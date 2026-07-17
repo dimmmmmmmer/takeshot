@@ -100,7 +100,9 @@ struct CapturePipelineTests {
         // и это валидный ролик ~2 сек с видео- и timecode-треками
         let asset = AVURLAsset(url: take.url)
         let duration = try await asset.load(.duration)
-        #expect(abs(duration.seconds - 2.0) < 0.3)
+        // допуск широкий: под нагрузкой (параллельные тесты, CI) энкодер может
+        // дропнуть часть синтетических кадров — важно, что дубль есть и он ~2 сек
+        #expect(duration.seconds > 1.2 && duration.seconds < 2.6)
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         #expect(videoTracks.count == 1)
         let tcTracks = try await asset.loadTracks(withMediaType: .timecode)

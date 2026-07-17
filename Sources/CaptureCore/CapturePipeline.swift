@@ -1,5 +1,4 @@
 import AVFoundation
-import CaptureCore
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -163,7 +162,7 @@ public final class CapturePipeline: @unchecked Sendable {
             if droppedFrames == 1 || droppedFrames % 100 == 0 {
                 let count = droppedFrames
                 DispatchQueue.main.async {
-                    self.onError?("Дропнуто кадров записи: \(count) — диск не успевает")
+                    self.onError?("Dropped \(count) recording frame(s) — disk too slow")
                 }
             }
         }
@@ -201,7 +200,7 @@ public final class CapturePipeline: @unchecked Sendable {
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
         } catch {
             DispatchQueue.main.async {
-                self.onError?("Не удалось начать запись: \(error.localizedDescription)")
+                self.onError?("Failed to start recording: \(error.localizedDescription)")
             }
         }
     }
@@ -226,7 +225,7 @@ public final class CapturePipeline: @unchecked Sendable {
                 _ = try await writer.finish()
             } catch {
                 DispatchQueue.main.async {
-                    self.onError?("Ошибка завершения дубля: \(error.localizedDescription)")
+                    self.onError?("Failed to finalize take: \(error.localizedDescription)")
                 }
             }
         }

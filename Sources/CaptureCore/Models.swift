@@ -77,6 +77,9 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var stopDebounceFrames: Int = 12
     public var projectName: String = ""
     public var cameraLabel: String = "A"
+    /// Язык интерфейса: "en" (приоритетный), "ru", nil — системный.
+    /// Optional — чтобы старые сохранённые настройки декодировались без миграции.
+    public var appLanguage: String?
 
     public init() {}
 

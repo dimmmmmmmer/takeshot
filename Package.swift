@@ -6,6 +6,7 @@ let swift5Mode: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
     name: "TakeShot",
+    defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     targets: [
         // Ядро: детекция REC, именование, запись дублей. Не зависит от DeckLink SDK.
@@ -26,6 +27,7 @@ let package = Package(
         .executableTarget(
             name: "TakeShot",
             dependencies: ["CaptureCore", "CDeckLink"],
+            resources: [.process("Resources")],
             swiftSettings: swift5Mode
         ),
         // CLI-smoke: перечислить DeckLink-устройства.

@@ -1,0 +1,49 @@
+/* Превью */
+"no_devices_found" = "Устройства не найдены";
+"sdk_not_connected" = "DeckLink SDK не подключён";
+"capture_not_running" = "Захват не запущен";
+"no_signal" = "Нет сигнала";
+"rec" = "REC";
+
+/* Управление */
+"device" = "Устройство";
+"no_devices" = "Нет устройств";
+"start_capture" = "Запустить захват";
+"stop_capture" = "Остановить захват";
+"scene" = "Сцена";
+"take_n" = "Дубль %d";
+"record" = "Запись";
+"stop" = "Стоп";
+"mock_rec" = "REC демо-камеры";
+"mock_rec_stop" = "Стоп демо-камеры";
+"mock_rec_help" = "Симулирует нажатие REC на камере: таймкод побежит, авто-детекция создаст дубль";
+"mock_device_name" = "Демо-источник (без платы)";
+
+/* Список дублей */
+"takes" = "Дубли";
+"no_takes_yet" = "Дублей пока нет";
+"show_in_finder" = "Показать в Finder";
+"circle_take_help" = "Circle take — пометить удачный дубль";
+
+/* Настройки */
+"settings_recording" = "Запись";
+"codec" = "Кодек";
+"destination_folder" = "Папка записи";
+"project" = "Проект";
+"camera" = "Камера";
+"settings_naming" = "Именование";
+"naming_template" = "Шаблон имени";
+"placeholders" = "Плейсхолдеры: %@";
+"settings_detection" = "Детекция дублей";
+"detection_mode" = "Режим";
+"mode_auto" = "Авто (VANC + таймкод)";
+"mode_timecode" = "Только бегущий таймкод";
+"mode_manual" = "Только вручную";
+"start_debounce" = "Старт: %d кадр(ов)";
+"stop_debounce" = "Стоп: %d кадр(ов)";
+"recrun_hint" = "Для авто-детекции по таймкоду камера должна писать TC в режиме Rec Run";
+"settings_interface" = "Интерфейс";
+"language" = "Язык";
+"lang_system" = "Системный";
+"lang_english" = "English";
+"lang_russian" = "Русский";

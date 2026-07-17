@@ -220,7 +220,7 @@ private:
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:1 userInfo:@{
                 NSLocalizedDescriptionKey :
-                    [NSString stringWithFormat:@"Устройство «%@» не найдено", deviceID]
+                    [NSString stringWithFormat:@"Device \"%@\" not found", deviceID]
             }];
         }
         return NO;
@@ -229,7 +229,7 @@ private:
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:2 userInfo:@{
-                NSLocalizedDescriptionKey : @"Устройство не поддерживает захват"
+                NSLocalizedDescriptionKey : @"Device does not support capture"
             }];
         }
         return NO;
@@ -245,8 +245,8 @@ private:
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:3 userInfo:@{
-                NSLocalizedDescriptionKey : @"Не удалось открыть видеовход "
-                    @"(возможно, вход занят другим приложением)"
+                NSLocalizedDescriptionKey : @"Failed to open video input "
+                    @"(the input may be in use by another application)"
             }];
         }
         return NO;
@@ -257,7 +257,7 @@ private:
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:4 userInfo:@{
-                NSLocalizedDescriptionKey : @"Не удалось запустить потоки захвата"
+                NSLocalizedDescriptionKey : @"Failed to start capture streams"
             }];
         }
         return NO;
@@ -471,7 +471,7 @@ private:
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error {
     if (error) {
         *error = [NSError errorWithDomain:CDLErrorDomain code:100 userInfo:@{
-            NSLocalizedDescriptionKey : @"Собрано без DeckLink SDK"
+            NSLocalizedDescriptionKey : @"Built without DeckLink SDK"
         }];
     }
     return NO;

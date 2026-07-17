@@ -35,17 +35,17 @@ struct PreviewView: View {
                         Image(systemName: "cable.connector.slash")
                             .font(.system(size: 40))
                         Text(controller.backendAvailable
-                             ? "Устройства не найдены"
-                             : "DeckLink SDK не подключён")
+                             ? L("no_devices_found")
+                             : L("sdk_not_connected"))
                             .font(.headline)
                     }
                     .foregroundStyle(.secondary)
                 } else {
-                    Text("Захват не запущен")
+                    Text(L("capture_not_running"))
                         .foregroundStyle(.secondary)
                 }
             } else if !controller.signalPresent {
-                Text("Нет сигнала")
+                Text(L("no_signal"))
                     .font(.headline)
                     .padding(8)
                     .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
@@ -55,7 +55,7 @@ struct PreviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
             if controller.isRecording {
-                Label("REC", systemImage: "record.circle.fill")
+                Label(L("rec"), systemImage: "record.circle.fill")
                     .font(.headline.bold())
                     .foregroundStyle(.red)
                     .padding(10)
@@ -107,9 +107,9 @@ struct ControlsView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Picker("Устройство", selection: $controller.selectedDeviceID) {
+            Picker(L("device"), selection: $controller.selectedDeviceID) {
                 if controller.devices.isEmpty {
-                    Text("Нет устройств").tag(String?.none)
+                    Text(L("no_devices")).tag(String?.none)
                 }
                 ForEach(controller.devices) { device in
                     Text(device.name).tag(String?.some(device.id))
@@ -118,16 +118,16 @@ struct ControlsView: View {
             .frame(maxWidth: 280)
             .disabled(controller.isCapturing)
 
-            Button(controller.isCapturing ? "Остановить захват" : "Запустить захват") {
+            Button(controller.isCapturing ? L("stop_capture") : L("start_capture")) {
                 controller.isCapturing ? controller.stopCapture() : controller.startCapture()
             }
             .disabled(controller.selectedDeviceID == nil)
 
             Divider().frame(height: 20)
 
-            TextField("Сцена", text: $controller.scene)
+            TextField(L("scene"), text: $controller.scene)
                 .frame(width: 80)
-            Stepper("Дубль \(controller.nextTakeNumber)",
+            Stepper(L("take_n", controller.nextTakeNumber),
                     value: $controller.nextTakeNumber, in: 1...999)
 
             Spacer()
@@ -136,17 +136,17 @@ struct ControlsView: View {
                 Button {
                     controller.toggleMockCameraRecord()
                 } label: {
-                    Label(controller.mockCameraRecording ? "Стоп демо-камеры" : "REC демо-камеры",
+                    Label(controller.mockCameraRecording ? L("mock_rec_stop") : L("mock_rec"),
                           systemImage: "video.fill")
                 }
                 .tint(controller.mockCameraRecording ? .red : nil)
-                .help("Симулирует нажатие REC на камере: таймкод побежит, авто-детекция создаст дубль")
+                .help(L("mock_rec_help"))
             }
 
             Button {
                 controller.toggleManualRecord()
             } label: {
-                Label(controller.isRecording ? "Стоп" : "Запись",
+                Label(controller.isRecording ? L("stop") : L("record"),
                       systemImage: controller.isRecording ? "stop.fill" : "record.circle")
             }
             .keyboardShortcut("r", modifiers: .command)

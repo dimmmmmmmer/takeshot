@@ -1,0 +1,49 @@
+/* Preview */
+"no_devices_found" = "No devices found";
+"sdk_not_connected" = "DeckLink SDK not connected";
+"capture_not_running" = "Capture not running";
+"no_signal" = "No signal";
+"rec" = "REC";
+
+/* Controls */
+"device" = "Device";
+"no_devices" = "No devices";
+"start_capture" = "Start capture";
+"stop_capture" = "Stop capture";
+"scene" = "Scene";
+"take_n" = "Take %d";
+"record" = "Record";
+"stop" = "Stop";
+"mock_rec" = "Demo camera REC";
+"mock_rec_stop" = "Stop demo camera";
+"mock_rec_help" = "Simulates pressing REC on the camera: timecode starts running and auto-detection creates a take";
+"mock_device_name" = "Demo source (no hardware)";
+
+/* Take list */
+"takes" = "Takes";
+"no_takes_yet" = "No takes yet";
+"show_in_finder" = "Show in Finder";
+"circle_take_help" = "Circle take — mark a good take";
+
+/* Settings */
+"settings_recording" = "Recording";
+"codec" = "Codec";
+"destination_folder" = "Destination folder";
+"project" = "Project";
+"camera" = "Camera";
+"settings_naming" = "Naming";
+"naming_template" = "File name template";
+"placeholders" = "Placeholders: %@";
+"settings_detection" = "Take detection";
+"detection_mode" = "Mode";
+"mode_auto" = "Auto (VANC + timecode)";
+"mode_timecode" = "Running timecode only";
+"mode_manual" = "Manual only";
+"start_debounce" = "Start: %d frame(s)";
+"stop_debounce" = "Stop: %d frame(s)";
+"recrun_hint" = "For timecode-based auto-detection the camera must output Rec Run timecode";
+"settings_interface" = "Interface";
+"language" = "Language";
+"lang_system" = "System";
+"lang_english" = "English";
+"lang_russian" = "Русский";

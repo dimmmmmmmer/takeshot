@@ -26,7 +26,7 @@ final class MockCaptureBackend: CaptureBackend {
                                               timecodeFPS: 25, name: "Демо 1080p25")
 
     func devices() -> [CaptureDeviceInfo] {
-        [CaptureDeviceInfo(id: Self.deviceID, name: "Демо-источник (без платы)")]
+        [CaptureDeviceInfo(id: Self.deviceID, name: L("mock_device_name"))]
     }
 
     func startCapture(deviceID: String) throws {

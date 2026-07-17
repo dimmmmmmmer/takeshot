@@ -10,6 +10,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/TakeShot "$APP/Contents/MacOS/TakeShot"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# ресурсы SwiftPM-таргета (локализации): Bundle.module ищет их в Contents/Resources
+cp -R .build/release/TakeShot_TakeShot.bundle "$APP/Contents/Resources/"
 
 # ad-hoc подпись достаточно для локального запуска
 codesign --force --sign - "$APP"

@@ -48,8 +48,17 @@ runtime — `/Library/Frameworks/DeckLinkAPI.framework` из Blackmagic Desktop 
 
 GitHub Actions (`.github/workflows/`): `ci.yml` — сборка + тесты + артефакт
 TakeShot.zip на каждый push/PR; `release.yml` — по тегу `v*` собирает .app и
-публикует GitHub Release. Подпись ad-hoc: скачанные сборки открывать через
-правый клик → Open (Gatekeeper).
+публикует GitHub Release (.dmg с симлинком на /Applications + .zip).
+Подпись ad-hoc: скачанные сборки открывать через правый клик → Open (Gatekeeper).
+
+## i18n
+
+Базовый язык — английский. Строки UI — через `L("key")` (`Sources/TakeShot/L10n.swift`),
+файлы `Sources/TakeShot/Resources/{en,ru}.lproj/Localizable.strings`. Язык переключается
+в настройках на лету (подмена .lproj-бандла), выбор хранится в `CaptureSettings.appLanguage`
+(nil = системный; новые поля настроек делать Optional — иначе старый сохранённый JSON
+не декодируется). Ошибки ядра (CaptureCore/CDeckLink) — англ., без локализации.
+Новые строки добавлять в оба .strings; хардкод строк в вьюхах не оставлять.
 
 ## Статус этапов (план MVP)
 

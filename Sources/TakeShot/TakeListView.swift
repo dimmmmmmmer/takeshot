@@ -7,13 +7,13 @@ struct TakeListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Дубли")
+            Text(L("takes"))
                 .font(.headline)
                 .padding(12)
             Divider()
             if controller.takes.isEmpty {
                 Spacer()
-                Text("Дублей пока нет")
+                Text(L("no_takes_yet"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                 Spacer()
@@ -54,10 +54,10 @@ private struct TakeRow: View {
                     .foregroundStyle(take.isCircled ? .green : .secondary)
             }
             .buttonStyle(.plain)
-            .help("Circle take — пометить удачный дубль")
+            .help(L("circle_take_help"))
         }
         .contextMenu {
-            Button("Показать в Finder") {
+            Button(L("show_in_finder")) {
                 NSWorkspace.shared.activateFileViewerSelecting([take.url])
             }
         }

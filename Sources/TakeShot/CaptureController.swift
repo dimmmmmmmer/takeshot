@@ -29,7 +29,14 @@ final class CaptureController: ObservableObject {
         didSet {
             settings.save()
             pushConfig()
+            L10n.apply(appLanguage)
         }
+    }
+
+    /// Язык интерфейса; по умолчанию английский.
+    var appLanguage: AppLanguage {
+        get { settings.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english }
+        set { settings.appLanguage = newValue.rawValue }
     }
 
     let pipeline: CapturePipeline
@@ -57,6 +64,7 @@ final class CaptureController: ObservableObject {
             settings: stored, scene: "1", takeNumber: 1))
 
         backend.delegate = self
+        L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         bindPipeline()
         refreshDevices()
     }

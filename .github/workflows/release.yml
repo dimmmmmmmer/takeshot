@@ -27,6 +27,14 @@ jobs:
       - name: Zip приложения
         run: ditto -c -k --keepParent build/TakeShot.app "build/TakeShot-${{ github.ref_name }}.zip"
 
+      - name: DMG приложения
+        run: |
+          mkdir -p build/dmg-root
+          cp -R build/TakeShot.app build/dmg-root/
+          ln -s /Applications build/dmg-root/Applications
+          hdiutil create -volname "TakeShot" -srcfolder build/dmg-root \
+            -ov -format UDZO "build/TakeShot-${{ github.ref_name }}.dmg"
+
       - name: Создать релиз
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,4 +42,5 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "TakeShot ${{ github.ref_name }}" \
             --generate-notes \
+            "build/TakeShot-${{ github.ref_name }}.dmg" \
             "build/TakeShot-${{ github.ref_name }}.zip"
