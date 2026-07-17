@@ -1,0 +1,37 @@
+# Релиз по тегу vX.Y.Z: собрать TakeShot.app, зазиповать, создать GitHub Release.
+#
+# Подпись ad-hoc (Developer ID нет), поэтому при первом запуске скачанного
+# приложения macOS покажет предупреждение Gatekeeper — открыть через
+# правый клик → Open, либо: xattr -d com.apple.quarantine TakeShot.app
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Тесты
+        run: ./scripts/test.sh
+
+      - name: Сборка TakeShot.app
+        run: ./scripts/bundle-app.sh
+
+      - name: Zip приложения
+        run: ditto -c -k --keepParent build/TakeShot.app "build/TakeShot-${{ github.ref_name }}.zip"
+
+      - name: Создать релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "TakeShot ${{ github.ref_name }}" \
+            --generate-notes \
+            "build/TakeShot-${{ github.ref_name }}.zip"

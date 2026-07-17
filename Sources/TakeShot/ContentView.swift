@@ -1,3 +1,4 @@
+import AVFoundation
 import CaptureCore
 import SwiftUI
 
@@ -20,29 +21,35 @@ struct ContentView: View {
     }
 }
 
-/// Превью входного сигнала. До этапа 3 — плейсхолдер.
+/// Живое превью входного сигнала (AVSampleBufferDisplayLayer из конвейера).
 struct PreviewView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
         ZStack {
             Rectangle().fill(.black)
-            if !controller.backendAvailable {
-                VStack(spacing: 8) {
-                    Image(systemName: "cable.connector.slash")
-                        .font(.system(size: 40))
-                    Text("DeckLink SDK не подключён")
-                        .font(.headline)
-                    Text("Положите заголовки SDK в vendor/DeckLinkSDK/include и пересоберите")
-                        .font(.caption)
+            DisplayLayerView(layer: controller.pipeline.displayLayer)
+            if !controller.isCapturing {
+                if controller.devices.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "cable.connector.slash")
+                            .font(.system(size: 40))
+                        Text(controller.backendAvailable
+                             ? "Устройства не найдены"
+                             : "DeckLink SDK не подключён")
+                            .font(.headline)
+                    }
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("Захват не запущен")
+                        .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
-            } else if !controller.isCapturing {
-                Text("Захват не запущен")
-                    .foregroundStyle(.secondary)
-            } else if controller.signalFormat == nil {
+            } else if !controller.signalPresent {
                 Text("Нет сигнала")
-                    .foregroundStyle(.secondary)
+                    .font(.headline)
+                    .padding(8)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(.orange)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,6 +62,22 @@ struct PreviewView: View {
             }
         }
     }
+}
+
+/// NSView-обёртка вокруг AVSampleBufferDisplayLayer.
+private struct DisplayLayerView: NSViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = .black
+        view.layer = layer
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 struct StatusBarView: View {
@@ -92,7 +115,8 @@ struct ControlsView: View {
                     Text(device.name).tag(String?.some(device.id))
                 }
             }
-            .frame(maxWidth: 260)
+            .frame(maxWidth: 280)
+            .disabled(controller.isCapturing)
 
             Button(controller.isCapturing ? "Остановить захват" : "Запустить захват") {
                 controller.isCapturing ? controller.stopCapture() : controller.startCapture()
@@ -107,6 +131,17 @@ struct ControlsView: View {
                     value: $controller.nextTakeNumber, in: 1...999)
 
             Spacer()
+
+            if controller.isMockSelected && controller.isCapturing {
+                Button {
+                    controller.toggleMockCameraRecord()
+                } label: {
+                    Label(controller.mockCameraRecording ? "Стоп демо-камеры" : "REC демо-камеры",
+                          systemImage: "video.fill")
+                }
+                .tint(controller.mockCameraRecording ? .red : nil)
+                .help("Симулирует нажатие REC на камере: таймкод побежит, авто-детекция создаст дубль")
+            }
 
             Button {
                 controller.toggleManualRecord()
