@@ -116,19 +116,16 @@ struct ControlsView: View {
                 }
             }
             .frame(maxWidth: 280)
-            .disabled(controller.isCapturing)
-
-            Button(controller.isCapturing ? L("stop_capture") : L("start_capture")) {
-                controller.isCapturing ? controller.stopCapture() : controller.startCapture()
-            }
-            .disabled(controller.selectedDeviceID == nil)
+            .disabled(controller.isRecording)
 
             Divider().frame(height: 20)
 
             TextField(L("scene"), text: $controller.scene)
                 .frame(width: 80)
+                .help(L("scene_help"))
             Stepper(L("take_n", controller.nextTakeNumber),
                     value: $controller.nextTakeNumber, in: 1...999)
+                .help(L("take_help"))
 
             Spacer()
 
@@ -151,6 +148,11 @@ struct ControlsView: View {
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(!controller.isCapturing)
+
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .help(L("open_settings"))
         }
         .padding(12)
     }

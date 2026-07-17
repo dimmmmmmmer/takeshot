@@ -50,3 +50,8 @@
 
 /* Pre-roll */
 "pre_roll" = "Pre-roll: %.1f s";
+
+/* Controls v2 */
+"open_settings" = "Settings";
+"scene_help" = "Scene name — used in file names ({scene}). With cameras that embed metadata in SDI it will be filled automatically";
+"take_help" = "Next take number, auto-increments after every take ({take})";

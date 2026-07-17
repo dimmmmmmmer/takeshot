@@ -10,7 +10,13 @@ import Foundation
 @MainActor
 final class CaptureController: ObservableObject {
     @Published var devices: [CaptureDeviceInfo] = []
-    @Published var selectedDeviceID: String?
+    /// Захват стартует автоматически при выборе устройства — отдельной кнопки нет.
+    @Published var selectedDeviceID: String? {
+        didSet {
+            guard oldValue != selectedDeviceID else { return }
+            restartCapture()
+        }
+    }
     @Published var isCapturing = false
     @Published var isRecording = false
     @Published var signalPresent = true
@@ -66,7 +72,7 @@ final class CaptureController: ObservableObject {
         backend.delegate = self
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         bindPipeline()
-        refreshDevices()
+        refreshDevices() // выбор первого устройства запустит захват через didSet
     }
 
     private func bindPipeline() {
@@ -124,6 +130,13 @@ final class CaptureController: ObservableObject {
         if isMockSelected {
             mockCameraRecording = false
         }
+    }
+
+    private func restartCapture() {
+        if isCapturing {
+            stopCapture()
+        }
+        startCapture()
     }
 
     func toggleManualRecord() {
