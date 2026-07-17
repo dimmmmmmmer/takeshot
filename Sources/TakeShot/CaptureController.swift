@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CaptureCore
 import Combine
@@ -23,6 +24,8 @@ final class CaptureController: ObservableObject {
     @Published var signalFormat: CaptureFormat?
     @Published var currentTimecode: Timecode?
     @Published var takes: [Take] = []
+    /// Превью-кадры дублей для режима миниатюр.
+    @Published var thumbnails: [Take.ID: NSImage] = [:]
     @Published var scene: String = "1" {
         didSet { pushConfig() }
     }
@@ -89,6 +92,8 @@ final class CaptureController: ObservableObject {
             guard let self else { return }
             self.takes.append(take)
             self.nextTakeNumber += 1
+            self.exportTakeLog()
+            self.generateThumbnail(for: take)
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
@@ -154,6 +159,53 @@ final class CaptureController: ObservableObject {
     func toggleCircle(_ take: Take) {
         guard let idx = takes.firstIndex(of: take) else { return }
         takes[idx].isCircled.toggle()
+        exportTakeLog()
+    }
+
+    /// URL журнала метадаты (для «показать в Finder»).
+    var takeLogURL: URL {
+        destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
+    }
+
+    private var destinationRoot: URL {
+        URL(fileURLWithPath: (settings.destinationPath as NSString).expandingTildeInPath)
+    }
+
+    /// Resolve-совместимый CSV: пишется заново при каждом дубле и каждой отметке
+    /// circle take — в Резолве импортируется через Media Pool → Import Metadata.
+    private func exportTakeLog() {
+        let takes = takes
+        let root = destinationRoot
+        Task.detached(priority: .utility) {
+            try? TakeLogExporter.write(takes: takes, toDirectory: root)
+        }
+    }
+
+    /// Кадр-превью из записанного файла; файл финализируется асинхронно,
+    /// поэтому несколько попыток с паузой.
+    private func generateThumbnail(for take: Take) {
+        Task.detached(priority: .utility) { [weak self] in
+            for _ in 0..<10 {
+                if FileManager.default.fileExists(atPath: take.url.path) {
+                    let asset = AVURLAsset(url: take.url)
+                    let generator = AVAssetImageGenerator(asset: asset)
+                    generator.appliesPreferredTrackTransform = true
+                    generator.maximumSize = CGSize(width: 480, height: 480)
+                    let time = CMTime(seconds: min(1.0, take.durationSeconds / 2),
+                                      preferredTimescale: 600)
+                    if let (cgImage, _) = try? await generator.image(at: time) {
+                        let image = NSImage(cgImage: cgImage,
+                                            size: NSSize(width: cgImage.width,
+                                                         height: cgImage.height))
+                        await MainActor.run { [weak self] in
+                            self?.thumbnails[take.id] = image
+                        }
+                        return
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
     }
 }
 

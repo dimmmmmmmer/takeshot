@@ -55,3 +55,10 @@
 "open_settings" = "Settings";
 "scene_help" = "Scene name — used in file names ({scene}). With cameras that embed metadata in SDI it will be filled automatically";
 "take_help" = "Next take number, auto-increments after every take ({take})";
+
+/* Take panel v2 */
+"view_list" = "List";
+"view_grid" = "Thumbnails";
+"reveal_csv_help" = "Show metadata CSV for DaVinci Resolve (Media Pool → Import Metadata; circle takes become Good Takes)";
+"circle_take" = "Circle take (Good Take in Resolve)";
+"uncircle_take" = "Remove circle";

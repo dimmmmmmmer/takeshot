@@ -55,3 +55,10 @@
 "open_settings" = "Настройки";
 "scene_help" = "Имя сцены — попадает в имена файлов ({scene}). С камерами, отдающими метадату в SDI, заполнится само";
 "take_help" = "Номер следующего дубля, автоинкремент после каждого дубля ({take})";
+
+/* Панель дублей v2 */
+"view_list" = "Список";
+"view_grid" = "Миниатюры";
+"reveal_csv_help" = "Показать CSV метадаты для DaVinci Resolve (Media Pool → Import Metadata; circle takes станут Good Takes)";
+"circle_take" = "Обвести дубль (Good Take в Резолве)";
+"uncircle_take" = "Снять отметку";
