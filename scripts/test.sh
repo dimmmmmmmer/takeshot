@@ -11,11 +11,13 @@ cd "$(dirname "$0")/.."
 FRAMEWORKS="/Library/Developer/CommandLineTools/Library/Developer/Frameworks"
 INTEROP_LIB="/Library/Developer/CommandLineTools/Library/Developer/usr/lib"
 
+# --no-parallel: конвейерный e2e-тест кодирует ProRes в реальном темпе;
+# параллельные writer-тесты отбирают у него энкодер и вызывают флаки
 if [ ! -d "$FRAMEWORKS/Testing.framework" ]; then
-    exec swift test "$@"
+    exec swift test --no-parallel "$@"
 fi
 
-exec swift test \
+exec swift test --no-parallel \
     -Xswiftc -F"$FRAMEWORKS" \
     -Xlinker -F"$FRAMEWORKS" \
     -Xlinker -rpath -Xlinker "$FRAMEWORKS" \
