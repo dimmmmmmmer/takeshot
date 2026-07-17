@@ -48,7 +48,7 @@ runtime — `/Library/Frameworks/DeckLinkAPI.framework` из Blackmagic Desktop 
 
 GitHub Actions (`.github/workflows/`): `ci.yml` — сборка + тесты + артефакт
 TakeShot.zip на каждый push/PR; `release.yml` — по тегу `v*` собирает .app и
-публикует GitHub Release (.dmg с симлинком на /Applications + .zip).
+публикует GitHub Release (.dmg с симлинком на /Applications).
 Подпись ad-hoc: скачанные сборки открывать через правый клик → Open (Gatekeeper).
 
 ## i18n
