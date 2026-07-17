@@ -62,7 +62,7 @@ final class MockCaptureBackend: CaptureBackend {
         guard let pixelBuffer = renderFrame() else { return }
         let pts = CMTime(value: CMTimeValue(frameCounter * 40), timescale: 1000)
         delegate?.backend(self, didReceiveFrame: pixelBuffer, pts: pts,
-                          timecode: timecode, vancTrigger: nil)
+                          timecode: timecode, vancTrigger: nil, ancillaryPackets: [])
     }
 
     private func renderFrame() -> CVPixelBuffer? {

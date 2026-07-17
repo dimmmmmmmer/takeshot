@@ -17,7 +17,8 @@ public struct CaptureDeviceInfo: Identifiable, Equatable, Sendable {
 public protocol CaptureBackendDelegate: AnyObject {
     func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat)
     func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?)
+                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
+                 ancillaryPackets: [AncillaryPacket])
     func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer)
     func backend(_ backend: CaptureBackend, signalPresent: Bool)
     func backendDeviceListChanged(_ backend: CaptureBackend)

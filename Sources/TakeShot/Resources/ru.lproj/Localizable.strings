@@ -64,3 +64,23 @@
 "uncircle_take" = "Снять отметку";
 
 "device_disconnected" = "Капчур-устройство отключено";
+
+/* Хоткеи */
+"settings_hotkeys" = "Горячие клавиши";
+"hotkey_record" = "Запись / стоп";
+"hotkey_circle" = "Обвести последний дубль";
+"hotkey_demo_rec" = "REC демо-камеры";
+"press_keys" = "Нажмите клавиши…";
+"reset_hotkeys" = "Сбросить по умолчанию";
+"choose_folder" = "Выбрать папку";
+
+/* VANC-монитор */
+"vanc_monitor_title" = "VANC-монитор";
+"vanc_open_help" = "VANC-монитор — ancillary-пакеты входного сигнала (метадата камеры, триггеры)";
+"vanc_empty" = "VANC-пакетов пока нет. Подключите SDI/HDMI-источник — здесь появятся типы пакетов";
+"vanc_col_id" = "DID/SDID";
+"vanc_col_desc" = "Тип";
+"vanc_col_count" = "Сколько";
+"vanc_col_line" = "Строка";
+"vanc_col_data" = "Последние данные (hex)";
+"vanc_unknown" = "Неизвестный";

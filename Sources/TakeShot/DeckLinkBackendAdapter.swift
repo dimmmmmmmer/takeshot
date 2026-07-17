@@ -60,19 +60,23 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
     func capture(_ capture: CDLCapture, didReceiveVideoFrame pixelBuffer: CVPixelBuffer,
                  ptsSeconds: Double, hasTimecode: Bool,
                  tcHours: Int32, tcMinutes: Int32, tcSeconds: Int32, tcFrames: Int32,
-                 tcDropFrame: Bool) {
+                 tcDropFrame: Bool, ancillaryPackets: [CDLAncillaryPacket]) {
         var timecode: Timecode?
         if hasTimecode {
-            // fps таймкода уточняется по величине поля frames в RecDetector не нужен —
-            // берём из последнего формата через delegate-цепочку; здесь достаточно
-            // передать компоненты с номинальным fps, его проставит конвейер
+            // fps таймкода мост не знает — компоненты передаются с fps 0,
+            // конвейер проставит его из текущего формата
             timecode = Timecode(hours: Int(tcHours), minutes: Int(tcMinutes),
                                 seconds: Int(tcSeconds), frames: Int(tcFrames),
                                 fps: 0, isDropFrame: tcDropFrame)
         }
+        let packets = ancillaryPackets.map {
+            AncillaryPacket(did: $0.did, sdid: $0.sdid,
+                            lineNumber: $0.lineNumber, data: [UInt8]($0.data))
+        }
         delegate?.backend(self, didReceiveFrame: pixelBuffer,
                           pts: CMTime(seconds: ptsSeconds, preferredTimescale: 240_000),
-                          timecode: timecode, vancTrigger: nil)
+                          timecode: timecode, vancTrigger: nil,
+                          ancillaryPackets: packets)
     }
 
     func capture(_ capture: CDLCapture, didReceiveAudioBytes bytes: UnsafeRawPointer,
@@ -182,9 +186,11 @@ extension AggregateBackend: CaptureBackendDelegate {
     }
 
     func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?) {
+                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
+                 ancillaryPackets: [AncillaryPacket]) {
         delegate?.backend(self, didReceiveFrame: pixelBuffer, pts: pts,
-                          timecode: timecode, vancTrigger: vancTrigger)
+                          timecode: timecode, vancTrigger: vancTrigger,
+                          ancillaryPackets: ancillaryPackets)
     }
 
     func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {

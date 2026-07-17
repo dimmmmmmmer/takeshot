@@ -64,3 +64,23 @@
 "uncircle_take" = "Remove circle";
 
 "device_disconnected" = "Capture device disconnected";
+
+/* Hotkeys */
+"settings_hotkeys" = "Hotkeys";
+"hotkey_record" = "Record / stop";
+"hotkey_circle" = "Circle last take";
+"hotkey_demo_rec" = "Demo camera REC";
+"press_keys" = "Press keys…";
+"reset_hotkeys" = "Reset to defaults";
+"choose_folder" = "Choose folder";
+
+/* VANC monitor */
+"vanc_monitor_title" = "VANC Monitor";
+"vanc_open_help" = "VANC Monitor — ancillary packets in the input signal (camera metadata, triggers)";
+"vanc_empty" = "No VANC packets yet. Connect an SDI/HDMI source — packet types will appear here";
+"vanc_col_id" = "DID/SDID";
+"vanc_col_desc" = "Type";
+"vanc_col_count" = "Count";
+"vanc_col_line" = "Line";
+"vanc_col_data" = "Last data (hex)";
+"vanc_unknown" = "Unknown";

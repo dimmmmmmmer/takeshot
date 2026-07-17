@@ -9,7 +9,7 @@ import Testing
 struct CapturePipelineTests {
     private func makePixelBuffer() -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, 640, 360, kCVPixelFormatType_32BGRA,
+        CVPixelBufferCreate(kCFAllocatorDefault, 320, 180, kCVPixelFormatType_32BGRA,
                             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
                             &pixelBuffer)
         return pixelBuffer!
@@ -43,7 +43,7 @@ struct CapturePipelineTests {
             pipeline.onRecStateChanged = { recStates.append($0) }
 
             pipeline.handleFormat(CaptureFormat(
-                width: 640, height: 360, frameRate: 25, timecodeFPS: 25, name: "test"))
+                width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
 
             let pixelBuffer = makePixelBuffer()
             var tc = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
@@ -129,7 +129,7 @@ struct CapturePipelineTests {
         pipeline.onTakeFinished = { finishedTakes.append($0) }
 
         pipeline.handleFormat(CaptureFormat(
-            width: 640, height: 360, frameRate: 25, timecodeFPS: 25, name: "test"))
+            width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
         let pixelBuffer = makePixelBuffer()
         var tc = Timecode(hours: 12, minutes: 0, seconds: 0, frames: 0, fps: 25)
         var frame = 0
@@ -189,7 +189,7 @@ struct CapturePipelineTests {
         pipeline.onRecStateChanged = { if $0 { recStarted = true } }
 
         pipeline.handleFormat(CaptureFormat(
-            width: 640, height: 360, frameRate: 25, timecodeFPS: 25, name: "test"))
+            width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
         let pixelBuffer = makePixelBuffer()
         var tc = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0, fps: 25)
         for frame in 1...30 {

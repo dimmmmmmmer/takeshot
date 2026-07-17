@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
 
     var body: some View {
         Form {
@@ -21,7 +22,15 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
-                TextField(L("destination_folder"), text: $controller.settings.destinationPath)
+                HStack {
+                    TextField(L("destination_folder"), text: $controller.settings.destinationPath)
+                    Button {
+                        chooseDestinationFolder()
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help(L("choose_folder"))
+                }
                 TextField(L("project"), text: $controller.settings.projectName)
                 TextField(L("camera"), text: $controller.settings.cameraLabel)
             }
@@ -50,9 +59,43 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section(L("settings_hotkeys")) {
+                ForEach(HotkeyAction.allCases) { action in
+                    HStack {
+                        Text(L(action.titleKey))
+                        Spacer()
+                        Button {
+                            hotkeys.recordingAction =
+                                (hotkeys.recordingAction == action) ? nil : action
+                        } label: {
+                            Text(hotkeys.recordingAction == action
+                                 ? L("press_keys")
+                                 : hotkeys.combo(for: action).display)
+                                .frame(minWidth: 90)
+                        }
+                        .tint(hotkeys.recordingAction == action ? .accentColor : nil)
+                    }
+                }
+                Button(L("reset_hotkeys")) {
+                    hotkeys.resetToDefaults()
+                }
+                .buttonStyle(.link)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 480)
         .padding()
+    }
+
+    private func chooseDestinationFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath:
+            (controller.settings.destinationPath as NSString).expandingTildeInPath)
+        if panel.runModal() == .OK, let url = panel.url {
+            controller.settings.destinationPath = url.path
+        }
     }
 }

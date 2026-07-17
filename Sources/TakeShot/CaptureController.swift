@@ -26,8 +26,15 @@ final class CaptureController: ObservableObject {
     @Published var takes: [Take] = []
     /// Превью-кадры дублей для режима миниатюр.
     @Published var thumbnails: [Take.ID: NSImage] = [:]
+    /// Статистика VANC-пакетов для окна монитора.
+    @Published var vancStats: [VancPacketStat] = []
     @Published var scene: String = "1" {
-        didSet { pushConfig() }
+        didSet {
+            guard oldValue != scene else { return }
+            // новая сцена — дубли считаем с первого
+            if nextTakeNumber != 1 { nextTakeNumber = 1 }
+            pushConfig()
+        }
     }
     @Published var nextTakeNumber: Int = 1 {
         didSet { pushConfig() }
@@ -101,6 +108,15 @@ final class CaptureController: ObservableObject {
         pipeline.onError = { [weak self] message in
             self?.lastError = message
         }
+        pipeline.onVancStats = { [weak self] stats in
+            self?.vancStats = stats
+        }
+    }
+
+    /// Обвести последний дубль (хоткей).
+    func circleLastTake() {
+        guard let last = takes.last else { return }
+        toggleCircle(last)
     }
 
     private func pushConfig() {
@@ -225,9 +241,11 @@ extension CaptureController: CaptureBackendDelegate {
     }
 
     nonisolated func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                             pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?) {
+                             pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
+                             ancillaryPackets: [AncillaryPacket]) {
         pipeline.handleFrame(pixelBuffer: pixelBuffer, pts: pts,
-                             timecode: timecode, vancTrigger: vancTrigger)
+                             timecode: timecode, vancTrigger: vancTrigger,
+                             ancillaryPackets: ancillaryPackets)
     }
 
     nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {

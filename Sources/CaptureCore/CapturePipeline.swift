@@ -29,6 +29,8 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onTakeFinished: ((Take) -> Void)?
     public var onSignal: ((Bool) -> Void)?
     public var onError: ((String) -> Void)?
+    /// Статистика VANC-пакетов (для монитора); шлётся раз в секунду при изменениях.
+    public var onVancStats: (([VancPacketStat]) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
 
@@ -49,6 +51,10 @@ public final class CapturePipeline: @unchecked Sendable {
     private var videoFormatDescription: CMVideoFormatDescription?
     /// Кадры до старта записи — для пре-ролла (только пока writer == nil).
     private var preRollBuffer: [(index: Int, pixelBuffer: CVPixelBuffer, pts: CMTime)] = []
+    /// Накопленная статистика VANC по (DID, SDID).
+    private var vancStats: [String: VancPacketStat] = [:]
+    private var vancStatsDirty = false
+    private var vancStatsLastPublish = 0
 
     public init(config: Config) {
         self.config = config
@@ -95,9 +101,12 @@ public final class CapturePipeline: @unchecked Sendable {
             self.lastTimecode = nil
             self.videoFormatDescription = nil
             self.preRollBuffer.removeAll()
+            self.vancStats.removeAll()
+            self.vancStatsLastPublish = 0
             DispatchQueue.main.async {
                 self.onFormatChanged?(nil)
                 self.onTimecode?(nil)
+                self.onVancStats?([])
             }
         }
     }
@@ -119,10 +128,12 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public func handleFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
-                     timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?) {
+                     timecode rawTimecode: Timecode?, vancTrigger: VancTrigger? = nil,
+                     ancillaryPackets: [AncillaryPacket] = []) {
         queue.async {
             self.processFrame(pixelBuffer: pixelBuffer, pts: pts,
-                              timecode: rawTimecode, vancTrigger: vancTrigger)
+                              timecode: rawTimecode, vancTrigger: vancTrigger,
+                              ancillaryPackets: ancillaryPackets)
         }
     }
 
@@ -135,9 +146,12 @@ public final class CapturePipeline: @unchecked Sendable {
     // MARK: - обработка (на queue)
 
     private func processFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
-                              timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?) {
+                              timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?,
+                              ancillaryPackets: [AncillaryPacket]) {
         guard let format else { return }
         frameIndex += 1
+        updateVancStats(ancillaryPackets)
+        let vancTrigger = vancTrigger ?? VancParser.recTrigger(in: ancillaryPackets)
 
         // мост может не знать fps таймкода — проставляем из формата
         var timecode = rawTimecode
@@ -187,6 +201,28 @@ public final class CapturePipeline: @unchecked Sendable {
 
         enqueuePreview(pixelBuffer: pixelBuffer)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
+    }
+
+    private func updateVancStats(_ packets: [AncillaryPacket]) {
+        for packet in packets {
+            let key = String(format: "%02X/%02X", packet.did, packet.sdid)
+            let hex = packet.data.prefix(24)
+                .map { String(format: "%02X", $0) }.joined(separator: " ")
+            let previous = vancStats[key]
+            vancStats[key] = VancPacketStat(
+                did: packet.did, sdid: packet.sdid,
+                count: (previous?.count ?? 0) + 1,
+                lastLine: packet.lineNumber, lastDataHex: hex)
+            vancStatsDirty = true
+        }
+        // публикуем не чаще ~раза в секунду, чтобы не дёргать UI на каждом кадре
+        let interval = Int(format?.frameRate.rounded() ?? 25)
+        if vancStatsDirty, frameIndex - vancStatsLastPublish >= interval {
+            vancStatsDirty = false
+            vancStatsLastPublish = frameIndex
+            let stats = vancStats.values.sorted { $0.key < $1.key }
+            DispatchQueue.main.async { self.onVancStats?(stats) }
+        }
     }
 
     /// Кадров пре-ролла при текущем формате.

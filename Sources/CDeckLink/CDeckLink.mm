@@ -21,6 +21,9 @@ static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 @implementation CDLVideoFormat
 @end
 
+@implementation CDLAncillaryPacket
+@end
+
 #if TAKESHOT_HAS_DECKLINK_SDK
 
 #pragma mark - Вспомогательное
@@ -492,6 +495,33 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                 pts = (double)frameTime / (double)kScale;
             }
 
+            // SMPTE 291M пакеты из VANC (метадата камер, триггеры, тайм-данные)
+            NSMutableArray<CDLAncillaryPacket *> *ancPackets = [NSMutableArray array];
+            IDeckLinkVideoFrameAncillaryPackets *ancInterface = NULL;
+            if (videoFrame->QueryInterface(IID_IDeckLinkVideoFrameAncillaryPackets,
+                                           (void **)&ancInterface) == S_OK && ancInterface) {
+                IDeckLinkAncillaryPacketIterator *iterator = NULL;
+                if (ancInterface->GetPacketIterator(&iterator) == S_OK && iterator) {
+                    IDeckLinkAncillaryPacket *packet = NULL;
+                    while (iterator->Next(&packet) == S_OK && packet) {
+                        const void *bytes = NULL;
+                        uint32_t size = 0;
+                        if (packet->GetBytes(bmdAncillaryPacketFormatUInt8,
+                                             &bytes, &size) == S_OK && bytes && size > 0) {
+                            CDLAncillaryPacket *anc = [[CDLAncillaryPacket alloc] init];
+                            anc.did = packet->GetDID();
+                            anc.sdid = packet->GetSDID();
+                            anc.lineNumber = packet->GetLineNumber();
+                            anc.data = [NSData dataWithBytes:bytes length:size];
+                            [ancPackets addObject:anc];
+                        }
+                        packet->Release();
+                    }
+                    iterator->Release();
+                }
+                ancInterface->Release();
+            }
+
             CVPixelBufferRef pixelBuffer = [self copyPixelBufferFromFrame:videoFrame];
             if (pixelBuffer) {
                 [delegate capture:self
@@ -502,7 +532,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                                tcMinutes:m
                                tcSeconds:s
                                 tcFrames:f
-                             tcDropFrame:dropFrame];
+                             tcDropFrame:dropFrame
+                        ancillaryPackets:ancPackets];
                 CVPixelBufferRelease(pixelBuffer);
             }
         }

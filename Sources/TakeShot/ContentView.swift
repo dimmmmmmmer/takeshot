@@ -104,6 +104,8 @@ struct StatusBarView: View {
 
 struct ControlsView: View {
     @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 12) {
@@ -146,8 +148,15 @@ struct ControlsView: View {
                 Label(controller.isRecording ? L("stop") : L("record"),
                       systemImage: controller.isRecording ? "stop.fill" : "record.circle")
             }
-            .keyboardShortcut("r", modifiers: .command)
             .disabled(!controller.isCapturing)
+            .help(hotkeys.combo(for: .toggleRecord).display)
+
+            Button {
+                openWindow(id: "vanc-monitor")
+            } label: {
+                Image(systemName: "waveform.badge.magnifyingglass")
+            }
+            .help(L("vanc_open_help"))
 
             SettingsLink {
                 Image(systemName: "gearshape")

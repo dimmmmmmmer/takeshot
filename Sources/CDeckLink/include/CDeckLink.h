@@ -30,6 +30,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)startWatchingDevicesWithHandler:(void (^)(void))handler;
 @end
 
+/// SMPTE 291M ancillary-пакет из VANC-области кадра.
+@interface CDLAncillaryPacket : NSObject
+@property (nonatomic) uint8_t did;
+@property (nonatomic) uint8_t sdid;
+@property (nonatomic) uint32_t lineNumber;
+@property (nonatomic, copy) NSData *data;
+@end
+
 @class CDLCapture;
 
 /// Колбэки захвата. Вызываются на внутреннем потоке DeckLink —
@@ -44,7 +52,8 @@ NS_ASSUME_NONNULL_BEGIN
                tcMinutes:(int)tcMinutes
                tcSeconds:(int)tcSeconds
                 tcFrames:(int)tcFrames
-             tcDropFrame:(BOOL)tcDropFrame;
+             tcDropFrame:(BOOL)tcDropFrame
+        ancillaryPackets:(NSArray<CDLAncillaryPacket *> *)ancillaryPackets;
 /// PCM 48 кГц, 16 бит, interleaved.
 - (void)capture:(CDLCapture *)capture
     didReceiveAudioBytes:(const void *)bytes
