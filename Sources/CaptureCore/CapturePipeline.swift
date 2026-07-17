@@ -47,6 +47,8 @@ public final class CapturePipeline: @unchecked Sendable {
     private var takeScene = ""
     private var takeNumber = 0
     private var videoFormatDescription: CMVideoFormatDescription?
+    /// Кадры до старта записи — для пре-ролла (только пока writer == nil).
+    private var preRollBuffer: [(index: Int, pixelBuffer: CVPixelBuffer, pts: CMTime)] = []
 
     public init(config: Config) {
         self.config = config
@@ -92,6 +94,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.format = nil
             self.lastTimecode = nil
             self.videoFormatDescription = nil
+            self.preRollBuffer.removeAll()
             DispatchQueue.main.async {
                 self.onFormatChanged?(nil)
                 self.onTimecode?(nil)
@@ -106,6 +109,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.format = newFormat
             self.detector.reset()
             self.videoFormatDescription = nil
+            self.preRollBuffer.removeAll()
             DispatchQueue.main.async { self.onFormatChanged?(newFormat) }
         }
     }
@@ -143,21 +147,35 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         lastTimecode = timecode
 
+        // пока не пишем — копим кадры в пре-ролл буфер (текущий кадр включительно):
+        // при старте дубля из него добираются кадры от фактического начала записи
+        // камеры (потерянные на дебаунсе) плюс настроенные секунды до него
+        if writer == nil {
+            preRollBuffer.append((index: frameIndex, pixelBuffer: pixelBuffer, pts: pts))
+            let capacity = preRollCapacity
+            if preRollBuffer.count > capacity {
+                preRollBuffer.removeFirst(preRollBuffer.count - capacity)
+            }
+        }
+
+        var startedThisFrame = false
         let mode = config.settings.detectionMode
         if mode != .manual {
             let sample = FrameSample(index: frameIndex, timecode: timecode,
                                      vancTrigger: mode == .auto ? vancTrigger : nil)
             if let event = detector.process(sample) {
                 switch event {
-                case .started(_, let startTC):
-                    beginTake(timecode: startTC ?? timecode)
+                case .started(let atIndex, let startTC):
+                    beginTake(timecode: startTC ?? timecode, recStartIndex: atIndex)
+                    startedThisFrame = true // текущий кадр уже записан из буфера
                 case .stopped:
                     finishTake()
                 }
             }
         }
 
-        if let writer, !writer.append(pixelBuffer: pixelBuffer, pts: pts) {
+        if !startedThisFrame, let writer,
+           !writer.append(pixelBuffer: pixelBuffer, pts: pts) {
             droppedFrames += 1
             if droppedFrames == 1 || droppedFrames % 100 == 0 {
                 let count = droppedFrames
@@ -171,7 +189,20 @@ public final class CapturePipeline: @unchecked Sendable {
         DispatchQueue.main.async { self.onTimecode?(timecode) }
     }
 
-    private func beginTake(timecode: Timecode?) {
+    /// Кадров пре-ролла при текущем формате.
+    private var preRollFrames: Int {
+        let fps = format?.frameRate ?? 25
+        return Int((config.settings.preRollSecondsEffective * fps).rounded())
+    }
+
+    /// Ёмкость буфера: пре-ролл + задержка детекции + запас.
+    private var preRollCapacity: Int {
+        preRollFrames + config.settings.startDebounceFrames + 25
+    }
+
+    /// Начать дубль. `recStartIndex` — кадр фактического старта записи камеры
+    /// (от детектора); nil — ручной старт, пре-ролл отсчитывается от текущего кадра.
+    private func beginTake(timecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
         let engine = NamingEngine(template: config.settings.namingTemplate)
         let context = NamingContext(
@@ -190,13 +221,24 @@ public final class CapturePipeline: @unchecked Sendable {
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov")
         do {
-            writer = try TakeWriter(url: url, format: format,
-                                    codec: config.settings.codec, startTimecode: timecode)
+            let writer = try TakeWriter(url: url, format: format,
+                                        codec: config.settings.codec, startTimecode: timecode)
+            self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()
             takeScene = config.scene
             takeNumber = config.takeNumber
             droppedFrames = 0
+
+            // добираем из буфера кадры от (старт камеры - пре-ролл) до текущего;
+            // в Rec Run их таймкод заморожен на стартовом значении, так что
+            // timecode-трек дубля остаётся корректным
+            let cutoff = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
+            for buffered in preRollBuffer where buffered.index >= cutoff {
+                writer.append(pixelBuffer: buffered.pixelBuffer, pts: buffered.pts)
+            }
+            preRollBuffer.removeAll()
+
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
         } catch {
             DispatchQueue.main.async {

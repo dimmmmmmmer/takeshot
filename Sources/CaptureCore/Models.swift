@@ -80,6 +80,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Язык интерфейса: "en" (приоритетный), "ru", nil — системный.
     /// Optional — чтобы старые сохранённые настройки декодировались без миграции.
     public var appLanguage: String?
+    /// Пре-ролл в секундах: сколько кадров ДО старта записи камеры включать в дубль.
+    /// Optional по той же причине; эффективное значение — preRollSecondsEffective.
+    public var preRollSeconds: Double?
+
+    public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 
     public init() {}
 

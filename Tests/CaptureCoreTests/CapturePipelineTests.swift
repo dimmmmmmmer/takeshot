@@ -28,6 +28,7 @@ struct CapturePipelineTests {
         settings.startDebounceFrames = 3
         settings.stopDebounceFrames = 5
         settings.detectionMode = .timecodeRun
+        settings.preRollSeconds = 0 // пре-ролл проверяется отдельным тестом
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "7", takeNumber: 2))
@@ -107,6 +108,70 @@ struct CapturePipelineTests {
         #expect(videoTracks.count == 1)
         let tcTracks = try await asset.loadTracks(withMediaType: .timecode)
         #expect(tcTracks.count == 1)
+    }
+
+    @Test func preRollIncludesFramesBeforeRecStart() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PipelineTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var settings = CaptureSettings()
+        settings.codec = .proResProxy
+        settings.destinationPath = root.path
+        settings.startDebounceFrames = 3
+        settings.stopDebounceFrames = 5
+        settings.detectionMode = .timecodeRun
+        settings.preRollSeconds = 0.8 // 20 кадров при 25 fps
+
+        let pipeline = CapturePipeline(config: .init(
+            settings: settings, scene: "1", takeNumber: 1))
+        var finishedTakes: [Take] = []
+        pipeline.onTakeFinished = { finishedTakes.append($0) }
+
+        pipeline.handleFormat(CaptureFormat(
+            width: 640, height: 360, frameRate: 25, timecodeFPS: 25, name: "test"))
+        let pixelBuffer = makePixelBuffer()
+        var tc = Timecode(hours: 12, minutes: 0, seconds: 0, frames: 0, fps: 25)
+        var frame = 0
+        func push(_ timecode: Timecode) async throws {
+            frame += 1
+            pipeline.handleFrame(
+                pixelBuffer: pixelBuffer,
+                pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
+                timecode: timecode, vancTrigger: nil)
+            try await Task.sleep(for: .milliseconds(8))
+        }
+
+        // долгий standby — буфер пре-ролла успевает наполниться
+        for _ in 0..<30 { try await push(tc) }
+        // запись 50 кадров, затем стоп
+        for _ in 0..<50 {
+            tc = tc.advanced(by: 1)
+            try await push(tc)
+        }
+        for _ in 0..<10 { try await push(tc) }
+
+        for _ in 0..<100 where finishedTakes.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let take = try #require(finishedTakes.first)
+
+        var fileExists = false
+        for _ in 0..<100 {
+            if FileManager.default.fileExists(atPath: take.url.path) {
+                fileExists = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(fileExists)
+
+        // 50 кадров записи + ~4 хвостовых + 20 пре-ролла ≈ 74 кадра ≈ 2.96 c;
+        // без пре-ролла было бы ~2.2 с — проверяем, что кадры до REC вошли
+        let asset = AVURLAsset(url: take.url)
+        let duration = try await asset.load(.duration)
+        #expect(duration.seconds > 2.6 && duration.seconds < 3.4,
+                "duration=\(duration.seconds)")
     }
 
     @Test func manualModeIgnoresRunningTimecode() async throws {

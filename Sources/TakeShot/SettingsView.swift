@@ -41,6 +41,11 @@ struct SettingsView: View {
                         value: $controller.settings.startDebounceFrames, in: 1...30)
                 Stepper(L("stop_debounce", controller.settings.stopDebounceFrames),
                         value: $controller.settings.stopDebounceFrames, in: 1...60)
+                Stepper(L("pre_roll", controller.settings.preRollSecondsEffective),
+                        value: Binding(
+                            get: { controller.settings.preRollSecondsEffective },
+                            set: { controller.settings.preRollSeconds = $0 }),
+                        in: 0...3, step: 0.5)
                 Text(L("recrun_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)

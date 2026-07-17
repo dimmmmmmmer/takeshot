@@ -47,3 +47,6 @@
 "lang_system" = "Системный";
 "lang_english" = "English";
 "lang_russian" = "Русский";
+
+/* Пре-ролл */
+"pre_roll" = "Пре-ролл: %.1f с";
