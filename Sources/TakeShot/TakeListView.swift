@@ -14,6 +14,13 @@ struct TakeListView: View {
                     .font(.headline)
                 Spacer()
                 Button {
+                    controller.openDestinationInFinder()
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.plain)
+                .help(L("open_folder"))
+                Button {
                     NSWorkspace.shared.activateFileViewerSelecting([controller.takeLogURL])
                 } label: {
                     Image(systemName: "tablecells")
@@ -47,6 +54,43 @@ struct TakeListView: View {
                 }
                 .listStyle(.inset)
             }
+            if !controller.otherFiles.isEmpty {
+                OtherContentView()
+            }
+        }
+    }
+}
+
+/// Видео, брошенные в папку записи руками (или другими программами) —
+/// показываются отдельным блоком, чтобы папка и приложение не расходились.
+private struct OtherContentView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Divider()
+        VStack(alignment: .leading, spacing: 0) {
+            Text(L("other_content"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            List(controller.otherFiles, id: \.self) { url in
+                HStack {
+                    Image(systemName: "film")
+                        .foregroundStyle(.secondary)
+                    Text(url.lastPathComponent)
+                        .font(.callout)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .contextMenu {
+                    Button(L("show_in_finder")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .frame(maxHeight: 140)
         }
     }
 }

@@ -84,3 +84,22 @@
 "vanc_col_line" = "Line";
 "vanc_col_data" = "Last data (hex)";
 "vanc_unknown" = "Unknown";
+
+/* Redesign */
+"no_signal_short" = "No signal";
+"settings_device" = "Capture device";
+"theme" = "Theme";
+"theme_system" = "System";
+"theme_light" = "Light";
+"theme_dark" = "Dark";
+"player_background" = "Player background";
+"prefix_label" = "PREFIX";
+"prefix_prompt" = "Project";
+"cam_label" = "CAM";
+"roll_label" = "ROLL";
+"clip_label" = "CLIP";
+"clip_help" = "Next clip number, auto-increments after every recording";
+"open_folder" = "Open takes folder in Finder";
+"other_content" = "Other content";
+"debounce_hint" = "Confirmation frames before start/stop is detected; 0 = react instantly (one frame of timecode movement is still required)";
+"pre_roll_hint" = "Frames are buffered in memory before REC; the take starts this many seconds before the camera did";

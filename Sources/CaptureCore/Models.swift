@@ -38,6 +38,7 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var url: URL
     public var displayName: String
     public var scene: String
+    public var roll: String
     public var takeNumber: Int
     public var startTimecode: Timecode?
     public var durationSeconds: Double
@@ -45,12 +46,13 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var recordedAt: Date
 
     public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
-                takeNumber: Int, startTimecode: Timecode?, durationSeconds: Double,
-                isCircled: Bool = false, recordedAt: Date) {
+                roll: String = "", takeNumber: Int, startTimecode: Timecode?,
+                durationSeconds: Double, isCircled: Bool = false, recordedAt: Date) {
         self.id = id
         self.url = url
         self.displayName = displayName
         self.scene = scene
+        self.roll = roll
         self.takeNumber = takeNumber
         self.startTimecode = startTimecode
         self.durationSeconds = durationSeconds
@@ -69,7 +71,7 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
 /// Настройки приложения (персистятся в UserDefaults как JSON).
 public struct CaptureSettings: Codable, Equatable, Sendable {
     public var codec: CaptureCodec = .proRes422
-    public var namingTemplate: String = "{scene}_T{take}_{cam}_{tc}"
+    public var namingTemplate: String = "{prefix}_{cam}_{roll}_C{clip}"
     public var destinationPath: String = NSSearchPathForDirectoriesInDomains(
         .moviesDirectory, .userDomainMask, true).first.map { $0 + "/TakeShot" } ?? "~/Movies/TakeShot"
     public var detectionMode: RecDetectionMode = .auto
@@ -83,6 +85,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Пре-ролл в секундах: сколько кадров ДО старта записи камеры включать в дубль.
     /// Optional по той же причине; эффективное значение — preRollSecondsEffective.
     public var preRollSeconds: Double?
+    /// Тема интерфейса: "light" / "dark" / nil — системная.
+    public var appearance: String?
+    /// Цвет подложки плеера, hex "#RRGGBB"; nil — чёрный.
+    public var playerBackgroundHex: String?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 
@@ -92,8 +98,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
 
     public static func loaded(from defaults: UserDefaults = .standard) -> CaptureSettings {
         guard let data = defaults.data(forKey: defaultsKey),
-              let settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
+              var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
         else { return CaptureSettings() }
+        // миграция со старого дефолтного шаблона на Prefix/Cam/Roll/Clip
+        if settings.namingTemplate == "{scene}_T{take}_{cam}_{tc}" {
+            settings.namingTemplate = CaptureSettings().namingTemplate
+        }
         return settings
     }
 

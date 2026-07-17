@@ -84,3 +84,22 @@
 "vanc_col_line" = "Строка";
 "vanc_col_data" = "Последние данные (hex)";
 "vanc_unknown" = "Неизвестный";
+
+/* Редизайн */
+"no_signal_short" = "Нет сигнала";
+"settings_device" = "Устройство захвата";
+"theme" = "Тема";
+"theme_system" = "Системная";
+"theme_light" = "Светлая";
+"theme_dark" = "Тёмная";
+"player_background" = "Фон плеера";
+"prefix_label" = "PREFIX";
+"prefix_prompt" = "Проект";
+"cam_label" = "CAM";
+"roll_label" = "ROLL";
+"clip_label" = "CLIP";
+"clip_help" = "Номер следующего клипа, автоинкремент после каждой записи";
+"open_folder" = "Открыть папку дублей в Finder";
+"other_content" = "Другие файлы";
+"debounce_hint" = "Кадры подтверждения перед стартом/стопом; 0 = мгновенная реакция (один кадр движения таймкода всё равно нужен)";
+"pre_roll_hint" = "Кадры копятся в памяти до REC; дубль начнётся на столько секунд раньше, чем нажали запись на камере";

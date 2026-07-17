@@ -24,7 +24,7 @@ struct NamingEngineTests {
     }
 
     @Test func sanitizesForbiddenCharacters() {
-        let engine = NamingEngine(template: "{scene}_{clip}")
+        let engine = NamingEngine(template: "{scene}_{clipname}")
         let name = engine.fileName(for: NamingContext(
             scene: "INT/КУХНЯ: день", clipName: "clip*01?"))
         #expect(!name.contains("/"))

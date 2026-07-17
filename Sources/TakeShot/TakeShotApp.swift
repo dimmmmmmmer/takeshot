@@ -13,15 +13,19 @@ struct TakeShotApp: App {
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
                 .frame(minWidth: 960, minHeight: 600)
+                .preferredColorScheme(controller.colorScheme)
                 .onAppear {
                     hotkeys.install(controller: controller)
                 }
         }
+        // кнопки окна поверх контента, без отдельной полосы тайтлбара
+        .windowStyle(.hiddenTitleBar)
 
         // Окно диагностики VANC-пакетов (открывается кнопкой из главного окна)
         Window("VANC Monitor", id: "vanc-monitor") {
             VancMonitorView()
                 .environmentObject(controller)
+                .preferredColorScheme(controller.colorScheme)
         }
         .defaultSize(width: 640, height: 320)
 
@@ -29,6 +33,7 @@ struct TakeShotApp: App {
             SettingsView()
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
+                .preferredColorScheme(controller.colorScheme)
         }
     }
 }

@@ -5,6 +5,7 @@ import Combine
 import CoreMedia
 import CoreVideo
 import Foundation
+import SwiftUI
 
 /// UI-состояние приложения. Тяжёлая работа с кадрами живёт в CapturePipeline;
 /// контроллер только гоняет конфигурацию туда и события обратно.
@@ -28,10 +29,10 @@ final class CaptureController: ObservableObject {
     @Published var thumbnails: [Take.ID: NSImage] = [:]
     /// Статистика VANC-пакетов для окна монитора.
     @Published var vancStats: [VancPacketStat] = []
-    @Published var scene: String = "1" {
+    /// Ролл (катушка/носитель). Смена ролла сбрасывает номер клипа.
+    @Published var roll: String = "A001" {
         didSet {
-            guard oldValue != scene else { return }
-            // новая сцена — дубли считаем с первого
+            guard oldValue != roll else { return }
             if nextTakeNumber != 1 { nextTakeNumber = 1 }
             pushConfig()
         }
@@ -39,6 +40,8 @@ final class CaptureController: ObservableObject {
     @Published var nextTakeNumber: Int = 1 {
         didSet { pushConfig() }
     }
+    /// Видеофайлы в папке записи, появившиеся не из TakeShot (сброшены руками).
+    @Published var otherFiles: [URL] = []
     @Published var lastError: String?
     @Published var mockCameraRecording = false
     @Published var settings = CaptureSettings.loaded() {
@@ -68,21 +71,26 @@ final class CaptureController: ObservableObject {
 
     init(extraBackends: [(String, CaptureBackend)] = []) {
         var children: [(String, CaptureBackend)] = [
-            ("decklink", DeckLinkBackendAdapter()),
-            ("mock", MockCaptureBackend()),
+            ("decklink", DeckLinkBackendAdapter())
         ]
+        // демо-источник — только для отладки без железа: TakeShot --demo
+        if ProcessInfo.processInfo.arguments.contains("--demo")
+            || ProcessInfo.processInfo.environment["TAKESHOT_DEMO"] != nil {
+            children.append(("mock", MockCaptureBackend()))
+        }
         children.append(contentsOf: extraBackends)
         let backend = AggregateBackend(children: children)
         self.backend = backend
 
         let stored = CaptureSettings.loaded()
         self.pipeline = CapturePipeline(config: .init(
-            settings: stored, scene: "1", takeNumber: 1))
+            settings: stored, roll: "A001", takeNumber: 1))
 
         backend.delegate = self
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         bindPipeline()
         refreshDevices() // выбор первого устройства запустит захват через didSet
+        startFolderSync()
     }
 
     private func bindPipeline() {
@@ -113,6 +121,21 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Тема интерфейса из настроек.
+    var colorScheme: ColorScheme? {
+        switch settings.appearance {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+
+    /// Цвет подложки плеера.
+    var playerBackground: Color {
+        get { settings.playerBackgroundHex.flatMap(Color.init(hex:)) ?? .black }
+        set { settings.playerBackgroundHex = newValue.hexString }
+    }
+
     /// Обвести последний дубль (хоткей).
     func circleLastTake() {
         guard let last = takes.last else { return }
@@ -121,7 +144,7 @@ final class CaptureController: ObservableObject {
 
     private func pushConfig() {
         pipeline.update(config: .init(
-            settings: settings, scene: scene, takeNumber: nextTakeNumber))
+            settings: settings, roll: roll, takeNumber: nextTakeNumber))
     }
 
     // MARK: - управление захватом
@@ -191,8 +214,75 @@ final class CaptureController: ObservableObject {
         destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
     }
 
-    private var destinationRoot: URL {
+    /// Корневая папка записи (для кнопки «открыть папку»).
+    var destinationRoot: URL {
         URL(fileURLWithPath: (settings.destinationPath as NSString).expandingTildeInPath)
+    }
+
+    func openDestinationInFinder() {
+        try? FileManager.default.createDirectory(at: destinationRoot,
+                                                 withIntermediateDirectories: true)
+        NSWorkspace.shared.open(destinationRoot)
+    }
+
+    /// Диалог смены папки записи (используется и из настроек, и из нижней панели).
+    func chooseDestinationFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = destinationRoot
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.destinationPath = url.path
+        }
+    }
+
+    // MARK: - синхронизация папки (Other content)
+
+    nonisolated private static let videoExtensions: Set<String> = ["mov", "mp4", "mxf", "m4v", "avi"]
+
+    /// Лёгкий поллинг папки записи: видеофайлы, которых нет среди наших дублей,
+    /// показываются отдельным блоком Other content.
+    private func startFolderSync() {
+        Task { [weak self] in
+            while let self, !Task.isCancelled {
+                self.scanDestinationFolder()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    private func scanDestinationFolder() {
+        let root = destinationRoot
+        let ownTakePaths = Set(takes.map { $0.url.path })
+        Task.detached(priority: .utility) { [weak self] in
+            let sorted = Self.findForeignVideos(root: root, excluding: ownTakePaths)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if self.otherFiles != sorted {
+                    self.otherFiles = sorted
+                }
+            }
+        }
+    }
+
+    nonisolated private static func findForeignVideos(root: URL,
+                                                      excluding ownPaths: Set<String>) -> [URL] {
+        var found: [URL] = []
+        let cutoff = Date().addingTimeInterval(-3) // пишущиеся файлы не трогаем
+        if let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+            for case let url as URL in enumerator {
+                guard videoExtensions.contains(url.pathExtension.lowercased()),
+                      !ownPaths.contains(url.path) else { continue }
+                let modified = (try? url.resourceValues(
+                    forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                if let modified, modified > cutoff { continue }
+                found.append(url)
+            }
+        }
+        return found.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     /// Resolve-совместимый CSV: пишется заново при каждом дубле и каждой отметке

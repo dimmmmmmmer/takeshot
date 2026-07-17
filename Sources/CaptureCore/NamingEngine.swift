@@ -35,8 +35,10 @@ public struct NamingEngine: Sendable {
         self.template = template
     }
 
-    public static let placeholders = ["{project}", "{date}", "{scene}", "{take}",
-                                      "{reel}", "{cam}", "{clip}", "{tc}"]
+    /// {prefix} — префикс проекта, {roll} — ролл, {clip} — номер клипа (с паддингом).
+    /// Старые имена ({project}/{reel}/{take}) остаются рабочими алиасами.
+    public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
+                                      "{scene}", "{tc}", "{date}", "{clipname}"]
 
     /// Имя файла без расширения.
     public func fileName(for context: NamingContext) -> String {
@@ -45,14 +47,18 @@ public struct NamingEngine: Sendable {
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         var result = template
+        let paddedNumber = context.take > 0 ? String(format: "%02d", context.take) : ""
         let substitutions: [String: String] = [
             "{project}": context.project,
+            "{prefix}": context.project,
             "{date}": dateFormatter.string(from: context.date),
             "{scene}": context.scene,
-            "{take}": context.take > 0 ? String(format: "%02d", context.take) : "",
+            "{take}": paddedNumber,
+            "{clip}": paddedNumber,
             "{reel}": context.reel,
+            "{roll}": context.reel,
             "{cam}": context.camera,
-            "{clip}": context.clipName,
+            "{clipname}": context.clipName,
             "{tc}": context.timecode?.fileNameSafe ?? "",
         ]
         for (key, value) in substitutions {

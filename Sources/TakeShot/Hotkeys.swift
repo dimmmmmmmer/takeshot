@@ -43,7 +43,6 @@ struct KeyCombo: Codable, Equatable {
 enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleRecord
     case circleLastTake
-    case toggleDemoRec
 
     var id: String { rawValue }
 
@@ -51,7 +50,6 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .toggleRecord: return "hotkey_record"
         case .circleLastTake: return "hotkey_circle"
-        case .toggleDemoRec: return "hotkey_demo_rec"
         }
     }
 
@@ -61,8 +59,6 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "r", modifiers: NSEvent.ModifierFlags.command.rawValue)
         case .circleLastTake:
             return KeyCombo(key: "g", modifiers: NSEvent.ModifierFlags.command.rawValue)
-        case .toggleDemoRec:
-            return KeyCombo(key: "d", modifiers: NSEvent.ModifierFlags.command.rawValue)
         }
     }
 }
@@ -150,10 +146,6 @@ final class HotkeyManager: ObservableObject {
             if controller.isCapturing { controller.toggleManualRecord() }
         case .circleLastTake:
             controller.circleLastTake()
-        case .toggleDemoRec:
-            if controller.isMockSelected && controller.isCapturing {
-                controller.toggleMockCameraRecord()
-            }
         }
     }
 }

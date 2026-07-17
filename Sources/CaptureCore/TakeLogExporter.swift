@@ -6,11 +6,11 @@ public enum TakeLogExporter {
     public static let fileName = "takeshot-log.csv"
 
     public static func resolveCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Scene,Take,Good Take,Comments"]
+        var lines = ["File Name,Reel Name,Take,Good Take,Comments"]
         for take in takes {
             lines.append([
                 escape(take.url.lastPathComponent),
-                escape(take.scene),
+                escape(take.roll.isEmpty ? take.scene : take.roll),
                 String(take.takeNumber),
                 take.isCircled ? "true" : "false",
                 "",

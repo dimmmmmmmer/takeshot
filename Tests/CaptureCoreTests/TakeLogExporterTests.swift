@@ -17,7 +17,7 @@ struct TakeLogExporterTests {
             makeTake(name: "1_T02.mov", scene: "1", number: 2, circled: false),
         ])
         let lines = csv.split(separator: "\n").map(String.init)
-        #expect(lines[0] == "File Name,Scene,Take,Good Take,Comments")
+        #expect(lines[0] == "File Name,Reel Name,Take,Good Take,Comments")
         #expect(lines[1] == "1_T01.mov,1,1,true,")
         #expect(lines[2] == "1_T02.mov,1,2,false,")
     }

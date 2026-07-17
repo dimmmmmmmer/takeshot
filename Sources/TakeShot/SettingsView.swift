@@ -7,6 +7,17 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section(L("settings_device")) {
+                Picker(L("device"), selection: $controller.selectedDeviceID) {
+                    if controller.devices.isEmpty {
+                        Text(L("no_devices")).tag(String?.none)
+                    }
+                    ForEach(controller.devices) { device in
+                        Text(device.name).tag(String?.some(device.id))
+                    }
+                }
+                .disabled(controller.isRecording)
+            }
             Section(L("settings_interface")) {
                 Picker(L("language"), selection: Binding(
                     get: { controller.appLanguage },
@@ -15,6 +26,17 @@ struct SettingsView: View {
                     Text(L("lang_russian")).tag(AppLanguage.russian)
                     Text(L("lang_system")).tag(AppLanguage.system)
                 }
+                Picker(L("theme"), selection: Binding(
+                    get: { controller.settings.appearance ?? "system" },
+                    set: { controller.settings.appearance = $0 == "system" ? nil : $0 })) {
+                    Text(L("theme_system")).tag("system")
+                    Text(L("theme_light")).tag("light")
+                    Text(L("theme_dark")).tag("dark")
+                }
+                ColorPicker(L("player_background"), selection: Binding(
+                    get: { controller.playerBackground },
+                    set: { controller.playerBackground = $0 }),
+                    supportsOpacity: false)
             }
             Section(L("settings_recording")) {
                 Picker(L("codec"), selection: $controller.settings.codec) {
@@ -22,17 +44,17 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
-                HStack {
-                    TextField(L("destination_folder"), text: $controller.settings.destinationPath)
-                    Button {
-                        chooseDestinationFolder()
-                    } label: {
-                        Image(systemName: "folder")
+                LabeledContent(L("destination_folder")) {
+                    HStack {
+                        Text(controller.settings.destinationPath)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button(L("choose_folder")) {
+                            controller.chooseDestinationFolder()
+                        }
                     }
-                    .help(L("choose_folder"))
                 }
-                TextField(L("project"), text: $controller.settings.projectName)
-                TextField(L("camera"), text: $controller.settings.cameraLabel)
             }
             Section(L("settings_naming")) {
                 TextField(L("naming_template"), text: $controller.settings.namingTemplate)
@@ -47,14 +69,20 @@ struct SettingsView: View {
                     Text(L("mode_manual")).tag(RecDetectionMode.manual)
                 }
                 Stepper(L("start_debounce", controller.settings.startDebounceFrames),
-                        value: $controller.settings.startDebounceFrames, in: 1...30)
+                        value: $controller.settings.startDebounceFrames, in: 0...30)
                 Stepper(L("stop_debounce", controller.settings.stopDebounceFrames),
-                        value: $controller.settings.stopDebounceFrames, in: 1...60)
+                        value: $controller.settings.stopDebounceFrames, in: 0...60)
+                Text(L("debounce_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Stepper(L("pre_roll", controller.settings.preRollSecondsEffective),
                         value: Binding(
                             get: { controller.settings.preRollSecondsEffective },
                             set: { controller.settings.preRollSeconds = $0 }),
                         in: 0...3, step: 0.5)
+                Text(L("pre_roll_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(L("recrun_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -83,19 +111,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
+        .frame(width: 500)
         .padding()
-    }
-
-    private func chooseDestinationFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath:
-            (controller.settings.destinationPath as NSString).expandingTildeInPath)
-        if panel.runModal() == .OK, let url = panel.url {
-            controller.settings.destinationPath = url.path
-        }
     }
 }

@@ -13,11 +13,14 @@ public final class CapturePipeline: @unchecked Sendable {
     public struct Config {
         public var settings: CaptureSettings
         public var scene: String
+        public var roll: String
         public var takeNumber: Int
 
-        public init(settings: CaptureSettings, scene: String, takeNumber: Int) {
+        public init(settings: CaptureSettings, scene: String = "",
+                    roll: String = "", takeNumber: Int) {
             self.settings = settings
             self.scene = scene
+            self.roll = roll
             self.takeNumber = takeNumber
         }
     }
@@ -47,6 +50,7 @@ public final class CapturePipeline: @unchecked Sendable {
     private var takeStartTC: Timecode?
     private var takeStartedAt = Date()
     private var takeScene = ""
+    private var takeRoll = ""
     private var takeNumber = 0
     private var videoFormatDescription: CMVideoFormatDescription?
     /// Кадры до старта записи — для пре-ролла (только пока writer == nil).
@@ -246,7 +250,7 @@ public final class CapturePipeline: @unchecked Sendable {
             date: Date(),
             scene: config.scene,
             take: config.takeNumber,
-            reel: "",
+            reel: config.roll,
             camera: config.settings.cameraLabel,
             clipName: "",
             timecode: timecode)
@@ -263,6 +267,7 @@ public final class CapturePipeline: @unchecked Sendable {
             takeStartTC = timecode
             takeStartedAt = Date()
             takeScene = config.scene
+            takeRoll = config.roll
             takeNumber = config.takeNumber
             droppedFrames = 0
 
@@ -290,6 +295,7 @@ public final class CapturePipeline: @unchecked Sendable {
             url: writer.url,
             displayName: writer.url.deletingPathExtension().lastPathComponent,
             scene: takeScene,
+            roll: takeRoll,
             takeNumber: takeNumber,
             startTimecode: takeStartTC,
             durationSeconds: writer.durationSeconds,
