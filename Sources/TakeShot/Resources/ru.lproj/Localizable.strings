@@ -62,3 +62,5 @@
 "reveal_csv_help" = "Показать CSV метадаты для DaVinci Resolve (Media Pool → Import Metadata; circle takes станут Good Takes)";
 "circle_take" = "Обвести дубль (Good Take в Резолве)";
 "uncircle_take" = "Снять отметку";
+
+"device_disconnected" = "Капчур-устройство отключено";

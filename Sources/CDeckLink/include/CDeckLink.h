@@ -25,6 +25,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)isSDKAvailable;
 /// Список подключённых устройств (пустой в стаб-режиме).
 + (NSArray<CDLDeviceInfo *> *)devices;
+/// Подписка на hot-plug: handler вызывается при подключении/отключении
+/// любого DeckLink-устройства (на потоке DeckLink). Повторный вызов заменяет handler.
++ (void)startWatchingDevicesWithHandler:(void (^)(void))handler;
 @end
 
 @class CDLCapture;

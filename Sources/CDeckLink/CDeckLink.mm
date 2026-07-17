@@ -157,9 +157,83 @@ private:
     __weak CDLCapture *_owner;
 };
 
+#pragma mark - Hot-plug discovery
+
+class CDLDiscoveryCallback : public IDeckLinkDeviceNotificationCallback {
+public:
+    explicit CDLDiscoveryCallback(void (^handler)(void))
+        : _refCount(1), _handler([handler copy]) {}
+
+    HRESULT DeckLinkDeviceArrived(IDeckLink *device) override {
+        notify();
+        return S_OK;
+    }
+
+    HRESULT DeckLinkDeviceRemoved(IDeckLink *device) override {
+        notify();
+        return S_OK;
+    }
+
+    HRESULT QueryInterface(REFIID iid, LPVOID *ppv) override {
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+
+    ULONG AddRef() override { return ++_refCount; }
+
+    ULONG Release() override {
+        ULONG count = --_refCount;
+        if (count == 0) {
+            delete this;
+        }
+        return count;
+    }
+
+private:
+    virtual ~CDLDiscoveryCallback() = default;
+
+    void notify() {
+        @autoreleasepool {
+            void (^handler)(void) = _handler;
+            if (handler) {
+                handler();
+            }
+        }
+    }
+
+    std::atomic<ULONG> _refCount;
+    void (^_handler)(void);
+};
+
+static IDeckLinkDiscovery *sDiscovery = NULL;
+static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
+
 #pragma mark - CDLDeviceManager
 
 @implementation CDLDeviceManager
+
++ (void)startWatchingDevicesWithHandler:(void (^)(void))handler {
+    if (sDiscovery) {
+        sDiscovery->UninstallDeviceNotifications();
+        sDiscovery->Release();
+        sDiscovery = NULL;
+    }
+    if (sDiscoveryCallback) {
+        sDiscoveryCallback->Release();
+        sDiscoveryCallback = NULL;
+    }
+    sDiscovery = CreateDeckLinkDiscoveryInstance();
+    if (!sDiscovery) {
+        return;
+    }
+    sDiscoveryCallback = new CDLDiscoveryCallback(handler);
+    if (sDiscovery->InstallDeviceNotifications(sDiscoveryCallback) != S_OK) {
+        sDiscoveryCallback->Release();
+        sDiscoveryCallback = NULL;
+        sDiscovery->Release();
+        sDiscovery = NULL;
+    }
+}
 
 + (BOOL)isSDKAvailable {
     IDeckLinkIterator *iterator = CreateDeckLinkIteratorInstance();
@@ -462,6 +536,9 @@ private:
 
 + (NSArray<CDLDeviceInfo *> *)devices {
     return @[];
+}
+
++ (void)startWatchingDevicesWithHandler:(void (^)(void))handler {
 }
 
 @end

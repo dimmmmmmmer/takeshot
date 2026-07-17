@@ -62,3 +62,5 @@
 "reveal_csv_help" = "Show metadata CSV for DaVinci Resolve (Media Pool → Import Metadata; circle takes become Good Takes)";
 "circle_take" = "Circle take (Good Take in Resolve)";
 "uncircle_take" = "Remove circle";
+
+"device_disconnected" = "Capture device disconnected";

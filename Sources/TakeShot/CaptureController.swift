@@ -112,8 +112,16 @@ final class CaptureController: ObservableObject {
 
     func refreshDevices() {
         devices = backend.devices()
-        if selectedDeviceID == nil {
+
+        let realDevices = devices.filter { !$0.id.hasPrefix("mock:") }
+        if let selected = selectedDeviceID, !devices.contains(where: { $0.id == selected }) {
+            // выбранное устройство выдернули — откатываемся на первое доступное
+            lastError = L("device_disconnected")
             selectedDeviceID = devices.first?.id
+        } else if selectedDeviceID == nil || (isMockSelected && !realDevices.isEmpty) {
+            // ничего не выбрано, или выбран демо-источник, а появилась настоящая
+            // плата — переключаемся на неё (захват стартует сам через didSet)
+            selectedDeviceID = realDevices.first?.id ?? devices.first?.id
         }
     }
 

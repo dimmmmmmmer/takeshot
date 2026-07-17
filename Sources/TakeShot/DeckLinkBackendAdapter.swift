@@ -12,6 +12,15 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
 
+    override init() {
+        super.init()
+        // hot-plug: воткнули/выдернули плату — список устройств обновится сам
+        CDLDeviceManager.startWatchingDevices { [weak self] in
+            guard let self else { return }
+            self.delegate?.backendDeviceListChanged(self)
+        }
+    }
+
     var isAvailable: Bool {
         CDLDeviceManager.isSDKAvailable()
     }
