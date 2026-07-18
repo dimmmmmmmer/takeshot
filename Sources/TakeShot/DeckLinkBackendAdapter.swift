@@ -96,42 +96,9 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
 
     private func makeAudioSampleBuffer(bytes: UnsafeRawPointer, sampleFrames: Int,
                                        channelCount: Int, ptsSeconds: Double) -> CMSampleBuffer? {
-        if audioFormatDescription == nil {
-            var asbd = AudioStreamBasicDescription(
-                mSampleRate: 48_000,
-                mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
-                mBytesPerPacket: UInt32(2 * channelCount),
-                mFramesPerPacket: 1,
-                mBytesPerFrame: UInt32(2 * channelCount),
-                mChannelsPerFrame: UInt32(channelCount),
-                mBitsPerChannel: 16,
-                mReserved: 0)
-            CMAudioFormatDescriptionCreate(
-                allocator: kCFAllocatorDefault, asbd: &asbd,
-                layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
-                extensions: nil, formatDescriptionOut: &audioFormatDescription)
-        }
-        guard let formatDescription = audioFormatDescription else { return nil }
-
-        let dataLength = sampleFrames * 2 * channelCount
-        var blockBuffer: CMBlockBuffer?
-        guard CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: dataLength,
-            blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
-            offsetToData: 0, dataLength: dataLength, flags: 0,
-            blockBufferOut: &blockBuffer) == noErr, let blockBuffer else { return nil }
-        guard CMBlockBufferReplaceDataBytes(
-            with: bytes, blockBuffer: blockBuffer,
-            offsetIntoDestination: 0, dataLength: dataLength) == noErr else { return nil }
-
-        var sampleBuffer: CMSampleBuffer?
-        CMAudioSampleBufferCreateReadyWithPacketDescriptions(
-            allocator: kCFAllocatorDefault, dataBuffer: blockBuffer,
-            formatDescription: formatDescription, sampleCount: sampleFrames,
-            presentationTimeStamp: CMTime(seconds: ptsSeconds, preferredTimescale: 240_000),
-            packetDescriptions: nil, sampleBufferOut: &sampleBuffer)
-        return sampleBuffer
+        PCMAudio.makeSampleBuffer(bytes: bytes, sampleFrames: sampleFrames,
+                                  channelCount: channelCount, ptsSeconds: ptsSeconds,
+                                  formatCache: &audioFormatDescription)
     }
 }
 

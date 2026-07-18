@@ -46,6 +46,34 @@ final class CaptureController: ObservableObject {
     @Published var otherThumbnails: [URL: NSImage] = [:]
     @Published var lastError: String?
     @Published var mockCameraRecording = false
+    /// Пиковые уровни аудиоканалов, dBFS (для метров).
+    @Published var audioLevels: [Float] = []
+    /// Режим просмотра: живой сигнал или плейбек записанного.
+    @Published var viewerMode: ViewerMode = .record {
+        didSet {
+            if viewerMode == .record {
+                player.pause()
+            }
+        }
+    }
+    /// Что сейчас загружено в плеер (для подсветки в списке).
+    @Published var playbackURL: URL?
+
+    enum ViewerMode: String, CaseIterable {
+        case record
+        case playback
+    }
+
+    /// Плеер для просмотра дублей (AVPlayerView в превью).
+    let player = AVPlayer()
+
+    /// Открыть файл в плеере и переключиться в режим плейбека.
+    func play(url: URL) {
+        playbackURL = url
+        player.replaceCurrentItem(with: AVPlayerItem(url: url))
+        viewerMode = .playback
+        player.play()
+    }
     @Published var settings = CaptureSettings.loaded() {
         didSet {
             settings.save()
@@ -118,6 +146,9 @@ final class CaptureController: ObservableObject {
         }
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
+        }
+        pipeline.onAudioLevels = { [weak self] levels in
+            self?.audioLevels = levels
         }
     }
 

@@ -127,6 +127,8 @@ private struct TakeRow: View {
             Spacer()
             CircleToggle(take: take)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { controller.play(url: take.url) }
         .contextMenu { TakeContextMenu(take: take) }
     }
 }
@@ -171,6 +173,8 @@ private struct TakeCell: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { controller.play(url: take.url) }
         .contextMenu { TakeContextMenu(take: take) }
     }
 }
@@ -212,6 +216,10 @@ private struct OtherContentSection: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        if !isImage(url) { controller.play(url: url) }
+                    }
                     .contextMenu { OtherContextMenu(url: url) }
                 }
                 .listStyle(.inset)
@@ -245,18 +253,31 @@ private struct OtherCell: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            if !isImage(url) { controller.play(url: url) }
+        }
         .contextMenu { OtherContextMenu(url: url) }
     }
 }
 
 private struct OtherContextMenu: View {
+    @EnvironmentObject private var controller: CaptureController
     let url: URL
 
     var body: some View {
+        if !isImage(url) {
+            Button(L("play")) { controller.play(url: url) }
+        }
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
     }
+}
+
+private func isImage(_ url: URL) -> Bool {
+    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
+        .contains(url.pathExtension.lowercased())
 }
 
 private func iconName(for url: URL) -> String {
@@ -287,6 +308,7 @@ private struct TakeContextMenu: View {
     let take: Take
 
     var body: some View {
+        Button(L("play")) { controller.play(url: take.url) }
         Button(take.isCircled ? L("uncircle_take") : L("circle_take")) {
             controller.toggleCircle(take)
         }

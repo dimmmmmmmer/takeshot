@@ -106,3 +106,9 @@
 
 "open" = "Open";
 "reveal_csv" = "Show Resolve metadata CSV in Finder";
+
+/* Playback */
+"mode_record" = "Record";
+"mode_playback" = "Playback";
+"play" = "Play";
+"playback_pick_hint" = "Double-click a take to play it";

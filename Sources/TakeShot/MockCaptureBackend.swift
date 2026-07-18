@@ -21,6 +21,9 @@ final class MockCaptureBackend: CaptureBackend {
     private var pixelBufferPool: CVPixelBufferPool?
     private var frameCounter = 0
     private var timecode = Timecode(hours: 10, minutes: 0, seconds: 0, frames: 0, fps: 25)
+    private var audioFormatCache: CMAudioFormatDescription?
+    private var audioPhaseL: Double = 0
+    private var audioPhaseR: Double = 0
 
     private static let format = CaptureFormat(width: 1920, height: 1080, frameRate: 25,
                                               timecodeFPS: 25, name: "Демо 1080p25")
@@ -63,6 +66,33 @@ final class MockCaptureBackend: CaptureBackend {
         let pts = CMTime(value: CMTimeValue(frameCounter * 40), timescale: 1000)
         delegate?.backend(self, didReceiveFrame: pixelBuffer, pts: pts,
                           timecode: timecode, vancTrigger: nil, ancillaryPackets: [])
+        emitAudio(ptsSeconds: Double(frameCounter) * 0.04)
+    }
+
+    /// Стерео-синус с «дыханием» громкости — чтобы метры уровня жили в демо.
+    private func emitAudio(ptsSeconds: Double) {
+        let sampleFrames = 1920 // 40 мс при 48 кГц
+        var samples = [Int16](repeating: 0, count: sampleFrames * 2)
+        let t = Double(frameCounter) * 0.04
+        let ampL = 0.28 + 0.22 * sin(t * 0.9)
+        let ampR = 0.22 + 0.18 * sin(t * 0.6 + 1.3)
+        let stepL = 2.0 * Double.pi * 440.0 / 48_000.0
+        let stepR = 2.0 * Double.pi * 330.0 / 48_000.0
+        for frame in 0..<sampleFrames {
+            audioPhaseL += stepL
+            audioPhaseR += stepR
+            samples[frame * 2] = Int16(sin(audioPhaseL) * ampL * 32_000)
+            samples[frame * 2 + 1] = Int16(sin(audioPhaseR) * ampR * 32_000)
+        }
+        let sampleBuffer = samples.withUnsafeBytes { raw -> CMSampleBuffer? in
+            guard let base = raw.baseAddress else { return nil }
+            return PCMAudio.makeSampleBuffer(bytes: base, sampleFrames: sampleFrames,
+                                             channelCount: 2, ptsSeconds: ptsSeconds,
+                                             formatCache: &audioFormatCache)
+        }
+        if let sampleBuffer {
+            delegate?.backend(self, didReceiveAudio: sampleBuffer)
+        }
     }
 
     private func renderFrame() -> CVPixelBuffer? {

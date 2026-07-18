@@ -1,4 +1,5 @@
 import AVFoundation
+import AVKit
 import CaptureCore
 import SwiftUI
 
@@ -41,6 +42,17 @@ struct TopBarView: View {
 
             Spacer()
 
+            Picker("", selection: $controller.viewerMode) {
+                Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
+                Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 190)
+            .labelsHidden()
+            .controlSize(.small)
+
+            Spacer()
+
             if let format = controller.signalFormat {
                 Text(Self.shortFormat(format))
                     .font(.system(size: 15, weight: .medium))
@@ -77,6 +89,48 @@ struct PreviewView: View {
     var body: some View {
         ZStack {
             Rectangle().fill(controller.playerBackground)
+            if controller.viewerMode == .playback {
+                if controller.playbackURL != nil {
+                    PlayerView(player: controller.player)
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "play.rectangle")
+                            .font(.system(size: 40))
+                        Text(L("playback_pick_hint"))
+                            .font(.headline)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+            } else {
+                LivePreviewContent()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if controller.isRecording {
+                Label(L("rec"), systemImage: "record.circle.fill")
+                    .font(.headline.bold())
+                    .foregroundStyle(.red)
+                    .padding(10)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if controller.viewerMode == .record, controller.isCapturing,
+               !controller.audioLevels.isEmpty {
+                AudioMeterView(levels: controller.audioLevels)
+                    .frame(height: 190)
+                    .padding(.trailing, 10)
+            }
+        }
+    }
+}
+
+/// Живой сигнал + плашки состояний (вынесено из PreviewView).
+private struct LivePreviewContent: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        ZStack {
             DisplayLayerView(layer: controller.pipeline.displayLayer)
             if !controller.isCapturing || controller.devices.isEmpty {
                 VStack(spacing: 8) {
@@ -96,16 +150,22 @@ struct PreviewView: View {
                     .foregroundStyle(.orange)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) {
-            if controller.isRecording {
-                Label(L("rec"), systemImage: "record.circle.fill")
-                    .font(.headline.bold())
-                    .foregroundStyle(.red)
-                    .padding(10)
-            }
-        }
     }
+}
+
+/// Нативный плеер с транспортом (AVPlayerView, inline-контролы).
+private struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.player = player
+        view.controlsStyle = .inline
+        view.showsFullScreenToggleButton = false
+        return view
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
 }
 
 /// NSView-обёртка вокруг AVSampleBufferDisplayLayer.

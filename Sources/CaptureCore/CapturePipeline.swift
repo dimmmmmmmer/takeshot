@@ -34,6 +34,8 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onError: ((String) -> Void)?
     /// Статистика VANC-пакетов (для монитора); шлётся раз в секунду при изменениях.
     public var onVancStats: (([VancPacketStat]) -> Void)?
+    /// Пиковые уровни аудиоканалов, dBFS. Приходят с частотой аудиопакетов (~25 Гц).
+    public var onAudioLevels: (([Float]) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
 
@@ -111,6 +113,7 @@ public final class CapturePipeline: @unchecked Sendable {
                 self.onFormatChanged?(nil)
                 self.onTimecode?(nil)
                 self.onVancStats?([])
+                self.onAudioLevels?([])
             }
         }
     }
@@ -144,6 +147,10 @@ public final class CapturePipeline: @unchecked Sendable {
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
         queue.async {
             self.writer?.append(audioSampleBuffer: sampleBuffer)
+            let levels = PCMAudio.peakLevels(of: sampleBuffer)
+            if !levels.isEmpty {
+                DispatchQueue.main.async { self.onAudioLevels?(levels) }
+            }
         }
     }
 
