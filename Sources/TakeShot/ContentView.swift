@@ -26,21 +26,23 @@ struct TopBarView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                .font(.system(size: 22, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(controller.isRecording ? .red : .primary)
-
-            if let error = controller.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-                    .padding(.leading, 12)
+        // три колонки: TC прижат к левому краю, переключатель ровно по центру
+        // плеера, инфо о сигнале — к правому. Кнопки окна живут строкой выше
+        // (отступ сверху), поэтому края свободны.
+        HStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Text(controller.currentTimecode?.description ?? "--:--:--:--")
+                    .font(.body.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(controller.isRecording ? .red : .primary)
+                if let error = controller.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                }
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Picker("", selection: $controller.viewerMode) {
                 Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
@@ -51,23 +53,21 @@ struct TopBarView: View {
             .labelsHidden()
             .controlSize(.small)
 
-            Spacer()
-
-            if let format = controller.signalFormat {
-                Text(Self.shortFormat(format))
-                    .font(.system(size: 15, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(L("no_signal_short"))
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+            Group {
+                if let format = controller.signalFormat {
+                    Text(Self.shortFormat(format))
+                        .monospacedDigit()
+                } else {
+                    Text(L("no_signal_short"))
+                }
             }
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        // отступ слева под маковские кнопки окна (титлбар скрыт, они поверх контента)
-        .padding(.leading, 78)
-        .padding(.trailing, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.top, 34) // кнопки окна — над этой строкой, не двигают контент
+        .padding(.bottom, 8)
     }
 
     static func fpsText(_ fps: Double) -> String {
@@ -112,14 +112,6 @@ struct PreviewView: View {
                     .font(.headline.bold())
                     .foregroundStyle(.red)
                     .padding(10)
-            }
-        }
-        .overlay(alignment: .trailing) {
-            if controller.viewerMode == .record, controller.isCapturing,
-               !controller.audioLevels.isEmpty {
-                AudioMeterView(levels: controller.audioLevels)
-                    .frame(height: 190)
-                    .padding(.trailing, 10)
             }
         }
     }
@@ -216,23 +208,20 @@ struct BottomBarView: View {
                         .font(.system(size: 15))
                 }
                 .help(L("choose_folder"))
-
-                if controller.isMockSelected && controller.isCapturing {
-                    Button {
-                        controller.toggleMockCameraRecord()
-                    } label: {
-                        Image(systemName: controller.mockCameraRecording
-                              ? "video.fill" : "video")
-                            .font(.system(size: 15))
-                            .foregroundStyle(controller.mockCameraRecording ? .red : .primary)
-                    }
-                    .help(controller.mockCameraRecording ? L("mock_rec_stop") : L("mock_rec"))
-                }
             }
             .buttonStyle(.borderless)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            RecordButton()
+            // центр: REC ровно по центру, метры уровня висят рядом справа
+            // (offset — чтобы не сдвигать кнопку с центра)
+            ZStack {
+                RecordButton()
+                if controller.isCapturing, !controller.audioLevels.isEmpty {
+                    AudioMeterView(levels: controller.audioLevels)
+                        .frame(height: 46)
+                        .offset(x: 62)
+                }
+            }
 
             NamingFieldsView()
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -294,10 +283,16 @@ struct NamingFieldsView: View {
                 Text(L("clip_label"))
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
-                Stepper(String(format: "%02d", controller.nextTakeNumber),
-                        value: $controller.nextTakeNumber, in: 0...999)
-                    .controlSize(.small)
-                    .monospacedDigit()
+                // номер отдельным текстом: лейбл степпера в компактном размере
+                // может не отрисоваться, а цифра должна быть видна всегда
+                HStack(spacing: 4) {
+                    Text(String(format: "%02d", controller.nextTakeNumber))
+                        .font(.body)
+                        .monospacedDigit()
+                    Stepper("", value: $controller.nextTakeNumber, in: 0...999)
+                        .labelsHidden()
+                        .controlSize(.small)
+                }
             }
             .help(L("clip_help"))
         }

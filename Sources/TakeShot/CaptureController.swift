@@ -45,7 +45,6 @@ final class CaptureController: ObservableObject {
     /// Миниатюры для Other content.
     @Published var otherThumbnails: [URL: NSImage] = [:]
     @Published var lastError: String?
-    @Published var mockCameraRecording = false
     /// Пиковые уровни аудиоканалов, dBFS (для метров).
     @Published var audioLevels: [Float] = []
     /// Режим просмотра: живой сигнал или плейбек записанного.
@@ -210,9 +209,6 @@ final class CaptureController: ObservableObject {
         backend.stopCapture()
         pipeline.captureStopped()
         isCapturing = false
-        if isMockSelected {
-            mockCameraRecording = false
-        }
     }
 
     private func restartCapture() {
@@ -224,14 +220,6 @@ final class CaptureController: ObservableObject {
 
     func toggleManualRecord() {
         pipeline.toggleManualRecord()
-    }
-
-    /// «Нажать REC на камере» демо-источника: TC побежит/встанет,
-    /// авто-детекция должна поймать это как настоящий дубль.
-    func toggleMockCameraRecord() {
-        mockCameraRecording.toggle()
-        backend.child(of: MockCaptureBackend.self)?
-            .setCameraRecording(mockCameraRecording)
     }
 
     func toggleCircle(_ take: Take) {

@@ -13,7 +13,8 @@ final class MockCaptureBackend: CaptureBackend {
     weak var delegate: CaptureBackendDelegate?
     var isAvailable: Bool { true }
 
-    /// «REC на камере»: пока true — TC бежит, false — стоит.
+    /// «REC на камере». Демо-камера живёт сама: 6 с standby → 12 с записи → снова
+    /// standby — авто-детекция дублей видна без каких-либо кнопок.
     private(set) var isCameraRecording = false
 
     private let queue = DispatchQueue(label: "takeshot.mock-source")
@@ -51,13 +52,12 @@ final class MockCaptureBackend: CaptureBackend {
         timer = nil
     }
 
-    func setCameraRecording(_ recording: Bool) {
-        queue.async { self.isCameraRecording = recording }
-    }
-
     // MARK: - генерация кадров (на queue)
 
     private func emitFrame() {
+        // автоцикл: 150 кадров standby, затем 300 кадров записи (25 fps)
+        let phase = frameCounter % 450
+        isCameraRecording = phase >= 150
         if isCameraRecording {
             timecode = timecode.advanced(by: 1)
         }
