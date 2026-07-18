@@ -1,8 +1,10 @@
-// Генерация иконки приложения в стиле Blackmagic: тёмная плашка,
-// металлическое кольцо-объектив с рисками, красная точка REC с свечением.
+// Генерация иконки приложения: тёмная плашка в стиле Blackmagic,
+// хлопушка с приоткрытой полосатой планкой и красным REC-огоньком.
 // Запуск: swift scripts/make-icon.swift <выходная-папка.iconset>
 import AppKit
 import CoreGraphics
+
+let space = CGColorSpaceCreateDeviceRGB()
 
 func drawIcon(into ctx: CGContext, size: CGFloat) {
     let s = size / 1024.0
@@ -13,111 +15,79 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
     let margin: CGFloat = 100
     let rect = CGRect(x: margin, y: margin, width: 1024 - margin * 2, height: 1024 - margin * 2)
     let bg = CGPath(roundedRect: rect, cornerWidth: 185, cornerHeight: 185, transform: nil)
-
     ctx.addPath(bg)
     ctx.clip()
     let bgColors = [
-        CGColor(red: 0.165, green: 0.173, blue: 0.184, alpha: 1), // верх — чуть светлее
-        CGColor(red: 0.071, green: 0.075, blue: 0.082, alpha: 1), // низ — почти чёрный
+        CGColor(red: 0.165, green: 0.173, blue: 0.184, alpha: 1),
+        CGColor(red: 0.071, green: 0.075, blue: 0.082, alpha: 1),
     ] as CFArray
-    let space = CGColorSpaceCreateDeviceRGB()
-    if let gradient = CGGradient(colorsSpace: space, colors: bgColors, locations: [0, 1]) {
-        ctx.drawLinearGradient(gradient,
-                               start: CGPoint(x: 512, y: 1024 - margin),
-                               end: CGPoint(x: 512, y: margin),
-                               options: [])
+    if let g = CGGradient(colorsSpace: space, colors: bgColors, locations: [0, 1]) {
+        ctx.drawLinearGradient(g, start: CGPoint(x: 512, y: 924),
+                               end: CGPoint(x: 512, y: 100), options: [])
     }
-    // тонкая светлая кромка сверху
     ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.07))
     ctx.setLineWidth(4)
     ctx.addPath(bg)
     ctx.strokePath()
 
-    let center = CGPoint(x: 512, y: 512)
-
-    // --- риски вокруг кольца (шкала объектива / таймкода) ---
-    ctx.setLineCap(.round)
-    for i in 0..<24 {
-        let angle = CGFloat(i) / 24 * 2 * .pi + .pi / 2
-        let isMajor = i % 2 == 0
-        let r0: CGFloat = 352
-        let r1: CGFloat = isMajor ? 384 : 372
-        ctx.setStrokeColor(CGColor(red: 0.36, green: 0.375, blue: 0.40,
-                                   alpha: isMajor ? 0.9 : 0.5))
-        ctx.setLineWidth(isMajor ? 9 : 6)
-        ctx.move(to: CGPoint(x: center.x + cos(angle) * r0, y: center.y + sin(angle) * r0))
-        ctx.addLine(to: CGPoint(x: center.x + cos(angle) * r1, y: center.y + sin(angle) * r1))
-        ctx.strokePath()
-    }
-
-    // --- металлическое кольцо ---
-    let ringPath = CGMutablePath()
-    ringPath.addArc(center: center, radius: 322, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
+    // --- корпус хлопушки ---
+    let bodyRect = CGRect(x: 232, y: 300, width: 560, height: 310)
+    let body = CGPath(roundedRect: bodyRect, cornerWidth: 36, cornerHeight: 36, transform: nil)
     ctx.saveGState()
-    ctx.addPath(ringPath.copy(strokingWithWidth: 66, lineCap: .butt, lineJoin: .miter, miterLimit: 10))
+    ctx.addPath(body)
     ctx.clip()
-    let ringColors = [
-        CGColor(red: 0.52, green: 0.54, blue: 0.57, alpha: 1),
-        CGColor(red: 0.26, green: 0.27, blue: 0.30, alpha: 1),
-        CGColor(red: 0.42, green: 0.44, blue: 0.47, alpha: 1),
-        CGColor(red: 0.20, green: 0.21, blue: 0.235, alpha: 1),
+    let bodyColors = [
+        CGColor(red: 0.24, green: 0.25, blue: 0.27, alpha: 1),
+        CGColor(red: 0.15, green: 0.155, blue: 0.17, alpha: 1),
     ] as CFArray
-    if let gradient = CGGradient(colorsSpace: space, colors: ringColors,
-                                 locations: [0, 0.4, 0.7, 1]) {
-        ctx.drawLinearGradient(gradient,
-                               start: CGPoint(x: 512 - 322, y: 512 + 322),
-                               end: CGPoint(x: 512 + 322, y: 512 - 322),
-                               options: [])
+    if let g = CGGradient(colorsSpace: space, colors: bodyColors, locations: [0, 1]) {
+        ctx.drawLinearGradient(g, start: CGPoint(x: 512, y: 610),
+                               end: CGPoint(x: 512, y: 300), options: [])
     }
-    ctx.restoreGState()
-
-    // внутренняя тёмная линза
-    ctx.setFillColor(CGColor(red: 0.043, green: 0.047, blue: 0.055, alpha: 1))
-    ctx.addArc(center: center, radius: 289, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
-    ctx.fillPath()
-
-    // --- свечение вокруг REC-точки ---
-    let glowColors = [
-        CGColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 0.72),
-        CGColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 0.0),
-    ] as CFArray
-    if let glow = CGGradient(colorsSpace: space, colors: glowColors, locations: [0, 1]) {
-        ctx.drawRadialGradient(glow, startCenter: center, startRadius: 40,
-                               endCenter: center, endRadius: 275, options: [])
+    // строчки-«графы» на корпусе
+    ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.10))
+    for y in [520, 448, 376] {
+        ctx.fill(CGRect(x: 282, y: CGFloat(y), width: 320, height: 22))
     }
-
-    // --- красная точка REC ---
-    let dotColors = [
+    // красный REC-огонёк
+    let dotCenter = CGPoint(x: 700, y: 531)
+    let dot = [
         CGColor(red: 1.0, green: 0.35, blue: 0.30, alpha: 1),
-        CGColor(red: 0.86, green: 0.13, blue: 0.09, alpha: 1),
-        CGColor(red: 0.62, green: 0.06, blue: 0.04, alpha: 1),
+        CGColor(red: 0.80, green: 0.10, blue: 0.07, alpha: 1),
     ] as CFArray
-    if let dot = CGGradient(colorsSpace: space, colors: dotColors, locations: [0, 0.7, 1]) {
+    if let g = CGGradient(colorsSpace: space, colors: dot, locations: [0, 1]) {
         ctx.saveGState()
-        ctx.addArc(center: center, radius: 150, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
+        ctx.addArc(center: dotCenter, radius: 34, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
         ctx.clip()
-        ctx.drawRadialGradient(dot,
-                               startCenter: CGPoint(x: 512 - 40, y: 512 + 50), startRadius: 0,
-                               endCenter: center, endRadius: 160,
+        ctx.drawRadialGradient(g, startCenter: CGPoint(x: 692, y: 540), startRadius: 0,
+                               endCenter: dotCenter, endRadius: 38,
                                options: [.drawsBeforeStartLocation])
         ctx.restoreGState()
     }
+    ctx.restoreGState()
 
-    // блик на точке
-    let specColors = [
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0.5),
-        CGColor(red: 1, green: 1, blue: 1, alpha: 0.0),
-    ] as CFArray
-    if let spec = CGGradient(colorsSpace: space, colors: specColors, locations: [0, 1]) {
-        ctx.saveGState()
-        ctx.addEllipse(in: CGRect(x: 512 - 95, y: 512 + 10, width: 130, height: 95))
-        ctx.clip()
-        ctx.drawRadialGradient(spec,
-                               startCenter: CGPoint(x: 512 - 35, y: 512 + 62), startRadius: 0,
-                               endCenter: CGPoint(x: 512 - 35, y: 512 + 62), endRadius: 90,
-                               options: [])
-        ctx.restoreGState()
+    // --- верхняя планка: приоткрыта, диагональные полосы ---
+    ctx.saveGState()
+    ctx.translateBy(x: 232, y: 622)
+    ctx.rotate(by: 7 * .pi / 180)
+    let barRect = CGRect(x: 0, y: 0, width: 560, height: 108)
+    let bar = CGPath(roundedRect: barRect, cornerWidth: 24, cornerHeight: 24, transform: nil)
+    ctx.addPath(bar)
+    ctx.clip()
+    ctx.setFillColor(CGColor(red: 0.16, green: 0.165, blue: 0.18, alpha: 1))
+    ctx.fill(barRect)
+    ctx.setFillColor(CGColor(red: 0.80, green: 0.81, blue: 0.83, alpha: 1))
+    var x: CGFloat = -80
+    while x < 640 {
+        ctx.move(to: CGPoint(x: x, y: 0))
+        ctx.addLine(to: CGPoint(x: x + 70, y: 0))
+        ctx.addLine(to: CGPoint(x: x + 70 + 54, y: 108))
+        ctx.addLine(to: CGPoint(x: x + 54, y: 108))
+        ctx.closePath()
+        ctx.fillPath()
+        x += 140
     }
+    ctx.restoreGState()
 
     ctx.restoreGState()
 }
@@ -126,7 +96,7 @@ func writePNG(size: Int, scale: Int, name: String, dir: URL) {
     let pixels = size * scale
     guard let ctx = CGContext(data: nil, width: pixels, height: pixels,
                               bitsPerComponent: 8, bytesPerRow: 0,
-                              space: CGColorSpaceCreateDeviceRGB(),
+                              space: space,
                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
     else { fatalError("no context") }
     drawIcon(into: ctx, size: CGFloat(pixels))
