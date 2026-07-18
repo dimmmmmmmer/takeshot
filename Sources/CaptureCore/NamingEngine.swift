@@ -47,7 +47,7 @@ public struct NamingEngine: Sendable {
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         var result = template
-        let paddedNumber = context.take > 0 ? String(format: "%02d", context.take) : ""
+        let paddedNumber = context.take >= 0 ? String(format: "%02d", context.take) : ""
         let substitutions: [String: String] = [
             "{project}": context.project,
             "{prefix}": context.project,

@@ -30,7 +30,7 @@ final class CaptureController: ObservableObject {
     /// Статистика VANC-пакетов для окна монитора.
     @Published var vancStats: [VancPacketStat] = []
     /// Ролл (катушка/носитель). Смена ролла сбрасывает номер клипа.
-    @Published var roll: String = "A001" {
+    @Published var roll: String = "001" {
         didSet {
             guard oldValue != roll else { return }
             if nextTakeNumber != 1 { nextTakeNumber = 1 }
@@ -40,8 +40,10 @@ final class CaptureController: ObservableObject {
     @Published var nextTakeNumber: Int = 1 {
         didSet { pushConfig() }
     }
-    /// Видеофайлы в папке записи, появившиеся не из TakeShot (сброшены руками).
+    /// Видео и фото в папке записи, появившиеся не из TakeShot (сброшены руками).
     @Published var otherFiles: [URL] = []
+    /// Миниатюры для Other content.
+    @Published var otherThumbnails: [URL: NSImage] = [:]
     @Published var lastError: String?
     @Published var mockCameraRecording = false
     @Published var settings = CaptureSettings.loaded() {
@@ -70,21 +72,19 @@ final class CaptureController: ObservableObject {
     }
 
     init(extraBackends: [(String, CaptureBackend)] = []) {
+        // демо-источник всегда в конце списка; при появлении реальной платы
+        // приложение само переключится на неё (см. refreshDevices)
         var children: [(String, CaptureBackend)] = [
-            ("decklink", DeckLinkBackendAdapter())
+            ("decklink", DeckLinkBackendAdapter()),
+            ("mock", MockCaptureBackend()),
         ]
-        // демо-источник — только для отладки без железа: TakeShot --demo
-        if ProcessInfo.processInfo.arguments.contains("--demo")
-            || ProcessInfo.processInfo.environment["TAKESHOT_DEMO"] != nil {
-            children.append(("mock", MockCaptureBackend()))
-        }
         children.append(contentsOf: extraBackends)
         let backend = AggregateBackend(children: children)
         self.backend = backend
 
         let stored = CaptureSettings.loaded()
         self.pipeline = CapturePipeline(config: .init(
-            settings: stored, roll: "A001", takeNumber: 1))
+            settings: stored, roll: "001", takeNumber: 1))
 
         backend.delegate = self
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
@@ -240,6 +240,8 @@ final class CaptureController: ObservableObject {
     // MARK: - синхронизация папки (Other content)
 
     nonisolated private static let videoExtensions: Set<String> = ["mov", "mp4", "mxf", "m4v", "avi"]
+    nonisolated private static let imageExtensions: Set<String> =
+        ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
     /// Лёгкий поллинг папки записи: видеофайлы, которых нет среди наших дублей,
     /// показываются отдельным блоком Other content.
@@ -261,6 +263,39 @@ final class CaptureController: ObservableObject {
                 guard let self else { return }
                 if self.otherFiles != sorted {
                     self.otherFiles = sorted
+                    self.generateOtherThumbnails(for: sorted)
+                }
+            }
+        }
+    }
+
+    /// Миниатюры для Other content: фото — напрямую, видео — через генератор кадров.
+    private func generateOtherThumbnails(for urls: [URL]) {
+        let missing = urls.filter { otherThumbnails[$0] == nil }
+        guard !missing.isEmpty else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            for url in missing {
+                var image: NSImage?
+                let ext = url.pathExtension.lowercased()
+                if Self.imageExtensions.contains(ext) {
+                    if let source = NSImage(contentsOf: url) {
+                        image = source
+                    }
+                } else {
+                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                    generator.appliesPreferredTrackTransform = true
+                    generator.maximumSize = CGSize(width: 480, height: 480)
+                    if let (cgImage, _) = try? await generator.image(
+                        at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
+                        image = NSImage(cgImage: cgImage,
+                                        size: NSSize(width: cgImage.width,
+                                                     height: cgImage.height))
+                    }
+                }
+                if let image {
+                    await MainActor.run { [weak self] in
+                        self?.otherThumbnails[url] = image
+                    }
                 }
             }
         }
@@ -274,7 +309,8 @@ final class CaptureController: ObservableObject {
             at: root, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
             for case let url as URL in enumerator {
-                guard videoExtensions.contains(url.pathExtension.lowercased()),
+                let ext = url.pathExtension.lowercased()
+                guard videoExtensions.contains(ext) || imageExtensions.contains(ext),
                       !ownPaths.contains(url.path) else { continue }
                 let modified = (try? url.resourceValues(
                     forKeys: [.contentModificationDateKey]))?.contentModificationDate

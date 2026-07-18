@@ -3,42 +3,62 @@ import SwiftUI
 
 /// Панель дублей: список или сетка миниатюр, отметка circle take
 /// (уходит в takeshot-log.csv как Good Take для DaVinci Resolve).
+/// Ниже — Other content: файлы, попавшие в папку записи мимо TakeShot.
+/// Граница между секциями перетаскивается (VSplitView).
 struct TakeListView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        if controller.otherFiles.isEmpty {
+            TakesSection()
+        } else {
+            VSplitView {
+                TakesSection()
+                    .frame(minHeight: 160)
+                OtherContentSection()
+                    .frame(minHeight: 100, idealHeight: 180)
+            }
+        }
+    }
+}
+
+// MARK: - секция дублей
+
+private struct TakesSection: View {
     @EnvironmentObject private var controller: CaptureController
     @AppStorage("takesViewMode") private var viewMode = "list"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Text(L("takes"))
                     .font(.headline)
                 Spacer()
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
-                    Image(systemName: "folder")
+                    Label(L("open"), systemImage: "folder")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption)
                 }
-                .buttonStyle(.plain)
+                .controlSize(.small)
                 .help(L("open_folder"))
-                Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([controller.takeLogURL])
+
+                ViewModePicker(mode: $viewMode)
+
+                Menu {
+                    Button(L("reveal_csv")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([controller.takeLogURL])
+                    }
+                    .disabled(controller.takes.isEmpty)
                 } label: {
-                    Image(systemName: "tablecells")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .buttonStyle(.plain)
-                .help(L("reveal_csv_help"))
-                .disabled(controller.takes.isEmpty)
-                Picker("", selection: $viewMode) {
-                    Image(systemName: "list.bullet").tag("list")
-                        .help(L("view_list"))
-                    Image(systemName: "square.grid.2x2").tag("grid")
-                        .help(L("view_grid"))
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 70)
-                .labelsHidden()
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             Divider()
             if controller.takes.isEmpty {
                 Spacer()
@@ -47,55 +67,43 @@ struct TakeListView: View {
                     .frame(maxWidth: .infinity)
                 Spacer()
             } else if viewMode == "grid" {
-                TakeGridView()
+                ScrollView {
+                    LazyVGrid(columns: gridColumns, spacing: 10) {
+                        ForEach(controller.takes.reversed()) { take in
+                            TakeCell(take: take)
+                        }
+                    }
+                    .padding(10)
+                }
             } else {
                 List(controller.takes.reversed()) { take in
                     TakeRow(take: take)
                 }
                 .listStyle(.inset)
             }
-            if !controller.otherFiles.isEmpty {
-                OtherContentView()
-            }
         }
     }
 }
 
-/// Видео, брошенные в папку записи руками (или другими программами) —
-/// показываются отдельным блоком, чтобы папка и приложение не расходились.
-private struct OtherContentView: View {
-    @EnvironmentObject private var controller: CaptureController
+private let gridColumns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 10)]
+
+/// Переключатель список/миниатюры (общий стиль для обеих секций).
+private struct ViewModePicker: View {
+    @Binding var mode: String
 
     var body: some View {
-        Divider()
-        VStack(alignment: .leading, spacing: 0) {
-            Text(L("other_content"))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-            List(controller.otherFiles, id: \.self) { url in
-                HStack {
-                    Image(systemName: "film")
-                        .foregroundStyle(.secondary)
-                    Text(url.lastPathComponent)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .contextMenu {
-                    Button(L("show_in_finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
-                    }
-                }
-            }
-            .listStyle(.inset)
-            .frame(maxHeight: 140)
+        Picker("", selection: $mode) {
+            Image(systemName: "list.bullet").tag("list")
+                .help(L("view_list"))
+            Image(systemName: "square.grid.2x2").tag("grid")
+                .help(L("view_grid"))
         }
+        .pickerStyle(.segmented)
+        .frame(width: 70)
+        .labelsHidden()
+        .controlSize(.small)
     }
 }
-
-// MARK: - список
 
 private struct TakeRow: View {
     @EnvironmentObject private var controller: CaptureController
@@ -120,25 +128,6 @@ private struct TakeRow: View {
             CircleToggle(take: take)
         }
         .contextMenu { TakeContextMenu(take: take) }
-    }
-}
-
-// MARK: - сетка миниатюр
-
-private struct TakeGridView: View {
-    @EnvironmentObject private var controller: CaptureController
-
-    private let columns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 10)]
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(controller.takes.reversed()) { take in
-                    TakeCell(take: take)
-                }
-            }
-            .padding(10)
-        }
     }
 }
 
@@ -184,6 +173,95 @@ private struct TakeCell: View {
         }
         .contextMenu { TakeContextMenu(take: take) }
     }
+}
+
+// MARK: - Other content
+
+private struct OtherContentSection: View {
+    @EnvironmentObject private var controller: CaptureController
+    @AppStorage("otherViewMode") private var viewMode = "list"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text(L("other_content"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                ViewModePicker(mode: $viewMode)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            Divider()
+            if viewMode == "grid" {
+                ScrollView {
+                    LazyVGrid(columns: gridColumns, spacing: 10) {
+                        ForEach(controller.otherFiles, id: \.self) { url in
+                            OtherCell(url: url)
+                        }
+                    }
+                    .padding(10)
+                }
+            } else {
+                List(controller.otherFiles, id: \.self) { url in
+                    HStack {
+                        Image(systemName: iconName(for: url))
+                            .foregroundStyle(.secondary)
+                        Text(url.lastPathComponent)
+                            .font(.callout)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .contextMenu { OtherContextMenu(url: url) }
+                }
+                .listStyle(.inset)
+            }
+        }
+    }
+}
+
+private struct OtherCell: View {
+    @EnvironmentObject private var controller: CaptureController
+    let url: URL
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6).fill(.black)
+                if let thumbnail = controller.otherThumbnails[url] {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: iconName(for: url))
+                        .font(.title)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            Text(url.lastPathComponent)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .contextMenu { OtherContextMenu(url: url) }
+    }
+}
+
+private struct OtherContextMenu: View {
+    let url: URL
+
+    var body: some View {
+        Button(L("show_in_finder")) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+}
+
+private func iconName(for url: URL) -> String {
+    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
+        .contains(url.pathExtension.lowercased()) ? "photo" : "film"
 }
 
 // MARK: - общее

@@ -27,7 +27,7 @@ struct TopBarView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                .font(.system(size: 22, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(controller.isRecording ? .red : .primary)
 
@@ -42,8 +42,9 @@ struct TopBarView: View {
             Spacer()
 
             if let format = controller.signalFormat {
-                Text("\(format.width)×\(format.height) • \(Self.fpsText(format.frameRate)) fps")
-                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                Text(Self.shortFormat(format))
+                    .font(.system(size: 15, weight: .medium))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
             } else {
                 Text(L("no_signal_short"))
@@ -61,6 +62,11 @@ struct TopBarView: View {
         fps.truncatingRemainder(dividingBy: 1) == 0
             ? String(Int(fps))
             : String(format: "%.2f", fps)
+    }
+
+    /// Короткое обозначение: "1080p25", "2160p23.98".
+    static func shortFormat(_ format: CaptureFormat) -> String {
+        "\(format.height)p\(fpsText(format.frameRate))"
     }
 }
 
@@ -126,51 +132,50 @@ struct BottomBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        ZStack {
-            HStack(spacing: 12) {
-                // левый нижний угол — настройки и сервис
-                HStack(spacing: 10) {
-                    SettingsLink {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 15))
-                    }
-                    .help(L("open_settings"))
-
-                    Button {
-                        openWindow(id: "vanc-monitor")
-                    } label: {
-                        Image(systemName: "waveform.badge.magnifyingglass")
-                            .font(.system(size: 15))
-                    }
-                    .help(L("vanc_open_help"))
-
-                    Button {
-                        controller.chooseDestinationFolder()
-                    } label: {
-                        Image(systemName: "folder")
-                            .font(.system(size: 15))
-                    }
-                    .help(L("choose_folder"))
+        HStack(spacing: 8) {
+            // левая колонка — настройки и сервис
+            HStack(spacing: 10) {
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 15))
                 }
-                .buttonStyle(.borderless)
+                .help(L("open_settings"))
 
-                Spacer()
+                Button {
+                    openWindow(id: "vanc-monitor")
+                } label: {
+                    Image(systemName: "waveform.badge.magnifyingglass")
+                        .font(.system(size: 15))
+                }
+                .help(L("vanc_open_help"))
+
+                Button {
+                    controller.chooseDestinationFolder()
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 15))
+                }
+                .help(L("choose_folder"))
 
                 if controller.isMockSelected && controller.isCapturing {
                     Button {
                         controller.toggleMockCameraRecord()
                     } label: {
-                        Label(controller.mockCameraRecording ? L("mock_rec_stop") : L("mock_rec"),
-                              systemImage: "video.fill")
+                        Image(systemName: controller.mockCameraRecording
+                              ? "video.fill" : "video")
+                            .font(.system(size: 15))
+                            .foregroundStyle(controller.mockCameraRecording ? .red : .primary)
                     }
-                    .tint(controller.mockCameraRecording ? .red : nil)
-                    .help(L("mock_rec_help"))
+                    .help(controller.mockCameraRecording ? L("mock_rec_stop") : L("mock_rec"))
                 }
-
-                NamingFieldsView()
             }
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             RecordButton()
+
+            NamingFieldsView()
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -188,13 +193,18 @@ struct RecordButton: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(controller.isCapturing ? Color.red : Color.red.opacity(0.35))
+                    .fill(controller.isRecording
+                          ? Color.red
+                          : Color(nsColor: .quaternaryLabelColor))
                     .frame(width: 52, height: 52)
                     .shadow(color: controller.isRecording ? .red.opacity(0.7) : .clear,
                             radius: 9)
+                Circle()
+                    .strokeBorder(Color.primary.opacity(0.25), lineWidth: 1.5)
+                    .frame(width: 52, height: 52)
                 Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(controller.isRecording ? .white : .red)
             }
         }
         .buttonStyle(.plain)
@@ -225,8 +235,9 @@ struct NamingFieldsView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Stepper(String(format: "%02d", controller.nextTakeNumber),
-                        value: $controller.nextTakeNumber, in: 1...999)
-                    .font(.system(.body, design: .monospaced))
+                        value: $controller.nextTakeNumber, in: 0...999)
+                    .controlSize(.small)
+                    .monospacedDigit()
             }
             .help(L("clip_help"))
         }

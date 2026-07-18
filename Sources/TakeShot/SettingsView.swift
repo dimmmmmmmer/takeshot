@@ -44,6 +44,7 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
+                TextField(L("project"), text: $controller.settings.projectName)
                 LabeledContent(L("destination_folder")) {
                     HStack {
                         Text(controller.settings.destinationPath)

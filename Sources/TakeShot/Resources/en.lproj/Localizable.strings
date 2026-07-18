@@ -103,3 +103,6 @@
 "other_content" = "Other content";
 "debounce_hint" = "Confirmation frames before start/stop is detected; 0 = react instantly (one frame of timecode movement is still required)";
 "pre_roll_hint" = "Frames are buffered in memory before REC; the take starts this many seconds before the camera did";
+
+"open" = "Open";
+"reveal_csv" = "Show Resolve metadata CSV in Finder";
