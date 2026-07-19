@@ -41,7 +41,8 @@ struct ContentView: View {
                     .padding(.vertical, 8)
             }
         }
-        .frame(minWidth: 600, maxWidth: .infinity)
+        .frame(minWidth: 680, maxWidth: .infinity)
+        .layoutPriority(1)
     }
 
     private var sidePanel: some View {
@@ -54,7 +55,7 @@ struct ContentView: View {
             .padding(.top, 26)
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
-            .frame(minWidth: 310, maxWidth: 560)
+            .frame(minWidth: 310, maxWidth: 480)
     }
 }
 
