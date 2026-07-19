@@ -249,6 +249,24 @@ public final class CapturePipeline: @unchecked Sendable {
 
     /// Начать дубль. `recStartIndex` — кадр фактического старта записи камеры
     /// (от детектора); nil — ручной старт, пре-ролл отсчитывается от текущего кадра.
+    /// Свободный URL: если файл существует, добавляет _2, _3… перед расширением.
+    static func uniqueURL(for url: URL) -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else { return url }
+        let base = url.deletingPathExtension()
+        let ext = url.pathExtension
+        var attempt = 2
+        while attempt < 1000 {
+            let candidate = URL(fileURLWithPath: base.path + "_\(attempt)")
+                .appendingPathExtension(ext)
+            if !FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            attempt += 1
+        }
+        return URL(fileURLWithPath: base.path + "_\(UUID().uuidString)")
+            .appendingPathExtension(ext)
+    }
+
     private func beginTake(timecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
         let engine = NamingEngine(template: config.settings.namingTemplate)
@@ -263,10 +281,13 @@ public final class CapturePipeline: @unchecked Sendable {
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)
-        let url = root
+        // дубли не перезаписываются никогда: при коллизии имени — суффикс _2, _3…
+        // (типовой случай: счётчик клипов начался заново, а файлы прошлой сессии
+        // с теми же именами уже лежат в папке)
+        let url = Self.uniqueURL(for: root
             .appendingPathComponent(engine.relativeDirectory(for: context))
             .appendingPathComponent(engine.fileName(for: context))
-            .appendingPathExtension("mov")
+            .appendingPathExtension("mov"))
         do {
             let writer = try TakeWriter(url: url, format: format,
                                         codec: config.settings.codec, startTimecode: timecode)

@@ -174,6 +174,24 @@ struct CapturePipelineTests {
                 "duration=\(duration.seconds)")
     }
 
+    @Test func uniqueURLAddsSuffixOnCollision() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("UniqueURL-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let url = dir.appendingPathComponent("A_001_C01").appendingPathExtension("mov")
+        // свободно — имя не меняется
+        #expect(CapturePipeline.uniqueURL(for: url) == url)
+
+        // занято — добавляется _2, потом _3
+        FileManager.default.createFile(atPath: url.path, contents: Data())
+        let second = CapturePipeline.uniqueURL(for: url)
+        #expect(second.lastPathComponent == "A_001_C01_2.mov")
+        FileManager.default.createFile(atPath: second.path, contents: Data())
+        #expect(CapturePipeline.uniqueURL(for: url).lastPathComponent == "A_001_C01_3.mov")
+    }
+
     @Test func manualModeIgnoresRunningTimecode() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("PipelineTests-\(UUID().uuidString)")

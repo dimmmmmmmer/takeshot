@@ -7,10 +7,22 @@ import Foundation
 ///
 /// Жизненный цикл: init → append*(…) → finish(). Один экземпляр = один файл.
 public final class TakeWriter {
-    public enum WriterError: Error {
+    public enum WriterError: Error, LocalizedError {
         case cannotCreateWriter(Error)
         case notWritable(AVAssetWriter.Status, Error?)
         case timecodeTrackFailed
+
+        public var errorDescription: String? {
+            switch self {
+            case .cannotCreateWriter(let error):
+                return "Cannot create writer: \(error.localizedDescription)"
+            case .notWritable(let status, let error):
+                let reason = error?.localizedDescription ?? "status \(status.rawValue)"
+                return "Writer failed: \(reason)"
+            case .timecodeTrackFailed:
+                return "Failed to create timecode track"
+            }
+        }
     }
 
     public let url: URL
