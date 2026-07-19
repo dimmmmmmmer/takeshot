@@ -149,3 +149,7 @@
 "playback_output" = "Аудиовыход плейбека";
 "system_default" = "Системный";
 "fullscreen_playback" = "Плейбек во весь экран (выход — Esc). Зелёная кнопка окна разворачивает всё приложение";
+
+"panel_position" = "Панель дублей";
+"panel_right" = "Справа";
+"panel_left" = "Слева";

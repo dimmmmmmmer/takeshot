@@ -149,3 +149,7 @@
 "playback_output" = "Playback audio output";
 "system_default" = "System default";
 "fullscreen_playback" = "Playback fullscreen (Esc to exit). The green window button fullscreens the whole app";
+
+"panel_position" = "Takes panel position";
+"panel_right" = "Right";
+"panel_left" = "Left";

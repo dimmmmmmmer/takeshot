@@ -4,38 +4,73 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var controller: CaptureController
+    @AppStorage("panelWidth") private var panelWidth = 340.0
+    @AppStorage("panelSide") private var panelSide = "right"
+    @State private var dragStartWidth: Double?
 
     var body: some View {
-        HSplitView {
-            VStack(spacing: 0) {
-                if !controller.isImmersive {
-                    // тонкая полоса под кнопки окна (и за неё можно таскать окно)
-                    Color.clear.frame(height: 24)
-                }
-                PlayerArea()
-                if !controller.isImmersive {
-                    BottomBarView()
-                        .background(.ultraThinMaterial,
-                                    in: RoundedRectangle(cornerRadius: 18))
-                        .overlay(RoundedRectangle(cornerRadius: 18)
-                            .strokeBorder(.white.opacity(0.08)))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                }
+        HStack(spacing: 0) {
+            if panelSide == "left" && !controller.isImmersive {
+                sidePanel
+                splitter
             }
-            .frame(minWidth: 620)
-
-            if !controller.isImmersive {
-                TakeListView()
-                    .background(.regularMaterial,
-                                in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(.white.opacity(0.07)))
-                    .padding(8)
-                    .frame(minWidth: 280, maxWidth: 420)
+            mainColumn
+            if panelSide == "right" && !controller.isImmersive {
+                splitter
+                sidePanel
             }
         }
         .background(controller.appBackground.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var mainColumn: some View {
+        VStack(spacing: 0) {
+            if !controller.isImmersive {
+                // полоса под кнопки окна (за неё же таскается окно)
+                Color.clear.frame(height: 26)
+            }
+            PlayerArea()
+            if !controller.isImmersive {
+                BottomBarView()
+                    .background(.ultraThinMaterial,
+                                in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(.white.opacity(0.08)))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+        }
+        .frame(minWidth: 560, maxWidth: .infinity)
+    }
+
+    private var sidePanel: some View {
+        TakeListView()
+            .background(.regularMaterial,
+                        in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(.white.opacity(0.07)))
+            .padding(.vertical, 8)
+            .padding(panelSide == "right" ? .trailing : .leading, 8)
+            .frame(width: max(260, min(560, panelWidth)))
+    }
+
+    /// Невидимый сплиттер: тянется прямо за зазор между карточками.
+    private var splitter: some View {
+        Color.clear
+            .frame(width: 9)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartWidth == nil { dragStartWidth = panelWidth }
+                    let delta = panelSide == "right"
+                        ? -value.translation.width : value.translation.width
+                    panelWidth = max(260, min(560, (dragStartWidth ?? panelWidth) + delta))
+                }
+                .onEnded { _ in dragStartWidth = nil })
     }
 }
 
@@ -55,7 +90,7 @@ struct PlayerArea: View {
                     if !controller.isImmersive {
                         overlayBadge {
                             Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                                .font(.body.weight(.semibold))
+                                .font(.body)
                                 .monospacedDigit()
                                 .foregroundStyle(controller.isRecording ? .red : .primary)
                         }
@@ -84,15 +119,25 @@ struct PlayerArea: View {
                 .overlay(alignment: .topTrailing) {
                     if !controller.isImmersive {
                         overlayBadge {
-                            Group {
-                                if let format = controller.signalFormat {
-                                    Text(Self.shortFormat(format)).monospacedDigit()
-                                } else {
-                                    Text(L("no_signal_short"))
+                            HStack(spacing: 8) {
+                                Group {
+                                    if let format = controller.signalFormat {
+                                        Text(Self.shortFormat(format)).monospacedDigit()
+                                    } else {
+                                        Text(L("no_signal_short"))
+                                    }
                                 }
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                Button {
+                                    controller.toggleFullscreen()
+                                } label: {
+                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 12))
+                                }
+                                .buttonStyle(.plain)
+                                .help(L("fullscreen"))
                             }
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
                         }
                         .padding(8)
                     }
@@ -158,7 +203,7 @@ private struct CompareControls: View {
                 Text(L("compare_side")).tag(CaptureController.CompareMode.sideBySide)
             }
             .pickerStyle(.segmented)
-            .frame(width: 250)
+            .fixedSize()
             .labelsHidden()
             .controlSize(.mini)
 
@@ -311,53 +356,57 @@ struct BottomBarView: View {
             }
             ZStack {
                 HStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        SettingsLink {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 15))
-                        }
-                        .help(L("open_settings"))
+                    HStack(spacing: 0) {
+                        HStack(spacing: 10) {
+                            SettingsLink {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 15))
+                            }
+                            .help(L("open_settings"))
 
-                        Button {
-                            openWindow(id: "vanc-monitor")
-                        } label: {
-                            Image(systemName: "waveform.badge.magnifyingglass")
-                                .font(.system(size: 15))
-                        }
-                        .help(L("vanc_open_help"))
+                            Button {
+                                openWindow(id: "vanc-monitor")
+                            } label: {
+                                Image(systemName: "waveform.badge.magnifyingglass")
+                                    .font(.system(size: 15))
+                            }
+                            .help(L("vanc_open_help"))
 
-                        Button {
-                            controller.chooseDestinationFolder()
-                        } label: {
-                            Image(systemName: "folder")
-                                .font(.system(size: 15))
+                            Button {
+                                controller.chooseDestinationFolder()
+                            } label: {
+                                Image(systemName: "folder")
+                                    .font(.system(size: 15))
+                            }
+                            .help(L("choose_folder"))
                         }
-                        .help(L("choose_folder"))
+                        .buttonStyle(.borderless)
+
+                        Spacer(minLength: 8)
+
+                        // метры — по центру между утилитами и REC
+                        if controller.isCapturing, !controller.audioLevels.isEmpty {
+                            Button {
+                                controller.showAudioPanel.toggle()
+                            } label: {
+                                AudioMeterView(
+                                    levels: controller.audioLevels,
+                                    enabled: (0..<controller.audioLevels.count)
+                                        .map { controller.isChannelEnabled($0) })
+                                    .frame(height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .help(L("meters_click_help"))
+                        }
+
+                        Spacer(minLength: 40)
                     }
-                    .buttonStyle(.borderless)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
 
                     NamingFieldsView()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                // REC — в геометрическом центре, метры слева от него
-                ZStack {
-                    RecordButton()
-                    if controller.isCapturing, !controller.audioLevels.isEmpty {
-                        Button {
-                            controller.showAudioPanel.toggle()
-                        } label: {
-                            AudioMeterView(
-                                levels: controller.audioLevels,
-                                enabled: (0..<controller.audioLevels.count)
-                                    .map { controller.isChannelEnabled($0) })
-                                .frame(height: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .help(L("meters_click_help"))
-                        .offset(x: -Self.meterOffset(for: controller.audioLevels.count))
-                    }
-                }
+                RecordButton()
             }
         }
         .padding(.horizontal, 14)
@@ -380,22 +429,20 @@ struct RecordButton: View {
         Button {
             controller.toggleManualRecord()
         } label: {
+            // как в QuickTime: светло-серый диск; красный кружок — готов писать,
+            // белый квадратик — идёт запись
             ZStack {
                 Circle()
-                    .strokeBorder(Color.primary.opacity(0.35), lineWidth: 3)
-                    .frame(width: 52, height: 52)
+                    .fill(Color.primary.opacity(0.22))
+                    .frame(width: 48, height: 48)
                 if controller.isRecording {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.black)
-                        .frame(width: 22, height: 22)
-                        .shadow(color: .red.opacity(0.6), radius: 8)
+                    RoundedRectangle(cornerRadius: 3.5)
+                        .fill(Color.white)
+                        .frame(width: 18, height: 18)
                 } else {
                     Circle()
-                        .fill(LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.33, blue: 0.27),
-                                     Color(red: 0.82, green: 0.11, blue: 0.08)],
-                            startPoint: .top, endPoint: .bottom))
-                        .frame(width: 40, height: 40)
+                        .fill(Color(red: 0.96, green: 0.26, blue: 0.21))
+                        .frame(width: 22, height: 22)
                 }
             }
         }

@@ -108,11 +108,13 @@ final class CaptureController: ObservableObject {
         var name: String
     }
 
-    /// Дисплеи, кроме того, на котором главное окно.
+    /// Дисплеи, кроме того, на котором главное окно приложения.
     var availableScreens: [ScreenOption] {
-        NSScreen.screens.compactMap { screen in
-            guard let id = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        let currentScreen = NSApp.mainWindow?.screen
+        return NSScreen.screens.compactMap { screen in
+            guard screen != currentScreen,
+                  let id = screen.deviceDescription[
+                      NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             else { return nil }
             return ScreenOption(id: id, name: screen.localizedName)
         }

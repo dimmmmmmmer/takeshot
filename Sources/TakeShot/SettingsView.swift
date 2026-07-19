@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
+    @AppStorage("panelSide") private var panelSide = "right"
 
     var body: some View {
         Form {
@@ -41,6 +42,10 @@ struct SettingsView: View {
                     get: { controller.appBackground },
                     set: { controller.appBackground = $0 }),
                     supportsOpacity: false)
+                Picker(L("panel_position"), selection: $panelSide) {
+                    Text(L("panel_right")).tag("right")
+                    Text(L("panel_left")).tag("left")
+                }
             }
             Section(L("settings_recording")) {
                 Picker(L("codec"), selection: $controller.settings.codec) {
@@ -60,6 +65,10 @@ struct SettingsView: View {
                         }
                     }
                 }
+                TextField(L("naming_template"), text: $controller.settings.namingTemplate)
+                Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section(L("settings_output")) {
                 Picker(L("external_display"), selection: Binding(
@@ -79,12 +88,6 @@ struct SettingsView: View {
                     }
                 }
                 Text(L("record_channels_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section(L("settings_naming")) {
-                TextField(L("naming_template"), text: $controller.settings.namingTemplate)
-                Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

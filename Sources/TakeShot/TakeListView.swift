@@ -46,23 +46,12 @@ private struct TakesSection: View {
                 .help(L("open_folder"))
                 Spacer()
                 if viewMode == "grid" {
-                    Slider(value: $tileSize, in: 110...260)
+                    Slider(value: $tileSize, in: 70...260)
                         .frame(width: 70)
                         .controlSize(.mini)
                         .help(L("tile_size"))
                 }
                 ViewModePicker(mode: $viewMode)
-
-                Menu {
-                    Button(L("reveal_csv")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([controller.takeLogURL])
-                    }
-                    .disabled(controller.takes.isEmpty)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -204,7 +193,7 @@ private struct OtherContentSection: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if viewMode == "grid" {
-                    Slider(value: $tileSize, in: 110...260)
+                    Slider(value: $tileSize, in: 70...260)
                         .frame(width: 70)
                         .controlSize(.mini)
                         .help(L("tile_size"))
