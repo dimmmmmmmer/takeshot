@@ -99,7 +99,8 @@ struct PlayerArea: View {
                             .labelsHidden()
                             .controlSize(.small)
 
-                            if controller.viewerMode == .playback {
+                            if controller.viewerMode == .playback,
+                               controller.playbackURL != nil {
                                 CompareControls()
                             }
                         }
@@ -247,6 +248,13 @@ private struct CompareControls: View {
 struct PreviewView: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// Аспект живого сигнала — общий контейнер сравнения, чтобы кадры разных
+    /// разрешений (и шторка) совпадали по геометрии.
+    static func liveAspect(_ format: CaptureFormat?) -> CGFloat {
+        guard let format, format.height > 0 else { return 16.0 / 9.0 }
+        return CGFloat(format.width) / CGFloat(format.height)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geo in
@@ -257,16 +265,24 @@ struct PreviewView: View {
                         case .off:
                             PlaybackContent()
                         case .blend:
-                            LivePreviewContent()
-                            PlaybackContent().opacity(controller.blendOpacity)
+                            ZStack {
+                                LivePreviewContent()
+                                PlaybackContent().opacity(controller.blendOpacity)
+                            }
+                            .aspectRatio(Self.liveAspect(controller.signalFormat),
+                                         contentMode: .fit)
                         case .wipe:
-                            LivePreviewContent()
-                            PlaybackContent()
-                                .mask {
-                                    WipeMask(orientation: controller.wipeOrientation,
-                                             position: controller.wipePosition)
-                                }
-                            WipeHandle()
+                            ZStack {
+                                LivePreviewContent()
+                                PlaybackContent()
+                                    .mask {
+                                        WipeMask(orientation: controller.wipeOrientation,
+                                                 position: controller.wipePosition)
+                                    }
+                                WipeHandle()
+                            }
+                            .aspectRatio(Self.liveAspect(controller.signalFormat),
+                                         contentMode: .fit)
                         case .sideBySide:
                             HStack(spacing: 2) {
                                 LivePreviewContent()
