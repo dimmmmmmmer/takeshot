@@ -62,6 +62,14 @@ struct NamingEngineTests {
         #expect(without == "Film_B002C07")
     }
 
+    @Test func clipPaddingWidths() {
+        let engine = NamingEngine(template: "C{clip}")
+        #expect(engine.fileName(for: NamingContext(take: 7)) == "C07")
+        #expect(engine.fileName(for: NamingContext(take: 7, clipPadding: 3)) == "C007")
+        #expect(engine.fileName(for: NamingContext(take: 7, clipPadding: 4)) == "C0007")
+        #expect(engine.fileName(for: NamingContext(take: 1234, clipPadding: 2)) == "C1234")
+    }
+
     @Test func fieldStepperNumbersAndLetters() {
         #expect(FieldStepper.stepTrailingNumber("001", by: 1) == "002")
         #expect(FieldStepper.stepTrailingNumber("009", by: 1) == "010")

@@ -7,11 +7,13 @@ struct SettingsView: View {
     @AppStorage("panelSide") private var panelSide = "right"
 
     /// Пресеты шаблонов имён под стиль камер; правка шаблона руками = Custom.
-    static let namingPresets: [(key: String, template: String)] = [
-        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}"),
-        ("preset_arri", "{cam}{roll}C{clip}_{date}_{postfix}"),
-        ("preset_red", "{cam}{roll}_C{clip}_{date}_{postfix}"),
-        ("preset_bmd", "{cam}{roll}_{date}_C{clip}"),
+    /// clipDigits — вендорская ширина номера клипа (C001 у ARRI/RED/Sony).
+    static let namingPresets: [(key: String, template: String, clipDigits: Int)] = [
+        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}", 2),
+        ("preset_arri", "{cam}{roll}C{clip}_{date}_{postfix}", 3),
+        ("preset_red", "{cam}{roll}_C{clip}_{date}_{postfix}", 3),
+        ("preset_sony", "{cam}{roll}C{clip}_{date}{postfix}", 3),
+        ("preset_bmd", "{cam}{roll}_{date}_C{clip}", 3),
     ]
 
     var body: some View {
@@ -86,6 +88,7 @@ struct SettingsView: View {
                     set: { key in
                         if let preset = Self.namingPresets.first(where: { $0.key == key }) {
                             controller.settings.namingTemplate = preset.template
+                            controller.settings.clipPadWidth = preset.clipDigits
                         }
                     })) {
                     ForEach(Self.namingPresets, id: \.key) { preset in

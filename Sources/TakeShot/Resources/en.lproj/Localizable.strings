@@ -170,3 +170,5 @@
 "wipe_vertical" = "Vertical wipe";
 "wipe_horizontal" = "Horizontal wipe";
 "wipe_diagonal" = "Diagonal wipe";
+
+"preset_sony" = "Sony style";

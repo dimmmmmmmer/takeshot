@@ -110,6 +110,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var accentHex: String?
     /// DeckLink-устройство для видеовыхода на монитор (SDI/HDMI); nil — выкл.
     public var monitorDeviceID: String?
+    /// Число цифр в номере клипа (C01 / C001 / C0001); nil — 2.
+    public var clipPadWidth: Int?
+
+    public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 

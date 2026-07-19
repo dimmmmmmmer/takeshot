@@ -548,6 +548,49 @@ struct RecordButton: View {
     }
 }
 
+/// Поле CLIP: во время ввода текст не переформатируется (можно набрать 0001),
+/// коммит по Enter/расфокусу; ведущие нули задают паддинг имени файла.
+struct ClipField: View {
+    @EnvironmentObject private var controller: CaptureController
+    @FocusState private var focused: Bool
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(L("clip_label"))
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            HStack(spacing: 1) {
+                TextField("", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .monospacedDigit()
+                    .frame(width: 50)
+                    .focused($focused)
+                    .onSubmit { controller.commitClipText(text) }
+                Stepper("", onIncrement: {
+                    controller.nextTakeNumber = min(9999, controller.nextTakeNumber + 1)
+                }, onDecrement: {
+                    controller.nextTakeNumber = max(0, controller.nextTakeNumber - 1)
+                })
+                .labelsHidden()
+                .controlSize(.small)
+            }
+        }
+        .fixedSize()
+        .onAppear { text = controller.clipDisplay }
+        .onChange(of: focused) { _, isFocused in
+            if !isFocused { controller.commitClipText(text) }
+        }
+        .onChange(of: controller.nextTakeNumber) { _, _ in
+            if !focused { text = controller.clipDisplay }
+        }
+        .onChange(of: controller.settings.clipPadWidth) { _, _ in
+            if !focused { text = controller.clipDisplay }
+        }
+    }
+}
+
 /// Поля нейминга: компактные, подписи слева над полями.
 struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
@@ -560,11 +603,7 @@ struct NamingFieldsView: View {
             steppedField(L("roll_label"), width: 50,
                          text: $controller.roll,
                          onStep: { controller.stepRoll($0) })
-            steppedField(L("clip_label"), width: 50,
-                         text: Binding(
-                            get: { String(format: "%02d", controller.nextTakeNumber) },
-                            set: { controller.nextTakeNumber = max(0, min(9999, Int($0) ?? controller.nextTakeNumber)) }),
-                         onStep: { controller.nextTakeNumber = max(0, min(9999, controller.nextTakeNumber + $0)) })
+            ClipField()
                 .help(L("clip_help"))
             labeledField(L("postfix_label"), width: 56) {
                 TextField("", text: Binding(

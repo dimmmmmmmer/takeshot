@@ -373,6 +373,20 @@ final class CaptureController: ObservableObject {
         set { settings.appBackgroundHex = newValue.hexString }
     }
 
+    /// Номер клипа с текущим паддингом (для поля и превью имени).
+    var clipDisplay: String {
+        String(format: "%0\(settings.clipPadWidthEffective)d", nextTakeNumber)
+    }
+
+    /// Применить введённый в поле текст клипа: цифры → номер,
+    /// количество набранных цифр (с ведущими нулями) → паддинг имени.
+    func commitClipText(_ text: String) {
+        let digits = text.filter(\.isNumber)
+        guard !digits.isEmpty else { return }
+        settings.clipPadWidth = min(4, max(2, digits.count))
+        nextTakeNumber = min(9999, max(0, Int(digits) ?? nextTakeNumber))
+    }
+
     // MARK: - степперы полей нейминга
 
     func stepRoll(_ delta: Int) {

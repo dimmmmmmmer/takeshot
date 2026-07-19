@@ -297,6 +297,7 @@ public final class CapturePipeline: @unchecked Sendable {
             camera: config.settings.cameraLabel,
             clipName: "",
             postfix: config.settings.postfix ?? "",
+            clipPadding: config.settings.clipPadWidthEffective,
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)

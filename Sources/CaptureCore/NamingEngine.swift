@@ -10,11 +10,13 @@ public struct NamingContext: Sendable {
     public var camera: String
     public var clipName: String
     public var postfix: String
+    public var clipPadding: Int
     public var timecode: Timecode?
 
     public init(project: String = "", date: Date = Date(), scene: String = "",
                 take: Int = 0, reel: String = "", camera: String = "",
-                clipName: String = "", postfix: String = "", timecode: Timecode? = nil) {
+                clipName: String = "", postfix: String = "", clipPadding: Int = 2,
+                timecode: Timecode? = nil) {
         self.project = project
         self.date = date
         self.scene = scene
@@ -23,6 +25,7 @@ public struct NamingContext: Sendable {
         self.camera = camera
         self.clipName = clipName
         self.postfix = postfix
+        self.clipPadding = max(1, clipPadding)
         self.timecode = timecode
     }
 }
@@ -50,7 +53,8 @@ public struct NamingEngine: Sendable {
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         var result = template
-        let paddedNumber = context.take >= 0 ? String(format: "%02d", context.take) : ""
+        let paddedNumber = context.take >= 0
+            ? String(format: "%0\(context.clipPadding)d", context.take) : ""
         let substitutions: [String: String] = [
             "{project}": context.project,
             "{prefix}": context.project,

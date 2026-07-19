@@ -170,3 +170,5 @@
 "wipe_vertical" = "Вертикальная шторка";
 "wipe_horizontal" = "Горизонтальная шторка";
 "wipe_diagonal" = "Диагональная шторка";
+
+"preset_sony" = "Стиль Sony";
