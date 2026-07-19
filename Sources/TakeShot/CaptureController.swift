@@ -96,6 +96,9 @@ final class CaptureController: ObservableObject {
     /// Отдельное фулскрин-окно плейбека (не системный фулскрин приложения).
     @Published var isPlaybackFullscreen = false
     private var playbackFullscreenWindow: NSWindow?
+    /// Фулскрин-окно живого сигнала (плеер на весь экран в режиме река).
+    @Published var isLiveFullscreen = false
+    private var liveFullscreenWindow: NSWindow?
 
     /// Плеер для просмотра дублей (AVPlayerView в превью).
     let player = AVPlayer()
@@ -180,6 +183,31 @@ final class CaptureController: ObservableObject {
         window.makeKeyAndOrderFront(nil)
         playbackFullscreenWindow = window
         isPlaybackFullscreen = true
+    }
+
+    /// Фулскрин ТОЛЬКО плеера в режиме река (зеркало лайва в безрамочном окне).
+    func toggleLiveFullscreen() {
+        if isLiveFullscreen {
+            liveFullscreenWindow?.orderOut(nil)
+            liveFullscreenWindow = nil
+            pipeline.fullscreenMirrorEnabled = false
+            isLiveFullscreen = false
+            return
+        }
+        guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
+        pipeline.fullscreenMirrorEnabled = true
+        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
+                              backing: .buffered, defer: false, screen: screen)
+        window.level = .statusBar
+        window.backgroundColor = .black
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.fullScreenAuxiliary]
+        window.contentView = NSHostingView(rootView:
+            LiveFullscreenView().environmentObject(self))
+        window.setFrame(screen.frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        liveFullscreenWindow = window
+        isLiveFullscreen = true
     }
 
     // MARK: - аудиоканалы (маска записи)

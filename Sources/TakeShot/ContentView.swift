@@ -43,6 +43,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 680, maxWidth: .infinity)
         .layoutPriority(1)
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     private var sidePanel: some View {
@@ -56,6 +57,7 @@ struct ContentView: View {
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
             .frame(minWidth: 310, maxWidth: 480)
+            .ignoresSafeArea(.container, edges: .top)
     }
 }
 
@@ -63,6 +65,7 @@ struct ContentView: View {
 /// В иммерсиве занимает всё окно, подвал выезжает по ховеру снизу.
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
+    @AppStorage("panelSide") private var panelSide = "right"
     @State private var footerHover = false
 
     var body: some View {
@@ -79,8 +82,8 @@ struct PlayerArea: View {
                                 .monospacedDigit()
                                 .foregroundStyle(controller.isRecording ? .red : .primary)
                         }
-                        // правее кнопок окна, которые лежат на карточке
-                        .padding(.leading, 66)
+                        // кнопки окна лежат на плеере только когда панель справа
+                        .padding(.leading, panelSide == "right" ? 66 : 8)
                         .padding(.top, 8)
                     }
                 }
@@ -123,7 +126,7 @@ struct PlayerArea: View {
                     // фулскрин — справа внизу (в плейбеке эту роль играет транспорт)
                     if !controller.isImmersive, controller.viewerMode == .record {
                         Button {
-                            controller.toggleFullscreen()
+                            controller.toggleLiveFullscreen()
                         } label: {
                             Image(systemName: "arrow.up.left.and.arrow.down.right")
                                 .font(.system(size: 13))

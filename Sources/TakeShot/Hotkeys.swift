@@ -119,9 +119,13 @@ final class HotkeyManager: ObservableObject {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
 
-            // Esc закрывает фулскрин плейбека
+            // Esc закрывает фулскрины плеера
             if event.keyCode == 53, controller.isPlaybackFullscreen {
                 controller.togglePlaybackFullscreen()
+                return nil
+            }
+            if event.keyCode == 53, controller.isLiveFullscreen {
+                controller.toggleLiveFullscreen()
                 return nil
             }
 
@@ -166,7 +170,7 @@ final class HotkeyManager: ObservableObject {
             if controller.viewerMode == .playback, controller.playbackURL != nil {
                 controller.togglePlaybackFullscreen()
             } else {
-                controller.toggleFullscreen()
+                controller.toggleLiveFullscreen()
             }
         }
     }

@@ -88,6 +88,45 @@ struct AudioChannelPanel: View {
     }
 }
 
+/// Фулскрин-окно живого сигнала: только картинка (Esc/F — выход).
+struct LiveFullscreenView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Color.black
+            LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
+            Button {
+                controller.toggleLiveFullscreen()
+            } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    .font(.system(size: 14))
+                    .padding(8)
+                    .background(.black.opacity(0.5),
+                                in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .padding(14)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct LiveMirrorView: NSViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = .clear
+        view.layer = layer
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// Фулскрин-окно плейбека: только картинка и транспорт.
 struct PlaybackFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController

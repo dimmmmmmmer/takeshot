@@ -42,6 +42,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// только когда externalMirrorEnabled == true (копия — копеечная).
     public let externalLayer = AVSampleBufferDisplayLayer()
     public var externalMirrorEnabled = false
+    /// Третий слой — фулскрин-окно лайва (плеер на весь экран).
+    public let fullscreenLayer = AVSampleBufferDisplayLayer()
+    public var fullscreenMirrorEnabled = false
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
@@ -401,16 +404,17 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         displayLayer.enqueue(sampleBuffer)
 
-        if externalMirrorEnabled {
+        for (enabled, layer) in [(externalMirrorEnabled, externalLayer),
+                                 (fullscreenMirrorEnabled, fullscreenLayer)] where enabled {
             var copy: CMSampleBuffer?
             CMSampleBufferCreateCopy(allocator: kCFAllocatorDefault,
                                      sampleBuffer: sampleBuffer,
                                      sampleBufferOut: &copy)
             if let copy {
-                if externalLayer.status == .failed {
-                    externalLayer.flush()
+                if layer.status == .failed {
+                    layer.flush()
                 }
-                externalLayer.enqueue(copy)
+                layer.enqueue(copy)
             }
         }
     }
