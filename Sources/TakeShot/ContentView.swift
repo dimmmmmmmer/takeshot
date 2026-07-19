@@ -260,26 +260,31 @@ struct RecordButton: View {
         Button {
             controller.toggleManualRecord()
         } label: {
+            // как в QuickTime: красный кружок в кольце — готов писать,
+            // чёрный квадратик — идёт запись (нажми, чтобы остановить)
             ZStack {
                 Circle()
-                    .fill(controller.isRecording
-                          ? Color.red
-                          : Color(nsColor: .quaternaryLabelColor))
+                    .strokeBorder(Color.primary.opacity(0.35), lineWidth: 3)
                     .frame(width: 52, height: 52)
-                    .shadow(color: controller.isRecording ? .red.opacity(0.7) : .clear,
-                            radius: 9)
-                Circle()
-                    .strokeBorder(Color.primary.opacity(0.25), lineWidth: 1.5)
-                    .frame(width: 52, height: 52)
-                Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(controller.isRecording ? .white : .red)
+                if controller.isRecording {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.black)
+                        .frame(width: 22, height: 22)
+                        .shadow(color: .red.opacity(0.6), radius: 8)
+                } else {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.33, blue: 0.27),
+                                     Color(red: 0.82, green: 0.11, blue: 0.08)],
+                            startPoint: .top, endPoint: .bottom))
+                        .frame(width: 40, height: 40)
+                }
             }
         }
         .buttonStyle(.plain)
         .disabled(!controller.isCapturing)
         .help("\(controller.isRecording ? L("stop") : L("record")) — \(hotkeys.combo(for: .toggleRecord).display)")
-        .animation(.easeInOut(duration: 0.2), value: controller.isRecording)
+        .animation(.easeInOut(duration: 0.15), value: controller.isRecording)
     }
 }
 
