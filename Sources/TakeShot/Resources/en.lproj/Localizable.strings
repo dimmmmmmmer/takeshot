@@ -123,3 +123,19 @@
 "hotkey_good" = "Good take (last)";
 "hotkey_bad" = "Bad take (last)";
 "app_background" = "App background";
+
+/* Round 5 */
+"compare_off" = "Playback";
+"compare_wipe" = "Wipe";
+"compare_blend" = "Blend";
+"compare_side" = "A|B";
+"playback_speed" = "Playback speed";
+"playback_loop" = "Loop";
+"fullscreen" = "Fullscreen";
+"settings_output" = "Output";
+"external_display" = "External monitor output";
+"external_off" = "Off";
+"record_channels" = "Audio channels to record";
+"channels_all" = "All";
+"record_channels_hint" = "First N embedded channels are written to the file; meters always show all incoming channels";
+"tile_size" = "Tile size";

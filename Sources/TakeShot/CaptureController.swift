@@ -63,8 +63,81 @@ final class CaptureController: ObservableObject {
         case playback
     }
 
+    /// Режим сравнения лайва и плейбека.
+    enum CompareMode: String, CaseIterable, Identifiable {
+        case off        // только плейбек
+        case wipe       // шторка
+        case blend      // наложение с прозрачностью
+        case sideBySide // бок о бок
+        var id: String { rawValue }
+    }
+
+    @Published var compareMode: CompareMode = .off
+    /// Позиция шторки (0…1, доля ширины, слева — плейбек).
+    @Published var wipePosition: Double = 0.5
+    /// Непрозрачность плейбека в режиме blend.
+    @Published var blendOpacity: Double = 0.5
+    /// Иммерсивный режим (системный фулскрин окна): только плеер и ховер-подвал.
+    @Published var isImmersive = false
+
     /// Плеер для просмотра дублей (AVPlayerView в превью).
     let player = AVPlayer()
+
+    // MARK: - вывод на внешний монитор
+
+    /// Выбранный внешний дисплей (по displayID); nil — выкл.
+    @Published var externalDisplayID: CGDirectDisplayID? {
+        didSet {
+            guard oldValue != externalDisplayID else { return }
+            updateExternalWindow()
+        }
+    }
+    private var externalWindow: NSWindow?
+
+    struct ScreenOption: Identifiable, Equatable {
+        var id: CGDirectDisplayID
+        var name: String
+    }
+
+    /// Дисплеи, кроме того, на котором главное окно.
+    var availableScreens: [ScreenOption] {
+        NSScreen.screens.compactMap { screen in
+            guard let id = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+            else { return nil }
+            return ScreenOption(id: id, name: screen.localizedName)
+        }
+    }
+
+    private func updateExternalWindow() {
+        externalWindow?.orderOut(nil)
+        externalWindow = nil
+        pipeline.externalMirrorEnabled = false
+
+        guard let displayID = externalDisplayID,
+              let screen = NSScreen.screens.first(where: {
+                  ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                   as? CGDirectDisplayID) == displayID
+              }) else { return }
+
+        pipeline.externalMirrorEnabled = true
+        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
+                              backing: .buffered, defer: false, screen: screen)
+        window.level = .statusBar
+        window.backgroundColor = .black
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.fullScreenAuxiliary, .stationary]
+        window.contentView = NSHostingView(rootView:
+            ExternalOutputView().environmentObject(self))
+        window.setFrame(screen.frame, display: true)
+        window.orderFront(nil)
+        externalWindow = window
+    }
+
+    /// Системный фулскрин главного окна (иммерсивный режим).
+    func toggleFullscreen() {
+        NSApp.mainWindow?.toggleFullScreen(nil)
+    }
 
     /// Открыть файл в плеере и переключиться в режим плейбека.
     /// Фото просто показываются (AVPlayer для них не нужен).
@@ -124,6 +197,20 @@ final class CaptureController: ObservableObject {
         bindPipeline()
         refreshDevices() // выбор первого устройства запустит захват через didSet
         startFolderSync()
+
+        // иммерсив включается/выключается системным фулскрином главного окна
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didEnterFullScreenNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard (note.object as? NSWindow)?.styleMask.contains(.titled) == true else { return }
+            Task { @MainActor [weak self] in self?.isImmersive = true }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didExitFullScreenNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard (note.object as? NSWindow)?.styleMask.contains(.titled) == true else { return }
+            Task { @MainActor [weak self] in self?.isImmersive = false }
+        }
     }
 
     private func bindPipeline() {

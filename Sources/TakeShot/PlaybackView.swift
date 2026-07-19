@@ -1,15 +1,14 @@
 import AVFoundation
-import AVKit
 import CaptureCore
 import Combine
 import SwiftUI
 
-/// Просмотр записанного: видео с собственным транспортом (без затемняющих
-/// hover-контролов системного плеера) или фото.
-struct PlaybackView: View {
+/// Контент плейбека без транспорта (используется и в режимах сравнения):
+/// видео на прозрачной подложке или фото.
+struct PlaybackContent: View {
     @EnvironmentObject private var controller: CaptureController
 
-    private static let imageExtensions: Set<String> =
+    static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
     var body: some View {
@@ -17,10 +16,7 @@ struct PlaybackView: View {
             if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
                 ImagePlaybackView(url: url)
             } else {
-                VStack(spacing: 0) {
-                    PlayerSurface(player: controller.player)
-                    TransportBar(player: controller.player)
-                }
+                PlayerSurface(player: controller.player)
             }
         } else {
             VStack(spacing: 8) {
@@ -51,27 +47,50 @@ private struct ImagePlaybackView: View {
     }
 }
 
-/// Голая видеоповерхность — без системных контролов и их затемнения.
-private struct PlayerSurface: NSViewRepresentable {
+/// Голая видеоповерхность на AVPlayerLayer: без контролов, без затемнения,
+/// прозрачный фон — сквозь letterbox виден цвет подложки плеера.
+struct PlayerSurface: NSViewRepresentable {
     let player: AVPlayer
 
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
-        view.player = player
-        view.controlsStyle = .none
+    final class LayerView: NSView {
+        let playerLayer = AVPlayerLayer()
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            playerLayer.videoGravity = .resizeAspect
+            playerLayer.backgroundColor = .clear
+            layer = playerLayer
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError() }
+    }
+
+    func makeNSView(context: Context) -> LayerView {
+        let view = LayerView(frame: .zero)
+        view.playerLayer.player = player
         return view
     }
 
-    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
+    func updateNSView(_ nsView: LayerView, context: Context) {}
 }
 
-/// Транспорт: play/pause, скраббер, время. Всегда видимый, ничего не затемняет.
-private struct TransportBar: View {
+/// Транспорт: play/pause, ±5 с, скраббер, время, скорость, loop, фулскрин.
+struct TransportBar: View {
     let player: AVPlayer
+    @EnvironmentObject private var controller: CaptureController
     @StateObject private var model = TransportModel()
 
     var body: some View {
         HStack(spacing: 10) {
+            Button {
+                model.skip(-5)
+            } label: {
+                Image(systemName: "gobackward.5")
+            }
+            .buttonStyle(.plain)
+
             Button {
                 model.togglePlay()
             } label: {
@@ -81,6 +100,13 @@ private struct TransportBar: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.space, modifiers: [])
+
+            Button {
+                model.skip(5)
+            } label: {
+                Image(systemName: "goforward.5")
+            }
+            .buttonStyle(.plain)
 
             Text(Self.timeText(model.currentTime))
                 .font(.caption.monospacedDigit())
@@ -95,6 +121,38 @@ private struct TransportBar: View {
             Text(Self.timeText(model.duration))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+
+            Menu {
+                ForEach([0.25, 0.5, 1.0, 1.5, 2.0], id: \.self) { rate in
+                    Button("\(rate.formatted())×") { model.setRate(Float(rate)) }
+                }
+            } label: {
+                Text("\(model.desiredRate.formatted())×")
+                    .font(.caption.monospacedDigit())
+                    .frame(minWidth: 30)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(L("playback_speed"))
+
+            Button {
+                model.isLooping.toggle()
+            } label: {
+                Image(systemName: "repeat")
+                    .foregroundStyle(model.isLooping ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L("playback_loop"))
+
+            Button {
+                controller.toggleFullscreen()
+            } label: {
+                Image(systemName: controller.isImmersive
+                      ? "arrow.down.right.and.arrow.up.left"
+                      : "arrow.up.left.and.arrow.down.right")
+            }
+            .buttonStyle(.plain)
+            .help(L("fullscreen"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
@@ -110,16 +168,18 @@ private struct TransportBar: View {
     }
 }
 
-/// Наблюдение за AVPlayer для транспорта.
+/// Наблюдение за AVPlayer для транспорта: время, скорость, loop.
 @MainActor
-private final class TransportModel: ObservableObject {
+final class TransportModel: ObservableObject {
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var isPlaying = false
+    @Published var desiredRate: Double = 1.0
+    @Published var isLooping = false
 
     private weak var player: AVPlayer?
     private var timeObserver: Any?
-    private var cancellables: Set<AnyCancellable> = []
+    private var endObserver: NSObjectProtocol?
 
     func attach(_ player: AVPlayer) {
         detach()
@@ -136,12 +196,28 @@ private final class TransportModel: ObservableObject {
                 }
             }
         }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.didPlayToEndTimeNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            Task { @MainActor [weak self] in
+                guard let self, let player = self.player,
+                      (note.object as? AVPlayerItem) === player.currentItem,
+                      self.isLooping else { return }
+                player.seek(to: .zero)
+                player.rate = Float(self.desiredRate)
+            }
+        }
     }
 
     func detach() {
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
             timeObserver = nil
+        }
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
         }
     }
 
@@ -154,12 +230,58 @@ private final class TransportModel: ObservableObject {
                item.currentTime() >= item.duration {
                 player.seek(to: .zero)
             }
-            player.play()
+            player.rate = Float(desiredRate)
         }
+    }
+
+    func setRate(_ rate: Float) {
+        desiredRate = Double(rate)
+        if player?.rate != 0 {
+            player?.rate = rate
+        }
+    }
+
+    func skip(_ seconds: Double) {
+        guard let player else { return }
+        let target = max(0, player.currentTime().seconds + seconds)
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600),
+                    toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     func seek(to seconds: Double) {
         player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
                      toleranceBefore: .zero, toleranceAfter: .zero)
     }
+}
+
+/// Контент окна на внешнем мониторе: зеркало текущего режима.
+struct ExternalOutputView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if controller.viewerMode == .playback, controller.playbackURL != nil {
+                PlaybackContent()
+            } else {
+                ExternalLiveView(layer: controller.pipeline.externalLayer)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct ExternalLiveView: NSViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = .clear
+        view.layer = layer
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }

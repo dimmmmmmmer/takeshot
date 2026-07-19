@@ -123,3 +123,19 @@
 "hotkey_good" = "Good take (последний)";
 "hotkey_bad" = "Bad take (последний)";
 "app_background" = "Фон приложения";
+
+/* Раунд 5 */
+"compare_off" = "Плейбек";
+"compare_wipe" = "Шторка";
+"compare_blend" = "Наложение";
+"compare_side" = "A|B";
+"playback_speed" = "Скорость воспроизведения";
+"playback_loop" = "Зациклить";
+"fullscreen" = "Во весь экран";
+"settings_output" = "Вывод";
+"external_display" = "Вывод на внешний монитор";
+"external_off" = "Выкл";
+"record_channels" = "Аудиоканалы в запись";
+"channels_all" = "Все";
+"record_channels_hint" = "В файл пишутся первые N каналов; метры всегда показывают все входящие";
+"tile_size" = "Размер плитки";

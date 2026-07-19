@@ -45,6 +45,46 @@ public enum PCMAudio {
         return sampleBuffer
     }
 
+    /// Оставить первые `channelCount` каналов interleaved Int16-буфера
+    /// (выбор «сколько дорожек писать»). Возвращает исходный буфер, если
+    /// каналов и так не больше.
+    public static func trimChannels(_ sampleBuffer: CMSampleBuffer, to channelCount: Int,
+                                    formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
+        guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+              asbd.mBitsPerChannel == 16 else { return sampleBuffer }
+        let sourceChannels = Int(asbd.mChannelsPerFrame)
+        guard channelCount > 0, sourceChannels > channelCount,
+              let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+            return sampleBuffer
+        }
+
+        var length = 0
+        var pointer: UnsafeMutablePointer<CChar>?
+        guard CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0,
+                                          lengthAtOffsetOut: nil, totalLengthOut: &length,
+                                          dataPointerOut: &pointer) == noErr,
+              let pointer else { return sampleBuffer }
+
+        let frames = length / 2 / sourceChannels
+        var trimmed = [Int16](repeating: 0, count: frames * channelCount)
+        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
+            for frame in 0..<frames {
+                for channel in 0..<channelCount {
+                    trimmed[frame * channelCount + channel] =
+                        samples[frame * sourceChannels + channel]
+                }
+            }
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        return trimmed.withUnsafeBytes { raw -> CMSampleBuffer? in
+            guard let base = raw.baseAddress else { return nil }
+            return makeSampleBuffer(bytes: base, sampleFrames: frames,
+                                    channelCount: channelCount, ptsSeconds: pts,
+                                    formatCache: &formatCache)
+        }
+    }
+
     /// Пиковые уровни каналов в dBFS (-∞ → -100) из PCM16 interleaved сэмпл-буфера.
     public static func peakLevels(of sampleBuffer: CMSampleBuffer) -> [Float] {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),

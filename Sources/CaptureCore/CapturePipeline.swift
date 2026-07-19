@@ -38,6 +38,10 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onAudioLevels: (([Float]) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
+    /// Второй слой — для вывода на внешний монитор. Кадры зеркалируются,
+    /// только когда externalMirrorEnabled == true (копия — копеечная).
+    public let externalLayer = AVSampleBufferDisplayLayer()
+    public var externalMirrorEnabled = false
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
@@ -144,9 +148,19 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    private var trimFormatCache: CMAudioFormatDescription?
+
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
         queue.async {
-            self.writer?.append(audioSampleBuffer: sampleBuffer)
+            // метры показывают ВСЕ каналы; в файл идут первые N по настройке
+            var toWrite: CMSampleBuffer? = sampleBuffer
+            if let limit = self.config.settings.recordChannelCount {
+                toWrite = PCMAudio.trimChannels(sampleBuffer, to: limit,
+                                                formatCache: &self.trimFormatCache)
+            }
+            if let toWrite {
+                self.writer?.append(audioSampleBuffer: toWrite)
+            }
             let levels = PCMAudio.peakLevels(of: sampleBuffer)
             if !levels.isEmpty {
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }
@@ -385,5 +399,18 @@ public final class CapturePipeline: @unchecked Sendable {
             displayLayer.flush()
         }
         displayLayer.enqueue(sampleBuffer)
+
+        if externalMirrorEnabled {
+            var copy: CMSampleBuffer?
+            CMSampleBufferCreateCopy(allocator: kCFAllocatorDefault,
+                                     sampleBuffer: sampleBuffer,
+                                     sampleBufferOut: &copy)
+            if let copy {
+                if externalLayer.status == .failed {
+                    externalLayer.flush()
+                }
+                externalLayer.enqueue(copy)
+            }
+        }
     }
 }

@@ -100,6 +100,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var appBackgroundHex: String?
     /// Постфикс имени файла ({postfix} в шаблоне).
     public var postfix: String?
+    /// Сколько первых аудиоканалов писать в файл (nil — все).
+    public var recordChannelCount: Int?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 

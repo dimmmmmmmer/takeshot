@@ -27,6 +27,7 @@ struct TakeListView: View {
 private struct TakesSection: View {
     @EnvironmentObject private var controller: CaptureController
     @AppStorage("takesViewMode") private var viewMode = "list"
+    @AppStorage("gridTileSize") private var tileSize = 150.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,6 +45,12 @@ private struct TakesSection: View {
                 .fixedSize()
                 .help(L("open_folder"))
                 Spacer()
+                if viewMode == "grid" {
+                    Slider(value: $tileSize, in: 110...260)
+                        .frame(width: 70)
+                        .controlSize(.mini)
+                        .help(L("tile_size"))
+                }
                 ViewModePicker(mode: $viewMode)
 
                 Menu {
@@ -68,7 +75,7 @@ private struct TakesSection: View {
                 Spacer()
             } else if viewMode == "grid" {
                 ScrollView {
-                    LazyVGrid(columns: gridColumns, spacing: 10) {
+                    LazyVGrid(columns: gridColumns(size: tileSize), spacing: 10) {
                         ForEach(controller.takes.reversed()) { take in
                             TakeCell(take: take)
                         }
@@ -85,7 +92,9 @@ private struct TakesSection: View {
     }
 }
 
-private let gridColumns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 10)]
+func gridColumns(size: Double) -> [GridItem] {
+    [GridItem(.adaptive(minimum: size, maximum: size * 1.6), spacing: 10)]
+}
 
 /// Переключатель список/миниатюры (общий стиль для обеих секций).
 private struct ViewModePicker: View {
@@ -184,6 +193,7 @@ private struct TakeCell: View {
 private struct OtherContentSection: View {
     @EnvironmentObject private var controller: CaptureController
     @AppStorage("otherViewMode") private var viewMode = "list"
+    @AppStorage("gridTileSize") private var tileSize = 150.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -192,6 +202,12 @@ private struct OtherContentSection: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+                if viewMode == "grid" {
+                    Slider(value: $tileSize, in: 110...260)
+                        .frame(width: 70)
+                        .controlSize(.mini)
+                        .help(L("tile_size"))
+                }
                 ViewModePicker(mode: $viewMode)
             }
             .padding(.horizontal, 12)
@@ -199,7 +215,7 @@ private struct OtherContentSection: View {
             Divider()
             if viewMode == "grid" {
                 ScrollView {
-                    LazyVGrid(columns: gridColumns, spacing: 10) {
+                    LazyVGrid(columns: gridColumns(size: tileSize), spacing: 10) {
                         ForEach(controller.otherFiles, id: \.self) { url in
                             OtherCell(url: url)
                         }

@@ -174,6 +174,40 @@ struct CapturePipelineTests {
                 "duration=\(duration.seconds)")
     }
 
+    @Test func trimChannelsKeepsFirstN() throws {
+        // 16-канальный буфер: канал k заполнен значением (k+1)*100
+        let frames = 48
+        let channels = 16
+        var samples = [Int16](repeating: 0, count: frames * channels)
+        for frame in 0..<frames {
+            for channel in 0..<channels {
+                samples[frame * channels + channel] = Int16((channel + 1) * 100)
+            }
+        }
+        var makeCache: CMAudioFormatDescription?
+        let source = samples.withUnsafeBytes { raw in
+            PCMAudio.makeSampleBuffer(bytes: raw.baseAddress!, sampleFrames: frames,
+                                      channelCount: channels, ptsSeconds: 0,
+                                      formatCache: &makeCache)
+        }
+        let sourceBuffer = try #require(source)
+
+        var trimCache: CMAudioFormatDescription?
+        let trimmed = try #require(PCMAudio.trimChannels(
+            sourceBuffer, to: 2, formatCache: &trimCache))
+        let levels = PCMAudio.peakLevels(of: trimmed)
+        #expect(levels.count == 2)
+        // уровни соответствуют каналам 1 и 2 исходника
+        let expected1 = 20 * log10(Float(100) / Float(Int16.max))
+        let expected2 = 20 * log10(Float(200) / Float(Int16.max))
+        #expect(abs(levels[0] - expected1) < 0.01)
+        #expect(abs(levels[1] - expected2) < 0.01)
+
+        // если каналов и так меньше лимита — буфер возвращается как есть
+        let untouched = PCMAudio.trimChannels(sourceBuffer, to: 32, formatCache: &trimCache)
+        #expect(untouched === sourceBuffer)
+    }
+
     @Test func uniqueURLAddsSuffixOnCollision() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("UniqueURL-\(UUID().uuidString)")

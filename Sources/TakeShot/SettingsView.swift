@@ -61,6 +61,28 @@ struct SettingsView: View {
                     }
                 }
             }
+            Section(L("settings_output")) {
+                Picker(L("external_display"), selection: Binding(
+                    get: { controller.externalDisplayID },
+                    set: { controller.externalDisplayID = $0 })) {
+                    Text(L("external_off")).tag(CGDirectDisplayID?.none)
+                    ForEach(controller.availableScreens) { screen in
+                        Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
+                    }
+                }
+                Picker(L("record_channels"), selection: Binding(
+                    get: { controller.settings.recordChannelCount ?? 0 },
+                    set: { controller.settings.recordChannelCount = $0 == 0 ? nil : $0 })) {
+                    Text(L("channels_all")).tag(0)
+                    Text("2").tag(2)
+                    Text("4").tag(4)
+                    Text("8").tag(8)
+                    Text("16").tag(16)
+                }
+                Text(L("record_channels_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section(L("settings_naming")) {
                 TextField(L("naming_template"), text: $controller.settings.namingTemplate)
                 Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))
