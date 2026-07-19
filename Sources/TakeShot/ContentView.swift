@@ -4,19 +4,15 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var controller: CaptureController
-    @AppStorage("panelWidth") private var panelWidth = 340.0
     @AppStorage("panelSide") private var panelSide = "right"
-    @State private var dragStartWidth: Double?
 
     var body: some View {
-        HStack(spacing: 0) {
+        HSplitView {
             if panelSide == "left" && !controller.isImmersive {
                 sidePanel
-                splitter
             }
             mainColumn
             if panelSide == "right" && !controller.isImmersive {
-                splitter
                 sidePanel
             }
         }
@@ -50,27 +46,8 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
-            .padding(.vertical, 8)
-            .padding(panelSide == "right" ? .trailing : .leading, 8)
-            .frame(width: max(260, min(560, panelWidth)))
-    }
-
-    /// Невидимый сплиттер: тянется прямо за зазор между карточками.
-    private var splitter: some View {
-        Color.clear
-            .frame(width: 9)
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
-            .gesture(DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    if dragStartWidth == nil { dragStartWidth = panelWidth }
-                    let delta = panelSide == "right"
-                        ? -value.translation.width : value.translation.width
-                    panelWidth = max(260, min(560, (dragStartWidth ?? panelWidth) + delta))
-                }
-                .onEnded { _ in dragStartWidth = nil })
+            .padding(8)
+            .frame(minWidth: 280, maxWidth: 560)
     }
 }
 
@@ -462,14 +439,14 @@ struct NamingFieldsView: View {
             steppedField(L("cam_label"), width: 28,
                          text: $controller.settings.cameraLabel,
                          onStep: { controller.stepCamera($0) })
-            steppedField(L("roll_label"), width: 40,
+            steppedField(L("roll_label"), width: 58,
                          text: $controller.roll,
                          onStep: { controller.stepRoll($0) })
-            steppedField(L("clip_label"), width: 32,
+            steppedField(L("clip_label"), width: 46,
                          text: Binding(
                             get: { String(format: "%02d", controller.nextTakeNumber) },
-                            set: { controller.nextTakeNumber = max(0, min(999, Int($0) ?? controller.nextTakeNumber)) }),
-                         onStep: { controller.nextTakeNumber = max(0, min(999, controller.nextTakeNumber + $0)) })
+                            set: { controller.nextTakeNumber = max(0, min(9999, Int($0) ?? controller.nextTakeNumber)) }),
+                         onStep: { controller.nextTakeNumber = max(0, min(9999, controller.nextTakeNumber + $0)) })
                 .help(L("clip_help"))
             labeledField(L("postfix_label"), width: 56) {
                 TextField("", text: Binding(

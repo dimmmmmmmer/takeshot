@@ -186,7 +186,7 @@ final class TransportModel: ObservableObject {
     @Published var duration: Double = 0
     @Published var isPlaying = false
     @Published var desiredRate: Double = 1.0
-    @Published var isLooping = false
+    @Published var isLooping = true
 
     private weak var player: AVPlayer?
     private var timeObserver: Any?
