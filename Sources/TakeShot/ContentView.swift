@@ -201,6 +201,23 @@ private struct CompareControls: View {
             .labelsHidden()
             .controlSize(.mini)
 
+            if controller.compareMode == .wipe {
+                Picker("", selection: $controller.wipeOrientation) {
+                    Image(systemName: "rectangle.split.2x1")
+                        .tag(CaptureController.WipeOrientation.vertical)
+                        .help(L("wipe_vertical"))
+                    Image(systemName: "rectangle.split.1x2")
+                        .tag(CaptureController.WipeOrientation.horizontal)
+                        .help(L("wipe_horizontal"))
+                    Image(systemName: "line.diagonal")
+                        .tag(CaptureController.WipeOrientation.diagonal)
+                        .help(L("wipe_diagonal"))
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .labelsHidden()
+                .controlSize(.mini)
+            }
             if controller.compareMode == .blend {
                 Slider(value: $controller.blendOpacity, in: 0...1)
                     .frame(width: 90)
@@ -211,7 +228,7 @@ private struct CompareControls: View {
                     format: .number)
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 38)
+                    .frame(width: 30)
                     .controlSize(.mini)
                 Text("%")
                     .font(.caption)
@@ -242,9 +259,9 @@ struct PreviewView: View {
                         case .wipe:
                             LivePreviewContent()
                             PlaybackContent()
-                                .mask(alignment: .leading) {
-                                    Rectangle().frame(
-                                        width: geo.size.width * controller.wipePosition)
+                                .mask {
+                                    WipeMask(orientation: controller.wipeOrientation,
+                                             position: controller.wipePosition)
                                 }
                             WipeHandle()
                         case .sideBySide:
@@ -275,28 +292,82 @@ struct PreviewView: View {
     }
 }
 
-/// Перетаскиваемая шторка сравнения.
+/// Маска области плейбека для шторки (слева/сверху/по диагонали от линии).
+private struct WipeMask: Shape {
+    let orientation: CaptureController.WipeOrientation
+    let position: Double
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch orientation {
+        case .vertical:
+            path.addRect(CGRect(x: 0, y: 0,
+                                width: rect.width * position, height: rect.height))
+        case .horizontal:
+            path.addRect(CGRect(x: 0, y: 0,
+                                width: rect.width, height: rect.height * position))
+        case .diagonal:
+            // область x + y <= t; треугольник сам обрежется по границам вью
+            let t = position * (rect.width + rect.height)
+            path.move(to: .zero)
+            path.addLine(to: CGPoint(x: t, y: 0))
+            path.addLine(to: CGPoint(x: 0, y: t))
+            path.closeSubpath()
+        }
+        return path
+    }
+}
+
+/// Перетаскиваемая шторка сравнения (линия + ручка, любое направление).
 private struct WipeHandle: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
         GeometryReader { geo in
-            Rectangle()
-                .fill(.white.opacity(0.9))
-                .frame(width: 2)
-                .overlay {
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 14, height: 14)
-                        .shadow(radius: 2)
+            let (p1, p2) = endpoints(in: geo.size)
+            ZStack {
+                Path { path in
+                    path.move(to: p1)
+                    path.addLine(to: p2)
                 }
-                .position(x: geo.size.width * controller.wipePosition,
-                          y: geo.size.height / 2)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                    controller.wipePosition =
-                        min(1, max(0, value.location.x / geo.size.width))
-                })
+                .stroke(.white.opacity(0.9), lineWidth: 2)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 14, height: 14)
+                    .shadow(radius: 2)
+                    .position(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                let size = geo.size
+                let raw: Double
+                switch controller.wipeOrientation {
+                case .vertical:
+                    raw = value.location.x / size.width
+                case .horizontal:
+                    raw = value.location.y / size.height
+                case .diagonal:
+                    raw = (value.location.x + value.location.y)
+                        / (size.width + size.height)
+                }
+                controller.wipePosition = min(1, max(0, raw))
+            })
+        }
+    }
+
+    private func endpoints(in size: CGSize) -> (CGPoint, CGPoint) {
+        switch controller.wipeOrientation {
+        case .vertical:
+            let x = size.width * controller.wipePosition
+            return (CGPoint(x: x, y: 0), CGPoint(x: x, y: size.height))
+        case .horizontal:
+            let y = size.height * controller.wipePosition
+            return (CGPoint(x: 0, y: y), CGPoint(x: size.width, y: y))
+        case .diagonal:
+            let t = controller.wipePosition * (size.width + size.height)
+            let p1 = CGPoint(x: max(0, t - size.height), y: min(t, size.height))
+            let p2 = CGPoint(x: min(t, size.width), y: max(0, t - size.width))
+            return (p1, p2)
         }
     }
 }

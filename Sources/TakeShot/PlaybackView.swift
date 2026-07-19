@@ -139,7 +139,9 @@ struct TransportBar: View {
                 model.isLooping.toggle()
             } label: {
                 Image(systemName: "repeat")
-                    .foregroundStyle(model.isLooping ? Color.accentColor : .secondary)
+                    .foregroundStyle(model.isLooping
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
             }
             .buttonStyle(.plain)
             .help(L("playback_loop"))

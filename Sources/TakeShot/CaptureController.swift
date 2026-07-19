@@ -72,8 +72,16 @@ final class CaptureController: ObservableObject {
         var id: String { rawValue }
     }
 
+    /// Направление шторки сравнения.
+    enum WipeOrientation: String, CaseIterable {
+        case vertical    // вертикальная линия, тянется по горизонтали
+        case horizontal  // горизонтальная линия, тянется по вертикали
+        case diagonal    // 45°
+    }
+
     @Published var compareMode: CompareMode = .off
-    /// Позиция шторки (0…1, доля ширины, слева — плейбек).
+    @Published var wipeOrientation: WipeOrientation = .vertical
+    /// Позиция шторки (0…1; слева/сверху — плейбек).
     @Published var wipePosition: Double = 0.5
     /// Непрозрачность плейбека в режиме blend.
     @Published var blendOpacity: Double = 0.5

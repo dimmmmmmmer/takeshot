@@ -169,7 +169,8 @@ struct SettingsView: View {
                                  : hotkeys.combo(for: action).display)
                                 .frame(minWidth: 90)
                         }
-                        .tint(hotkeys.recordingAction == action ? .accentColor : nil)
+                        .tint(hotkeys.recordingAction == action
+                              ? controller.accentColor : nil)
                     }
                 }
                 Button(L("reset_hotkeys")) {
