@@ -23,7 +23,7 @@ struct ContentView: View {
                         .padding(.vertical, 8)
                 }
             }
-            .frame(minWidth: 700)
+            .frame(minWidth: 620)
 
             if !controller.isImmersive {
                 TakeListView()
@@ -32,7 +32,7 @@ struct ContentView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14)
                         .strokeBorder(.white.opacity(0.07)))
                     .padding(8)
-                    .frame(minWidth: 300, maxWidth: 420)
+                    .frame(minWidth: 280, maxWidth: 420)
             }
         }
         .background(controller.appBackground.ignoresSafeArea())
@@ -84,27 +84,22 @@ struct PlayerArea: View {
                 .overlay(alignment: .topTrailing) {
                     if !controller.isImmersive {
                         overlayBadge {
-                            HStack(spacing: 8) {
-                                Group {
-                                    if let format = controller.signalFormat {
-                                        Text(Self.shortFormat(format)).monospacedDigit()
-                                    } else {
-                                        Text(L("no_signal_short"))
-                                    }
+                            Group {
+                                if let format = controller.signalFormat {
+                                    Text(Self.shortFormat(format)).monospacedDigit()
+                                } else {
+                                    Text(L("no_signal_short"))
                                 }
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                Button {
-                                    controller.toggleFullscreen()
-                                } label: {
-                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                        .font(.system(size: 12))
-                                }
-                                .buttonStyle(.plain)
-                                .help(L("fullscreen"))
                             }
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                         }
                         .padding(8)
+                    }
+                }
+                .overlay {
+                    if controller.showAudioPanel {
+                        AudioChannelPanel()
                     }
                 }
                 .overlay(alignment: .bottom) {
@@ -349,9 +344,18 @@ struct BottomBarView: View {
                 ZStack {
                     RecordButton()
                     if controller.isCapturing, !controller.audioLevels.isEmpty {
-                        AudioMeterView(levels: controller.audioLevels)
-                            .frame(height: 44)
-                            .offset(x: -Self.meterOffset(for: controller.audioLevels.count))
+                        Button {
+                            controller.showAudioPanel.toggle()
+                        } label: {
+                            AudioMeterView(
+                                levels: controller.audioLevels,
+                                enabled: (0..<controller.audioLevels.count)
+                                    .map { controller.isChannelEnabled($0) })
+                                .frame(height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("meters_click_help"))
+                        .offset(x: -Self.meterOffset(for: controller.audioLevels.count))
                     }
                 }
             }
@@ -408,10 +412,6 @@ struct NamingFieldsView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            labeledField(L("prefix_label"), width: 72) {
-                TextField("", text: $controller.settings.projectName,
-                          prompt: Text(L("prefix_prompt")))
-            }
             steppedField(L("cam_label"), width: 28,
                          text: $controller.settings.cameraLabel,
                          onStep: { controller.stepCamera($0) })

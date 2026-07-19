@@ -100,8 +100,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var appBackgroundHex: String?
     /// Постфикс имени файла ({postfix} в шаблоне).
     public var postfix: String?
-    /// Сколько первых аудиоканалов писать в файл (nil — все).
+    /// Сколько первых аудиоканалов писать в файл (устарело, заменено маской).
     public var recordChannelCount: Int?
+    /// Битовая маска записываемых каналов (бит i = канал i); nil — все.
+    public var audioChannelMask: Int?
+    /// UID аудиоустройства для вывода плейбека; nil — системное.
+    public var playbackAudioDeviceUID: String?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 

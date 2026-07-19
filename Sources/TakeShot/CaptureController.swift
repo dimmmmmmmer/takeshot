@@ -79,6 +79,15 @@ final class CaptureController: ObservableObject {
     @Published var blendOpacity: Double = 0.5
     /// Иммерсивный режим (системный фулскрин окна): только плеер и ховер-подвал.
     @Published var isImmersive = false
+    /// Крупная панель аудиоканалов поверх плеера.
+    @Published var showAudioPanel = false
+    /// Громкость плейбека (только просмотр, на запись не влияет).
+    @Published var playbackVolume: Double = 1.0 {
+        didSet { player.volume = Float(playbackVolume) }
+    }
+    /// Отдельное фулскрин-окно плейбека (не системный фулскрин приложения).
+    @Published var isPlaybackFullscreen = false
+    private var playbackFullscreenWindow: NSWindow?
 
     /// Плеер для просмотра дублей (AVPlayerView в превью).
     let player = AVPlayer()
@@ -139,6 +148,54 @@ final class CaptureController: ObservableObject {
         NSApp.mainWindow?.toggleFullScreen(nil)
     }
 
+    /// Фулскрин ТОЛЬКО плейбека: безрамочное окно на весь экран,
+    /// приложение при этом остаётся как было (это не зелёная кнопка).
+    func togglePlaybackFullscreen() {
+        if isPlaybackFullscreen {
+            playbackFullscreenWindow?.orderOut(nil)
+            playbackFullscreenWindow = nil
+            isPlaybackFullscreen = false
+            return
+        }
+        guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
+        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
+                              backing: .buffered, defer: false, screen: screen)
+        window.level = .statusBar
+        window.backgroundColor = .black
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.fullScreenAuxiliary]
+        window.contentView = NSHostingView(rootView:
+            PlaybackFullscreenView().environmentObject(self))
+        window.setFrame(screen.frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        playbackFullscreenWindow = window
+        isPlaybackFullscreen = true
+    }
+
+    // MARK: - аудиоканалы (маска записи)
+
+    /// Включён ли канал в запись.
+    func isChannelEnabled(_ index: Int) -> Bool {
+        guard let mask = settings.audioChannelMask else { return true }
+        return mask & (1 << index) != 0
+    }
+
+    func toggleAudioChannel(_ index: Int) {
+        var mask = settings.audioChannelMask ?? 0xFFFF
+        mask ^= (1 << index)
+        // все включены — храним nil (= «все», в т.ч. если каналов станет больше)
+        settings.audioChannelMask = (mask & 0xFFFF) == 0xFFFF ? nil : mask
+    }
+
+    /// Аудиовыход плейбека.
+    var playbackOutputUID: String? {
+        get { settings.playbackAudioDeviceUID }
+        set {
+            settings.playbackAudioDeviceUID = newValue
+            player.audioOutputDeviceUniqueID = newValue
+        }
+    }
+
     /// Открыть файл в плеере и переключиться в режим плейбека.
     /// Фото просто показываются (AVPlayer для них не нужен).
     func play(url: URL) {
@@ -194,6 +251,7 @@ final class CaptureController: ObservableObject {
 
         backend.delegate = self
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
+        player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
         bindPipeline()
         refreshDevices() // выбор первого устройства запустит захват через didSet
         startFolderSync()

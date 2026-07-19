@@ -115,6 +115,12 @@ final class HotkeyManager: ObservableObject {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
 
+            // Esc закрывает фулскрин плейбека
+            if event.keyCode == 53, controller.isPlaybackFullscreen {
+                controller.togglePlaybackFullscreen()
+                return nil
+            }
+
             // идёт запись новой комбинации в настройках
             if let recording = self.recordingAction {
                 if event.keyCode == 53 { // Esc — отмена

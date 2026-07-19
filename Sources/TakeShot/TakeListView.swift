@@ -93,7 +93,8 @@ private struct TakesSection: View {
 }
 
 func gridColumns(size: Double) -> [GridItem] {
-    [GridItem(.adaptive(minimum: size, maximum: size * 1.6), spacing: 10)]
+    // max == min: плитка всегда ровно выбранного размера, слайдер работает плавно
+    [GridItem(.adaptive(minimum: size, maximum: size + 0.5), spacing: 10)]
 }
 
 /// Переключатель список/миниатюры (общий стиль для обеих секций).

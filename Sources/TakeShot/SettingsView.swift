@@ -70,14 +70,13 @@ struct SettingsView: View {
                         Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
                     }
                 }
-                Picker(L("record_channels"), selection: Binding(
-                    get: { controller.settings.recordChannelCount ?? 0 },
-                    set: { controller.settings.recordChannelCount = $0 == 0 ? nil : $0 })) {
-                    Text(L("channels_all")).tag(0)
-                    Text("2").tag(2)
-                    Text("4").tag(4)
-                    Text("8").tag(8)
-                    Text("16").tag(16)
+                Picker(L("playback_output"), selection: Binding(
+                    get: { controller.playbackOutputUID },
+                    set: { controller.playbackOutputUID = $0 })) {
+                    Text(L("system_default")).tag(String?.none)
+                    ForEach(AudioOutputDevices.list()) { device in
+                        Text(device.name).tag(String?.some(device.uid))
+                    }
                 }
                 Text(L("record_channels_hint"))
                     .font(.caption)

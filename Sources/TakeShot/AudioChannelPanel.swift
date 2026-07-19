@@ -1,0 +1,96 @@
+import SwiftUI
+
+/// Крупная панель аудиоканалов по центру плеера: большие метры с dB-цифрами,
+/// клик по каналу включает/выключает его запись.
+struct AudioChannelPanel: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    private let range: ClosedRange<Float> = -60...0
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text(L("audio_panel_title"))
+                    .font(.headline)
+                Spacer()
+                Button {
+                    controller.showAudioPanel = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(Array(controller.audioLevels.enumerated()), id: \.offset) { index, level in
+                    channelColumn(index: index, level: level)
+                }
+            }
+            Text(L("audio_panel_hint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: 560)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.1)))
+        .shadow(radius: 18)
+    }
+
+    private func channelColumn(index: Int, level: Float) -> some View {
+        let enabled = controller.isChannelEnabled(index)
+        return VStack(spacing: 3) {
+            Text(level <= -99 ? "-∞" : String(format: "%.0f", level))
+                .font(.system(size: 8).monospacedDigit())
+                .foregroundStyle(.secondary)
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(.black.opacity(0.5))
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(LinearGradient(
+                        stops: [
+                            .init(color: .green, location: 0),
+                            .init(color: .green, location: 0.80),
+                            .init(color: .yellow, location: 0.80),
+                            .init(color: .yellow, location: 0.95),
+                            .init(color: .red, location: 0.95),
+                            .init(color: .red, location: 1),
+                        ],
+                        startPoint: .bottom, endPoint: .top))
+                    .frame(height: 130 * fraction(of: level))
+                    .animation(.linear(duration: 0.07), value: level)
+            }
+            .frame(width: 16, height: 130)
+            .opacity(enabled ? 1 : 0.25)
+            Text("\(index + 1)")
+                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                .foregroundStyle(enabled ? .primary : .secondary)
+                .strikethrough(!enabled, color: .red)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { controller.toggleAudioChannel(index) }
+        .help(enabled ? L("channel_on_help") : L("channel_off_help"))
+    }
+
+    private func fraction(of level: Float) -> CGFloat {
+        let clamped = min(max(level, range.lowerBound), range.upperBound)
+        return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
+    }
+}
+
+/// Фулскрин-окно плейбека: только картинка и транспорт.
+struct PlaybackFullscreenView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        ZStack {
+            Color.black
+            VStack(spacing: 0) {
+                PlaybackContent()
+                TransportBar(player: controller.player)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}

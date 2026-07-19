@@ -144,15 +144,26 @@ struct TransportBar: View {
             .buttonStyle(.plain)
             .help(L("playback_loop"))
 
+            HStack(spacing: 4) {
+                Image(systemName: controller.playbackVolume == 0
+                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Slider(value: $controller.playbackVolume, in: 0...1)
+                    .frame(width: 64)
+                    .controlSize(.mini)
+            }
+            .help(L("playback_volume"))
+
             Button {
-                controller.toggleFullscreen()
+                controller.togglePlaybackFullscreen()
             } label: {
-                Image(systemName: controller.isImmersive
+                Image(systemName: controller.isPlaybackFullscreen
                       ? "arrow.down.right.and.arrow.up.left"
                       : "arrow.up.left.and.arrow.down.right")
             }
             .buttonStyle(.plain)
-            .help(L("fullscreen"))
+            .help(L("fullscreen_playback"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)

@@ -139,3 +139,13 @@
 "channels_all" = "All";
 "record_channels_hint" = "First N embedded channels are written to the file; meters always show all incoming channels";
 "tile_size" = "Tile size";
+
+/* Round 6 */
+"audio_panel_title" = "Audio channels";
+"audio_panel_hint" = "Click a channel to enable/disable recording it. Dimmed channels are not written to the file.";
+"channel_on_help" = "Recording — click to exclude from file";
+"channel_off_help" = "Muted — click to record this channel";
+"meters_click_help" = "Audio channels — click for the full panel with dB values and per-channel toggles";
+"playback_output" = "Playback audio output";
+"system_default" = "System default";
+"fullscreen_playback" = "Playback fullscreen (Esc to exit). The green window button fullscreens the whole app";

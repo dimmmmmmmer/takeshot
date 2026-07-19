@@ -45,16 +45,25 @@ public enum PCMAudio {
         return sampleBuffer
     }
 
-    /// Оставить первые `channelCount` каналов interleaved Int16-буфера
-    /// (выбор «сколько дорожек писать»). Возвращает исходный буфер, если
-    /// каналов и так не больше.
+    /// Оставить первые `channelCount` каналов (обёртка над selectChannels).
     public static func trimChannels(_ sampleBuffer: CMSampleBuffer, to channelCount: Int,
                                     formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
+        selectChannels(sampleBuffer, indices: Array(0..<max(0, channelCount)),
+                       formatCache: &formatCache)
+    }
+
+    /// Оставить произвольный набор каналов interleaved Int16-буфера
+    /// (вкл/выкл дорожек из UI). Возвращает исходный буфер, если выбраны все;
+    /// nil — если не выбран ни один существующий канал.
+    public static func selectChannels(_ sampleBuffer: CMSampleBuffer, indices: [Int],
+                                      formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
               asbd.mBitsPerChannel == 16 else { return sampleBuffer }
         let sourceChannels = Int(asbd.mChannelsPerFrame)
-        guard channelCount > 0, sourceChannels > channelCount,
+        let selected = indices.filter { $0 >= 0 && $0 < sourceChannels }.sorted()
+        guard !selected.isEmpty else { return nil }
+        guard selected != Array(0..<sourceChannels),
               let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
             return sampleBuffer
         }
@@ -67,20 +76,21 @@ public enum PCMAudio {
               let pointer else { return sampleBuffer }
 
         let frames = length / 2 / sourceChannels
-        var trimmed = [Int16](repeating: 0, count: frames * channelCount)
+        let outChannels = selected.count
+        var packed = [Int16](repeating: 0, count: frames * outChannels)
         pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
             for frame in 0..<frames {
-                for channel in 0..<channelCount {
-                    trimmed[frame * channelCount + channel] =
+                for (slot, channel) in selected.enumerated() {
+                    packed[frame * outChannels + slot] =
                         samples[frame * sourceChannels + channel]
                 }
             }
         }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
-        return trimmed.withUnsafeBytes { raw -> CMSampleBuffer? in
+        return packed.withUnsafeBytes { raw -> CMSampleBuffer? in
             guard let base = raw.baseAddress else { return nil }
             return makeSampleBuffer(bytes: base, sampleFrames: frames,
-                                    channelCount: channelCount, ptsSeconds: pts,
+                                    channelCount: outChannels, ptsSeconds: pts,
                                     formatCache: &formatCache)
         }
     }

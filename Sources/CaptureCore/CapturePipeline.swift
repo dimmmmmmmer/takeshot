@@ -152,11 +152,12 @@ public final class CapturePipeline: @unchecked Sendable {
 
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
         queue.async {
-            // метры показывают ВСЕ каналы; в файл идут первые N по настройке
+            // метры показывают ВСЕ каналы; в файл идут только включённые в маске
             var toWrite: CMSampleBuffer? = sampleBuffer
-            if let limit = self.config.settings.recordChannelCount {
-                toWrite = PCMAudio.trimChannels(sampleBuffer, to: limit,
-                                                formatCache: &self.trimFormatCache)
+            if let mask = self.config.settings.audioChannelMask {
+                let indices = (0..<32).filter { mask & (1 << $0) != 0 }
+                toWrite = PCMAudio.selectChannels(sampleBuffer, indices: indices,
+                                                  formatCache: &self.trimFormatCache)
             }
             if let toWrite {
                 self.writer?.append(audioSampleBuffer: toWrite)
