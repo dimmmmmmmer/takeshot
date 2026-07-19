@@ -171,7 +171,8 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)
         .frame(width: 500)
-        .padding()
+        .padding(.top, 28) // под кнопки окна: тайтлбар скрыт
+        .padding([.horizontal, .bottom])
         .background(controller.appBackground)
     }
 }
