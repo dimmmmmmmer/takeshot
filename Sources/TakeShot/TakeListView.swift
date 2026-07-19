@@ -37,9 +37,7 @@ private struct TakesSection: View {
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
-                    Label(L("open"), systemImage: "folder")
-                        .labelStyle(.titleAndIcon)
-                        .font(.caption)
+                    Image(systemName: "folder")
                 }
                 .controlSize(.small)
                 .fixedSize()

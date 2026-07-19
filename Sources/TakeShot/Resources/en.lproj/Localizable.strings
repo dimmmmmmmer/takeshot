@@ -153,3 +153,10 @@
 "panel_position" = "Takes panel position";
 "panel_right" = "Right";
 "panel_left" = "Left";
+
+"naming_preset" = "Naming style";
+"preset_takeshot" = "TakeShot (default)";
+"preset_arri" = "ARRI style";
+"preset_red" = "RED style";
+"preset_bmd" = "Blackmagic style";
+"preset_custom" = "Custom";

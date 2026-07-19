@@ -37,7 +37,7 @@ struct ContentView: View {
                     .padding(.vertical, 8)
             }
         }
-        .frame(minWidth: 560, maxWidth: .infinity)
+        .frame(minWidth: 600, maxWidth: .infinity)
     }
 
     private var sidePanel: some View {
@@ -46,8 +46,11 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
-            .padding(8)
-            .frame(minWidth: 280, maxWidth: 560)
+            // верхняя кромка вровень с плеером (у него полоса 26 под кнопки окна)
+            .padding(.top, 26)
+            .padding(.bottom, 10)
+            .padding(.horizontal, 10)
+            .frame(minWidth: 310, maxWidth: 560)
     }
 }
 
@@ -188,6 +191,17 @@ private struct CompareControls: View {
                 Slider(value: $controller.blendOpacity, in: 0...1)
                     .frame(width: 90)
                     .controlSize(.mini)
+                TextField("", value: Binding(
+                    get: { Int((controller.blendOpacity * 100).rounded()) },
+                    set: { controller.blendOpacity = Double(min(100, max(0, $0))) / 100 }),
+                    format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 38)
+                    .controlSize(.mini)
+                Text("%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(4)

@@ -6,6 +6,14 @@ struct SettingsView: View {
     @EnvironmentObject private var hotkeys: HotkeyManager
     @AppStorage("panelSide") private var panelSide = "right"
 
+    /// Пресеты шаблонов имён под стиль камер; правка шаблона руками = Custom.
+    static let namingPresets: [(key: String, template: String)] = [
+        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}"),
+        ("preset_arri", "{cam}{roll}C{clip}_{date}_{postfix}"),
+        ("preset_red", "{cam}{roll}_C{clip}_{date}_{postfix}"),
+        ("preset_bmd", "{cam}{roll}_{date}_C{clip}"),
+    ]
+
     var body: some View {
         Form {
             Section(L("settings_device")) {
@@ -64,6 +72,22 @@ struct SettingsView: View {
                             controller.chooseDestinationFolder()
                         }
                     }
+                }
+                Picker(L("naming_preset"), selection: Binding(
+                    get: {
+                        Self.namingPresets.first {
+                            $0.template == controller.settings.namingTemplate
+                        }?.key ?? "preset_custom"
+                    },
+                    set: { key in
+                        if let preset = Self.namingPresets.first(where: { $0.key == key }) {
+                            controller.settings.namingTemplate = preset.template
+                        }
+                    })) {
+                    ForEach(Self.namingPresets, id: \.key) { preset in
+                        Text(L(preset.key)).tag(preset.key)
+                    }
+                    Text(L("preset_custom")).tag("preset_custom")
                 }
                 TextField(L("naming_template"), text: $controller.settings.namingTemplate)
                 Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))

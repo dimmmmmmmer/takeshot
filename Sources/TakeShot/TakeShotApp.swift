@@ -12,7 +12,7 @@ struct TakeShotApp: App {
             ContentView()
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
-                .frame(minWidth: 960, minHeight: 600)
+                .frame(minWidth: 1080, minHeight: 620)
                 .preferredColorScheme(controller.colorScheme)
                 .onAppear {
                     hotkeys.install(controller: controller)
@@ -44,5 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // контент — под самый верх окна: без этого SwiftUI резервирует
+        // высоту тайтлбара и сверху остаётся пустая полоса
+        DispatchQueue.main.async {
+            for window in NSApp.windows where window.styleMask.contains(.titled) {
+                window.styleMask.insert(.fullSizeContentView)
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+            }
+        }
     }
 }

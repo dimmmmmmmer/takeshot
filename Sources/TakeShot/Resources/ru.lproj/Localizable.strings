@@ -153,3 +153,10 @@
 "panel_position" = "Панель дублей";
 "panel_right" = "Справа";
 "panel_left" = "Слева";
+
+"naming_preset" = "Стиль именования";
+"preset_takeshot" = "TakeShot (по умолчанию)";
+"preset_arri" = "Стиль ARRI";
+"preset_red" = "Стиль RED";
+"preset_bmd" = "Стиль Blackmagic";
+"preset_custom" = "Свой";
