@@ -52,14 +52,14 @@ struct NamingEngineTests {
     }
 
     @Test func postfixAndDefaultTemplate() {
-        let engine = NamingEngine(template: "{prefix}_{cam}_{roll}_C{clip}_{postfix}")
+        let engine = NamingEngine(template: CaptureSettings().namingTemplate)
         let withPostfix = engine.fileName(for: NamingContext(
             project: "Film", take: 7, reel: "002", camera: "B", postfix: "night"))
-        #expect(withPostfix == "Film_B_002_C07_night")
+        #expect(withPostfix == "Film_B002C07_night")
         // пустой постфикс схлопывается без хвостового разделителя
         let without = engine.fileName(for: NamingContext(
             project: "Film", take: 7, reel: "002", camera: "B"))
-        #expect(without == "Film_B_002_C07")
+        #expect(without == "Film_B002C07")
     }
 
     @Test func fieldStepperNumbersAndLetters() {

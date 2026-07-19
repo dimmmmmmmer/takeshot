@@ -78,7 +78,7 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
 /// Настройки приложения (персистятся в UserDefaults как JSON).
 public struct CaptureSettings: Codable, Equatable, Sendable {
     public var codec: CaptureCodec = .proRes422
-    public var namingTemplate: String = "{prefix}_{cam}_{roll}_C{clip}_{postfix}"
+    public var namingTemplate: String = "{prefix}_{cam}{roll}C{clip}_{postfix}"
     public var destinationPath: String = NSSearchPathForDirectoriesInDomains(
         .moviesDirectory, .userDomainMask, true).first.map { $0 + "/TakeShot" } ?? "~/Movies/TakeShot"
     public var detectionMode: RecDetectionMode = .auto
@@ -113,7 +113,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         else { return CaptureSettings() }
         // миграции дефолтных шаблонов прошлых версий
         if ["{scene}_T{take}_{cam}_{tc}",
-            "{prefix}_{cam}_{roll}_C{clip}"].contains(settings.namingTemplate) {
+            "{prefix}_{cam}_{roll}_C{clip}",
+            "{prefix}_{cam}_{roll}_C{clip}_{postfix}"].contains(settings.namingTemplate) {
             settings.namingTemplate = CaptureSettings().namingTemplate
         }
         return settings

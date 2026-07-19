@@ -37,11 +37,11 @@ public struct NamingEngine: Sendable {
         self.template = template
     }
 
-    /// {prefix} — префикс проекта, {roll} — ролл, {clip} — номер клипа (с паддингом).
-    /// Старые имена ({project}/{reel}/{take}) остаются рабочими алиасами.
+    /// Публичный список — только то, что реально задаётся из UI ({prefix}/{cam}/
+    /// {roll}/{clip}/{postfix}) или подставляется само ({tc}/{date}). Старые имена
+    /// ({project}/{reel}/{take}/{scene}/{clipname}) продолжают работать как алиасы.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
-                                      "{postfix}", "{scene}", "{tc}", "{date}",
-                                      "{clipname}"]
+                                      "{postfix}", "{tc}", "{date}"]
 
     /// Имя файла без расширения.
     public func fileName(for context: NamingContext) -> String {
