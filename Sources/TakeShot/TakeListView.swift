@@ -41,6 +41,7 @@ private struct TakesSection: View {
                         .font(.caption)
                 }
                 .controlSize(.small)
+                .fixedSize()
                 .help(L("open_folder"))
                 Spacer()
                 ViewModePicker(mode: $viewMode)
@@ -216,9 +217,7 @@ private struct OtherContentSection: View {
                             .truncationMode(.middle)
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        if !isImage(url) { controller.play(url: url) }
-                    }
+                    .onTapGesture(count: 2) { controller.play(url: url) }
                     .contextMenu { OtherContextMenu(url: url) }
                 }
                 .listStyle(.inset)
@@ -253,9 +252,7 @@ private struct OtherCell: View {
                 .truncationMode(.middle)
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            if !isImage(url) { controller.play(url: url) }
-        }
+        .onTapGesture(count: 2) { controller.play(url: url) }
         .contextMenu { OtherContextMenu(url: url) }
     }
 }
@@ -265,9 +262,7 @@ private struct OtherContextMenu: View {
     let url: URL
 
     var body: some View {
-        if !isImage(url) {
-            Button(L("play")) { controller.play(url: url) }
-        }
+        Button(L("play")) { controller.play(url: url) }
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }

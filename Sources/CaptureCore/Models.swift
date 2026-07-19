@@ -78,7 +78,7 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
 /// Настройки приложения (персистятся в UserDefaults как JSON).
 public struct CaptureSettings: Codable, Equatable, Sendable {
     public var codec: CaptureCodec = .proRes422
-    public var namingTemplate: String = "{prefix}_{cam}_{roll}_C{clip}"
+    public var namingTemplate: String = "{prefix}_{cam}_{roll}_C{clip}_{postfix}"
     public var destinationPath: String = NSSearchPathForDirectoriesInDomains(
         .moviesDirectory, .userDomainMask, true).first.map { $0 + "/TakeShot" } ?? "~/Movies/TakeShot"
     public var detectionMode: RecDetectionMode = .auto
@@ -96,6 +96,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var appearance: String?
     /// Цвет подложки плеера, hex "#RRGGBB"; nil — чёрный.
     public var playerBackgroundHex: String?
+    /// Цвет фона окна приложения, hex; nil — системный.
+    public var appBackgroundHex: String?
+    /// Постфикс имени файла ({postfix} в шаблоне).
+    public var postfix: String?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 
@@ -107,8 +111,9 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         guard let data = defaults.data(forKey: defaultsKey),
               var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
         else { return CaptureSettings() }
-        // миграция со старого дефолтного шаблона на Prefix/Cam/Roll/Clip
-        if settings.namingTemplate == "{scene}_T{take}_{cam}_{tc}" {
+        // миграции дефолтных шаблонов прошлых версий
+        if ["{scene}_T{take}_{cam}_{tc}",
+            "{prefix}_{cam}_{roll}_C{clip}"].contains(settings.namingTemplate) {
             settings.namingTemplate = CaptureSettings().namingTemplate
         }
         return settings
@@ -118,5 +123,29 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         if let data = try? JSONEncoder().encode(self) {
             defaults.set(data, forKey: Self.defaultsKey)
         }
+    }
+}
+
+
+/// Инкремент/декремент полей нейминга (ролл «001» → «002», камера A → B).
+public enum FieldStepper {
+    /// Меняет хвостовые цифры строки, сохраняя ведущие нули: "001"+1 → "002",
+    /// "A12"+1 → "A13". Без цифр в хвосте строка не меняется.
+    public static func stepTrailingNumber(_ value: String, by delta: Int) -> String {
+        guard let range = value.range(of: "[0-9]+$", options: .regularExpression),
+              let number = Int(value[range]) else { return value }
+        let width = value.distance(from: range.lowerBound, to: range.upperBound)
+        let next = max(0, number + delta)
+        return value[..<range.lowerBound] + String(format: "%0\(width)d", next)
+    }
+
+    /// Меняет последнюю букву A-Z по алфавиту (с циклом): "A"+1 → "B", "Z"+1 → "A".
+    public static func stepLetter(_ value: String, by delta: Int) -> String {
+        guard let last = value.unicodeScalars.last,
+              last.value >= 65, last.value <= 90 else { return value }
+        let index = Int(last.value) - 65
+        let next = ((index + delta) % 26 + 26) % 26
+        return String(value.unicodeScalars.dropLast())
+            + String(UnicodeScalar(UInt8(65 + next)))
     }
 }

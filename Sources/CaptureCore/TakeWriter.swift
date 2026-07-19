@@ -47,8 +47,15 @@ public final class TakeWriter {
         return CMTimeSubtract(lastPTS, firstPTS).seconds + frameDuration
     }
 
+    /// Ключ QuickTime-метадаты, которым TakeShot помечает свои файлы
+    /// (по нему приложение отличает свои дубли от чужих файлов в папке).
+    public static let markerKey = "com.takeshot.origin"
+    public static let rollKey = "com.takeshot.roll"
+    public static let clipKey = "com.takeshot.clip"
+
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
-                startTimecode: Timecode?) throws {
+                startTimecode: Timecode?,
+                markerMetadata: [String: String] = [:]) throws {
         self.url = url
         self.format = format
         self.startTimecode = startTimecode
@@ -61,6 +68,18 @@ public final class TakeWriter {
         } catch {
             throw WriterError.cannotCreateWriter(error)
         }
+
+        var metadataItems: [AVMetadataItem] = []
+        var allMetadata = markerMetadata
+        allMetadata[Self.markerKey] = "1"
+        for (key, value) in allMetadata {
+            let item = AVMutableMetadataItem()
+            item.keySpace = .quickTimeMetadata
+            item.key = key as NSString
+            item.value = value as NSString
+            metadataItems.append(item)
+        }
+        writer.metadata = metadataItems
 
         var videoSettings: [String: Any] = [
             AVVideoCodecKey: codec.avCodecType,

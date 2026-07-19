@@ -37,6 +37,10 @@ struct SettingsView: View {
                     get: { controller.playerBackground },
                     set: { controller.playerBackground = $0 }),
                     supportsOpacity: false)
+                ColorPicker(L("app_background"), selection: Binding(
+                    get: { controller.appBackground },
+                    set: { controller.appBackground = $0 }),
+                    supportsOpacity: false)
             }
             Section(L("settings_recording")) {
                 Picker(L("codec"), selection: $controller.settings.codec) {

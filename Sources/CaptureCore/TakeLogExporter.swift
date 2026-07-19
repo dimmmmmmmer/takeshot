@@ -28,6 +28,25 @@ public enum TakeLogExporter {
         return url
     }
 
+    /// Рейтинги из ранее записанного CSV: имя файла → good/bad.
+    /// Используется при восстановлении дублей после перезапуска приложения.
+    public static func parseRatings(csv: String) -> [String: TakeRating] {
+        var result: [String: TakeRating] = [:]
+        for line in csv.split(separator: "\n").dropFirst() {
+            // простые строки наш экспорт не квотит; имена с запятыми — редкий случай,
+            // такие строки просто пропускаем
+            let fields = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard fields.count >= 5, !fields[0].hasPrefix("\"") else { continue }
+            let name = String(fields[0])
+            if fields[3] == "true" {
+                result[name] = .good
+            } else if fields[4] == "NG" {
+                result[name] = .bad
+            }
+        }
+        return result
+    }
+
     /// Экранирование по RFC 4180: кавычки вокруг значений с запятыми/кавычками/переводами строк.
     static func escape(_ value: String) -> String {
         if value.contains(",") || value.contains("\"") || value.contains("\n") {

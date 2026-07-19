@@ -9,11 +9,12 @@ public struct NamingContext: Sendable {
     public var reel: String
     public var camera: String
     public var clipName: String
+    public var postfix: String
     public var timecode: Timecode?
 
     public init(project: String = "", date: Date = Date(), scene: String = "",
                 take: Int = 0, reel: String = "", camera: String = "",
-                clipName: String = "", timecode: Timecode? = nil) {
+                clipName: String = "", postfix: String = "", timecode: Timecode? = nil) {
         self.project = project
         self.date = date
         self.scene = scene
@@ -21,6 +22,7 @@ public struct NamingContext: Sendable {
         self.reel = reel
         self.camera = camera
         self.clipName = clipName
+        self.postfix = postfix
         self.timecode = timecode
     }
 }
@@ -38,7 +40,8 @@ public struct NamingEngine: Sendable {
     /// {prefix} — префикс проекта, {roll} — ролл, {clip} — номер клипа (с паддингом).
     /// Старые имена ({project}/{reel}/{take}) остаются рабочими алиасами.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
-                                      "{scene}", "{tc}", "{date}", "{clipname}"]
+                                      "{postfix}", "{scene}", "{tc}", "{date}",
+                                      "{clipname}"]
 
     /// Имя файла без расширения.
     public func fileName(for context: NamingContext) -> String {
@@ -59,6 +62,7 @@ public struct NamingEngine: Sendable {
             "{roll}": context.reel,
             "{cam}": context.camera,
             "{clipname}": context.clipName,
+            "{postfix}": context.postfix,
             "{tc}": context.timecode?.fileNameSafe ?? "",
         ]
         for (key, value) in substitutions {

@@ -278,6 +278,7 @@ public final class CapturePipeline: @unchecked Sendable {
             reel: config.roll,
             camera: config.settings.cameraLabel,
             clipName: "",
+            postfix: config.settings.postfix ?? "",
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)
@@ -289,8 +290,13 @@ public final class CapturePipeline: @unchecked Sendable {
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov"))
         do {
-            let writer = try TakeWriter(url: url, format: format,
-                                        codec: config.settings.codec, startTimecode: timecode)
+            let writer = try TakeWriter(
+                url: url, format: format,
+                codec: config.settings.codec, startTimecode: timecode,
+                markerMetadata: [
+                    TakeWriter.rollKey: config.roll,
+                    TakeWriter.clipKey: String(config.takeNumber),
+                ])
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()

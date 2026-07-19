@@ -31,6 +31,18 @@ struct TakeLogExporterTests {
         #expect(csv.contains("\"INT, kitchen \"\"day\"\"\""))
     }
 
+    @Test func parseRatingsRoundTrip() {
+        let csv = TakeLogExporter.resolveCSV(takes: [
+            makeTake(name: "a.mov", scene: "1", number: 1, rating: .good),
+            makeTake(name: "b.mov", scene: "1", number: 2),
+            makeTake(name: "c.mov", scene: "1", number: 3, rating: .bad),
+        ])
+        let ratings = TakeLogExporter.parseRatings(csv: csv)
+        #expect(ratings["a.mov"] == .good)
+        #expect(ratings["b.mov"] == nil)
+        #expect(ratings["c.mov"] == .bad)
+    }
+
     @Test func writesFileToDirectory() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("TakeLog-\(UUID().uuidString)")

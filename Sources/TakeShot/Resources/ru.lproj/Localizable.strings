@@ -115,6 +115,11 @@
 
 /* Оценка дубля */
 "good_take" = "Good take";
-"bad_take" = "Bad take (брак)";
+"bad_take" = "Bad take";
 "clear_rating" = "Снять отметку";
 "rating_help" = "Клик по кругу: пусто → good take (✓, Good Take в Резолве) → bad take (✕, NG в комментариях)";
+
+"postfix_label" = "POSTFIX";
+"hotkey_good" = "Good take (последний)";
+"hotkey_bad" = "Bad take (последний)";
+"app_background" = "Фон приложения";

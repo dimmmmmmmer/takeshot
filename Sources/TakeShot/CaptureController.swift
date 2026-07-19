@@ -33,7 +33,7 @@ final class CaptureController: ObservableObject {
     @Published var roll: String = "001" {
         didSet {
             guard oldValue != roll else { return }
-            if nextTakeNumber != 1 { nextTakeNumber = 1 }
+            continueClipNumbering()
             pushConfig()
         }
     }
@@ -67,11 +67,17 @@ final class CaptureController: ObservableObject {
     let player = AVPlayer()
 
     /// Открыть файл в плеере и переключиться в режим плейбека.
+    /// Фото просто показываются (AVPlayer для них не нужен).
     func play(url: URL) {
         playbackURL = url
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
+        if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+        } else {
+            player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            player.play()
+        }
         viewerMode = .playback
-        player.play()
     }
     @Published var settings = CaptureSettings.loaded() {
         didSet {
@@ -166,10 +172,29 @@ final class CaptureController: ObservableObject {
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
-    /// Оценка последнего дубля по хоткею (цикл: нет → good → bad → нет).
-    func circleLastTake() {
+    /// Цвет фона окна (nil в настройках — системный).
+    var appBackground: Color {
+        get {
+            settings.appBackgroundHex.flatMap(Color.init(hex:))
+                ?? Color(nsColor: .windowBackgroundColor)
+        }
+        set { settings.appBackgroundHex = newValue.hexString }
+    }
+
+    // MARK: - степперы полей нейминга
+
+    func stepRoll(_ delta: Int) {
+        roll = FieldStepper.stepTrailingNumber(roll, by: delta)
+    }
+
+    func stepCamera(_ delta: Int) {
+        settings.cameraLabel = FieldStepper.stepLetter(settings.cameraLabel, by: delta)
+    }
+
+    /// Хоткей: поставить/снять оценку последнему дублю.
+    func toggleLastRating(_ rating: TakeRating) {
         guard let last = takes.last else { return }
-        cycleRating(last)
+        setRating(last.rating == rating ? .none : rating, for: last)
     }
 
     private func pushConfig() {
@@ -284,19 +309,88 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Пути, уже проверенные на метку TakeShot (чтобы не читать мету повторно).
+    private var scannedPaths: Set<String> = []
+
     private func scanDestinationFolder() {
         let root = destinationRoot
         let ownTakePaths = Set(takes.map { $0.url.path })
         Task.detached(priority: .utility) { [weak self] in
-            let sorted = Self.findForeignVideos(root: root, excluding: ownTakePaths)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                if self.otherFiles != sorted {
-                    self.otherFiles = sorted
-                    self.generateOtherThumbnails(for: sorted)
+            let candidates = Self.findForeignVideos(root: root, excluding: ownTakePaths)
+            await self?.classifyFoundFiles(candidates)
+        }
+    }
+
+    /// Наши файлы (метка com.takeshot.origin в QuickTime-мете) возвращаются
+    /// в список дублей после перезапуска; остальные — Other content.
+    private func classifyFoundFiles(_ candidates: [URL]) async {
+        var restored: [Take] = []
+        var foreign: [URL] = []
+        let ratings = (try? String(contentsOf: takeLogURL, encoding: .utf8))
+            .map(TakeLogExporter.parseRatings(csv:)) ?? [:]
+
+        for url in candidates {
+            if scannedPaths.contains(url.path) {
+                if !takes.contains(where: { $0.url.path == url.path }) {
+                    foreign.append(url)
                 }
+                continue
+            }
+            let ext = url.pathExtension.lowercased()
+            guard ext == "mov" || ext == "mp4" else {
+                scannedPaths.insert(url.path)
+                foreign.append(url)
+                continue
+            }
+            let asset = AVURLAsset(url: url)
+            let metadata = (try? await asset.load(.metadata)) ?? []
+            func value(_ key: String) -> String? {
+                metadata.first { ($0.key as? String) == key }?.stringValue
+            }
+            scannedPaths.insert(url.path)
+            guard value(TakeWriter.markerKey) != nil else {
+                foreign.append(url)
+                continue
+            }
+            let duration = (try? await asset.load(.duration))?.seconds ?? 0
+            let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?
+                .creationDate ?? Date.distantPast
+            let take = Take(
+                url: url,
+                displayName: url.deletingPathExtension().lastPathComponent,
+                scene: "",
+                roll: value(TakeWriter.rollKey) ?? "",
+                takeNumber: Int(value(TakeWriter.clipKey) ?? "") ?? 0,
+                startTimecode: nil,
+                durationSeconds: duration,
+                rating: ratings[url.lastPathComponent] ?? .none,
+                recordedAt: created)
+            restored.append(take)
+        }
+
+        if !restored.isEmpty {
+            let known = Set(takes.map { $0.url.path })
+            let new = restored.filter { !known.contains($0.url.path) }
+            if !new.isEmpty {
+                takes.append(contentsOf: new)
+                takes.sort { $0.recordedAt < $1.recordedAt }
+                for take in new {
+                    generateThumbnail(for: take)
+                }
+                continueClipNumbering()
             }
         }
+        let sorted = foreign.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        if otherFiles != sorted {
+            otherFiles = sorted
+            generateOtherThumbnails(for: sorted)
+        }
+    }
+
+    /// Номер следующего клипа — после максимального в текущем ролле.
+    private func continueClipNumbering() {
+        let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
+        nextTakeNumber = maxClip + 1
     }
 
     /// Миниатюры для Other content: фото — напрямую, видео — через генератор кадров.

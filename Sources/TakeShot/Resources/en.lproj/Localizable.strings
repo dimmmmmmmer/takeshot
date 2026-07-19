@@ -115,6 +115,11 @@
 
 /* Take rating */
 "good_take" = "Good take";
-"bad_take" = "Bad take (NG)";
+"bad_take" = "Bad take";
 "clear_rating" = "Clear rating";
 "rating_help" = "Click cycles: none → good take (✓, Good Take in Resolve) → bad take (✕, NG in comments)";
+
+"postfix_label" = "POSTFIX";
+"hotkey_good" = "Good take (last)";
+"hotkey_bad" = "Bad take (last)";
+"app_background" = "App background";

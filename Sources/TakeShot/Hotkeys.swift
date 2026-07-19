@@ -42,14 +42,16 @@ struct KeyCombo: Codable, Equatable {
 /// Действия, на которые вешаются хоткеи.
 enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleRecord
-    case circleLastTake
+    case circleLastTake   // good take (историческое имя ключа — для сохранённых настроек)
+    case badTakeLast
 
     var id: String { rawValue }
 
     var titleKey: String {
         switch self {
         case .toggleRecord: return "hotkey_record"
-        case .circleLastTake: return "hotkey_circle"
+        case .circleLastTake: return "hotkey_good"
+        case .badTakeLast: return "hotkey_bad"
         }
     }
 
@@ -59,6 +61,8 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "r", modifiers: NSEvent.ModifierFlags.command.rawValue)
         case .circleLastTake:
             return KeyCombo(key: "g", modifiers: NSEvent.ModifierFlags.command.rawValue)
+        case .badTakeLast:
+            return KeyCombo(key: "b", modifiers: NSEvent.ModifierFlags.command.rawValue)
         }
     }
 }
@@ -145,7 +149,9 @@ final class HotkeyManager: ObservableObject {
         case .toggleRecord:
             if controller.isCapturing { controller.toggleManualRecord() }
         case .circleLastTake:
-            controller.circleLastTake()
+            controller.toggleLastRating(.good)
+        case .badTakeLast:
+            controller.toggleLastRating(.bad)
         }
     }
 }

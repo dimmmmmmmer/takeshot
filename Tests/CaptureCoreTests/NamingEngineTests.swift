@@ -51,6 +51,30 @@ struct NamingEngineTests {
         #expect(name == "2026-07-14_7")
     }
 
+    @Test func postfixAndDefaultTemplate() {
+        let engine = NamingEngine(template: "{prefix}_{cam}_{roll}_C{clip}_{postfix}")
+        let withPostfix = engine.fileName(for: NamingContext(
+            project: "Film", take: 7, reel: "002", camera: "B", postfix: "night"))
+        #expect(withPostfix == "Film_B_002_C07_night")
+        // пустой постфикс схлопывается без хвостового разделителя
+        let without = engine.fileName(for: NamingContext(
+            project: "Film", take: 7, reel: "002", camera: "B"))
+        #expect(without == "Film_B_002_C07")
+    }
+
+    @Test func fieldStepperNumbersAndLetters() {
+        #expect(FieldStepper.stepTrailingNumber("001", by: 1) == "002")
+        #expect(FieldStepper.stepTrailingNumber("009", by: 1) == "010")
+        #expect(FieldStepper.stepTrailingNumber("001", by: -1) == "000")
+        #expect(FieldStepper.stepTrailingNumber("000", by: -1) == "000")
+        #expect(FieldStepper.stepTrailingNumber("A12", by: 1) == "A13")
+        #expect(FieldStepper.stepTrailingNumber("ROLL", by: 1) == "ROLL")
+        #expect(FieldStepper.stepLetter("A", by: 1) == "B")
+        #expect(FieldStepper.stepLetter("Z", by: 1) == "A")
+        #expect(FieldStepper.stepLetter("A", by: -1) == "Z")
+        #expect(FieldStepper.stepLetter("CAM B", by: 1) == "CAM C")
+    }
+
     @Test func relativeDirectory() {
         let engine = NamingEngine(template: "{scene}")
         let dir = engine.relativeDirectory(for: NamingContext(
