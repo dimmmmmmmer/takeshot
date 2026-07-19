@@ -164,7 +164,10 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(controller.appBackground)
         .frame(width: 500)
         .padding()
+        .background(controller.appBackground)
     }
 }

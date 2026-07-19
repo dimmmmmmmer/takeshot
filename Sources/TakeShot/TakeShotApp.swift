@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.styleMask.insert(.fullSizeContentView)
                 window.titlebarAppearsTransparent = true
                 window.titleVisibility = .hidden
+                // не фокусировать первое текстовое поле при запуске
+                window.makeFirstResponder(nil)
             }
         }
     }

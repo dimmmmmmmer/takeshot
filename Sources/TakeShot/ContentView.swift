@@ -18,6 +18,10 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
+        // клик по пустому месту снимает фокус с текстовых полей
+        .onTapGesture {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
     }
 
     private var mainColumn: some View {

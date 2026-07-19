@@ -313,17 +313,20 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Цвет подложки плеера.
+    /// Цвет подложки плеера; по умолчанию — миддл-грей (18% серый).
     var playerBackground: Color {
-        get { settings.playerBackgroundHex.flatMap(Color.init(hex:)) ?? .black }
+        get {
+            settings.playerBackgroundHex.flatMap(Color.init(hex:))
+                ?? Color(hex: "#7F7F7F")!
+        }
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
-    /// Цвет фона окна (nil в настройках — системный).
+    /// Цвет фона окна; по умолчанию ~полторы ступени ниже миддл-грея.
     var appBackground: Color {
         get {
             settings.appBackgroundHex.flatMap(Color.init(hex:))
-                ?? Color(nsColor: .windowBackgroundColor)
+                ?? Color(hex: "#464646")!
         }
         set { settings.appBackgroundHex = newValue.hexString }
     }
