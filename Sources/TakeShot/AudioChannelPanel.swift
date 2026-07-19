@@ -89,25 +89,50 @@ struct AudioChannelPanel: View {
     }
 }
 
-/// Фулскрин-окно живого сигнала: только картинка (Esc/F — выход).
+/// Фулскрин-окно живого сигнала: картинка + подвал управления по ховеру снизу.
 struct LiveFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
+    @State private var footerHover = false
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color.black
-            LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
-            Button {
-                controller.toggleLiveFullscreen()
-            } label: {
-                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                    .font(.system(size: 14))
-                    .padding(8)
-                    .background(.black.opacity(0.5),
-                                in: RoundedRectangle(cornerRadius: 8))
+        GeometryReader { geo in
+            ZStack(alignment: .bottomTrailing) {
+                Color.black
+                LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
+                if !footerHover {
+                    Button {
+                        controller.toggleLiveFullscreen()
+                    } label: {
+                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                            .font(.system(size: 14))
+                            .padding(8)
+                            .background(.black.opacity(0.5),
+                                        in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(14)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(14)
+            .overlay(alignment: .bottom) {
+                if footerHover {
+                    BottomBarView()
+                        .background(.ultraThinMaterial,
+                                    in: RoundedRectangle(cornerRadius: 18))
+                        .padding(.horizontal, 60)
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point):
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        footerHover = point.y > geo.size.height - 150
+                    }
+                case .ended:
+                    withAnimation(.easeOut(duration: 0.15)) { footerHover = false }
+                }
+            }
         }
         .ignoresSafeArea()
     }

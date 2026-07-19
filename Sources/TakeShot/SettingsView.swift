@@ -4,7 +4,6 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
-    @AppStorage("panelSide") private var panelSide = "right"
 
     /// Пресеты шаблонов имён под стиль камер; правка шаблона руками = Custom.
     /// clipDigits — вендорская ширина номера клипа (C001 у ARRI/RED/Sony).
@@ -56,7 +55,7 @@ struct SettingsView: View {
                     get: { controller.accentColor },
                     set: { controller.accentColor = $0 }),
                     supportsOpacity: false)
-                Picker(L("panel_position"), selection: $panelSide) {
+                Picker(L("panel_position"), selection: $controller.panelSide) {
                     Text(L("panel_right")).tag("right")
                     Text(L("panel_left")).tag("left")
                 }

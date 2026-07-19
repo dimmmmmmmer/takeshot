@@ -72,8 +72,10 @@ private struct TakesSection: View {
             } else {
                 List(controller.takes.reversed()) { take in
                     TakeRow(take: take)
+                        .listRowBackground(Color.clear)
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -219,12 +221,21 @@ private struct OtherContentSection: View {
                             .font(.callout)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        Spacer()
+                        if let duration = controller.otherDurations[url] {
+                            Text(durationText(duration))
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .listRowBackground(Color.clear)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { controller.play(url: url) }
                     .contextMenu { OtherContextMenu(url: url) }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
     }

@@ -4,15 +4,14 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var controller: CaptureController
-    @AppStorage("panelSide") private var panelSide = "right"
 
     var body: some View {
         HSplitView {
-            if panelSide == "left" && !controller.isImmersive {
+            if controller.panelSide == "left" {
                 sidePanel
             }
             mainColumn
-            if panelSide == "right" && !controller.isImmersive {
+            if controller.panelSide == "right" {
                 sidePanel
             }
         }
@@ -26,20 +25,16 @@ struct ContentView: View {
 
     private var mainColumn: some View {
         VStack(spacing: 0) {
-            if !controller.isImmersive {
-                // минимальная полоса: кнопки окна ложатся на верх карточки плеера
-                Color.clear.frame(height: 14)
-            }
+            // полоса под кнопки окна (за неё же таскается окно)
+            Color.clear.frame(height: 20)
             PlayerArea()
-            if !controller.isImmersive {
-                BottomBarView()
-                    .background(.ultraThinMaterial,
-                                in: RoundedRectangle(cornerRadius: 18))
-                    .overlay(RoundedRectangle(cornerRadius: 18)
-                        .strokeBorder(.white.opacity(0.08)))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-            }
+            BottomBarView()
+                .background(.ultraThinMaterial,
+                            in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(.white.opacity(0.08)))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
         }
         .frame(minWidth: 680, maxWidth: .infinity)
         .layoutPriority(1)
@@ -48,12 +43,13 @@ struct ContentView: View {
 
     private var sidePanel: some View {
         TakeListView()
+            .clipShape(RoundedRectangle(cornerRadius: 14))
             .background(.regularMaterial,
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
             // верхняя кромка вровень с плеером
-            .padding(.top, 14)
+            .padding(.top, 20)
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
             .frame(minWidth: 310, maxWidth: 480)
@@ -62,112 +58,80 @@ struct ContentView: View {
 }
 
 /// Плеер-карточка: TC, формат и переключатель режима живут прямо на ней.
-/// В иммерсиве занимает всё окно, подвал выезжает по ховеру снизу.
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
-    @AppStorage("panelSide") private var panelSide = "right"
-    @State private var footerHover = false
 
     var body: some View {
-        GeometryReader { geo in
-            PreviewView()
-                .clipShape(RoundedRectangle(cornerRadius: controller.isImmersive ? 0 : 14))
-                .overlay(RoundedRectangle(cornerRadius: controller.isImmersive ? 0 : 14)
-                    .strokeBorder(.white.opacity(controller.isImmersive ? 0 : 0.08)))
-                .overlay(alignment: .topLeading) {
-                    if !controller.isImmersive {
-                        overlayBadge {
-                            Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                                .font(.body)
-                                .monospacedDigit()
-                                .foregroundStyle(controller.isRecording ? .red : .primary)
-                        }
-                        // кнопки окна лежат на плеере только когда панель справа
-                        .padding(.leading, panelSide == "right" ? 66 : 8)
-                        .padding(.top, 8)
-                    }
+        PreviewView()
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(.white.opacity(0.08)))
+            .overlay(alignment: .topLeading) {
+                overlayBadge {
+                    Text(controller.currentTimecode?.description ?? "--:--:--:--")
+                        .font(.body)
+                        .monospacedDigit()
+                        .foregroundStyle(controller.isRecording ? .red : .primary)
                 }
-                .overlay(alignment: .top) {
-                    if !controller.isImmersive {
-                        VStack(spacing: 4) {
-                            Picker("", selection: $controller.viewerMode) {
-                                Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
-                                Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 190)
-                            .labelsHidden()
-                            .controlSize(.small)
+                // кнопки окна лежат на плеере только когда панель справа
+                .padding(.leading, controller.panelSide == "right" ? 66 : 8)
+                .padding(.top, 8)
+            }
+            .overlay(alignment: .top) {
+                VStack(spacing: 4) {
+                    Picker("", selection: $controller.viewerMode) {
+                        Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
+                        Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 190)
+                    .labelsHidden()
+                    .controlSize(.small)
 
-                            if controller.viewerMode == .playback,
-                               controller.playbackURL != nil {
-                                CompareControls()
-                            }
+                    if controller.viewerMode == .playback,
+                       controller.playbackURL != nil {
+                        CompareControls()
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .overlay(alignment: .topTrailing) {
+                overlayBadge {
+                    Group {
+                        if let format = controller.signalFormat {
+                            Text(Self.shortFormat(format)).monospacedDigit()
+                        } else {
+                            Text(L("no_signal_short"))
                         }
-                        .padding(.top, 8)
                     }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
-                .overlay(alignment: .topTrailing) {
-                    if !controller.isImmersive {
-                        overlayBadge {
-                            Group {
-                                if let format = controller.signalFormat {
-                                    Text(Self.shortFormat(format)).monospacedDigit()
-                                } else {
-                                    Text(L("no_signal_short"))
-                                }
-                            }
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        }
-                        .padding(8)
+                .padding(8)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                // фулскрин плеера — справа внизу (в плейбеке эта кнопка в транспорте)
+                if controller.viewerMode == .record {
+                    Button {
+                        controller.toggleLiveFullscreen()
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 13))
+                            .padding(6)
+                            .background(.black.opacity(0.45),
+                                        in: RoundedRectangle(cornerRadius: 7))
                     }
+                    .buttonStyle(.plain)
+                    .help(L("fullscreen"))
+                    .padding(8)
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    // фулскрин — справа внизу (в плейбеке эту роль играет транспорт)
-                    if !controller.isImmersive, controller.viewerMode == .record {
-                        Button {
-                            controller.toggleLiveFullscreen()
-                        } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.system(size: 13))
-                                .padding(6)
-                                .background(.black.opacity(0.45),
-                                            in: RoundedRectangle(cornerRadius: 7))
-                        }
-                        .buttonStyle(.plain)
-                        .help(L("fullscreen"))
-                        .padding(8)
-                    }
+            }
+            .overlay {
+                if controller.showAudioPanel {
+                    AudioChannelPanel()
                 }
-                .overlay {
-                    if controller.showAudioPanel {
-                        AudioChannelPanel()
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if controller.isImmersive && footerHover {
-                        BottomBarView()
-                            .background(.ultraThinMaterial,
-                                        in: RoundedRectangle(cornerRadius: 18))
-                            .padding(.horizontal, 40)
-                            .padding(.bottom, 16)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .onContinuousHover { phase in
-                    guard controller.isImmersive else { return }
-                    switch phase {
-                    case .active(let point):
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            footerHover = point.y > geo.size.height - 140
-                        }
-                    case .ended:
-                        withAnimation(.easeOut(duration: 0.15)) { footerHover = false }
-                    }
-                }
-        }
-        .padding(.horizontal, controller.isImmersive ? 0 : 12)
+            }
+            .padding(.horizontal, 12)
     }
 
     private func overlayBadge(@ViewBuilder content: () -> some View) -> some View {
@@ -257,7 +221,7 @@ struct PreviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GeometryReader { geo in
+            GeometryReader { _ in
                 ZStack {
                     Rectangle().fill(controller.playerBackground)
                     if controller.viewerMode == .playback {
@@ -326,7 +290,6 @@ private struct WipeMask: Shape {
             path.addRect(CGRect(x: 0, y: 0,
                                 width: rect.width, height: rect.height * position))
         case .diagonal:
-            // область x + y <= t; треугольник сам обрежется по границам вью
             let t = position * (rect.width + rect.height)
             path.move(to: .zero)
             path.addLine(to: CGPoint(x: t, y: 0))
@@ -435,7 +398,8 @@ private struct DisplayLayerView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Подвал: утилиты слева, REC по центру, поля нейминга справа.
+/// Подвал: утилиты слева, метры по центру левой половины, REC по центру,
+/// поля нейминга справа.
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
@@ -466,20 +430,11 @@ struct BottomBarView: View {
                                     .font(.system(size: 15))
                             }
                             .help(L("vanc_open_help"))
-
-                            Button {
-                                controller.chooseDestinationFolder()
-                            } label: {
-                                Image(systemName: "folder")
-                                    .font(.system(size: 15))
-                            }
-                            .help(L("choose_folder"))
                         }
                         .buttonStyle(.borderless)
 
                         Spacer(minLength: 8)
 
-                        // метры — по центру между утилитами и REC
                         if controller.isCapturing, !controller.audioLevels.isEmpty {
                             Button {
                                 controller.showAudioPanel.toggle()
@@ -506,12 +461,6 @@ struct BottomBarView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-    }
-
-    /// Смещение метров влево от центра: половина ширины метров + зазор + радиус кнопки.
-    static func meterOffset(for channels: Int) -> CGFloat {
-        let metersWidth = CGFloat(channels) * 5 + 8
-        return metersWidth / 2 + 12 + 26
     }
 }
 
@@ -548,7 +497,7 @@ struct RecordButton: View {
     }
 }
 
-/// Поле CLIP: во время ввода текст не переформатируется (можно набрать 0001),
+/// Поле CLIP: только цифры, максимум 4; во время ввода текст не переформатируется,
 /// коммит по Enter/расфокусу; ведущие нули задают паддинг имени файла.
 struct ClipField: View {
     @EnvironmentObject private var controller: CaptureController
@@ -579,6 +528,11 @@ struct ClipField: View {
         }
         .fixedSize()
         .onAppear { text = controller.clipDisplay }
+        .onChange(of: text) { _, newValue in
+            // только цифры и не больше четырёх
+            let filtered = String(newValue.filter(\.isNumber).prefix(4))
+            if filtered != newValue { text = filtered }
+        }
         .onChange(of: focused) { _, isFocused in
             if !isFocused { controller.commitClipText(text) }
         }

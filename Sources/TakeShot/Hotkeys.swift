@@ -116,6 +116,7 @@ final class HotkeyManager: ObservableObject {
 
     /// Перехват клавиш во всех окнах приложения (не системно-глобальный).
     func install(controller: CaptureController) {
+        controller.hotkeysRef = self
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
 

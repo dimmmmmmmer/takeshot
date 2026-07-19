@@ -44,6 +44,8 @@ final class CaptureController: ObservableObject {
     @Published var otherFiles: [URL] = []
     /// Миниатюры для Other content.
     @Published var otherThumbnails: [URL: NSImage] = [:]
+    /// Длительности видео в Other content (сек).
+    @Published var otherDurations: [URL: Double] = [:]
     @Published var lastError: String?
     /// Пиковые уровни аудиоканалов, dBFS (для метров).
     @Published var audioLevels: [Float] = []
@@ -85,8 +87,13 @@ final class CaptureController: ObservableObject {
     @Published var wipePosition: Double = 0.5
     /// Непрозрачность плейбека в режиме blend.
     @Published var blendOpacity: Double = 0.5
-    /// Иммерсивный режим (системный фулскрин окна): только плеер и ховер-подвал.
-    @Published var isImmersive = false
+    /// Позиция панели дублей (left/right) — реактивно для всех окон.
+    @Published var panelSide: String =
+        UserDefaults.standard.string(forKey: "panelSide") ?? "right" {
+        didSet { UserDefaults.standard.set(panelSide, forKey: "panelSide") }
+    }
+    /// Хоткей-менеджер (для окружения фулскрин-окон).
+    weak var hotkeysRef: HotkeyManager?
     /// Крупная панель аудиоканалов поверх плеера.
     @Published var showAudioPanel = false
     /// Громкость плейбека (только просмотр, на запись не влияет).
@@ -178,7 +185,10 @@ final class CaptureController: ObservableObject {
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.fullScreenAuxiliary]
         window.contentView = NSHostingView(rootView:
-            PlaybackFullscreenView().environmentObject(self))
+            PlaybackFullscreenView()
+                .environmentObject(self)
+                .environmentObject(hotkeysRef ?? HotkeyManager())
+                .tint(accentColor))
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
         playbackFullscreenWindow = window
@@ -203,7 +213,10 @@ final class CaptureController: ObservableObject {
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.fullScreenAuxiliary]
         window.contentView = NSHostingView(rootView:
-            LiveFullscreenView().environmentObject(self))
+            LiveFullscreenView()
+                .environmentObject(self)
+                .environmentObject(hotkeysRef ?? HotkeyManager())
+                .tint(accentColor))
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
         liveFullscreenWindow = window
@@ -252,7 +265,22 @@ final class CaptureController: ObservableObject {
             settings.save()
             pushConfig()
             L10n.apply(appLanguage)
+            if oldValue.destinationPath != settings.destinationPath {
+                resetLibraryForNewDestination()
+            }
         }
+    }
+
+    /// Новая папка записи: старые дубли/файлы к ней не относятся — чистим и сканируем заново.
+    private func resetLibraryForNewDestination() {
+        takes.removeAll()
+        otherFiles.removeAll()
+        thumbnails.removeAll()
+        otherThumbnails.removeAll()
+        otherDurations.removeAll()
+        scannedPaths.removeAll()
+        nextTakeNumber = 1
+        scanDestinationFolder()
     }
 
     /// Язык интерфейса; по умолчанию английский.
@@ -294,19 +322,6 @@ final class CaptureController: ObservableObject {
         refreshDevices() // выбор первого устройства запустит захват через didSet
         startFolderSync()
 
-        // иммерсив включается/выключается системным фулскрином главного окна
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didEnterFullScreenNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            guard (note.object as? NSWindow)?.styleMask.contains(.titled) == true else { return }
-            Task { @MainActor [weak self] in self?.isImmersive = true }
-        }
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didExitFullScreenNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            guard (note.object as? NSWindow)?.styleMask.contains(.titled) == true else { return }
-            Task { @MainActor [weak self] in self?.isImmersive = false }
-        }
     }
 
     private func bindPipeline() {
@@ -612,7 +627,8 @@ final class CaptureController: ObservableObject {
                         image = source
                     }
                 } else {
-                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                    let asset = AVURLAsset(url: url)
+                    let generator = AVAssetImageGenerator(asset: asset)
                     generator.appliesPreferredTrackTransform = true
                     generator.maximumSize = CGSize(width: 480, height: 480)
                     if let (cgImage, _) = try? await generator.image(
@@ -620,6 +636,12 @@ final class CaptureController: ObservableObject {
                         image = NSImage(cgImage: cgImage,
                                         size: NSSize(width: cgImage.width,
                                                      height: cgImage.height))
+                    }
+                    if let duration = try? await asset.load(.duration) {
+                        let seconds = duration.seconds
+                        await MainActor.run { [weak self] in
+                            self?.otherDurations[url] = seconds
+                        }
                     }
                 }
                 if let image {
