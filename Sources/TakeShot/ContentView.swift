@@ -465,10 +465,10 @@ struct NamingFieldsView: View {
             steppedField(L("cam_label"), width: 28,
                          text: $controller.settings.cameraLabel,
                          onStep: { controller.stepCamera($0) })
-            steppedField(L("roll_label"), width: 58,
+            steppedField(L("roll_label"), width: 50,
                          text: $controller.roll,
                          onStep: { controller.stepRoll($0) })
-            steppedField(L("clip_label"), width: 46,
+            steppedField(L("clip_label"), width: 50,
                          text: Binding(
                             get: { String(format: "%02d", controller.nextTakeNumber) },
                             set: { controller.nextTakeNumber = max(0, min(9999, Int($0) ?? controller.nextTakeNumber)) }),
