@@ -33,7 +33,6 @@ private struct TakesSection: View {
             HStack(spacing: 10) {
                 Text(L("takes"))
                     .font(.headline)
-                Spacer()
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
@@ -43,7 +42,7 @@ private struct TakesSection: View {
                 }
                 .controlSize(.small)
                 .help(L("open_folder"))
-
+                Spacer()
                 ViewModePicker(mode: $viewMode)
 
                 Menu {
@@ -125,7 +124,7 @@ private struct TakeRow: View {
                 .foregroundStyle(.secondary)
             }
             Spacer()
-            CircleToggle(take: take)
+            RatingToggle(take: take)
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { controller.play(url: take.url) }
@@ -154,7 +153,7 @@ private struct TakeCell: View {
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(alignment: .topTrailing) {
-                CircleToggle(take: take)
+                RatingToggle(take: take)
                     .padding(4)
                     .background(.black.opacity(0.45), in: Circle())
                     .padding(4)
@@ -287,19 +286,28 @@ private func iconName(for url: URL) -> String {
 
 // MARK: - общее
 
-private struct CircleToggle: View {
+private struct RatingToggle: View {
     @EnvironmentObject private var controller: CaptureController
     let take: Take
 
     var body: some View {
         Button {
-            controller.toggleCircle(take)
+            controller.cycleRating(take)
         } label: {
-            Image(systemName: take.isCircled ? "circle.circle.fill" : "circle")
-                .foregroundStyle(take.isCircled ? .green : .secondary)
+            switch take.rating {
+            case .none:
+                Image(systemName: "circle")
+                    .foregroundStyle(.secondary)
+            case .good:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .bad:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+            }
         }
         .buttonStyle(.plain)
-        .help(L("circle_take_help"))
+        .help(L("rating_help"))
     }
 }
 
@@ -309,9 +317,11 @@ private struct TakeContextMenu: View {
 
     var body: some View {
         Button(L("play")) { controller.play(url: take.url) }
-        Button(take.isCircled ? L("uncircle_take") : L("circle_take")) {
-            controller.toggleCircle(take)
-        }
+        Divider()
+        Button(L("good_take")) { controller.setRating(.good, for: take) }
+        Button(L("bad_take")) { controller.setRating(.bad, for: take) }
+        Button(L("clear_rating")) { controller.setRating(.none, for: take) }
+        Divider()
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([take.url])
         }

@@ -10,13 +10,27 @@ struct ContentView: View {
         HSplitView {
             VStack(spacing: 0) {
                 TopBarView()
-                PreviewView()
-                BottomBarView()
+                // подвал — парящая стеклянная платформа поверх нижней кромки плеера
+                ZStack(alignment: .bottom) {
+                    PreviewView()
+                    BottomBarView()
+                        .background(.ultraThinMaterial,
+                                    in: RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18)
+                            .strokeBorder(.white.opacity(0.08)))
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                }
             }
-            .frame(minWidth: 620)
+            .frame(minWidth: 660)
 
             TakeListView()
-                .frame(minWidth: 280, maxWidth: 400)
+                .background(.regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.white.opacity(0.07)))
+                .padding(8)
+                .frame(minWidth: 300, maxWidth: 420)
         }
     }
 }
@@ -30,19 +44,11 @@ struct TopBarView: View {
         // плеера, инфо о сигнале — к правому. Кнопки окна живут строкой выше
         // (отступ сверху), поэтому края свободны.
         HStack(spacing: 8) {
-            HStack(spacing: 12) {
-                Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                    .font(.body.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(controller.isRecording ? .red : .primary)
-                if let error = controller.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(controller.currentTimecode?.description ?? "--:--:--:--")
+                .font(.body.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(controller.isRecording ? .red : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Picker("", selection: $controller.viewerMode) {
                 Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
@@ -66,8 +72,8 @@ struct TopBarView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 34) // кнопки окна — над этой строкой, не двигают контент
-        .padding(.bottom, 8)
+        .padding(.top, 26) // компактно, но ниже кнопок окна
+        .padding(.bottom, 6)
     }
 
     static func fpsText(_ fps: Double) -> String {
@@ -184,7 +190,14 @@ struct BottomBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 6) {
+            if let error = controller.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+            HStack(spacing: 8) {
             // левая колонка — настройки и сервис
             HStack(spacing: 10) {
                 SettingsLink {
@@ -212,22 +225,29 @@ struct BottomBarView: View {
             .buttonStyle(.borderless)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // центр: REC ровно по центру, метры уровня висят рядом справа
-            // (offset — чтобы не сдвигать кнопку с центра)
+            // центр: REC ровно по центру, метры уровня — слева от кнопки,
+            // в свободном пространстве (offset не сдвигает кнопку с центра)
             ZStack {
                 RecordButton()
                 if controller.isCapturing, !controller.audioLevels.isEmpty {
                     AudioMeterView(levels: controller.audioLevels)
                         .frame(height: 46)
-                        .offset(x: 62)
+                        .offset(x: -Self.meterOffset(for: controller.audioLevels.count))
                 }
             }
 
             NamingFieldsView()
                 .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    /// Смещение метров влево от центра: половина ширины метров + зазор + радиус кнопки.
+    static func meterOffset(for channels: Int) -> CGFloat {
+        let metersWidth = CGFloat(channels) * 7 + 8
+        return metersWidth / 2 + 14 + 26
     }
 }
 
@@ -283,17 +303,19 @@ struct NamingFieldsView: View {
                 Text(L("clip_label"))
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
-                // номер отдельным текстом: лейбл степпера в компактном размере
-                // может не отрисоваться, а цифра должна быть видна всегда
-                HStack(spacing: 4) {
+                    .fixedSize()
+                HStack(spacing: 3) {
                     Text(String(format: "%02d", controller.nextTakeNumber))
                         .font(.body)
                         .monospacedDigit()
+                        .frame(minWidth: 24, alignment: .trailing)
+                        .fixedSize()
                     Stepper("", value: $controller.nextTakeNumber, in: 0...999)
                         .labelsHidden()
                         .controlSize(.small)
                 }
             }
+            .fixedSize()
             .help(L("clip_help"))
         }
     }
@@ -304,9 +326,11 @@ struct NamingFieldsView: View {
             Text(label)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .fixedSize()
             content()
                 .textFieldStyle(.roundedBorder)
                 .frame(width: width)
         }
+        .fixedSize()
     }
 }

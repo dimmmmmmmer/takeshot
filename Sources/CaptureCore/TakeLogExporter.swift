@@ -12,8 +12,8 @@ public enum TakeLogExporter {
                 escape(take.url.lastPathComponent),
                 escape(take.roll.isEmpty ? take.scene : take.roll),
                 String(take.takeNumber),
-                take.isCircled ? "true" : "false",
-                "",
+                take.rating == .good ? "true" : "false",
+                take.rating == .bad ? "NG" : "",
             ].joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"

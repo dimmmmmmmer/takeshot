@@ -68,7 +68,7 @@
 /* Hotkeys */
 "settings_hotkeys" = "Hotkeys";
 "hotkey_record" = "Record / stop";
-"hotkey_circle" = "Circle last take";
+"hotkey_circle" = "Rate last take (good/bad)";
 "hotkey_demo_rec" = "Demo camera REC";
 "press_keys" = "Press keys…";
 "reset_hotkeys" = "Reset to defaults";
@@ -112,3 +112,9 @@
 "mode_playback" = "Playback";
 "play" = "Play";
 "playback_pick_hint" = "Double-click a take to play it";
+
+/* Take rating */
+"good_take" = "Good take";
+"bad_take" = "Bad take (NG)";
+"clear_rating" = "Clear rating";
+"rating_help" = "Click cycles: none → good take (✓, Good Take in Resolve) → bad take (✕, NG in comments)";

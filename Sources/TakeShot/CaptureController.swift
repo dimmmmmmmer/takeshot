@@ -166,10 +166,10 @@ final class CaptureController: ObservableObject {
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
-    /// Обвести последний дубль (хоткей).
+    /// Оценка последнего дубля по хоткею (цикл: нет → good → bad → нет).
     func circleLastTake() {
         guard let last = takes.last else { return }
-        toggleCircle(last)
+        cycleRating(last)
     }
 
     private func pushConfig() {
@@ -222,9 +222,20 @@ final class CaptureController: ObservableObject {
         pipeline.toggleManualRecord()
     }
 
-    func toggleCircle(_ take: Take) {
+    /// Клик по кружку: нет → good → bad → нет.
+    func cycleRating(_ take: Take) {
         guard let idx = takes.firstIndex(of: take) else { return }
-        takes[idx].isCircled.toggle()
+        switch takes[idx].rating {
+        case .none: takes[idx].rating = .good
+        case .good: takes[idx].rating = .bad
+        case .bad: takes[idx].rating = .none
+        }
+        exportTakeLog()
+    }
+
+    func setRating(_ rating: TakeRating, for take: Take) {
+        guard let idx = takes.firstIndex(of: take) else { return }
+        takes[idx].rating = rating
         exportTakeLog()
     }
 

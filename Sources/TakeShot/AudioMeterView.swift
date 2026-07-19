@@ -8,7 +8,7 @@ struct AudioMeterView: View {
     private let range: ClosedRange<Float> = -60...0
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
+        HStack(alignment: .bottom, spacing: 2) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 GeometryReader { geo in
                     ZStack(alignment: .bottom) {
@@ -29,7 +29,7 @@ struct AudioMeterView: View {
                             .animation(.linear(duration: 0.07), value: level)
                     }
                 }
-                .frame(width: 8)
+                .frame(width: 5)
             }
         }
         .padding(4)

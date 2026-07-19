@@ -13,9 +13,10 @@ final class MockCaptureBackend: CaptureBackend {
     weak var delegate: CaptureBackendDelegate?
     var isAvailable: Bool { true }
 
-    /// «REC на камере». Демо-камера живёт сама: 6 с standby → 12 с записи → снова
-    /// standby — авто-детекция дублей видна без каких-либо кнопок.
-    private(set) var isCameraRecording = false
+    /// Демо-источник — «камера в standby»: TC заморожен (Rec Run), сигнал живой.
+    /// Запись — только вручную кнопкой REC; авто-детекция сработает на настоящей
+    /// камере, когда TC побежит.
+    private let isCameraRecording = false
 
     private let queue = DispatchQueue(label: "takeshot.mock-source")
     private var timer: DispatchSourceTimer?
@@ -55,12 +56,6 @@ final class MockCaptureBackend: CaptureBackend {
     // MARK: - генерация кадров (на queue)
 
     private func emitFrame() {
-        // автоцикл: 150 кадров standby, затем 300 кадров записи (25 fps)
-        let phase = frameCounter % 450
-        isCameraRecording = phase >= 150
-        if isCameraRecording {
-            timecode = timecode.advanced(by: 1)
-        }
         frameCounter += 1
         guard let pixelBuffer = renderFrame() else { return }
         let pts = CMTime(value: CMTimeValue(frameCounter * 40), timescale: 1000)
@@ -69,10 +64,13 @@ final class MockCaptureBackend: CaptureBackend {
         emitAudio(ptsSeconds: Double(frameCounter) * 0.04)
     }
 
-    /// Стерео-синус с «дыханием» громкости — чтобы метры уровня жили в демо.
+    /// 16 каналов (как SDI-эмбед у Blackmagic): 1-2 — синусы с «дыханием»
+    /// громкости, остальные — те же синусы по убыванию уровня, чтобы метры
+    /// показывали живую картину по всем дорожкам.
     private func emitAudio(ptsSeconds: Double) {
+        let channels = 16
         let sampleFrames = 1920 // 40 мс при 48 кГц
-        var samples = [Int16](repeating: 0, count: sampleFrames * 2)
+        var samples = [Int16](repeating: 0, count: sampleFrames * channels)
         let t = Double(frameCounter) * 0.04
         let ampL = 0.28 + 0.22 * sin(t * 0.9)
         let ampR = 0.22 + 0.18 * sin(t * 0.6 + 1.3)
@@ -81,13 +79,18 @@ final class MockCaptureBackend: CaptureBackend {
         for frame in 0..<sampleFrames {
             audioPhaseL += stepL
             audioPhaseR += stepR
-            samples[frame * 2] = Int16(sin(audioPhaseL) * ampL * 32_000)
-            samples[frame * 2 + 1] = Int16(sin(audioPhaseR) * ampR * 32_000)
+            let left = sin(audioPhaseL) * ampL
+            let right = sin(audioPhaseR) * ampR
+            for channel in 0..<channels {
+                let source = channel % 2 == 0 ? left : right
+                let falloff = pow(0.72, Double(channel / 2))
+                samples[frame * channels + channel] = Int16(source * falloff * 32_000)
+            }
         }
         let sampleBuffer = samples.withUnsafeBytes { raw -> CMSampleBuffer? in
             guard let base = raw.baseAddress else { return nil }
             return PCMAudio.makeSampleBuffer(bytes: base, sampleFrames: sampleFrames,
-                                             channelCount: 2, ptsSeconds: ptsSeconds,
+                                             channelCount: channels, ptsSeconds: ptsSeconds,
                                              formatCache: &audioFormatCache)
         }
         if let sampleBuffer {

@@ -328,7 +328,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
         return NO;
     }
-    _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger, 2);
+    // SDI несёт до 16 каналов эмбеднутого аудио — берём все, писать так писать
+    _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger, 16);
 
     if (_input->StartStreams() != S_OK) {
         [self stop];
@@ -549,7 +550,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
             [delegate capture:self
                 didReceiveAudioBytes:bytes
                         sampleFrames:(unsigned int)sampleFrames
-                        channelCount:2
+                        channelCount:16
                           ptsSeconds:(double)packetTime / (double)kScale];
         }
     }

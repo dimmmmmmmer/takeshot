@@ -32,6 +32,13 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     public var id: String { rawValue }
 }
 
+/// Оценка дубля: удачный (Good Take в Resolve) / брак / без отметки.
+public enum TakeRating: String, Equatable, Sendable {
+    case none
+    case good
+    case bad
+}
+
 /// Дубль — один непрерывный отрезок записи камеры, один файл на диске.
 public struct Take: Identifiable, Equatable, Sendable {
     public var id: UUID
@@ -42,12 +49,12 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var takeNumber: Int
     public var startTimecode: Timecode?
     public var durationSeconds: Double
-    public var isCircled: Bool          // "circle take" — отмеченный удачный дубль
+    public var rating: TakeRating       // good/bad take (в CSV — Good Take + пометка NG)
     public var recordedAt: Date
 
     public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
                 roll: String = "", takeNumber: Int, startTimecode: Timecode?,
-                durationSeconds: Double, isCircled: Bool = false, recordedAt: Date) {
+                durationSeconds: Double, rating: TakeRating = .none, recordedAt: Date) {
         self.id = id
         self.url = url
         self.displayName = displayName
@@ -56,7 +63,7 @@ public struct Take: Identifiable, Equatable, Sendable {
         self.takeNumber = takeNumber
         self.startTimecode = startTimecode
         self.durationSeconds = durationSeconds
-        self.isCircled = isCircled
+        self.rating = rating
         self.recordedAt = recordedAt
     }
 }

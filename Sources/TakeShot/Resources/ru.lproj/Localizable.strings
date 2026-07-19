@@ -68,7 +68,7 @@
 /* Хоткеи */
 "settings_hotkeys" = "Горячие клавиши";
 "hotkey_record" = "Запись / стоп";
-"hotkey_circle" = "Обвести последний дубль";
+"hotkey_circle" = "Оценить последний дубль (good/bad)";
 "hotkey_demo_rec" = "REC демо-камеры";
 "press_keys" = "Нажмите клавиши…";
 "reset_hotkeys" = "Сбросить по умолчанию";
@@ -112,3 +112,9 @@
 "mode_playback" = "Просмотр";
 "play" = "Воспроизвести";
 "playback_pick_hint" = "Дважды кликните дубль, чтобы посмотреть его";
+
+/* Оценка дубля */
+"good_take" = "Good take";
+"bad_take" = "Bad take (брак)";
+"clear_rating" = "Снять отметку";
+"rating_help" = "Клик по кругу: пусто → good take (✓, Good Take в Резолве) → bad take (✕, NG в комментариях)";
