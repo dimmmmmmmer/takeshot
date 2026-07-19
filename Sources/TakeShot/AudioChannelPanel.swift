@@ -23,9 +23,11 @@ struct AudioChannelPanel: View {
                 .keyboardShortcut(.escape, modifiers: [])
             }
             HStack(alignment: .bottom, spacing: 8) {
+                dbScale
                 ForEach(Array(controller.audioLevels.enumerated()), id: \.offset) { index, level in
                     channelColumn(index: index, level: level)
                 }
+                dbScale
             }
             Text(L("audio_panel_hint"))
                 .font(.caption)
@@ -48,16 +50,7 @@ struct AudioChannelPanel: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(.black.opacity(0.5))
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(LinearGradient(
-                        stops: [
-                            .init(color: .green, location: 0),
-                            .init(color: .green, location: 0.80),
-                            .init(color: .yellow, location: 0.80),
-                            .init(color: .yellow, location: 0.95),
-                            .init(color: .red, location: 0.95),
-                            .init(color: .red, location: 1),
-                        ],
-                        startPoint: .bottom, endPoint: .top))
+                    .fill(AudioMeterView.color(for: level))
                     .frame(height: 130 * fraction(of: level))
                     .animation(.linear(duration: 0.07), value: level)
             }
@@ -65,12 +58,28 @@ struct AudioChannelPanel: View {
             .opacity(enabled ? 1 : 0.25)
             Text("\(index + 1)")
                 .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                .foregroundStyle(enabled ? .primary : .secondary)
-                .strikethrough(!enabled, color: .red)
+                .foregroundStyle(enabled ? .primary : .tertiary)
         }
         .contentShape(Rectangle())
         .onTapGesture { controller.toggleAudioChannel(index) }
         .help(enabled ? L("channel_on_help") : L("channel_off_help"))
+    }
+
+    /// Шкала dB сбоку от метров (0 вверху, -60 внизу).
+    private var dbScale: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 12) // компенсация строки с цифрой dB над столбиком
+            VStack(alignment: .trailing, spacing: 0) {
+                ForEach([0, -12, -24, -36, -48, -60], id: \.self) { mark in
+                    Text("\(mark)")
+                        .font(.system(size: 7).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(maxHeight: .infinity, alignment: mark == 0 ? .top : (mark == -60 ? .bottom : .center))
+                }
+            }
+            .frame(height: 130)
+            Spacer().frame(height: 14) // компенсация номера канала снизу
+        }
     }
 
     private func fraction(of level: Float) -> CGFloat {

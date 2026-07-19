@@ -27,8 +27,8 @@ struct ContentView: View {
     private var mainColumn: some View {
         VStack(spacing: 0) {
             if !controller.isImmersive {
-                // полоса под кнопки окна (за неё же таскается окно)
-                Color.clear.frame(height: 26)
+                // минимальная полоса: кнопки окна ложатся на верх карточки плеера
+                Color.clear.frame(height: 14)
             }
             PlayerArea()
             if !controller.isImmersive {
@@ -51,8 +51,8 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
-            // верхняя кромка вровень с плеером (у него полоса 26 под кнопки окна)
-            .padding(.top, 26)
+            // верхняя кромка вровень с плеером
+            .padding(.top, 14)
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
             .frame(minWidth: 310, maxWidth: 480)
@@ -79,7 +79,9 @@ struct PlayerArea: View {
                                 .monospacedDigit()
                                 .foregroundStyle(controller.isRecording ? .red : .primary)
                         }
-                        .padding(8)
+                        // правее кнопок окна, которые лежат на карточке
+                        .padding(.leading, 66)
+                        .padding(.top, 8)
                     }
                 }
                 .overlay(alignment: .top) {

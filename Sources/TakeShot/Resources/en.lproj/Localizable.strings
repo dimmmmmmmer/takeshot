@@ -163,3 +163,6 @@
 
 "accent_color" = "Accent color";
 "hotkey_fullscreen" = "Fullscreen (playback fullscreen while viewing)";
+
+"monitor_device" = "Monitor device (DeckLink out)";
+"monitor_device_hint" = "SDI/HDMI monitoring output through a Blackmagic device — activates with the first live-hardware build";

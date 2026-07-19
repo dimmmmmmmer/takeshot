@@ -163,3 +163,6 @@
 
 "accent_color" = "Акцентный цвет";
 "hotkey_fullscreen" = "Фулскрин (в просмотре — фулскрин плейбека)";
+
+"monitor_device" = "Monitor device (выход DeckLink)";
+"monitor_device_hint" = "Вывод мониторинга по SDI/HDMI через плату Blackmagic — включится с первой сборкой на живом железе";

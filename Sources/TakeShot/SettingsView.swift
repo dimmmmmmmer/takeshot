@@ -107,6 +107,17 @@ struct SettingsView: View {
                         Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
                     }
                 }
+                Picker(L("monitor_device"), selection: Binding(
+                    get: { controller.settings.monitorDeviceID },
+                    set: { controller.settings.monitorDeviceID = $0 })) {
+                    Text(L("external_off")).tag(String?.none)
+                    ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
+                        Text(device.name).tag(String?.some(device.id))
+                    }
+                }
+                Text(L("monitor_device_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker(L("playback_output"), selection: Binding(
                     get: { controller.playbackOutputUID },
                     set: { controller.playbackOutputUID = $0 })) {
@@ -173,6 +184,6 @@ struct SettingsView: View {
         .frame(width: 500)
         .padding(.top, 28) // под кнопки окна: тайтлбар скрыт
         .padding([.horizontal, .bottom])
-        .background(controller.appBackground)
+        .background(controller.appBackground.ignoresSafeArea())
     }
 }

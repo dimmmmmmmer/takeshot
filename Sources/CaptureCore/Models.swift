@@ -108,6 +108,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var playbackAudioDeviceUID: String?
     /// Акцентный цвет контролов, hex; nil — нейтральный серый.
     public var accentHex: String?
+    /// DeckLink-устройство для видеовыхода на монитор (SDI/HDMI); nil — выкл.
+    public var monitorDeviceID: String?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 

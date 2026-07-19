@@ -16,16 +16,7 @@ struct AudioMeterView: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(.black.opacity(0.55))
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(LinearGradient(
-                                stops: [
-                                    .init(color: .green, location: 0),
-                                    .init(color: .green, location: 0.80),   // -12 dB
-                                    .init(color: .yellow, location: 0.80),
-                                    .init(color: .yellow, location: 0.95),  // -3 dB
-                                    .init(color: .red, location: 0.95),
-                                    .init(color: .red, location: 1),
-                                ],
-                                startPoint: .bottom, endPoint: .top))
+                            .fill(Self.color(for: level))
                             .frame(height: geo.size.height * fraction(of: level))
                             .animation(.linear(duration: 0.07), value: level)
                     }
@@ -36,6 +27,11 @@ struct AudioMeterView: View {
         }
         .padding(4)
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    /// Вся полоса — одним цветом по громкости: зелёный до -12, жёлтый до -3, красный выше.
+    static func color(for level: Float) -> Color {
+        level >= -3 ? .red : level >= -12 ? .yellow : .green
     }
 
     private func fraction(of level: Float) -> CGFloat {
