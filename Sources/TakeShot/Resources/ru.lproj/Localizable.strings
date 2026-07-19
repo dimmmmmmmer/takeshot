@@ -160,3 +160,6 @@
 "preset_red" = "Стиль RED";
 "preset_bmd" = "Стиль Blackmagic";
 "preset_custom" = "Свой";
+
+"accent_color" = "Акцентный цвет";
+"hotkey_fullscreen" = "Фулскрин (в просмотре — фулскрин плейбека)";

@@ -322,6 +322,12 @@ final class CaptureController: ObservableObject {
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
+    /// Акцентный цвет контролов; по умолчанию нейтральный серый, не эппл-синий.
+    var accentColor: Color {
+        get { settings.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#9A9A9E")! }
+        set { settings.accentHex = newValue.hexString }
+    }
+
     /// Цвет фона окна; по умолчанию ~полторы ступени ниже миддл-грея.
     var appBackground: Color {
         get {

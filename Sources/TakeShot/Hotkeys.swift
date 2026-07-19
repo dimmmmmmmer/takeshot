@@ -44,6 +44,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleRecord
     case circleLastTake   // good take (историческое имя ключа — для сохранённых настроек)
     case badTakeLast
+    case fullscreen
 
     var id: String { rawValue }
 
@@ -52,6 +53,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .toggleRecord: return "hotkey_record"
         case .circleLastTake: return "hotkey_good"
         case .badTakeLast: return "hotkey_bad"
+        case .fullscreen: return "hotkey_fullscreen"
         }
     }
 
@@ -63,6 +65,8 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "g", modifiers: NSEvent.ModifierFlags.command.rawValue)
         case .badTakeLast:
             return KeyCombo(key: "b", modifiers: NSEvent.ModifierFlags.command.rawValue)
+        case .fullscreen:
+            return KeyCombo(key: "f", modifiers: 0)
         }
     }
 }
@@ -158,6 +162,12 @@ final class HotkeyManager: ObservableObject {
             controller.toggleLastRating(.good)
         case .badTakeLast:
             controller.toggleLastRating(.bad)
+        case .fullscreen:
+            if controller.viewerMode == .playback, controller.playbackURL != nil {
+                controller.togglePlaybackFullscreen()
+            } else {
+                controller.toggleFullscreen()
+            }
         }
     }
 }

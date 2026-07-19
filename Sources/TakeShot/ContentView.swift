@@ -103,26 +103,33 @@ struct PlayerArea: View {
                 .overlay(alignment: .topTrailing) {
                     if !controller.isImmersive {
                         overlayBadge {
-                            HStack(spacing: 8) {
-                                Group {
-                                    if let format = controller.signalFormat {
-                                        Text(Self.shortFormat(format)).monospacedDigit()
-                                    } else {
-                                        Text(L("no_signal_short"))
-                                    }
+                            Group {
+                                if let format = controller.signalFormat {
+                                    Text(Self.shortFormat(format)).monospacedDigit()
+                                } else {
+                                    Text(L("no_signal_short"))
                                 }
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                Button {
-                                    controller.toggleFullscreen()
-                                } label: {
-                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                        .font(.system(size: 12))
-                                }
-                                .buttonStyle(.plain)
-                                .help(L("fullscreen"))
                             }
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                         }
+                        .padding(8)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    // фулскрин — справа внизу (в плейбеке эту роль играет транспорт)
+                    if !controller.isImmersive, controller.viewerMode == .record {
+                        Button {
+                            controller.toggleFullscreen()
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 13))
+                                .padding(6)
+                                .background(.black.opacity(0.45),
+                                            in: RoundedRectangle(cornerRadius: 7))
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("fullscreen"))
                         .padding(8)
                     }
                 }

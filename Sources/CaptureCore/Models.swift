@@ -106,6 +106,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var audioChannelMask: Int?
     /// UID аудиоустройства для вывода плейбека; nil — системное.
     public var playbackAudioDeviceUID: String?
+    /// Акцентный цвет контролов, hex; nil — нейтральный серый.
+    public var accentHex: String?
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 

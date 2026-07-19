@@ -50,6 +50,10 @@ struct SettingsView: View {
                     get: { controller.appBackground },
                     set: { controller.appBackground = $0 }),
                     supportsOpacity: false)
+                ColorPicker(L("accent_color"), selection: Binding(
+                    get: { controller.accentColor },
+                    set: { controller.accentColor = $0 }),
+                    supportsOpacity: false)
                 Picker(L("panel_position"), selection: $panelSide) {
                     Text(L("panel_right")).tag("right")
                     Text(L("panel_left")).tag("left")

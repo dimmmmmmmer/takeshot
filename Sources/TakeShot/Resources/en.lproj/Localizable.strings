@@ -160,3 +160,6 @@
 "preset_red" = "RED style";
 "preset_bmd" = "Blackmagic style";
 "preset_custom" = "Custom";
+
+"accent_color" = "Accent color";
+"hotkey_fullscreen" = "Fullscreen (playback fullscreen while viewing)";

@@ -13,6 +13,7 @@ struct TakeShotApp: App {
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
                 .frame(minWidth: 1080, minHeight: 620)
+                .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
                 .onAppear {
                     hotkeys.install(controller: controller)
@@ -25,6 +26,7 @@ struct TakeShotApp: App {
         Window("VANC Monitor", id: "vanc-monitor") {
             VancMonitorView()
                 .environmentObject(controller)
+                .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
         }
         .defaultSize(width: 640, height: 320)
@@ -33,6 +35,7 @@ struct TakeShotApp: App {
             SettingsView()
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
+                .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
         }
     }
