@@ -49,15 +49,15 @@ struct CapturePipelineTests {
             var tc = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
             var frame = 0
 
-            // темп ~8мс/кадр: без него синтетика обгоняет энкодер и кадры дропаются
-            // (в живом захвате кадры приходят с частотой сигнала)
+            // реальный темп 40мс/кадр: как живой сигнал — иначе под нагрузкой
+            // (CI, параллельный энкодер) синтетика обгоняет writer и тест флачит
             func push(_ timecode: Timecode) async throws {
                 frame += 1
                 pipeline.handleFrame(
                     pixelBuffer: pixelBuffer,
                     pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
                     timecode: timecode, vancTrigger: nil)
-                try await Task.sleep(for: .milliseconds(8))
+                try await Task.sleep(for: .milliseconds(40))
             }
 
             // standby: TC стоит
@@ -139,7 +139,7 @@ struct CapturePipelineTests {
                 pixelBuffer: pixelBuffer,
                 pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
                 timecode: timecode, vancTrigger: nil)
-            try await Task.sleep(for: .milliseconds(8))
+            try await Task.sleep(for: .milliseconds(40))
         }
 
         // долгий standby — буфер пре-ролла успевает наполниться
