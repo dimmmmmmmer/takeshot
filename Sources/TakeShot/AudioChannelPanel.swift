@@ -157,12 +157,32 @@ private struct LiveMirrorView: NSViewRepresentable {
 struct PlaybackFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
 
+    @State private var transportHover = false
+
     var body: some View {
-        ZStack {
-            Color.black
-            VStack(spacing: 0) {
-                PlaybackContent()
-                TransportBar(player: controller.player)
+        GeometryReader { geo in
+            ZStack {
+                Color.black
+                PlaybackContent(target: .fullscreen)
+            }
+            .overlay(alignment: .bottom) {
+                if transportHover {
+                    TransportBar(player: controller.player)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 60)
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point):
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        transportHover = point.y > geo.size.height - 130
+                    }
+                case .ended:
+                    withAnimation(.easeOut(duration: 0.15)) { transportHover = false }
+                }
             }
         }
         .ignoresSafeArea()

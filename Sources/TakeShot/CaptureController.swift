@@ -55,7 +55,16 @@ final class CaptureController: ObservableObject {
             if viewerMode == .record {
                 player.pause()
             }
+            updateTapRunning()
         }
+    }
+
+    /// Опрос кадров плейбека нужен только когда просмотр реально виден.
+    private func updateTapRunning() {
+        let videoLoaded = playbackURL.map {
+            !Self.imageExtensions.contains($0.pathExtension.lowercased())
+        } ?? false
+        playbackTap.setRunning(viewerMode == .playback && videoLoaded)
     }
     /// Что сейчас загружено в плеер (для подсветки в списке).
     @Published var playbackURL: URL?
@@ -244,8 +253,10 @@ final class CaptureController: ObservableObject {
     @Published var isLiveFullscreen = false
     private var liveFullscreenWindow: NSWindow?
 
-    /// Плеер для просмотра дублей (AVPlayerView в превью).
+    /// Плеер для просмотра дублей.
     let player = AVPlayer()
+    /// Единый рендер плейбека (кадры из плеера → sample-buffer слои).
+    let playbackTap = PlaybackFrameTap()
 
     // MARK: - вывод на внешний монитор
 
@@ -394,11 +405,13 @@ final class CaptureController: ObservableObject {
         } else {
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
+            playbackTap.attach(to: item)
             playbackLUTSuppressed = false
             detectBakedLUT(for: item) // применит LUT сам, когда узнает про метку
             player.play()
         }
         viewerMode = .playback
+        updateTapRunning()
     }
     @Published var settings = CaptureSettings.loaded() {
         didSet {

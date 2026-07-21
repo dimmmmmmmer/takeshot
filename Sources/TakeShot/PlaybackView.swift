@@ -4,9 +4,17 @@ import Combine
 import SwiftUI
 
 /// Контент плейбека без транспорта (используется и в режимах сравнения):
-/// видео на прозрачной подложке или фото.
+/// видео (единый sample-buffer рендер, как у лайва) или фото.
 struct PlaybackContent: View {
+    /// Каждому окну — свой слой (CALayer живёт только в одном вью).
+    enum Target {
+        case main
+        case fullscreen
+        case external
+    }
+
     @EnvironmentObject private var controller: CaptureController
+    var target: Target = .main
 
     static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
@@ -16,7 +24,7 @@ struct PlaybackContent: View {
             if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
                 ImagePlaybackView(url: url)
             } else {
-                PlayerSurface(player: controller.player)
+                TapLayerView(layer: layerForTarget)
             }
         } else {
             VStack(spacing: 8) {
@@ -28,6 +36,30 @@ struct PlaybackContent: View {
             .foregroundStyle(.secondary)
         }
     }
+
+    private var layerForTarget: AVSampleBufferDisplayLayer {
+        switch target {
+        case .main: return controller.playbackTap.mainLayer
+        case .fullscreen: return controller.playbackTap.fullscreenLayer
+        case .external: return controller.playbackTap.externalLayer
+        }
+    }
+}
+
+/// Вью вокруг слоя единого рендера плейбека.
+private struct TapLayerView: NSViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = .clear
+        view.layer = layer
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// Фото на подложке плеера.
@@ -45,35 +77,6 @@ private struct ImagePlaybackView: View {
                 .foregroundStyle(.secondary)
         }
     }
-}
-
-/// Голая видеоповерхность на AVPlayerLayer: без контролов, без затемнения,
-/// прозрачный фон — сквозь letterbox виден цвет подложки плеера.
-struct PlayerSurface: NSViewRepresentable {
-    let player: AVPlayer
-
-    final class LayerView: NSView {
-        let playerLayer = AVPlayerLayer()
-
-        override init(frame: NSRect) {
-            super.init(frame: frame)
-            wantsLayer = true
-            playerLayer.videoGravity = .resizeAspect
-            playerLayer.backgroundColor = .clear
-            layer = playerLayer
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError() }
-    }
-
-    func makeNSView(context: Context) -> LayerView {
-        let view = LayerView(frame: .zero)
-        view.playerLayer.player = player
-        return view
-    }
-
-    func updateNSView(_ nsView: LayerView, context: Context) {}
 }
 
 /// Транспорт: play/pause, ±5 с, скраббер, время, скорость, loop, фулскрин.
@@ -294,7 +297,7 @@ struct ExternalOutputView: View {
         ZStack {
             Color.black
             if controller.viewerMode == .playback, controller.playbackURL != nil {
-                PlaybackContent()
+                PlaybackContent(target: .external)
             } else {
                 ExternalLiveView(layer: controller.pipeline.externalLayer)
             }
