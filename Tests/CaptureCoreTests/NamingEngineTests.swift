@@ -113,40 +113,52 @@ struct NamingEngineTests {
 
     /// Каждый пресет — против реального имени с камеры (2023-07-15 12:34).
     @Test func vendorPresetExactNames() {
-        var components = DateComponents()
-        components.year = 2023; components.month = 7; components.day = 15
-        components.hour = 12; components.minute = 34
-        let shootDate = Calendar(identifier: .gregorian).date(from: components)!
-
+        // дата/время из реальных примеров пользователя, где важны:
+        // ARRI35 A_0003C004_251031_201535..., Canon ...X260327_192707...
         func name(_ template: String, roll: String, clip: Int, pad: Int,
-                  cam: String = "A", postfix: String = "", prefix: String = "") -> String {
-            NamingEngine(template: template).fileName(for: NamingContext(
-                project: prefix, date: shootDate, take: clip, reel: roll,
+                  cam: String = "A", postfix: String = "", prefix: String = "",
+                  y: Int = 2023, mo: Int = 7, d: Int = 15,
+                  h: Int = 12, mi: Int = 34, s: Int = 0) -> String {
+            var c = DateComponents()
+            c.year = y; c.month = mo; c.day = d; c.hour = h; c.minute = mi; c.second = s
+            let date = Calendar(identifier: .gregorian).date(from: c)!
+            return NamingEngine(template: template).fileName(for: NamingContext(
+                project: prefix, date: date, take: clip, reel: roll,
                 camera: cam, postfix: postfix, clipPadding: pad))
         }
 
-        // ARRI classic: A001C001_230715_R1AB
+        // ARRI classic: A001C002_250904_R1Y2 (пример пользователя)
         #expect(name("{cam}{roll}C{clip}_{date6}_{postfix}",
-                     roll: "001", clip: 1, pad: 3, postfix: "R1AB")
-                == "A001C001_230715_R1AB")
-        // ARRI Alexa 35: A_0001C001_230715_A1B2
-        #expect(name("{cam}_{roll}C{clip}_{date6}_{postfix}",
-                     roll: "0001", clip: 1, pad: 3, postfix: "A1B2")
-                == "A_0001C001_230715_A1B2")
-        // RED: A001_C001_0715AB
-        #expect(name("{cam}{roll}_C{clip}_{date4}{postfix}",
-                     roll: "001", clip: 1, pad: 3, postfix: "AB")
-                == "A001_C001_0715AB")
-        // Sony Venice: A001C001_230715A1
+                     roll: "001", clip: 2, pad: 3, postfix: "R1Y2",
+                     y: 2025, mo: 9, d: 4)
+                == "A001C002_250904_R1Y2")
+        // ARRI Alexa 35: A_0003C004_251031_201535_h1ENU (пример пользователя)
+        #expect(name("{cam}_{roll}C{clip}_{date6}_{time6}_{postfix}",
+                     roll: "0003", clip: 4, pad: 3, postfix: "h1ENU",
+                     y: 2025, mo: 10, d: 31, h: 20, mi: 15, s: 35)
+                == "A_0003C004_251031_201535_h1ENU")
+        // RED: A108_A064_0416UM (пример пользователя, без спан-сегмента)
+        #expect(name("{cam}{roll}_{cam}{clip}_{date4}{postfix}",
+                     roll: "108", clip: 64, pad: 3, postfix: "UM",
+                     mo: 4, d: 16)
+                == "A108_A064_0416UM")
+        // Sony: A001C040_26022658 (пример пользователя)
         #expect(name("{cam}{roll}C{clip}_{date6}{postfix}",
-                     roll: "001", clip: 1, pad: 3, postfix: "A1")
-                == "A001C001_230715A1")
-        // Sony Alpha: C0001
+                     roll: "001", clip: 40, pad: 3, postfix: "58",
+                     y: 2026, mo: 2, d: 26)
+                == "A001C040_26022658")
+        // Sony (Legacy): C0001
         #expect(name("C{clip}", roll: "", clip: 1, pad: 4) == "C0001")
-        // Blackmagic: A001_07151234_C023
+        // Blackmagic: A001_11301823_C065 (пример пользователя)
         #expect(name("{cam}{roll}_{date4}{time4}_C{clip}",
-                     roll: "001", clip: 23, pad: 3)
-                == "A001_07151234_C023")
+                     roll: "001", clip: 65, pad: 3,
+                     mo: 11, d: 30, h: 18, mi: 23)
+                == "A001_11301823_C065")
+        // Canon: A_0002C188X260327_1927075S_CANON (пример пользователя)
+        #expect(name("{cam}_{roll}C{clip}X{date6}_{time6}{postfix}_CANON",
+                     roll: "0002", clip: 188, pad: 3, postfix: "5S",
+                     y: 2026, mo: 3, d: 27, h: 19, mi: 27, s: 7)
+                == "A_0002C188X260327_1927075S_CANON")
         // TakeShot default: Film_A001C01_night
         #expect(name("{prefix}_{cam}{roll}C{clip}_{postfix}",
                      roll: "001", clip: 1, pad: 2,

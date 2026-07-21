@@ -45,7 +45,7 @@ public struct NamingEngine: Sendable {
     /// ({project}/{reel}/{take}/{scene}/{clipname}) продолжают работать как алиасы.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
                                       "{postfix}", "{tc}", "{date}", "{date6}",
-                                      "{date4}", "{time4}"]
+                                      "{date4}", "{time4}", "{time6}"]
 
     private static func formatted(_ date: Date, _ format: String) -> String {
         let formatter = DateFormatter()
@@ -70,6 +70,7 @@ public struct NamingEngine: Sendable {
             "{date6}": Self.formatted(context.date, "yyMMdd"),   // ARRI/Sony: 230715
             "{date4}": Self.formatted(context.date, "MMdd"),     // RED: 0715
             "{time4}": Self.formatted(context.date, "HHmm"),     // BMD: 1234
+            "{time6}": Self.formatted(context.date, "HHmmss"),   // ARRI35/Canon: 201535
             "{scene}": context.scene,
             "{take}": paddedNumber,
             "{clip}": paddedNumber,
