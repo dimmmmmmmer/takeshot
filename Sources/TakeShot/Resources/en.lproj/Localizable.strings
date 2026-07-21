@@ -179,3 +179,6 @@
 "lut_record" = "Bake into recording";
 "lut_import" = "Import .cube…";
 "lut_help" = "Preview/record LUTs (.cube). Preview LUT applies to live and playback; recording stays clean unless baking is enabled";
+
+"lut_baked_indicator" = "LUT is baked into this file — playback LUT is off automatically";
+"lut_playback_toggle" = "LUT on this clip: turn off if the look came baked from the camera";

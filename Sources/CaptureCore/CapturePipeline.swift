@@ -50,6 +50,7 @@ public final class CapturePipeline: @unchecked Sendable {
     // LUT (все обращения — на queue)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
     private var lutFilter: CIFilter?
+    private var lutName: String?
     private var lutPreview = false
     private var lutRecord = false
     private var lutPool: CVPixelBufferPool?
@@ -60,6 +61,7 @@ public final class CapturePipeline: @unchecked Sendable {
     public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool) {
         queue.async {
             self.lutFilter = lut?.makeFilter()
+            self.lutName = lut?.name
             self.lutPreview = preview && lut != nil
             self.lutRecord = record && lut != nil
             self.lutPool = nil
@@ -357,10 +359,17 @@ public final class CapturePipeline: @unchecked Sendable {
             let writer = try TakeWriter(
                 url: url, format: format,
                 codec: config.settings.codec, startTimecode: timecode,
-                markerMetadata: [
-                    TakeWriter.rollKey: config.roll,
-                    TakeWriter.clipKey: String(config.takeNumber),
-                ])
+                markerMetadata: {
+                    var meta = [
+                        TakeWriter.rollKey: config.roll,
+                        TakeWriter.clipKey: String(config.takeNumber),
+                    ]
+                    // файл с запечённым лутом помечаем: плейбек не наложит LUT повторно
+                    if lutRecord, let lutName {
+                        meta[TakeWriter.lutKey] = lutName
+                    }
+                    return meta
+                }())
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()

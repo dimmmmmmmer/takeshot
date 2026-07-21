@@ -106,6 +106,12 @@ final class CaptureController: ObservableObject {
     /// Импортированные LUT-файлы (папка Application Support/TakeShot/LUTs).
     @Published var availableLUTs: [LUTInfo] = []
     private var currentCube: CubeLUT?
+    /// В текущем плейбек-файле лук уже запечён (метка com.takeshot.lut).
+    @Published var playbackFileHasBakedLUT = false
+    /// Ручное отключение LUT для текущего клипа (лук пришёл с камеры и т.п.).
+    @Published var playbackLUTSuppressed = false {
+        didSet { applyPlaybackLUT() }
+    }
 
     nonisolated static var lutsDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
@@ -193,12 +199,14 @@ final class CaptureController: ObservableObject {
         applyPlaybackLUT()
     }
 
-    /// LUT на плейбек — тем же фильтром через videoComposition:
-    /// сравнение лайв/плейбек идёт через одинаковую обработку.
-    private func applyPlaybackLUT() {
+    /// LUT на плейбек — тем же фильтром через videoComposition, но с учётом
+    /// уже запечённого лука: наш файл с меткой com.takeshot.lut или ручное
+    /// отключение на клип — и LUT повторно не накладывается.
+    func applyPlaybackLUT() {
         guard let item = player.currentItem else { return }
-        guard settings.lutPreviewEnabled ?? false, let cube = currentCube,
-              let filter = cube.makeFilter() else {
+        guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
+              !playbackLUTSuppressed,
+              let cube = currentCube, let filter = cube.makeFilter() else {
             item.videoComposition = nil
             return
         }
@@ -207,6 +215,20 @@ final class CaptureController: ObservableObject {
             filter.setValue(request.sourceImage, forKey: kCIInputImageKey)
             request.finish(with: filter.outputImage ?? request.sourceImage,
                            context: nil)
+        }
+    }
+
+    /// Проверить метку запечённого LUT у загруженного клипа (асинхронно).
+    private func detectBakedLUT(for item: AVPlayerItem) {
+        playbackFileHasBakedLUT = false
+        Task { [weak self] in
+            let metadata = (try? await item.asset.load(.metadata)) ?? []
+            let baked = metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.playbackFileHasBakedLUT = baked
+                self.applyPlaybackLUT()
+            }
         }
     }
     /// Крупная панель аудиоканалов поверх плеера.
@@ -370,8 +392,10 @@ final class CaptureController: ObservableObject {
             player.pause()
             player.replaceCurrentItem(with: nil)
         } else {
-            player.replaceCurrentItem(with: AVPlayerItem(url: url))
-            applyPlaybackLUT()
+            let item = AVPlayerItem(url: url)
+            player.replaceCurrentItem(with: item)
+            playbackLUTSuppressed = false
+            detectBakedLUT(for: item) // применит LUT сам, когда узнает про метку
             player.play()
         }
         viewerMode = .playback

@@ -52,6 +52,8 @@ public final class TakeWriter {
     public static let markerKey = "com.takeshot.origin"
     public static let rollKey = "com.takeshot.roll"
     public static let clipKey = "com.takeshot.clip"
+    /// Имя LUT, запечённого в файл (отсутствует — файл чистый).
+    public static let lutKey = "com.takeshot.lut"
 
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
                 startTimecode: Timecode?,

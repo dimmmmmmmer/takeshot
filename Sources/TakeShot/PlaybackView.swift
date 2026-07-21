@@ -146,6 +146,25 @@ struct TransportBar: View {
             .buttonStyle(.plain)
             .help(L("playback_loop"))
 
+            if controller.playbackFileHasBakedLUT {
+                Image(systemName: "camera.filters")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .help(L("lut_baked_indicator"))
+            } else if controller.lutPreviewOn {
+                Button {
+                    controller.playbackLUTSuppressed.toggle()
+                } label: {
+                    Image(systemName: "camera.filters")
+                        .font(.system(size: 11))
+                        .foregroundStyle(controller.playbackLUTSuppressed
+                                         ? AnyShapeStyle(.secondary)
+                                         : AnyShapeStyle(controller.accentColor))
+                }
+                .buttonStyle(.plain)
+                .help(L("lut_playback_toggle"))
+            }
+
             HStack(spacing: 4) {
                 Image(systemName: controller.playbackVolume == 0
                       ? "speaker.slash.fill" : "speaker.wave.2.fill")
