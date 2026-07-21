@@ -337,9 +337,17 @@ public final class CapturePipeline: @unchecked Sendable {
         return Int((config.settings.preRollSecondsEffective * fps).rounded())
     }
 
-    /// Ёмкость буфера: пре-ролл + задержка детекции + запас.
+    /// Ёмкость буфера: пре-ролл + задержка детекции + запас, но с потолком по
+    /// памяти. Без потолка 3 с пре-ролла на 4К60 держат ~6 ГБ несжатых кадров
+    /// в RAM (OOM); при высоком разрешении пре-ролл тихо укорачивается.
     private var preRollCapacity: Int {
-        preRollFrames + config.settings.startDebounceFrames + 25
+        let wanted = preRollFrames + config.settings.startDebounceFrames + 25
+        guard let format, format.width > 0, format.height > 0 else { return wanted }
+        let bytesPerFrame = format.width * format.height * 4
+        let budgetBytes = 1_500_000_000 // ~1.5 ГБ
+        let byteCap = max(config.settings.startDebounceFrames + 5,
+                          budgetBytes / max(1, bytesPerFrame))
+        return min(wanted, byteCap)
     }
 
     /// Начать дубль. `recStartIndex` — кадр фактического старта записи камеры
