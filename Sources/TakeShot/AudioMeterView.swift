@@ -15,9 +15,7 @@ struct AudioMeterView: View {
                     ZStack(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(.black.opacity(0.55))
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Self.color(for: level))
-                            .frame(height: geo.size.height * fraction(of: level))
+                        SegmentedMeterBar(level: level)
                             .animation(.linear(duration: 0.07), value: level)
                     }
                 }
@@ -29,12 +27,43 @@ struct AudioMeterView: View {
         .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 5))
     }
 
-    /// Вся полоса — одним цветом по громкости: зелёный до -12, жёлтый до -3, красный выше.
-    static func color(for level: Float) -> Color {
-        level >= -3 ? .red : level >= -12 ? .yellow : .green
+    private func fraction(of level: Float) -> CGFloat {
+        let clamped = min(max(level, range.lowerBound), range.upperBound)
+        return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
+    }
+}
+
+/// Классический сегментный метр: зелёный до -12 dB, жёлтым красится только
+/// участок -12…-3, красным — только то, что выше -3.
+struct SegmentedMeterBar: View {
+    let level: Float
+
+    private static let range: ClosedRange<Float> = -60...0
+    private static let yellowMark: CGFloat = 0.8   // -12 dB
+    private static let redMark: CGFloat = 0.95     // -3 dB
+
+    var body: some View {
+        GeometryReader { geo in
+            let h = geo.size.height
+            let f = Self.fraction(level)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if f > Self.redMark {
+                    Rectangle().fill(Color.red)
+                        .frame(height: h * (f - Self.redMark))
+                }
+                if f > Self.yellowMark {
+                    Rectangle().fill(Color.yellow)
+                        .frame(height: h * (min(f, Self.redMark) - Self.yellowMark))
+                }
+                Rectangle().fill(Color.green)
+                    .frame(height: h * min(f, Self.yellowMark))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 2))
     }
 
-    private func fraction(of level: Float) -> CGFloat {
+    static func fraction(_ level: Float) -> CGFloat {
         let clamped = min(max(level, range.lowerBound), range.upperBound)
         return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
     }

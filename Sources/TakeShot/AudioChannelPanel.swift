@@ -8,6 +8,11 @@ struct AudioChannelPanel: View {
 
     private let range: ClosedRange<Float> = -60...0
 
+    /// Ширина по контенту: каналы (16+8) + две dB-шкалы.
+    private var panelWidth: CGFloat {
+        CGFloat(max(2, controller.audioLevels.count)) * 24 + 44
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             HStack {
@@ -33,9 +38,11 @@ struct AudioChannelPanel: View {
             Text(L("audio_panel_hint"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: panelWidth)
         }
         .padding(14)
-        .frame(maxWidth: 560)
+        .frame(width: panelWidth + 28)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.1)))
         .shadow(radius: 18)
@@ -50,9 +57,7 @@ struct AudioChannelPanel: View {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(.black.opacity(0.5))
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(AudioMeterView.color(for: level))
-                    .frame(height: 130 * fraction(of: level))
+                SegmentedMeterBar(level: level)
                     .animation(.linear(duration: 0.07), value: level)
             }
             .frame(width: 16, height: 130)
@@ -96,22 +101,21 @@ struct LiveFullscreenView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ZStack(alignment: .bottomTrailing) {
+            ZStack(alignment: .topTrailing) {
                 Color.black
                 LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
-                if !footerHover {
-                    Button {
-                        controller.toggleLiveFullscreen()
-                    } label: {
-                        Image(systemName: "arrow.down.right.and.arrow.up.left")
-                            .font(.system(size: 14))
-                            .padding(8)
-                            .background(.black.opacity(0.5),
-                                        in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(14)
+                // выход — в верхнем углу: не пересекается с ховер-зоной подвала
+                Button {
+                    controller.toggleLiveFullscreen()
+                } label: {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.system(size: 14))
+                        .padding(8)
+                        .background(.black.opacity(0.5),
+                                    in: RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(.plain)
+                .padding(14)
             }
             .overlay(alignment: .bottom) {
                 if footerHover {

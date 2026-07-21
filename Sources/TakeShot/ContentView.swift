@@ -66,12 +66,20 @@ struct PlayerArea: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.08)))
+            .overlay {
+                if controller.isRecording, controller.viewerMode == .record {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.red.opacity(0.85), lineWidth: 3)
+                }
+            }
             .overlay(alignment: .topLeading) {
                 overlayBadge {
                     Text(controller.currentTimecode?.description ?? "--:--:--:--")
                         .font(.body)
                         .monospacedDigit()
-                        .foregroundStyle(controller.isRecording ? .red : .primary)
+                        .foregroundStyle(
+                            controller.isRecording && controller.viewerMode == .record
+                            ? .red : .primary)
                 }
                 // кнопки окна лежат на плеере только когда панель справа
                 .padding(.leading, controller.panelSide == "right" ? 66 : 8)
@@ -323,7 +331,7 @@ struct PreviewView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomLeading) {
-            if controller.isRecording {
+            if controller.isRecording, controller.viewerMode == .record {
                 Label(L("rec"), systemImage: "record.circle.fill")
                     .font(.headline.bold())
                     .foregroundStyle(.red)
@@ -488,6 +496,8 @@ struct BottomBarView: View {
                                     .font(.system(size: 15))
                             }
                             .help(L("vanc_open_help"))
+
+                            NamingPresetMenu()
                         }
                         .buttonStyle(.borderless)
 
@@ -519,6 +529,34 @@ struct BottomBarView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+/// Выбор стиля именования прямо из подвала (те же пресеты, что в настройках).
+struct NamingPresetMenu: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Menu {
+            ForEach(SettingsView.namingPresets, id: \.key) { preset in
+                Button {
+                    controller.settings.namingTemplate = preset.template
+                    controller.settings.clipPadWidth = preset.clipDigits
+                } label: {
+                    if controller.settings.namingTemplate == preset.template {
+                        Label(L(preset.key), systemImage: "checkmark")
+                    } else {
+                        Text(L(preset.key))
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "textformat")
+                .font(.system(size: 15))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(L("naming_preset"))
     }
 }
 
@@ -563,11 +601,12 @@ struct ClipField: View {
     @State private var text = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(L("clip_label"))
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize()
+                .padding(.leading, 2)
             HStack(spacing: 1) {
                 TextField("", text: $text)
                     .textFieldStyle(.roundedBorder)
@@ -609,7 +648,7 @@ struct NamingFieldsView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            steppedField(L("cam_label"), width: 28,
+            steppedField(L("cam_label"), width: 40,
                          text: $controller.settings.cameraLabel,
                          onStep: { controller.stepCamera($0) })
             steppedField(L("roll_label"), width: 50,
@@ -627,11 +666,12 @@ struct NamingFieldsView: View {
 
     private func labeledField(_ label: String, width: CGFloat,
                               @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize()
+                .padding(.leading, 2)
             content()
                 .textFieldStyle(.roundedBorder)
                 .frame(width: width)
@@ -642,11 +682,12 @@ struct NamingFieldsView: View {
     private func steppedField(_ label: String, width: CGFloat,
                               text: Binding<String>,
                               onStep: @escaping (Int) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize()
+                .padding(.leading, 2)
             HStack(spacing: 1) {
                 TextField("", text: text)
                     .textFieldStyle(.roundedBorder)

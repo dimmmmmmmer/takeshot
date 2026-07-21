@@ -47,6 +47,25 @@ public final class TakeWriter {
         return CMTimeSubtract(lastPTS, firstPTS).seconds + frameDuration
     }
 
+    /// AVVideoColorProperties по пресету ("709" → nclc 1-1-1).
+    static func videoColorProperties(for preset: String?) -> [String: String] {
+        switch preset {
+        case "601":
+            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_SMPTE_C,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_601_4]
+        case "2020":
+            // трансфер у 2020 SDR — тот же 709
+            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020]
+        default:
+            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]
+        }
+    }
+
     /// Ключ QuickTime-метадаты, которым TakeShot помечает свои файлы
     /// (по нему приложение отличает свои дубли от чужих файлов в папке).
     public static let markerKey = "com.takeshot.origin"
@@ -57,7 +76,8 @@ public final class TakeWriter {
 
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
                 startTimecode: Timecode?,
-                markerMetadata: [String: String] = [:]) throws {
+                markerMetadata: [String: String] = [:],
+                colorTagPreset: String? = nil) throws {
         self.url = url
         self.format = format
         self.startTimecode = startTimecode
@@ -87,12 +107,8 @@ public final class TakeWriter {
             AVVideoCodecKey: codec.avCodecType,
             AVVideoWidthKey: format.width,
             AVVideoHeightKey: format.height,
-            // явная колориметрия HD: файл и превью интерпретируются одинаково
-            AVVideoColorPropertiesKey: [
-                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
-            ],
+            // явная колориметрия (nclc): файл и превью интерпретируются одинаково
+            AVVideoColorPropertiesKey: Self.videoColorProperties(for: colorTagPreset),
         ]
         if codec.needsBitrate {
             // ощутимо качественный H.264/HEVC для он-сет просмотра: ~0.12 bpp

@@ -3,8 +3,10 @@ import Foundation
 
 /// Комбинация клавиш: символ + модификаторы.
 struct KeyCombo: Codable, Equatable {
-    var key: String        // символ в нижнем регистре ("r") или спец-имя ("space", "return")
+    var key: String        // символ для отображения ("r", "space", "return")
     var modifiers: UInt    // NSEvent.ModifierFlags.rawValue (deviceIndependent)
+    /// Физическая клавиша: матчим по ней, чтобы хоткеи работали на любой раскладке.
+    var keyCode: UInt16?
 
     var display: String {
         var parts = ""
@@ -31,11 +33,20 @@ struct KeyCombo: Codable, Equatable {
                   let first = chars.first, !first.isWhitespace else { return nil }
             key = String(first)
         }
-        return KeyCombo(key: key, modifiers: flags.rawValue)
+        return KeyCombo(key: key, modifiers: flags.rawValue, keyCode: event.keyCode)
     }
 
     func matches(event: NSEvent) -> Bool {
-        Self.from(event: event) == self
+        let flags = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .intersection([.command, .option, .control, .shift])
+        guard flags.rawValue == modifiers else { return false }
+        if let keyCode {
+            // по физической клавише — раскладка не важна (R и К — одна клавиша)
+            return event.keyCode == keyCode
+        }
+        // старые сохранённые комбо без keyCode — по символу
+        return Self.from(event: event)?.key == key
     }
 }
 
@@ -60,13 +71,16 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     var defaultCombo: KeyCombo {
         switch self {
         case .toggleRecord:
-            return KeyCombo(key: "r", modifiers: NSEvent.ModifierFlags.command.rawValue)
+            return KeyCombo(key: "r", modifiers: NSEvent.ModifierFlags.command.rawValue,
+                            keyCode: 15)
         case .circleLastTake:
-            return KeyCombo(key: "g", modifiers: NSEvent.ModifierFlags.command.rawValue)
+            return KeyCombo(key: "g", modifiers: NSEvent.ModifierFlags.command.rawValue,
+                            keyCode: 5)
         case .badTakeLast:
-            return KeyCombo(key: "b", modifiers: NSEvent.ModifierFlags.command.rawValue)
+            return KeyCombo(key: "b", modifiers: NSEvent.ModifierFlags.command.rawValue,
+                            keyCode: 11)
         case .fullscreen:
-            return KeyCombo(key: "f", modifiers: 0)
+            return KeyCombo(key: "f", modifiers: 0, keyCode: 3)
         }
     }
 }

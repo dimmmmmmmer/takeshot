@@ -196,28 +196,44 @@ public final class CapturePipeline: @unchecked Sendable {
 
     // MARK: - обработка (на queue)
 
-    /// Проставить кадру колориметрию Rec.709, если бэкенд её не сообщил.
-    /// Без тегов превью-слой и плеер интерпретируют цвет по-разному —
-    /// плейбек выглядит ярче/контрастнее река.
-    private static func tagRec709IfUntagged(_ pixelBuffer: CVPixelBuffer) {
+    /// Колориметрия по пресету настроек: "709" (nclc 1-1-1, дефолт) / "601" / "2020".
+    public static func colorTagValues(for preset: String?)
+        -> (primaries: CFString, transfer: CFString, matrix: CFString) {
+        switch preset {
+        case "601":
+            return (kCVImageBufferColorPrimaries_SMPTE_C,
+                    kCVImageBufferTransferFunction_ITU_R_709_2,
+                    kCVImageBufferYCbCrMatrix_ITU_R_601_4)
+        case "2020":
+            return (kCVImageBufferColorPrimaries_ITU_R_2020,
+                    kCVImageBufferTransferFunction_ITU_R_2020,
+                    kCVImageBufferYCbCrMatrix_ITU_R_2020)
+        default:
+            return (kCVImageBufferColorPrimaries_ITU_R_709_2,
+                    kCVImageBufferTransferFunction_ITU_R_709_2,
+                    kCVImageBufferYCbCrMatrix_ITU_R_709_2)
+        }
+    }
+
+    /// Проставить кадру колориметрию из настроек, если бэкенд её не сообщил.
+    /// Без тегов превью-слой и плеер интерпретируют цвет по-разному.
+    private func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                     nil) == nil else { return }
+        let tags = Self.colorTagValues(for: config.settings.colorTagPreset)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
-                              kCVImageBufferColorPrimaries_ITU_R_709_2,
-                              .shouldPropagate)
+                              tags.primaries, .shouldPropagate)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey,
-                              kCVImageBufferTransferFunction_ITU_R_709_2,
-                              .shouldPropagate)
+                              tags.transfer, .shouldPropagate)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey,
-                              kCVImageBufferYCbCrMatrix_ITU_R_709_2,
-                              .shouldPropagate)
+                              tags.matrix, .shouldPropagate)
     }
 
     private func processFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                               timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?,
                               ancillaryPackets: [AncillaryPacket]) {
         guard let format else { return }
-        Self.tagRec709IfUntagged(pixelBuffer)
+        tagColorIfUntagged(pixelBuffer)
         frameIndex += 1
         updateVancStats(ancillaryPackets)
         let vancTrigger = vancTrigger ?? VancParser.recTrigger(in: ancillaryPackets)
@@ -369,7 +385,8 @@ public final class CapturePipeline: @unchecked Sendable {
                         meta[TakeWriter.lutKey] = lutName
                     }
                     return meta
-                }())
+                }(),
+                colorTagPreset: config.settings.colorTagPreset)
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()
@@ -452,7 +469,7 @@ public final class CapturePipeline: @unchecked Sendable {
         guard let output = filter.outputImage else { return nil }
         ciContext.render(output, to: outBuffer, bounds: input.extent,
                          colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
-        Self.tagRec709IfUntagged(outBuffer)
+        tagColorIfUntagged(outBuffer)
         return outBuffer
     }
 

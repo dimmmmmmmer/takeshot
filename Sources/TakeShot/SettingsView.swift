@@ -99,6 +99,22 @@ struct SettingsView: View {
                 Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Picker(L("color_tags"), selection: Binding(
+                    get: { controller.settings.colorTagPreset ?? "709" },
+                    set: { controller.settings.colorTagPreset = $0 == "709" ? nil : $0 })) {
+                    Text("Rec.709 (1-1-1)").tag("709")
+                    Text("Rec.601").tag("601")
+                    Text("Rec.2020").tag("2020")
+                }
+                Picker(L("video_levels"), selection: Binding(
+                    get: { controller.settings.fullRangeVideo ?? false },
+                    set: { controller.settings.fullRangeVideo = $0 ? true : nil })) {
+                    Text(L("levels_limited")).tag(false)
+                    Text(L("levels_full")).tag(true)
+                }
+                Text(L("color_tags_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section(L("settings_output")) {
                 Picker(L("external_display"), selection: Binding(

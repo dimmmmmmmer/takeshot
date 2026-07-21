@@ -182,3 +182,10 @@
 
 "lut_baked_indicator" = "LUT is baked into this file — playback LUT is off automatically";
 "lut_playback_toggle" = "LUT on this clip: turn off if the look came baked from the camera";
+
+/* Color tags */
+"color_tags" = "Video color tags";
+"video_levels" = "Video levels";
+"levels_limited" = "Limited (video)";
+"levels_full" = "Full";
+"color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
