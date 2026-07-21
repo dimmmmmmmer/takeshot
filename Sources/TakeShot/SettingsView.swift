@@ -5,14 +5,18 @@ struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
 
-    /// Пресеты шаблонов имён под стиль камер; правка шаблона руками = Custom.
-    /// clipDigits — вендорская ширина номера клипа (C001 у ARRI/RED/Sony).
-    static let namingPresets: [(key: String, template: String, clipDigits: Int)] = [
-        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}", 2),
-        ("preset_arri", "{cam}{roll}C{clip}_{date}_{postfix}", 3),
-        ("preset_red", "{cam}{roll}_C{clip}_{date}_{postfix}", 3),
-        ("preset_sony", "{cam}{roll}C{clip}_{date}{postfix}", 3),
-        ("preset_bmd", "{cam}{roll}_{date}_C{clip}", 3),
+    /// Пресеты шаблонов имён — сверены с реальными именами камер
+    /// (см. NamingEngineTests.vendorPresetExactNames). rollDigits — вендорская
+    /// ширина номера ролла, применяется к текущему значению ROLL при выборе.
+    static let namingPresets:
+        [(key: String, template: String, clipDigits: Int, rollDigits: Int?)] = [
+        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}", 2, 3),
+        ("preset_arri", "{cam}{roll}C{clip}_{date6}_{postfix}", 3, 3),
+        ("preset_arri35", "{cam}_{roll}C{clip}_{date6}_{postfix}", 3, 4),
+        ("preset_red", "{cam}{roll}_C{clip}_{date4}{postfix}", 3, 3),
+        ("preset_sony_venice", "{cam}{roll}C{clip}_{date6}{postfix}", 3, 3),
+        ("preset_sony_alpha", "C{clip}", 4, nil),
+        ("preset_bmd", "{cam}{roll}_{date4}{time4}_C{clip}", 3, 3),
     ]
 
     var body: some View {
@@ -86,8 +90,7 @@ struct SettingsView: View {
                     },
                     set: { key in
                         if let preset = Self.namingPresets.first(where: { $0.key == key }) {
-                            controller.settings.namingTemplate = preset.template
-                            controller.settings.clipPadWidth = preset.clipDigits
+                            controller.applyNamingPreset(preset)
                         }
                     })) {
                     ForEach(Self.namingPresets, id: \.key) { preset in

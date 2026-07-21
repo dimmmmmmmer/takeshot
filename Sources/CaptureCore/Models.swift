@@ -141,6 +141,16 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
             "{prefix}_{cam}_{roll}_C{clip}_{postfix}"].contains(settings.namingTemplate) {
             settings.namingTemplate = CaptureSettings().namingTemplate
         }
+        // пресеты до появления вендорских форматов дат ({date6}/{date4}/{time4})
+        let presetMigrations = [
+            "{cam}{roll}C{clip}_{date}_{postfix}": "{cam}{roll}C{clip}_{date6}_{postfix}",
+            "{cam}{roll}_C{clip}_{date}_{postfix}": "{cam}{roll}_C{clip}_{date4}{postfix}",
+            "{cam}{roll}C{clip}_{date}{postfix}": "{cam}{roll}C{clip}_{date6}{postfix}",
+            "{cam}{roll}_{date}_C{clip}": "{cam}{roll}_{date4}{time4}_C{clip}",
+        ]
+        if let migrated = presetMigrations[settings.namingTemplate] {
+            settings.namingTemplate = migrated
+        }
         return settings
     }
 

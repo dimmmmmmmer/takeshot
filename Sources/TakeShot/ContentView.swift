@@ -144,6 +144,21 @@ struct PlayerArea: View {
                     AudioChannelPanel()
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let error = controller.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: controller.lastError)
             .padding(.horizontal, 12)
     }
 
@@ -473,12 +488,6 @@ struct BottomBarView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            if let error = controller.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-            }
             ZStack {
                 HStack(spacing: 8) {
                     HStack(spacing: 0) {
@@ -540,8 +549,7 @@ struct NamingPresetMenu: View {
         Menu {
             ForEach(SettingsView.namingPresets, id: \.key) { preset in
                 Button {
-                    controller.settings.namingTemplate = preset.template
-                    controller.settings.clipPadWidth = preset.clipDigits
+                    controller.applyNamingPreset(preset)
                 } label: {
                     if controller.settings.namingTemplate == preset.template {
                         Label(L(preset.key), systemImage: "checkmark")

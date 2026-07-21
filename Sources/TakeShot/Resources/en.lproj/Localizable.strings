@@ -189,3 +189,7 @@
 "levels_limited" = "Limited (video)";
 "levels_full" = "Full";
 "color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
+
+"preset_arri35" = "ARRI Alexa 35";
+"preset_sony_venice" = "Sony Venice";
+"preset_sony_alpha" = "Sony Alpha (C0001)";

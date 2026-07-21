@@ -44,7 +44,15 @@ public struct NamingEngine: Sendable {
     /// {roll}/{clip}/{postfix}) или подставляется само ({tc}/{date}). Старые имена
     /// ({project}/{reel}/{take}/{scene}/{clipname}) продолжают работать как алиасы.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
-                                      "{postfix}", "{tc}", "{date}"]
+                                      "{postfix}", "{tc}", "{date}", "{date6}",
+                                      "{date4}", "{time4}"]
+
+    private static func formatted(_ date: Date, _ format: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.string(from: date)
+    }
 
     /// Имя файла без расширения.
     public func fileName(for context: NamingContext) -> String {
@@ -59,6 +67,9 @@ public struct NamingEngine: Sendable {
             "{project}": context.project,
             "{prefix}": context.project,
             "{date}": dateFormatter.string(from: context.date),
+            "{date6}": Self.formatted(context.date, "yyMMdd"),   // ARRI/Sony: 230715
+            "{date4}": Self.formatted(context.date, "MMdd"),     // RED: 0715
+            "{time4}": Self.formatted(context.date, "HHmm"),     // BMD: 1234
             "{scene}": context.scene,
             "{take}": paddedNumber,
             "{clip}": paddedNumber,

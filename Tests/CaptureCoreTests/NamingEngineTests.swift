@@ -111,6 +111,49 @@ struct NamingEngineTests {
         }
     }
 
+    /// Каждый пресет — против реального имени с камеры (2023-07-15 12:34).
+    @Test func vendorPresetExactNames() {
+        var components = DateComponents()
+        components.year = 2023; components.month = 7; components.day = 15
+        components.hour = 12; components.minute = 34
+        let shootDate = Calendar(identifier: .gregorian).date(from: components)!
+
+        func name(_ template: String, roll: String, clip: Int, pad: Int,
+                  cam: String = "A", postfix: String = "", prefix: String = "") -> String {
+            NamingEngine(template: template).fileName(for: NamingContext(
+                project: prefix, date: shootDate, take: clip, reel: roll,
+                camera: cam, postfix: postfix, clipPadding: pad))
+        }
+
+        // ARRI classic: A001C001_230715_R1AB
+        #expect(name("{cam}{roll}C{clip}_{date6}_{postfix}",
+                     roll: "001", clip: 1, pad: 3, postfix: "R1AB")
+                == "A001C001_230715_R1AB")
+        // ARRI Alexa 35: A_0001C001_230715_A1B2
+        #expect(name("{cam}_{roll}C{clip}_{date6}_{postfix}",
+                     roll: "0001", clip: 1, pad: 3, postfix: "A1B2")
+                == "A_0001C001_230715_A1B2")
+        // RED: A001_C001_0715AB
+        #expect(name("{cam}{roll}_C{clip}_{date4}{postfix}",
+                     roll: "001", clip: 1, pad: 3, postfix: "AB")
+                == "A001_C001_0715AB")
+        // Sony Venice: A001C001_230715A1
+        #expect(name("{cam}{roll}C{clip}_{date6}{postfix}",
+                     roll: "001", clip: 1, pad: 3, postfix: "A1")
+                == "A001C001_230715A1")
+        // Sony Alpha: C0001
+        #expect(name("C{clip}", roll: "", clip: 1, pad: 4) == "C0001")
+        // Blackmagic: A001_07151234_C023
+        #expect(name("{cam}{roll}_{date4}{time4}_C{clip}",
+                     roll: "001", clip: 23, pad: 3)
+                == "A001_07151234_C023")
+        // TakeShot default: Film_A001C01_night
+        #expect(name("{prefix}_{cam}{roll}C{clip}_{postfix}",
+                     roll: "001", clip: 1, pad: 2,
+                     postfix: "night", prefix: "Film")
+                == "Film_A001C01_night")
+    }
+
     @Test func relativeDirectory() {
         let engine = NamingEngine(template: "{scene}")
         let dir = engine.relativeDirectory(for: NamingContext(

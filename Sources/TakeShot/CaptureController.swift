@@ -46,7 +46,19 @@ final class CaptureController: ObservableObject {
     @Published var otherThumbnails: [URL: NSImage] = [:]
     /// Длительности видео в Other content (сек).
     @Published var otherDurations: [URL: Double] = [:]
-    @Published var lastError: String?
+    /// Ошибка-тост: всплывает над подвалом и сама исчезает через несколько секунд.
+    @Published var lastError: String? {
+        didSet {
+            errorDismissTask?.cancel()
+            guard lastError != nil else { return }
+            errorDismissTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                self?.lastError = nil
+            }
+        }
+    }
+    private var errorDismissTask: Task<Void, Never>?
     /// Пиковые уровни аудиоканалов, dBFS (для метров).
     @Published var audioLevels: [Float] = []
     /// Режим просмотра: живой сигнал или плейбек записанного.
@@ -555,6 +567,18 @@ final class CaptureController: ObservableObject {
         guard !digits.isEmpty else { return }
         settings.clipPadWidth = min(4, max(2, digits.count))
         nextTakeNumber = min(9999, max(0, Int(digits) ?? nextTakeNumber))
+    }
+
+    /// Применить пресет именования: шаблон, ширина клипа и ширина ролла.
+    func applyNamingPreset(
+        _ preset: (key: String, template: String, clipDigits: Int, rollDigits: Int?)) {
+        settings.namingTemplate = preset.template
+        settings.clipPadWidth = preset.clipDigits
+        if let rollDigits = preset.rollDigits,
+           let range = roll.range(of: "[0-9]+$", options: .regularExpression),
+           let number = Int(roll[range]) {
+            roll = roll[..<range.lowerBound] + String(format: "%0\(rollDigits)d", number)
+        }
     }
 
     // MARK: - степперы полей нейминга
