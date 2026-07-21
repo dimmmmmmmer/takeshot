@@ -174,10 +174,28 @@ public final class CapturePipeline: @unchecked Sendable {
 
     // MARK: - обработка (на queue)
 
+    /// Проставить кадру колориметрию Rec.709, если бэкенд её не сообщил.
+    /// Без тегов превью-слой и плеер интерпретируют цвет по-разному —
+    /// плейбек выглядит ярче/контрастнее река.
+    private static func tagRec709IfUntagged(_ pixelBuffer: CVPixelBuffer) {
+        guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
+                                    nil) == nil else { return }
+        CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
+                              kCVImageBufferColorPrimaries_ITU_R_709_2,
+                              .shouldPropagate)
+        CVBufferSetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey,
+                              kCVImageBufferTransferFunction_ITU_R_709_2,
+                              .shouldPropagate)
+        CVBufferSetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey,
+                              kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+                              .shouldPropagate)
+    }
+
     private func processFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                               timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?,
                               ancillaryPackets: [AncillaryPacket]) {
         guard let format else { return }
+        Self.tagRec709IfUntagged(pixelBuffer)
         frameIndex += 1
         updateVancStats(ancillaryPackets)
         let vancTrigger = vancTrigger ?? VancParser.recTrigger(in: ancillaryPackets)

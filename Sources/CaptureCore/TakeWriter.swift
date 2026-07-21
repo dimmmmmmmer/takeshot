@@ -85,6 +85,12 @@ public final class TakeWriter {
             AVVideoCodecKey: codec.avCodecType,
             AVVideoWidthKey: format.width,
             AVVideoHeightKey: format.height,
+            // явная колориметрия HD: файл и превью интерпретируются одинаково
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
+            ],
         ]
         if codec.needsBitrate {
             // ощутимо качественный H.264/HEVC для он-сет просмотра: ~0.12 bpp
