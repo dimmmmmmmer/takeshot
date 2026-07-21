@@ -83,7 +83,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
               let pixelBuffer = output.copyPixelBuffer(
                 forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
 
-        tagRec709IfUntagged(pixelBuffer)
+        normalizeColorTags(pixelBuffer)
 
         if formatDescription.map({
             !CMVideoFormatDescriptionMatchesImageBuffer($0, imageBuffer: pixelBuffer)
@@ -121,9 +121,12 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
     }
 
-    private func tagRec709IfUntagged(_ pixelBuffer: CVPixelBuffer) {
-        guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
-                                    nil) == nil else { return }
+    /// Декодер вешает на кадры display-referred colorspace (CoreMedia709),
+    /// а лайв описан scene-referred тегами ITU_R_709 — ColorSync мапит их на
+    /// дисплей по-разному, отсюда разница контраста лайв/плейбек. Приводим
+    /// кадры плейбека ровно к тому же описанию, что у лайва.
+    private func normalizeColorTags(_ pixelBuffer: CVPixelBuffer) {
+        CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferCGColorSpaceKey)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                               kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey,

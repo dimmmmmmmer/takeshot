@@ -103,6 +103,8 @@ final class CaptureController: ObservableObject {
     }
     /// Хоткей-менеджер (для окружения фулскрин-окон).
     weak var hotkeysRef: HotkeyManager?
+    /// Фактическая высота зоны кнопок окна (тайтлбар скрыт, кнопки поверх контента).
+    @Published var windowTopInset: CGFloat = 26
 
     // MARK: - LUT
 

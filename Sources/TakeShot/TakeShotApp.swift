@@ -17,6 +17,14 @@ struct TakeShotApp: App {
                 .preferredColorScheme(controller.colorScheme)
                 .onAppear {
                     hotkeys.install(controller: controller)
+                    // отступ под кнопки окна — по факту, а не константой
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        if let window = NSApp.windows.first(where: {
+                            $0.styleMask.contains(.titled) }) {
+                            controller.windowTopInset =
+                                AppDelegate.titlebarInset(of: window)
+                        }
+                    }
                 }
         }
         // кнопки окна поверх контента, без отдельной полосы тайтлбара
@@ -70,5 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.toolbar = nil
+    }
+
+    /// Реальная высота зоны кнопок окна: разница высоты окна и contentLayoutRect.
+    static func titlebarInset(of window: NSWindow) -> CGFloat {
+        max(20, window.frame.height - window.contentLayoutRect.height + 2)
     }
 }

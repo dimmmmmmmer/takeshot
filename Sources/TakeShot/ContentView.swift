@@ -25,8 +25,8 @@ struct ContentView: View {
 
     private var mainColumn: some View {
         VStack(spacing: 0) {
-            // полоса под кнопки окна (за неё же таскается окно)
-            Color.clear.frame(height: 20)
+            // полоса под кнопки окна — фактическая высота их зоны
+            Color.clear.frame(height: controller.windowTopInset)
             PlayerArea()
             BottomBarView()
                 .background(.ultraThinMaterial,
@@ -49,7 +49,7 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
             // верхняя кромка вровень с плеером
-            .padding(.top, 20)
+            .padding(.top, controller.windowTopInset)
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
             .frame(minWidth: 310, maxWidth: 480)

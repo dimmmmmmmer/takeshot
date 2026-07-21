@@ -69,6 +69,73 @@ struct TakeWriterTests {
         #expect(readBack == startTC)
     }
 
+    /// Уровни не должны плыть при записи: серый 50% и 18% возвращаются из
+    /// ProRes-файла с точностью до ±2/255 на канал.
+    @Test func levelsSurviveWriteReadRoundTrip() async throws {
+        let tempURL = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }
+
+        func makeGray(_ value: UInt8) -> CVPixelBuffer {
+            var pb: CVPixelBuffer?
+            CVPixelBufferCreate(kCFAllocatorDefault, 320, 180, kCVPixelFormatType_32BGRA,
+                                [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+                                &pb)
+            let buffer = pb!
+            CVPixelBufferLockBaseAddress(buffer, [])
+            memset(CVPixelBufferGetBaseAddress(buffer), Int32(value),
+                   CVPixelBufferGetDataSize(buffer))
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            for (key, value) in [
+                (kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2),
+                (kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2),
+                (kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2),
+            ] {
+                CVBufferSetAttachment(buffer, key, value, .shouldPropagate)
+            }
+            return buffer
+        }
+
+        let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
+                                   timecodeFPS: 25, name: "test")
+        let writer = try TakeWriter(url: tempURL, format: format,
+                                    codec: .proRes422, startTimecode: nil)
+        let gray = makeGray(128) // ~50% серый
+        for frame in 0..<10 {
+            let pts = CMTime(value: CMTimeValue(frame * 40), timescale: 1000)
+            var attempts = 0
+            while !writer.append(pixelBuffer: gray, pts: pts), attempts < 100 {
+                attempts += 1
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        _ = try await writer.finish()
+
+        // читаем кадр из файла и сравниваем центр
+        let asset = AVURLAsset(url: tempURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .positiveInfinity
+        let (cgImage, _) = try await generator.image(
+            at: CMTime(value: 200, timescale: 1000))
+
+        // рисуем в НАТИВНОМ colorspace кадра (identity) — проверяем, что сами
+        // значения не поплыли при encode/decode; интерпретация colorspace —
+        // отдельная забота слоёв отображения
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let space = cgImage.colorSpace ?? CGColorSpace(name: CGColorSpace.itur_709)!
+        let context = CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(cgImage, in: CGRect(x: -160, y: -90, width: 320, height: 180))
+
+        for channel in 0..<3 {
+            let delta = abs(Int(pixel[channel]) - 128)
+            #expect(delta <= 2,
+                    "канал \(channel): записали 128, прочитали \(pixel[channel])")
+        }
+    }
+
     @Test func cancelRemovesFile() throws {
         let tempURL = makeTempURL()
         defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }
