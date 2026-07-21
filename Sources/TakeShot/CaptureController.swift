@@ -94,6 +94,121 @@ final class CaptureController: ObservableObject {
     }
     /// Хоткей-менеджер (для окружения фулскрин-окон).
     weak var hotkeysRef: HotkeyManager?
+
+    // MARK: - LUT
+
+    struct LUTInfo: Identifiable, Equatable {
+        var id: String { fileName }
+        var fileName: String
+        var name: String
+    }
+
+    /// Импортированные LUT-файлы (папка Application Support/TakeShot/LUTs).
+    @Published var availableLUTs: [LUTInfo] = []
+    private var currentCube: CubeLUT?
+
+    nonisolated static var lutsDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        return base.appendingPathComponent("TakeShot/LUTs", isDirectory: true)
+    }
+
+    func reloadLUTList() {
+        let dir = Self.lutsDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil)) ?? []
+        availableLUTs = files
+            .filter { $0.pathExtension.lowercased() == "cube" }
+            .map { LUTInfo(fileName: $0.lastPathComponent,
+                           name: $0.deletingPathExtension().lastPathComponent) }
+            .sorted { $0.name < $1.name }
+    }
+
+    /// Импорт .cube: копируется в папку приложения и сразу выбирается.
+    func importLUT() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "cube")!]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        let dir = Self.lutsDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var lastName: String?
+        for url in panel.urls {
+            let dest = dir.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            do {
+                try FileManager.default.copyItem(at: url, to: dest)
+                lastName = url.lastPathComponent
+            } catch {
+                lastError = "LUT import failed: \(error.localizedDescription)"
+            }
+        }
+        reloadLUTList()
+        if let lastName {
+            selectLUT(fileName: lastName)
+        }
+    }
+
+    func selectLUT(fileName: String?) {
+        settings.lutFileName = fileName
+        if fileName != nil, settings.lutPreviewEnabled != true,
+           settings.lutRecordEnabled != true {
+            settings.lutPreviewEnabled = true // выбрали LUT — очевидно хотят видеть
+        }
+        rebuildLUT()
+    }
+
+    var lutPreviewOn: Bool {
+        get { settings.lutPreviewEnabled ?? false }
+        set {
+            settings.lutPreviewEnabled = newValue
+            rebuildLUT()
+        }
+    }
+
+    var lutRecordOn: Bool {
+        get { settings.lutRecordEnabled ?? false }
+        set {
+            settings.lutRecordEnabled = newValue
+            rebuildLUT()
+        }
+    }
+
+    /// Пересобрать фильтр, раздать конвейеру и плейбеку.
+    func rebuildLUT() {
+        currentCube = nil
+        if let fileName = settings.lutFileName {
+            let url = Self.lutsDirectory.appendingPathComponent(fileName)
+            do {
+                currentCube = try CubeLUT.load(url: url)
+            } catch {
+                lastError = "LUT: \(error.localizedDescription)"
+                settings.lutFileName = nil
+            }
+        }
+        pipeline.setLUT(currentCube,
+                        preview: settings.lutPreviewEnabled ?? false,
+                        record: settings.lutRecordEnabled ?? false)
+        applyPlaybackLUT()
+    }
+
+    /// LUT на плейбек — тем же фильтром через videoComposition:
+    /// сравнение лайв/плейбек идёт через одинаковую обработку.
+    private func applyPlaybackLUT() {
+        guard let item = player.currentItem else { return }
+        guard settings.lutPreviewEnabled ?? false, let cube = currentCube,
+              let filter = cube.makeFilter() else {
+            item.videoComposition = nil
+            return
+        }
+        item.videoComposition = AVMutableVideoComposition(
+            asset: item.asset) { request in
+            filter.setValue(request.sourceImage, forKey: kCIInputImageKey)
+            request.finish(with: filter.outputImage ?? request.sourceImage,
+                           context: nil)
+        }
+    }
     /// Крупная панель аудиоканалов поверх плеера.
     @Published var showAudioPanel = false
     /// Громкость плейбека (только просмотр, на запись не влияет).
@@ -256,6 +371,7 @@ final class CaptureController: ObservableObject {
             player.replaceCurrentItem(with: nil)
         } else {
             player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            applyPlaybackLUT()
             player.play()
         }
         viewerMode = .playback

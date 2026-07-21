@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -45,6 +46,25 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Третий слой — фулскрин-окно лайва (плеер на весь экран).
     public let fullscreenLayer = AVSampleBufferDisplayLayer()
     public var fullscreenMirrorEnabled = false
+
+    // LUT (все обращения — на queue)
+    private let ciContext = CIContext(options: [.cacheIntermediates: false])
+    private var lutFilter: CIFilter?
+    private var lutPreview = false
+    private var lutRecord = false
+    private var lutPool: CVPixelBufferPool?
+    private var lutPoolWidth = 0
+    private var lutPoolHeight = 0
+
+    /// Установить LUT (nil — выключить) и режимы применения.
+    public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool) {
+        queue.async {
+            self.lutFilter = lut?.makeFilter()
+            self.lutPreview = preview && lut != nil
+            self.lutRecord = record && lut != nil
+            self.lutPool = nil
+        }
+    }
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
@@ -219,6 +239,13 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
+        // LUT: превью может быть с лутом, запись — чистой (или наоборот)
+        let displayBuffer = lutPreview
+            ? (applyLUT(to: pixelBuffer) ?? pixelBuffer) : pixelBuffer
+        let recordBuffer = lutRecord
+            ? (lutPreview ? displayBuffer : (applyLUT(to: pixelBuffer) ?? pixelBuffer))
+            : pixelBuffer
+
         var startedThisFrame = false
         let mode = config.settings.detectionMode
         if mode != .manual {
@@ -236,7 +263,7 @@ public final class CapturePipeline: @unchecked Sendable {
         }
 
         if !startedThisFrame, let writer,
-           !writer.append(pixelBuffer: pixelBuffer, pts: pts) {
+           !writer.append(pixelBuffer: recordBuffer, pts: pts) {
             droppedFrames += 1
             if droppedFrames == 1 || droppedFrames % 100 == 0 {
                 let count = droppedFrames
@@ -246,7 +273,7 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
-        enqueuePreview(pixelBuffer: pixelBuffer)
+        enqueuePreview(pixelBuffer: displayBuffer)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
     }
 
@@ -347,7 +374,10 @@ public final class CapturePipeline: @unchecked Sendable {
             // timecode-трек дубля остаётся корректным
             let cutoff = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
             for buffered in preRollBuffer where buffered.index >= cutoff {
-                writer.append(pixelBuffer: buffered.pixelBuffer, pts: buffered.pts)
+                let frame = lutRecord
+                    ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
+                    : buffered.pixelBuffer
+                writer.append(pixelBuffer: frame, pts: buffered.pts)
             }
             preRollBuffer.removeAll()
 
@@ -384,6 +414,37 @@ public final class CapturePipeline: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Прогнать кадр через LUT (CoreImage, GPU). nil — если LUT не настроен/ошибка.
+    private func applyLUT(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        guard let filter = lutFilter else { return nil }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        if lutPool == nil || lutPoolWidth != width || lutPoolHeight != height {
+            let attrs: [CFString: Any] = [
+                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey: width,
+                kCVPixelBufferHeightKey: height,
+                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+            ]
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary,
+                                    &lutPool)
+            lutPoolWidth = width
+            lutPoolHeight = height
+        }
+        guard let pool = lutPool else { return nil }
+        var outBuffer: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
+        guard let outBuffer else { return nil }
+
+        let input = CIImage(cvPixelBuffer: pixelBuffer)
+        filter.setValue(input, forKey: kCIInputImageKey)
+        guard let output = filter.outputImage else { return nil }
+        ciContext.render(output, to: outBuffer, bounds: input.extent,
+                         colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
+        Self.tagRec709IfUntagged(outBuffer)
+        return outBuffer
     }
 
     private func enqueuePreview(pixelBuffer: CVPixelBuffer) {

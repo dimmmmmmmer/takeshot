@@ -112,6 +112,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var monitorDeviceID: String?
     /// Число цифр в номере клипа (C01 / C001 / C0001); nil — 2.
     public var clipPadWidth: Int?
+    /// Имя файла выбранного LUT (в папке LUTs приложения); nil — без LUT.
+    public var lutFileName: String?
+    /// Применять LUT к превью (лайв и плейбек).
+    public var lutPreviewEnabled: Bool?
+    /// Запекать LUT в записываемый файл (иначе пишется чистый сигнал).
+    public var lutRecordEnabled: Bool?
 
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 

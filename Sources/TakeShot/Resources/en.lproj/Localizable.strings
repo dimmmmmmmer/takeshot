@@ -172,3 +172,10 @@
 "wipe_diagonal" = "Diagonal wipe";
 
 "preset_sony" = "Sony style";
+
+/* LUT */
+"lut_none" = "No LUT";
+"lut_preview" = "Apply to preview";
+"lut_record" = "Bake into recording";
+"lut_import" = "Import .cube…";
+"lut_help" = "Preview/record LUTs (.cube). Preview LUT applies to live and playback; recording stays clean unless baking is enabled";

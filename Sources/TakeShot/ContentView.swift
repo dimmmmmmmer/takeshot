@@ -96,16 +96,21 @@ struct PlayerArea: View {
                 .padding(.top, 8)
             }
             .overlay(alignment: .topTrailing) {
-                overlayBadge {
-                    Group {
-                        if let format = controller.signalFormat {
-                            Text(Self.shortFormat(format)).monospacedDigit()
-                        } else {
-                            Text(L("no_signal_short"))
-                        }
+                HStack(spacing: 6) {
+                    overlayBadge {
+                        LUTMenu()
                     }
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    overlayBadge {
+                        Group {
+                            if let format = controller.signalFormat {
+                                Text(Self.shortFormat(format)).monospacedDigit()
+                            } else {
+                                Text(L("no_signal_short"))
+                            }
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(8)
             }
@@ -149,6 +154,59 @@ struct PlayerArea: View {
 
     static func shortFormat(_ format: CaptureFormat) -> String {
         "\(format.height)p\(fpsText(format.frameRate))"
+    }
+}
+
+/// Меню LUT: выбор/импорт .cube, применение к превью и запеканию в запись.
+struct LUTMenu: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Menu {
+            Button {
+                controller.selectLUT(fileName: nil)
+            } label: {
+                if controller.settings.lutFileName == nil {
+                    Label(L("lut_none"), systemImage: "checkmark")
+                } else {
+                    Text(L("lut_none"))
+                }
+            }
+            ForEach(controller.availableLUTs) { lut in
+                Button {
+                    controller.selectLUT(fileName: lut.fileName)
+                } label: {
+                    if controller.settings.lutFileName == lut.fileName {
+                        Label(lut.name, systemImage: "checkmark")
+                    } else {
+                        Text(lut.name)
+                    }
+                }
+            }
+            Divider()
+            Toggle(L("lut_preview"), isOn: Binding(
+                get: { controller.lutPreviewOn },
+                set: { controller.lutPreviewOn = $0 }))
+            Toggle(L("lut_record"), isOn: Binding(
+                get: { controller.lutRecordOn },
+                set: { controller.lutRecordOn = $0 }))
+            Divider()
+            Button(L("lut_import")) { controller.importLUT() }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "camera.filters")
+                    .font(.system(size: 12))
+                if controller.settings.lutFileName != nil,
+                   controller.lutPreviewOn || controller.lutRecordOn {
+                    Circle()
+                        .fill(controller.accentColor)
+                        .frame(width: 5, height: 5)
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(L("lut_help"))
     }
 }
 

@@ -83,6 +83,34 @@ struct NamingEngineTests {
         #expect(FieldStepper.stepLetter("CAM B", by: 1) == "CAM C")
     }
 
+    @Test func cubeLUTParsing() throws {
+        let cube = """
+        # comment
+        TITLE "test"
+        LUT_3D_SIZE 2
+        0.0 0.0 0.0
+        1.0 0.0 0.0
+        0.0 1.0 0.0
+        1.0 1.0 0.0
+        0.0 0.0 1.0
+        1.0 0.0 1.0
+        0.0 1.0 1.0
+        1.0 1.0 1.0
+        """
+        let lut = try CubeLUT.parse(cube, name: "test")
+        #expect(lut.size == 2)
+        // 8 узлов * RGBA float32
+        #expect(lut.data.count == 8 * 4 * 4)
+        #expect(lut.makeFilter() != nil)
+
+        #expect(throws: CubeLUT.ParseError.self) {
+            _ = try CubeLUT.parse("LUT_3D_SIZE 2\n0 0 0")
+        }
+        #expect(throws: CubeLUT.ParseError.self) {
+            _ = try CubeLUT.parse("0 0 0\n1 1 1")
+        }
+    }
+
     @Test func relativeDirectory() {
         let engine = NamingEngine(template: "{scene}")
         let dir = engine.relativeDirectory(for: NamingContext(
