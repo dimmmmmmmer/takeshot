@@ -155,10 +155,10 @@
 "panel_left" = "Слева";
 
 "naming_preset" = "Стиль именования";
-"preset_takeshot" = "TakeShot (по умолчанию)";
-"preset_arri" = "Стиль ARRI";
-"preset_red" = "Стиль RED";
-"preset_bmd" = "Стиль Blackmagic";
+"preset_takeshot" = "TakeShot (Default)";
+"preset_arri" = "ARRI Alexa";
+"preset_red" = "RED";
+"preset_bmd" = "BlackMagic";
 "preset_custom" = "Свой";
 
 "accent_color" = "Акцентный цвет";
@@ -191,9 +191,13 @@
 "color_tags_hint" = "Дефолт — Rec.709 nclc 1-1-1, limited: то, чего ждут 99% HD-пайплайнов. Настройка уровней полноценно заработает с форматами живого железа";
 
 "preset_arri35" = "ARRI Alexa 35";
-"preset_sony_venice" = "Sony Venice";
-"preset_sony_alpha" = "Sony Alpha (C0001)";
+"preset_sony_venice" = "Sony";
+"preset_sony_alpha" = "Sony (Legacy)";
 
 /* Предупреждение о занятом имени */
 "name_taken_short" = "ЗАНЯТО";
 "name_taken_help" = "Такое имя уже есть в папке (%@). Смените CLIP/ROLL — перезаписи не будет, добавится суффикс _2";
+
+"preset_canon" = "Canon";
+
+"lut_intensity" = "Интенсивность: %d%%";

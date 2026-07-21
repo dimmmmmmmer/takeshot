@@ -77,7 +77,8 @@ public final class TakeWriter {
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
                 startTimecode: Timecode?,
                 markerMetadata: [String: String] = [:],
-                colorTagPreset: String? = nil) throws {
+                colorTagPreset: String? = nil,
+                audioChannelCount: Int = 0) throws {
         self.url = url
         self.format = format
         self.startTimecode = startTimecode
@@ -149,6 +150,27 @@ public final class TakeWriter {
             timecodeFormatDescription = nil
         }
 
+        // Аудио-вход обязан быть добавлен ДО startWriting() — иначе canAdd
+        // возвращает false и дорожки звука в файле не будет. Формат известен
+        // заранее (PCM 48к/16бит, число каналов приходит из конвейера).
+        if audioChannelCount > 0 {
+            let audioSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 48_000,
+                AVNumberOfChannelsKey: audioChannelCount,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+            ]
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            input.expectsMediaDataInRealTime = true
+            if writer.canAdd(input) {
+                writer.add(input)
+                audioInput = input
+            }
+        }
+
         guard writer.startWriting() else {
             throw WriterError.notWritable(writer.status, writer.error)
         }
@@ -170,20 +192,9 @@ public final class TakeWriter {
         return true
     }
 
-    /// PCM-аудио с капчур-платы, пишется как есть.
+    /// PCM-аудио с капчур-платы. Вход уже создан в init (до startWriting).
     public func append(audioSampleBuffer: CMSampleBuffer) {
-        guard sessionStarted else { return }
-        if audioInput == nil,
-           let fdesc = CMSampleBufferGetFormatDescription(audioSampleBuffer) {
-            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: nil,
-                                           sourceFormatHint: fdesc)
-            input.expectsMediaDataInRealTime = true
-            if writer.canAdd(input) {
-                writer.add(input)
-                audioInput = input
-            }
-        }
-        guard let audioInput, audioInput.isReadyForMoreMediaData else { return }
+        guard sessionStarted, let audioInput, audioInput.isReadyForMoreMediaData else { return }
         audioInput.append(audioSampleBuffer)
     }
 

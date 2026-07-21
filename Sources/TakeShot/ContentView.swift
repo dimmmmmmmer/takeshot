@@ -214,6 +214,12 @@ struct LUTMenu: View {
                 get: { controller.lutRecordOn },
                 set: { controller.lutRecordOn = $0 }))
             Divider()
+            // интенсивность LUT (микс с оригиналом)
+            Text(L("lut_intensity", Int((controller.lutIntensity * 100).rounded())))
+            Slider(value: Binding(
+                get: { controller.lutIntensity },
+                set: { controller.lutIntensity = $0 }), in: 0...1)
+            Divider()
             Button(L("lut_import")) { controller.importLUT() }
         } label: {
             HStack(spacing: 3) {
@@ -300,8 +306,17 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
+    /// Показывать ли транспорт (плейбек видео, не фото).
+    private var showsTransport: Bool {
+        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        else { return false }
+        return !PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased())
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        // площадь картинки неизменна между реком и плейбеком: транспорт —
+        // полупрозрачный оверлей снизу, а не строка, отжимающая кадр
+        ZStack(alignment: .bottom) {
             GeometryReader { _ in
                 ZStack {
                     Rectangle().fill(controller.playerBackground)
@@ -339,9 +354,11 @@ struct PreviewView: View {
                     }
                 }
             }
-            if controller.viewerMode == .playback, let url = controller.playbackURL,
-               !PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased()) {
+            if showsTransport {
                 TransportBar(player: controller.player)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

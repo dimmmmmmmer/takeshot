@@ -17,6 +17,7 @@ struct SettingsView: View {
         ("preset_sony_venice", "{cam}{roll}C{clip}_{date6}{postfix}", 3, 3),
         ("preset_sony_alpha", "C{clip}", 4, nil),
         ("preset_bmd", "{cam}{roll}_{date4}{time4}_C{clip}", 3, 3),
+        ("preset_canon", "{cam}{roll}C{clip}_{date6}_{postfix}", 3, 3),
     ]
 
     var body: some View {

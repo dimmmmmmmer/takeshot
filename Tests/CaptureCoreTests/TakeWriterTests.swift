@@ -136,6 +136,42 @@ struct TakeWriterTests {
         }
     }
 
+    @Test func writesAudioTrack() async throws {
+        let tempURL = makeTempURL()
+        defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }
+
+        let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
+                                   timecodeFPS: 25, name: "test")
+        let writer = try TakeWriter(url: tempURL, format: format,
+                                    codec: .proResProxy, startTimecode: nil,
+                                    audioChannelCount: 2)
+        let pixelBuffer = makePixelBuffer(width: 320, height: 180)
+        var audioCache: CMAudioFormatDescription?
+        for frame in 0..<10 {
+            let pts = CMTime(value: CMTimeValue(frame * 40), timescale: 1000)
+            var attempts = 0
+            while !writer.append(pixelBuffer: pixelBuffer, pts: pts), attempts < 100 {
+                attempts += 1
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            // 1920 сэмплов стерео 16 бит на кадр (40 мс @48к)
+            var samples = [Int16](repeating: 500, count: 1920 * 2)
+            samples.withUnsafeBytes { raw in
+                if let base = raw.baseAddress,
+                   let sb = PCMAudio.makeSampleBuffer(
+                    bytes: base, sampleFrames: 1920, channelCount: 2,
+                    ptsSeconds: Double(frame) * 0.04, formatCache: &audioCache) {
+                    writer.append(audioSampleBuffer: sb)
+                }
+            }
+        }
+        let url = try await writer.finish()
+
+        let asset = AVURLAsset(url: url)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(audioTracks.count == 1, "в файле должна быть аудиодорожка")
+    }
+
     @Test func cancelRemovesFile() throws {
         let tempURL = makeTempURL()
         defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }

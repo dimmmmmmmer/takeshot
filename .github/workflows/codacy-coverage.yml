@@ -1,0 +1,47 @@
+# Прогон тестов с покрытием и заливка отчёта в Codacy.
+# Токен проекта хранится в секрете репозитория CODACY_PROJECT_TOKEN
+# (в код не коммитится). Статический анализ Codacy делает сам на своей
+# стороне после подключения репозитория на codacy.com — этот workflow
+# отвечает только за coverage.
+name: Codacy Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Тесты с покрытием
+        run: |
+          swift test --enable-code-coverage \
+            -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+            -Xlinker -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+            -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+            -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
+
+      - name: Экспорт покрытия в lcov
+        run: |
+          BIN=$(swift build --show-bin-path)
+          PROF="$BIN/codecov/default.profdata"
+          # бинарь тест-бандла для llvm-cov
+          XCTEST=$(find "$BIN" -name '*.xctest' -maxdepth 2 | head -1)
+          BINARY="$XCTEST/Contents/MacOS/$(basename "$XCTEST" .xctest)"
+          xcrun llvm-cov export \
+            "$BINARY" \
+            -instr-profile "$PROF" \
+            -format=lcov \
+            -ignore-filename-regex='(Tests|\.build)/' \
+            > coverage.lcov
+          echo "lcov lines: $(wc -l < coverage.lcov)"
+
+      - name: Заливка в Codacy
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          bash <(curl -Ls https://coverage.codacy.com/get.sh) report \
+            --force-coverage-parser lcov -r coverage.lcov

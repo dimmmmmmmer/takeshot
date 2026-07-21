@@ -155,10 +155,10 @@
 "panel_left" = "Left";
 
 "naming_preset" = "Naming style";
-"preset_takeshot" = "TakeShot (default)";
-"preset_arri" = "ARRI style";
-"preset_red" = "RED style";
-"preset_bmd" = "Blackmagic style";
+"preset_takeshot" = "TakeShot (Default)";
+"preset_arri" = "ARRI Alexa";
+"preset_red" = "RED";
+"preset_bmd" = "BlackMagic";
 "preset_custom" = "Custom";
 
 "accent_color" = "Accent color";
@@ -191,9 +191,13 @@
 "color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
 
 "preset_arri35" = "ARRI Alexa 35";
-"preset_sony_venice" = "Sony Venice";
-"preset_sony_alpha" = "Sony Alpha (C0001)";
+"preset_sony_venice" = "Sony";
+"preset_sony_alpha" = "Sony (Legacy)";
 
 /* Name collision warning */
 "name_taken_short" = "TAKEN";
 "name_taken_help" = "This name already exists in the folder (%@). Change CLIP/ROLL — recording won't overwrite it, a _2 suffix will be added";
+
+"preset_canon" = "Canon";
+
+"lut_intensity" = "Intensity: %d%%";

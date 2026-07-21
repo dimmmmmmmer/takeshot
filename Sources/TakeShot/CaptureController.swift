@@ -212,6 +212,15 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Интенсивность LUT (0…1); по умолчанию 1.
+    var lutIntensity: Double {
+        get { settings.lutIntensity ?? 1 }
+        set {
+            settings.lutIntensity = newValue
+            rebuildLUT()
+        }
+    }
+
     /// Пересобрать фильтр, раздать конвейеру и плейбеку.
     func rebuildLUT() {
         currentCube = nil
@@ -226,7 +235,8 @@ final class CaptureController: ObservableObject {
         }
         pipeline.setLUT(currentCube,
                         preview: settings.lutPreviewEnabled ?? false,
-                        record: settings.lutRecordEnabled ?? false)
+                        record: settings.lutRecordEnabled ?? false,
+                        intensity: settings.lutIntensity ?? 1)
         applyPlaybackLUT()
     }
 
@@ -241,11 +251,15 @@ final class CaptureController: ObservableObject {
             item.videoComposition = nil
             return
         }
+        let intensity = settings.lutIntensity ?? 1
         item.videoComposition = AVMutableVideoComposition(
             asset: item.asset) { request in
-            filter.setValue(request.sourceImage, forKey: kCIInputImageKey)
-            request.finish(with: filter.outputImage ?? request.sourceImage,
-                           context: nil)
+            let source = request.sourceImage
+            filter.setValue(source, forKey: kCIInputImageKey)
+            let filtered = filter.outputImage ?? source
+            let mixed = CapturePipeline.mix(source: source, filtered: filtered,
+                                            intensity: intensity)
+            request.finish(with: mixed, context: nil)
         }
     }
 

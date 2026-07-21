@@ -56,6 +56,10 @@ Prefix (=projectName)/Cam/Roll/Clip. Смена ролла сбрасывает 
 
 ## CI
 
+Codacy: статический анализ (подключается на codacy.com) + покрытие
+(`codacy-coverage.yml` заливает lcov; токен в секрете CODACY_PROJECT_TOKEN,
+в код не коммитится).
+
 GitHub Actions (`.github/workflows/`): `ci.yml` — сборка + тесты + артефакт
 TakeShot.zip на каждый push/PR; `release.yml` — по тегу `v*` собирает .app и
 публикует GitHub Release (.dmg с симлинком на /Applications).

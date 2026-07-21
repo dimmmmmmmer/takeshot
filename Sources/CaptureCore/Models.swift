@@ -118,6 +118,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var lutPreviewEnabled: Bool?
     /// Запекать LUT в записываемый файл (иначе пишется чистый сигнал).
     public var lutRecordEnabled: Bool?
+    /// Интенсивность LUT 0…1 (микс с оригиналом); nil — 1.
+    public var lutIntensity: Double?
     /// Цветовые теги видео: "709" (nclc 1-1-1, дефолт), "601", "2020".
     public var colorTagPreset: String?
     /// Уровни видео: false = limited/video (дефолт), true = full.

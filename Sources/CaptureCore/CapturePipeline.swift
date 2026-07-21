@@ -53,17 +53,20 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lutName: String?
     private var lutPreview = false
     private var lutRecord = false
+    private var lutIntensity: Double = 1
     private var lutPool: CVPixelBufferPool?
     private var lutPoolWidth = 0
     private var lutPoolHeight = 0
 
-    /// Установить LUT (nil — выключить) и режимы применения.
-    public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool) {
+    /// Установить LUT (nil — выключить), режимы применения и интенсивность (0…1).
+    public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool,
+                       intensity: Double = 1) {
         queue.async {
             self.lutFilter = lut?.makeFilter()
             self.lutName = lut?.name
             self.lutPreview = preview && lut != nil
             self.lutRecord = record && lut != nil
+            self.lutIntensity = min(1, max(0, intensity))
             self.lutPool = nil
         }
     }
@@ -174,9 +177,14 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private var trimFormatCache: CMAudioFormatDescription?
+    /// Число каналов входного аудио (кэшируется и во время превью — чтобы writer
+    /// знал формат аудио-входа заранее, до первого пакета записи).
+    private var sourceAudioChannels = 0
 
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
         queue.async {
+            let levels = PCMAudio.peakLevels(of: sampleBuffer)
+            self.sourceAudioChannels = levels.count
             // метры показывают ВСЕ каналы; в файл идут только включённые в маске
             var toWrite: CMSampleBuffer? = sampleBuffer
             if let mask = self.config.settings.audioChannelMask {
@@ -187,11 +195,17 @@ public final class CapturePipeline: @unchecked Sendable {
             if let toWrite {
                 self.writer?.append(audioSampleBuffer: toWrite)
             }
-            let levels = PCMAudio.peakLevels(of: sampleBuffer)
             if !levels.isEmpty {
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }
             }
         }
+    }
+
+    /// Сколько каналов реально пишется в файл при текущей маске.
+    private var recordChannelCount: Int {
+        guard sourceAudioChannels > 0 else { return 0 }
+        guard let mask = config.settings.audioChannelMask else { return sourceAudioChannels }
+        return (0..<sourceAudioChannels).filter { mask & (1 << $0) != 0 }.count
     }
 
     // MARK: - обработка (на queue)
@@ -386,7 +400,8 @@ public final class CapturePipeline: @unchecked Sendable {
                     }
                     return meta
                 }(),
-                colorTagPreset: config.settings.colorTagPreset)
+                colorTagPreset: config.settings.colorTagPreset,
+                audioChannelCount: recordChannelCount)
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()
@@ -467,10 +482,23 @@ public final class CapturePipeline: @unchecked Sendable {
         let input = CIImage(cvPixelBuffer: pixelBuffer)
         filter.setValue(input, forKey: kCIInputImageKey)
         guard let output = filter.outputImage else { return nil }
-        ciContext.render(output, to: outBuffer, bounds: input.extent,
+        let finalImage = Self.mix(source: input, filtered: output,
+                                  intensity: lutIntensity)
+        ciContext.render(finalImage, to: outBuffer, bounds: input.extent,
                          colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
         tagColorIfUntagged(outBuffer)
         return outBuffer
+    }
+
+    /// Смешать оригинал и LUT'нутый кадр по интенсивности (кросс-дизолв).
+    public static func mix(source: CIImage, filtered: CIImage,
+                           intensity: Double) -> CIImage {
+        guard intensity < 0.999 else { return filtered }
+        guard let dissolve = CIFilter(name: "CIDissolveTransition") else { return filtered }
+        dissolve.setValue(source, forKey: "inputImage")
+        dissolve.setValue(filtered, forKey: "inputTargetImage")
+        dissolve.setValue(intensity, forKey: "inputTime")
+        return dissolve.outputImage ?? filtered
     }
 
     private func enqueuePreview(pixelBuffer: CVPixelBuffer) {
