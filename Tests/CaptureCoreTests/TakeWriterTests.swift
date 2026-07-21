@@ -63,6 +63,10 @@ struct TakeWriterTests {
 
         let timecodeTracks = try await asset.loadTracks(withMediaType: .timecode)
         #expect(timecodeTracks.count == 1, "timecode-трек должен присутствовать")
+
+        // и стартовый TC читается обратно ровно тем, что записали
+        let readBack = await TimecodeReader.startTimecode(of: asset)
+        #expect(readBack == startTC)
     }
 
     @Test func cancelRemovesFile() throws {

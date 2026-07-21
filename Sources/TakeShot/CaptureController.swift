@@ -729,13 +729,14 @@ final class CaptureController: ObservableObject {
             let duration = (try? await asset.load(.duration))?.seconds ?? 0
             let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?
                 .creationDate ?? Date.distantPast
+            let startTC = await TimecodeReader.startTimecode(of: asset)
             let take = Take(
                 url: url,
                 displayName: url.deletingPathExtension().lastPathComponent,
                 scene: "",
                 roll: value(TakeWriter.rollKey) ?? "",
                 takeNumber: Int(value(TakeWriter.clipKey) ?? "") ?? 0,
-                startTimecode: nil,
+                startTimecode: startTC,
                 durationSeconds: duration,
                 rating: ratings[url.lastPathComponent] ?? .none,
                 recordedAt: created)
