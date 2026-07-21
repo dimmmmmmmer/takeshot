@@ -35,11 +35,19 @@ final class CaptureController: ObservableObject {
             guard oldValue != roll else { return }
             continueClipNumbering()
             pushConfig()
+            refreshNameCollision()
         }
     }
     @Published var nextTakeNumber: Int = 1 {
-        didSet { pushConfig() }
+        didSet {
+            pushConfig()
+            refreshNameCollision()
+        }
     }
+    /// Имя файла, которое даст текущая комбинация нейминга, уже существует в папке.
+    /// nil — коллизии нет. Предупреждаем оператора ДО записи (степпер прыгнул на
+    /// занятый номер, ролл вернули назад и т.п.); писать поверх мы всё равно не будем.
+    @Published var nameCollision: String?
     /// Видео и фото в папке записи, появившиеся не из TakeShot (сброшены руками).
     @Published var otherFiles: [URL] = []
     /// Миниатюры для Other content.
@@ -435,7 +443,33 @@ final class CaptureController: ObservableObject {
             if oldValue.destinationPath != settings.destinationPath {
                 resetLibraryForNewDestination()
             }
+            // cam/postfix/шаблон/паддинг влияют на имя — пересчитываем предупреждение
+            if oldValue.cameraLabel != settings.cameraLabel
+                || oldValue.postfix != settings.postfix
+                || oldValue.namingTemplate != settings.namingTemplate
+                || oldValue.clipPadWidth != settings.clipPadWidth {
+                refreshNameCollision()
+            }
         }
+    }
+
+    /// Пересчитать предупреждение о занятом имени для СЛЕДУЮЩЕГО дубля.
+    /// Во время записи не показываем: пишущийся файл, естественно, существует.
+    func refreshNameCollision() {
+        guard !isRecording else { nameCollision = nil; return }
+        let engine = NamingEngine(template: settings.namingTemplate)
+        let context = NamingContext(
+            project: settings.projectName, date: Date(),
+            take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
+            postfix: settings.postfix ?? "",
+            clipPadding: settings.clipPadWidthEffective,
+            timecode: currentTimecode)
+        let url = destinationRoot
+            .appendingPathComponent(engine.relativeDirectory(for: context))
+            .appendingPathComponent(engine.fileName(for: context))
+            .appendingPathExtension("mov")
+        nameCollision = FileManager.default.fileExists(atPath: url.path)
+            ? url.lastPathComponent : nil
     }
 
     /// Новая папка записи: старые дубли/файлы к ней не относятся — чистим и сканируем заново.
@@ -488,7 +522,7 @@ final class CaptureController: ObservableObject {
         bindPipeline()
         refreshDevices() // выбор первого устройства запустит захват через didSet
         startFolderSync()
-
+        refreshNameCollision()
     }
 
     private func bindPipeline() {
@@ -500,6 +534,7 @@ final class CaptureController: ObservableObject {
         }
         pipeline.onRecStateChanged = { [weak self] recording in
             self?.isRecording = recording
+            self?.refreshNameCollision() // старт скрывает, стоп — пересчитывает
         }
         pipeline.onTakeFinished = { [weak self] take in
             guard let self else { return }
@@ -786,6 +821,8 @@ final class CaptureController: ObservableObject {
             otherFiles = sorted
             generateOtherThumbnails(for: sorted)
         }
+        // файл мог появиться в папке извне — обновим предупреждение о занятом имени
+        refreshNameCollision()
     }
 
     /// Номер следующего клипа — после максимального в текущем ролле.

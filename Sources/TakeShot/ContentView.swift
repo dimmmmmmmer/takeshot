@@ -656,6 +656,19 @@ struct NamingFieldsView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
+            // предупреждение: текущее имя уже занято в папке
+            if let collision = controller.nameCollision {
+                VStack(spacing: 1) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(L("name_taken_short"))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.orange)
+                }
+                .padding(.top, 8)
+                .help(L("name_taken_help", collision))
+                .transition(.opacity)
+            }
             steppedField(L("cam_label"), width: 40,
                          text: $controller.settings.cameraLabel,
                          onStep: { controller.stepCamera($0) })
@@ -670,6 +683,7 @@ struct NamingFieldsView: View {
                     set: { controller.settings.postfix = $0.isEmpty ? nil : $0 }))
             }
         }
+        .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
     }
 
     private func labeledField(_ label: String, width: CGFloat,

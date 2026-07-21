@@ -193,3 +193,7 @@
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony Venice";
 "preset_sony_alpha" = "Sony Alpha (C0001)";
+
+/* Предупреждение о занятом имени */
+"name_taken_short" = "ЗАНЯТО";
+"name_taken_help" = "Такое имя уже есть в папке (%@). Смените CLIP/ROLL — перезаписи не будет, добавится суффикс _2";

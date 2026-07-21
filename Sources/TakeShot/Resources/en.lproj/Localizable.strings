@@ -193,3 +193,7 @@
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony Venice";
 "preset_sony_alpha" = "Sony Alpha (C0001)";
+
+/* Name collision warning */
+"name_taken_short" = "TAKEN";
+"name_taken_help" = "This name already exists in the folder (%@). Change CLIP/ROLL — recording won't overwrite it, a _2 suffix will be added";
