@@ -13,5 +13,6 @@ if CDLDeviceManager.isSDKAvailable() {
         }
     }
 } else {
-    print("Built without the DeckLink SDK (stub). Put the headers in vendor/DeckLinkSDK/include — see the README there.")
+    print("Built without the DeckLink SDK (stub). "
+          + "Put the headers in vendor/DeckLinkSDK/include — see the README there.")
 }

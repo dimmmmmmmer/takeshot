@@ -1,0 +1,7 @@
+---
+# Codacy analysis config.
+# CLAUDE.md is excluded: it's the project's AI-assistant working notes, and the
+# agent-prompt linter misreads it as an agent persona definition (asks for
+# identity/tools/examples that don't apply).
+exclude_paths:
+  - "CLAUDE.md"

@@ -167,7 +167,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     }
 }
 
-
 /// Increment/decrement naming fields (roll "001" → "002", camera A → B).
 public enum FieldStepper {
     /// Changes a string's trailing digits, preserving leading zeros: "001"+1 → "002",

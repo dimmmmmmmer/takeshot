@@ -4,14 +4,14 @@ import SwiftUI
 /// Green up to -12, yellow up to -3, red beyond.
 struct AudioMeterView: View {
     let levels: [Float]
-    var enabled: [Bool]? = nil
+    var enabled: [Bool]?
 
     private let range: ClosedRange<Float> = -60...0
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                GeometryReader { geo in
+                GeometryReader { _ in
                     ZStack(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(.black.opacity(0.55))

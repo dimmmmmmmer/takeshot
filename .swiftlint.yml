@@ -1,0 +1,14 @@
+# Project SwiftLint conventions (Codacy picks this up for its SwiftLint tool).
+#
+# Deliberate deviations from the defaults:
+# - identifier_name: video-domain code idiomatically uses short names
+#   (tc, pb, x, y, r, g, b, fps…) — length checks off, case checks stay on.
+# - trailing_comma: this codebase intentionally keeps trailing commas in
+#   multiline collection literals (smaller diffs when appending).
+# Everything else stays at defaults so real complexity findings still surface.
+
+identifier_name:
+  min_length: 1
+
+disabled_rules:
+  - trailing_comma

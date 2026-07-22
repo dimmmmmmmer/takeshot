@@ -108,8 +108,15 @@ public final class CapturePipeline: @unchecked Sendable {
     private var takeRoll = ""
     private var takeNumber = 0
     private var videoFormatDescription: CMVideoFormatDescription?
+    /// One buffered frame awaiting a possible take start.
+    private struct PreRollFrame {
+        let index: Int
+        let pixelBuffer: CVPixelBuffer
+        let pts: CMTime
+    }
+
     /// Frames before record start — for pre-roll (only while writer == nil).
-    private var preRollBuffer: [(index: Int, pixelBuffer: CVPixelBuffer, pts: CMTime)] = []
+    private var preRollBuffer: [PreRollFrame] = []
     /// Accumulated VANC stats by (DID, SDID).
     private var vancStats: [String: VancPacketStat] = [:]
     private var vancStatsDirty = false
@@ -190,8 +197,9 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public func handleFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
-                     timecode rawTimecode: Timecode?, vancTrigger: VancTrigger? = nil,
-                     ancillaryPackets: [AncillaryPacket] = []) {
+                            timecode rawTimecode: Timecode?,
+                            vancTrigger: VancTrigger? = nil,
+                            ancillaryPackets: [AncillaryPacket] = []) {
         queue.async {
             self.processFrame(pixelBuffer: pixelBuffer, pts: pts,
                               timecode: rawTimecode, vancTrigger: vancTrigger,
@@ -263,7 +271,8 @@ public final class CapturePipeline: @unchecked Sendable {
         // frame included): when a take starts, frames from the camera's actual record
         // start (lost to debounce) plus the configured lead seconds are pulled from it
         if writer == nil {
-            preRollBuffer.append((index: frameIndex, pixelBuffer: pixelBuffer, pts: pts))
+            preRollBuffer.append(PreRollFrame(index: frameIndex,
+                                              pixelBuffer: pixelBuffer, pts: pts))
             let capacity = preRollCapacity
             if preRollBuffer.count > capacity {
                 preRollBuffer.removeFirst(preRollBuffer.count - capacity)

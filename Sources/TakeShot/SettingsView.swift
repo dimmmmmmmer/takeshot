@@ -6,20 +6,9 @@ struct SettingsView: View {
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var confirmClearLUTs = false
 
-    /// Name-template presets — verified against real camera filenames
-    /// (see NamingEngineTests.vendorPresetExactNames). rollDigits is the vendor's
-    /// roll-number width, applied to the current ROLL value on selection.
-    static let namingPresets:
-        [(key: String, template: String, clipDigits: Int, rollDigits: Int?)] = [
-        ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}", 2, 3),
-        ("preset_arri", "{cam}{roll}C{clip}_{date6}_{postfix}", 3, 3),
-        ("preset_arri35", "{cam}_{roll}C{clip}_{date6}_{time6}_{postfix}", 3, 4),
-        ("preset_red", "{cam}{roll}_{cam}{clip}_{date4}{postfix}", 3, 3),
-        ("preset_sony_venice", "{cam}{roll}C{clip}_{date6}{postfix}", 3, 3),
-        ("preset_sony_alpha", "C{clip}", 4, nil),
-        ("preset_bmd", "{cam}{roll}_{date4}{time4}_C{clip}", 3, 3),
-        ("preset_canon", "{cam}_{roll}C{clip}X{date6}_{time6}{postfix}_CANON", 3, 4),
-    ]
+    /// Vendor naming presets (see NamingPreset.all; kept as an alias so both
+    /// Settings and the footer menu read the same list).
+    static let namingPresets = NamingPreset.all
 
     var body: some View {
         Form {

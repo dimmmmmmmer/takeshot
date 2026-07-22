@@ -104,7 +104,11 @@ func writePNG(size: Int, scale: Int, name: String, dir: URL) {
     let rep = NSBitmapImageRep(cgImage: image)
     rep.size = NSSize(width: size, height: size)
     guard let data = rep.representation(using: .png, properties: [:]) else { fatalError("no png") }
-    try! data.write(to: dir.appendingPathComponent(name))
+    do {
+        try data.write(to: dir.appendingPathComponent(name))
+    } catch {
+        fatalError("write failed: \(error)")
+    }
 }
 
 let args = CommandLine.arguments

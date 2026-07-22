@@ -240,8 +240,10 @@ public final class TakeWriter {
                 offsetIntoDestination: 0, dataLength: 4)
         }
 
+        let frameDuration = CMTime(value: 1000,
+                                   timescale: CMTimeScale(format.frameRate * 1000))
         var timing = CMSampleTimingInfo(
-            duration: CMTimeSubtract(CMTimeAdd(lastPTS, CMTime(value: 1000, timescale: CMTimeScale(format.frameRate * 1000))), firstPTS),
+            duration: CMTimeSubtract(CMTimeAdd(lastPTS, frameDuration), firstPTS),
             presentationTimeStamp: firstPTS,
             decodeTimeStamp: .invalid)
         var sampleSize = 4

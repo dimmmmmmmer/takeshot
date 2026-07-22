@@ -685,8 +685,7 @@ final class CaptureController: ObservableObject {
     }
 
     /// Apply a naming preset: template, clip width, and roll width.
-    func applyNamingPreset(
-        _ preset: (key: String, template: String, clipDigits: Int, rollDigits: Int?)) {
+    func applyNamingPreset(_ preset: NamingPreset) {
         settings.namingTemplate = preset.template
         settings.clipPadWidth = preset.clipDigits
         if let rollDigits = preset.rollDigits,
