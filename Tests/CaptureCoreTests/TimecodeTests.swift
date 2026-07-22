@@ -9,11 +9,11 @@ struct TimecodeTests {
     }
 
     @Test func dropFrameRoundTripSweep() {
-        // круговой прогон по суткам с шагом ~17 минут — ловит ошибки в DF-математике
+        // a round-trip sweep over 24h in ~17-minute steps — catches DF-math errors
         for base in stride(from: 0, to: 24 * 60 * 60 * 30 - 2 * (24 * 60 - 24 * 6), by: 30_007) {
             let tc = Timecode(frameNumber: base, fps: 30, isDropFrame: true)
             #expect(tc.frameNumber == base, "round trip failed for \(tc)")
-            // DF никогда не показывает кадры 00/01 в начале минут, не кратных 10
+            // DF never shows frames 00/01 at the start of minutes not divisible by 10
             if tc.seconds == 0 && tc.minutes % 10 != 0 {
                 #expect(tc.frames >= 2, "invalid DF label \(tc)")
             }
@@ -21,7 +21,7 @@ struct TimecodeTests {
     }
 
     @Test func dropFrameMinuteBoundaryIsConsecutive() {
-        // 00:00:59;29 → следующий кадр 00:01:00;02
+        // 00:00:59;29 → next frame 00:01:00;02
         let before = Timecode(hours: 0, minutes: 0, seconds: 59, frames: 29,
                               fps: 30, isDropFrame: true)
         let after = before.advanced(by: 1)
@@ -31,7 +31,7 @@ struct TimecodeTests {
     }
 
     @Test func tenMinuteBoundaryKeepsFrames() {
-        // на кратных 10 минутах кадры не выпадают: 00:09:59;29 → 00:10:00;00
+        // on minutes divisible by 10 no frames are dropped: 00:09:59;29 → 00:10:00;00
         let before = Timecode(hours: 0, minutes: 9, seconds: 59, frames: 29,
                               fps: 30, isDropFrame: true)
         let after = before.advanced(by: 1)

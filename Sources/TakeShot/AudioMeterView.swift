@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Вертикальные пиковые метры аудиоканалов (dBFS от -60 до 0).
-/// Зелёный до -12, жёлтый до -3, дальше красный.
+/// Vertical audio-channel peak meters (dBFS from -60 to 0).
+/// Green up to -12, yellow up to -3, red beyond.
 struct AudioMeterView: View {
     let levels: [Float]
     var enabled: [Bool]? = nil
@@ -33,8 +33,8 @@ struct AudioMeterView: View {
     }
 }
 
-/// Классический сегментный метр: зелёный до -12 dB, жёлтым красится только
-/// участок -12…-3, красным — только то, что выше -3.
+/// Classic segmented meter: green up to -12 dB, only the -12…-3 band is yellow,
+/// only what's above -3 is red.
 struct SegmentedMeterBar: View {
     let level: Float
 

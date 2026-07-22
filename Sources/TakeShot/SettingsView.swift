@@ -6,9 +6,9 @@ struct SettingsView: View {
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var confirmClearLUTs = false
 
-    /// Пресеты шаблонов имён — сверены с реальными именами камер
-    /// (см. NamingEngineTests.vendorPresetExactNames). rollDigits — вендорская
-    /// ширина номера ролла, применяется к текущему значению ROLL при выборе.
+    /// Name-template presets — verified against real camera filenames
+    /// (see NamingEngineTests.vendorPresetExactNames). rollDigits is the vendor's
+    /// roll-number width, applied to the current ROLL value on selection.
     static let namingPresets:
         [(key: String, template: String, clipDigits: Int, rollDigits: Int?)] = [
         ("preset_takeshot", "{prefix}_{cam}{roll}C{clip}_{postfix}", 2, 3),
@@ -238,7 +238,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)
         .frame(width: 500)
-        .padding(.top, 28) // под кнопки окна: тайтлбар скрыт
+        .padding(.top, 28) // under the window buttons: title bar hidden
         .padding([.horizontal, .bottom])
         .background(controller.appBackground.ignoresSafeArea())
     }

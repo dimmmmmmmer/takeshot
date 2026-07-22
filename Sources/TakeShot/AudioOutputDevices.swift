@@ -1,7 +1,7 @@
 import CoreAudio
 import Foundation
 
-/// Список аудиовыходов системы (для маршрутизации звука плейбека).
+/// List of the system's audio outputs (for routing playback audio).
 enum AudioOutputDevices {
     struct Device: Identifiable, Equatable {
         var id: String { uid }

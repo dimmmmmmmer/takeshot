@@ -1,11 +1,11 @@
 import AppKit
 import Foundation
 
-/// Комбинация клавиш: символ + модификаторы.
+/// A key combo: a symbol + modifiers.
 struct KeyCombo: Codable, Equatable {
-    var key: String        // символ для отображения ("r", "space", "return")
+    var key: String        // symbol for display ("r", "space", "return")
     var modifiers: UInt    // NSEvent.ModifierFlags.rawValue (deviceIndependent)
-    /// Физическая клавиша: матчим по ней, чтобы хоткеи работали на любой раскладке.
+    /// Physical key: we match on it so hotkeys work on any keyboard layout.
     var keyCode: UInt16?
 
     var display: String {
@@ -42,18 +42,18 @@ struct KeyCombo: Codable, Equatable {
             .intersection([.command, .option, .control, .shift])
         guard flags.rawValue == modifiers else { return false }
         if let keyCode {
-            // по физической клавише — раскладка не важна (R и К — одна клавиша)
+            // by physical key — the keyboard layout doesn't matter (same key in Latin/Cyrillic)
             return event.keyCode == keyCode
         }
-        // старые сохранённые комбо без keyCode — по символу
+        // old saved combos without a keyCode — by symbol
         return Self.from(event: event)?.key == key
     }
 }
 
-/// Действия, на которые вешаются хоткеи.
+/// Actions that hotkeys can be bound to.
 enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleRecord
-    case circleLastTake   // good take (историческое имя ключа — для сохранённых настроек)
+    case circleLastTake   // good take (legacy key name — for saved settings)
     case badTakeLast
     case fullscreen
 
@@ -85,11 +85,11 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-/// Хранение биндингов и локальный перехват клавиш в приложении.
+/// Stores bindings and locally intercepts keys within the app.
 @MainActor
 final class HotkeyManager: ObservableObject {
     @Published private(set) var bindings: [HotkeyAction: KeyCombo]
-    /// Действие, для которого сейчас записывается новая комбинация (UI-состояние).
+    /// The action currently recording a new combo (UI state).
     @Published var recordingAction: HotkeyAction?
 
     private var monitor: Any?
@@ -128,13 +128,13 @@ final class HotkeyManager: ObservableObject {
         }
     }
 
-    /// Перехват клавиш во всех окнах приложения (не системно-глобальный).
+    /// Intercept keys in all app windows (not system-global).
     func install(controller: CaptureController) {
         controller.hotkeysRef = self
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
 
-            // Esc закрывает фулскрины плеера
+            // Esc closes the player fullscreens
             if event.keyCode == 53, controller.isPlaybackFullscreen {
                 controller.togglePlaybackFullscreen()
                 return nil
@@ -144,9 +144,9 @@ final class HotkeyManager: ObservableObject {
                 return nil
             }
 
-            // идёт запись новой комбинации в настройках
+            // a new combo is being recorded in settings
             if let recording = self.recordingAction {
-                if event.keyCode == 53 { // Esc — отмена
+                if event.keyCode == 53 { // Esc — cancel
                     self.recordingAction = nil
                     return nil
                 }
@@ -158,7 +158,7 @@ final class HotkeyManager: ObservableObject {
                 return nil
             }
 
-            // не перехватываем ввод в текстовых полях, если комбинация без ⌘/⌃
+            // don't intercept text-field typing if the combo has no ⌘/⌃
             let flags = event.modifierFlags.intersection([.command, .control])
             let isTyping = event.window?.firstResponder is NSTextView
             if isTyping && flags.isEmpty {

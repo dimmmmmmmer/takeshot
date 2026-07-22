@@ -19,7 +19,7 @@ struct TakeShotApp: App {
                 .onAppear {
                     AppDelegate.shared?.controller = controller
                     hotkeys.install(controller: controller)
-                    // отступ под кнопки окна — по факту, а не константой
+                    // inset under the window buttons — measured, not a constant
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         if let window = NSApp.windows.first(where: {
                             $0.styleMask.contains(.titled) }) {
@@ -29,10 +29,10 @@ struct TakeShotApp: App {
                     }
                 }
         }
-        // кнопки окна поверх контента, без отдельной полосы тайтлбара
+        // window buttons over the content, no separate title-bar strip
         .windowStyle(.hiddenTitleBar)
 
-        // Окно диагностики VANC-пакетов (открывается кнопкой из главного окна)
+        // VANC packet diagnostics window (opened by a button from the main window)
         Window("VANC Monitor", id: "vanc-monitor") {
             VancMonitorView()
                 .environmentObject(controller)
@@ -51,8 +51,8 @@ struct TakeShotApp: App {
     }
 }
 
-/// При запуске голого исполняемого файла из swift build (без .app-бандла)
-/// приложение не получает фокус — поднимаем его вручную.
+/// When launching the bare executable from swift build (without an .app bundle)
+/// the app doesn't get focus — bring it to front manually.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
     weak var controller: CaptureController?
@@ -69,13 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        // контент — под самый верх окна: без этого SwiftUI резервирует
-        // высоту тайтлбара и сверху остаётся пустая полоса
+        // content up to the very top of the window: without this SwiftUI reserves
+        // title-bar height and leaves an empty strip on top
         DispatchQueue.main.async {
             for window in NSApp.windows { Self.makeMonolithic(window) }
             NSApp.mainWindow?.makeFirstResponder(nil)
         }
-        // настройки и другие окна создаются позже — стилизуем при активации
+        // settings and other windows are created later — style them on activation
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
         ) { note in
@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Монолитное окно без полосы тайтлбара (кнопки поверх контента).
+    /// A monolithic window with no title-bar strip (buttons over the content).
     static func makeMonolithic(_ window: NSWindow) {
         guard window.styleMask.contains(.titled) else { return }
         window.styleMask.insert(.fullSizeContentView)
@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.toolbar = nil
     }
 
-    /// Реальная высота зоны кнопок окна: разница высоты окна и contentLayoutRect.
+    /// Actual height of the window-button area: window height minus contentLayoutRect.
     static func titlebarInset(of window: NSWindow) -> CGFloat {
         max(20, window.frame.height - window.contentLayoutRect.height + 2)
     }

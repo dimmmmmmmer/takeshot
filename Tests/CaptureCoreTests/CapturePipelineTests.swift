@@ -4,8 +4,8 @@ import Foundation
 import Testing
 @testable import CaptureCore
 
-/// End-to-end тест конвейера без железа: синтетический сигнал с Rec Run-таймкодом
-/// проходит через детектор, writer и именование — на диске появляется готовый дубль.
+/// End-to-end pipeline test without hardware: a synthetic signal with Rec Run
+/// timecode goes through the detector, writer, and naming — a finished take appears on disk.
 struct CapturePipelineTests {
     private func makePixelBuffer() -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
@@ -28,14 +28,14 @@ struct CapturePipelineTests {
         settings.startDebounceFrames = 3
         settings.stopDebounceFrames = 5
         settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0 // пре-ролл проверяется отдельным тестом
+        settings.preRollSeconds = 0 // pre-roll is checked by a separate test
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "7", takeNumber: 2))
 
         var finishedTakes: [Take] = []
         var recStates: [Bool] = []
-        try await confirmation("дубль закрыт") { takeDone in
+        try await confirmation("take closed") { takeDone in
             pipeline.onTakeFinished = { take in
                 finishedTakes.append(take)
                 takeDone()
@@ -49,8 +49,8 @@ struct CapturePipelineTests {
             var tc = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
             var frame = 0
 
-            // реальный темп 40мс/кадр: как живой сигнал — иначе под нагрузкой
-            // (CI, параллельный энкодер) синтетика обгоняет writer и тест флачит
+            // real 40ms/frame pace: like a live signal — otherwise under load
+            // (CI, parallel encoder) the synthetic feed outruns the writer and the test flakes
             func push(_ timecode: Timecode) async throws {
                 frame += 1
                 pipeline.handleFrame(
@@ -60,17 +60,17 @@ struct CapturePipelineTests {
                 try await Task.sleep(for: .milliseconds(40))
             }
 
-            // standby: TC стоит
+            // standby: TC stalled
             for _ in 0..<10 { try await push(tc) }
-            // «камера пишет»: TC бежит 50 кадров (2 секунды)
+            // "camera recording": TC runs for 50 frames (2 seconds)
             for _ in 0..<50 {
                 tc = tc.advanced(by: 1)
                 try await push(tc)
             }
-            // стоп: TC снова стоит
+            // stop: TC stalled again
             for _ in 0..<10 { try await push(tc) }
 
-            // конвейер обрабатывает асинхронно — ждём событие завершения дубля
+            // the pipeline processes asynchronously — wait for the take-finished event
             for _ in 0..<100 where finishedTakes.isEmpty {
                 try? await Task.sleep(for: .milliseconds(50))
             }
@@ -81,13 +81,13 @@ struct CapturePipelineTests {
         #expect(take.scene == "7")
         #expect(take.takeNumber == 2)
 
-        // имя по шаблону: сцена, номер дубля и стартовый TC (11:00:00:00 ± пре-ролл)
+        // name by template: scene, take number, and start TC (11:00:00:00 ± pre-roll)
         #expect(take.displayName.hasPrefix("7_T02_11.00.00"))
-        // пишем прямо в выбранную папку — без авто-подпапок по дате/проекту
+        // write straight into the chosen folder — no auto subfolders by date/project
         #expect(take.url.deletingLastPathComponent().path == root.path)
         #expect(take.url.path.hasSuffix(".mov"))
 
-        // файл дописывается асинхронно после события — подождём его появления
+        // the file is finished asynchronously after the event — wait for it to appear
         var fileExists = false
         for _ in 0..<100 {
             if FileManager.default.fileExists(atPath: take.url.path) {
@@ -96,13 +96,13 @@ struct CapturePipelineTests {
             }
             try await Task.sleep(for: .milliseconds(50))
         }
-        #expect(fileExists, "файл дубля должен существовать: \(take.url.path)")
+        #expect(fileExists, "the take file must exist: \(take.url.path)")
 
-        // и это валидный ролик ~2 сек с видео- и timecode-треками
+        // and it's a valid ~2 s clip with video and timecode tracks
         let asset = AVURLAsset(url: take.url)
         let duration = try await asset.load(.duration)
-        // допуск широкий: под нагрузкой (параллельные тесты, CI) энкодер может
-        // дропнуть часть синтетических кадров — важно, что дубль есть и он ~2 сек
+        // wide tolerance: under load (parallel tests, CI) the encoder may drop
+        // some synthetic frames — what matters is the take exists and is ~2 s
         #expect(duration.seconds > 1.2 && duration.seconds < 2.6)
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         #expect(videoTracks.count == 1)
@@ -121,7 +121,7 @@ struct CapturePipelineTests {
         settings.startDebounceFrames = 3
         settings.stopDebounceFrames = 5
         settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0.8 // 20 кадров при 25 fps
+        settings.preRollSeconds = 0.8 // 20 frames at 25 fps
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "1", takeNumber: 1))
@@ -142,9 +142,9 @@ struct CapturePipelineTests {
             try await Task.sleep(for: .milliseconds(40))
         }
 
-        // долгий standby — буфер пре-ролла успевает наполниться
+        // long standby — the pre-roll buffer has time to fill
         for _ in 0..<30 { try await push(tc) }
-        // запись 50 кадров, затем стоп
+        // record 50 frames, then stop
         for _ in 0..<50 {
             tc = tc.advanced(by: 1)
             try await push(tc)
@@ -166,8 +166,8 @@ struct CapturePipelineTests {
         }
         #expect(fileExists)
 
-        // 50 кадров записи + ~4 хвостовых + 20 пре-ролла ≈ 74 кадра ≈ 2.96 c;
-        // без пре-ролла было бы ~2.2 с — проверяем, что кадры до REC вошли
+        // 50 recorded frames + ~4 trailing + 20 pre-roll ≈ 74 frames ≈ 2.96 s;
+        // without pre-roll it would be ~2.2 s — verify the pre-REC frames are included
         let asset = AVURLAsset(url: take.url)
         let duration = try await asset.load(.duration)
         #expect(duration.seconds > 2.6 && duration.seconds < 3.4,
@@ -175,7 +175,7 @@ struct CapturePipelineTests {
     }
 
     @Test func trimChannelsKeepsFirstN() throws {
-        // 16-канальный буфер: канал k заполнен значением (k+1)*100
+        // 16-channel buffer: channel k is filled with (k+1)*100
         let frames = 48
         let channels = 16
         var samples = [Int16](repeating: 0, count: frames * channels)
@@ -197,13 +197,13 @@ struct CapturePipelineTests {
             sourceBuffer, to: 2, formatCache: &trimCache))
         let levels = PCMAudio.peakLevels(of: trimmed)
         #expect(levels.count == 2)
-        // уровни соответствуют каналам 1 и 2 исходника
+        // levels correspond to the source's channels 1 and 2
         let expected1 = 20 * log10(Float(100) / Float(Int16.max))
         let expected2 = 20 * log10(Float(200) / Float(Int16.max))
         #expect(abs(levels[0] - expected1) < 0.01)
         #expect(abs(levels[1] - expected2) < 0.01)
 
-        // если каналов и так меньше лимита — буфер возвращается как есть
+        // if there are already fewer channels than the limit — the buffer is returned as-is
         let untouched = PCMAudio.trimChannels(sourceBuffer, to: 32, formatCache: &trimCache)
         #expect(untouched === sourceBuffer)
     }
@@ -215,10 +215,10 @@ struct CapturePipelineTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let url = dir.appendingPathComponent("A_001_C01").appendingPathExtension("mov")
-        // свободно — имя не меняется
+        // free — the name doesn't change
         #expect(CapturePipeline.uniqueURL(for: url) == url)
 
-        // занято — добавляется _2, потом _3
+        // taken — _2 is added, then _3
         FileManager.default.createFile(atPath: url.path, contents: Data())
         let second = CapturePipeline.uniqueURL(for: url)
         #expect(second.lastPathComponent == "A_001_C01_2.mov")
@@ -252,6 +252,6 @@ struct CapturePipelineTests {
                 timecode: tc, vancTrigger: nil)
         }
         try await Task.sleep(for: .milliseconds(300))
-        #expect(!recStarted, "в ручном режиме бегущий TC не должен запускать запись")
+        #expect(!recStarted, "in manual mode a running TC must not start recording")
     }
 }

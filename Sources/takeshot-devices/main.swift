@@ -1,17 +1,17 @@
 import CDeckLink
 import Foundation
 
-// CLI-smoke: проверка моста CDeckLink без UI.
+// CLI smoke test: check the CDeckLink bridge without a UI.
 if CDLDeviceManager.isSDKAvailable() {
     let devices = CDLDeviceManager.devices()
     if devices.isEmpty {
-        print("SDK доступен, но DeckLink-устройства не найдены")
+        print("SDK available, but no DeckLink devices found")
     } else {
-        print("Найдено устройств: \(devices.count)")
+        print("Devices found: \(devices.count)")
         for device in devices {
             print("  \(device.name)  [id: \(device.persistentID)]")
         }
     }
 } else {
-    print("Собрано без DeckLink SDK (стаб). Положите заголовки в vendor/DeckLinkSDK/include — см. README там же.")
+    print("Built without the DeckLink SDK (stub). Put the headers in vendor/DeckLinkSDK/include — see the README there.")
 }

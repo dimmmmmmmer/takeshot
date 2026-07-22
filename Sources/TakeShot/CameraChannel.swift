@@ -5,9 +5,9 @@ import CoreVideo
 import Foundation
 import SwiftUI
 
-/// Дополнительная камера в мультикам-режиме: собственный бэкенд-источник +
-/// конвейер + превью-слой. Первая (основная) камера живёт прямо в
-/// CaptureController; эти — независимые каналы поверх, синхронно пишутся по REC.
+/// An extra camera in multicam mode: its own backend source + pipeline +
+/// preview layer. The first (main) camera lives directly in CaptureController;
+/// these are independent channels on top, recorded in sync by REC.
 @MainActor
 final class CameraChannel: ObservableObject, Identifiable {
     nonisolated let id = UUID()
@@ -23,7 +23,7 @@ final class CameraChannel: ObservableObject, Identifiable {
     @Published var signalPresent = true
     @Published var audioLevels: [Float] = []
 
-    /// Колбэк наверх: канал записал дубль (для добавления в общий список).
+    /// Callback upward: the channel recorded a take (to add to the shared list).
     var onTakeFinished: ((Take) -> Void)?
 
     init(camLabel: String, backend: CaptureBackend, deviceID: String,

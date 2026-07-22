@@ -2,13 +2,13 @@ import Testing
 @testable import CaptureCore
 
 struct VancParserTests {
-    /// Команда Transport Mode: заголовок [dest=255(broadcast), len, cmd=0, res]
+    /// Transport Mode command: header [dest=255(broadcast), len, cmd=0, res]
     /// + [category=10, parameter=1, type=1, operation=0, mode, ...padding]
     private func transportPacket(mode: UInt8) -> AncillaryPacket {
         AncillaryPacket(did: 0x51, sdid: 0x53, data: [
-            255, 6, 0, 0,       // dest, command length (4 команды + 2 данных → 6), id, reserved
-            10, 1, 1, 0,        // категория Media, параметр Transport Mode, тип, операция
-            mode, 0, 0, 0,      // режим + выравнивание
+            255, 6, 0, 0,       // dest, command length (4 command + 2 data → 6), id, reserved
+            10, 1, 1, 0,        // category Media, parameter Transport Mode, type, operation
+            mode, 0, 0, 0,      // mode + padding
         ])
     }
 
@@ -42,7 +42,7 @@ struct VancParserTests {
     }
 
     @Test func secondCommandInGroupIsParsed() {
-        // первая команда — линза (категория 0), вторая — transport record
+        // first command — lens (category 0), second — transport record
         let data: [UInt8] = [
             255, 6, 0, 0, 0, 3, 128, 0, 0, 0, 0, 0,  // lens focus (len 6 → padded 8)
             255, 6, 0, 0, 10, 1, 1, 0, 2, 0, 0, 0,   // transport mode = record

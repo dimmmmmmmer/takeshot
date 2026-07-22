@@ -1,14 +1,14 @@
 import AVFoundation
 import SwiftUI
 
-/// Крупная панель аудиоканалов по центру плеера: большие метры с dB-цифрами,
-/// клик по каналу включает/выключает его запись.
+/// Large audio-channel panel over the center of the player: big meters with dB
+/// numbers; clicking a channel toggles whether it's recorded.
 struct AudioChannelPanel: View {
     @EnvironmentObject private var controller: CaptureController
 
     private let range: ClosedRange<Float> = -60...0
 
-    /// Ширина по контенту: каналы (16+8) + две dB-шкалы.
+    /// Width by content: channels (16+8) + two dB scales.
     private var panelWidth: CGFloat {
         CGFloat(max(2, controller.audioLevels.count)) * 24 + 44
     }
@@ -71,10 +71,10 @@ struct AudioChannelPanel: View {
         .help(enabled ? L("channel_on_help") : L("channel_off_help"))
     }
 
-    /// Шкала dB сбоку от метров (0 вверху, -60 внизу).
+    /// dB scale beside the meters (0 at the top, -60 at the bottom).
     private var dbScale: some View {
         VStack(spacing: 0) {
-            Spacer().frame(height: 12) // компенсация строки с цифрой dB над столбиком
+            Spacer().frame(height: 12) // offset for the dB number row above the bar
             VStack(alignment: .trailing, spacing: 0) {
                 ForEach([0, -12, -24, -36, -48, -60], id: \.self) { mark in
                     Text("\(mark)")
@@ -84,7 +84,7 @@ struct AudioChannelPanel: View {
                 }
             }
             .frame(height: 130)
-            Spacer().frame(height: 14) // компенсация номера канала снизу
+            Spacer().frame(height: 14) // offset for the channel number below
         }
     }
 
@@ -94,7 +94,7 @@ struct AudioChannelPanel: View {
     }
 }
 
-/// Фулскрин-окно живого сигнала: картинка + подвал управления по ховеру снизу.
+/// Live-signal fullscreen window: image + a control footer revealed on hover at the bottom.
 struct LiveFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
     @State private var footerHover = false
@@ -105,7 +105,7 @@ struct LiveFullscreenView: View {
                 Color.black
                 LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
             }
-            // выход — внизу справа, там же где кнопка входа в фулскрин на плеере
+            // exit — bottom-right, same place as the player's enter-fullscreen button
             .overlay(alignment: .bottomTrailing) {
                 Button {
                     controller.toggleLiveFullscreen()
@@ -159,7 +159,7 @@ private struct LiveMirrorView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Фулскрин-окно плейбека: только картинка и транспорт.
+/// Playback fullscreen window: image and transport only.
 struct PlaybackFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
 

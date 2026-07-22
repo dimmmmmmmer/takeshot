@@ -1,11 +1,11 @@
-/* Превью */
+/* Preview */
 "no_devices_found" = "Устройства не найдены";
 "sdk_not_connected" = "DeckLink SDK не подключён";
 "capture_not_running" = "Захват не запущен";
 "no_signal" = "Нет сигнала";
 "rec" = "REC";
 
-/* Управление */
+/* Controls */
 "device" = "Устройство";
 "no_devices" = "Нет устройств";
 "start_capture" = "Запустить захват";
@@ -19,13 +19,13 @@
 "mock_rec_help" = "Симулирует нажатие REC на камере: таймкод побежит, авто-детекция создаст дубль";
 "mock_device_name" = "Демо-источник (без платы)";
 
-/* Список дублей */
+/* Take list */
 "takes" = "Дубли";
 "no_takes_yet" = "Дублей пока нет";
 "show_in_finder" = "Показать в Finder";
 "circle_take_help" = "Circle take — пометить удачный дубль";
 
-/* Настройки */
+/* Settings */
 "settings_recording" = "Запись";
 "codec" = "Кодек";
 "destination_folder" = "Папка записи";
@@ -48,15 +48,15 @@
 "lang_english" = "English";
 "lang_russian" = "Русский";
 
-/* Пре-ролл */
+/* Pre-roll */
 "pre_roll" = "Пре-ролл: %.1f с";
 
-/* Управление v2 */
+/* Controls v2 */
 "open_settings" = "Настройки";
 "scene_help" = "Имя сцены — попадает в имена файлов ({scene}). С камерами, отдающими метадату в SDI, заполнится само";
 "take_help" = "Номер следующего дубля, автоинкремент после каждого дубля ({take})";
 
-/* Панель дублей v2 */
+/* Take panel v2 */
 "view_list" = "Список";
 "view_grid" = "Миниатюры";
 "reveal_csv_help" = "Показать CSV метадаты для DaVinci Resolve (Media Pool → Import Metadata; circle takes станут Good Takes)";
@@ -65,7 +65,7 @@
 
 "device_disconnected" = "Капчур-устройство отключено";
 
-/* Хоткеи */
+/* Hotkeys */
 "settings_hotkeys" = "Горячие клавиши";
 "hotkey_record" = "Запись / стоп";
 "hotkey_circle" = "Оценить последний дубль (good/bad)";
@@ -74,7 +74,7 @@
 "reset_hotkeys" = "Сбросить по умолчанию";
 "choose_folder" = "Выбрать папку";
 
-/* VANC-монитор */
+/* VANC monitor */
 "vanc_monitor_title" = "VANC-монитор";
 "vanc_open_help" = "VANC-монитор — ancillary-пакеты входного сигнала (метадата камеры, триггеры)";
 "vanc_empty" = "VANC-пакетов пока нет. Подключите SDI/HDMI-источник — здесь появятся типы пакетов";
@@ -85,7 +85,7 @@
 "vanc_col_data" = "Последние данные (hex)";
 "vanc_unknown" = "Неизвестный";
 
-/* Редизайн */
+/* Redesign */
 "no_signal_short" = "Нет сигнала";
 "settings_device" = "Устройство захвата";
 "theme" = "Тема";
@@ -107,13 +107,13 @@
 "open" = "Открыть";
 "reveal_csv" = "Показать CSV метадаты для Resolve в Finder";
 
-/* Плейбек */
+/* Playback */
 "mode_record" = "Запись";
 "mode_playback" = "Просмотр";
 "play" = "Воспроизвести";
 "playback_pick_hint" = "Дважды кликните дубль, чтобы посмотреть его";
 
-/* Оценка дубля */
+/* Take rating */
 "good_take" = "Good take";
 "bad_take" = "Bad take";
 "clear_rating" = "Снять отметку";
@@ -124,7 +124,7 @@
 "hotkey_bad" = "Bad take (последний)";
 "app_background" = "Фон приложения";
 
-/* Раунд 5 */
+/* Round 5 */
 "compare_off" = "Плейбек";
 "compare_wipe" = "Шторка";
 "compare_blend" = "Наложение";
@@ -140,7 +140,7 @@
 "record_channels_hint" = "В файл пишутся первые N каналов; метры всегда показывают все входящие";
 "tile_size" = "Размер плитки";
 
-/* Раунд 6 */
+/* Round 6 */
 "audio_panel_title" = "Аудиоканалы";
 "audio_panel_hint" = "Клик по каналу включает/выключает его запись. Приглушённые каналы в файл не пишутся.";
 "channel_on_help" = "Пишется — клик исключит из файла";
@@ -183,7 +183,7 @@
 "lut_baked_indicator" = "LUT запечён в этом файле — плейбек-LUT отключён автоматически";
 "lut_playback_toggle" = "LUT на этом клипе: выключите, если лук уже запечён камерой";
 
-/* Цветовые теги */
+/* Color tags */
 "color_tags" = "Цветовые теги видео";
 "video_levels" = "Уровни видео";
 "levels_limited" = "Limited (video)";
@@ -194,7 +194,7 @@
 "preset_sony_venice" = "Sony";
 "preset_sony_alpha" = "Sony (Legacy)";
 
-/* Предупреждение о занятом имени */
+/* Name collision warning */
 "name_taken_short" = "ЗАНЯТО";
 "name_taken_help" = "Такое имя уже есть в папке (%@). Смените CLIP/ROLL — перезаписи не будет, добавится суффикс _2";
 
@@ -202,7 +202,7 @@
 
 "lut_intensity" = "Интенсивность: %d%%";
 
-/* Сброс */
+/* Reset */
 "reset_colors" = "Сбросить цвета";
 "reset_all" = "Сбросить все настройки";
 
@@ -211,7 +211,7 @@
 
 "multicam_toggle" = "Мультикам: захват всех камер сразу (в демо — вторая камера; на железе — все другие платы DeckLink)";
 
-/* Папка LUT + плейсхолдеры */
+/* LUT folder + placeholders */
 "settings_luts" = "LUT-файлы";
 "luts_folder" = "Импортированные LUT";
 "luts_hint" = "Импортированные .cube копируются сюда (Application Support/TakeShot/LUTs).";

@@ -1,9 +1,9 @@
 import CaptureCore
 import SwiftUI
 
-/// Монитор VANC-пакетов: какие DID/SDID приходят в сигнале, сколько и что внутри.
-/// Главный инструмент на площадке, чтобы понять, какую метадату отдаёт конкретная
-/// камера, и добавить под неё парсер.
+/// VANC packet monitor: which DID/SDID arrive in the signal, how many, and what's
+/// inside. The main on-set tool for figuring out what metadata a given camera
+/// emits, so a parser can be added for it.
 struct VancMonitorView: View {
     @EnvironmentObject private var controller: CaptureController
 

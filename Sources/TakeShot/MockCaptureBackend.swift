@@ -4,18 +4,18 @@ import CoreMedia
 import CoreVideo
 import Foundation
 
-/// Демо-источник сигнала для отладки GUI и авто-дублей без платы:
-/// синтетические 1080p25-кадры (SMPTE-подобные бары, бегущая полоса, TC burn-in)
-/// и таймкод в режиме Rec Run — идёт только когда «камера» пишет.
+/// A demo signal source for debugging the GUI and auto-takes without a board:
+/// synthetic 1080p25 frames (SMPTE-like bars, a moving strip, TC burn-in)
+/// and Rec Run timecode — running only while the "camera" records.
 final class MockCaptureBackend: CaptureBackend {
     static let deviceID = "mock-source"
 
     weak var delegate: CaptureBackendDelegate?
     var isAvailable: Bool { true }
 
-    /// Демо-источник — «камера в standby»: TC заморожен (Rec Run), сигнал живой.
-    /// Запись — только вручную кнопкой REC; авто-детекция сработает на настоящей
-    /// камере, когда TC побежит.
+    /// Demo source — "camera in standby": TC frozen (Rec Run), signal live.
+    /// Recording is manual via the REC button only; auto-detection fires on a real
+    /// camera once TC starts running.
     private let isCameraRecording = false
 
     private let queue = DispatchQueue(label: "takeshot.mock-source")
@@ -28,7 +28,7 @@ final class MockCaptureBackend: CaptureBackend {
     private var audioPhaseR: Double = 0
 
     private static let format = CaptureFormat(width: 1920, height: 1080, frameRate: 25,
-                                              timecodeFPS: 25, name: "Демо 1080p25")
+                                              timecodeFPS: 25, name: "Demo 1080p25")
 
     func devices() -> [CaptureDeviceInfo] {
         [CaptureDeviceInfo(id: Self.deviceID, name: L("mock_device_name"))]
@@ -53,7 +53,7 @@ final class MockCaptureBackend: CaptureBackend {
         timer = nil
     }
 
-    // MARK: - генерация кадров (на queue)
+    // MARK: - frame generation (on queue)
 
     private func emitFrame() {
         frameCounter += 1
@@ -64,12 +64,12 @@ final class MockCaptureBackend: CaptureBackend {
         emitAudio(ptsSeconds: Double(frameCounter) * 0.04)
     }
 
-    /// 16 каналов (как SDI-эмбед у Blackmagic): 1-2 — синусы с «дыханием»
-    /// громкости, остальные — те же синусы по убыванию уровня, чтобы метры
-    /// показывали живую картину по всем дорожкам.
+    /// 16 channels (like Blackmagic SDI embed): 1-2 are sines with "breathing"
+    /// volume, the rest are the same sines at decreasing level, so the meters
+    /// show a live picture across all tracks.
     private func emitAudio(ptsSeconds: Double) {
         let channels = 16
-        let sampleFrames = 1920 // 40 мс при 48 кГц
+        let sampleFrames = 1920 // 40 ms at 48 kHz
         var samples = [Int16](repeating: 0, count: sampleFrames * channels)
         let t = Double(frameCounter) * 0.04
         let ampL = 0.28 + 0.22 * sin(t * 0.9)
@@ -131,7 +131,7 @@ final class MockCaptureBackend: CaptureBackend {
     }
 
     private func drawTestPattern(in context: CGContext, width: Int, height: Int) {
-        // цветные бары
+        // color bars
         let barColors: [CGColor] = [
             CGColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1),
             CGColor(red: 0.75, green: 0.75, blue: 0.00, alpha: 1),
@@ -148,12 +148,12 @@ final class MockCaptureBackend: CaptureBackend {
                                 width: barWidth + 1, height: CGFloat(height)))
         }
 
-        // бегущая полоса — видно, что сигнал «живой»
+        // moving strip — shows the signal is "live"
         let stripeX = CGFloat(frameCounter % 125) / 125.0 * CGFloat(width)
         context.setFillColor(CGColor(gray: 1.0, alpha: 0.9))
         context.fill(CGRect(x: stripeX, y: 0, width: 6, height: CGFloat(height)))
 
-        // плашка с TC и статусом «камеры»
+        // badge with TC and the "camera" status
         context.setFillColor(CGColor(gray: 0, alpha: 0.75))
         context.fill(CGRect(x: 0, y: 0, width: CGFloat(width), height: 160))
 

@@ -39,7 +39,7 @@ struct TakeWriterTests {
         let pixelBuffer = makePixelBuffer(width: 1280, height: 720)
         for frame in 0..<24 {
             let pts = CMTime(value: CMTimeValue(frame * 1000), timescale: 24_000)
-            // в тесте кадры подаются быстрее реального времени — ждём готовности энкодера
+            // the test feeds frames faster than real time — wait for the encoder to be ready
             var attempts = 0
             while !writer.append(pixelBuffer: pixelBuffer, pts: pts), attempts < 200 {
                 attempts += 1
@@ -62,15 +62,15 @@ struct TakeWriterTests {
         #expect(Int(size.height) == 720)
 
         let timecodeTracks = try await asset.loadTracks(withMediaType: .timecode)
-        #expect(timecodeTracks.count == 1, "timecode-трек должен присутствовать")
+        #expect(timecodeTracks.count == 1, "a timecode track must be present")
 
-        // и стартовый TC читается обратно ровно тем, что записали
+        // and the start TC reads back exactly as written
         let readBack = await TimecodeReader.startTimecode(of: asset)
         #expect(readBack == startTC)
     }
 
-    /// Уровни не должны плыть при записи: серый 50% и 18% возвращаются из
-    /// ProRes-файла с точностью до ±2/255 на канал.
+    /// Levels must not drift on write: 50% and 18% grey come back from the
+    /// ProRes file within ±2/255 per channel.
     @Test func levelsSurviveWriteReadRoundTrip() async throws {
         let tempURL = makeTempURL()
         defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }
@@ -99,7 +99,7 @@ struct TakeWriterTests {
                                    timecodeFPS: 25, name: "test")
         let writer = try TakeWriter(url: tempURL, format: format,
                                     codec: .proRes422, startTimecode: nil)
-        let gray = makeGray(128) // ~50% серый
+        let gray = makeGray(128) // ~50% grey
         for frame in 0..<10 {
             let pts = CMTime(value: CMTimeValue(frame * 40), timescale: 1000)
             var attempts = 0
@@ -110,7 +110,7 @@ struct TakeWriterTests {
         }
         _ = try await writer.finish()
 
-        // читаем кадр из файла и сравниваем центр
+        // read a frame from the file and compare the center
         let asset = AVURLAsset(url: tempURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.requestedTimeToleranceBefore = .zero
@@ -118,9 +118,9 @@ struct TakeWriterTests {
         let (cgImage, _) = try await generator.image(
             at: CMTime(value: 200, timescale: 1000))
 
-        // рисуем в НАТИВНОМ colorspace кадра (identity) — проверяем, что сами
-        // значения не поплыли при encode/decode; интерпретация colorspace —
-        // отдельная забота слоёв отображения
+        // draw in the frame's NATIVE colorspace (identity) — verify the values
+        // themselves didn't drift on encode/decode; colorspace interpretation is
+        // a separate concern of the display layers
         var pixel = [UInt8](repeating: 0, count: 4)
         let space = cgImage.colorSpace ?? CGColorSpace(name: CGColorSpace.itur_709)!
         let context = CGContext(
@@ -132,7 +132,7 @@ struct TakeWriterTests {
         for channel in 0..<3 {
             let delta = abs(Int(pixel[channel]) - 128)
             #expect(delta <= 2,
-                    "канал \(channel): записали 128, прочитали \(pixel[channel])")
+                    "channel \(channel): wrote 128, read \(pixel[channel])")
         }
     }
 
@@ -142,7 +142,7 @@ struct TakeWriterTests {
 
         let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
                                    timecodeFPS: 25, name: "test")
-        let channels = 16 // 16-канальный LPCM без layout ронял процесс
+        let channels = 16 // 16-channel LPCM without a layout crashed the process
         let writer = try TakeWriter(url: tempURL, format: format,
                                     codec: .proResProxy, startTimecode: nil,
                                     audioChannelCount: channels)
@@ -169,7 +169,7 @@ struct TakeWriterTests {
 
         let asset = AVURLAsset(url: url)
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-        #expect(audioTracks.count == 1, "в файле должна быть аудиодорожка")
+        #expect(audioTracks.count == 1, "the file must have an audio track")
     }
 
     @Test func cancelRemovesFile() throws {

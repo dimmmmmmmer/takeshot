@@ -1,10 +1,10 @@
 import CaptureCore
 import SwiftUI
 
-/// Панель дублей: список или сетка миниатюр, отметка circle take
-/// (уходит в takeshot-log.csv как Good Take для DaVinci Resolve).
-/// Ниже — Other content: файлы, попавшие в папку записи мимо TakeShot.
-/// Граница между секциями перетаскивается (VSplitView).
+/// Takes panel: a list or a thumbnail grid, with a circle-take mark
+/// (goes into takeshot-log.csv as a Good Take for DaVinci Resolve).
+/// Below — Other content: files that landed in the record folder outside TakeShot.
+/// The boundary between sections is draggable (VSplitView).
 struct TakeListView: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -22,7 +22,7 @@ struct TakeListView: View {
     }
 }
 
-// MARK: - секция дублей
+// MARK: - takes section
 
 private struct TakesSection: View {
     @EnvironmentObject private var controller: CaptureController
@@ -82,11 +82,11 @@ private struct TakesSection: View {
 }
 
 func gridColumns(size: Double) -> [GridItem] {
-    // max == min: плитка всегда ровно выбранного размера, слайдер работает плавно
+    // max == min: the tile is always exactly the chosen size, the slider stays smooth
     [GridItem(.adaptive(minimum: size, maximum: size + 0.5), spacing: 10)]
 }
 
-/// Переключатель список/миниатюры (общий стиль для обеих секций).
+/// List/thumbnail toggle (shared style for both sections).
 private struct ViewModePicker: View {
     @Binding var mode: String
 
@@ -294,7 +294,7 @@ private func iconName(for url: URL) -> String {
         .contains(url.pathExtension.lowercased()) ? "photo" : "film"
 }
 
-// MARK: - общее
+// MARK: - shared
 
 private struct RatingToggle: View {
     @EnvironmentObject private var controller: CaptureController

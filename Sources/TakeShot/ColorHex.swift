@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 extension Color {
-    /// "#RRGGBB" → Color; некорректная строка — nil.
+    /// "#RRGGBB" → Color; an invalid string — nil.
     init?(hex: String) {
         var value = hex.trimmingCharacters(in: .whitespaces)
         if value.hasPrefix("#") { value.removeFirst() }

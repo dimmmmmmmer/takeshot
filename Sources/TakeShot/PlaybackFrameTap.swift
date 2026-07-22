@@ -4,13 +4,13 @@ import CoreVideo
 import Foundation
 import QuartzCore
 
-/// Единый рендер плейбека: кадры тянутся из AVPlayer через AVPlayerItemVideoOutput
-/// (после videoComposition, т.е. уже с LUT) и рисуются AVSampleBufferDisplayLayer —
-/// тем же типом слоя, что и лайв. Никакого AVPlayerLayer — лайв и плейбек проходят
-/// одинаковый путь отображения, шторка/бленд сравнивают честно.
+/// Unified playback render: frames are pulled from AVPlayer via AVPlayerItemVideoOutput
+/// (after videoComposition, i.e. already with the LUT) and drawn by AVSampleBufferDisplayLayer
+/// — the same layer type as live. No AVPlayerLayer — live and playback go through the
+/// same display path, so wipe/blend compare fairly.
 ///
-/// Слоёв три (главное окно, фулскрин, внешний монитор): CALayer живёт только
-/// в одном вью, поэтому каждому окну — свой.
+/// There are three layers (main window, fullscreen, external monitor): a CALayer lives
+/// in only one view, so each window gets its own.
 final class PlaybackFrameTap: @unchecked Sendable {
     let mainLayer = AVSampleBufferDisplayLayer()
     let fullscreenLayer = AVSampleBufferDisplayLayer()
@@ -23,7 +23,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     private var formatDescription: CMVideoFormatDescription?
     private var running = false
 
-    /// Подключиться к новому клипу (старый output снимается).
+    /// Attach to a new clip (the old output is removed).
     func attach(to item: AVPlayerItem) {
         queue.async {
             self.detachLocked()
@@ -51,7 +51,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
         queue.async { self.detachLocked() }
     }
 
-    // MARK: - на queue
+    // MARK: - on queue
 
     private func detachLocked() {
         timer?.cancel()
@@ -68,7 +68,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
         timer = nil
         guard running, output != nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Гц опрос
+        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz polling
         timer.setEventHandler { [weak self] in
             self?.tick()
         }
@@ -121,10 +121,10 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
     }
 
-    /// Декодер вешает на кадры display-referred colorspace (CoreMedia709),
-    /// а лайв описан scene-referred тегами ITU_R_709 — ColorSync мапит их на
-    /// дисплей по-разному, отсюда разница контраста лайв/плейбек. Приводим
-    /// кадры плейбека ровно к тому же описанию, что у лайва.
+    /// The decoder tags frames with a display-referred colorspace (CoreMedia709),
+    /// while live is described by scene-referred ITU_R_709 tags — ColorSync maps
+    /// them to the display differently, hence the live/playback contrast mismatch.
+    /// Bring playback frames to exactly the same description as live.
     private func normalizeColorTags(_ pixelBuffer: CVPixelBuffer) {
         CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferCGColorSpaceKey)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,

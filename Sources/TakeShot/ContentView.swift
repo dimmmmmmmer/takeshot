@@ -17,7 +17,7 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
-        // клик по пустому месту снимает фокус с текстовых полей
+        // clicking empty space clears focus from text fields
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
@@ -25,7 +25,7 @@ struct ContentView: View {
 
     private var mainColumn: some View {
         VStack(spacing: 0) {
-            // полоса под кнопки окна — фактическая высота их зоны
+            // strip under the window buttons — the actual height of their area
             Color.clear.frame(height: controller.windowTopInset)
             PlayerArea()
             BottomBarView()
@@ -48,7 +48,7 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
-            // верхняя кромка вровень с плеером
+            // top edge flush with the player
             .padding(.top, controller.windowTopInset)
             .padding(.bottom, 10)
             .padding(.horizontal, 10)
@@ -57,7 +57,7 @@ struct ContentView: View {
     }
 }
 
-/// Плеер-карточка: TC, формат и переключатель режима живут прямо на ней.
+/// Player card: TC, format, and the mode switch live right on it.
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -81,8 +81,8 @@ struct PlayerArea: View {
                             controller.isRecording && controller.viewerMode == .record
                             ? Color.red : Color.white)
                 }
-                // всегда в левом углу; вертикальный отступ под кнопки окна уже
-                // зарезервирован полосой windowTopInset над плеером
+                // always in the left corner; vertical inset under the window buttons
+                // is already reserved by the windowTopInset strip above the player
                 .padding(.leading, 8)
                 .padding(.top, 8)
             }
@@ -124,7 +124,7 @@ struct PlayerArea: View {
                 .padding(8)
             }
             .overlay(alignment: .bottomTrailing) {
-                // фулскрин плеера — справа внизу (в плейбеке эта кнопка в транспорте)
+                // player fullscreen — bottom-right (in playback this button is in the transport)
                 if controller.viewerMode == .record {
                     Button {
                         controller.toggleLiveFullscreen()
@@ -165,7 +165,7 @@ struct PlayerArea: View {
 
     private func overlayBadge(@ViewBuilder content: () -> some View) -> some View {
         content()
-            .foregroundStyle(.white) // читаемо на любом (в т.ч. чёрном) фоне плеера
+            .foregroundStyle(.white) // readable on any player background (incl. black)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
@@ -182,8 +182,8 @@ struct PlayerArea: View {
     }
 }
 
-/// LUT: выбор/импорт .cube, применение к превью/записи, интенсивность.
-/// Popover, а не Menu — в NSMenu слайдеры не работают (интенсивность «зависала»).
+/// LUT: choose/import .cube, apply to preview/recording, intensity.
+/// A Popover, not a Menu — sliders don't work in an NSMenu (intensity "hung").
 struct LUTMenu: View {
     @EnvironmentObject private var controller: CaptureController
     @State private var showPopover = false
@@ -211,7 +211,7 @@ struct LUTMenu: View {
         .help(L("lut_help"))
     }
 
-    /// Имя выбранного LUT для заголовка меню (или «No LUT»).
+    /// Name of the selected LUT for the menu title (or "No LUT").
     private var currentLUTName: String {
         controller.availableLUTs
             .first { $0.fileName == controller.settings.lutFileName }?.name
@@ -221,8 +221,8 @@ struct LUTMenu: View {
     @ViewBuilder private var lutControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L("lut_help")).font(.caption).foregroundStyle(.secondary)
-            // выбор и добавление .cube — в одном выпадающем меню (импорт
-            // отдельной кнопкой убран: «Add .cube…» прямо в списке, мультивыбор)
+            // choosing and adding .cube in one dropdown menu (the separate import
+            // button is gone: "Add .cube…" right in the list, multi-select)
             Menu {
                 Button(L("lut_none")) { controller.selectLUT(fileName: nil) }
                 if !controller.availableLUTs.isEmpty {
@@ -270,7 +270,7 @@ struct LUTMenu: View {
     }
 }
 
-/// Управление сравнением лайв/плейбек.
+/// Live/playback compare controls.
 private struct CompareControls: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -326,18 +326,18 @@ private struct CompareControls: View {
     }
 }
 
-/// Превью: лайв, плейбек и режимы сравнения.
+/// Preview: live, playback, and compare modes.
 struct PreviewView: View {
     @EnvironmentObject private var controller: CaptureController
 
-    /// Аспект живого сигнала — общий контейнер сравнения, чтобы кадры разных
-    /// разрешений (и шторка) совпадали по геометрии.
+    /// The live signal's aspect — a shared compare container so frames of
+    /// different resolutions (and the wipe) line up geometrically.
     static func liveAspect(_ format: CaptureFormat?) -> CGFloat {
         guard let format, format.height > 0 else { return 16.0 / 9.0 }
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
-    /// Показывать ли транспорт (плейбек видео, не фото).
+    /// Whether to show the transport (video playback, not a photo).
     private var showsTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
         else { return false }
@@ -345,8 +345,8 @@ struct PreviewView: View {
     }
 
     var body: some View {
-        // площадь картинки неизменна между реком и плейбеком: транспорт —
-        // полупрозрачный оверлей снизу, а не строка, отжимающая кадр
+        // the image area stays the same between record and playback: the transport
+        // is a translucent bottom overlay, not a row that squeezes the frame
         ZStack(alignment: .bottom) {
             GeometryReader { _ in
                 ZStack {
@@ -406,7 +406,7 @@ struct PreviewView: View {
     }
 }
 
-/// Маска области плейбека для шторки (слева/сверху/по диагонали от линии).
+/// Mask of the playback area for the wipe (left/top/diagonal from the line).
 private struct WipeMask: Shape {
     let orientation: CaptureController.WipeOrientation
     let position: Double
@@ -431,7 +431,7 @@ private struct WipeMask: Shape {
     }
 }
 
-/// Перетаскиваемая шторка сравнения (линия + ручка, любое направление).
+/// Draggable compare wipe (line + handle, any direction).
 private struct WipeHandle: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -485,7 +485,7 @@ private struct WipeHandle: View {
     }
 }
 
-/// Сетка превью всех камер в мультикам-режиме (основная + дополнительные).
+/// Preview grid of all cameras in multicam mode (main + extras).
 struct MulticamGrid: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -559,7 +559,7 @@ private struct CameraTile: View {
     }
 }
 
-/// Обёртка над AVSampleBufferDisplayLayer для сетки (публичная в модуле).
+/// AVSampleBufferDisplayLayer wrapper for the grid (module-public).
 struct SampleLayerView: NSViewRepresentable {
     let layer: AVSampleBufferDisplayLayer
 
@@ -575,7 +575,7 @@ struct SampleLayerView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Живой сигнал + плашки состояний.
+/// Live signal + status badges.
 struct LivePreviewContent: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -603,7 +603,7 @@ struct LivePreviewContent: View {
     }
 }
 
-/// NSView-обёртка вокруг AVSampleBufferDisplayLayer.
+/// NSView wrapper around AVSampleBufferDisplayLayer.
 private struct DisplayLayerView: NSViewRepresentable {
     let layer: AVSampleBufferDisplayLayer
 
@@ -619,8 +619,8 @@ private struct DisplayLayerView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Подвал: утилиты слева, метры по центру левой половины, REC по центру,
-/// поля нейминга справа.
+/// Footer: utilities on the left, meters centered in the left half, REC in the
+/// center, naming fields on the right.
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
@@ -693,7 +693,7 @@ struct BottomBarView: View {
     }
 }
 
-/// Выбор стиля именования прямо из подвала (те же пресеты, что в настройках).
+/// Naming-style picker right from the footer (same presets as in Settings).
 struct NamingPresetMenu: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -720,7 +720,7 @@ struct NamingPresetMenu: View {
     }
 }
 
-/// Кнопка записи в стиле QuickTime.
+/// QuickTime-style record button.
 struct RecordButton: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
@@ -729,8 +729,8 @@ struct RecordButton: View {
         Button {
             controller.toggleManualRecord()
         } label: {
-            // как в QuickTime: светло-серый диск; красный кружок — готов писать,
-            // белый квадратик — идёт запись
+            // like QuickTime: a light-grey disc; a red circle means ready to record,
+            // a white square means recording
             ZStack {
                 Circle()
                     .fill(Color.primary.opacity(0.22))
@@ -753,8 +753,8 @@ struct RecordButton: View {
     }
 }
 
-/// Поле CLIP: только цифры, максимум 4; во время ввода текст не переформатируется,
-/// коммит по Enter/расфокусу; ведущие нули задают паддинг имени файла.
+/// CLIP field: digits only, max 4; text isn't reformatted while typing,
+/// commit on Enter/blur; leading zeros set the filename padding.
 struct ClipField: View {
     @EnvironmentObject private var controller: CaptureController
     @FocusState private var focused: Bool
@@ -786,7 +786,7 @@ struct ClipField: View {
         .fixedSize()
         .onAppear { text = controller.clipDisplay }
         .onChange(of: text) { _, newValue in
-            // только цифры и не больше четырёх
+            // digits only, no more than four
             let filtered = String(newValue.filter(\.isNumber).prefix(4))
             if filtered != newValue { text = filtered }
         }
@@ -802,13 +802,13 @@ struct ClipField: View {
     }
 }
 
-/// Поля нейминга: компактные, подписи слева над полями.
+/// Naming fields: compact, labels above the fields on the left.
 struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // предупреждение: текущее имя уже занято в папке
+            // warning: the current name is already taken in the folder
             if let collision = controller.nameCollision {
                 VStack(spacing: 1) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -821,7 +821,7 @@ struct NamingFieldsView: View {
                 .help(L("name_taken_help", collision))
                 .transition(.opacity)
             }
-            // показываем только те поля, что реально есть в текущем шаблоне
+            // show only the fields that actually exist in the current template
             if uses("{cam}") {
                 steppedField(L("cam_label"), width: 40,
                              text: $controller.settings.cameraLabel,
@@ -848,7 +848,7 @@ struct NamingFieldsView: View {
         .animation(.easeOut(duration: 0.15), value: controller.settings.namingTemplate)
     }
 
-    /// Есть ли плейсхолдер в текущем шаблоне.
+    /// Whether a placeholder is in the current template.
     private func uses(_ placeholder: String) -> Bool {
         controller.settings.namingTemplate.contains(placeholder)
     }

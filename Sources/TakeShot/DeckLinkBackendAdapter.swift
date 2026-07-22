@@ -4,8 +4,8 @@ import CoreMedia
 import CoreVideo
 import Foundation
 
-/// Swift-обёртка над Obj-C++ мостом CDeckLink, реализующая CaptureBackend.
-/// Колбэки CDLCapture приходят с потока DeckLink и пробрасываются делегату как есть.
+/// Swift wrapper over the Obj-C++ CDeckLink bridge, implementing CaptureBackend.
+/// CDLCapture callbacks arrive on the DeckLink thread and pass through to the delegate as-is.
 final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     weak var delegate: CaptureBackendDelegate?
 
@@ -14,7 +14,7 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
 
     override init() {
         super.init()
-        // hot-plug: воткнули/выдернули плату — список устройств обновится сам
+        // hot-plug: a board plugged/unplugged — the device list refreshes itself
         CDLDeviceManager.startWatchingDevices { [weak self] in
             guard let self else { return }
             self.delegate?.backendDeviceListChanged(self)
@@ -48,8 +48,8 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
 extension DeckLinkBackendAdapter: CDLCaptureDelegate {
     func capture(_ capture: CDLCapture, didDetect format: CDLVideoFormat) {
         let fps = format.frameRate
-        // 29.97/59.94 сигнализируем как потенциальный drop-frame; фактический
-        // флаг DF придёт с таймкодом каждого кадра
+        // flag 29.97/59.94 as potential drop-frame; the actual DF flag arrives
+        // with each frame's timecode
         let fractional = abs(fps.rounded() - fps) > 0.01
         delegate?.backend(self, didDetectFormat: CaptureFormat(
             width: format.width, height: format.height,
@@ -63,8 +63,8 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
                  tcDropFrame: Bool, ancillaryPackets: [CDLAncillaryPacket]) {
         var timecode: Timecode?
         if hasTimecode {
-            // fps таймкода мост не знает — компоненты передаются с fps 0,
-            // конвейер проставит его из текущего формата
+            // the bridge doesn't know the timecode fps — components come with fps 0,
+            // the pipeline fills it from the current format
             timecode = Timecode(hours: Int(tcHours), minutes: Int(tcMinutes),
                                 seconds: Int(tcSeconds), frames: Int(tcFrames),
                                 fps: 0, isDropFrame: tcDropFrame)
@@ -102,8 +102,8 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
     }
 }
 
-/// Объединяет несколько бэкендов (DeckLink + демо-источник, позже AJA)
-/// в один список устройств. ID устройств получают префикс бэкенда.
+/// Merges several backends (DeckLink + demo source, later AJA) into one device
+/// list. Device IDs get a backend prefix.
 final class AggregateBackend: CaptureBackend {
     weak var delegate: CaptureBackendDelegate? {
         didSet { children.forEach { $0.backend.delegate = self } }
@@ -141,7 +141,7 @@ final class AggregateBackend: CaptureBackend {
         activeBackend = nil
     }
 
-    /// Доступ к конкретному дочернему бэкенду (для спец-функций вроде демо-REC).
+    /// Access to a specific child backend (for special features like demo REC).
     func child<T>(of type: T.Type) -> T? {
         children.first { $0.backend is T }?.backend as? T
     }

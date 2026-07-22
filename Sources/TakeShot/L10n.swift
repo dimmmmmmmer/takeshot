@@ -1,6 +1,6 @@
 import Foundation
 
-/// Язык интерфейса. Приоритетный (и базовый для новых строк) — английский.
+/// UI language. English is the preferred (and base) language for new strings.
 enum AppLanguage: String, CaseIterable, Codable, Identifiable {
     case system
     case english = "en"
@@ -9,8 +9,8 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
 }
 
-/// Локализация с переключением языка на лету: строки берутся из .lproj-бандла
-/// выбранного языка, минуя системную настройку.
+/// Localization with on-the-fly language switching: strings come from the
+/// selected language's .lproj bundle, bypassing the system setting.
 enum L10n {
     private static var bundle: Bundle = .module
 
@@ -37,7 +37,7 @@ enum L10n {
     }
 }
 
-/// Короткий хелпер для вьюх.
+/// Short helper for views.
 func L(_ key: String) -> String {
     L10n.string(key)
 }

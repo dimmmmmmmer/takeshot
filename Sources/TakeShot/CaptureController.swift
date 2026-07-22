@@ -7,12 +7,12 @@ import CoreVideo
 import Foundation
 import SwiftUI
 
-/// UI-состояние приложения. Тяжёлая работа с кадрами живёт в CapturePipeline;
-/// контроллер только гоняет конфигурацию туда и события обратно.
+/// App UI state. The heavy frame work lives in CapturePipeline; the controller
+/// just pushes configuration in and events back out.
 @MainActor
 final class CaptureController: ObservableObject {
     @Published var devices: [CaptureDeviceInfo] = []
-    /// Захват стартует автоматически при выборе устройства — отдельной кнопки нет.
+    /// Capture starts automatically when a device is selected — there's no separate button.
     @Published var selectedDeviceID: String? {
         didSet {
             guard oldValue != selectedDeviceID else { return }
@@ -25,11 +25,11 @@ final class CaptureController: ObservableObject {
     @Published var signalFormat: CaptureFormat?
     @Published var currentTimecode: Timecode?
     @Published var takes: [Take] = []
-    /// Превью-кадры дублей для режима миниатюр.
+    /// Take preview frames for thumbnail mode.
     @Published var thumbnails: [Take.ID: NSImage] = [:]
-    /// Статистика VANC-пакетов для окна монитора.
+    /// VANC packet stats for the monitor window.
     @Published var vancStats: [VancPacketStat] = []
-    /// Ролл (катушка/носитель). Смена ролла сбрасывает номер клипа.
+    /// Roll (reel/media). Changing the roll resets the clip number.
     @Published var roll: String = "001" {
         didSet {
             guard oldValue != roll else { return }
@@ -44,17 +44,17 @@ final class CaptureController: ObservableObject {
             refreshNameCollision()
         }
     }
-    /// Имя файла, которое даст текущая комбинация нейминга, уже существует в папке.
-    /// nil — коллизии нет. Предупреждаем оператора ДО записи (степпер прыгнул на
-    /// занятый номер, ролл вернули назад и т.п.); писать поверх мы всё равно не будем.
+    /// The filename the current naming combo would produce already exists in the folder.
+    /// nil — no collision. We warn the operator BEFORE recording (the stepper landed on
+    /// a taken number, the roll was rolled back, etc.); we won't overwrite anyway.
     @Published var nameCollision: String?
-    /// Видео и фото в папке записи, появившиеся не из TakeShot (сброшены руками).
+    /// Video and photos in the record folder that didn't come from TakeShot (dropped in by hand).
     @Published var otherFiles: [URL] = []
-    /// Миниатюры для Other content.
+    /// Thumbnails for Other content.
     @Published var otherThumbnails: [URL: NSImage] = [:]
-    /// Длительности видео в Other content (сек).
+    /// Video durations in Other content (seconds).
     @Published var otherDurations: [URL: Double] = [:]
-    /// Ошибка-тост: всплывает над подвалом и сама исчезает через несколько секунд.
+    /// Error toast: pops up over the footer and dismisses itself after a few seconds.
     @Published var lastError: String? {
         didSet {
             errorDismissTask?.cancel()
@@ -67,9 +67,9 @@ final class CaptureController: ObservableObject {
         }
     }
     private var errorDismissTask: Task<Void, Never>?
-    /// Пиковые уровни аудиоканалов, dBFS (для метров).
+    /// Per-channel audio peak levels, dBFS (for the meters).
     @Published var audioLevels: [Float] = []
-    /// Режим просмотра: живой сигнал или плейбек записанного.
+    /// View mode: live signal or playback of a recording.
     @Published var viewerMode: ViewerMode = .record {
         didSet {
             if viewerMode == .record {
@@ -79,14 +79,14 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Опрос кадров плейбека нужен только когда просмотр реально виден.
+    /// Polling playback frames is only needed when the view is actually visible.
     private func updateTapRunning() {
         let videoLoaded = playbackURL.map {
             !Self.imageExtensions.contains($0.pathExtension.lowercased())
         } ?? false
         playbackTap.setRunning(viewerMode == .playback && videoLoaded)
     }
-    /// Что сейчас загружено в плеер (для подсветки в списке).
+    /// What's currently loaded in the player (for highlighting in the list).
     @Published var playbackURL: URL?
 
     enum ViewerMode: String, CaseIterable {
@@ -94,36 +94,36 @@ final class CaptureController: ObservableObject {
         case playback
     }
 
-    /// Режим сравнения лайва и плейбека.
+    /// Live vs. playback compare mode.
     enum CompareMode: String, CaseIterable, Identifiable {
-        case off        // только плейбек
-        case wipe       // шторка
-        case blend      // наложение с прозрачностью
-        case sideBySide // бок о бок
+        case off        // playback only
+        case wipe       // wipe
+        case blend      // overlay with transparency
+        case sideBySide // side by side
         var id: String { rawValue }
     }
 
-    /// Направление шторки сравнения.
+    /// Compare wipe direction.
     enum WipeOrientation: String, CaseIterable {
-        case vertical    // вертикальная линия, тянется по горизонтали
-        case horizontal  // горизонтальная линия, тянется по вертикали
+        case vertical    // vertical line, drags horizontally
+        case horizontal  // horizontal line, drags vertically
         case diagonal    // 45°
     }
 
     @Published var compareMode: CompareMode = .off
     @Published var wipeOrientation: WipeOrientation = .vertical
-    /// Позиция шторки (0…1; слева/сверху — плейбек).
+    /// Wipe position (0…1; left/top is playback).
     @Published var wipePosition: Double = 0.5
-    /// Непрозрачность плейбека в режиме blend.
+    /// Playback opacity in blend mode.
     @Published var blendOpacity: Double = 0.5
-    /// Позиция панели дублей (left/right) — реактивно для всех окон.
+    /// Takes-panel position (left/right) — reactive for all windows.
     @Published var panelSide: String =
         UserDefaults.standard.string(forKey: "panelSide") ?? "right" {
         didSet { UserDefaults.standard.set(panelSide, forKey: "panelSide") }
     }
-    /// Хоткей-менеджер (для окружения фулскрин-окон).
+    /// Hotkey manager (for the fullscreen windows' environment).
     weak var hotkeysRef: HotkeyManager?
-    /// Фактическая высота зоны кнопок окна (тайтлбар скрыт, кнопки поверх контента).
+    /// Actual height of the window-button area (title bar hidden, buttons over content).
     @Published var windowTopInset: CGFloat = 26
 
     // MARK: - LUT
@@ -134,12 +134,12 @@ final class CaptureController: ObservableObject {
         var name: String
     }
 
-    /// Импортированные LUT-файлы (папка Application Support/TakeShot/LUTs).
+    /// Imported LUT files (the Application Support/TakeShot/LUTs folder).
     @Published var availableLUTs: [LUTInfo] = []
     private var currentCube: CubeLUT?
-    /// В текущем плейбек-файле лук уже запечён (метка com.takeshot.lut).
+    /// The current playback file already has the look baked in (com.takeshot.lut tag).
     @Published var playbackFileHasBakedLUT = false
-    /// Ручное отключение LUT для текущего клипа (лук пришёл с камеры и т.п.).
+    /// Manual LUT off for the current clip (the look came from the camera, etc.).
     @Published var playbackLUTSuppressed = false {
         didSet { applyPlaybackLUT() }
     }
@@ -162,7 +162,7 @@ final class CaptureController: ObservableObject {
             .sorted { $0.name < $1.name }
     }
 
-    /// Импорт .cube: копируется в папку приложения и сразу выбирается.
+    /// Import .cube: copied into the app folder and selected right away.
     func importLUT() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.init(filenameExtension: "cube")!]
@@ -187,14 +187,14 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Открыть папку с импортированными LUT в Finder.
+    /// Open the imported-LUTs folder in Finder.
     func openLUTsInFinder() {
         let dir = Self.lutsDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         NSWorkspace.shared.open(dir)
     }
 
-    /// Удалить все импортированные .cube и сбросить выбранный LUT.
+    /// Delete all imported .cube files and clear the selected LUT.
     func clearLUTs() {
         let dir = Self.lutsDirectory
         let files = (try? FileManager.default.contentsOfDirectory(
@@ -210,7 +210,7 @@ final class CaptureController: ObservableObject {
         settings.lutFileName = fileName
         if fileName != nil, settings.lutPreviewEnabled != true,
            settings.lutRecordEnabled != true {
-            settings.lutPreviewEnabled = true // выбрали LUT — очевидно хотят видеть
+            settings.lutPreviewEnabled = true // picked a LUT — clearly want to see it
         }
         rebuildLUT()
     }
@@ -231,9 +231,9 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Интенсивность LUT (0…1); по умолчанию 1. На каждый тик слайдера НЕ
-    /// перечитываем .cube с диска (это подвешивало ползунок) — только меняем
-    /// коэффициент подмешивания в конвейере, а на плейбек — лишь в режиме плейбека.
+    /// LUT intensity (0…1); default 1. On each slider tick we do NOT re-read the
+    /// .cube from disk (that hung the slider) — we only change the mix coefficient
+    /// in the pipeline, and touch playback only in playback mode.
     var lutIntensity: Double {
         get { settings.lutIntensity ?? 1 }
         set {
@@ -244,7 +244,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Пересобрать фильтр, раздать конвейеру и плейбеку.
+    /// Rebuild the filter and hand it to the pipeline and playback.
     func rebuildLUT() {
         currentCube = nil
         if let fileName = settings.lutFileName {
@@ -264,9 +264,9 @@ final class CaptureController: ObservableObject {
         applyPlaybackLUT()
     }
 
-    /// LUT на плейбек — тем же фильтром через videoComposition, но с учётом
-    /// уже запечённого лука: наш файл с меткой com.takeshot.lut или ручное
-    /// отключение на клип — и LUT повторно не накладывается.
+    /// LUT on playback — the same filter via videoComposition, but accounting for
+    /// an already-baked look: our file tagged com.takeshot.lut or a manual
+    /// per-clip off — and the LUT isn't applied twice.
     func applyPlaybackLUT() {
         guard let item = player.currentItem else { return }
         guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
@@ -287,7 +287,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Проверить метку запечённого LUT у загруженного клипа (асинхронно).
+    /// Check the loaded clip's baked-LUT tag (asynchronously).
     private func detectBakedLUT(for item: AVPlayerItem) {
         playbackFileHasBakedLUT = false
         Task { [weak self] in
@@ -300,27 +300,27 @@ final class CaptureController: ObservableObject {
             }
         }
     }
-    /// Крупная панель аудиоканалов поверх плеера.
+    /// Large audio-channel panel over the player.
     @Published var showAudioPanel = false
-    /// Громкость плейбека (только просмотр, на запись не влияет).
+    /// Playback volume (viewing only, doesn't affect recording).
     @Published var playbackVolume: Double = 1.0 {
         didSet { player.volume = Float(playbackVolume) }
     }
-    /// Отдельное фулскрин-окно плейбека (не системный фулскрин приложения).
+    /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
     private var playbackFullscreenWindow: NSWindow?
-    /// Фулскрин-окно живого сигнала (плеер на весь экран в режиме река).
+    /// Live-signal fullscreen window (player fills the screen in record mode).
     @Published var isLiveFullscreen = false
     private var liveFullscreenWindow: NSWindow?
 
-    /// Плеер для просмотра дублей.
+    /// Player for reviewing takes.
     let player = AVPlayer()
-    /// Единый рендер плейбека (кадры из плеера → sample-buffer слои).
+    /// Unified playback render (frames from the player → sample-buffer layers).
     let playbackTap = PlaybackFrameTap()
 
-    // MARK: - вывод на внешний монитор
+    // MARK: - external monitor output
 
-    /// Выбранный внешний дисплей (по displayID); nil — выкл.
+    /// The selected external display (by displayID); nil — off.
     @Published var externalDisplayID: CGDirectDisplayID? {
         didSet {
             guard oldValue != externalDisplayID else { return }
@@ -334,7 +334,7 @@ final class CaptureController: ObservableObject {
         var name: String
     }
 
-    /// Дисплеи, кроме того, на котором главное окно приложения.
+    /// Displays other than the one the app's main window is on.
     var availableScreens: [ScreenOption] {
         let currentScreen = NSApp.mainWindow?.screen
         return NSScreen.screens.compactMap { screen in
@@ -371,13 +371,13 @@ final class CaptureController: ObservableObject {
         externalWindow = window
     }
 
-    /// Системный фулскрин главного окна (иммерсивный режим).
+    /// System fullscreen of the main window (immersive mode).
     func toggleFullscreen() {
         NSApp.mainWindow?.toggleFullScreen(nil)
     }
 
-    /// Фулскрин ТОЛЬКО плейбека: безрамочное окно на весь экран,
-    /// приложение при этом остаётся как было (это не зелёная кнопка).
+    /// Fullscreen for PLAYBACK ONLY: a borderless full-screen window;
+    /// the app itself stays as it was (this isn't the green button).
     func togglePlaybackFullscreen() {
         if isPlaybackFullscreen {
             playbackFullscreenWindow?.orderOut(nil)
@@ -403,7 +403,7 @@ final class CaptureController: ObservableObject {
         isPlaybackFullscreen = true
     }
 
-    /// Фулскрин ТОЛЬКО плеера в режиме река (зеркало лайва в безрамочном окне).
+    /// Fullscreen for the PLAYER ONLY in record mode (a live mirror in a borderless window).
     func toggleLiveFullscreen() {
         if isLiveFullscreen {
             liveFullscreenWindow?.orderOut(nil)
@@ -431,9 +431,9 @@ final class CaptureController: ObservableObject {
         isLiveFullscreen = true
     }
 
-    // MARK: - аудиоканалы (маска записи)
+    // MARK: - audio channels (record mask)
 
-    /// Включён ли канал в запись.
+    /// Whether the channel is included in the recording.
     func isChannelEnabled(_ index: Int) -> Bool {
         guard let mask = settings.audioChannelMask else { return true }
         return mask & (1 << index) != 0
@@ -442,11 +442,11 @@ final class CaptureController: ObservableObject {
     func toggleAudioChannel(_ index: Int) {
         var mask = settings.audioChannelMask ?? 0xFFFF
         mask ^= (1 << index)
-        // все включены — храним nil (= «все», в т.ч. если каналов станет больше)
+        // all enabled — store nil (= "all", including if more channels appear later)
         settings.audioChannelMask = (mask & 0xFFFF) == 0xFFFF ? nil : mask
     }
 
-    /// Аудиовыход плейбека.
+    /// Playback audio output.
     var playbackOutputUID: String? {
         get { settings.playbackAudioDeviceUID }
         set {
@@ -455,8 +455,8 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Открыть файл в плеере и переключиться в режим плейбека.
-    /// Фото просто показываются (AVPlayer для них не нужен).
+    /// Open a file in the player and switch to playback mode.
+    /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
         playbackURL = url
         if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
@@ -467,7 +467,7 @@ final class CaptureController: ObservableObject {
             player.replaceCurrentItem(with: item)
             playbackTap.attach(to: item)
             playbackLUTSuppressed = false
-            detectBakedLUT(for: item) // применит LUT сам, когда узнает про метку
+            detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
             player.play()
         }
         viewerMode = .playback
@@ -481,7 +481,7 @@ final class CaptureController: ObservableObject {
             if oldValue.destinationPath != settings.destinationPath {
                 resetLibraryForNewDestination()
             }
-            // cam/postfix/шаблон/паддинг влияют на имя — пересчитываем предупреждение
+            // cam/postfix/template/padding affect the name — recompute the warning
             if oldValue.cameraLabel != settings.cameraLabel
                 || oldValue.postfix != settings.postfix
                 || oldValue.namingTemplate != settings.namingTemplate
@@ -491,8 +491,8 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Пересчитать предупреждение о занятом имени для СЛЕДУЮЩЕГО дубля.
-    /// Во время записи не показываем: пишущийся файл, естественно, существует.
+    /// Recompute the taken-name warning for the NEXT take.
+    /// Not shown while recording: the file being written naturally exists.
     func refreshNameCollision() {
         guard !isRecording else { nameCollision = nil; return }
         let engine = NamingEngine(template: settings.namingTemplate)
@@ -509,7 +509,7 @@ final class CaptureController: ObservableObject {
             ? url.lastPathComponent : nil
     }
 
-    /// Новая папка записи: старые дубли/файлы к ней не относятся — чистим и сканируем заново.
+    /// New record folder: old takes/files don't apply — clear and rescan.
     private func resetLibraryForNewDestination() {
         takes.removeAll()
         otherFiles.removeAll()
@@ -521,7 +521,7 @@ final class CaptureController: ObservableObject {
         scanDestinationFolder()
     }
 
-    /// Язык интерфейса; по умолчанию английский.
+    /// UI language; English by default.
     var appLanguage: AppLanguage {
         get { settings.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english }
         set { settings.appLanguage = newValue.rawValue }
@@ -533,14 +533,14 @@ final class CaptureController: ObservableObject {
 
     var backendAvailable: Bool { backend.isAvailable }
 
-    /// Выбран ли демо-источник (для показа кнопки «REC демо-камеры»).
+    /// Whether the demo source is selected (to show the "REC demo camera" button).
     var isMockSelected: Bool {
         selectedDeviceID?.hasPrefix("mock:") ?? false
     }
 
     init(extraBackends: [(String, CaptureBackend)] = []) {
-        // демо-источник всегда в конце списка; при появлении реальной платы
-        // приложение само переключится на неё (см. refreshDevices)
+        // the demo source is always last; when a real board appears the app
+        // switches to it automatically (see refreshDevices)
         var children: [(String, CaptureBackend)] = [
             ("decklink", DeckLinkBackendAdapter()),
             ("mock", MockCaptureBackend()),
@@ -557,7 +557,7 @@ final class CaptureController: ObservableObject {
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
         bindPipeline()
-        refreshDevices() // выбор первого устройства запустит захват через didSet
+        refreshDevices() // selecting the first device starts capture via didSet
         startFolderSync()
         refreshNameCollision()
     }
@@ -572,8 +572,8 @@ final class CaptureController: ObservableObject {
         pipeline.onRecStateChanged = { [weak self] recording in
             guard let self else { return }
             self.isRecording = recording
-            self.refreshNameCollision() // старт скрывает, стоп — пересчитывает
-            // мультикам: остальные камеры синхронно с основной
+            self.refreshNameCollision() // start hides it, stop recomputes
+            // multicam: the other cameras in sync with the main one
             for channel in self.extraChannels { channel.setRecording(recording) }
         }
         pipeline.onTakeFinished = { [weak self] take in
@@ -597,7 +597,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Тема интерфейса из настроек.
+    /// UI theme from settings.
     var colorScheme: ColorScheme? {
         switch settings.appearance {
         case "light": return .light
@@ -606,7 +606,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Цвет подложки плеера; по умолчанию чёрный.
+    /// Player backdrop color; black by default.
     var playerBackground: Color {
         get {
             settings.playerBackgroundHex.flatMap(Color.init(hex:))
@@ -615,21 +615,21 @@ final class CaptureController: ObservableObject {
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
-    /// Акцентный цвет контролов; по умолчанию белый.
+    /// Control accent color; white by default.
     var accentColor: Color {
         get { settings.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#FFFFFF")! }
         set { settings.accentHex = newValue.hexString }
     }
 
-    /// Сбросить только цвета интерфейса к дефолтам.
+    /// Reset only the UI colors to defaults.
     func resetColors() {
         settings.playerBackgroundHex = nil
         settings.appBackgroundHex = nil
         settings.accentHex = nil
     }
 
-    /// Сбросить ВСЕ настройки приложения к заводским (папку записи сохраняем,
-    /// чтобы не потерять текущую библиотеку). Хоткеи и раскладку панели тоже.
+    /// Reset ALL app settings to factory (keep the record folder so we don't lose
+    /// the current library). Hotkeys and panel layout too.
     func resetAllSettings() {
         let keepDestination = settings.destinationPath
         var fresh = CaptureSettings()
@@ -641,7 +641,7 @@ final class CaptureController: ObservableObject {
         rebuildLUT()
     }
 
-    /// Цвет фона окна; по умолчанию серый — 15% яркости от чёрного (~#262626).
+    /// Window background color; grey by default — 15% brightness of black (~#262626).
     var appBackground: Color {
         get {
             settings.appBackgroundHex.flatMap(Color.init(hex:))
@@ -650,13 +650,13 @@ final class CaptureController: ObservableObject {
         set { settings.appBackgroundHex = newValue.hexString }
     }
 
-    /// Номер клипа с текущим паддингом (для поля и превью имени).
+    /// Clip number with the current padding (for the field and name preview).
     var clipDisplay: String {
         String(format: "%0\(settings.clipPadWidthEffective)d", nextTakeNumber)
     }
 
-    /// Применить введённый в поле текст клипа: цифры → номер,
-    /// количество набранных цифр (с ведущими нулями) → паддинг имени.
+    /// Apply the clip text typed into the field: digits → number,
+    /// the count of typed digits (with leading zeros) → filename padding.
     func commitClipText(_ text: String) {
         let digits = text.filter(\.isNumber)
         guard !digits.isEmpty else { return }
@@ -664,7 +664,7 @@ final class CaptureController: ObservableObject {
         nextTakeNumber = min(9999, max(0, Int(digits) ?? nextTakeNumber))
     }
 
-    /// Применить пресет именования: шаблон, ширина клипа и ширина ролла.
+    /// Apply a naming preset: template, clip width, and roll width.
     func applyNamingPreset(
         _ preset: (key: String, template: String, clipDigits: Int, rollDigits: Int?)) {
         settings.namingTemplate = preset.template
@@ -676,7 +676,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    // MARK: - степперы полей нейминга
+    // MARK: - naming-field steppers
 
     func stepRoll(_ delta: Int) {
         roll = FieldStepper.stepTrailingNumber(roll, by: delta)
@@ -686,7 +686,7 @@ final class CaptureController: ObservableObject {
         settings.cameraLabel = FieldStepper.stepLetter(settings.cameraLabel, by: delta)
     }
 
-    /// Хоткей: поставить/снять оценку последнему дублю.
+    /// Hotkey: set/clear the last take's rating.
     func toggleLastRating(_ rating: TakeRating) {
         guard let last = takes.last else { return }
         setRating(last.rating == rating ? .none : rating, for: last)
@@ -700,14 +700,14 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    // MARK: - мультикамера
+    // MARK: - multicam
 
-    /// Дополнительные камеры (первая/основная живёт в этом контроллере).
+    /// Extra cameras (the first/main one lives in this controller).
     @Published var extraChannels: [CameraChannel] = []
-    /// Мультикам включён (в демо добавляет вторую камеру; на железе — остальные платы).
+    /// Multicam on (demo adds a second camera; on hardware — the other boards).
     @Published var multicamOn = false
 
-    /// Все камеры для превью-сетки: основная (nil-канал) + дополнительные.
+    /// All cameras for the preview grid: main (nil channel) + extras.
     var allCameraLabels: [String] {
         [settings.cameraLabel] + extraChannels.map(\.camLabel)
     }
@@ -724,7 +724,7 @@ final class CaptureController: ObservableObject {
 
         let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)
         if isMockSelected {
-            // демо: вторая мок-камера
+            // demo: a second mock camera
             let mock = MockCaptureBackend()
             let channel = CameraChannel(
                 camLabel: nextLetter, backend: mock,
@@ -733,7 +733,7 @@ final class CaptureController: ObservableObject {
             channel.start()
             extraChannels = [channel]
         } else {
-            // железо: каждая ДРУГАЯ DeckLink-плата — отдельный канал
+            // hardware: each OTHER DeckLink board is its own channel
             let others = devices.filter {
                 $0.id.hasPrefix("decklink:") && $0.id != selectedDeviceID
             }
@@ -760,19 +760,19 @@ final class CaptureController: ObservableObject {
         generateThumbnail(for: take)
     }
 
-    // MARK: - управление захватом
+    // MARK: - capture control
 
     func refreshDevices() {
         devices = backend.devices()
 
         let realDevices = devices.filter { !$0.id.hasPrefix("mock:") }
         if let selected = selectedDeviceID, !devices.contains(where: { $0.id == selected }) {
-            // выбранное устройство выдернули — откатываемся на первое доступное
+            // the selected device was unplugged — fall back to the first available
             lastError = L("device_disconnected")
             selectedDeviceID = devices.first?.id
         } else if selectedDeviceID == nil || (isMockSelected && !realDevices.isEmpty) {
-            // ничего не выбрано, или выбран демо-источник, а появилась настоящая
-            // плата — переключаемся на неё (захват стартует сам через didSet)
+            // nothing selected, or the demo source is selected but a real board
+            // appeared — switch to it (capture starts itself via didSet)
             selectedDeviceID = realDevices.first?.id ?? devices.first?.id
         }
     }
@@ -792,11 +792,11 @@ final class CaptureController: ObservableObject {
         backend.stopCapture()
         pipeline.captureStopped()
         isCapturing = false
-        // дождаться дозаписи файлов в фоне (не блокируя UI)
+        // await finishing the files in the background (without blocking the UI)
         Task { await pipeline.finishPendingWrites() }
     }
 
-    /// Блокирующий флаш при выходе из приложения — чтобы файл не усёкся.
+    /// A blocking flush on app exit — so the file isn't truncated.
     func flushOnTerminate() {
         let sem = DispatchSemaphore(value: 0)
         Task {
@@ -817,7 +817,7 @@ final class CaptureController: ObservableObject {
         pipeline.toggleManualRecord()
     }
 
-    /// Клик по кружку: нет → good → bad → нет.
+    /// Click the circle: none → good → bad → none.
     func cycleRating(_ take: Take) {
         guard let idx = takes.firstIndex(of: take) else { return }
         switch takes[idx].rating {
@@ -834,12 +834,12 @@ final class CaptureController: ObservableObject {
         exportTakeLog()
     }
 
-    /// URL журнала метадаты (для «показать в Finder»).
+    /// The metadata log URL (for "show in Finder").
     var takeLogURL: URL {
         destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
     }
 
-    /// Корневая папка записи (для кнопки «открыть папку»).
+    /// The record root folder (for the "open folder" button).
     var destinationRoot: URL {
         URL(fileURLWithPath: (settings.destinationPath as NSString).expandingTildeInPath)
     }
@@ -850,7 +850,7 @@ final class CaptureController: ObservableObject {
         NSWorkspace.shared.open(destinationRoot)
     }
 
-    /// Диалог смены папки записи (используется и из настроек, и из нижней панели).
+    /// Change-record-folder dialog (used from both Settings and the bottom bar).
     func chooseDestinationFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -862,14 +862,14 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    // MARK: - синхронизация папки (Other content)
+    // MARK: - folder sync (Other content)
 
     nonisolated private static let videoExtensions: Set<String> = ["mov", "mp4", "mxf", "m4v", "avi"]
     nonisolated private static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
-    /// Лёгкий поллинг папки записи: видеофайлы, которых нет среди наших дублей,
-    /// показываются отдельным блоком Other content.
+    /// Light polling of the record folder: video files not among our takes
+    /// are shown in a separate Other content block.
     private func startFolderSync() {
         Task { [weak self] in
             while let self, !Task.isCancelled {
@@ -879,7 +879,7 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Пути, уже проверенные на метку TakeShot (чтобы не читать мету повторно).
+    /// Paths already checked for the TakeShot tag (so we don't re-read metadata).
     private var scannedPaths: Set<String> = []
 
     private func scanDestinationFolder() {
@@ -891,8 +891,8 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Наши файлы (метка com.takeshot.origin в QuickTime-мете) возвращаются
-    /// в список дублей после перезапуска; остальные — Other content.
+    /// Our files (the com.takeshot.origin QuickTime tag) return to the takes list
+    /// after a restart; the rest are Other content.
     private func classifyFoundFiles(_ candidates: [URL]) async {
         var restored: [Take] = []
         var foreign: [URL] = []
@@ -956,17 +956,17 @@ final class CaptureController: ObservableObject {
             otherFiles = sorted
             generateOtherThumbnails(for: sorted)
         }
-        // файл мог появиться в папке извне — обновим предупреждение о занятом имени
+        // a file may have appeared in the folder externally — refresh the taken-name warning
         refreshNameCollision()
     }
 
-    /// Номер следующего клипа — после максимального в текущем ролле.
+    /// The next clip number — after the max in the current roll.
     private func continueClipNumbering() {
         let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
         nextTakeNumber = maxClip + 1
     }
 
-    /// Миниатюры для Other content: фото — напрямую, видео — через генератор кадров.
+    /// Thumbnails for Other content: photos directly, videos via a frame generator.
     private func generateOtherThumbnails(for urls: [URL]) {
         let missing = urls.filter { otherThumbnails[$0] == nil }
         guard !missing.isEmpty else { return }
@@ -1008,7 +1008,7 @@ final class CaptureController: ObservableObject {
     nonisolated private static func findForeignVideos(root: URL,
                                                       excluding ownPaths: Set<String>) -> [URL] {
         var found: [URL] = []
-        let cutoff = Date().addingTimeInterval(-3) // пишущиеся файлы не трогаем
+        let cutoff = Date().addingTimeInterval(-3) // don't touch files still being written
         if let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
@@ -1025,8 +1025,8 @@ final class CaptureController: ObservableObject {
         return found.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    /// Resolve-совместимый CSV: пишется заново при каждом дубле и каждой отметке
-    /// circle take — в Резолве импортируется через Media Pool → Import Metadata.
+    /// Resolve-compatible CSV: rewritten on every take and every circle-take mark
+    /// — in Resolve it's imported via Media Pool → Import Metadata.
     private func exportTakeLog() {
         let takes = takes
         let root = destinationRoot
@@ -1035,8 +1035,8 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Кадр-превью из записанного файла; файл финализируется асинхронно,
-    /// поэтому несколько попыток с паузой.
+    /// A preview frame from the recorded file; the file finalizes asynchronously,
+    /// so several attempts with a pause.
     private func generateThumbnail(for take: Take) {
         Task.detached(priority: .utility) { [weak self] in
             for _ in 0..<10 {
@@ -1063,7 +1063,7 @@ final class CaptureController: ObservableObject {
     }
 }
 
-// MARK: - CaptureBackendDelegate (колбэки с потоков захвата — сразу в конвейер)
+// MARK: - CaptureBackendDelegate (callbacks from capture threads — straight into the pipeline)
 
 extension CaptureController: CaptureBackendDelegate {
     nonisolated func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat) {

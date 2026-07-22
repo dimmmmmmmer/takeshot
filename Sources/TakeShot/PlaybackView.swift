@@ -3,10 +3,10 @@ import CaptureCore
 import Combine
 import SwiftUI
 
-/// Контент плейбека без транспорта (используется и в режимах сравнения):
-/// видео (единый sample-buffer рендер, как у лайва) или фото.
+/// Playback content without the transport (also used in compare modes):
+/// video (the unified sample-buffer render, like live) or a photo.
 struct PlaybackContent: View {
-    /// Каждому окну — свой слой (CALayer живёт только в одном вью).
+    /// Each window gets its own layer (a CALayer lives in only one view).
     enum Target {
         case main
         case fullscreen
@@ -46,7 +46,7 @@ struct PlaybackContent: View {
     }
 }
 
-/// Вью вокруг слоя единого рендера плейбека.
+/// A view around the unified playback render layer.
 private struct TapLayerView: NSViewRepresentable {
     let layer: AVSampleBufferDisplayLayer
 
@@ -62,7 +62,7 @@ private struct TapLayerView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// Фото на подложке плеера.
+/// A photo on the player backdrop.
 private struct ImagePlaybackView: View {
     let url: URL
 
@@ -79,7 +79,7 @@ private struct ImagePlaybackView: View {
     }
 }
 
-/// Транспорт: play/pause, ±5 с, скраббер, время, скорость, loop, фулскрин.
+/// Transport: play/pause, ±5 s, scrubber, time, speed, loop, fullscreen.
 struct TransportBar: View {
     let player: AVPlayer
     @EnvironmentObject private var controller: CaptureController
@@ -203,7 +203,7 @@ struct TransportBar: View {
     }
 }
 
-/// Наблюдение за AVPlayer для транспорта: время, скорость, loop.
+/// Observing AVPlayer for the transport: time, speed, loop.
 @MainActor
 final class TransportModel: ObservableObject {
     @Published var currentTime: Double = 0
@@ -289,7 +289,7 @@ final class TransportModel: ObservableObject {
     }
 }
 
-/// Контент окна на внешнем мониторе: зеркало текущего режима.
+/// External-monitor window content: a mirror of the current mode.
 struct ExternalOutputView: View {
     @EnvironmentObject private var controller: CaptureController
 
