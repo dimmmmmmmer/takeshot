@@ -548,8 +548,11 @@ final class CaptureController: ObservableObject {
             self?.currentTimecode = timecode
         }
         pipeline.onRecStateChanged = { [weak self] recording in
-            self?.isRecording = recording
-            self?.refreshNameCollision() // старт скрывает, стоп — пересчитывает
+            guard let self else { return }
+            self.isRecording = recording
+            self.refreshNameCollision() // старт скрывает, стоп — пересчитывает
+            // мультикам: остальные камеры синхронно с основной
+            for channel in self.extraChannels { channel.setRecording(recording) }
         }
         pipeline.onTakeFinished = { [weak self] take in
             guard let self else { return }
@@ -670,6 +673,69 @@ final class CaptureController: ObservableObject {
     private func pushConfig() {
         pipeline.update(config: .init(
             settings: settings, roll: roll, takeNumber: nextTakeNumber))
+        for channel in extraChannels {
+            channel.update(settings: settings, roll: roll, takeNumber: nextTakeNumber)
+        }
+    }
+
+    // MARK: - мультикамера
+
+    /// Дополнительные камеры (первая/основная живёт в этом контроллере).
+    @Published var extraChannels: [CameraChannel] = []
+    /// Мультикам включён (в демо добавляет вторую камеру; на железе — остальные платы).
+    @Published var multicamOn = false
+
+    /// Все камеры для превью-сетки: основная (nil-канал) + дополнительные.
+    var allCameraLabels: [String] {
+        [settings.cameraLabel] + extraChannels.map(\.camLabel)
+    }
+
+    func toggleMulticam() {
+        setMulticam(!multicamOn)
+    }
+
+    func setMulticam(_ on: Bool) {
+        for channel in extraChannels { channel.stop() }
+        extraChannels.removeAll()
+        multicamOn = on
+        guard on else { return }
+
+        let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)
+        if isMockSelected {
+            // демо: вторая мок-камера
+            let mock = MockCaptureBackend()
+            let channel = CameraChannel(
+                camLabel: nextLetter, backend: mock,
+                deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
+            channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
+            channel.start()
+            extraChannels = [channel]
+        } else {
+            // железо: каждая ДРУГАЯ DeckLink-плата — отдельный канал
+            let others = devices.filter {
+                $0.id.hasPrefix("decklink:") && $0.id != selectedDeviceID
+            }
+            var channels: [CameraChannel] = []
+            var letter = nextLetter
+            for device in others {
+                let rawID = String(device.id.dropFirst("decklink:".count))
+                let channel = CameraChannel(
+                    camLabel: letter, backend: DeckLinkBackendAdapter(),
+                    deviceID: rawID, settings: settings, roll: roll)
+                channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
+                channel.start()
+                channels.append(channel)
+                letter = FieldStepper.stepLetter(letter, by: 1)
+            }
+            extraChannels = channels
+        }
+    }
+
+    private func appendChannelTake(_ take: Take) {
+        takes.append(take)
+        takes.sort { $0.recordedAt < $1.recordedAt }
+        exportTakeLog()
+        generateThumbnail(for: take)
     }
 
     // MARK: - управление захватом

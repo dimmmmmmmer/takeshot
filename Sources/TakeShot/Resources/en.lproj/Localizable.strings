@@ -208,3 +208,5 @@
 
 "levels_auto" = "Auto";
 "lut_intensity_label" = "Intensity";
+
+"multicam_toggle" = "Multicam: capture all cameras at once (demo adds a 2nd camera; with hardware, all other DeckLink devices)";

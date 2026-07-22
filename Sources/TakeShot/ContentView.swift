@@ -360,6 +360,8 @@ struct PreviewView: View {
                                 PlaybackContent()
                             }
                         }
+                    } else if controller.multicamOn && !controller.extraChannels.isEmpty {
+                        MulticamGrid()
                     } else {
                         LivePreviewContent()
                     }
@@ -463,6 +465,96 @@ private struct WipeHandle: View {
     }
 }
 
+/// Сетка превью всех камер в мультикам-режиме (основная + дополнительные).
+struct MulticamGrid: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    private var columns: Int {
+        let n = 1 + controller.extraChannels.count
+        return n <= 1 ? 1 : (n <= 4 ? 2 : 3)
+    }
+
+    var body: some View {
+        let cols = Array(repeating: GridItem(.flexible(), spacing: 4), count: columns)
+        LazyVGrid(columns: cols, spacing: 4) {
+            CameraTile(layer: controller.pipeline.displayLayer,
+                       label: controller.settings.cameraLabel,
+                       timecode: controller.currentTimecode,
+                       recording: controller.isRecording,
+                       background: controller.playerBackground)
+            ForEach(controller.extraChannels) { channel in
+                CameraTileChannel(channel: channel,
+                                  background: controller.playerBackground)
+            }
+        }
+        .padding(4)
+    }
+}
+
+private struct CameraTileChannel: View {
+    @ObservedObject var channel: CameraChannel
+    let background: Color
+
+    var body: some View {
+        CameraTile(layer: channel.pipeline.displayLayer,
+                   label: channel.camLabel,
+                   timecode: channel.currentTimecode,
+                   recording: channel.isRecording,
+                   background: background)
+    }
+}
+
+private struct CameraTile: View {
+    let layer: AVSampleBufferDisplayLayer
+    let label: String
+    let timecode: Timecode?
+    let recording: Bool
+    let background: Color
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(background)
+            SampleLayerView(layer: layer)
+        }
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .strokeBorder(recording ? Color.red.opacity(0.9) : .white.opacity(0.12),
+                          lineWidth: recording ? 2.5 : 1))
+        .overlay(alignment: .topLeading) {
+            Text(label)
+                .font(.caption.bold())
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(.black.opacity(0.5), in: Capsule())
+                .padding(6)
+        }
+        .overlay(alignment: .bottomLeading) {
+            Text(timecode?.description ?? "--:--:--:--")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(recording ? .red : .white)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
+                .padding(6)
+        }
+    }
+}
+
+/// Обёртка над AVSampleBufferDisplayLayer для сетки (публичная в модуле).
+struct SampleLayerView: NSViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = .clear
+        view.layer = layer
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 /// Живой сигнал + плашки состояний.
 struct LivePreviewContent: View {
     @EnvironmentObject private var controller: CaptureController
@@ -535,6 +627,18 @@ struct BottomBarView: View {
                             .help(L("vanc_open_help"))
 
                             NamingPresetMenu()
+
+                            Button {
+                                controller.toggleMulticam()
+                            } label: {
+                                Image(systemName: controller.multicamOn
+                                      ? "rectangle.split.2x1.fill"
+                                      : "rectangle.split.2x1")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(controller.multicamOn
+                                                     ? controller.accentColor : .primary)
+                            }
+                            .help(L("multicam_toggle"))
                         }
                         .buttonStyle(.borderless)
 
