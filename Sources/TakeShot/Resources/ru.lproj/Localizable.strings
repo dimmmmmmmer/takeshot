@@ -227,3 +227,9 @@
 "comment_label" = "Комментарий";
 "comment_save" = "Сохранить";
 "grab_frame" = "Стоп-кадр";
+
+/* Scopes */
+"scopes_toggle" = "Скопы: waveform по луме + RGB-гистограмма видимого кадра";
+"scope_waveform" = "Waveform (лума)";
+"scope_histogram" = "Гистограмма (RGB)";
+"scope_waiting" = "Ожидание сигнала…";

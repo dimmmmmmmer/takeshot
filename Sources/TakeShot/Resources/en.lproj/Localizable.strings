@@ -227,3 +227,9 @@
 "comment_label" = "Comment";
 "comment_save" = "Save";
 "grab_frame" = "Grab frame";
+
+/* Scopes */
+"scopes_toggle" = "Scopes: luma waveform + RGB histogram of the visible frame";
+"scope_waveform" = "Waveform (luma)";
+"scope_histogram" = "Histogram (RGB)";
+"scope_waiting" = "Waiting for signal…";

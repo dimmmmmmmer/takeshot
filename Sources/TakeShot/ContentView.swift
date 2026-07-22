@@ -145,6 +145,13 @@ struct PlayerArea: View {
                     AudioChannelPanel()
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if controller.showScopes {
+                    ScopesPanel()
+                        .padding(10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let error = controller.lastError {
                     Text(error)
@@ -668,6 +675,18 @@ struct BottomBarView: View {
                             }
                             .disabled(!controller.isCapturing && controller.playbackURL == nil)
                             .help(L("grab_frame"))
+
+                            Button {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    controller.showScopes.toggle()
+                                }
+                            } label: {
+                                Image(systemName: "waveform.path.ecg.rectangle")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(controller.showScopes
+                                                     ? controller.accentColor : .primary)
+                            }
+                            .help(L("scopes_toggle"))
                         }
                         .buttonStyle(.borderless)
 

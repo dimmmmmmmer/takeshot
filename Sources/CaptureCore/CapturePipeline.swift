@@ -37,6 +37,9 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onVancStats: (([VancPacketStat]) -> Void)?
     /// Per-channel audio peak levels, dBFS. Arrive at the audio-packet rate (~25 Hz).
     public var onAudioLevels: (([Float]) -> Void)?
+    /// Scope data (waveform + histograms) from the displayed frame, ~8 Hz while
+    /// enabled via setScopesEnabled. Delivered on the main queue.
+    public var onScopeData: ((ScopeData) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
     /// Second layer — for output to an external monitor. Frames are mirrored
@@ -80,6 +83,13 @@ public final class CapturePipeline: @unchecked Sendable {
     /// without parsing the .cube and without disk operations).
     public func setLUTIntensity(_ intensity: Double) {
         queue.async { self.lutIntensity = min(1, max(0, intensity)) }
+    }
+
+    private var scopesEnabled = false
+
+    /// Toggle scope analysis (skipped entirely while off — zero cost).
+    public func setScopesEnabled(_ on: Bool) {
+        queue.async { self.scopesEnabled = on }
     }
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
@@ -296,6 +306,12 @@ public final class CapturePipeline: @unchecked Sendable {
                     self.onError?("Dropped \(count) recording frame(s) — disk too slow")
                 }
             }
+        }
+
+        // scopes: analyze the displayed frame at ~1/3 frame rate while enabled
+        if scopesEnabled, frameIndex % 3 == 0,
+           let scopeData = ScopeAnalyzer.analyze(displayBuffer) {
+            DispatchQueue.main.async { self.onScopeData?(scopeData) }
         }
 
         // one-shot frame grab: PNG of exactly what's on screen (levels + preview LUT)

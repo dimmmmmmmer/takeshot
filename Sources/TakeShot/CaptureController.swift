@@ -76,6 +76,7 @@ final class CaptureController: ObservableObject {
                 player.pause()
             }
             updateTapRunning()
+            updateScopesRunning()
         }
     }
 
@@ -302,6 +303,19 @@ final class CaptureController: ObservableObject {
     }
     /// Large audio-channel panel over the player.
     @Published var showAudioPanel = false
+    /// Scopes panel (waveform + histogram) over the player.
+    @Published var showScopes = false {
+        didSet { updateScopesRunning() }
+    }
+    /// Latest scope data (from live or playback, whichever is visible).
+    @Published var scopeData: ScopeData?
+
+    /// Route scope analysis to whichever source is actually on screen.
+    private func updateScopesRunning() {
+        pipeline.setScopesEnabled(showScopes && viewerMode == .record)
+        playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
+        if !showScopes { scopeData = nil }
+    }
     /// Playback volume (viewing only, doesn't affect recording).
     @Published var playbackVolume: Double = 1.0 {
         didSet { player.volume = Float(playbackVolume) }
@@ -585,6 +599,12 @@ final class CaptureController: ObservableObject {
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
+        }
+        pipeline.onScopeData = { [weak self] data in
+            self?.scopeData = data
+        }
+        playbackTap.onScopeData = { [weak self] data in
+            self?.scopeData = data
         }
         pipeline.onError = { [weak self] message in
             self?.lastError = message

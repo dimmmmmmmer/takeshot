@@ -1,4 +1,5 @@
 import AVFoundation
+import CaptureCore
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -22,6 +23,15 @@ final class PlaybackFrameTap: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var formatDescription: CMVideoFormatDescription?
     private var running = false
+    private var scopesEnabled = false
+    private var tickCount = 0
+
+    /// Scope data from playback frames (~8 Hz while enabled), on the main queue.
+    var onScopeData: ((ScopeData) -> Void)?
+
+    func setScopesEnabled(_ on: Bool) {
+        queue.async { self.scopesEnabled = on }
+    }
 
     /// Attach to a new clip (the old output is removed).
     func attach(to item: AVPlayerItem) {
@@ -84,6 +94,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
                 forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
 
         normalizeColorTags(pixelBuffer)
+
+        // scopes: playback polls at ~60 Hz; analyze every 8th delivered frame
+        tickCount += 1
+        if scopesEnabled, tickCount % 8 == 0,
+           let scopeData = ScopeAnalyzer.analyze(pixelBuffer) {
+            DispatchQueue.main.async { self.onScopeData?(scopeData) }
+        }
 
         if formatDescription.map({
             !CMVideoFormatDescriptionMatchesImageBuffer($0, imageBuffer: pixelBuffer)
