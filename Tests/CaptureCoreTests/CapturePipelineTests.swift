@@ -83,8 +83,8 @@ struct CapturePipelineTests {
 
         // имя по шаблону: сцена, номер дубля и стартовый TC (11:00:00:00 ± пре-ролл)
         #expect(take.displayName.hasPrefix("7_T02_11.00.00"))
-        // папка: проект/дата/сцена
-        #expect(take.url.path.contains("Test/"))
+        // пишем прямо в выбранную папку — без авто-подпапок по дате/проекту
+        #expect(take.url.deletingLastPathComponent().path == root.path)
         #expect(take.url.path.hasSuffix(".mov"))
 
         // файл дописывается асинхронно после события — подождём его появления

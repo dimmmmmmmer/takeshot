@@ -187,6 +187,25 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Открыть папку с импортированными LUT в Finder.
+    func openLUTsInFinder() {
+        let dir = Self.lutsDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
+    }
+
+    /// Удалить все импортированные .cube и сбросить выбранный LUT.
+    func clearLUTs() {
+        let dir = Self.lutsDirectory
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.pathExtension.lowercased() == "cube" {
+            try? FileManager.default.removeItem(at: file)
+        }
+        selectLUT(fileName: nil)
+        reloadLUTList()
+    }
+
     func selectLUT(fileName: String?) {
         settings.lutFileName = fileName
         if fileName != nil, settings.lutPreviewEnabled != true,
@@ -212,12 +231,16 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Интенсивность LUT (0…1); по умолчанию 1.
+    /// Интенсивность LUT (0…1); по умолчанию 1. На каждый тик слайдера НЕ
+    /// перечитываем .cube с диска (это подвешивало ползунок) — только меняем
+    /// коэффициент подмешивания в конвейере, а на плейбек — лишь в режиме плейбека.
     var lutIntensity: Double {
         get { settings.lutIntensity ?? 1 }
         set {
-            settings.lutIntensity = newValue
-            rebuildLUT()
+            let clamped = min(1, max(0, newValue))
+            settings.lutIntensity = clamped
+            pipeline.setLUTIntensity(clamped)
+            if viewerMode == .playback { applyPlaybackLUT() }
         }
     }
 
@@ -480,7 +503,6 @@ final class CaptureController: ObservableObject {
             clipPadding: settings.clipPadWidthEffective,
             timecode: currentTimecode)
         let url = destinationRoot
-            .appendingPathComponent(engine.relativeDirectory(for: context))
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov")
         nameCollision = FileManager.default.fileExists(atPath: url.path)
@@ -584,18 +606,18 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Цвет подложки плеера; по умолчанию — миддл-грей (18% серый).
+    /// Цвет подложки плеера; по умолчанию чёрный.
     var playerBackground: Color {
         get {
             settings.playerBackgroundHex.flatMap(Color.init(hex:))
-                ?? Color(hex: "#7F7F7F")!
+                ?? Color(hex: "#000000")!
         }
         set { settings.playerBackgroundHex = newValue.hexString }
     }
 
-    /// Акцентный цвет контролов; по умолчанию нейтральный серый, не эппл-синий.
+    /// Акцентный цвет контролов; по умолчанию белый.
     var accentColor: Color {
-        get { settings.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#9A9A9E")! }
+        get { settings.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#FFFFFF")! }
         set { settings.accentHex = newValue.hexString }
     }
 
@@ -619,11 +641,11 @@ final class CaptureController: ObservableObject {
         rebuildLUT()
     }
 
-    /// Цвет фона окна; по умолчанию ~полторы ступени ниже миддл-грея.
+    /// Цвет фона окна; по умолчанию серый — 15% яркости от чёрного (~#262626).
     var appBackground: Color {
         get {
             settings.appBackgroundHex.flatMap(Color.init(hex:))
-                ?? Color(hex: "#464646")!
+                ?? Color(hex: "#262626")!
         }
         set { settings.appBackgroundHex = newValue.hexString }
     }

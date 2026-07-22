@@ -101,10 +101,12 @@ struct LiveFullscreenView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ZStack(alignment: .topTrailing) {
+            ZStack {
                 Color.black
                 LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
-                // выход — в верхнем углу: не пересекается с ховер-зоной подвала
+            }
+            // выход — внизу справа, там же где кнопка входа в фулскрин на плеере
+            .overlay(alignment: .bottomTrailing) {
                 Button {
                     controller.toggleLiveFullscreen()
                 } label: {

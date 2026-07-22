@@ -210,3 +210,13 @@
 "lut_intensity_label" = "Интенсивность";
 
 "multicam_toggle" = "Мультикам: захват всех камер сразу (в демо — вторая камера; на железе — все другие платы DeckLink)";
+
+/* Папка LUT + плейсхолдеры */
+"settings_luts" = "LUT-файлы";
+"luts_folder" = "Импортированные LUT";
+"luts_hint" = "Импортированные .cube копируются сюда (Application Support/TakeShot/LUTs).";
+"open_in_finder" = "Открыть в Finder";
+"clear_data" = "Очистить";
+"cancel" = "Отмена";
+"clear_luts_confirm" = "Удалить все импортированные LUT? Действие необратимо.";
+"placeholders_legend" = "Поля: {prefix} {cam} {roll} {clip} {postfix}. Таймкод: {tc}. Даты: {date}=ГГГГ-ММ-ДД, {date6}=ГГММДД, {date4}=ММДД. Время: {time4}=ЧЧММ, {time6}=ЧЧММСС.";

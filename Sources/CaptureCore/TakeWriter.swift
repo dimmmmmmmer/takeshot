@@ -154,7 +154,7 @@ public final class TakeWriter {
         // возвращает false и дорожки звука в файле не будет. Формат известен
         // заранее (PCM 48к/16бит, число каналов приходит из конвейера).
         if audioChannelCount > 0 {
-            let audioSettings: [String: Any] = [
+            var audioSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: 48_000,
                 AVNumberOfChannelsKey: audioChannelCount,
@@ -163,6 +163,15 @@ public final class TakeWriter {
                 AVLinearPCMIsBigEndianKey: false,
                 AVLinearPCMIsNonInterleaved: false,
             ]
+            // для >2 каналов LPCM обязателен channel layout — без него append
+            // роняет процесс (NSException). Discrete-раскладка по числу каналов.
+            if audioChannelCount > 2 {
+                var layout = AudioChannelLayout()
+                layout.mChannelLayoutTag =
+                    kAudioChannelLayoutTag_DiscreteInOrder | UInt32(audioChannelCount)
+                audioSettings[AVChannelLayoutKey] =
+                    Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
+            }
             let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             input.expectsMediaDataInRealTime = true
             if writer.canAdd(input) {

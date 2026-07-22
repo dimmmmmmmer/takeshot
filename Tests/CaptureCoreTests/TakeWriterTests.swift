@@ -142,9 +142,10 @@ struct TakeWriterTests {
 
         let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
                                    timecodeFPS: 25, name: "test")
+        let channels = 16 // 16-канальный LPCM без layout ронял процесс
         let writer = try TakeWriter(url: tempURL, format: format,
                                     codec: .proResProxy, startTimecode: nil,
-                                    audioChannelCount: 2)
+                                    audioChannelCount: channels)
         let pixelBuffer = makePixelBuffer(width: 320, height: 180)
         var audioCache: CMAudioFormatDescription?
         for frame in 0..<10 {
@@ -154,12 +155,11 @@ struct TakeWriterTests {
                 attempts += 1
                 try await Task.sleep(for: .milliseconds(5))
             }
-            // 1920 сэмплов стерео 16 бит на кадр (40 мс @48к)
-            var samples = [Int16](repeating: 500, count: 1920 * 2)
+            var samples = [Int16](repeating: 500, count: 1920 * channels)
             samples.withUnsafeBytes { raw in
                 if let base = raw.baseAddress,
                    let sb = PCMAudio.makeSampleBuffer(
-                    bytes: base, sampleFrames: 1920, channelCount: 2,
+                    bytes: base, sampleFrames: 1920, channelCount: channels,
                     ptsSeconds: Double(frame) * 0.04, formatCache: &audioCache) {
                     writer.append(audioSampleBuffer: sb)
                 }

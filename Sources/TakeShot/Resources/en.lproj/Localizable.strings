@@ -210,3 +210,13 @@
 "lut_intensity_label" = "Intensity";
 
 "multicam_toggle" = "Multicam: capture all cameras at once (demo adds a 2nd camera; with hardware, all other DeckLink devices)";
+
+/* LUT folder + placeholders */
+"settings_luts" = "LUTs";
+"luts_folder" = "Imported LUTs";
+"luts_hint" = "Imported .cube files are copied here (Application Support/TakeShot/LUTs).";
+"open_in_finder" = "Open in Finder";
+"clear_data" = "Clear";
+"cancel" = "Cancel";
+"clear_luts_confirm" = "Delete all imported LUTs? This cannot be undone.";
+"placeholders_legend" = "Fields: {prefix} {cam} {roll} {clip} {postfix}. Timecode: {tc}. Dates: {date}=YYYY-MM-DD, {date6}=YYMMDD, {date4}=MMDD. Times: {time4}=HHMM, {time6}=HHMMSS.";

@@ -78,6 +78,12 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// Только интенсивность — без пересборки фильтра (для слайдера: реагирует
+    /// на каждый тик без парсинга .cube и без дисковых операций).
+    public func setLUTIntensity(_ intensity: Double) {
+        queue.async { self.lutIntensity = min(1, max(0, intensity)) }
+    }
+
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
     // состояние конвейера — только на queue
@@ -399,11 +405,12 @@ public final class CapturePipeline: @unchecked Sendable {
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)
+        // пишем ПРЯМО в выбранную папку — без авто-подпапок по дате/проекту:
+        // DIT сам выбирает папку карты/ролла, вложенность приложения его удивляет.
         // дубли не перезаписываются никогда: при коллизии имени — суффикс _2, _3…
         // (типовой случай: счётчик клипов начался заново, а файлы прошлой сессии
         // с теми же именами уже лежат в папке)
         let url = Self.uniqueURL(for: root
-            .appendingPathComponent(engine.relativeDirectory(for: context))
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov"))
         do {

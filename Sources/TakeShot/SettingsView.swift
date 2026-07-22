@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
+    @State private var confirmClearLUTs = false
 
     /// Пресеты шаблонов имён — сверены с реальными именами камер
     /// (см. NamingEngineTests.vendorPresetExactNames). rollDigits — вендорская
@@ -64,6 +65,9 @@ struct SettingsView: View {
                     Text(L("panel_right")).tag("right")
                     Text(L("panel_left")).tag("left")
                 }
+                Button(L("reset_colors"), role: .destructive) {
+                    controller.resetColors()
+                }
             }
             Section(L("settings_recording")) {
                 Picker(L("codec"), selection: $controller.settings.codec) {
@@ -100,9 +104,10 @@ struct SettingsView: View {
                     Text(L("preset_custom")).tag("preset_custom")
                 }
                 TextField(L("naming_template"), text: $controller.settings.namingTemplate)
-                Text(L("placeholders", NamingEngine.placeholders.joined(separator: " ")))
+                Text(L("placeholders_legend"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
                 Picker(L("color_tags"), selection: Binding(
                     get: { controller.settings.colorTagPreset ?? "709" },
                     set: { controller.settings.colorTagPreset = $0 == "709" ? nil : $0 })) {
@@ -118,6 +123,22 @@ struct SettingsView: View {
                     Text(L("levels_full")).tag("full")
                 }
                 Text(L("color_tags_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section(L("settings_luts")) {
+                LabeledContent(L("luts_folder")) {
+                    HStack {
+                        Text("\(controller.availableLUTs.count)")
+                            .foregroundStyle(.secondary)
+                        Button(L("open_in_finder")) { controller.openLUTsInFinder() }
+                        Button(L("clear_data"), role: .destructive) {
+                            confirmClearLUTs = true
+                        }
+                        .disabled(controller.availableLUTs.isEmpty)
+                    }
+                }
+                Text(L("luts_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -202,17 +223,18 @@ struct SettingsView: View {
                 .buttonStyle(.link)
             }
             Section {
-                HStack {
-                    Button(L("reset_colors")) { controller.resetColors() }
-                    Spacer()
-                    Button(L("reset_all"), role: .destructive) {
-                        controller.resetAllSettings()
-                        hotkeys.resetToDefaults()
-                    }
+                Button(L("reset_all"), role: .destructive) {
+                    controller.resetAllSettings()
+                    hotkeys.resetToDefaults()
                 }
+                .frame(maxWidth: .infinity)
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(L("clear_luts_confirm"), isPresented: $confirmClearLUTs) {
+            Button(L("clear_data"), role: .destructive) { controller.clearLUTs() }
+            Button(L("cancel"), role: .cancel) {}
+        }
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)
         .frame(width: 500)

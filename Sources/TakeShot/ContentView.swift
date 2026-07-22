@@ -79,10 +79,11 @@ struct PlayerArea: View {
                         .monospacedDigit()
                         .foregroundStyle(
                             controller.isRecording && controller.viewerMode == .record
-                            ? .red : .primary)
+                            ? Color.red : Color.white)
                 }
-                // кнопки окна лежат на плеере только когда панель справа
-                .padding(.leading, controller.panelSide == "right" ? 66 : 8)
+                // всегда в левом углу; вертикальный отступ под кнопки окна уже
+                // зарезервирован полосой windowTopInset над плеером
+                .padding(.leading, 8)
                 .padding(.top, 8)
             }
             .overlay(alignment: .top) {
@@ -117,7 +118,7 @@ struct PlayerArea: View {
                             }
                         }
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.85))
                     }
                 }
                 .padding(8)
@@ -164,9 +165,10 @@ struct PlayerArea: View {
 
     private func overlayBadge(@ViewBuilder content: () -> some View) -> some View {
         content()
+            .foregroundStyle(.white) // читаемо на любом (в т.ч. чёрном) фоне плеера
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
+            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
     }
 
     static func fpsText(_ fps: Double) -> String {
@@ -209,18 +211,37 @@ struct LUTMenu: View {
         .help(L("lut_help"))
     }
 
+    /// Имя выбранного LUT для заголовка меню (или «No LUT»).
+    private var currentLUTName: String {
+        controller.availableLUTs
+            .first { $0.fileName == controller.settings.lutFileName }?.name
+            ?? L("lut_none")
+    }
+
     @ViewBuilder private var lutControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L("lut_help")).font(.caption).foregroundStyle(.secondary)
-            Picker(L("lut_none"), selection: Binding(
-                get: { controller.settings.lutFileName ?? "" },
-                set: { controller.selectLUT(fileName: $0.isEmpty ? nil : $0) })) {
-                Text(L("lut_none")).tag("")
-                ForEach(controller.availableLUTs) { lut in
-                    Text(lut.name).tag(lut.fileName)
+            // выбор и добавление .cube — в одном выпадающем меню (импорт
+            // отдельной кнопкой убран: «Add .cube…» прямо в списке, мультивыбор)
+            Menu {
+                Button(L("lut_none")) { controller.selectLUT(fileName: nil) }
+                if !controller.availableLUTs.isEmpty {
+                    Divider()
+                    ForEach(controller.availableLUTs) { lut in
+                        Button(lut.name) { controller.selectLUT(fileName: lut.fileName) }
+                    }
+                }
+                Divider()
+                Button(L("lut_import")) { controller.importLUT() }
+            } label: {
+                HStack {
+                    Text(currentLUTName).lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            .labelsHidden()
+            .menuStyle(.borderlessButton)
             Toggle(L("lut_preview"), isOn: Binding(
                 get: { controller.lutPreviewOn },
                 set: { controller.lutPreviewOn = $0 }))
@@ -238,14 +259,13 @@ struct LUTMenu: View {
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 42)
+                    .disabled(controller.settings.lutFileName == nil)
                 Text("%").font(.caption).foregroundStyle(.secondary)
             }
             Slider(value: Binding(
                 get: { controller.lutIntensity },
                 set: { controller.lutIntensity = $0 }), in: 0...1)
             .disabled(controller.settings.lutFileName == nil)
-            Divider()
-            Button(L("lut_import")) { controller.importLUT() }
         }
     }
 }
@@ -302,7 +322,7 @@ private struct CompareControls: View {
             }
         }
         .padding(4)
-        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
