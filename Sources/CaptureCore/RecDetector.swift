@@ -1,14 +1,14 @@
 import Foundation
 
-/// Явный REC-триггер, распознанный в VANC-пакетах (вендор-специфично).
+/// An explicit REC trigger recognized in VANC packets (vendor-specific).
 public enum VancTrigger: Equatable, Sendable {
     case recordStart
     case recordStop
 }
 
-/// Один кадр входного сигнала глазами детектора.
+/// One input frame as seen by the detector.
 public struct FrameSample: Sendable {
-    public var index: Int               // сквозной счётчик кадров захвата
+    public var index: Int               // running capture frame counter
     public var timecode: Timecode?
     public var vancTrigger: VancTrigger?
 
@@ -20,18 +20,18 @@ public struct FrameSample: Sendable {
 }
 
 public enum RecEvent: Equatable, Sendable {
-    /// Камера начала запись. `atIndex` — кадр фактического старта (первый кадр,
-    /// на котором TC пошёл), обычно раньше кадра, на котором сработал дебаунс —
-    /// контроллер добирает эти кадры из пре-ролл-буфера.
+    /// The camera started recording. `atIndex` is the actual start frame (the
+    /// first frame where TC began advancing), usually earlier than the frame the
+    /// debounce fired on — the controller backfills these from the pre-roll buffer.
     case started(atIndex: Int, timecode: Timecode?)
-    /// Камера остановила запись. `atIndex` — последний кадр дубля.
+    /// The camera stopped recording. `atIndex` is the take's last frame.
     case stopped(atIndex: Int)
 }
 
 public struct RecDetectorConfig: Equatable, Sendable {
-    /// Сколько кадров подряд TC должен идти, чтобы объявить REC (фильтр от глитчей).
+    /// How many consecutive frames TC must advance to declare REC (glitch filter).
     public var startDebounceFrames: Int
-    /// Сколько кадров подряд TC должен стоять/отсутствовать, чтобы объявить стоп.
+    /// How many consecutive frames TC must stall/be absent to declare stop.
     public var stopDebounceFrames: Int
 
     public init(startDebounceFrames: Int = 4, stopDebounceFrames: Int = 12) {
@@ -40,10 +40,10 @@ public struct RecDetectorConfig: Equatable, Sendable {
     }
 }
 
-/// Детектор REC-состояния камеры по бегущему таймкоду (универсально, камера в Rec Run)
-/// и по VANC-триггерам (приоритетнее, если распознаны).
+/// Detects the camera's REC state from running timecode (universal, camera in
+/// Rec Run) and from VANC triggers (take priority when recognized).
 ///
-/// Чистая state machine без зависимостей от железа — вся логика тестируется на синтетике.
+/// A pure state machine with no hardware dependencies — all logic is tested on synthetic data.
 public final class RecDetector {
     public private(set) var isRecording = false
 
@@ -51,12 +51,12 @@ public final class RecDetector {
     private var lastTimecode: Timecode?
     private var lastIndex: Int = -1
 
-    // накопление старта
+    // start accumulation
     private var advanceRunLength = 0
     private var runStartIndex = 0
     private var runStartTimecode: Timecode?
 
-    // накопление стопа
+    // stop accumulation
     private var stallRunLength = 0
     private var stallStartIndex = 0
 
@@ -78,7 +78,7 @@ public final class RecDetector {
             lastIndex = sample.index
         }
 
-        // VANC-триггер — явное знание, срабатывает без дебаунса.
+        // A VANC trigger is explicit knowledge — fires without debounce.
         if let trigger = sample.vancTrigger {
             switch trigger {
             case .recordStart where !isRecording:
@@ -97,8 +97,8 @@ public final class RecDetector {
             stallRunLength = 0
             if !isRecording {
                 if advanceRunLength == 0 {
-                    // первый кадр движения — предыдущий кадр уже часть дубля
-                    // (TC "пошёл" между прошлым и текущим кадром)
+                    // first frame of movement — the previous frame is already part
+                    // of the take (TC "started" between the previous and current frame)
                     runStartIndex = max(0, sample.index - 1)
                     runStartTimecode = lastTimecode
                 }
@@ -121,8 +121,8 @@ public final class RecDetector {
             }
 
         case .discontinuity:
-            // скачок TC: при записи — камера остановилась (и, возможно, тут же
-            // начала новый дубль — его подберёт следующая серия advancing-кадров)
+            // TC jump: while recording it means the camera stopped (and maybe
+            // immediately started a new take — the next run of advancing frames catches it)
             advanceRunLength = 0
             if isRecording {
                 endRecording()
@@ -147,20 +147,20 @@ public final class RecDetector {
     // MARK: - private
 
     private enum Movement {
-        case advancing      // TC вырос ровно на 1 кадр
-        case stalled        // TC не изменился
-        case discontinuity  // TC скакнул (вперёд/назад больше чем на 1)
-        case noData         // TC отсутствует
+        case advancing      // TC grew by exactly 1 frame
+        case stalled        // TC did not change
+        case discontinuity  // TC jumped (forward/back by more than 1)
+        case noData         // TC absent
     }
 
     private func movement(of sample: FrameSample) -> Movement {
         guard let tc = sample.timecode else { return .noData }
         guard let last = lastTimecode else {
-            // первый TC — точка отсчёта, движения ещё нет
+            // first TC — the reference point, no movement yet
             return .stalled
         }
-        // капчур может отдавать один TC на пару кадров (PsF) — считаем повтор stall,
-        // а шаг ровно в 1 кадр — движением
+        // capture may report one TC per pair of frames (PsF) — treat a repeat as
+        // stall, and a step of exactly 1 frame as movement
         let delta = tc.frameNumber - last.frameNumber
         switch delta {
         case 0: return .stalled

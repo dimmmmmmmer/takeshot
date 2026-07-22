@@ -2,8 +2,8 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
-/// Чтение стартового таймкода из timecode-трека .mov
-/// (обратная операция к тому, что пишет TakeWriter).
+/// Reads the start timecode from a .mov timecode track
+/// (the inverse of what TakeWriter writes).
 public enum TimecodeReader {
     public static func startTimecode(of asset: AVAsset) async -> Timecode? {
         guard let track = try? await asset.loadTracks(withMediaType: .timecode).first,
@@ -14,8 +14,8 @@ public enum TimecodeReader {
         guard reader.startReading() else { return nil }
         defer { reader.cancelReading() }
 
-        // первые буферы могут быть пустыми маркерами (numSamples == 0) —
-        // листаем до сэмпла с данными
+        // the first buffers may be empty markers (numSamples == 0) —
+        // skip forward to a sample that has data
         var sampleWithData: CMSampleBuffer?
         for _ in 0..<16 {
             guard let sample = output.copyNextSampleBuffer() else { break }
@@ -30,7 +30,7 @@ public enum TimecodeReader {
               let description = CMSampleBufferGetFormatDescription(sample)
         else { return nil }
 
-        // tc32: один big-endian UInt32 с номером кадра
+        // tc32: one big-endian UInt32 with the frame number
         var raw: UInt32 = 0
         guard CMBlockBufferCopyDataBytes(block, atOffset: 0,
                                          dataLength: 4, destination: &raw) == noErr

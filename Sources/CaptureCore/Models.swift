@@ -1,13 +1,13 @@
 import Foundation
 
-/// Формат входного сигнала, определённый капчур-платой.
+/// The input signal format detected by the capture board.
 public struct CaptureFormat: Equatable, Sendable {
     public var width: Int
     public var height: Int
-    public var frameRate: Double        // фактическая (23.976, 25, 29.97...)
-    public var timecodeFPS: Int         // номинальная нумерация TC (24, 25, 30...)
+    public var frameRate: Double        // actual (23.976, 25, 29.97...)
+    public var timecodeFPS: Int         // nominal TC numbering (24, 25, 30...)
     public var isDropFrame: Bool
-    public var name: String             // человекочитаемо: "1080p25"
+    public var name: String             // human-readable: "1080p25"
 
     public init(width: Int, height: Int, frameRate: Double, timecodeFPS: Int,
                 isDropFrame: Bool = false, name: String) {
@@ -20,7 +20,7 @@ public struct CaptureFormat: Equatable, Sendable {
     }
 }
 
-/// Кодек записи.
+/// Recording codec.
 public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable {
     case proResProxy = "ProRes 422 Proxy"
     case proResLT = "ProRes 422 LT"
@@ -32,14 +32,14 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     public var id: String { rawValue }
 }
 
-/// Оценка дубля: удачный (Good Take в Resolve) / брак / без отметки.
+/// Take rating: good (Good Take in Resolve) / bad / unmarked.
 public enum TakeRating: String, Equatable, Sendable {
     case none
     case good
     case bad
 }
 
-/// Дубль — один непрерывный отрезок записи камеры, один файл на диске.
+/// A take — one continuous camera recording segment, one file on disk.
 public struct Take: Identifiable, Equatable, Sendable {
     public var id: UUID
     public var url: URL
@@ -49,7 +49,7 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var takeNumber: Int
     public var startTimecode: Timecode?
     public var durationSeconds: Double
-    public var rating: TakeRating       // good/bad take (в CSV — Good Take + пометка NG)
+    public var rating: TakeRating       // good/bad take (in CSV — Good Take + NG marker)
     public var recordedAt: Date
 
     public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
@@ -68,14 +68,14 @@ public struct Take: Identifiable, Equatable, Sendable {
     }
 }
 
-/// Режим детекции начала/конца дубля.
+/// Take start/stop detection mode.
 public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
-    case auto           // VANC-триггер, если распознан, + бегущий таймкод
-    case timecodeRun    // только по бегущему TC (камера в Rec Run)
-    case manual         // только кнопка в приложении
+    case auto           // VANC trigger if recognized + running timecode
+    case timecodeRun    // running TC only (camera in Rec Run)
+    case manual         // in-app button only
 }
 
-/// Настройки приложения (персистятся в UserDefaults как JSON).
+/// App settings (persisted in UserDefaults as JSON).
 public struct CaptureSettings: Codable, Equatable, Sendable {
     public var codec: CaptureCodec = .proRes422
     public var namingTemplate: String = "{prefix}_{cam}{roll}C{clip}_{postfix}"
@@ -86,44 +86,44 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var stopDebounceFrames: Int = 12
     public var projectName: String = ""
     public var cameraLabel: String = "A"
-    /// Язык интерфейса: "en" (приоритетный), "ru", nil — системный.
-    /// Optional — чтобы старые сохранённые настройки декодировались без миграции.
+    /// UI language: "en" (preferred), "ru", nil — system.
+    /// Optional — so old saved settings decode without a migration.
     public var appLanguage: String?
-    /// Пре-ролл в секундах: сколько кадров ДО старта записи камеры включать в дубль.
-    /// Optional по той же причине; эффективное значение — preRollSecondsEffective.
+    /// Pre-roll in seconds: how many frames BEFORE the camera's record start to include.
+    /// Optional for the same reason; effective value is preRollSecondsEffective.
     public var preRollSeconds: Double?
-    /// Тема интерфейса: "light" / "dark" / nil — системная.
+    /// UI theme: "light" / "dark" / nil — system.
     public var appearance: String?
-    /// Цвет подложки плеера, hex "#RRGGBB"; nil — чёрный.
+    /// Player backdrop color, hex "#RRGGBB"; nil — black.
     public var playerBackgroundHex: String?
-    /// Цвет фона окна приложения, hex; nil — системный.
+    /// App window background color, hex; nil — system.
     public var appBackgroundHex: String?
-    /// Постфикс имени файла ({postfix} в шаблоне).
+    /// Filename postfix ({postfix} in the template).
     public var postfix: String?
-    /// Сколько первых аудиоканалов писать в файл (устарело, заменено маской).
+    /// How many leading audio channels to write (deprecated, replaced by the mask).
     public var recordChannelCount: Int?
-    /// Битовая маска записываемых каналов (бит i = канал i); nil — все.
+    /// Bit mask of recorded channels (bit i = channel i); nil — all.
     public var audioChannelMask: Int?
-    /// UID аудиоустройства для вывода плейбека; nil — системное.
+    /// Audio device UID for playback output; nil — system.
     public var playbackAudioDeviceUID: String?
-    /// Акцентный цвет контролов, hex; nil — нейтральный серый.
+    /// Control accent color, hex; nil — neutral grey.
     public var accentHex: String?
-    /// DeckLink-устройство для видеовыхода на монитор (SDI/HDMI); nil — выкл.
+    /// DeckLink device for video-out to a monitor (SDI/HDMI); nil — off.
     public var monitorDeviceID: String?
-    /// Число цифр в номере клипа (C01 / C001 / C0001); nil — 2.
+    /// Number of digits in the clip number (C01 / C001 / C0001); nil — 2.
     public var clipPadWidth: Int?
-    /// Имя файла выбранного LUT (в папке LUTs приложения); nil — без LUT.
+    /// Filename of the selected LUT (in the app's LUTs folder); nil — no LUT.
     public var lutFileName: String?
-    /// Применять LUT к превью (лайв и плейбек).
+    /// Apply the LUT to preview (live and playback).
     public var lutPreviewEnabled: Bool?
-    /// Запекать LUT в записываемый файл (иначе пишется чистый сигнал).
+    /// Bake the LUT into the recorded file (otherwise a clean signal is written).
     public var lutRecordEnabled: Bool?
-    /// Интенсивность LUT 0…1 (микс с оригиналом); nil — 1.
+    /// LUT intensity 0…1 (mix with the original); nil — 1.
     public var lutIntensity: Double?
-    /// Цветовые теги видео: "709" (nclc 1-1-1, дефолт), "601", "2020".
+    /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020".
     public var colorTagPreset: String?
-    /// Обработка уровней видео на пиксели: nil/"auto" — не трогать,
-    /// "limited" — сжать full→legal 16-235, "full" — растянуть legal→0-255.
+    /// Video level processing on pixels: nil/"auto" — leave alone,
+    /// "limited" — compress full→legal 16-235, "full" — stretch legal→0-255.
     public var videoLevels: String?
 
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
@@ -138,13 +138,13 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         guard let data = defaults.data(forKey: defaultsKey),
               var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
         else { return CaptureSettings() }
-        // миграции дефолтных шаблонов прошлых версий
+        // migrate default templates from earlier versions
         if ["{scene}_T{take}_{cam}_{tc}",
             "{prefix}_{cam}_{roll}_C{clip}",
             "{prefix}_{cam}_{roll}_C{clip}_{postfix}"].contains(settings.namingTemplate) {
             settings.namingTemplate = CaptureSettings().namingTemplate
         }
-        // пресеты до появления вендорских форматов дат ({date6}/{date4}/{time4})
+        // presets from before the vendor date formats ({date6}/{date4}/{time4})
         let presetMigrations = [
             "{cam}{roll}C{clip}_{date}_{postfix}": "{cam}{roll}C{clip}_{date6}_{postfix}",
             "{cam}{roll}_C{clip}_{date}_{postfix}": "{cam}{roll}_C{clip}_{date4}{postfix}",
@@ -165,10 +165,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
 }
 
 
-/// Инкремент/декремент полей нейминга (ролл «001» → «002», камера A → B).
+/// Increment/decrement naming fields (roll "001" → "002", camera A → B).
 public enum FieldStepper {
-    /// Меняет хвостовые цифры строки, сохраняя ведущие нули: "001"+1 → "002",
-    /// "A12"+1 → "A13". Без цифр в хвосте строка не меняется.
+    /// Changes a string's trailing digits, preserving leading zeros: "001"+1 → "002",
+    /// "A12"+1 → "A13". With no trailing digits the string is unchanged.
     public static func stepTrailingNumber(_ value: String, by delta: Int) -> String {
         guard let range = value.range(of: "[0-9]+$", options: .regularExpression),
               let number = Int(value[range]) else { return value }
@@ -177,7 +177,7 @@ public enum FieldStepper {
         return value[..<range.lowerBound] + String(format: "%0\(width)d", next)
     }
 
-    /// Меняет последнюю букву A-Z по алфавиту (с циклом): "A"+1 → "B", "Z"+1 → "A".
+    /// Steps the last A-Z letter through the alphabet (wrapping): "A"+1 → "B", "Z"+1 → "A".
     public static func stepLetter(_ value: String, by delta: Int) -> String {
         guard let last = value.unicodeScalars.last,
               last.value >= 65, last.value <= 90 else { return value }

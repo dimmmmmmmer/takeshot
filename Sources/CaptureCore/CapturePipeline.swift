@@ -4,12 +4,12 @@ import CoreMedia
 import CoreVideo
 import Foundation
 
-/// Конвейер кадров: принимает колбэки бэкенда (с потоков захвата), гонит их через
-/// RecDetector, пишет дубли через TakeWriter и кормит превью. Вся работа — на
-/// собственной серийной очереди, на MainActor уходят только UI-события.
+/// Frame pipeline: takes backend callbacks (from capture threads), runs them
+/// through RecDetector, writes takes via TakeWriter, and feeds preview. All work
+/// happens on its own serial queue; only UI events hop to the MainActor.
 ///
-/// @unchecked Sendable: всё мутабельное состояние трогается только на `queue`;
-/// UI-колбэки назначаются один раз до старта захвата и вызываются на main.
+/// @unchecked Sendable: all mutable state is touched only on `queue`; UI callbacks
+/// are assigned once before capture starts and invoked on main.
 public final class CapturePipeline: @unchecked Sendable {
     public struct Config {
         public var settings: CaptureSettings
@@ -26,28 +26,28 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    // UI-колбэки, вызываются на главной очереди
+    // UI callbacks, invoked on the main queue
     public var onFormatChanged: ((CaptureFormat?) -> Void)?
     public var onTimecode: ((Timecode?) -> Void)?
     public var onRecStateChanged: ((Bool) -> Void)?
     public var onTakeFinished: ((Take) -> Void)?
     public var onSignal: ((Bool) -> Void)?
     public var onError: ((String) -> Void)?
-    /// Статистика VANC-пакетов (для монитора); шлётся раз в секунду при изменениях.
+    /// VANC packet stats (for the monitor); sent about once a second on changes.
     public var onVancStats: (([VancPacketStat]) -> Void)?
-    /// Пиковые уровни аудиоканалов, dBFS. Приходят с частотой аудиопакетов (~25 Гц).
+    /// Per-channel audio peak levels, dBFS. Arrive at the audio-packet rate (~25 Hz).
     public var onAudioLevels: (([Float]) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
-    /// Второй слой — для вывода на внешний монитор. Кадры зеркалируются,
-    /// только когда externalMirrorEnabled == true (копия — копеечная).
+    /// Second layer — for output to an external monitor. Frames are mirrored
+    /// only when externalMirrorEnabled == true (the copy is cheap).
     public let externalLayer = AVSampleBufferDisplayLayer()
     public var externalMirrorEnabled = false
-    /// Третий слой — фулскрин-окно лайва (плеер на весь экран).
+    /// Third layer — the live fullscreen window (player fills the screen).
     public let fullscreenLayer = AVSampleBufferDisplayLayer()
     public var fullscreenMirrorEnabled = false
 
-    // LUT (все обращения — на queue)
+    // LUT (all access on queue)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
     private var lutFilter: CIFilter?
     private var lutName: String?
@@ -57,15 +57,15 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lutPool: CVPixelBufferPool?
     private var lutPoolWidth = 0
     private var lutPoolHeight = 0
-    /// Обработка уровней ("limited"/"full"/nil) — пиксельный remap.
+    /// Level processing ("limited"/"full"/nil) — a pixel remap.
     private var levelsMode: String?
 
-    /// Режим обработки уровней видео на пиксели.
+    /// Video-level processing mode applied to pixels.
     public func setVideoLevels(_ mode: String?) {
         queue.async { self.levelsMode = (mode == "auto") ? nil : mode }
     }
 
-    /// Установить LUT (nil — выключить), режимы применения и интенсивность (0…1).
+    /// Set the LUT (nil — off), apply modes, and intensity (0…1).
     public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool,
                        intensity: Double = 1) {
         queue.async {
@@ -78,15 +78,15 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Только интенсивность — без пересборки фильтра (для слайдера: реагирует
-    /// на каждый тик без парсинга .cube и без дисковых операций).
+    /// Intensity only — no filter rebuild (for the slider: reacts to every tick
+    /// without parsing the .cube and without disk operations).
     public func setLUTIntensity(_ intensity: Double) {
         queue.async { self.lutIntensity = min(1, max(0, intensity)) }
     }
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
-    // состояние конвейера — только на queue
+    // pipeline state — queue only
     private var config: Config
     private var detector: RecDetector
     private var writer: TakeWriter?
@@ -100,13 +100,13 @@ public final class CapturePipeline: @unchecked Sendable {
     private var takeRoll = ""
     private var takeNumber = 0
     private var videoFormatDescription: CMVideoFormatDescription?
-    /// Кадры до старта записи — для пре-ролла (только пока writer == nil).
+    /// Frames before record start — for pre-roll (only while writer == nil).
     private var preRollBuffer: [(index: Int, pixelBuffer: CVPixelBuffer, pts: CMTime)] = []
-    /// Накопленная статистика VANC по (DID, SDID).
+    /// Accumulated VANC stats by (DID, SDID).
     private var vancStats: [String: VancPacketStat] = [:]
     private var vancStatsDirty = false
     private var vancStatsLastPublish = 0
-    /// Незавершённые задачи финализации файлов (ждём их при остановке/выходе).
+    /// Pending file-finalization tasks (awaited on stop/exit).
     private var pendingFinishTasks: [Task<Void, Never>] = []
 
     public init(config: Config) {
@@ -116,7 +116,7 @@ public final class CapturePipeline: @unchecked Sendable {
             stopDebounceFrames: config.settings.stopDebounceFrames))
     }
 
-    // MARK: - управление (с MainActor)
+    // MARK: - control (from MainActor)
 
     public func update(config: Config) {
         queue.async {
@@ -132,7 +132,7 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Ручной старт/стоп записи (кнопка).
+    /// Manual record start/stop (button).
     public func toggleManualRecord() {
         queue.async {
             if self.writer != nil {
@@ -143,7 +143,7 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Остановка захвата: закрыть текущий дубль, сбросить состояние.
+    /// Capture stopped: close the current take, reset state.
     public func captureStopped() {
         queue.async {
             if self.writer != nil {
@@ -165,7 +165,7 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    // MARK: - вход с бэкенда (потоки захвата)
+    // MARK: - backend input (capture threads)
 
     public func handleFormat(_ newFormat: CaptureFormat) {
         queue.async {
@@ -192,15 +192,15 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private var trimFormatCache: CMAudioFormatDescription?
-    /// Число каналов входного аудио (кэшируется и во время превью — чтобы writer
-    /// знал формат аудио-входа заранее, до первого пакета записи).
+    /// Input audio channel count (cached even during preview — so the writer
+    /// knows the audio input format up front, before the first record packet).
     private var sourceAudioChannels = 0
 
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
         queue.async {
             let levels = PCMAudio.peakLevels(of: sampleBuffer)
             self.sourceAudioChannels = levels.count
-            // метры показывают ВСЕ каналы; в файл идут только включённые в маске
+            // meters show ALL channels; only channels enabled in the mask are written
             var toWrite: CMSampleBuffer? = sampleBuffer
             if let mask = self.config.settings.audioChannelMask {
                 let indices = (0..<32).filter { mask & (1 << $0) != 0 }
@@ -216,16 +216,16 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Сколько каналов реально пишется в файл при текущей маске.
+    /// How many channels are actually written under the current mask.
     private var recordChannelCount: Int {
         guard sourceAudioChannels > 0 else { return 0 }
         guard let mask = config.settings.audioChannelMask else { return sourceAudioChannels }
         return (0..<sourceAudioChannels).filter { mask & (1 << $0) != 0 }.count
     }
 
-    // MARK: - обработка (на queue)
+    // MARK: - processing (on queue)
 
-    /// Колориметрия по пресету настроек: "709" (nclc 1-1-1, дефолт) / "601" / "2020".
+    /// Colorimetry for the settings preset: "709" (nclc 1-1-1, default) / "601" / "2020".
     public static func colorTagValues(for preset: String?)
         -> (primaries: CFString, transfer: CFString, matrix: CFString) {
         switch preset {
@@ -244,8 +244,8 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Проставить кадру колориметрию из настроек, если бэкенд её не сообщил.
-    /// Без тегов превью-слой и плеер интерпретируют цвет по-разному.
+    /// Tag a frame with colorimetry from settings if the backend didn't report it.
+    /// Without tags the preview layer and the player interpret color differently.
     private func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                     nil) == nil else { return }
@@ -267,7 +267,7 @@ public final class CapturePipeline: @unchecked Sendable {
         updateVancStats(ancillaryPackets)
         let vancTrigger = vancTrigger ?? VancParser.recTrigger(in: ancillaryPackets)
 
-        // мост может не знать fps таймкода — проставляем из формата
+        // the bridge may not know the timecode fps — fill it from the format
         var timecode = rawTimecode
         if var tc = timecode, tc.fps <= 0 {
             tc.fps = format.timecodeFPS
@@ -275,9 +275,9 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         lastTimecode = timecode
 
-        // пока не пишем — копим кадры в пре-ролл буфер (текущий кадр включительно):
-        // при старте дубля из него добираются кадры от фактического начала записи
-        // камеры (потерянные на дебаунсе) плюс настроенные секунды до него
+        // while not recording — accumulate frames into the pre-roll buffer (current
+        // frame included): when a take starts, frames from the camera's actual record
+        // start (lost to debounce) plus the configured lead seconds are pulled from it
         if writer == nil {
             preRollBuffer.append((index: frameIndex, pixelBuffer: pixelBuffer, pts: pts))
             let capacity = preRollCapacity
@@ -286,11 +286,11 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
-        // сначала уровни (пиксельный remap), общий для превью и записи —
-        // это часть сигнала, а не «взгляд» как LUT
+        // levels first (pixel remap), shared by preview and recording —
+        // it's part of the signal, not a "look" like the LUT
         let leveled = levelsMode != nil ? (applyLevels(to: pixelBuffer) ?? pixelBuffer)
                                         : pixelBuffer
-        // LUT: превью может быть с лутом, запись — чистой (или наоборот)
+        // LUT: preview may have the LUT while recording stays clean (or vice versa)
         let displayBuffer = lutPreview
             ? (applyLUT(to: leveled) ?? leveled) : leveled
         let recordBuffer = lutRecord
@@ -306,7 +306,7 @@ public final class CapturePipeline: @unchecked Sendable {
                 switch event {
                 case .started(let atIndex, let startTC):
                     beginTake(timecode: startTC ?? timecode, recStartIndex: atIndex)
-                    startedThisFrame = true // текущий кадр уже записан из буфера
+                    startedThisFrame = true // current frame already written from the buffer
                 case .stopped:
                     finishTake()
                 }
@@ -340,7 +340,7 @@ public final class CapturePipeline: @unchecked Sendable {
                 lastLine: packet.lineNumber, lastDataHex: hex)
             vancStatsDirty = true
         }
-        // публикуем не чаще ~раза в секунду, чтобы не дёргать UI на каждом кадре
+        // publish at most ~once a second so we don't poke the UI every frame
         let interval = Int(format?.frameRate.rounded() ?? 25)
         if vancStatsDirty, frameIndex - vancStatsLastPublish >= interval {
             vancStatsDirty = false
@@ -350,28 +350,28 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Кадров пре-ролла при текущем формате.
+    /// Pre-roll frame count at the current format.
     private var preRollFrames: Int {
         let fps = format?.frameRate ?? 25
         return Int((config.settings.preRollSecondsEffective * fps).rounded())
     }
 
-    /// Ёмкость буфера: пре-ролл + задержка детекции + запас, но с потолком по
-    /// памяти. Без потолка 3 с пре-ролла на 4К60 держат ~6 ГБ несжатых кадров
-    /// в RAM (OOM); при высоком разрешении пре-ролл тихо укорачивается.
+    /// Buffer capacity: pre-roll + detection latency + slack, but with a memory
+    /// cap. Without the cap, 3 s of pre-roll at 4K60 holds ~6 GB of uncompressed
+    /// frames in RAM (OOM); at high resolution the pre-roll quietly shortens.
     private var preRollCapacity: Int {
         let wanted = preRollFrames + config.settings.startDebounceFrames + 25
         guard let format, format.width > 0, format.height > 0 else { return wanted }
         let bytesPerFrame = format.width * format.height * 4
-        let budgetBytes = 1_500_000_000 // ~1.5 ГБ
+        let budgetBytes = 1_500_000_000 // ~1.5 GB
         let byteCap = max(config.settings.startDebounceFrames + 5,
                           budgetBytes / max(1, bytesPerFrame))
         return min(wanted, byteCap)
     }
 
-    /// Начать дубль. `recStartIndex` — кадр фактического старта записи камеры
-    /// (от детектора); nil — ручной старт, пре-ролл отсчитывается от текущего кадра.
-    /// Свободный URL: если файл существует, добавляет _2, _3… перед расширением.
+    /// Free URL: if the file exists, adds _2, _3… before the extension.
+    /// (Used by beginTake; `recStartIndex` there is the camera's actual record
+    /// start frame from the detector, nil for manual start.)
     static func uniqueURL(for url: URL) -> URL {
         guard FileManager.default.fileExists(atPath: url.path) else { return url }
         let base = url.deletingPathExtension()
@@ -405,11 +405,11 @@ public final class CapturePipeline: @unchecked Sendable {
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)
-        // пишем ПРЯМО в выбранную папку — без авто-подпапок по дате/проекту:
-        // DIT сам выбирает папку карты/ролла, вложенность приложения его удивляет.
-        // дубли не перезаписываются никогда: при коллизии имени — суффикс _2, _3…
-        // (типовой случай: счётчик клипов начался заново, а файлы прошлой сессии
-        // с теми же именами уже лежат в папке)
+        // write STRAIGHT into the chosen folder — no auto subfolders by date/project:
+        // the DIT picks the card/roll folder themselves; app nesting surprises them.
+        // takes are never overwritten: on a name collision — suffix _2, _3…
+        // (typical case: the clip counter restarted and last session's files with
+        // the same names are already in the folder)
         let url = Self.uniqueURL(for: root
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov"))
@@ -422,7 +422,7 @@ public final class CapturePipeline: @unchecked Sendable {
                         TakeWriter.rollKey: config.roll,
                         TakeWriter.clipKey: String(config.takeNumber),
                     ]
-                    // файл с запечённым лутом помечаем: плейбек не наложит LUT повторно
+                    // tag a file with a baked-in LUT: playback won't apply the LUT again
                     if lutRecord, let lutName {
                         meta[TakeWriter.lutKey] = lutName
                     }
@@ -438,9 +438,9 @@ public final class CapturePipeline: @unchecked Sendable {
             takeNumber = config.takeNumber
             droppedFrames = 0
 
-            // добираем из буфера кадры от (старт камеры - пре-ролл) до текущего;
-            // в Rec Run их таймкод заморожен на стартовом значении, так что
-            // timecode-трек дубля остаётся корректным
+            // pull frames from the buffer from (camera start - pre-roll) to current;
+            // in Rec Run their timecode is frozen at the start value, so the take's
+            // timecode track stays correct
             let cutoff = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
             for buffered in preRollBuffer where buffered.index >= cutoff {
                 let frame = lutRecord
@@ -474,8 +474,8 @@ public final class CapturePipeline: @unchecked Sendable {
             self.onRecStateChanged?(false)
             self.onTakeFinished?(take)
         }
-        // задачу финализации трекаем — чтобы дождаться её при остановке захвата
-        // и выходе из приложения (иначе файл может остаться недописанным)
+        // track the finalization task so we can await it on capture stop and app
+        // exit (otherwise the file may be left unfinished)
         let task = Task { [weak self] in
             do {
                 _ = try await writer.finish()
@@ -488,7 +488,7 @@ public final class CapturePipeline: @unchecked Sendable {
         pendingFinishTasks.append(task)
     }
 
-    /// Дождаться финализации всех дописываемых файлов (стоп захвата, выход).
+    /// Await finalization of all files still being written (capture stop, exit).
     public func finishPendingWrites() async {
         let tasks: [Task<Void, Never>] = await withCheckedContinuation { cont in
             queue.async {
@@ -500,7 +500,7 @@ public final class CapturePipeline: @unchecked Sendable {
         for task in tasks { await task.value }
     }
 
-    /// Прогнать кадр через LUT (CoreImage, GPU). nil — если LUT не настроен/ошибка.
+    /// Run a frame through the LUT (CoreImage, GPU). nil — if no LUT set/on error.
     private func applyLUT(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         guard let filter = lutFilter else { return nil }
         let width = CVPixelBufferGetWidth(pixelBuffer)
@@ -537,14 +537,14 @@ public final class CapturePipeline: @unchecked Sendable {
     private var levelsPoolW = 0
     private var levelsPoolH = 0
 
-    /// Пиксельный remap уровней: "limited" сжимает full(0-255)→legal(16-235),
-    /// "full" растягивает legal→full. Работает через CIColorMatrix (масштаб+сдвиг).
+    /// Pixel-level remap: "limited" compresses full(0-255)→legal(16-235),
+    /// "full" stretches legal→full. Uses CIColorMatrix (scale+bias).
     private func applyLevels(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         guard let mode = levelsMode else { return nil }
         let scale: CGFloat, bias: CGFloat
         switch mode {
-        case "limited": scale = 219.0 / 255.0; bias = 16.0 / 255.0   // full → legal
-        case "full":    scale = 255.0 / 219.0; bias = -16.0 / 219.0   // legal → full
+        case "limited": scale = 219.0 / 255.0; bias = 16.0 / 255.0   // full -> legal
+        case "full":    scale = 255.0 / 219.0; bias = -16.0 / 219.0   // legal -> full
         default: return nil
         }
         let width = CVPixelBufferGetWidth(pixelBuffer)
@@ -577,7 +577,7 @@ public final class CapturePipeline: @unchecked Sendable {
         return outBuffer
     }
 
-    /// Смешать оригинал и LUT'нутый кадр по интенсивности (кросс-дизолв).
+    /// Blend the original and LUT'd frame by intensity (cross-dissolve).
     public static func mix(source: CIImage, filtered: CIImage,
                            intensity: Double) -> CIImage {
         guard intensity < 0.999 else { return filtered }
@@ -610,7 +610,7 @@ public final class CapturePipeline: @unchecked Sendable {
             formatDescription: videoFormatDescription, sampleTiming: &timing,
             sampleBufferOut: &sampleBuffer) == noErr, let sampleBuffer else { return }
 
-        // показать немедленно, без привязки к часам плеера
+        // display immediately, not tied to the player clock
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(
             sampleBuffer, createIfNecessary: true) as? [CFMutableDictionary],
            let first = attachments.first {

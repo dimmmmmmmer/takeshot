@@ -1,10 +1,10 @@
 import CoreImage
 import Foundation
 
-/// 3D LUT из файла .cube (Adobe/Resolve-формат).
+/// A 3D LUT from a .cube file (Adobe/Resolve format).
 public struct CubeLUT: Sendable {
     public let size: Int
-    /// RGBA float32, порядок как требует CIColorCube.
+    /// RGBA float32, in the order CIColorCube expects.
     public let data: Data
     public let name: String
 
@@ -38,7 +38,7 @@ public struct CubeLUT: Sendable {
                 size = Int(line.split(separator: " ").last.map(String.init) ?? "") ?? 0
                 continue
             }
-            // TITLE, DOMAIN_MIN/MAX, LUT_1D_* — пропускаем
+            // TITLE, DOMAIN_MIN/MAX, LUT_1D_* — skip
             if upper.hasPrefix("TITLE") || upper.hasPrefix("DOMAIN")
                 || upper.hasPrefix("LUT_") { continue }
             let parts = line.split(separator: " ").compactMap { Float($0) }
@@ -64,7 +64,7 @@ public struct CubeLUT: Sendable {
         return CubeLUT(size: size, data: data, name: name)
     }
 
-    /// CIFilter для применения LUT (каждому потребителю — свой экземпляр).
+    /// A CIFilter that applies the LUT (a fresh instance per consumer).
     public func makeFilter() -> CIFilter? {
         guard let filter = CIFilter(name: "CIColorCubeWithColorSpace") else { return nil }
         filter.setValue(size, forKey: "inputCubeDimension")

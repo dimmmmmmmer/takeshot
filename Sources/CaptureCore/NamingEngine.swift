@@ -1,6 +1,6 @@
 import Foundation
 
-/// Значения для подстановки в шаблон имени файла.
+/// Values substituted into a filename template.
 public struct NamingContext: Sendable {
     public var project: String
     public var date: Date
@@ -30,9 +30,9 @@ public struct NamingContext: Sendable {
     }
 }
 
-/// Генерация имён файлов по шаблону с плейсхолдерами:
+/// Generates filenames from a template with placeholders:
 /// {project} {date} {scene} {take} {reel} {cam} {clip} {tc}
-/// Неизвестные плейсхолдеры и пустые значения выпадают, повторные разделители схлопываются.
+/// Unknown placeholders and empty values are dropped; repeated separators collapse.
 public struct NamingEngine: Sendable {
     public var template: String
 
@@ -40,9 +40,9 @@ public struct NamingEngine: Sendable {
         self.template = template
     }
 
-    /// Публичный список — только то, что реально задаётся из UI ({prefix}/{cam}/
-    /// {roll}/{clip}/{postfix}) или подставляется само ({tc}/{date}). Старые имена
-    /// ({project}/{reel}/{take}/{scene}/{clipname}) продолжают работать как алиасы.
+    /// Public list — only what's actually set from the UI ({prefix}/{cam}/
+    /// {roll}/{clip}/{postfix}) or filled in automatically ({tc}/{date}). The old
+    /// names ({project}/{reel}/{take}/{scene}/{clipname}) still work as aliases.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
                                       "{postfix}", "{tc}", "{date}", "{date6}",
                                       "{date4}", "{time4}", "{time6}"]
@@ -54,7 +54,7 @@ public struct NamingEngine: Sendable {
         return formatter.string(from: date)
     }
 
-    /// Имя файла без расширения.
+    /// Filename without extension.
     public func fileName(for context: NamingContext) -> String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -84,12 +84,12 @@ public struct NamingEngine: Sendable {
         for (key, value) in substitutions {
             result = result.replacingOccurrences(of: key, with: Self.sanitize(value))
         }
-        // неизвестные плейсхолдеры {что-то} — убрать
+        // unknown placeholders {something} — remove
         result = result.replacingOccurrences(of: #"\{[^{}]*\}"#, with: "", options: .regularExpression)
         return Self.collapseSeparators(result)
     }
 
-    /// Папка дубля относительно корня записи: <проект>/<дата>/<сцена>.
+    /// Take folder relative to the record root: <project>/<date>/<scene>.
     public func relativeDirectory(for context: NamingContext) -> String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -100,7 +100,7 @@ public struct NamingEngine: Sendable {
         return components.joined(separator: "/")
     }
 
-    /// Убрать из значения символы, недопустимые/неудобные в именах файлов.
+    /// Strip characters that are invalid/awkward in filenames.
     static func sanitize(_ value: String) -> String {
         let forbidden = CharacterSet(charactersIn: "/\\:?*<>|\"\0")
         let cleaned = value.unicodeScalars
@@ -111,7 +111,7 @@ public struct NamingEngine: Sendable {
             .replacingOccurrences(of: #"\s+"#, with: "_", options: .regularExpression)
     }
 
-    /// Схлопнуть повторные разделители и обрезать их по краям:
+    /// Collapse repeated separators and trim them at the edges:
     /// "A__T01_" → "A_T01".
     static func collapseSeparators(_ value: String) -> String {
         var result = value

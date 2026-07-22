@@ -1,9 +1,9 @@
 import CoreMedia
 import Foundation
 
-/// Утилиты для PCM 16-бит interleaved аудио (общие для бэкендов и конвейера).
+/// Utilities for 16-bit interleaved PCM audio (shared by backends and pipeline).
 public enum PCMAudio {
-    /// CMSampleBuffer из сырых interleaved Int16-сэмплов, 48 кГц.
+    /// A CMSampleBuffer from raw interleaved Int16 samples, 48 kHz.
     public static func makeSampleBuffer(bytes: UnsafeRawPointer, sampleFrames: Int,
                                         channelCount: Int, ptsSeconds: Double,
                                         formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
@@ -45,16 +45,16 @@ public enum PCMAudio {
         return sampleBuffer
     }
 
-    /// Оставить первые `channelCount` каналов (обёртка над selectChannels).
+    /// Keep the first `channelCount` channels (a wrapper over selectChannels).
     public static func trimChannels(_ sampleBuffer: CMSampleBuffer, to channelCount: Int,
                                     formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
         selectChannels(sampleBuffer, indices: Array(0..<max(0, channelCount)),
                        formatCache: &formatCache)
     }
 
-    /// Оставить произвольный набор каналов interleaved Int16-буфера
-    /// (вкл/выкл дорожек из UI). Возвращает исходный буфер, если выбраны все;
-    /// nil — если не выбран ни один существующий канал.
+    /// Keep an arbitrary set of channels from an interleaved Int16 buffer
+    /// (track on/off from the UI). Returns the original buffer if all are
+    /// selected; nil if not a single existing channel is selected.
     public static func selectChannels(_ sampleBuffer: CMSampleBuffer, indices: [Int],
                                       formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
@@ -95,7 +95,7 @@ public enum PCMAudio {
         }
     }
 
-    /// Пиковые уровни каналов в dBFS (-∞ → -100) из PCM16 interleaved сэмпл-буфера.
+    /// Per-channel peak levels in dBFS (-∞ → -100) from an interleaved PCM16 sample buffer.
     public static func peakLevels(of sampleBuffer: CMSampleBuffer) -> [Float] {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,

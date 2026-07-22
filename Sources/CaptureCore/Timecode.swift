@@ -1,7 +1,7 @@
 import Foundation
 
-/// SMPTE-таймкод. `fps` — номинальная частота нумерации кадров (24, 25, 30, 60...);
-/// для 29.97/59.94 drop-frame используется `fps` 30/60 + `isDropFrame`.
+/// SMPTE timecode. `fps` is the nominal frame-numbering rate (24, 25, 30, 60...);
+/// for 29.97/59.94 drop-frame use `fps` 30/60 + `isDropFrame`.
 public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
     public var hours: Int
     public var minutes: Int
@@ -19,23 +19,23 @@ public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
         self.isDropFrame = isDropFrame
     }
 
-    /// Реальный порядковый номер кадра с начала суток (учитывает drop-frame),
-    /// т.е. у двух последовательных кадров записи разница всегда ровно 1 —
-    /// в том числе через минутную границу DF.
+    /// The real frame ordinal since midnight (accounts for drop-frame), i.e. two
+    /// consecutive recorded frames always differ by exactly 1 — including across
+    /// a DF minute boundary.
     public var frameNumber: Int {
         let nominal = ((hours * 60 + minutes) * 60 + seconds) * fps + frames
         guard isDropFrame, fps % 30 == 0 else { return nominal }
-        let dropPerMinute = fps / 15 // 2 для 30, 4 для 60
+        let dropPerMinute = fps / 15 // 2 for 30, 4 for 60
         let totalMinutes = hours * 60 + minutes
         return nominal - dropPerMinute * (totalMinutes - totalMinutes / 10)
     }
 
-    /// Обратное преобразование: реальный номер кадра → метка таймкода.
+    /// Inverse transform: real frame number → a timecode label.
     public init(frameNumber: Int, fps: Int, isDropFrame: Bool = false) {
         var fn = max(0, frameNumber)
         if isDropFrame, fps % 30 == 0 {
             let dropPerMinute = fps / 15
-            let framesPerMinute = fps * 60 - dropPerMinute        // все минуты, кроме каждой 10-й
+            let framesPerMinute = fps * 60 - dropPerMinute        // every minute except each 10th
             let framesPer10Minutes = fps * 600 - dropPerMinute * 9
             let tenMinuteBlocks = fn / framesPer10Minutes
             let rem = fn % framesPer10Minutes
@@ -65,7 +65,7 @@ public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
         return String(format: "%02d:%02d:%02d%@%02d", hours, minutes, seconds, sep, frames)
     }
 
-    /// Вариант для имён файлов (без двоеточий).
+    /// A filename-safe variant (no colons).
     public var fileNameSafe: String {
         String(format: "%02d.%02d.%02d.%02d", hours, minutes, seconds, frames)
     }

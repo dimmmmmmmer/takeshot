@@ -1,9 +1,9 @@
 #import "include/CDeckLink.h"
 
-// Заголовки Blackmagic DeckLink SDK подключаются, если пользователь положил их
-// в vendor/DeckLinkSDK/include (см. vendor/DeckLinkSDK/README.md).
-// DeckLinkAPIDispatch.cpp из SDK динамически грузит /Library/Frameworks/DeckLinkAPI.framework,
-// поэтому линковать фреймворк на этапе сборки не нужно.
+// The Blackmagic DeckLink SDK headers are included if the user placed them in
+// vendor/DeckLinkSDK/include (see vendor/DeckLinkSDK/README.md).
+// The SDK's DeckLinkAPIDispatch.cpp dynamically loads /Library/Frameworks/DeckLinkAPI.framework,
+// so there's no need to link the framework at build time.
 #if __has_include("DeckLinkAPI.h")
 #define TAKESHOT_HAS_DECKLINK_SDK 1
 #include "DeckLinkAPI.h"
@@ -26,9 +26,9 @@ static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 
 #if TAKESHOT_HAS_DECKLINK_SDK
 
-#pragma mark - Вспомогательное
+#pragma mark - Helpers
 
-// Персистентный ID устройства (fallback — display name).
+// Persistent device ID (fallback — display name).
 static NSString *CDLPersistentID(IDeckLink *deckLink) {
     int64_t persistentID = 0;
     IDeckLinkProfileAttributes *attributes = NULL;
@@ -58,7 +58,7 @@ static IDeckLink *CDLFindDevice(NSString *deviceID) {
     IDeckLink *found = NULL;
     while (iterator->Next(&deckLink) == S_OK) {
         if (!found && [CDLPersistentID(deckLink) isEqualToString:deviceID]) {
-            found = deckLink; // владение переходит вызывающему
+            found = deckLink; // ownership passes to the caller
         } else {
             deckLink->Release();
         }
@@ -88,7 +88,7 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
     return format;
 }
 
-#pragma mark - Колбэк DeckLink
+#pragma mark - DeckLink callback
 
 @interface CDLCapture () {
   @public
@@ -241,7 +241,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 + (BOOL)isSDKAvailable {
     IDeckLinkIterator *iterator = CreateDeckLinkIteratorInstance();
     if (!iterator) {
-        return NO; // Desktop Video runtime не установлен
+        return NO; // Desktop Video runtime not installed
     }
     iterator->Release();
     return YES;
@@ -315,7 +315,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     _callback = new CDLInputCallback(self);
     _input->SetCallback(_callback);
 
-    // Стартуем с произвольного режима — детекция формата поправит на фактический.
+    // Start with an arbitrary mode — format detection will correct it to the actual one.
     HRESULT hr = _input->EnableVideoInput(bmdModeHD1080p25, bmdFormat8BitYUV,
                                           bmdVideoInputEnableFormatDetection);
     if (hr != S_OK) {
@@ -328,7 +328,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
         return NO;
     }
-    // SDI несёт до 16 каналов эмбеднутого аудио — берём все, писать так писать
+    // SDI carries up to 16 channels of embedded audio — take them all
     _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger, 16);
 
     if (_input->StartStreams() != S_OK) {
@@ -366,14 +366,14 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     }
 }
 
-#pragma mark - обработка колбэков (поток DeckLink)
+#pragma mark - callback handling (DeckLink thread)
 
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags {
     if (!_input) {
         return;
     }
-    // RGB-источники берём как BGRA, остальное — 8-бит YUV (2vuy)
+    // RGB sources as BGRA, everything else as 8-bit YUV (2vuy)
     BMDPixelFormat pixelFormat = (flags & bmdDetectedVideoInputRGB444)
         ? bmdFormat8BitBGRA
         : bmdFormat8BitYUV;
@@ -422,7 +422,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         return NULL;
     }
 
-    // С SDK 14.x байты кадра доступны через IDeckLinkVideoBuffer
+    // With SDK 14.x the frame bytes are accessed via IDeckLinkVideoBuffer
     IDeckLinkVideoBuffer *videoBuffer = NULL;
     if (videoFrame->QueryInterface(IID_IDeckLinkVideoBuffer,
                                    (void **)&videoBuffer) != S_OK || !videoBuffer) {
@@ -467,7 +467,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
             [delegate capture:self signalPresent:_lastSignalPresent];
         }
         if (!noSignal) {
-            // RP188-таймкод: пробуем источники по убыванию надёжности
+            // RP188 timecode: try sources in decreasing order of reliability
             BOOL hasTC = NO;
             uint8_t h = 0, m = 0, s = 0, f = 0;
             BOOL dropFrame = NO;
@@ -496,7 +496,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                 pts = (double)frameTime / (double)kScale;
             }
 
-            // SMPTE 291M пакеты из VANC (метадата камер, триггеры, тайм-данные)
+            // SMPTE 291M packets from VANC (camera metadata, triggers, time data)
             NSMutableArray<CDLAncillaryPacket *> *ancPackets = [NSMutableArray array];
             IDeckLinkVideoFrameAncillaryPackets *ancInterface = NULL;
             if (videoFrame->QueryInterface(IID_IDeckLinkVideoFrameAncillaryPackets,
@@ -558,7 +558,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 @end
 
-#else // стаб без SDK
+#else // stub without SDK
 
 @implementation CDLDeviceManager
 

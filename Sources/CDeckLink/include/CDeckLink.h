@@ -3,34 +3,34 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Описание DeckLink-устройства.
+/// Description of a DeckLink device.
 @interface CDLDeviceInfo : NSObject
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *persistentID;
 @end
 
-/// Формат входного сигнала, определённый платой.
+/// The input signal format detected by the board.
 @interface CDLVideoFormat : NSObject
 @property (nonatomic) long width;
 @property (nonatomic) long height;
-@property (nonatomic) double frameRate;      // фактическая: 23.976, 25, 29.97...
-@property (nonatomic) int timecodeFPS;       // номинальная нумерация TC: 24, 25, 30...
+@property (nonatomic) double frameRate;      // actual: 23.976, 25, 29.97...
+@property (nonatomic) int timecodeFPS;       // nominal TC numbering: 24, 25, 30...
 @property (nonatomic, copy) NSString *modeName; // "1080p25"
 @end
 
-/// Доступ к DeckLink API. Если проект собран без заголовков SDK
-/// (vendor/DeckLinkSDK/include пуст), работает как стаб: isSDKAvailable == NO.
+/// Access to the DeckLink API. If the project is built without the SDK headers
+/// (vendor/DeckLinkSDK/include is empty), it works as a stub: isSDKAvailable == NO.
 @interface CDLDeviceManager : NSObject
-/// Скомпилирован ли мост с DeckLink SDK и доступен ли runtime-фреймворк.
+/// Whether the bridge was compiled with the DeckLink SDK and the runtime framework is available.
 + (BOOL)isSDKAvailable;
-/// Список подключённых устройств (пустой в стаб-режиме).
+/// List of connected devices (empty in stub mode).
 + (NSArray<CDLDeviceInfo *> *)devices;
-/// Подписка на hot-plug: handler вызывается при подключении/отключении
-/// любого DeckLink-устройства (на потоке DeckLink). Повторный вызов заменяет handler.
+/// Subscribe to hot-plug: handler is called when any DeckLink device is
+/// connected/disconnected (on the DeckLink thread). Calling again replaces the handler.
 + (void)startWatchingDevicesWithHandler:(void (^)(void))handler;
 @end
 
-/// SMPTE 291M ancillary-пакет из VANC-области кадра.
+/// A SMPTE 291M ancillary packet from the frame's VANC region.
 @interface CDLAncillaryPacket : NSObject
 @property (nonatomic) uint8_t did;
 @property (nonatomic) uint8_t sdid;
@@ -40,8 +40,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CDLCapture;
 
-/// Колбэки захвата. Вызываются на внутреннем потоке DeckLink —
-/// принимающая сторона сама решает, куда перекинуть.
+/// Capture callbacks. Invoked on DeckLink's internal thread —
+/// the receiver decides where to hop them.
 @protocol CDLCaptureDelegate <NSObject>
 - (void)capture:(CDLCapture *)capture didDetectFormat:(CDLVideoFormat *)format;
 - (void)capture:(CDLCapture *)capture
@@ -54,7 +54,7 @@ NS_ASSUME_NONNULL_BEGIN
                 tcFrames:(int)tcFrames
              tcDropFrame:(BOOL)tcDropFrame
         ancillaryPackets:(NSArray<CDLAncillaryPacket *> *)ancillaryPackets;
-/// PCM 48 кГц, 16 бит, interleaved.
+/// PCM 48 kHz, 16-bit, interleaved.
 - (void)capture:(CDLCapture *)capture
     didReceiveAudioBytes:(const void *)bytes
             sampleFrames:(unsigned int)sampleFrames
@@ -63,10 +63,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)capture:(CDLCapture *)capture signalPresent:(BOOL)present;
 @end
 
-/// Сессия захвата с одного устройства.
+/// A capture session from a single device.
 @interface CDLCapture : NSObject
 @property (nonatomic, weak, nullable) id<CDLCaptureDelegate> delegate;
-/// Запуск с автодетекцией формата. deviceID — persistentID из CDLDeviceManager.
+/// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;
 @end

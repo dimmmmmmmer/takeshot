@@ -2,10 +2,10 @@ import AVFoundation
 import CoreVideo
 import Foundation
 
-/// Запись одного дубля в .mov: видео в выбранном кодеке, PCM-аудио пасстру,
-/// timecode-трек со стартовым TC дубля.
+/// Writes one take to a .mov: video in the chosen codec, PCM audio passthrough,
+/// a timecode track with the take's start TC.
 ///
-/// Жизненный цикл: init → append*(…) → finish(). Один экземпляр = один файл.
+/// Lifecycle: init → append*(…) → finish(). One instance = one file.
 public final class TakeWriter {
     public enum WriterError: Error, LocalizedError {
         case cannotCreateWriter(Error)
@@ -47,7 +47,7 @@ public final class TakeWriter {
         return CMTimeSubtract(lastPTS, firstPTS).seconds + frameDuration
     }
 
-    /// AVVideoColorProperties по пресету ("709" → nclc 1-1-1).
+    /// AVVideoColorProperties for a preset ("709" → nclc 1-1-1).
     static func videoColorProperties(for preset: String?) -> [String: String] {
         switch preset {
         case "601":
@@ -55,7 +55,7 @@ public final class TakeWriter {
                     AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                     AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_601_4]
         case "2020":
-            // трансфер у 2020 SDR — тот же 709
+            // the transfer for 2020 SDR is the same 709
             return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
                     AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                     AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020]
@@ -66,12 +66,12 @@ public final class TakeWriter {
         }
     }
 
-    /// Ключ QuickTime-метадаты, которым TakeShot помечает свои файлы
-    /// (по нему приложение отличает свои дубли от чужих файлов в папке).
+    /// QuickTime metadata key TakeShot uses to tag its own files
+    /// (lets the app tell its takes apart from foreign files in the folder).
     public static let markerKey = "com.takeshot.origin"
     public static let rollKey = "com.takeshot.roll"
     public static let clipKey = "com.takeshot.clip"
-    /// Имя LUT, запечённого в файл (отсутствует — файл чистый).
+    /// Name of the LUT baked into the file (absent — the file is clean).
     public static let lutKey = "com.takeshot.lut"
 
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
@@ -108,11 +108,11 @@ public final class TakeWriter {
             AVVideoCodecKey: codec.avCodecType,
             AVVideoWidthKey: format.width,
             AVVideoHeightKey: format.height,
-            // явная колориметрия (nclc): файл и превью интерпретируются одинаково
+            // explicit colorimetry (nclc): file and preview are interpreted the same
             AVVideoColorPropertiesKey: Self.videoColorProperties(for: colorTagPreset),
         ]
         if codec.needsBitrate {
-            // ощутимо качественный H.264/HEVC для он-сет просмотра: ~0.12 bpp
+            // visibly good H.264/HEVC for on-set viewing: ~0.12 bpp
             let bitrate = Int(Double(format.width * format.height) * format.frameRate * 0.12)
             videoSettings[AVVideoCompressionPropertiesKey] = [
                 AVVideoAverageBitRateKey: bitrate,
@@ -125,7 +125,7 @@ public final class TakeWriter {
             assetWriterInput: videoInput, sourcePixelBufferAttributes: nil)
         writer.add(videoInput)
 
-        // Timecode-трек: одна tc32-сэмпла на весь дубль, добавляется в finish().
+        // Timecode track: one tc32 sample for the whole take, added in finish().
         if let tc = startTimecode {
             var fdesc: CMTimeCodeFormatDescription?
             let frameDuration = CMTime(value: 1000, timescale: CMTimeScale(format.frameRate * 1000))
@@ -150,9 +150,9 @@ public final class TakeWriter {
             timecodeFormatDescription = nil
         }
 
-        // Аудио-вход обязан быть добавлен ДО startWriting() — иначе canAdd
-        // возвращает false и дорожки звука в файле не будет. Формат известен
-        // заранее (PCM 48к/16бит, число каналов приходит из конвейера).
+        // The audio input MUST be added BEFORE startWriting() — otherwise canAdd
+        // returns false and the file has no audio track. The format is known
+        // up front (PCM 48k/16-bit, channel count comes from the pipeline).
         if audioChannelCount > 0 {
             var audioSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
@@ -163,8 +163,8 @@ public final class TakeWriter {
                 AVLinearPCMIsBigEndianKey: false,
                 AVLinearPCMIsNonInterleaved: false,
             ]
-            // для >2 каналов LPCM обязателен channel layout — без него append
-            // роняет процесс (NSException). Discrete-раскладка по числу каналов.
+            // for >2 channels LPCM requires a channel layout — without it append
+            // crashes the process (NSException). Discrete layout by channel count.
             if audioChannelCount > 2 {
                 var layout = AudioChannelLayout()
                 layout.mChannelLayoutTag =
@@ -185,10 +185,10 @@ public final class TakeWriter {
         }
     }
 
-    /// Видеокадр. `pts` — presentation time в таймлайне захвата (любая база,
-    /// сессия стартует с первого переданного кадра).
-    /// Возвращает false, если кадр дропнут (энкодер/диск не успевает) —
-    /// при живом захвате это допустимо, счётчик дропов ведёт вызывающий.
+    /// A video frame. `pts` is the presentation time on the capture timeline (any
+    /// base; the session starts from the first frame passed in).
+    /// Returns false if the frame was dropped (encoder/disk can't keep up) —
+    /// acceptable during live capture; the caller keeps the drop counter.
     @discardableResult
     public func append(pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
         startSessionIfNeeded(at: pts)
@@ -201,13 +201,13 @@ public final class TakeWriter {
         return true
     }
 
-    /// PCM-аудио с капчур-платы. Вход уже создан в init (до startWriting).
+    /// PCM audio from the capture board. The input is already created in init (before startWriting).
     public func append(audioSampleBuffer: CMSampleBuffer) {
         guard sessionStarted, let audioInput, audioInput.isReadyForMoreMediaData else { return }
         audioInput.append(audioSampleBuffer)
     }
 
-    /// Завершить дубль. Возвращает URL готового файла.
+    /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
         if let timecodeInput, let fdesc = timecodeFormatDescription,
            let tc = startTimecode, sessionStarted {
@@ -227,7 +227,7 @@ public final class TakeWriter {
         return url
     }
 
-    /// Отменить и удалить недописанный файл.
+    /// Cancel and delete the unfinished file.
     public func cancel() {
         writer.cancelWriting()
         try? FileManager.default.removeItem(at: url)
@@ -245,7 +245,7 @@ public final class TakeWriter {
     private func appendTimecodeSample(input: AVAssetWriterInput,
                                       formatDescription: CMTimeCodeFormatDescription,
                                       timecode: Timecode) {
-        // tc32: один big-endian UInt32 с номером кадра старта
+        // tc32: one big-endian UInt32 with the start frame number
         var frameNumber = UInt32(clamping: timecode.frameNumber).bigEndian
         var blockBuffer: CMBlockBuffer?
         guard CMBlockBufferCreateWithMemoryBlock(
