@@ -1,8 +1,8 @@
-# Релиз по тегу vX.Y.Z: собрать TakeShot.app, зазиповать, создать GitHub Release.
+# Release on a vX.Y.Z tag: build TakeShot.app, zip it, create a GitHub Release.
 #
-# Подпись ad-hoc (Developer ID нет), поэтому при первом запуске скачанного
-# приложения macOS покажет предупреждение Gatekeeper — открыть через
-# правый клик → Open, либо: xattr -d com.apple.quarantine TakeShot.app
+# Ad-hoc signing (no Developer ID), so on first launch of a downloaded build
+# macOS shows a Gatekeeper warning — open via right-click → Open, or:
+# xattr -d com.apple.quarantine TakeShot.app
 name: Release
 
 on:
@@ -18,13 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Тесты
+      - name: Test
         run: ./scripts/test.sh
 
-      - name: Сборка TakeShot.app
+      - name: Build TakeShot.app
         run: ./scripts/bundle-app.sh
 
-      - name: DMG приложения
+      - name: App DMG
         run: |
           mkdir -p build/dmg-root
           cp -R build/TakeShot.app build/dmg-root/
@@ -32,7 +32,7 @@ jobs:
           hdiutil create -volname "TakeShot" -srcfolder build/dmg-root \
             -ov -format UDZO "build/TakeShot-${{ github.ref_name }}.dmg"
 
-      - name: Создать релиз
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -1,5 +1,5 @@
-# Сборка и тесты на каждый push/PR. DeckLink SDK в репозитории нет,
-# поэтому мост собирается в стаб-режиме — ядро и GUI это не затрагивает.
+# Build and test on every push/PR. The DeckLink SDK is not in the repo,
+# so the bridge builds in stub mode — this doesn't affect the core or GUI.
 name: CI
 
 on:
@@ -13,24 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Версии тулчейна
+      - name: Toolchain versions
         run: |
           sw_vers
           swift --version
 
-      - name: Сборка
+      - name: Build
         run: swift build
 
-      - name: Тесты
+      - name: Test
         run: ./scripts/test.sh
 
-      - name: Сборка TakeShot.app
+      - name: Build TakeShot.app
         run: ./scripts/bundle-app.sh
 
-      - name: Zip приложения
+      - name: Zip the app
         run: ditto -c -k --keepParent build/TakeShot.app build/TakeShot.zip
 
-      - name: Артефакт сборки
+      - name: Build artifact
         uses: actions/upload-artifact@v4
         with:
           name: TakeShot-${{ github.sha }}

@@ -1,87 +1,101 @@
 # TakeShot
 
-Он-сет ingest-ассистент для macOS: захват с камеры через Blackmagic DeckLink/UltraStudio,
-автоматическая нарезка на дубли по REC-состоянию камеры (бегущий RP188-таймкод + VANC-триггеры),
-именование файлов по метадате. План проекта: см. историю — аналог Resolve Capture / Media Express,
-заточенный под сбор дублей.
+On-set ingest assistant for macOS: captures a camera feed through a Blackmagic
+DeckLink/UltraStudio, auto-splits it into takes by the camera's REC state
+(running RP188 timecode + VANC triggers), and names files from metadata. A take
+collector in the spirit of Resolve Capture / Media Express.
 
-## Сборка и тесты
+Project language: **all documentation, README files, and code comments are in
+English.** UI strings are localized (see i18n below).
 
-- Xcode не установлен — только Command Line Tools. Всё через SwiftPM:
-  - `swift build` — сборка
-  - `scripts/test.sh` — тесты ядра (Swift Testing; голый `swift test` на CLT не находит
-    Testing.framework — скрипт добавляет нужные -F/-rpath, с Xcode он же деградирует
-    до обычного `swift test`)
-  - `swift run takeshot-devices` — CLI-smoke: перечислить DeckLink-устройства
-  - `scripts/bundle-app.sh` — собрать `build/TakeShot.app` (release + ad-hoc подпись)
+## Build and test
+
+- Xcode is not installed — only the Command Line Tools. Everything runs through
+  SwiftPM:
+  - `swift build` — build
+  - `scripts/test.sh` — core tests (Swift Testing; a bare `swift test` on CLT
+    can't find Testing.framework — the script adds the needed -F/-rpath, and it
+    degrades to a plain `swift test` when Xcode is present)
+  - `swift run takeshot-devices` — CLI smoke test: list DeckLink devices
+  - `scripts/bundle-app.sh` — build `build/TakeShot.app` (release + ad-hoc sign)
 
 ## DeckLink SDK
 
-Заголовки SDK не коммитятся. Их кладут в `vendor/DeckLinkSDK/include/`
-(см. `vendor/DeckLinkSDK/README.md`). Без них `CDeckLink` собирается как стаб
-(`CDLDeviceManager.isSDKAvailable == false`); с ними — реальный мост
-(`DeckLinkAPIDispatch.cpp` включается прямо в `CDeckLink.mm`, линковать фреймворк не нужно;
-runtime — `/Library/Frameworks/DeckLinkAPI.framework` из Blackmagic Desktop Video).
+The SDK headers are not committed. Drop them into `vendor/DeckLinkSDK/include/`
+(see `vendor/DeckLinkSDK/README.md`). Without them `CDeckLink` builds as a stub
+(`CDLDeviceManager.isSDKAvailable == false`); with them it's the real bridge
+(`DeckLinkAPIDispatch.cpp` is included directly in `CDeckLink.mm`, so no
+framework linking is needed; the runtime is
+`/Library/Frameworks/DeckLinkAPI.framework` from Blackmagic Desktop Video).
 
-## Архитектура
+## Architecture
 
-- `Sources/CaptureCore` — ядро без зависимостей от SDK: `Timecode` (включая drop-frame
-  математику), `RecDetector` (state machine REC/IDLE по TC-run и VANC-триггерам),
-  `NamingEngine` (шаблоны имён), `TakeWriter` (AVAssetWriter: видео + аудио + timecode-трек,
-  один файл = один дубль), протокол `CaptureBackend` (абстракция под будущий AJA-бэкенд).
-- `Sources/CDeckLink` — Obj-C++ мост к DeckLink SDK (C-family таргет, наружу чистый Obj-C).
-- `Sources/TakeShot` — SwiftUI-приложение; `CaptureController` — единственная точка,
-  связывающая бэкенд/детектор/writer; колбэки бэкенда приходят с фонового потока
-  и перебрасываются на MainActor.
+- `Sources/CaptureCore` — SDK-free core: `Timecode` (including drop-frame math),
+  `RecDetector` (REC/IDLE state machine from TC-run and VANC triggers),
+  `NamingEngine` (name templates), `TakeWriter` (AVAssetWriter: video + audio +
+  timecode track, one file = one take), the `CaptureBackend` protocol
+  (abstraction for a future AJA backend).
+- `Sources/CDeckLink` — Obj-C++ bridge to the DeckLink SDK (C-family target,
+  pure Obj-C surface).
+- `Sources/TakeShot` — SwiftUI app; `CaptureController` is the single point that
+  ties backend/detector/writer together; backend callbacks arrive on a
+  background thread and are hopped onto the MainActor.
 
-Вся логика детекции дублей тестируется на синтетических TC-последовательностях —
-при изменениях `RecDetector`/`Timecode` прогонять `swift test`.
+All take-detection logic is tested against synthetic TC sequences — run
+`swift test` after any change to `RecDetector`/`Timecode`.
 
-## Демо-источник
+## Demo source
 
-`MockCaptureBackend` скрыт из продакшн-UI: появляется в списке устройств только
-при запуске `TakeShot --demo` (или env `TAKESHOT_DEMO=1`). Генерирует 1080p25-сигнал
-с Rec Run-таймкодом; кнопка «REC демо-камеры» видна при выбранном демо-источнике.
-Это способ гонять GUI и логику дублей end-to-end без платы.
+`MockCaptureBackend` is hidden from the production UI: it appears in the device
+list only when launched via `TakeShot --demo` (or env `TAKESHOT_DEMO=1`). It
+generates a 1080p25 signal with Rec Run timecode; the "REC demo camera" button
+is visible when the demo source is selected. This is how the GUI and take logic
+are exercised end-to-end without a board.
 
-## UI-компоновка (по брифу пользователя)
+## UI layout (per the user's brief)
 
-Устройство выбирается в настройках (не в главном окне). Над плеером: TC слева,
-разрешение+fps справа. Под плеером: большая красная REC-кнопка строго по центру;
-слева внизу — настройки/VANC-монитор/выбор папки (как в Resolve); справа — поля
-Prefix (=projectName)/Cam/Roll/Clip. Смена ролла сбрасывает номер клипа. Тайтлбар
-скрыт (.hiddenTitleBar). Тема (light/dark/system) и цвет фона плеера — в настройках.
-Панель дублей: кнопка «открыть папку», блок Other content (чужие видеофайлы в папке
-записи, поллинг раз в 5 с). CSV использует колонку Reel Name (=roll).
+The device is chosen in Settings (not in the main window). Above the player: TC
+on the left, resolution + fps on the right. Below the player: a large red REC
+button dead center; bottom-left — settings/VANC monitor/folder picker (like
+Resolve); right — Prefix (=projectName)/Cam/Roll/Clip fields. Changing the roll
+resets the clip number. The title bar is hidden (.hiddenTitleBar). Theme
+(light/dark/system) and the player background color live in Settings. Takes
+panel: an "open folder" button and an Other content block (foreign video files
+in the record folder, polled every 5 s). The CSV uses a Reel Name column
+(=roll).
 
 ## CI
 
-Codacy: статический анализ (подключается на codacy.com) + покрытие
-(`codacy-coverage.yml` заливает lcov; токен в секрете CODACY_PROJECT_TOKEN,
-в код не коммитится).
+Codacy: static analysis (connected on codacy.com) + coverage
+(`codacy-coverage.yml` uploads lcov; the token lives in the CODACY_PROJECT_TOKEN
+secret and is never committed).
 
-GitHub Actions (`.github/workflows/`): `ci.yml` — сборка + тесты + артефакт
-TakeShot.zip на каждый push/PR; `release.yml` — по тегу `v*` собирает .app и
-публикует GitHub Release (.dmg с симлинком на /Applications).
-Подпись ad-hoc: скачанные сборки открывать через правый клик → Open (Gatekeeper).
+GitHub Actions (`.github/workflows/`): `ci.yml` — build + tests + a TakeShot.zip
+artifact on every push/PR; `release.yml` — on a `v*` tag it builds the .app and
+publishes a GitHub Release (.dmg with a symlink to /Applications). Ad-hoc
+signing: open downloaded builds via right-click → Open (Gatekeeper).
 
 ## i18n
 
-Базовый язык — английский. Строки UI — через `L("key")` (`Sources/TakeShot/L10n.swift`),
-файлы `Sources/TakeShot/Resources/{en,ru}.lproj/Localizable.strings`. Язык переключается
-в настройках на лету (подмена .lproj-бандла), выбор хранится в `CaptureSettings.appLanguage`
-(nil = системный; новые поля настроек делать Optional — иначе старый сохранённый JSON
-не декодируется). Ошибки ядра (CaptureCore/CDeckLink) — англ., без локализации.
-Новые строки добавлять в оба .strings; хардкод строк в вьюхах не оставлять.
+The base language is English. UI strings go through `L("key")`
+(`Sources/TakeShot/L10n.swift`), with files
+`Sources/TakeShot/Resources/{en,ru}.lproj/Localizable.strings`. The language
+switches live in Settings (swapping the .lproj bundle); the choice is stored in
+`CaptureSettings.appLanguage` (nil = system; make new settings fields Optional —
+otherwise old saved JSON won't decode). Core errors (CaptureCore/CDeckLink) are
+English, not localized. Add new strings to both .strings files; don't leave
+hard-coded strings in views.
 
-## Статус этапов (план MVP)
+## Milestone status (MVP plan)
 
-1. ✅ Каркас + ядро (детектор, именование, writer, UI-скелет, тесты)
-2. ✅ Захват в `CDeckLink`: вход, автодетекция формата, кадры (IDeckLinkVideoBuffer),
-   RP188-таймкод, аудио 48к/16бит → колбэки. **Не проверено на живой плате.**
-3. ✅ Превью (`AVSampleBufferDisplayLayer`), конвейер `CapturePipeline` на серийной
-   очереди, ручная запись, демо-источник
-4. ✅ Авто-дубли + пре-ролл буфер (кадры от фактического старта камеры + настраиваемые
-   секунды до него; покрыто e2e-тестами на синтетике). **Нужна проверка с платой.**
-5. ⏳ VANC-метадата (Blackmagic: tally DID 0x51/SDID 0x52, camera control 0x51/0x53),
-   имена из reel/scene/take камеры
+1. ✅ Scaffold + core (detector, naming, writer, UI skeleton, tests)
+2. ✅ Capture in `CDeckLink`: input, format auto-detection, frames
+   (IDeckLinkVideoBuffer), RP188 timecode, 48k/16-bit audio → callbacks.
+   **Not verified on a live board.**
+3. ✅ Preview (`AVSampleBufferDisplayLayer`), the `CapturePipeline` on a serial
+   queue, manual recording, demo source
+4. ✅ Auto-takes + pre-roll buffer (frames from the camera's actual start +
+   configurable lead seconds; covered by synthetic e2e tests). **Needs a board
+   check.**
+5. ⏳ VANC metadata (Blackmagic: tally DID 0x51/SDID 0x52, camera control
+   0x51/0x53), names from the camera's reel/scene/take

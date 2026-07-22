@@ -1,6 +1,6 @@
-// Генерация иконки приложения: тёмная плашка в стиле Blackmagic,
-// хлопушка с приоткрытой полосатой планкой и красным REC-огоньком.
-// Запуск: swift scripts/make-icon.swift <выходная-папка.iconset>
+// Generate the app icon: a dark Blackmagic-style tile, a clapperboard with a
+// slightly open striped bar and a red REC light.
+// Run: swift scripts/make-icon.swift <output-folder.iconset>
 import AppKit
 import CoreGraphics
 
@@ -11,7 +11,7 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
     ctx.saveGState()
     ctx.scaleBy(x: s, y: s)
 
-    // --- фон: тёмная скруглённая плашка ---
+    // --- background: dark rounded tile ---
     let margin: CGFloat = 100
     let rect = CGRect(x: margin, y: margin, width: 1024 - margin * 2, height: 1024 - margin * 2)
     let bg = CGPath(roundedRect: rect, cornerWidth: 185, cornerHeight: 185, transform: nil)
@@ -30,7 +30,7 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
     ctx.addPath(bg)
     ctx.strokePath()
 
-    // --- корпус хлопушки ---
+    // --- clapperboard body ---
     let bodyRect = CGRect(x: 232, y: 300, width: 560, height: 310)
     let body = CGPath(roundedRect: bodyRect, cornerWidth: 36, cornerHeight: 36, transform: nil)
     ctx.saveGState()
@@ -44,12 +44,12 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
         ctx.drawLinearGradient(g, start: CGPoint(x: 512, y: 610),
                                end: CGPoint(x: 512, y: 300), options: [])
     }
-    // строчки-«графы» на корпусе
+    // ruled "field" lines on the body
     ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.10))
     for y in [520, 448, 376] {
         ctx.fill(CGRect(x: 282, y: CGFloat(y), width: 320, height: 22))
     }
-    // красный REC-огонёк
+    // red REC light
     let dotCenter = CGPoint(x: 700, y: 531)
     let dot = [
         CGColor(red: 1.0, green: 0.35, blue: 0.30, alpha: 1),
@@ -66,7 +66,7 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
     }
     ctx.restoreGState()
 
-    // --- верхняя планка: приоткрыта, диагональные полосы ---
+    // --- top bar: slightly open, diagonal stripes ---
     ctx.saveGState()
     ctx.translateBy(x: 232, y: 622)
     ctx.rotate(by: 7 * .pi / 180)

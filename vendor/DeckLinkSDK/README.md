@@ -1,21 +1,19 @@
 # DeckLink SDK
 
-Сюда кладутся заголовки Blackmagic DeckLink SDK (в git не попадают — лицензия BMD).
+Place the Blackmagic DeckLink SDK headers here (not committed to git — BMD license).
 
-1. Скачать «Desktop Video SDK»: https://www.blackmagicdesign.com/support → Capture and Playback → Latest Downloads → Developer SDKs.
-2. Распаковать архив.
-3. Скопировать **содержимое папки `Mac/include`** из SDK сюда, в `vendor/DeckLinkSDK/include/`:
+1. Download the "Desktop Video SDK": https://www.blackmagicdesign.com/support → Capture and Playback → Latest Downloads → Developer SDKs.
+2. Unpack the archive.
+3. Copy the **contents of the SDK's `Mac/include` folder** here, into `vendor/DeckLinkSDK/include/`:
 
 ```
 vendor/DeckLinkSDK/include/
 ├── DeckLinkAPI.h
 ├── DeckLinkAPIDispatch.cpp
 ├── DeckLinkAPIVersion.h
-└── … (остальные DeckLinkAPI*.h)
+└── … (the rest of the DeckLinkAPI*.h)
 ```
 
-После этого `swift build` автоматически соберёт мост `CDeckLink` с реальной поддержкой устройств
-(без заголовков он собирается как стаб: устройства не находятся, `isSDKAvailable == false`).
+After that, `swift build` automatically builds the `CDeckLink` bridge with real device support (without the headers it builds as a stub: no devices are found, `isSDKAvailable == false`).
 
-Runtime-часть (`/Library/Frameworks/DeckLinkAPI.framework`) ставится вместе с Blackmagic Desktop Video —
-на этой машине уже установлена.
+The runtime part (`/Library/Frameworks/DeckLinkAPI.framework`) ships with Blackmagic Desktop Video — already installed on this machine.
