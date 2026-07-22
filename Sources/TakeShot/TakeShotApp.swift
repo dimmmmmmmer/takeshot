@@ -5,6 +5,7 @@ import SwiftUI
 struct TakeShotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var controller = CaptureController()
+
     @StateObject private var hotkeys = HotkeyManager()
 
     var body: some Scene {
@@ -16,6 +17,7 @@ struct TakeShotApp: App {
                 .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
                 .onAppear {
+                    AppDelegate.shared?.controller = controller
                     hotkeys.install(controller: controller)
                     // отступ под кнопки окна — по факту, а не константой
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -52,6 +54,18 @@ struct TakeShotApp: App {
 /// При запуске голого исполняемого файла из swift build (без .app-бандла)
 /// приложение не получает фокус — поднимаем его вручную.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static weak var shared: AppDelegate?
+    weak var controller: CaptureController?
+
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        controller?.flushOnTerminate()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

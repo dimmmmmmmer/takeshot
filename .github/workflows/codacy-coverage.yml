@@ -40,6 +40,9 @@ jobs:
           echo "lcov lines: $(wc -l < coverage.lcov)"
 
       - name: Заливка в Codacy
+        # не красим CI: заливка работает только после подключения репозитория
+        # на codacy.com (иначе 'Request URL not found')
+        continue-on-error: true
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         run: |

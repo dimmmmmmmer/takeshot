@@ -200,6 +200,16 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.link)
             }
+            Section {
+                HStack {
+                    Button(L("reset_colors")) { controller.resetColors() }
+                    Spacer()
+                    Button(L("reset_all"), role: .destructive) {
+                        controller.resetAllSettings()
+                        hotkeys.resetToDefaults()
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

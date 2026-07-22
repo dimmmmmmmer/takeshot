@@ -180,47 +180,15 @@ struct PlayerArea: View {
     }
 }
 
-/// Меню LUT: выбор/импорт .cube, применение к превью и запеканию в запись.
+/// LUT: выбор/импорт .cube, применение к превью/записи, интенсивность.
+/// Popover, а не Menu — в NSMenu слайдеры не работают (интенсивность «зависала»).
 struct LUTMenu: View {
     @EnvironmentObject private var controller: CaptureController
+    @State private var showPopover = false
 
     var body: some View {
-        Menu {
-            Button {
-                controller.selectLUT(fileName: nil)
-            } label: {
-                if controller.settings.lutFileName == nil {
-                    Label(L("lut_none"), systemImage: "checkmark")
-                } else {
-                    Text(L("lut_none"))
-                }
-            }
-            ForEach(controller.availableLUTs) { lut in
-                Button {
-                    controller.selectLUT(fileName: lut.fileName)
-                } label: {
-                    if controller.settings.lutFileName == lut.fileName {
-                        Label(lut.name, systemImage: "checkmark")
-                    } else {
-                        Text(lut.name)
-                    }
-                }
-            }
-            Divider()
-            Toggle(L("lut_preview"), isOn: Binding(
-                get: { controller.lutPreviewOn },
-                set: { controller.lutPreviewOn = $0 }))
-            Toggle(L("lut_record"), isOn: Binding(
-                get: { controller.lutRecordOn },
-                set: { controller.lutRecordOn = $0 }))
-            Divider()
-            // интенсивность LUT (микс с оригиналом)
-            Text(L("lut_intensity", Int((controller.lutIntensity * 100).rounded())))
-            Slider(value: Binding(
-                get: { controller.lutIntensity },
-                set: { controller.lutIntensity = $0 }), in: 0...1)
-            Divider()
-            Button(L("lut_import")) { controller.importLUT() }
+        Button {
+            showPopover.toggle()
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: "camera.filters")
@@ -233,9 +201,41 @@ struct LUTMenu: View {
                 }
             }
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            lutControls.padding(14).frame(width: 240)
+        }
         .fixedSize()
         .help(L("lut_help"))
+    }
+
+    @ViewBuilder private var lutControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("lut_help")).font(.caption).foregroundStyle(.secondary)
+            Picker(L("lut_none"), selection: Binding(
+                get: { controller.settings.lutFileName ?? "" },
+                set: { controller.selectLUT(fileName: $0.isEmpty ? nil : $0) })) {
+                Text(L("lut_none")).tag("")
+                ForEach(controller.availableLUTs) { lut in
+                    Text(lut.name).tag(lut.fileName)
+                }
+            }
+            .labelsHidden()
+            Toggle(L("lut_preview"), isOn: Binding(
+                get: { controller.lutPreviewOn },
+                set: { controller.lutPreviewOn = $0 }))
+            Toggle(L("lut_record"), isOn: Binding(
+                get: { controller.lutRecordOn },
+                set: { controller.lutRecordOn = $0 }))
+            Divider()
+            Text(L("lut_intensity", Int((controller.lutIntensity * 100).rounded())))
+                .font(.caption)
+            Slider(value: Binding(
+                get: { controller.lutIntensity },
+                set: { controller.lutIntensity = $0 }), in: 0...1)
+            Divider()
+            Button(L("lut_import")) { controller.importLUT() }
+        }
     }
 }
 

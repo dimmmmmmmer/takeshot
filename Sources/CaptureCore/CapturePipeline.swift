@@ -93,6 +93,8 @@ public final class CapturePipeline: @unchecked Sendable {
     private var vancStats: [String: VancPacketStat] = [:]
     private var vancStatsDirty = false
     private var vancStatsLastPublish = 0
+    /// Незавершённые задачи финализации файлов (ждём их при остановке/выходе).
+    private var pendingFinishTasks: [Task<Void, Never>] = []
 
     public init(config: Config) {
         self.config = config
@@ -454,15 +456,30 @@ public final class CapturePipeline: @unchecked Sendable {
             self.onRecStateChanged?(false)
             self.onTakeFinished?(take)
         }
-        Task {
+        // задачу финализации трекаем — чтобы дождаться её при остановке захвата
+        // и выходе из приложения (иначе файл может остаться недописанным)
+        let task = Task { [weak self] in
             do {
                 _ = try await writer.finish()
             } catch {
                 DispatchQueue.main.async {
-                    self.onError?("Failed to finalize take: \(error.localizedDescription)")
+                    self?.onError?("Failed to finalize take: \(error.localizedDescription)")
                 }
             }
         }
+        pendingFinishTasks.append(task)
+    }
+
+    /// Дождаться финализации всех дописываемых файлов (стоп захвата, выход).
+    public func finishPendingWrites() async {
+        let tasks: [Task<Void, Never>] = await withCheckedContinuation { cont in
+            queue.async {
+                let snapshot = self.pendingFinishTasks
+                self.pendingFinishTasks.removeAll()
+                cont.resume(returning: snapshot)
+            }
+        }
+        for task in tasks { await task.value }
     }
 
     /// Прогнать кадр через LUT (CoreImage, GPU). nil — если LUT не настроен/ошибка.

@@ -201,3 +201,7 @@
 "preset_canon" = "Canon";
 
 "lut_intensity" = "Intensity: %d%%";
+
+/* Reset */
+"reset_colors" = "Reset colors";
+"reset_all" = "Reset all settings";

@@ -595,6 +595,26 @@ final class CaptureController: ObservableObject {
         set { settings.accentHex = newValue.hexString }
     }
 
+    /// Сбросить только цвета интерфейса к дефолтам.
+    func resetColors() {
+        settings.playerBackgroundHex = nil
+        settings.appBackgroundHex = nil
+        settings.accentHex = nil
+    }
+
+    /// Сбросить ВСЕ настройки приложения к заводским (папку записи сохраняем,
+    /// чтобы не потерять текущую библиотеку). Хоткеи и раскладку панели тоже.
+    func resetAllSettings() {
+        let keepDestination = settings.destinationPath
+        var fresh = CaptureSettings()
+        fresh.destinationPath = keepDestination
+        settings = fresh
+        panelSide = "right"
+        UserDefaults.standard.removeObject(forKey: "TakeShot.Hotkeys")
+        L10n.apply(appLanguage)
+        rebuildLUT()
+    }
+
     /// Цвет фона окна; по умолчанию ~полторы ступени ниже миддл-грея.
     var appBackground: Color {
         get {
@@ -683,6 +703,18 @@ final class CaptureController: ObservableObject {
         backend.stopCapture()
         pipeline.captureStopped()
         isCapturing = false
+        // дождаться дозаписи файлов в фоне (не блокируя UI)
+        Task { await pipeline.finishPendingWrites() }
+    }
+
+    /// Блокирующий флаш при выходе из приложения — чтобы файл не усёкся.
+    func flushOnTerminate() {
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            await pipeline.finishPendingWrites()
+            sem.signal()
+        }
+        _ = sem.wait(timeout: .now() + 5)
     }
 
     private func restartCapture() {

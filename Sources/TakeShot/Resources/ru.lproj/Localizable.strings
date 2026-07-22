@@ -201,3 +201,7 @@
 "preset_canon" = "Canon";
 
 "lut_intensity" = "Интенсивность: %d%%";
+
+/* Сброс */
+"reset_colors" = "Сбросить цвета";
+"reset_all" = "Сбросить все настройки";
