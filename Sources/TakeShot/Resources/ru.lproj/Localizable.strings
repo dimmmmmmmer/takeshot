@@ -233,3 +233,6 @@
 "scope_waveform" = "Waveform (лума)";
 "scope_histogram" = "Гистограмма (RGB)";
 "scope_waiting" = "Ожидание сигнала…";
+
+/* Audio monitor */
+"monitor_toggle" = "Мониторинг живого звука (первые два включённых канала; при запуске всегда выключен)";

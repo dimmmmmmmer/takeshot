@@ -35,6 +35,24 @@ struct AudioChannelPanel: View {
                 }
                 dbScale
             }
+            // live monitor: toggle + volume (first two enabled channels)
+            HStack(spacing: 8) {
+                Button {
+                    controller.monitorOn.toggle()
+                } label: {
+                    Image(systemName: controller.monitorOn
+                          ? "speaker.wave.2.fill" : "speaker.slash")
+                        .foregroundStyle(controller.monitorOn
+                                         ? controller.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L("monitor_toggle"))
+                Slider(value: Binding(
+                    get: { controller.monitorVolume },
+                    set: { controller.monitorVolume = $0 }), in: 0...1)
+                    .disabled(!controller.monitorOn)
+            }
+            .frame(maxWidth: panelWidth)
             Text(L("audio_panel_hint"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

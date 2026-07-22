@@ -40,6 +40,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Scope data (waveform + histograms) from the displayed frame, ~8 Hz while
     /// enabled via setScopesEnabled. Delivered on the main queue.
     public var onScopeData: ((ScopeData) -> Void)?
+    /// Stereo monitor feed (first two enabled channels) while audio monitoring
+    /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
+    public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
 
     public let displayLayer = AVSampleBufferDisplayLayer()
     /// Second layer — for output to an external monitor. Frames are mirrored
@@ -90,6 +93,14 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Toggle scope analysis (skipped entirely while off — zero cost).
     public func setScopesEnabled(_ on: Bool) {
         queue.async { self.scopesEnabled = on }
+    }
+
+    private var monitorEnabled = false
+    private var monitorFormatCache: CMAudioFormatDescription?
+
+    /// Toggle the live audio monitor feed (onMonitorAudio).
+    public func setAudioMonitorEnabled(_ on: Bool) {
+        queue.async { self.monitorEnabled = on }
     }
 
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
@@ -225,6 +236,20 @@ public final class CapturePipeline: @unchecked Sendable {
             }
             if let toWrite {
                 self.writer?.append(audioSampleBuffer: toWrite)
+            }
+            // monitor: the first two ENABLED channels as a stereo feed
+            if self.monitorEnabled, let onMonitorAudio = self.onMonitorAudio {
+                let indices: [Int]
+                if let mask = self.config.settings.audioChannelMask {
+                    indices = Array((0..<32).filter { mask & (1 << $0) != 0 }.prefix(2))
+                } else {
+                    indices = [0, 1]
+                }
+                if let monitor = PCMAudio.selectChannels(
+                    sampleBuffer, indices: indices,
+                    formatCache: &self.monitorFormatCache) {
+                    onMonitorAudio(monitor)
+                }
             }
             if !levels.isEmpty {
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }

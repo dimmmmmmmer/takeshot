@@ -687,6 +687,18 @@ struct BottomBarView: View {
                                                      ? controller.accentColor : .primary)
                             }
                             .help(L("scopes_toggle"))
+
+                            Button {
+                                controller.monitorOn.toggle()
+                            } label: {
+                                Image(systemName: controller.monitorOn
+                                      ? "speaker.wave.2.fill" : "speaker.slash")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(controller.monitorOn
+                                                     ? controller.accentColor : .primary)
+                            }
+                            .disabled(!controller.isCapturing)
+                            .help(L("monitor_toggle"))
                         }
                         .buttonStyle(.borderless)
 

@@ -128,6 +128,9 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Video level processing on pixels: nil/"auto" — leave alone,
     /// "limited" — compress full→legal 16-235, "full" — stretch legal→0-255.
     public var videoLevels: String?
+    /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
+    /// OFF on launch (no surprise audio on set).
+    public var monitorVolume: Double?
 
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 

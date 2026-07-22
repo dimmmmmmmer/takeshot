@@ -331,6 +331,25 @@ final class CaptureController: ObservableObject {
     let player = AVPlayer()
     /// Unified playback render (frames from the player → sample-buffer layers).
     let playbackTap = PlaybackFrameTap()
+    /// Live capture audio monitor (renderer to a system output).
+    let audioMonitor = AudioMonitor()
+
+    /// Live audio monitoring on/off. Always starts OFF — no surprise audio on set.
+    @Published var monitorOn = false {
+        didSet {
+            pipeline.setAudioMonitorEnabled(monitorOn)
+            if !monitorOn { audioMonitor.stop() }
+        }
+    }
+
+    /// Monitor volume 0…1 (persisted; the on/off state is not).
+    var monitorVolume: Double {
+        get { settings.monitorVolume ?? 1 }
+        set {
+            settings.monitorVolume = newValue
+            audioMonitor.volume = Float(newValue)
+        }
+    }
 
     // MARK: - external monitor output
 
@@ -460,12 +479,13 @@ final class CaptureController: ObservableObject {
         settings.audioChannelMask = (mask & 0xFFFF) == 0xFFFF ? nil : mask
     }
 
-    /// Playback audio output.
+    /// Playback audio output (also used by the live monitor).
     var playbackOutputUID: String? {
         get { settings.playbackAudioDeviceUID }
         set {
             settings.playbackAudioDeviceUID = newValue
             player.audioOutputDeviceUniqueID = newValue
+            audioMonitor.outputDeviceUID = newValue
         }
     }
 
@@ -570,6 +590,8 @@ final class CaptureController: ObservableObject {
         backend.delegate = self
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
+        audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
+        audioMonitor.volume = Float(stored.monitorVolume ?? 1)
         bindPipeline()
         refreshDevices() // selecting the first device starts capture via didSet
         startFolderSync()
@@ -606,6 +628,10 @@ final class CaptureController: ObservableObject {
         playbackTap.onScopeData = { [weak self] data in
             self?.scopeData = data
         }
+        // capture the monitor object itself: this fires on the pipeline queue
+        // and must not touch the MainActor-isolated controller
+        let monitor = audioMonitor
+        pipeline.onMonitorAudio = { monitor.enqueue($0) }
         pipeline.onError = { [weak self] message in
             self?.lastError = message
         }
