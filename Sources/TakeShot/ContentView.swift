@@ -801,21 +801,36 @@ struct NamingFieldsView: View {
                 .help(L("name_taken_help", collision))
                 .transition(.opacity)
             }
-            steppedField(L("cam_label"), width: 40,
-                         text: $controller.settings.cameraLabel,
-                         onStep: { controller.stepCamera($0) })
-            steppedField(L("roll_label"), width: 50,
-                         text: $controller.roll,
-                         onStep: { controller.stepRoll($0) })
-            ClipField()
-                .help(L("clip_help"))
-            labeledField(L("postfix_label"), width: 56) {
-                TextField("", text: Binding(
-                    get: { controller.settings.postfix ?? "" },
-                    set: { controller.settings.postfix = $0.isEmpty ? nil : $0 }))
+            // показываем только те поля, что реально есть в текущем шаблоне
+            if uses("{cam}") {
+                steppedField(L("cam_label"), width: 40,
+                             text: $controller.settings.cameraLabel,
+                             onStep: { controller.stepCamera($0) })
+            }
+            if uses("{roll}") {
+                steppedField(L("roll_label"), width: 50,
+                             text: $controller.roll,
+                             onStep: { controller.stepRoll($0) })
+            }
+            if uses("{clip}") {
+                ClipField()
+                    .help(L("clip_help"))
+            }
+            if uses("{postfix}") {
+                labeledField(L("postfix_label"), width: 56) {
+                    TextField("", text: Binding(
+                        get: { controller.settings.postfix ?? "" },
+                        set: { controller.settings.postfix = $0.isEmpty ? nil : $0 }))
+                }
             }
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
+        .animation(.easeOut(duration: 0.15), value: controller.settings.namingTemplate)
+    }
+
+    /// Есть ли плейсхолдер в текущем шаблоне.
+    private func uses(_ placeholder: String) -> Bool {
+        controller.settings.namingTemplate.contains(placeholder)
     }
 
     private func labeledField(_ label: String, width: CGFloat,
