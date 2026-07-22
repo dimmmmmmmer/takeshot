@@ -346,6 +346,28 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Shared factory for the borderless full-screen output windows
+    /// (playback fullscreen, live fullscreen, external monitor).
+    private func makeBorderlessWindow(
+        on screen: NSScreen, content: some View,
+        behavior: NSWindow.CollectionBehavior = [.fullScreenAuxiliary],
+        makeKey: Bool = true) -> NSWindow {
+        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
+                              backing: .buffered, defer: false, screen: screen)
+        window.level = .statusBar
+        window.backgroundColor = .black
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = behavior
+        window.contentView = NSHostingView(rootView: content)
+        window.setFrame(screen.frame, display: true)
+        if makeKey {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFront(nil)
+        }
+        return window
+    }
+
     private func updateExternalWindow() {
         externalWindow?.orderOut(nil)
         externalWindow = nil
@@ -358,17 +380,11 @@ final class CaptureController: ObservableObject {
               }) else { return }
 
         pipeline.externalMirrorEnabled = true
-        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
-                              backing: .buffered, defer: false, screen: screen)
-        window.level = .statusBar
-        window.backgroundColor = .black
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.fullScreenAuxiliary, .stationary]
-        window.contentView = NSHostingView(rootView:
-            ExternalOutputView().environmentObject(self))
-        window.setFrame(screen.frame, display: true)
-        window.orderFront(nil)
-        externalWindow = window
+        externalWindow = makeBorderlessWindow(
+            on: screen,
+            content: ExternalOutputView().environmentObject(self),
+            behavior: [.fullScreenAuxiliary, .stationary],
+            makeKey: false)
     }
 
     /// System fullscreen of the main window (immersive mode).
@@ -386,20 +402,12 @@ final class CaptureController: ObservableObject {
             return
         }
         guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
-        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
-                              backing: .buffered, defer: false, screen: screen)
-        window.level = .statusBar
-        window.backgroundColor = .black
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.fullScreenAuxiliary]
-        window.contentView = NSHostingView(rootView:
-            PlaybackFullscreenView()
+        playbackFullscreenWindow = makeBorderlessWindow(
+            on: screen,
+            content: PlaybackFullscreenView()
                 .environmentObject(self)
                 .environmentObject(hotkeysRef ?? HotkeyManager())
                 .tint(accentColor))
-        window.setFrame(screen.frame, display: true)
-        window.makeKeyAndOrderFront(nil)
-        playbackFullscreenWindow = window
         isPlaybackFullscreen = true
     }
 
@@ -414,20 +422,12 @@ final class CaptureController: ObservableObject {
         }
         guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
         pipeline.fullscreenMirrorEnabled = true
-        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
-                              backing: .buffered, defer: false, screen: screen)
-        window.level = .statusBar
-        window.backgroundColor = .black
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.fullScreenAuxiliary]
-        window.contentView = NSHostingView(rootView:
-            LiveFullscreenView()
+        liveFullscreenWindow = makeBorderlessWindow(
+            on: screen,
+            content: LiveFullscreenView()
                 .environmentObject(self)
                 .environmentObject(hotkeysRef ?? HotkeyManager())
                 .tint(accentColor))
-        window.setFrame(screen.frame, display: true)
-        window.makeKeyAndOrderFront(nil)
-        liveFullscreenWindow = window
         isLiveFullscreen = true
     }
 

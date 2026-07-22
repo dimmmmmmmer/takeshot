@@ -54,9 +54,7 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lutPreview = false
     private var lutRecord = false
     private var lutIntensity: Double = 1
-    private var lutPool: CVPixelBufferPool?
-    private var lutPoolWidth = 0
-    private var lutPoolHeight = 0
+    private let lutBufferPool = PixelBufferPool()
     /// Level processing ("limited"/"full"/nil) — a pixel remap.
     private var levelsMode: String?
 
@@ -74,7 +72,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.lutPreview = preview && lut != nil
             self.lutRecord = record && lut != nil
             self.lutIntensity = min(1, max(0, intensity))
-            self.lutPool = nil
+            self.lutBufferPool.reset()
         }
     }
 
@@ -225,37 +223,13 @@ public final class CapturePipeline: @unchecked Sendable {
 
     // MARK: - processing (on queue)
 
-    /// Colorimetry for the settings preset: "709" (nclc 1-1-1, default) / "601" / "2020".
-    public static func colorTagValues(for preset: String?)
-        -> (primaries: CFString, transfer: CFString, matrix: CFString) {
-        switch preset {
-        case "601":
-            return (kCVImageBufferColorPrimaries_SMPTE_C,
-                    kCVImageBufferTransferFunction_ITU_R_709_2,
-                    kCVImageBufferYCbCrMatrix_ITU_R_601_4)
-        case "2020":
-            return (kCVImageBufferColorPrimaries_ITU_R_2020,
-                    kCVImageBufferTransferFunction_ITU_R_2020,
-                    kCVImageBufferYCbCrMatrix_ITU_R_2020)
-        default:
-            return (kCVImageBufferColorPrimaries_ITU_R_709_2,
-                    kCVImageBufferTransferFunction_ITU_R_709_2,
-                    kCVImageBufferYCbCrMatrix_ITU_R_709_2)
-        }
-    }
-
     /// Tag a frame with colorimetry from settings if the backend didn't report it.
     /// Without tags the preview layer and the player interpret color differently.
+    /// The values come from ColorTags — the same table the recorded file uses.
     private func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                     nil) == nil else { return }
-        let tags = Self.colorTagValues(for: config.settings.colorTagPreset)
-        CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
-                              tags.primaries, .shouldPropagate)
-        CVBufferSetAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey,
-                              tags.transfer, .shouldPropagate)
-        CVBufferSetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey,
-                              tags.matrix, .shouldPropagate)
+        ColorTags.tag(pixelBuffer, preset: config.settings.colorTagPreset)
     }
 
     private func processFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
@@ -529,22 +503,9 @@ public final class CapturePipeline: @unchecked Sendable {
         guard let filter = lutFilter else { return nil }
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
-        if lutPool == nil || lutPoolWidth != width || lutPoolHeight != height {
-            let attrs: [CFString: Any] = [
-                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey: width,
-                kCVPixelBufferHeightKey: height,
-                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-            ]
-            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary,
-                                    &lutPool)
-            lutPoolWidth = width
-            lutPoolHeight = height
+        guard let outBuffer = lutBufferPool.buffer(width: width, height: height) else {
+            return nil
         }
-        guard let pool = lutPool else { return nil }
-        var outBuffer: CVPixelBuffer?
-        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
-        guard let outBuffer else { return nil }
 
         let input = CIImage(cvPixelBuffer: pixelBuffer)
         filter.setValue(input, forKey: kCIInputImageKey)
@@ -557,9 +518,7 @@ public final class CapturePipeline: @unchecked Sendable {
         return outBuffer
     }
 
-    private var levelsPool: CVPixelBufferPool?
-    private var levelsPoolW = 0
-    private var levelsPoolH = 0
+    private let levelsBufferPool = PixelBufferPool()
 
     /// Pixel-level remap: "limited" compresses full(0-255)→legal(16-235),
     /// "full" stretches legal→full. Uses CIColorMatrix (scale+bias).
@@ -573,20 +532,7 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
-        if levelsPool == nil || levelsPoolW != width || levelsPoolH != height {
-            let attrs: [CFString: Any] = [
-                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey: width,
-                kCVPixelBufferHeightKey: height,
-                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-            ]
-            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &levelsPool)
-            levelsPoolW = width; levelsPoolH = height
-        }
-        guard let pool = levelsPool else { return nil }
-        var outBuffer: CVPixelBuffer?
-        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
-        guard let outBuffer,
+        guard let outBuffer = levelsBufferPool.buffer(width: width, height: height),
               let matrix = CIFilter(name: "CIColorMatrix") else { return nil }
         let input = CIImage(cvPixelBuffer: pixelBuffer)
         matrix.setValue(input, forKey: kCIInputImageKey)

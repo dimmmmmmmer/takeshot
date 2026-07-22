@@ -47,25 +47,6 @@ public final class TakeWriter {
         return CMTimeSubtract(lastPTS, firstPTS).seconds + frameDuration
     }
 
-    /// AVVideoColorProperties for a preset ("709" → nclc 1-1-1).
-    static func videoColorProperties(for preset: String?) -> [String: String] {
-        switch preset {
-        case "601":
-            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_SMPTE_C,
-                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_601_4]
-        case "2020":
-            // the transfer for 2020 SDR is the same 709
-            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
-                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020]
-        default:
-            return [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]
-        }
-    }
-
     /// QuickTime metadata key TakeShot uses to tag its own files
     /// (lets the app tell its takes apart from foreign files in the folder).
     public static let markerKey = "com.takeshot.origin"
@@ -109,7 +90,7 @@ public final class TakeWriter {
             AVVideoWidthKey: format.width,
             AVVideoHeightKey: format.height,
             // explicit colorimetry (nclc): file and preview are interpreted the same
-            AVVideoColorPropertiesKey: Self.videoColorProperties(for: colorTagPreset),
+            AVVideoColorPropertiesKey: ColorTags.videoColorProperties(for: colorTagPreset),
         ]
         if codec.needsBitrate {
             // visibly good H.264/HEVC for on-set viewing: ~0.12 bpp
