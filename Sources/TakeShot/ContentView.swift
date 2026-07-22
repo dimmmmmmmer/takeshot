@@ -228,11 +228,22 @@ struct LUTMenu: View {
                 get: { controller.lutRecordOn },
                 set: { controller.lutRecordOn = $0 }))
             Divider()
-            Text(L("lut_intensity", Int((controller.lutIntensity * 100).rounded())))
-                .font(.caption)
+            HStack(spacing: 6) {
+                Text(L("lut_intensity_label")).font(.caption)
+                Spacer()
+                TextField("", value: Binding(
+                    get: { Int((controller.lutIntensity * 100).rounded()) },
+                    set: { controller.lutIntensity = Double(min(100, max(0, $0))) / 100 }),
+                    format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 42)
+                Text("%").font(.caption).foregroundStyle(.secondary)
+            }
             Slider(value: Binding(
                 get: { controller.lutIntensity },
                 set: { controller.lutIntensity = $0 }), in: 0...1)
+            .disabled(controller.settings.lutFileName == nil)
             Divider()
             Button(L("lut_import")) { controller.importLUT() }
         }

@@ -237,6 +237,7 @@ final class CaptureController: ObservableObject {
                         preview: settings.lutPreviewEnabled ?? false,
                         record: settings.lutRecordEnabled ?? false,
                         intensity: settings.lutIntensity ?? 1)
+        pipeline.setVideoLevels(settings.videoLevels)
         applyPlaybackLUT()
     }
 

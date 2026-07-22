@@ -111,10 +111,11 @@ struct SettingsView: View {
                     Text("Rec.2020").tag("2020")
                 }
                 Picker(L("video_levels"), selection: Binding(
-                    get: { controller.settings.fullRangeVideo ?? false },
-                    set: { controller.settings.fullRangeVideo = $0 ? true : nil })) {
-                    Text(L("levels_limited")).tag(false)
-                    Text(L("levels_full")).tag(true)
+                    get: { controller.settings.videoLevels ?? "auto" },
+                    set: { controller.settings.videoLevels = $0 == "auto" ? nil : $0 })) {
+                    Text(L("levels_auto")).tag("auto")
+                    Text(L("levels_limited")).tag("limited")
+                    Text(L("levels_full")).tag("full")
                 }
                 Text(L("color_tags_hint"))
                     .font(.caption)

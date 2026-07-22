@@ -205,3 +205,6 @@
 /* Reset */
 "reset_colors" = "Reset colors";
 "reset_all" = "Reset all settings";
+
+"levels_auto" = "Auto";
+"lut_intensity_label" = "Intensity";

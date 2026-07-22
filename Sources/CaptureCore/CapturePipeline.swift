@@ -57,6 +57,13 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lutPool: CVPixelBufferPool?
     private var lutPoolWidth = 0
     private var lutPoolHeight = 0
+    /// Обработка уровней ("limited"/"full"/nil) — пиксельный remap.
+    private var levelsMode: String?
+
+    /// Режим обработки уровней видео на пиксели.
+    public func setVideoLevels(_ mode: String?) {
+        queue.async { self.levelsMode = (mode == "auto") ? nil : mode }
+    }
 
     /// Установить LUT (nil — выключить), режимы применения и интенсивность (0…1).
     public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool,
@@ -273,12 +280,16 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
+        // сначала уровни (пиксельный remap), общий для превью и записи —
+        // это часть сигнала, а не «взгляд» как LUT
+        let leveled = levelsMode != nil ? (applyLevels(to: pixelBuffer) ?? pixelBuffer)
+                                        : pixelBuffer
         // LUT: превью может быть с лутом, запись — чистой (или наоборот)
         let displayBuffer = lutPreview
-            ? (applyLUT(to: pixelBuffer) ?? pixelBuffer) : pixelBuffer
+            ? (applyLUT(to: leveled) ?? leveled) : leveled
         let recordBuffer = lutRecord
-            ? (lutPreview ? displayBuffer : (applyLUT(to: pixelBuffer) ?? pixelBuffer))
-            : pixelBuffer
+            ? (lutPreview ? displayBuffer : (applyLUT(to: leveled) ?? leveled))
+            : leveled
 
         var startedThisFrame = false
         let mode = config.settings.detectionMode
@@ -510,6 +521,50 @@ public final class CapturePipeline: @unchecked Sendable {
         let finalImage = Self.mix(source: input, filtered: output,
                                   intensity: lutIntensity)
         ciContext.render(finalImage, to: outBuffer, bounds: input.extent,
+                         colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
+        tagColorIfUntagged(outBuffer)
+        return outBuffer
+    }
+
+    private var levelsPool: CVPixelBufferPool?
+    private var levelsPoolW = 0
+    private var levelsPoolH = 0
+
+    /// Пиксельный remap уровней: "limited" сжимает full(0-255)→legal(16-235),
+    /// "full" растягивает legal→full. Работает через CIColorMatrix (масштаб+сдвиг).
+    private func applyLevels(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        guard let mode = levelsMode else { return nil }
+        let scale: CGFloat, bias: CGFloat
+        switch mode {
+        case "limited": scale = 219.0 / 255.0; bias = 16.0 / 255.0   // full → legal
+        case "full":    scale = 255.0 / 219.0; bias = -16.0 / 219.0   // legal → full
+        default: return nil
+        }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        if levelsPool == nil || levelsPoolW != width || levelsPoolH != height {
+            let attrs: [CFString: Any] = [
+                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey: width,
+                kCVPixelBufferHeightKey: height,
+                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+            ]
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &levelsPool)
+            levelsPoolW = width; levelsPoolH = height
+        }
+        guard let pool = levelsPool else { return nil }
+        var outBuffer: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
+        guard let outBuffer,
+              let matrix = CIFilter(name: "CIColorMatrix") else { return nil }
+        let input = CIImage(cvPixelBuffer: pixelBuffer)
+        matrix.setValue(input, forKey: kCIInputImageKey)
+        matrix.setValue(CIVector(x: scale, y: 0, z: 0, w: 0), forKey: "inputRVector")
+        matrix.setValue(CIVector(x: 0, y: scale, z: 0, w: 0), forKey: "inputGVector")
+        matrix.setValue(CIVector(x: 0, y: 0, z: scale, w: 0), forKey: "inputBVector")
+        matrix.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
+        guard let output = matrix.outputImage else { return nil }
+        ciContext.render(output, to: outBuffer, bounds: input.extent,
                          colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
         tagColorIfUntagged(outBuffer)
         return outBuffer
