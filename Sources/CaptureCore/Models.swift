@@ -50,11 +50,13 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var startTimecode: Timecode?
     public var durationSeconds: Double
     public var rating: TakeRating       // good/bad take (in CSV — Good Take + NG marker)
+    public var comment: String          // free-text note (in CSV — Comments column)
     public var recordedAt: Date
 
     public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
                 roll: String = "", takeNumber: Int, startTimecode: Timecode?,
-                durationSeconds: Double, rating: TakeRating = .none, recordedAt: Date) {
+                durationSeconds: Double, rating: TakeRating = .none,
+                comment: String = "", recordedAt: Date) {
         self.id = id
         self.url = url
         self.displayName = displayName
@@ -64,6 +66,7 @@ public struct Take: Identifiable, Equatable, Sendable {
         self.startTimecode = startTimecode
         self.durationSeconds = durationSeconds
         self.rating = rating
+        self.comment = comment
         self.recordedAt = recordedAt
     }
 }

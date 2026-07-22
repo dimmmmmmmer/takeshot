@@ -4,11 +4,11 @@ import Testing
 
 struct TakeLogExporterTests {
     private func makeTake(name: String, scene: String, number: Int,
-                          rating: TakeRating = .none) -> Take {
+                          rating: TakeRating = .none, comment: String = "") -> Take {
         Take(url: URL(fileURLWithPath: "/tmp/x/\(name)"),
              displayName: name, scene: scene, takeNumber: number,
              startTimecode: nil, durationSeconds: 10,
-             rating: rating, recordedAt: Date(timeIntervalSince1970: 0))
+             rating: rating, comment: comment, recordedAt: Date(timeIntervalSince1970: 0))
     }
 
     @Test func csvHasResolveColumnsAndRatings() {
@@ -41,6 +41,33 @@ struct TakeLogExporterTests {
         #expect(ratings["a.mov"] == .good)
         #expect(ratings["b.mov"] == nil)
         #expect(ratings["c.mov"] == .bad)
+    }
+
+    @Test func commentsRoundTripWithRatings() {
+        let csv = TakeLogExporter.resolveCSV(takes: [
+            makeTake(name: "a.mov", scene: "1", number: 1, rating: .good,
+                     comment: "hero take"),
+            makeTake(name: "b.mov", scene: "1", number: 2, rating: .bad,
+                     comment: "boom in frame"),
+            makeTake(name: "c.mov", scene: "1", number: 3, rating: .bad),
+            makeTake(name: "d.mov", scene: "1", number: 4,
+                     comment: "note, with comma"),
+        ])
+        let meta = TakeLogExporter.parseMetadata(csv: csv)
+        #expect(meta["a.mov"] == .init(rating: .good, comment: "hero take"))
+        #expect(meta["b.mov"] == .init(rating: .bad, comment: "boom in frame"))
+        #expect(meta["c.mov"] == .init(rating: .bad, comment: ""))
+        // a comment with a comma must be quoted and survive the round trip
+        #expect(meta["d.mov"] == .init(rating: .none, comment: "note, with comma"))
+    }
+
+    @Test func badTakeCommentUsesNGPrefix() {
+        let csv = TakeLogExporter.resolveCSV(takes: [
+            makeTake(name: "x.mov", scene: "1", number: 1, rating: .bad,
+                     comment: "soft focus"),
+        ])
+        let comments = csv.split(separator: "\n").map(String.init)[1]
+        #expect(comments.hasSuffix("NG: soft focus"))
     }
 
     @Test func writesFileToDirectory() throws {

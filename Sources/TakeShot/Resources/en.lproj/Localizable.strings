@@ -163,6 +163,7 @@
 
 "accent_color" = "Accent color";
 "hotkey_fullscreen" = "Fullscreen (playback fullscreen while viewing)";
+"hotkey_grab" = "Grab frame";
 
 "monitor_device" = "Monitor device (DeckLink out)";
 "monitor_device_hint" = "SDI/HDMI monitoring output through a Blackmagic device — activates with the first live-hardware build";
@@ -220,3 +221,9 @@
 "cancel" = "Cancel";
 "clear_luts_confirm" = "Delete all imported LUTs? This cannot be undone.";
 "placeholders_legend" = "Fields: {prefix} {cam} {roll} {clip} {postfix}. Timecode: {tc}. Dates: {date}=YYYY-MM-DD, {date6}=YYMMDD, {date4}=MMDD. Times: {time4}=HHMM, {time6}=HHMMSS.";
+
+/* Take comments */
+"comment_help" = "Comment on this take (saved to the log CSV)";
+"comment_label" = "Comment";
+"comment_save" = "Save";
+"grab_frame" = "Grab frame";

@@ -163,6 +163,7 @@
 
 "accent_color" = "Акцентный цвет";
 "hotkey_fullscreen" = "Фулскрин (в просмотре — фулскрин плейбека)";
+"hotkey_grab" = "Стоп-кадр";
 
 "monitor_device" = "Monitor device (выход DeckLink)";
 "monitor_device_hint" = "Вывод мониторинга по SDI/HDMI через плату Blackmagic — включится с первой сборкой на живом железе";
@@ -220,3 +221,9 @@
 "cancel" = "Отмена";
 "clear_luts_confirm" = "Удалить все импортированные LUT? Действие необратимо.";
 "placeholders_legend" = "Поля: {prefix} {cam} {roll} {clip} {postfix}. Таймкод: {tc}. Даты: {date}=ГГГГ-ММ-ДД, {date6}=ГГММДД, {date4}=ММДД. Время: {time4}=ЧЧММ, {time6}=ЧЧММСС.";
+
+/* Take comments */
+"comment_help" = "Комментарий к дублю (сохраняется в CSV-журнал)";
+"comment_label" = "Комментарий";
+"comment_save" = "Сохранить";
+"grab_frame" = "Стоп-кадр";

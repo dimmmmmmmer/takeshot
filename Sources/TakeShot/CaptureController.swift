@@ -834,6 +834,71 @@ final class CaptureController: ObservableObject {
         exportTakeLog()
     }
 
+    /// Set a free-text comment on a take (persisted to the CSV Comments column).
+    func setComment(_ comment: String, for take: Take) {
+        guard let idx = takes.firstIndex(of: take) else { return }
+        guard takes[idx].comment != comment else { return }
+        takes[idx].comment = comment
+        exportTakeLog()
+    }
+
+    // MARK: - frame grab
+
+    /// Grab the current frame as a PNG next to the takes. In playback it grabs the
+    /// current player frame (with the LUT); otherwise the live processed frame.
+    func grabFrame() {
+        if viewerMode == .playback, let item = player.currentItem,
+           let url = playbackURL,
+           !Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+            grabPlaybackFrame(item: item)
+        } else {
+            pipeline.grabNextFrame { [weak self] png in self?.saveGrab(png) }
+        }
+    }
+
+    private func grabPlaybackFrame(item: AVPlayerItem) {
+        let generator = AVAssetImageGenerator(asset: item.asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+        if let composition = item.videoComposition {
+            generator.videoComposition = composition
+        }
+        let time = player.currentTime()
+        Task { [weak self] in
+            let cg = try? await generator.image(at: time).image
+            await MainActor.run {
+                guard let cg else { self?.lastError = "Frame grab failed"; return }
+                self?.saveGrab(NSBitmapImageRep(cgImage: cg)
+                    .representation(using: .png, properties: [:]))
+            }
+        }
+    }
+
+    private func saveGrab(_ png: Data?) {
+        guard let png else { lastError = "Frame grab failed"; return }
+        let base = settings.projectName.isEmpty ? settings.cameraLabel : settings.projectName
+        let stamp = currentTimecode?.fileNameSafe ?? Self.grabTimeStamp()
+        let name = NamingEngine.sanitize("\(base)_grab_\(stamp)")
+        let url = CapturePipeline.uniqueURL(for: destinationRoot
+            .appendingPathComponent(name).appendingPathExtension("png"))
+        do {
+            try FileManager.default.createDirectory(
+                at: destinationRoot, withIntermediateDirectories: true)
+            try png.write(to: url)
+            scanDestinationFolder() // show it in Other content right away
+        } catch {
+            lastError = "Frame grab failed: \(error.localizedDescription)"
+        }
+    }
+
+    private static func grabTimeStamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HHmmss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.string(from: Date())
+    }
+
     /// The metadata log URL (for "show in Finder").
     var takeLogURL: URL {
         destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
@@ -896,8 +961,8 @@ final class CaptureController: ObservableObject {
     private func classifyFoundFiles(_ candidates: [URL]) async {
         var restored: [Take] = []
         var foreign: [URL] = []
-        let ratings = (try? String(contentsOf: takeLogURL, encoding: .utf8))
-            .map(TakeLogExporter.parseRatings(csv:)) ?? [:]
+        let meta = (try? String(contentsOf: takeLogURL, encoding: .utf8))
+            .map(TakeLogExporter.parseMetadata(csv:)) ?? [:]
 
         for url in candidates {
             if scannedPaths.contains(url.path) {
@@ -934,7 +999,8 @@ final class CaptureController: ObservableObject {
                 takeNumber: Int(value(TakeWriter.clipKey) ?? "") ?? 0,
                 startTimecode: startTC,
                 durationSeconds: duration,
-                rating: ratings[url.lastPathComponent] ?? .none,
+                rating: meta[url.lastPathComponent]?.rating ?? .none,
+                comment: meta[url.lastPathComponent]?.comment ?? "",
                 recordedAt: created)
             restored.append(take)
         }

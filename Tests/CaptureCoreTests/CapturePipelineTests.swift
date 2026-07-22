@@ -254,4 +254,24 @@ struct CapturePipelineTests {
         try await Task.sleep(for: .milliseconds(300))
         #expect(!recStarted, "in manual mode a running TC must not start recording")
     }
+
+    @Test func grabNextFrameProducesPNG() async {
+        let pipeline = CapturePipeline(config: .init(settings: CaptureSettings(),
+                                                     takeNumber: 1))
+        pipeline.handleFormat(CaptureFormat(width: 320, height: 180, frameRate: 25,
+                                            timecodeFPS: 25, name: "t"))
+        let pixelBuffer = makePixelBuffer()
+        let png: Data? = await withCheckedContinuation { cont in
+            pipeline.grabNextFrame { cont.resume(returning: $0) }
+            for frame in 0..<3 {
+                pipeline.handleFrame(
+                    pixelBuffer: pixelBuffer,
+                    pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
+                    timecode: nil, vancTrigger: nil)
+            }
+        }
+        #expect(png != nil)
+        // PNG magic bytes: 89 50 4E 47
+        #expect(png?.prefix(4).elementsEqual([0x89, 0x50, 0x4E, 0x47]) == true)
+    }
 }

@@ -101,7 +101,7 @@ public struct NamingEngine: Sendable {
     }
 
     /// Strip characters that are invalid/awkward in filenames.
-    static func sanitize(_ value: String) -> String {
+    public static func sanitize(_ value: String) -> String {
         let forbidden = CharacterSet(charactersIn: "/\\:?*<>|\"\0")
         let cleaned = value.unicodeScalars
             .map { forbidden.contains($0) ? " " : Character($0) }

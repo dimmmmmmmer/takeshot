@@ -659,6 +659,15 @@ struct BottomBarView: View {
                                                      ? controller.accentColor : .primary)
                             }
                             .help(L("multicam_toggle"))
+
+                            Button {
+                                controller.grabFrame()
+                            } label: {
+                                Image(systemName: "camera")
+                                    .font(.system(size: 15))
+                            }
+                            .disabled(!controller.isCapturing && controller.playbackURL == nil)
+                            .help(L("grab_frame"))
                         }
                         .buttonStyle(.borderless)
 

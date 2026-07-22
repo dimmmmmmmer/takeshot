@@ -122,8 +122,16 @@ private struct TakeRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if !take.comment.isEmpty {
+                    Text(take.comment)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .lineLimit(2)
+                }
             }
             Spacer()
+            CommentButton(take: take)
             RatingToggle(take: take)
         }
         .contentShape(Rectangle())
@@ -153,10 +161,13 @@ private struct TakeCell: View {
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(alignment: .topTrailing) {
-                RatingToggle(take: take)
-                    .padding(4)
-                    .background(.black.opacity(0.45), in: Circle())
-                    .padding(4)
+                HStack(spacing: 4) {
+                    CommentButton(take: take)
+                    RatingToggle(take: take)
+                }
+                .padding(4)
+                .background(.black.opacity(0.45), in: Capsule())
+                .padding(4)
             }
             .overlay(alignment: .bottomLeading) {
                 Text(durationText(take.durationSeconds))
@@ -295,6 +306,45 @@ private func iconName(for url: URL) -> String {
 }
 
 // MARK: - shared
+
+/// Speech-bubble button that opens a popover to edit a take's free-text comment.
+private struct CommentButton: View {
+    @EnvironmentObject private var controller: CaptureController
+    let take: Take
+    @State private var showPopover = false
+    @State private var draft = ""
+
+    var body: some View {
+        Button {
+            draft = take.comment
+            showPopover = true
+        } label: {
+            Image(systemName: take.comment.isEmpty ? "bubble.left" : "bubble.left.fill")
+                .foregroundStyle(take.comment.isEmpty ? Color.secondary : controller.accentColor)
+        }
+        .buttonStyle(.plain)
+        .help(L("comment_help"))
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("comment_label")).font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $draft)
+                    .font(.body)
+                    .frame(width: 240, height: 80)
+                    .overlay(RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(.secondary.opacity(0.3)))
+                HStack {
+                    Spacer()
+                    Button(L("comment_save")) {
+                        controller.setComment(draft, for: take)
+                        showPopover = false
+                    }
+                    .keyboardShortcut(.return, modifiers: [.command])
+                }
+            }
+            .padding(12)
+        }
+    }
+}
 
 private struct RatingToggle: View {
     @EnvironmentObject private var controller: CaptureController

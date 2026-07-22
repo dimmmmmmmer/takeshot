@@ -324,8 +324,32 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
+        // one-shot frame grab: PNG of exactly what's on screen (levels + preview LUT)
+        if let grab = frameGrabHandler {
+            frameGrabHandler = nil
+            let png = Self.pngData(from: displayBuffer, ciContext: ciContext)
+            DispatchQueue.main.async { grab(png) }
+        }
+
         enqueuePreview(pixelBuffer: displayBuffer)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
+    }
+
+    private var frameGrabHandler: ((Data?) -> Void)?
+
+    /// Grab the next displayed frame as PNG (WYSIWYG with levels/preview LUT).
+    /// The handler fires once, on the main queue.
+    public func grabNextFrame(_ handler: @escaping (Data?) -> Void) {
+        queue.async { self.frameGrabHandler = handler }
+    }
+
+    private static func pngData(from pixelBuffer: CVPixelBuffer,
+                                ciContext: CIContext) -> Data? {
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+        let space = CGColorSpace(name: CGColorSpace.itur_709)
+            ?? CGColorSpaceCreateDeviceRGB()
+        return ciContext.pngRepresentation(of: image, format: .RGBA8,
+                                           colorSpace: space)
     }
 
     private func updateVancStats(_ packets: [AncillaryPacket]) {
@@ -372,7 +396,7 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Free URL: if the file exists, adds _2, _3… before the extension.
     /// (Used by beginTake; `recStartIndex` there is the camera's actual record
     /// start frame from the detector, nil for manual start.)
-    static func uniqueURL(for url: URL) -> URL {
+    public static func uniqueURL(for url: URL) -> URL {
         guard FileManager.default.fileExists(atPath: url.path) else { return url }
         let base = url.deletingPathExtension()
         let ext = url.pathExtension

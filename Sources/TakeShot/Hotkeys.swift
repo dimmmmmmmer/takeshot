@@ -56,6 +56,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case circleLastTake   // good take (legacy key name — for saved settings)
     case badTakeLast
     case fullscreen
+    case grabFrame
 
     var id: String { rawValue }
 
@@ -65,6 +66,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .circleLastTake: return "hotkey_good"
         case .badTakeLast: return "hotkey_bad"
         case .fullscreen: return "hotkey_fullscreen"
+        case .grabFrame: return "hotkey_grab"
         }
     }
 
@@ -81,6 +83,11 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
                             keyCode: 11)
         case .fullscreen:
             return KeyCombo(key: "f", modifiers: 0, keyCode: 3)
+        case .grabFrame:
+            // ⌘⇧S — grab still
+            return KeyCombo(key: "s",
+                            modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+                            keyCode: 1)
         }
     }
 }
@@ -187,6 +194,8 @@ final class HotkeyManager: ObservableObject {
             } else {
                 controller.toggleLiveFullscreen()
             }
+        case .grabFrame:
+            controller.grabFrame()
         }
     }
 }
