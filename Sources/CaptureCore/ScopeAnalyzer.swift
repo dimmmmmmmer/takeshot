@@ -32,6 +32,9 @@ public struct ScopeData: Sendable {
     /// Vectorscope density: x = Cb (right = +), y = Cr (top = +), center at
     /// (vectorSize/2, vectorSize/2), full-range chroma ±127 maps to ±half-size.
     public let vector: [UInt8]
+    /// Monotonic frame counter — views cache derived images against it so a
+    /// window resize doesn't rebuild them.
+    public let sequence: Int
 
     /// Legacy alias (luma waveform).
     public var waveform: [UInt8] { waveformY }
@@ -46,6 +49,16 @@ public enum ScopeAnalyzer {
         -> (cb: Double, cr: Double) {
         let y = 0.2126 * r + 0.7152 * g + 0.0722 * b
         return ((b - y) / 1.8556, (r - y) / 1.5748)
+    }
+
+    private static let sequenceLock = NSLock()
+    nonisolated(unsafe) private static var sequenceCounter = 0
+
+    static func nextSequence() -> Int {
+        sequenceLock.lock()
+        defer { sequenceLock.unlock() }
+        sequenceCounter += 1
+        return sequenceCounter
     }
 
     public static func analyze(_ pixelBuffer: CVPixelBuffer) -> ScopeData? {
@@ -254,7 +267,8 @@ public enum ScopeAnalyzer {
                              waveformYColor: colored,
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,
-                             vector: toBytes(countsV, gain: 120))
+                             vector: toBytes(countsV, gain: 120),
+                             sequence: ScopeAnalyzer.nextSequence())
         }
     }
 }

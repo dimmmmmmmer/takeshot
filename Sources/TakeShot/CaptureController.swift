@@ -387,7 +387,8 @@ final class CaptureController: ObservableObject {
     private func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
         playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
-        if !showScopes { live.scopeData = nil }
+        // scopeData is kept on close — reopening shows the last picture
+        // immediately instead of flashing "waiting for signal"
     }
     /// Playback volume (viewing only, doesn't affect recording).
     @Published var playbackVolume: Double = 1.0 {
@@ -406,6 +407,24 @@ final class CaptureController: ObservableObject {
     let playbackTap = PlaybackFrameTap()
     /// Live capture audio monitor (renderer to a system output).
     let audioMonitor = AudioMonitor()
+
+    private var monitorVolumeBeforeMute: Double = 1
+
+    /// Speaker click in the audio panel: mute/unmute the volume with restore.
+    /// It never disables the output path — the slider always stays live.
+    func toggleMonitorMute() {
+        if !monitorOn {
+            monitorOn = true
+            if monitorVolume == 0 { monitorVolume = monitorVolumeBeforeMute }
+            return
+        }
+        if monitorVolume > 0 {
+            monitorVolumeBeforeMute = monitorVolume
+            monitorVolume = 0
+        } else {
+            monitorVolume = monitorVolumeBeforeMute > 0 ? monitorVolumeBeforeMute : 1
+        }
+    }
 
     /// Live audio monitoring on/off. Always starts OFF — no surprise audio on set.
     @Published var monitorOn = false {
@@ -671,8 +690,17 @@ final class CaptureController: ObservableObject {
     @Published var settings = CaptureSettings.loaded() {
         didSet {
             settings.save()
-            pushConfig()
-            L10n.apply(appLanguage)
+            // volume slider ticks land here too — only re-apply localization on
+            // an actual language change (Bundle lookups hit the disk), and only
+            // push the pipeline config when something it reads has changed
+            if oldValue.appLanguage != settings.appLanguage {
+                L10n.apply(appLanguage)
+            }
+            var irrelevant = oldValue
+            irrelevant.monitorVolume = settings.monitorVolume
+            if irrelevant != settings {
+                pushConfig()
+            }
             if oldValue.destinationPath != settings.destinationPath {
                 resetLibraryForNewDestination()
                 startFolderWatcher()

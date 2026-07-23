@@ -457,6 +457,9 @@ private struct HistogramView: View {
 /// 75% primary/secondary targets and the skin-tone line.
 private struct VectorscopeView: View {
     let data: ScopeData
+    // rebuilding the colored map is a 65k-cell loop — cache it per frame so a
+    // window resize doesn't recompute it on every layout pass
+    @State private var cached: (sequence: Int, image: CGImage)?
 
     /// Hue for every (Cb, Cr) cell — computed once. Saturation follows the
     /// radius, so near-neutral chroma reads near-white instead of screaming.
@@ -504,7 +507,7 @@ private struct VectorscopeView: View {
             let side = min(geo.size.width, geo.size.height)
             let cx = geo.size.width / 2, cy = geo.size.height / 2
             ZStack {
-                if let image = coloredVector() {
+                if let image = cachedVector() {
                     Image(decorative: image, scale: 1)
                         .resizable()
                         .interpolation(.medium)
@@ -545,6 +548,14 @@ private struct VectorscopeView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func cachedVector() -> CGImage? {
+        if let cached, cached.sequence == data.sequence { return cached.image }
+        guard let image = coloredVector() else { return nil }
+        // @State mutation during body is deferred by SwiftUI; this is a cache
+        DispatchQueue.main.async { cached = (data.sequence, image) }
+        return image
     }
 
     /// Density map × hue LUT → RGBA image.

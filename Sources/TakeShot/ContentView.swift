@@ -228,6 +228,11 @@ struct PlayerArea: View {
                     .padding(8)
                 }
             }
+            .overlay {
+                if controller.showAudioPanel {
+                    AudioChannelPanel(live: controller.live)
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let error = controller.lastError {
                     Text(error)
@@ -299,6 +304,10 @@ struct LUTMenu: View {
                              && (controller.lutPreviewOn || controller.lutRecordOn)
                              ? 1 : 0)
             }
+            // the icon alone is a ~17 px target — clicks kept missing it
+            .padding(.horizontal, 4)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
@@ -321,11 +330,27 @@ struct LUTMenu: View {
             // choosing and adding .cube in one dropdown menu (the separate import
             // button is gone: "Add .cube…" right in the list, multi-select)
             Menu {
-                Button(L("lut_none")) { controller.selectLUT(fileName: nil) }
+                Button {
+                    controller.selectLUT(fileName: nil)
+                } label: {
+                    if controller.settings.lutFileName == nil {
+                        Label(L("lut_none"), systemImage: "checkmark")
+                    } else {
+                        Text(L("lut_none"))
+                    }
+                }
                 if !controller.availableLUTs.isEmpty {
                     Divider()
                     ForEach(controller.availableLUTs) { lut in
-                        Button(lut.name) { controller.selectLUT(fileName: lut.fileName) }
+                        Button {
+                            controller.selectLUT(fileName: lut.fileName)
+                        } label: {
+                            if controller.settings.lutFileName == lut.fileName {
+                                Label(lut.name, systemImage: "checkmark")
+                            } else {
+                                Text(lut.name)
+                            }
+                        }
                     }
                 }
                 Divider()
@@ -1073,7 +1098,7 @@ private struct FooterAudioMeters: View {
     var body: some View {
         if !live.audioLevels.isEmpty {
             Button {
-                openWindow(id: "audio-channels")
+                controller.showAudioPanel.toggle()
             } label: {
                 AudioMeterView(
                     levels: live.audioLevels,

@@ -102,7 +102,15 @@ public final class CapturePipeline: @unchecked Sendable {
 
     /// Toggle scope analysis (skipped entirely while off — zero cost).
     public func setScopesEnabled(_ on: Bool) {
-        queue.async { self.scopesEnabled = on }
+        queue.async {
+            self.scopesEnabled = on
+            // analyze the current frame right away — the scopes window should
+            // open with data, not "waiting for signal"
+            if on, let buffer = self.currentPreviewBuffer(),
+               let scopeData = ScopeAnalyzer.analyze(buffer) {
+                DispatchQueue.main.async { self.onScopeData?(scopeData) }
+            }
+        }
     }
 
     private var monitorEnabled = false

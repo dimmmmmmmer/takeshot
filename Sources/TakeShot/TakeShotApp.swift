@@ -41,15 +41,6 @@ struct TakeShotApp: App {
         }
         .defaultSize(width: 980, height: 380)
 
-        // Audio channels window: big meters + record toggles, movable
-        Window("Audio Channels", id: "audio-channels") {
-            AudioChannelPanel(live: controller.live)
-                .environmentObject(controller)
-                .tint(controller.accentColor)
-                .preferredColorScheme(controller.colorScheme)
-        }
-        .windowResizability(.contentSize)
-
         // VANC packet diagnostics window (opened by a button from the main window)
         Window("VANC Monitor", id: "vanc-monitor") {
             VancMonitorView()

@@ -13,7 +13,7 @@ struct AudioChannelPanel: View {
 
     /// Width by content: channels (16+8) + two dB scales.
     private var panelWidth: CGFloat {
-        CGFloat(max(2, live.audioLevels.count)) * 24 + 44
+        CGFloat(max(2, live.audioLevels.count)) * 30 + 56
     }
 
     var body: some View {
@@ -41,7 +41,7 @@ struct AudioChannelPanel: View {
             // live monitor: toggle + volume (first two enabled channels)
             HStack(spacing: 8) {
                 Button {
-                    controller.monitorOn.toggle()
+                    controller.toggleMonitorMute()
                 } label: {
                     Image(systemName: !controller.monitorOn
                           ? "speaker.slash"
@@ -52,11 +52,11 @@ struct AudioChannelPanel: View {
                         .frame(width: 20)
                 }
                 .buttonStyle(.plain)
-                .help(L("monitor_toggle"))
+                .help(L("monitor_mute_help"))
+                // never disabled: dragging the volume up wakes the monitor
                 Slider(value: Binding(
                     get: { controller.monitorVolume },
                     set: { controller.monitorVolume = $0 }), in: 0...1)
-                    .disabled(!controller.monitorOn)
             }
             .frame(maxWidth: panelWidth)
             Text(L("audio_panel_hint"))
@@ -76,7 +76,7 @@ struct AudioChannelPanel: View {
         let enabled = controller.isChannelEnabled(index)
         return VStack(spacing: 3) {
             Text(level <= -99 ? "-∞" : String(format: "%.0f", level))
-                .font(.system(size: 8).monospacedDigit())
+                .font(.system(size: 9).monospacedDigit())
                 .foregroundStyle(.secondary)
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 2)
@@ -84,10 +84,10 @@ struct AudioChannelPanel: View {
                 SegmentedMeterBar(level: level)
                     .animation(.linear(duration: 0.07), value: level)
             }
-            .frame(width: 16, height: 130)
+            .frame(width: 20, height: 170)
             .opacity(enabled ? 1 : 0.25)
             Text("\(index + 1)")
-                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
                 .foregroundStyle(enabled ? .primary : .tertiary)
         }
         .contentShape(Rectangle())
@@ -102,12 +102,12 @@ struct AudioChannelPanel: View {
             VStack(alignment: .trailing, spacing: 0) {
                 ForEach([0, -12, -24, -36, -48, -60], id: \.self) { mark in
                     Text("\(mark)")
-                        .font(.system(size: 7).monospacedDigit())
+                        .font(.system(size: 8).monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(maxHeight: .infinity, alignment: mark == 0 ? .top : (mark == -60 ? .bottom : .center))
                 }
             }
-            .frame(height: 130)
+            .frame(height: 170)
             Spacer().frame(height: 14) // offset for the channel number below
         }
     }
