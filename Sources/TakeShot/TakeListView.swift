@@ -119,7 +119,7 @@ private struct TakeRow: View {
                         .lineLimit(1)
                     HStack(spacing: 8) {
                         if let tc = take.startTimecode {
-                            Text(tc.description)
+                            Text("\(tc.description) – \(endTimecode(of: take).description)")
                         }
                         Text(durationText(take.durationSeconds))
                     }
@@ -317,6 +317,7 @@ private struct CommentButton: View {
     let take: Take
     @State private var showPopover = false
     @State private var draft = ""
+    @FocusState private var editorFocused: Bool
 
     var body: some View {
         Button {
@@ -338,6 +339,8 @@ private struct CommentButton: View {
                     .frame(width: 240, height: 80)
                     .overlay(RoundedRectangle(cornerRadius: 4)
                         .strokeBorder(.secondary.opacity(0.3)))
+                    .focused($editorFocused)
+                    .onAppear { editorFocused = true }
                 HStack {
                     Spacer()
                     Button(L("comment_save")) {
@@ -396,6 +399,14 @@ private struct TakeContextMenu: View {
             NSWorkspace.shared.activateFileViewerSelecting([take.url])
         }
     }
+}
+
+/// Take end TC: start + duration at the TC's own fps.
+private func endTimecode(of take: Take) -> Timecode {
+    let start = take.startTimecode ?? Timecode(frameNumber: 0, fps: 25, isDropFrame: false)
+    let frames = Int((take.durationSeconds * Double(max(1, start.fps))).rounded())
+    return Timecode(frameNumber: start.frameNumber + frames,
+                    fps: start.fps, isDropFrame: start.isDropFrame)
 }
 
 private func durationText(_ seconds: Double) -> String {

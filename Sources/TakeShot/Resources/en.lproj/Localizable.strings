@@ -166,7 +166,7 @@
 "hotkey_fullscreen" = "Fullscreen (playback fullscreen while viewing)";
 "hotkey_grab" = "Grab frame";
 
-"monitor_device" = "Monitor device (DeckLink out)";
+"monitor_device" = "Hardware monitor device";
 "monitor_device_hint" = "SDI/HDMI monitoring output through a Blackmagic device — activates with the first live-hardware build";
 
 "wipe_vertical" = "Vertical wipe";
@@ -254,3 +254,6 @@
 "scope_parade" = "Parade";
 "scope_vector" = "Vector";
 "scope_none_hint" = "All scopes are off";
+"grab_saved" = "Still saved: %@";
+"reset_interface" = "Reset interface";
+"scope_drag_hint" = "drag scopes to reorder";

@@ -106,29 +106,29 @@ struct PlayerArea: View {
             }
             .overlay(alignment: .topLeading) {
                 overlayBadge {
-                    if controller.viewerMode == .playback {
-                        PlaybackTimecodeText()
-                    } else {
-                        Menu {
-                            Picker(L("detection_mode"),
-                                   selection: $controller.settings.detectionMode) {
-                                Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
-                                Text(L("mode_auto")).tag(RecDetectionMode.auto)
-                                Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
-                                Text(L("mode_manual")).tag(RecDetectionMode.manual)
-                            }
-                            .pickerStyle(.inline)
-                            .labelsHidden()
-                        } label: {
+                    Menu {
+                        Picker(L("detection_mode"),
+                               selection: $controller.settings.detectionMode) {
+                            Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
+                            Text(L("mode_auto")).tag(RecDetectionMode.auto)
+                            Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
+                            Text(L("mode_manual")).tag(RecDetectionMode.manual)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } label: {
+                        if controller.viewerMode == .playback {
+                            PlaybackTimecodeText()
+                        } else {
                             LiveTimecodeText(
                                 live: controller.live,
                                 tint: controller.isRecording ? Color.red : Color.white)
                         }
-                        .menuStyle(.borderlessButton)
-                        .menuIndicator(.hidden)
-                        .fixedSize()
-                        .help(L("tc_menu_help"))
                     }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help(L("tc_menu_help"))
                 }
                 // always in the left corner; vertical inset under the window buttons
                 // is already reserved by the windowTopInset strip above the player
@@ -171,18 +171,42 @@ struct PlayerArea: View {
                         LUTMenu()
                     }
                     overlayBadge {
-                        Group {
-                            if controller.viewerMode == .playback,
-                               let info = controller.playbackFormatText {
-                                Text(info).monospacedDigit()
-                            } else if let format = controller.signalFormat {
-                                Text(Self.shortFormat(format)).monospacedDigit()
-                            } else {
-                                Text(L("no_signal_short"))
+                        Menu {
+                            Picker(L("input_mode"), selection: Binding(
+                                get: { controller.settings.forcedInputMode ?? "auto" },
+                                set: { controller.settings.forcedInputMode =
+                                    $0 == "auto" ? nil : $0 })) {
+                                Text(L("input_mode_auto")).tag("auto")
+                                ForEach(controller.selectedDeviceInputModes,
+                                        id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
                             }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                            if controller.settings.forcedInputMode != nil {
+                                Toggle(L("input_mode_rgb"), isOn: Binding(
+                                    get: { controller.settings.forcedInputRGB ?? false },
+                                    set: { controller.settings.forcedInputRGB = $0 }))
+                            }
+                        } label: {
+                            Group {
+                                if controller.viewerMode == .playback,
+                                   let info = controller.playbackFormatText {
+                                    Text(info).monospacedDigit()
+                                } else if let format = controller.signalFormat {
+                                    Text(Self.shortFormat(format)).monospacedDigit()
+                                } else {
+                                    Text(L("no_signal_short"))
+                                }
+                            }
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.9))
                         }
-                        .font(.callout)
-                        .foregroundStyle(.white.opacity(0.9))
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help(L("input_mode"))
                     }
                 }
                 .padding(8)
@@ -216,9 +240,21 @@ struct PlayerArea: View {
                                     in: RoundedRectangle(cornerRadius: 8))
                         .padding(.bottom, 10)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let notice = controller.lastNotice {
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.easeOut(duration: 0.2), value: controller.lastError)
+            .animation(.easeOut(duration: 0.2), value: controller.lastNotice)
             .padding(.horizontal, 12)
     }
 
@@ -693,7 +729,9 @@ struct BottomBarView: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 0) {
                         HStack(spacing: 10) {
-                            SettingsLink {
+                            Button {
+                                openWindow(id: "settings")
+                            } label: {
                                 Image(systemName: "gearshape")
                                     .font(.system(size: 15))
                             }
@@ -709,9 +747,7 @@ struct BottomBarView: View {
 
                             NamingPresetMenu()
 
-                            if controller.viewerMode == .record {
-                                FooterMonitorButton()
-                            }
+                            FooterMonitorButton()
                         }
                         .buttonStyle(.borderless)
 
@@ -748,44 +784,53 @@ struct BottomBarView: View {
     }
 }
 
-/// Footer speaker: click opens monitoring on/off + volume in one popover.
+/// Footer speaker: volume popover. In record mode it drives the live monitor,
+/// in playback — the player volume (the transport has no volume of its own).
 private struct FooterMonitorButton: View {
     @EnvironmentObject private var controller: CaptureController
     @State private var showPopover = false
+
+    private var isPlayback: Bool { controller.viewerMode == .playback }
+
+    private var volume: Binding<Double> {
+        isPlayback
+            ? $controller.playbackVolume
+            : Binding(get: { controller.monitorVolume },
+                      set: { controller.monitorVolume = $0 })
+    }
 
     var body: some View {
         Button {
             showPopover.toggle()
         } label: {
-            Image(systemName: controller.monitorOn
-                  ? (controller.monitorVolume == 0
+            Image(systemName: isPlayback
+                  ? (controller.playbackVolume == 0
                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                  : "speaker.slash")
+                  : (controller.monitorOn
+                     ? (controller.monitorVolume == 0
+                        ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                     : "speaker.slash"))
                 .font(.system(size: 15))
-                .foregroundStyle(controller.monitorOn
+                .foregroundStyle((isPlayback ? controller.playbackVolume > 0
+                                             : controller.monitorOn)
                                  ? controller.accentColor : .primary)
                 .frame(width: 22)
         }
-        .disabled(!controller.isCapturing)
+        .disabled(!isPlayback && !controller.isCapturing)
         .help(L("monitor_toggle"))
         .popover(isPresented: $showPopover, arrowEdge: .top) {
-            HStack(spacing: 10) {
-                Button {
-                    controller.monitorOn.toggle()
-                } label: {
-                    Image(systemName: controller.monitorOn
-                          ? "speaker.wave.2.fill" : "speaker.slash")
-                        .foregroundStyle(controller.monitorOn
-                                         ? controller.accentColor : .secondary)
-                        .frame(width: 20)
-                }
-                .buttonStyle(.plain)
-                .help(L("monitor_toggle"))
-                Slider(value: Binding(
-                    get: { controller.monitorVolume },
-                    set: { controller.monitorVolume = $0 }), in: 0...1)
-                    .frame(width: 140)
-                    .disabled(!controller.monitorOn)
+            VStack(spacing: 10) {
+                TextField("", value: Binding(
+                    get: { Int((volume.wrappedValue * 100).rounded()) },
+                    set: { volume.wrappedValue = Double(min(100, max(0, $0))) / 100 }),
+                    format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 44)
+                Slider(value: volume, in: 0...1)
+                    .frame(width: 100)
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 28, height: 108)
             }
             .padding(12)
         }

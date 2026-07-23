@@ -86,6 +86,12 @@ public struct NamingEngine: Sendable {
             "{postfix}": context.postfix,
             "{tc}": context.timecode?.fileNameSafe ?? "",
         ]
+        // the project name always prefixes the file, for any vendor preset —
+        // unless the template already places {prefix}/{project} itself
+        if !context.project.isEmpty,
+           !template.contains("{prefix}"), !template.contains("{project}") {
+            result = "{prefix}_" + result
+        }
         for (key, value) in substitutions {
             result = result.replacingOccurrences(of: key, with: Self.sanitize(value))
         }

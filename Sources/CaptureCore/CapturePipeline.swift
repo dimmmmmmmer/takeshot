@@ -487,8 +487,20 @@ public final class CapturePipeline: @unchecked Sendable {
             .appendingPathExtension(ext)
     }
 
-    private func beginTake(timecode: Timecode?, recStartIndex: Int? = nil) {
+    private func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
+        // The file's TC track counts from its FIRST frame — which is pre-roll,
+        // shot before the camera's TC started running. Shift the start TC back
+        // by the pre-roll frames actually written, so the camera-start frame
+        // carries exactly the camera's TC and the take stays sync-accurate
+        // against the camera original.
+        let cutoffPreview = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
+        let preRollCount = preRollBuffer.filter { $0.index >= cutoffPreview }.count
+        var timecode = rawTimecode
+        if let tc = rawTimecode, preRollCount > 0 {
+            timecode = Timecode(frameNumber: max(0, tc.frameNumber - preRollCount),
+                                fps: tc.fps, isDropFrame: tc.isDropFrame)
+        }
         let engine = NamingEngine(template: config.settings.namingTemplate)
         let context = NamingContext(
             project: config.settings.projectName,

@@ -59,13 +59,15 @@ struct TakeShotApp: App {
         }
         .defaultSize(width: 640, height: 320)
 
-        Settings {
+        Window("Settings", id: "settings") {
             SettingsView()
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
                 .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
     }
 }
 

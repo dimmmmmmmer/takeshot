@@ -82,7 +82,7 @@ struct CapturePipelineTests {
         #expect(take.takeNumber == 2)
 
         // name by template: scene, take number, and start TC (11:00:00:00 ± pre-roll)
-        #expect(take.displayName.hasPrefix("7_T02_11.00.00"))
+        #expect(take.displayName.hasPrefix("Test_7_T02_10.59.59"))
         // write straight into the chosen folder — no auto subfolders by date/project
         #expect(take.url.deletingLastPathComponent().path == root.path)
         #expect(take.url.path.hasSuffix(".mov"))

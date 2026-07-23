@@ -71,6 +71,19 @@ final class CaptureController: ObservableObject {
         }
     }
     private var errorDismissTask: Task<Void, Never>?
+    /// Neutral info toast (grab saved etc.) — green, self-dismissing.
+    @Published var lastNotice: String? {
+        didSet {
+            noticeDismissTask?.cancel()
+            guard lastNotice != nil else { return }
+            noticeDismissTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled else { return }
+                self?.lastNotice = nil
+            }
+        }
+    }
+    private var noticeDismissTask: Task<Void, Never>?
     /// Per-channel audio peak levels, dBFS (for the meters; see `live`).
     var audioLevels: [Float] { live.audioLevels }
     /// View mode: live signal or playback of a recording.
@@ -395,6 +408,8 @@ final class CaptureController: ObservableObject {
         set {
             settings.monitorVolume = newValue
             audioMonitor.volume = Float(newValue)
+            // dragging the volume up implies "I want to hear it"
+            if newValue > 0, !monitorOn, isCapturing { monitorOn = true }
         }
     }
 
@@ -819,10 +834,13 @@ final class CaptureController: ObservableObject {
     }
 
     /// Reset only the UI colors to defaults.
-    func resetColors() {
+    func resetInterface() {
         settings.playerBackgroundHex = nil
         settings.appBackgroundHex = nil
         settings.accentHex = nil
+        settings.appearance = nil
+        panelSide = "right"
+        applyLetterboxColor()
     }
 
     /// Reset ALL app settings to factory (keep the record folder so we don't lose
@@ -1087,9 +1105,11 @@ final class CaptureController: ObservableObject {
 
     private func saveGrab(_ png: Data?) {
         guard let png else { lastError = "Frame grab failed"; return }
-        let base = settings.projectName.isEmpty ? settings.cameraLabel : settings.projectName
+        // project_cam_still_timecode
         let stamp = currentTimecode?.fileNameSafe ?? Self.grabTimeStamp()
-        let name = NamingEngine.sanitize("\(base)_grab_\(stamp)")
+        let name = NamingEngine.sanitize(
+            [settings.projectName, settings.cameraLabel, "still", stamp]
+                .filter { !$0.isEmpty }.joined(separator: "_"))
         let url = CapturePipeline.uniqueURL(for: destinationRoot
             .appendingPathComponent(name).appendingPathExtension("png"))
         do {
@@ -1097,6 +1117,7 @@ final class CaptureController: ObservableObject {
                 at: destinationRoot, withIntermediateDirectories: true)
             try png.write(to: url)
             scanDestinationFolder() // show it in Other content right away
+            lastNotice = L("grab_saved", url.lastPathComponent)
         } catch {
             lastError = "Frame grab failed: \(error.localizedDescription)"
         }

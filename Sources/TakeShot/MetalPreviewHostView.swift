@@ -36,9 +36,9 @@ final class MetalPreviewHostView: NSView {
         if size.width > 0, size.height > 0, previewLayer.drawableSize != size {
             previewLayer.drawableSize = size
             // paused playback / no signal: no new frame will arrive to fill the
-            // resized drawable — redraw the last one or the image stretches
-            let layer = previewLayer
-            DispatchQueue.global(qos: .userInitiated).async { layer.redraw() }
+            // resized drawable — redraw the last one right away or the image
+            // stretches/jumps for a frame
+            previewLayer.redraw()
         }
     }
 }

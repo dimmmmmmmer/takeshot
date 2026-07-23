@@ -21,6 +21,9 @@ public struct ScopeData: Sendable {
     /// Vectorscope density map: x = Cb, y = Cr (128;128 at the center),
     /// row-major `size * size`, row 0 = Cr 255.
     public let vector: [UInt8]
+    /// Luma waveform colored by the image: RGBA `size * size * 4`, brightness =
+    /// trace density, hue = mean color of the contributing pixels.
+    public let waveformYColor: [UInt8]
 
     /// Legacy alias (luma waveform).
     public var waveform: [UInt8] { waveformY }
@@ -166,6 +169,10 @@ public enum ScopeAnalyzer {
         var histG = [Int](repeating: 0, count: 256)
         var histB = [Int](repeating: 0, count: 256)
         var histY = [Int](repeating: 0, count: 256)
+        // mean color of the pixels landing in each luma-waveform cell
+        var sumR = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
+        var sumG = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
+        var sumB = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
 
         init(width: Int) { self.width = width }
 
@@ -176,7 +183,11 @@ public enum ScopeAnalyzer {
             histY[luma] += 1
             let col = x * ScopeData.size / width
             let size = ScopeData.size
-            countsY[(size - 1 - luma * size / 256) * size + col] += 1
+            let yIdx = (size - 1 - luma * size / 256) * size + col
+            countsY[yIdx] += 1
+            sumR[yIdx] += r
+            sumG[yIdx] += g
+            sumB[yIdx] += b
             countsR[(size - 1 - r * size / 256) * size + col] += 1
             countsG[(size - 1 - g * size / 256) * size + col] += 1
             countsB[(size - 1 - b * size / 256) * size + col] += 1
@@ -189,13 +200,29 @@ public enum ScopeAnalyzer {
             func toBytes(_ counts: [Int], gain: Int) -> [UInt8] {
                 counts.map { UInt8(min(255, $0 * gain)) }
             }
+            // colored luma trace: brightness from density, hue from mean color
+            var colored = [UInt8](repeating: 0, count: countsY.count * 4)
+            for i in 0..<countsY.count {
+                let count = countsY[i]
+                guard count > 0 else { continue }
+                let brightness = min(255, count * 24)
+                let avgR = sumR[i] / count, avgG = sumG[i] / count, avgB = sumB[i] / count
+                // scale so the strongest component carries the brightness — the
+                // trace stays readable while showing the image's hue
+                let peak = max(avgR, max(avgG, avgB), 1)
+                colored[i * 4] = UInt8(min(255, avgR * brightness / peak))
+                colored[i * 4 + 1] = UInt8(min(255, avgG * brightness / peak))
+                colored[i * 4 + 2] = UInt8(min(255, avgB * brightness / peak))
+                colored[i * 4 + 3] = 255
+            }
             return ScopeData(waveformY: toBytes(countsY, gain: 24),
                              waveformR: toBytes(countsR, gain: 24),
                              waveformG: toBytes(countsG, gain: 24),
                              waveformB: toBytes(countsB, gain: 24),
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,
-                             vector: toBytes(countsV, gain: 40))
+                             vector: toBytes(countsV, gain: 40),
+                             waveformYColor: colored)
         }
     }
 }

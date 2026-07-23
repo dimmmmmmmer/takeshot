@@ -91,9 +91,10 @@ struct SettingsView: View {
                     Text(L("panel_right")).tag("right")
                     Text(L("panel_left")).tag("left")
                 }
-                Button(L("reset_colors"), role: .destructive) {
-                    controller.resetColors()
+                Button(L("reset_interface"), role: .destructive) {
+                    controller.resetInterface()
                 }
+                .buttonStyle(.plain)
                 .foregroundStyle(.red)
             }
             Section(L("settings_recording")) {
@@ -103,18 +104,18 @@ struct SettingsView: View {
                     }
                 }
                 TextField(L("project"), text: $controller.settings.projectName)
-                LabeledContent(L("destination_folder")) {
-                    HStack {
-                        Text(controller.settings.destinationPath)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: 240, alignment: .trailing)
-                        Button(L("choose_folder")) {
-                            controller.chooseDestinationFolder()
-                        }
+                HStack(spacing: 8) {
+                    Text(L("destination_folder"))
                         .fixedSize()
+                    Text(controller.settings.destinationPath)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Button(L("choose_folder")) {
+                        controller.chooseDestinationFolder()
                     }
+                    .fixedSize()
                 }
                 Picker(L("naming_preset"), selection: Binding(
                     get: {
@@ -181,9 +182,6 @@ struct SettingsView: View {
                         Text(device.name).tag(String?.some(device.id))
                     }
                 }
-                Text(L("monitor_device_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Picker(L("playback_output"), selection: Binding(
                     get: { controller.playbackOutputUID },
                     set: { controller.playbackOutputUID = $0 })) {
@@ -192,9 +190,6 @@ struct SettingsView: View {
                         Text(device.name).tag(String?.some(device.uid))
                     }
                 }
-                Text(L("record_channels_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Section(L("settings_detection")) {
                 Picker(L("detection_mode"), selection: $controller.settings.detectionMode) {
@@ -237,6 +232,7 @@ struct SettingsView: View {
                 Button(L("reset_hotkeys"), role: .destructive) {
                     hotkeys.resetToDefaults()
                 }
+                .buttonStyle(.plain)
                 .foregroundStyle(.red)
             }
             Section {
@@ -255,7 +251,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)
         .frame(width: 500)
-        .padding(.top, 28) // under the window buttons: title bar hidden
+        .padding(.top, 16) // under the window buttons: title bar hidden
         .padding([.horizontal, .bottom])
         .background(controller.appBackground.ignoresSafeArea())
     }

@@ -1,6 +1,7 @@
 import CaptureCore
 import CoreGraphics
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Scopes window content: enables analysis while the window is on screen.
 struct ScopesWindowView: View {
@@ -14,9 +15,24 @@ struct ScopesWindowView: View {
     }
 }
 
-/// Scopes overlay: waveform, RGB parade, histogram and vectorscope computed
-/// from the visible frame (live or playback — whichever mode is active).
-/// Each scope toggles individually; waveform/histogram have a channel picker.
+/// The scope kinds, in user-configurable order.
+enum ScopeKind: String, CaseIterable, Identifiable {
+    case waveform, parade, histogram, vector
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .waveform: return "scope_waveform"
+        case .parade: return "scope_parade"
+        case .histogram: return "scope_histogram"
+        case .vector: return "scope_vector"
+        }
+    }
+}
+
+/// Scopes: waveform (image-colored luma or per-channel), RGB parade, histogram
+/// and vectorscope. Toggle each on/off, drag boxes to reorder; the grid wraps
+/// to the window width.
 struct ScopesPanel: View {
     @EnvironmentObject private var controller: CaptureController
     // scope data updates ~8/s — observed separately from the controller
@@ -28,57 +44,67 @@ struct ScopesPanel: View {
     @AppStorage("scopeVectorOn") private var vectorOn = false
     @AppStorage("scopeWaveformChannel") private var waveformChannel = "y"
     @AppStorage("scopeHistogramChannel") private var histogramChannel = "rgb"
+    @AppStorage("scopeOrder") private var orderRaw = "waveform,parade,histogram,vector"
+    @State private var dragged: ScopeKind?
+
+    private var order: [ScopeKind] {
+        var kinds = orderRaw.split(separator: ",").compactMap {
+            ScopeKind(rawValue: String($0))
+        }
+        for kind in ScopeKind.allCases where !kinds.contains(kind) {
+            kinds.append(kind)
+        }
+        return kinds
+    }
+
+    private func isOn(_ kind: ScopeKind) -> Binding<Bool> {
+        switch kind {
+        case .waveform: return $waveformOn
+        case .parade: return $paradeOn
+        case .histogram: return $histogramOn
+        case .vector: return $vectorOn
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                scopeToggle(L("scope_waveform"), isOn: $waveformOn)
-                scopeToggle(L("scope_parade"), isOn: $paradeOn)
-                scopeToggle(L("scope_histogram"), isOn: $histogramOn)
-                scopeToggle(L("scope_vector"), isOn: $vectorOn)
+                ForEach(order) { kind in
+                    scopeToggle(L(kind.titleKey), isOn: isOn(kind))
+                }
+                Spacer()
+                Text(L("scope_drag_hint"))
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.3))
             }
             if let data = live.scopeData {
-                HStack(alignment: .top, spacing: 12) {
-                    if waveformOn {
-                        ScopeBox(title: L("scope_waveform"),
-                                 channel: channelBinding($waveformChannel,
-                                                         options: ["y", "rgb", "r", "g", "b"])) {
-                            WaveformView(data: data, channel: waveformChannel)
-                        } scale: {
-                            percentScale
+                let visible = order.filter { isOn($0).wrappedValue }
+                if visible.isEmpty {
+                    Text(L("scope_none_hint"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    GeometryReader { geo in
+                        let columns = max(1, min(visible.count,
+                                                 Int(geo.size.width / 360)))
+                        let rows = (visible.count + columns - 1) / columns
+                        Grid(horizontalSpacing: 12, verticalSpacing: 10) {
+                            ForEach(0..<rows, id: \.self) { row in
+                                GridRow {
+                                    ForEach(0..<columns, id: \.self) { col in
+                                        let index = row * columns + col
+                                        if index < visible.count {
+                                            scopeBox(visible[index], data: data)
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                    if paradeOn {
-                        ScopeBox(title: L("scope_parade"), channel: nil) {
-                            ParadeView(data: data)
-                        } scale: {
-                            percentScale
-                        }
-                    }
-                    if histogramOn {
-                        ScopeBox(title: L("scope_histogram"),
-                                 channel: channelBinding($histogramChannel,
-                                                         options: ["rgb", "y", "r", "g", "b"])) {
-                            HistogramView(data: data, channel: histogramChannel)
-                        } scale: {
-                            EmptyView()
-                        }
-                    }
-                    if vectorOn {
-                        ScopeBox(title: L("scope_vector"), channel: nil) {
-                            VectorscopeView(data: data)
-                        } scale: {
-                            EmptyView()
-                        }
-                    }
-                    if !waveformOn && !paradeOn && !histogramOn && !vectorOn {
-                        Text(L("scope_none_hint"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text(L("scope_waiting"))
                     .font(.caption)
@@ -87,30 +113,69 @@ struct ScopesPanel: View {
             }
         }
         .padding(12)
-        .frame(minWidth: 480, minHeight: 240)
+        .frame(minWidth: 420, minHeight: 260)
         .background(.black.opacity(0.92))
+    }
+
+    @ViewBuilder
+    private func scopeBox(_ kind: ScopeKind, data: ScopeData) -> some View {
+        ScopeBox(title: L(kind.titleKey), channel: channelPicker(for: kind)) {
+            switch kind {
+            case .waveform:
+                WaveformView(data: data, channel: waveformChannel)
+            case .parade:
+                ParadeView(data: data)
+            case .histogram:
+                HistogramView(data: data, channel: histogramChannel)
+            case .vector:
+                VectorscopeView(data: data)
+            }
+        } scale: {
+            if kind == .waveform || kind == .parade {
+                percentScale
+            }
+        }
+        .onDrag {
+            dragged = kind
+            return NSItemProvider(object: kind.rawValue as NSString)
+        }
+        .onDrop(of: [UTType.plainText], delegate: ScopeDropDelegate(
+            target: kind, dragged: $dragged, orderRaw: $orderRaw, order: order))
+    }
+
+    private func channelPicker(for kind: ScopeKind) -> ChannelPicker? {
+        switch kind {
+        case .waveform:
+            return ChannelPicker(selection: $waveformChannel,
+                                 options: ["y", "rgb", "r", "g", "b"])
+        case .histogram:
+            return ChannelPicker(selection: $histogramChannel,
+                                 options: ["rgb", "y", "r", "g", "b"])
+        default:
+            return nil
+        }
     }
 
     private func scopeToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         Button {
             withAnimation(.easeOut(duration: 0.12)) { isOn.wrappedValue.toggle() }
         } label: {
-            Text(title)
-                .font(.caption2)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(isOn.wrappedValue
-                            ? AnyShapeStyle(controller.accentColor.opacity(0.35))
-                            : AnyShapeStyle(.white.opacity(0.08)),
-                            in: Capsule())
-                .foregroundStyle(isOn.wrappedValue ? .white : .white.opacity(0.55))
+            HStack(spacing: 3) {
+                Image(systemName: isOn.wrappedValue
+                      ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 8))
+                Text(title)
+            }
+            .font(.caption2)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(isOn.wrappedValue
+                        ? AnyShapeStyle(controller.accentColor.opacity(0.35))
+                        : AnyShapeStyle(.white.opacity(0.08)),
+                        in: Capsule())
+            .foregroundStyle(isOn.wrappedValue ? .white : .white.opacity(0.55))
         }
         .buttonStyle(.plain)
-    }
-
-    private func channelBinding(_ storage: Binding<String>,
-                                options: [String]) -> ChannelPicker {
-        ChannelPicker(selection: storage, options: options)
     }
 
     /// 0–100% marks for waveform/parade.
@@ -118,14 +183,41 @@ struct ScopesPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach([100, 75, 50, 25, 0], id: \.self) { mark in
                 Text("\(mark)")
-                    .font(.system(size: 7).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.45))
+                    .font(.system(size: 8).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.5))
                     .frame(maxHeight: .infinity,
                            alignment: mark == 100 ? .top : (mark == 0 ? .bottom : .center))
             }
         }
-        .frame(width: 16)
+        .frame(width: 18)
         .frame(maxHeight: .infinity)
+    }
+}
+
+/// Drag-to-reorder for scope boxes.
+private struct ScopeDropDelegate: DropDelegate {
+    let target: ScopeKind
+    @Binding var dragged: ScopeKind?
+    @Binding var orderRaw: String
+    let order: [ScopeKind]
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged, dragged != target,
+              let from = order.firstIndex(of: dragged),
+              let to = order.firstIndex(of: target) else { return }
+        var kinds = order
+        kinds.move(fromOffsets: IndexSet(integer: from),
+                   toOffset: to > from ? to + 1 : to)
+        orderRaw = kinds.map(\.rawValue).joined(separator: ",")
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragged = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 
@@ -167,6 +259,9 @@ private struct ScopeBox<Content: View, Scale: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.white.opacity(0.3))
                 Text(title)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.6))
@@ -177,8 +272,8 @@ private struct ScopeBox<Content: View, Scale: View>: View {
             }
             HStack(spacing: 2) {
                 content
-                    .frame(minWidth: 220, maxWidth: .infinity,
-                           minHeight: 140, maxHeight: .infinity)
+                    .frame(minWidth: 260, maxWidth: .infinity,
+                           minHeight: 150, maxHeight: .infinity)
                     .background(Color.black)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 scale
@@ -187,7 +282,8 @@ private struct ScopeBox<Content: View, Scale: View>: View {
     }
 }
 
-/// Waveform of the selected channel (or all three in screen blend for "rgb").
+/// Waveform of the selected channel: "y" is the luma trace colored by the
+/// image itself; single channels and the RGB composite are channel-tinted.
 private struct WaveformView: View {
     let data: ScopeData
     let channel: String
@@ -208,10 +304,14 @@ private struct WaveformView: View {
                     .blendMode(.screen)
                 channelImage(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
                     .blendMode(.screen)
-            default: // "y" — neutral luma trace
-                channelImage(data.waveformY, tint: Color(white: 0.95))
+            default: // "y" — luma trace carrying the image's color
+                if let image = rgbaImage(from: data.waveformYColor) {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.low)
+                }
             }
-            referenceLines(fractions: [0.0, 0.25, 0.5, 0.75, 1.0])
+            waveformGraticule
         }
     }
 
@@ -237,7 +337,7 @@ private struct ParadeView: View {
                 paradeChannel(data.waveformG, tint: Color(red: 0.3, green: 1, blue: 0.35))
                 paradeChannel(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
             }
-            referenceLines(fractions: [0.0, 0.25, 0.5, 0.75, 1.0])
+            waveformGraticule
         }
     }
 
@@ -252,8 +352,30 @@ private struct ParadeView: View {
     }
 }
 
-/// Histogram of the selected channel(s), rendered in 2-code bins: level
-/// remaps leave single-code gaps that would show as a vertical comb.
+/// Dense waveform graticule: a line every 10%, stronger at 0/50/100.
+private var waveformGraticule: some View {
+    GeometryReader { geo in
+        Path { p in
+            for i in stride(from: 0.0, through: 1.0, by: 0.1) {
+                let y = geo.size.height * i
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addLine(to: CGPoint(x: geo.size.width, y: y))
+            }
+        }
+        .stroke(.white.opacity(0.12), lineWidth: 0.5)
+        Path { p in
+            for i in [0.0, 0.5, 1.0] {
+                let y = geo.size.height * i
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addLine(to: CGPoint(x: geo.size.width, y: y))
+            }
+        }
+        .stroke(.white.opacity(0.28), lineWidth: 0.5)
+    }
+}
+
+/// Histogram of the selected channel(s), 2-code bins (single-code gaps from
+/// level remaps would show as a comb), vertical marks at 0/64/128/192/255.
 private struct HistogramView: View {
     let data: ScopeData
     let channel: String
@@ -270,16 +392,27 @@ private struct HistogramView: View {
                         .fill(item.color.opacity(0.7))
                         .blendMode(.screen)
                 }
-                // value marks: 0 / 128 / 255
+                Path { p in
+                    for mark in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                        let x = geo.size.width * mark
+                        p.move(to: CGPoint(x: x, y: 0))
+                        p.addLine(to: CGPoint(x: x, y: geo.size.height))
+                    }
+                }
+                .stroke(.white.opacity(0.14), lineWidth: 0.5)
                 HStack {
                     Text("0")
                     Spacer()
+                    Text("64")
+                    Spacer()
                     Text("128")
+                    Spacer()
+                    Text("192")
                     Spacer()
                     Text("255")
                 }
-                .font(.system(size: 7).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.45))
+                .font(.system(size: 8).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.5))
                 .padding(.horizontal, 2)
                 .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -299,7 +432,6 @@ private struct HistogramView: View {
         }
     }
 
-    /// 2-code bins (128 bars) — kills the comb from level-remap code gaps.
     private func smoothed(_ bins: [Int]) -> [Int] {
         stride(from: 0, to: bins.count - 1, by: 2).map { bins[$0] + bins[$0 + 1] }
     }
@@ -318,49 +450,112 @@ private struct HistogramView: View {
     }
 }
 
-/// Vectorscope: Cb/Cr density with a graticule (center cross + 75% ring).
+/// Vectorscope: chroma density colored by its own hue, rings at 25/50/75%,
+/// 75% primary/secondary targets and the skin-tone line.
 private struct VectorscopeView: View {
     let data: ScopeData
 
-    var body: some View {
-        ZStack {
-            if let image = grayscaleImage(from: data.vector) {
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .interpolation(.low)
-                    .colorMultiply(Color(white: 0.95))
-                    .aspectRatio(1, contentMode: .fit)
+    /// Hue for every (Cb, Cr) cell — computed once.
+    private static let hueLUT: [UInt8] = {
+        var lut = [UInt8](repeating: 0, count: 256 * 256 * 3)
+        for row in 0..<256 {          // row 0 = Cr 255
+            let cr = Double(255 - row) - 128
+            for col in 0..<256 {      // col = Cb
+                let cb = Double(col) - 128
+                // BT.709 inverse at mid luma, normalized to a vivid tone
+                var r = 1.5748 * cr
+                var g = -0.1873 * cb - 0.4681 * cr
+                var b = 1.8556 * cb
+                let peak = max(abs(r), abs(g), abs(b), 1)
+                r = r / peak * 127 + 128
+                g = g / peak * 127 + 128
+                b = b / peak * 127 + 128
+                let i = (row * 256 + col) * 3
+                lut[i] = UInt8(max(0, min(255, r)))
+                lut[i + 1] = UInt8(max(0, min(255, g)))
+                lut[i + 2] = UInt8(max(0, min(255, b)))
             }
-            GeometryReader { geo in
-                let side = min(geo.size.width, geo.size.height)
-                let cx = geo.size.width / 2, cy = geo.size.height / 2
+        }
+        return lut
+    }()
+
+    /// 75% color-bar targets in the analyzer's chroma approximation.
+    private static let targets: [(String, CGFloat, CGFloat)] = {
+        func point(_ r: Int, _ g: Int, _ b: Int) -> (CGFloat, CGFloat) {
+            let luma = (54 * r + 183 * g + 19 * b) >> 8
+            let cb = 128 + ((b - luma) * 138) >> 8
+            let cr = 128 + ((r - luma) * 163) >> 8
+            return (CGFloat(cb) / 255, CGFloat(255 - cr) / 255)
+        }
+        let v = 191 // 75%
+        let r = point(v, 0, 0), g = point(0, v, 0), b = point(0, 0, v)
+        let cy = point(0, v, v), mg = point(v, 0, v), yl = point(v, v, 0)
+        return [("R", r.0, r.1), ("G", g.0, g.1), ("B", b.0, b.1),
+                ("Cy", cy.0, cy.1), ("Mg", mg.0, mg.1), ("Yl", yl.0, yl.1)]
+    }()
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let cx = geo.size.width / 2, cy = geo.size.height / 2
+            ZStack {
+                if let image = coloredVector() {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.low)
+                        .frame(width: side, height: side)
+                        .position(x: cx, y: cy)
+                }
+                // rings + cross + skin-tone line
+                ForEach([0.25, 0.5, 0.75], id: \.self) { ring in
+                    Circle()
+                        .strokeBorder(.white.opacity(ring == 0.75 ? 0.3 : 0.15),
+                                      lineWidth: 0.5)
+                        .frame(width: side * ring, height: side * ring)
+                        .position(x: cx, y: cy)
+                }
                 Path { p in
                     p.move(to: CGPoint(x: cx - side / 2, y: cy))
                     p.addLine(to: CGPoint(x: cx + side / 2, y: cy))
                     p.move(to: CGPoint(x: cx, y: cy - side / 2))
                     p.addLine(to: CGPoint(x: cx, y: cy + side / 2))
+                    // skin-tone line (~33° up-left of the +Cr axis)
+                    p.move(to: CGPoint(x: cx, y: cy))
+                    p.addLine(to: CGPoint(x: cx - side * 0.26, y: cy - side * 0.40))
                 }
-                .stroke(.white.opacity(0.2), lineWidth: 0.5)
-                Circle()
-                    .strokeBorder(.white.opacity(0.2), lineWidth: 0.5)
-                    .frame(width: side * 0.75, height: side * 0.75)
-                    .position(x: cx, y: cy)
+                .stroke(.white.opacity(0.22), lineWidth: 0.5)
+                ForEach(Self.targets, id: \.0) { name, tx, ty in
+                    let px = cx - side / 2 + tx * side
+                    let py = cy - side / 2 + ty * side
+                    Rectangle()
+                        .strokeBorder(.white.opacity(0.5), lineWidth: 0.7)
+                        .frame(width: 7, height: 7)
+                        .position(x: px, y: py)
+                    Text(name)
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .position(x: px + 9, y: py - 7)
+                }
             }
         }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
-/// Horizontal reference lines at the given fractions of the height.
-private func referenceLines(fractions: [Double]) -> some View {
-    GeometryReader { geo in
-        Path { p in
-            for fraction in fractions {
-                let y = geo.size.height * fraction
-                p.move(to: CGPoint(x: 0, y: y))
-                p.addLine(to: CGPoint(x: geo.size.width, y: y))
-            }
+    /// Density map × hue LUT → RGBA image.
+    private func coloredVector() -> CGImage? {
+        let size = ScopeData.size
+        var rgba = [UInt8](repeating: 0, count: size * size * 4)
+        let lut = Self.hueLUT
+        for i in 0..<(size * size) {
+            let density = Int(data.vector[i])
+            guard density > 0 else { continue }
+            rgba[i * 4] = UInt8(Int(lut[i * 3]) * density / 255)
+            rgba[i * 4 + 1] = UInt8(Int(lut[i * 3 + 1]) * density / 255)
+            rgba[i * 4 + 2] = UInt8(Int(lut[i * 3 + 2]) * density / 255)
+            rgba[i * 4 + 3] = 255
         }
-        .stroke(.white.opacity(0.16), lineWidth: 0.5)
+        return rgbaImage(from: rgba)
     }
 }
 
@@ -375,6 +570,22 @@ private func grayscaleImage(from bytes: [UInt8]) -> CGImage? {
                    bitsPerPixel: 8, bytesPerRow: size,
                    space: CGColorSpaceCreateDeviceGray(),
                    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                   provider: provider, decode: nil,
+                   shouldInterpolate: false, intent: .defaultIntent)
+}
+
+/// 256×256 RGBA CGImage from analyzer bytes.
+private func rgbaImage(from bytes: [UInt8]) -> CGImage? {
+    let size = ScopeData.size
+    guard bytes.count == size * size * 4,
+          let provider = CGDataProvider(data: Data(bytes) as CFData) else {
+        return nil
+    }
+    return CGImage(width: size, height: size, bitsPerComponent: 8,
+                   bitsPerPixel: 32, bytesPerRow: size * 4,
+                   space: CGColorSpaceCreateDeviceRGB(),
+                   bitmapInfo: CGBitmapInfo(
+                       rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                    provider: provider, decode: nil,
                    shouldInterpolate: false, intent: .defaultIntent)
 }

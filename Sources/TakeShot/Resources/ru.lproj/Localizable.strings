@@ -166,7 +166,7 @@
 "hotkey_fullscreen" = "Фулскрин (в просмотре — фулскрин плейбека)";
 "hotkey_grab" = "Стоп-кадр";
 
-"monitor_device" = "Monitor device (выход DeckLink)";
+"monitor_device" = "Hardware monitor device";
 "monitor_device_hint" = "Вывод мониторинга по SDI/HDMI через плату Blackmagic — включится с первой сборкой на живом железе";
 
 "wipe_vertical" = "Вертикальная шторка";
@@ -254,3 +254,6 @@
 "scope_parade" = "Парад";
 "scope_vector" = "Вектор";
 "scope_none_hint" = "Все скопы выключены";
+"grab_saved" = "Стилл сохранён: %@";
+"reset_interface" = "Сбросить интерфейс";
+"scope_drag_hint" = "скопы можно перетаскивать";
