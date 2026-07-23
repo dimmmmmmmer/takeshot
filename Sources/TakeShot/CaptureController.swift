@@ -128,12 +128,34 @@ final class CaptureController: ObservableObject {
         case diagonal    // 45°
     }
 
-    @Published var compareMode: CompareMode = .off
-    @Published var wipeOrientation: WipeOrientation = .vertical
+    @Published var compareMode: CompareMode = .off {
+        didSet { pushCompare() }
+    }
+    @Published var wipeOrientation: WipeOrientation = .vertical {
+        didSet { pushCompare() }
+    }
     /// Wipe position (0…1; left/top is playback).
-    @Published var wipePosition: Double = 0.5
+    @Published var wipePosition: Double = 0.5 {
+        didSet { pushCompare() }
+    }
     /// Playback opacity in blend mode.
-    @Published var blendOpacity: Double = 0.5
+    @Published var blendOpacity: Double = 0.5 {
+        didSet { pushCompare() }
+    }
+
+    /// Wipe/blend are composited inside the playback render (SwiftUI masking of
+    /// video layers drops the colorspace) — push the parameters to the tap.
+    private func pushCompare() {
+        switch compareMode {
+        case .off, .sideBySide:
+            playbackTap.setCompare(.off)
+        case .blend:
+            playbackTap.setCompare(.blend(opacity: blendOpacity))
+        case .wipe:
+            playbackTap.setCompare(.wipe(orientation: wipeOrientation,
+                                         position: wipePosition))
+        }
+    }
     /// Takes-panel position (left/right) — reactive for all windows.
     @Published var panelSide: String =
         UserDefaults.standard.string(forKey: "panelSide") ?? "right" {
@@ -328,27 +350,18 @@ final class CaptureController: ObservableObject {
         applyPlaybackLUT()
     }
 
-    /// LUT on playback — the same filter via videoComposition, but accounting for
-    /// an already-baked look: our file tagged com.takeshot.lut or a manual
-    /// per-clip off — and the LUT isn't applied twice.
+    /// LUT on playback — applied in the tap's own render (AVVideoComposition's
+    /// pipeline shifted contrast even on untouched clips), accounting for an
+    /// already-baked look: our file tagged com.takeshot.lut or a manual
+    /// per-clip off — the LUT isn't applied twice.
     func applyPlaybackLUT() {
-        guard let item = player.currentItem else { return }
         guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
               !playbackLUTSuppressed,
               let cube = currentCube, let filter = cube.makeFilter() else {
-            item.videoComposition = nil
+            playbackTap.setLUT(nil, intensity: 1)
             return
         }
-        let intensity = settings.lutIntensity ?? 1
-        item.videoComposition = AVMutableVideoComposition(
-            asset: item.asset) { request in
-            let source = request.sourceImage
-            filter.setValue(source, forKey: kCIInputImageKey)
-            let filtered = filter.outputImage ?? source
-            let mixed = CapturePipeline.mix(source: source, filtered: filtered,
-                                            intensity: intensity)
-            request.finish(with: mixed, context: nil)
-        }
+        playbackTap.setLUT(filter, intensity: settings.lutIntensity ?? 1)
     }
 
     /// Check the loaded clip's baked-LUT tag (asynchronously).
@@ -558,6 +571,7 @@ final class CaptureController: ObservableObject {
         playbackURL = url
         playbackFormatText = nil
         playbackStartTC = nil
+        playbackAspect = nil
         playbackFPS = 25
         if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
             player.pause()
@@ -581,6 +595,8 @@ final class CaptureController: ObservableObject {
     @Published var playbackFormatText: String?
     /// Start TC from the file's timecode track (nil — none).
     @Published var playbackStartTC: Timecode?
+    /// Aspect ratio of the loaded clip (nil while loading / images).
+    @Published var playbackAspect: CGFloat?
     private(set) var playbackFPS: Double = 25
 
     /// Playback position as timecode (start TC + elapsed at the file's fps).
@@ -625,6 +641,8 @@ final class CaptureController: ObservableObject {
                 self.playbackFormatText = "\(Int(size.height))p\(fpsText)"
                 self.playbackStartTC = startTC
                 self.playbackFPS = fps > 0 ? fps : 25
+                self.playbackAspect = size.height > 0
+                    ? size.width / size.height : nil
             }
         }
     }
@@ -741,6 +759,9 @@ final class CaptureController: ObservableObject {
         audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
         audioMonitor.volume = Float(stored.monitorVolume ?? 1)
         bindPipeline()
+        playbackTap.setLiveBufferProvider { [pipeline] in
+            pipeline.currentPreviewBuffer()
+        }
         refreshDevices() // selecting the first device starts capture via didSet
         startFolderSync()
         refreshNameCollision()
@@ -1089,12 +1110,33 @@ final class CaptureController: ObservableObject {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
         generator.appliesPreferredTrackTransform = true
-        if let composition = item.videoComposition {
-            generator.videoComposition = composition
-        }
         let time = player.currentTime()
+        // the playback LUT lives in the tap render now — bake it into the grab
+        let lutOn = (settings.lutPreviewEnabled ?? false) && !playbackFileHasBakedLUT
+            && !playbackLUTSuppressed
+        let filter = lutOn ? currentCube?.makeFilter() : nil
+        let intensity = settings.lutIntensity ?? 1
         Task { [weak self] in
-            let cg = try? await generator.image(at: time).image
+            var cg = try? await generator.image(at: time).image
+            if let source = cg, let filter {
+                // unmanaged like the tap render — the LUT applies to raw code
+                // values, so the still matches the screen
+                let input = CIImage(cgImage: source,
+                                    options: [.colorSpace: NSNull()])
+                filter.setValue(input, forKey: kCIInputImageKey)
+                if let output = filter.outputImage {
+                    let mixed = CapturePipeline.mix(source: input, filtered: output,
+                                                    intensity: intensity)
+                    let context = CIContext(options: [
+                        .workingColorSpace: NSNull(),
+                        .outputColorSpace: NSNull(),
+                    ])
+                    cg = context.createCGImage(
+                        mixed, from: input.extent, format: .RGBA8,
+                        colorSpace: source.colorSpace
+                            ?? CGColorSpaceCreateDeviceRGB()) ?? source
+                }
+            }
             await MainActor.run {
                 guard let cg else { self?.lastError = "Frame grab failed"; return }
                 self?.saveGrab(NSBitmapImageRep(cgImage: cg)

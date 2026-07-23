@@ -308,7 +308,7 @@ private struct WaveformView: View {
                 if let image = rgbaImage(from: data.waveformYColor) {
                     Image(decorative: image, scale: 1)
                         .resizable()
-                        .interpolation(.low)
+                        .interpolation(.medium)
                 }
             }
             waveformGraticule
@@ -320,7 +320,7 @@ private struct WaveformView: View {
         if let image = grayscaleImage(from: bytes) {
             Image(decorative: image, scale: 1)
                 .resizable()
-                .interpolation(.low)
+                .interpolation(.medium)
                 .colorMultiply(tint)
         }
     }
@@ -346,7 +346,7 @@ private struct ParadeView: View {
         if let image = grayscaleImage(from: bytes) {
             Image(decorative: image, scale: 1)
                 .resizable()
-                .interpolation(.low)
+                .interpolation(.medium)
                 .colorMultiply(tint)
         }
     }
@@ -381,40 +381,43 @@ private struct HistogramView: View {
     let channel: String
 
     var body: some View {
-        GeometryReader { geo in
+        VStack(spacing: 1) {
             let series = selectedSeries
-            ZStack {
-                // each channel normalized to its own peak — the composite view
-                // matches the single-channel views instead of rescaling them
-                ForEach(Array(series.enumerated()), id: \.offset) { _, item in
-                    channelPath(item.bins, peak: max(1, item.bins.max() ?? 1),
-                                in: geo.size)
-                        .fill(item.color.opacity(0.7))
-                        .blendMode(.screen)
-                }
-                Path { p in
-                    for mark in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                        let x = geo.size.width * mark
-                        p.move(to: CGPoint(x: x, y: 0))
-                        p.addLine(to: CGPoint(x: x, y: geo.size.height))
+            // channels stacked in rows — each normalized to its own peak,
+            // all three readable at once (nothing blended away)
+            ForEach(Array(series.enumerated()), id: \.offset) { index, item in
+                GeometryReader { geo in
+                    ZStack {
+                        channelPath(item.bins, peak: max(1, item.bins.max() ?? 1),
+                                    in: geo.size)
+                            .fill(item.color.opacity(0.75))
+                        Path { p in
+                            for mark in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                                let x = geo.size.width * mark
+                                p.move(to: CGPoint(x: x, y: 0))
+                                p.addLine(to: CGPoint(x: x, y: geo.size.height))
+                            }
+                        }
+                        .stroke(.white.opacity(0.14), lineWidth: 0.5)
+                        if index == series.count - 1 {
+                            HStack {
+                                Text("0")
+                                Spacer()
+                                Text("64")
+                                Spacer()
+                                Text("128")
+                                Spacer()
+                                Text("192")
+                                Spacer()
+                                Text("255")
+                            }
+                            .font(.system(size: 8).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.horizontal, 2)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                        }
                     }
                 }
-                .stroke(.white.opacity(0.14), lineWidth: 0.5)
-                HStack {
-                    Text("0")
-                    Spacer()
-                    Text("64")
-                    Spacer()
-                    Text("128")
-                    Spacer()
-                    Text("192")
-                    Spacer()
-                    Text("255")
-                }
-                .font(.system(size: 8).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.5))
-                .padding(.horizontal, 2)
-                .frame(maxHeight: .infinity, alignment: .bottom)
             }
         }
     }
@@ -455,22 +458,24 @@ private struct HistogramView: View {
 private struct VectorscopeView: View {
     let data: ScopeData
 
-    /// Hue for every (Cb, Cr) cell — computed once.
+    /// Hue for every (Cb, Cr) cell — computed once. Saturation follows the
+    /// radius, so near-neutral chroma reads near-white instead of screaming.
     private static let hueLUT: [UInt8] = {
-        var lut = [UInt8](repeating: 0, count: 256 * 256 * 3)
-        for row in 0..<256 {          // row 0 = Cr 255
-            let cr = Double(255 - row) - 128
-            for col in 0..<256 {      // col = Cb
-                let cb = Double(col) - 128
-                // BT.709 inverse at mid luma, normalized to a vivid tone
+        let size = ScopeData.vectorSize
+        var lut = [UInt8](repeating: 0, count: size * size * 3)
+        for row in 0..<size {
+            let cr = (Double(size) / 2 - Double(row)) * 255 / Double(size)
+            for col in 0..<size {
+                let cb = (Double(col) - Double(size) / 2) * 255 / Double(size)
                 var r = 1.5748 * cr
                 var g = -0.1873 * cb - 0.4681 * cr
                 var b = 1.8556 * cb
                 let peak = max(abs(r), abs(g), abs(b), 1)
-                r = r / peak * 127 + 128
-                g = g / peak * 127 + 128
-                b = b / peak * 127 + 128
-                let i = (row * 256 + col) * 3
+                let saturation = min(1.0, (cb * cb + cr * cr).squareRoot() / 60)
+                r = 255 * (1 - saturation) + (r / peak * 127 + 128) * saturation
+                g = 255 * (1 - saturation) + (g / peak * 127 + 128) * saturation
+                b = 255 * (1 - saturation) + (b / peak * 127 + 128) * saturation
+                let i = (row * size + col) * 3
                 lut[i] = UInt8(max(0, min(255, r)))
                 lut[i + 1] = UInt8(max(0, min(255, g)))
                 lut[i + 2] = UInt8(max(0, min(255, b)))
@@ -479,13 +484,13 @@ private struct VectorscopeView: View {
         return lut
     }()
 
-    /// 75% color-bar targets in the analyzer's chroma approximation.
+    /// 75% color-bar targets — positioned by the exact same chroma math the
+    /// analyzer plots with, so bars land on their boxes.
     private static let targets: [(String, CGFloat, CGFloat)] = {
         func point(_ r: Int, _ g: Int, _ b: Int) -> (CGFloat, CGFloat) {
-            let luma = (54 * r + 183 * g + 19 * b) >> 8
-            let cb = 128 + ((b - luma) * 138) >> 8
-            let cr = 128 + ((r - luma) * 163) >> 8
-            return (CGFloat(cb) / 255, CGFloat(255 - cr) / 255)
+            let (cb, cr) = ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
+                                                b: Double(b))
+            return (CGFloat(0.5 + cb / 255), CGFloat(0.5 - cr / 255))
         }
         let v = 191 // 75%
         let r = point(v, 0, 0), g = point(0, v, 0), b = point(0, 0, v)
@@ -502,7 +507,7 @@ private struct VectorscopeView: View {
                 if let image = coloredVector() {
                     Image(decorative: image, scale: 1)
                         .resizable()
-                        .interpolation(.low)
+                        .interpolation(.medium)
                         .frame(width: side, height: side)
                         .position(x: cx, y: cy)
                 }
@@ -544,7 +549,7 @@ private struct VectorscopeView: View {
 
     /// Density map × hue LUT → RGBA image.
     private func coloredVector() -> CGImage? {
-        let size = ScopeData.size
+        let size = ScopeData.vectorSize
         var rgba = [UInt8](repeating: 0, count: size * size * 4)
         let lut = Self.hueLUT
         for i in 0..<(size * size) {
@@ -555,37 +560,39 @@ private struct VectorscopeView: View {
             rgba[i * 4 + 2] = UInt8(Int(lut[i * 3 + 2]) * density / 255)
             rgba[i * 4 + 3] = 255
         }
-        return rgbaImage(from: rgba)
+        return rgbaImage(from: rgba, width: size, height: size)
     }
 }
 
-/// 256×256 grayscale CGImage from an analyzer density map.
-private func grayscaleImage(from bytes: [UInt8]) -> CGImage? {
-    let size = ScopeData.size
-    guard bytes.count == size * size,
+/// Grayscale CGImage from an analyzer density map.
+private func grayscaleImage(from bytes: [UInt8],
+                            width: Int = ScopeData.waveWidth,
+                            height: Int = ScopeData.waveHeight) -> CGImage? {
+    guard bytes.count == width * height,
           let provider = CGDataProvider(data: Data(bytes) as CFData) else {
         return nil
     }
-    return CGImage(width: size, height: size, bitsPerComponent: 8,
-                   bitsPerPixel: 8, bytesPerRow: size,
+    return CGImage(width: width, height: height, bitsPerComponent: 8,
+                   bitsPerPixel: 8, bytesPerRow: width,
                    space: CGColorSpaceCreateDeviceGray(),
                    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                    provider: provider, decode: nil,
-                   shouldInterpolate: false, intent: .defaultIntent)
+                   shouldInterpolate: true, intent: .defaultIntent)
 }
 
-/// 256×256 RGBA CGImage from analyzer bytes.
-private func rgbaImage(from bytes: [UInt8]) -> CGImage? {
-    let size = ScopeData.size
-    guard bytes.count == size * size * 4,
+/// RGBA CGImage from analyzer bytes.
+private func rgbaImage(from bytes: [UInt8],
+                       width: Int = ScopeData.waveWidth,
+                       height: Int = ScopeData.waveHeight) -> CGImage? {
+    guard bytes.count == width * height * 4,
           let provider = CGDataProvider(data: Data(bytes) as CFData) else {
         return nil
     }
-    return CGImage(width: size, height: size, bitsPerComponent: 8,
-                   bitsPerPixel: 32, bytesPerRow: size * 4,
+    return CGImage(width: width, height: height, bitsPerComponent: 8,
+                   bitsPerPixel: 32, bytesPerRow: width * 4,
                    space: CGColorSpaceCreateDeviceRGB(),
                    bitmapInfo: CGBitmapInfo(
                        rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                    provider: provider, decode: nil,
-                   shouldInterpolate: false, intent: .defaultIntent)
+                   shouldInterpolate: true, intent: .defaultIntent)
 }

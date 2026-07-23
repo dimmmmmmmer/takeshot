@@ -2,28 +2,36 @@ import CoreVideo
 import Foundation
 
 /// One frame's worth of scope data: per-channel waveform density maps, RGB/luma
-/// histograms and a vectorscope density map. Computed on the CPU from a strided
-/// sample of the frame — cheap enough to run at ~8 Hz on the pipeline queue.
+/// histograms and a vectorscope density map. Computed on the CPU from a fixed
+/// sampling grid — cheap enough to run at ~8 Hz on the pipeline queue.
+///
+/// Colorimetry: gamma-encoded R'G'B' code values (the standard scope domain),
+/// BT.709 luma Y' = 0.2126 R' + 0.7152 G' + 0.0722 B', full-range chroma
+/// Cb = (B'−Y')/1.8556, Cr = (R'−Y')/1.5748 — the same math positions the
+/// vectorscope graticule targets, so a 75% bar lands exactly on its box.
 public struct ScopeData: Sendable {
-    /// Waveform resolution (width = columns, height = value bins).
-    public static let size = 256
-    /// Grayscale density maps, row-major `size * size`; row 0 is 100%
-    /// (top of the scope), row 255 is 0%.
+    /// Waveform trace resolution.
+    public static let waveWidth = 512
+    public static let waveHeight = 256
+    /// Vectorscope resolution (square).
+    public static let vectorSize = 256
+    /// Grayscale density maps, row-major `waveWidth * waveHeight`;
+    /// row 0 is 100% (top of the scope).
     public let waveformY: [UInt8]
     public let waveformR: [UInt8]
     public let waveformG: [UInt8]
     public let waveformB: [UInt8]
+    /// Luma waveform colored by the image: RGBA `waveWidth * waveHeight * 4`,
+    /// brightness = trace density, chroma = mean color of contributing pixels.
+    public let waveformYColor: [UInt8]
     /// 256-bin histograms.
     public let histR: [Int]
     public let histG: [Int]
     public let histB: [Int]
     public let histY: [Int]
-    /// Vectorscope density map: x = Cb, y = Cr (128;128 at the center),
-    /// row-major `size * size`, row 0 = Cr 255.
+    /// Vectorscope density: x = Cb (right = +), y = Cr (top = +), center at
+    /// (vectorSize/2, vectorSize/2), full-range chroma ±127 maps to ±half-size.
     public let vector: [UInt8]
-    /// Luma waveform colored by the image: RGBA `size * size * 4`, brightness =
-    /// trace density, hue = mean color of the contributing pixels.
-    public let waveformYColor: [UInt8]
 
     /// Legacy alias (luma waveform).
     public var waveform: [UInt8] { waveformY }
@@ -32,6 +40,14 @@ public struct ScopeData: Sendable {
 /// Computes scope data from capture/playback pixel buffers.
 /// Supports 32BGRA, 2vuy and 420v frames.
 public enum ScopeAnalyzer {
+    /// Full-range BT.709 chroma of gamma-encoded R'G'B' — shared by the
+    /// analysis and the vectorscope graticule so targets are exact.
+    public static func chroma(r: Double, g: Double, b: Double)
+        -> (cb: Double, cr: Double) {
+        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return ((b - y) / 1.8556, (r - y) / 1.5748)
+    }
+
     public static func analyze(_ pixelBuffer: CVPixelBuffer) -> ScopeData? {
         let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
@@ -59,16 +75,15 @@ public enum ScopeAnalyzer {
 
     // MARK: - private
 
-    /// Fixed sampling grid: exactly `gridCols`×`gridRows` samples for any frame
-    /// size, so every waveform column gets the same number of hits — resolution-
-    /// dependent striding caused visible vertical banding.
-    static let gridCols = 512
+    /// Fixed sampling grid: identical column population for any frame size
+    /// (resolution-dependent striding caused vertical banding).
+    static let gridCols = ScopeData.waveWidth
     static let gridRows = 270
 
     private static func analyzeBGRA(base: UnsafeRawPointer, width: Int,
                                     height: Int, rowBytes: Int) -> ScopeData? {
         guard width > 1, height > 0 else { return nil }
-        var acc = Accumulator(width: Self.gridCols)
+        var acc = Accumulator()
         let bytes = base.assumingMemoryBound(to: UInt8.self)
         for gy in 0..<Self.gridRows {
             let y = gy * height / Self.gridRows
@@ -76,13 +91,7 @@ public enum ScopeAnalyzer {
             for gx in 0..<Self.gridCols {
                 let x = gx * width / Self.gridCols
                 let p = row + x * 4 // B G R A
-                let b = Int(p[0]), g = Int(p[1]), r = Int(p[2])
-                // Rec.709 luma from gamma-encoded values — standard scope behavior
-                let luma = (54 * r + 183 * g + 19 * b) >> 8
-                // BT.709 chroma (full-range approximation) for the vectorscope
-                let cb = clamp(128 + ((b - luma) * 138) >> 8, lo: 0, hi: 255)
-                let cr = clamp(128 + ((r - luma) * 163) >> 8, lo: 0, hi: 255)
-                acc.add(x: gx, r: r, g: g, b: b, luma: luma, cb: cb, cr: cr)
+                acc.add(col: gx, r: Int(p[2]), g: Int(p[1]), b: Int(p[0]))
             }
         }
         return acc.finish()
@@ -91,7 +100,7 @@ public enum ScopeAnalyzer {
     private static func analyze2vuy(base: UnsafeRawPointer, width: Int,
                                     height: Int, rowBytes: Int) -> ScopeData? {
         guard width > 1, height > 0 else { return nil }
-        var acc = Accumulator(width: Self.gridCols)
+        var acc = Accumulator()
         let bytes = base.assumingMemoryBound(to: UInt8.self)
         for gy in 0..<Self.gridRows {
             let y = gy * height / Self.gridRows
@@ -99,21 +108,18 @@ public enum ScopeAnalyzer {
             for gx in 0..<Self.gridCols {
                 let x = (gx * width / Self.gridCols) & ~1 // whole Cb Y0 Cr Y1 macropixel
                 let p = row + (x / 2) * 4
-                let cbRaw = Int(p[0])
+                let cb = Int(p[0]) - 128
                 let luma0 = Int(p[1])
-                let crRaw = Int(p[2])
-                let cb = cbRaw - 128
-                let cr = crRaw - 128
-                // BT.709 video-range YCbCr → R'G'B' (scaled to 0-255, clamped)
+                let cr = Int(p[2]) - 128
+                // BT.709 video-range YCbCr → full-range R'G'B'
                 let yv = (luma0 - 16) * 298
                 let r = clamp((yv + 459 * cr) >> 8)
                 let g = clamp((yv - 137 * cr - 55 * cb) >> 8)
                 let b = clamp((yv + 541 * cb) >> 8)
-                // luma on the same full-range scale as the BGRA path — otherwise
-                // the waveform/histogram of a legal-range source never reaches
-                // 0/100% and reads as low contrast next to processed frames
-                let luma = clamp(yv >> 8)
-                acc.add(x: gx, r: r, g: g, b: b, luma: luma, cb: cbRaw, cr: crRaw)
+                acc.add(col: gx, r: r, g: g, b: b,
+                        nativeChroma: (Double(cb) * 255 / 224,
+                                       Double(cr) * 255 / 224),
+                        nativeLuma: clamp(yv >> 8))
             }
         }
         return acc.finish()
@@ -129,7 +135,7 @@ public enum ScopeAnalyzer {
         let yRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
         let cRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
         guard width > 1, height > 0 else { return nil }
-        var acc = Accumulator(width: Self.gridCols)
+        var acc = Accumulator()
         let yp = yBase.assumingMemoryBound(to: UInt8.self)
         let cp = cBase.assumingMemoryBound(to: UInt8.self)
         for gy in 0..<Self.gridRows {
@@ -139,90 +145,116 @@ public enum ScopeAnalyzer {
             for gx in 0..<Self.gridCols {
                 let x = (gx * width / Self.gridCols) & ~1
                 let luma0 = Int(lumaRow[x])
-                let cbRaw = Int(chromaRow[(x / 2) * 2])
-                let crRaw = Int(chromaRow[(x / 2) * 2 + 1])
-                let cb = cbRaw - 128
-                let cr = crRaw - 128
+                let cb = Int(chromaRow[(x / 2) * 2]) - 128
+                let cr = Int(chromaRow[(x / 2) * 2 + 1]) - 128
                 let yv = (luma0 - 16) * 298
                 let r = clamp((yv + 459 * cr) >> 8)
                 let g = clamp((yv - 137 * cr - 55 * cb) >> 8)
                 let b = clamp((yv + 541 * cb) >> 8)
-                let luma = clamp(yv >> 8)
-                acc.add(x: gx, r: r, g: g, b: b, luma: luma, cb: cbRaw, cr: crRaw)
+                acc.add(col: gx, r: r, g: g, b: b,
+                        nativeChroma: (Double(cb) * 255 / 224,
+                                       Double(cr) * 255 / 224),
+                        nativeLuma: clamp(yv >> 8))
             }
         }
         return acc.finish()
     }
 
     private static func clamp(_ v: Int) -> Int { min(255, max(0, v)) }
-    private static func clamp(_ v: Int, lo: Int, hi: Int) -> Int { min(hi, max(lo, v)) }
 
-    /// Shared accumulation: waveform densities + histograms + vectorscope.
+    /// Shared accumulation: everything is derived from full-range gamma-encoded
+    /// R'G'B' samples, so all sources land on the same scales.
     private struct Accumulator {
-        let width: Int
-        var countsY = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var countsR = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var countsG = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var countsB = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var countsV = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
+        static let cells = ScopeData.waveWidth * ScopeData.waveHeight
+        var countsY = [Int](repeating: 0, count: Self.cells)
+        var countsR = [Int](repeating: 0, count: Self.cells)
+        var countsG = [Int](repeating: 0, count: Self.cells)
+        var countsB = [Int](repeating: 0, count: Self.cells)
+        var countsV = [Int](repeating: 0,
+                            count: ScopeData.vectorSize * ScopeData.vectorSize)
         var histR = [Int](repeating: 0, count: 256)
         var histG = [Int](repeating: 0, count: 256)
         var histB = [Int](repeating: 0, count: 256)
         var histY = [Int](repeating: 0, count: 256)
         // mean color of the pixels landing in each luma-waveform cell
-        var sumR = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var sumG = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
-        var sumB = [Int](repeating: 0, count: ScopeData.size * ScopeData.size)
+        var sumR = [Int](repeating: 0, count: Self.cells)
+        var sumG = [Int](repeating: 0, count: Self.cells)
+        var sumB = [Int](repeating: 0, count: Self.cells)
 
-        init(width: Int) { self.width = width }
-
-        mutating func add(x: Int, r: Int, g: Int, b: Int, luma: Int, cb: Int, cr: Int) {
+        /// `nativeChroma`/`nativeLuma`: for YUV sources pass the wire values
+        /// (scaled to full range) so illegal chroma/luma excursions are plotted
+        /// as-is instead of being folded into the RGB gamut by the clamp.
+        mutating func add(col: Int, r: Int, g: Int, b: Int,
+                          nativeChroma: (cb: Double, cr: Double)? = nil,
+                          nativeLuma: Int? = nil) {
+            let width = ScopeData.waveWidth
+            let height = ScopeData.waveHeight
+            let luma = nativeLuma
+                ?? min(255, Int((0.2126 * Double(r) + 0.7152 * Double(g)
+                                 + 0.0722 * Double(b)).rounded()))
             histR[r] += 1
             histG[g] += 1
             histB[b] += 1
             histY[luma] += 1
-            let col = x * ScopeData.size / width
-            let size = ScopeData.size
-            let yIdx = (size - 1 - luma * size / 256) * size + col
+
+            func rowFor(_ value: Int) -> Int {
+                height - 1 - min(height - 1, value * height / 256)
+            }
+            let yIdx = rowFor(luma) * width + col
             countsY[yIdx] += 1
             sumR[yIdx] += r
             sumG[yIdx] += g
             sumB[yIdx] += b
-            countsR[(size - 1 - r * size / 256) * size + col] += 1
-            countsG[(size - 1 - g * size / 256) * size + col] += 1
-            countsB[(size - 1 - b * size / 256) * size + col] += 1
-            countsV[(size - 1 - cr * size / 256) * size + cb * size / 256] += 1
+            countsR[rowFor(r) * width + col] += 1
+            countsG[rowFor(g) * width + col] += 1
+            countsB[rowFor(b) * width + col] += 1
+
+            // vectorscope: full-range BT.709 chroma, ±127 → ±half-size
+            let (cb, cr) = nativeChroma
+                ?? ScopeAnalyzer.chroma(r: Double(r), g: Double(g), b: Double(b))
+            let size = ScopeData.vectorSize
+            let vx = min(size - 1, max(0, Int(Double(size) / 2 + cb * Double(size) / 255)))
+            let vy = min(size - 1, max(0, Int(Double(size) / 2 - cr * Double(size) / 255)))
+            countsV[vy * size + vx] += 1
         }
 
         func finish() -> ScopeData {
-            // fixed gain: the 512×270 grid lands ~2 hits per waveform cell on
-            // flat areas, so *24 gives a readable trace with density variation
-            func toBytes(_ counts: [Int], gain: Int) -> [UInt8] {
-                counts.map { UInt8(min(255, $0 * gain)) }
+            // sqrt tone curve: a linear gain saturates after a few hits and the
+            // trace turns binary; sqrt keeps single hits visible with readable
+            // density gradation
+            func toBytes(_ counts: [Int], gain: Double) -> [UInt8] {
+                counts.map {
+                    $0 == 0 ? 0
+                        : UInt8(min(255.0, gain * Double($0).squareRoot()))
+                }
             }
-            // colored luma trace: brightness from density, hue from mean color
+            // colored luma trace: brightness from density, chroma kept exactly
+            // as the image's (no re-saturation)
             var colored = [UInt8](repeating: 0, count: countsY.count * 4)
             for i in 0..<countsY.count {
                 let count = countsY[i]
                 guard count > 0 else { continue }
-                let brightness = min(255, count * 24)
-                let avgR = sumR[i] / count, avgG = sumG[i] / count, avgB = sumB[i] / count
-                // scale so the strongest component carries the brightness — the
-                // trace stays readable while showing the image's hue
-                let peak = max(avgR, max(avgG, avgB), 1)
-                colored[i * 4] = UInt8(min(255, avgR * brightness / peak))
-                colored[i * 4 + 1] = UInt8(min(255, avgG * brightness / peak))
-                colored[i * 4 + 2] = UInt8(min(255, avgB * brightness / peak))
+                let brightness = min(255.0, 96 * Double(count).squareRoot())
+                let avgR = Double(sumR[i]) / Double(count)
+                let avgG = Double(sumG[i]) / Double(count)
+                let avgB = Double(sumB[i]) / Double(count)
+                // scale the mean color so its BT.709 luma equals the trace
+                // brightness: hue and saturation stay true to the image
+                let avgY = max(1, 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB)
+                let scale = brightness / avgY
+                colored[i * 4] = UInt8(min(255, avgR * scale))
+                colored[i * 4 + 1] = UInt8(min(255, avgG * scale))
+                colored[i * 4 + 2] = UInt8(min(255, avgB * scale))
                 colored[i * 4 + 3] = 255
             }
-            return ScopeData(waveformY: toBytes(countsY, gain: 24),
-                             waveformR: toBytes(countsR, gain: 24),
-                             waveformG: toBytes(countsG, gain: 24),
-                             waveformB: toBytes(countsB, gain: 24),
+            return ScopeData(waveformY: toBytes(countsY, gain: 96),
+                             waveformR: toBytes(countsR, gain: 96),
+                             waveformG: toBytes(countsG, gain: 96),
+                             waveformB: toBytes(countsB, gain: 96),
+                             waveformYColor: colored,
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,
-                             vector: toBytes(countsV, gain: 40),
-                             waveformYColor: colored)
+                             vector: toBytes(countsV, gain: 120))
         }
     }
 }

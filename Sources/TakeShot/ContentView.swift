@@ -449,28 +449,55 @@ struct PreviewView: View {
                 ZStack {
                     Rectangle().fill(controller.playerBackground)
                     if controller.viewerMode == .playback {
+                        let isImage = controller.playbackURL.map {
+                            PlaybackContent.imageExtensions.contains(
+                                $0.pathExtension.lowercased())
+                        } ?? false
                         switch controller.compareMode {
                         case .off:
                             PlaybackContent()
                         case .blend:
-                            ZStack {
-                                LivePreviewContent()
-                                PlaybackContent().opacity(controller.blendOpacity)
-                            }
-                            .aspectRatio(Self.liveAspect(controller.signalFormat),
-                                         contentMode: .fit)
-                        case .wipe:
-                            ZStack {
-                                LivePreviewContent()
+                            if isImage {
+                                // stills render on the graphics path — SwiftUI
+                                // opacity is color-correct for Image views
+                                ZStack {
+                                    LivePreviewContent()
+                                    PlaybackContent().opacity(controller.blendOpacity)
+                                }
+                                .aspectRatio(Self.liveAspect(controller.signalFormat),
+                                             contentMode: .fit)
+                            } else {
+                                // video is composited inside the playback render:
+                                // SwiftUI opacity over a video layer drops its
+                                // colorspace
                                 PlaybackContent()
-                                    .mask {
-                                        WipeMask(orientation: controller.wipeOrientation,
-                                                 position: controller.wipePosition)
-                                    }
-                                WipeHandle()
                             }
-                            .aspectRatio(Self.liveAspect(controller.signalFormat),
-                                         contentMode: .fit)
+                        case .wipe:
+                            if isImage {
+                                ZStack {
+                                    LivePreviewContent()
+                                    PlaybackContent()
+                                        .mask {
+                                            WipeMask(
+                                                orientation: controller.wipeOrientation,
+                                                position: controller.wipePosition)
+                                        }
+                                    WipeHandle()
+                                }
+                                .aspectRatio(Self.liveAspect(controller.signalFormat),
+                                             contentMode: .fit)
+                            } else {
+                                ZStack {
+                                    PlaybackContent()
+                                    WipeHandle()
+                                }
+                                // the composite is playback-sized — the handle
+                                // must live in the same aspect or the seam and
+                                // the line diverge
+                                .aspectRatio(controller.playbackAspect
+                                             ?? Self.liveAspect(controller.signalFormat),
+                                             contentMode: .fit)
+                            }
                         case .sideBySide:
                             HStack(spacing: 2) {
                                 LivePreviewContent()
@@ -503,7 +530,8 @@ struct PreviewView: View {
     }
 }
 
-/// Mask of the playback area for the wipe (left/top/diagonal from the line).
+/// Mask of the playback area for the wipe (left/top/diagonal from the line) —
+/// used for still images, which render on the color-correct graphics path.
 private struct WipeMask: Shape {
     let orientation: CaptureController.WipeOrientation
     let position: Double

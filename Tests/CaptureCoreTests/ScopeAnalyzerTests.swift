@@ -32,13 +32,14 @@ struct ScopeAnalyzerTests {
         #expect(data.histY.firstIndex(of: data.histY.max()!) == 128)
         #expect(data.histR.firstIndex(of: data.histR.max()!) == 128)
         // the waveform trace sits on a single luma row: exactly one non-empty row
-        let size = ScopeData.size
-        let nonEmptyRows = (0..<size).filter { row in
-            (0..<size).contains { data.waveform[row * size + $0] > 0 }
+        let width = ScopeData.waveWidth
+        let height = ScopeData.waveHeight
+        let nonEmptyRows = (0..<height).filter { row in
+            (0..<width).contains { data.waveform[row * width + $0] > 0 }
         }
         #expect(nonEmptyRows.count == 1)
-        // 128/255 luma → the middle of the scope (row ≈ size/2)
-        #expect(abs(nonEmptyRows[0] - size / 2) <= 2)
+        // 128/255 luma → the middle of the scope (row ≈ height/2)
+        #expect(abs(nonEmptyRows[0] - height / 2) <= 2)
     }
 
     @Test func pureRedShowsOnlyRedHistogram() throws {

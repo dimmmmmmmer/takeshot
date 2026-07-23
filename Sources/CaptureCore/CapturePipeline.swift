@@ -190,6 +190,9 @@ public final class CapturePipeline: @unchecked Sendable {
             self.format = nil
             self.lastTimecode = nil
             self.preRollBuffer.removeAll()
+            self.latestPreviewLock.lock()
+            self.latestPreview = nil // don't compare against a frozen frame
+            self.latestPreviewLock.unlock()
             self.vancStats.removeAll()
             self.vancStatsLastPublish = 0
             DispatchQueue.main.async {
@@ -678,7 +681,21 @@ public final class CapturePipeline: @unchecked Sendable {
         return dissolve.outputImage ?? filtered
     }
 
+    private let latestPreviewLock = NSLock()
+    private var latestPreview: CVPixelBuffer?
+
+    /// The most recent processed preview frame (levels/LUT applied) — pulled by
+    /// the playback tap for the compare modes. Thread-safe.
+    public func currentPreviewBuffer() -> CVPixelBuffer? {
+        latestPreviewLock.lock()
+        defer { latestPreviewLock.unlock() }
+        return latestPreview
+    }
+
     private func enqueuePreview(pixelBuffer: CVPixelBuffer) {
+        latestPreviewLock.lock()
+        latestPreview = pixelBuffer
+        latestPreviewLock.unlock()
         displayLayer.present(pixelBuffer)
         if externalMirrorEnabled { externalLayer.present(pixelBuffer) }
         if fullscreenMirrorEnabled { fullscreenLayer.present(pixelBuffer) }

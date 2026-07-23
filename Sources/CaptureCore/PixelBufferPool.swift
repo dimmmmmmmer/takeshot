@@ -4,18 +4,18 @@ import Foundation
 /// A reusable pixel-buffer pool (BGRA by default) that rebuilds itself when the
 /// frame size changes. Shared by the LUT/levels/preview stages so the pool
 /// setup lives in one place.
-final class PixelBufferPool {
+public final class PixelBufferPool {
     private let format: OSType
     private var pool: CVPixelBufferPool?
     private var width = 0
     private var height = 0
 
-    init(format: OSType = kCVPixelFormatType_32BGRA) {
+    public init(format: OSType = kCVPixelFormatType_32BGRA) {
         self.format = format
     }
 
     /// Vend a fresh buffer of the given size (rebuilds the pool on size change).
-    func buffer(width: Int, height: Int) -> CVPixelBuffer? {
+    public func buffer(width: Int, height: Int) -> CVPixelBuffer? {
         if pool == nil || self.width != width || self.height != height {
             let attrs: [CFString: Any] = [
                 kCVPixelBufferPixelFormatTypeKey: format,
@@ -37,5 +37,5 @@ final class PixelBufferPool {
     }
 
     /// Drop the pool so the next `buffer(width:height:)` rebuilds it.
-    func reset() { pool = nil }
+    public func reset() { pool = nil }
 }
