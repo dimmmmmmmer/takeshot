@@ -752,7 +752,7 @@ struct LivePreviewContent: View {
                     .font(.headline)
                     .padding(8)
                     .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.white.opacity(0.75))
             }
         }
     }
