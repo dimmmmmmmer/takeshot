@@ -9,8 +9,8 @@ struct ScopesWindowView: View {
 
     var body: some View {
         ScopesPanel(live: controller.live)
-            .onAppear { controller.showScopes = true }
-            .onDisappear { controller.showScopes = false }
+            .onAppear { controller.scopesWindowOpen = true }
+            .onDisappear { controller.scopesWindowOpen = false }
             .ignoresSafeArea(.container, edges: .top)
     }
 }
@@ -35,6 +35,7 @@ enum ScopeKind: String, CaseIterable, Identifiable {
 /// to the window width.
 struct ScopesPanel: View {
     @EnvironmentObject private var controller: CaptureController
+    @Environment(\.openWindow) private var openWindow
     // scope data updates ~8/s — observed separately from the controller
     @ObservedObject var live: LiveSignal
 
@@ -45,6 +46,11 @@ struct ScopesPanel: View {
     @AppStorage("scopeWaveformChannel") private var waveformChannel = "y"
     @AppStorage("scopeHistogramChannel") private var histogramChannel = "rgb"
     @AppStorage("scopeOrder") private var orderRaw = "waveform,parade,histogram,vector"
+    /// Value scale for waveform/parade labels: "100" (%) or "1023" (10-bit).
+    @AppStorage("scopeScale") private var scaleMode = "100"
+    /// Graticule and trace brightness (0.2…1).
+    @AppStorage("scopeGridBrightness") private var gridBrightness = 0.5
+    @AppStorage("scopeTraceBrightness") private var traceBrightness = 1.0
     @State private var dragged: ScopeKind?
 
     private var order: [ScopeKind] {
@@ -73,9 +79,40 @@ struct ScopesPanel: View {
                     scopeToggle(L(kind.titleKey), isOn: isOn(kind))
                 }
                 Spacer()
+                ChannelPicker(selection: $scaleMode, options: ["100", "1023"])
+                HStack(spacing: 3) {
+                    Image(systemName: "grid")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.white.opacity(0.45))
+                    Slider(value: $gridBrightness, in: 0.15...1)
+                        .frame(width: 56)
+                        .controlSize(.mini)
+                }
+                .help(L("scope_grid_brightness"))
+                HStack(spacing: 3) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.white.opacity(0.45))
+                    Slider(value: $traceBrightness, in: 0.3...1)
+                        .frame(width: 56)
+                        .controlSize(.mini)
+                }
+                .help(L("scope_trace_brightness"))
                 Text(L("scope_drag_hint"))
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.3))
+                if !controller.scopesWindowOpen {
+                    Button {
+                        openWindow(id: "scopes")
+                        controller.showScopesOverlay = false
+                    } label: {
+                        Image(systemName: "macwindow.on.rectangle")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("scope_open_window"))
+                }
             }
             if let data = live.scopeData {
                 let visible = order.filter { isOn($0).wrappedValue }
@@ -120,16 +157,23 @@ struct ScopesPanel: View {
     @ViewBuilder
     private func scopeBox(_ kind: ScopeKind, data: ScopeData) -> some View {
         ScopeBox(title: L(kind.titleKey), channel: channelPicker(for: kind)) {
-            switch kind {
-            case .waveform:
-                WaveformView(data: data, channel: waveformChannel)
-            case .parade:
-                ParadeView(data: data)
-            case .histogram:
-                HistogramView(data: data, channel: histogramChannel)
-            case .vector:
-                VectorscopeView(data: data)
+            Group {
+                switch kind {
+                case .waveform:
+                    WaveformView(data: data, channel: waveformChannel)
+                        .opacity(traceBrightness)
+                case .parade:
+                    ParadeView(data: data)
+                        .opacity(traceBrightness)
+                case .histogram:
+                    HistogramView(data: data, channel: histogramChannel)
+                        .opacity(max(0.6, traceBrightness))
+                case .vector:
+                    VectorscopeView(data: data)
+                        .opacity(max(0.6, traceBrightness))
+                }
             }
+            .environment(\.scopeGridBrightness, gridBrightness)
         } scale: {
             if kind == .waveform || kind == .parade {
                 percentScale
@@ -178,19 +222,34 @@ struct ScopesPanel: View {
         .buttonStyle(.plain)
     }
 
-    /// 0–100% marks for waveform/parade.
+    /// Value marks for waveform/parade: percent or 10-bit code values.
     private var percentScale: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach([100, 75, 50, 25, 0], id: \.self) { mark in
+        let marks: [Int] = scaleMode == "1023"
+            ? [1023, 896, 768, 640, 512, 384, 256, 128, 0]
+            : [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
+        return VStack(alignment: .trailing, spacing: 0) {
+            ForEach(marks, id: \.self) { mark in
                 Text("\(mark)")
-                    .font(.system(size: 8).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.system(size: 8, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.35 + gridBrightness * 0.45))
                     .frame(maxHeight: .infinity,
-                           alignment: mark == 100 ? .top : (mark == 0 ? .bottom : .center))
+                           alignment: mark == marks.first ? .top
+                               : (mark == 0 ? .bottom : .center))
             }
         }
-        .frame(width: 18)
+        .frame(width: 26)
         .frame(maxHeight: .infinity)
+    }
+}
+
+private struct ScopeGridBrightnessKey: EnvironmentKey {
+    static let defaultValue: Double = 0.5
+}
+
+extension EnvironmentValues {
+    var scopeGridBrightness: Double {
+        get { self[ScopeGridBrightnessKey.self] }
+        set { self[ScopeGridBrightnessKey.self] = newValue }
     }
 }
 
@@ -311,7 +370,7 @@ private struct WaveformView: View {
                         .interpolation(.medium)
                 }
             }
-            waveformGraticule
+            WaveformGraticule()
         }
     }
 
@@ -337,7 +396,7 @@ private struct ParadeView: View {
                 paradeChannel(data.waveformG, tint: Color(red: 0.3, green: 1, blue: 0.35))
                 paradeChannel(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
             }
-            waveformGraticule
+            WaveformGraticule()
         }
     }
 
@@ -352,25 +411,30 @@ private struct ParadeView: View {
     }
 }
 
-/// Dense waveform graticule: a line every 10%, stronger at 0/50/100.
-private var waveformGraticule: some View {
-    GeometryReader { geo in
-        Path { p in
-            for i in stride(from: 0.0, through: 1.0, by: 0.1) {
-                let y = geo.size.height * i
-                p.move(to: CGPoint(x: 0, y: y))
-                p.addLine(to: CGPoint(x: geo.size.width, y: y))
+/// Dense waveform graticule: a line every 10%, stronger at 0/25/50/75/100,
+/// brightness user-adjustable.
+private struct WaveformGraticule: View {
+    @Environment(\.scopeGridBrightness) private var brightness
+
+    var body: some View {
+        GeometryReader { geo in
+            Path { p in
+                for i in stride(from: 0.0, through: 1.0, by: 0.1) {
+                    let y = geo.size.height * i
+                    p.move(to: CGPoint(x: 0, y: y))
+                    p.addLine(to: CGPoint(x: geo.size.width, y: y))
+                }
             }
-        }
-        .stroke(.white.opacity(0.12), lineWidth: 0.5)
-        Path { p in
-            for i in [0.0, 0.5, 1.0] {
-                let y = geo.size.height * i
-                p.move(to: CGPoint(x: 0, y: y))
-                p.addLine(to: CGPoint(x: geo.size.width, y: y))
+            .stroke(.white.opacity(0.24 * brightness), lineWidth: 0.5)
+            Path { p in
+                for i in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                    let y = geo.size.height * i
+                    p.move(to: CGPoint(x: 0, y: y))
+                    p.addLine(to: CGPoint(x: geo.size.width, y: y))
+                }
             }
+            .stroke(.white.opacity(0.55 * brightness), lineWidth: 0.5)
         }
-        .stroke(.white.opacity(0.28), lineWidth: 0.5)
     }
 }
 

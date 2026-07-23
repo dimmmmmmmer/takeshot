@@ -157,7 +157,7 @@ struct PlayerArea: View {
                 HStack(spacing: 6) {
                     overlayBadge {
                         Button {
-                            openWindow(id: "scopes")
+                            controller.showScopesOverlay.toggle()
                         } label: {
                             Image(systemName: "waveform.path.ecg.rectangle")
                                 .font(.system(size: 13))
@@ -233,6 +233,17 @@ struct PlayerArea: View {
                     AudioChannelPanel(live: controller.live)
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if controller.showScopesOverlay, !controller.scopesWindowOpen {
+                    ScopesPanel(live: controller.live)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(.white.opacity(0.12)))
+                        .frame(maxWidth: 860, maxHeight: 320)
+                        .padding(10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let error = controller.lastError {
                     Text(error)
@@ -294,20 +305,20 @@ struct LUTMenu: View {
         Button {
             showPopover.toggle()
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "camera.filters")
-                    .font(.system(size: 12))
-                Circle()
-                    .fill(controller.accentColor)
-                    .frame(width: 5, height: 5)
-                    .opacity(controller.settings.lutFileName != nil
-                             && (controller.lutPreviewOn || controller.lutRecordOn)
-                             ? 1 : 0)
-            }
-            // the icon alone is a ~17 px target — clicks kept missing it
-            .padding(.horizontal, 4)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
+            // same footprint as the neighbouring badge icons; the active-LUT
+            // dot sits on the icon's corner instead of reserving width
+            Image(systemName: "camera.filters")
+                .font(.system(size: 13))
+                .overlay(alignment: .topTrailing) {
+                    if controller.settings.lutFileName != nil,
+                       controller.lutPreviewOn || controller.lutRecordOn {
+                        Circle()
+                            .fill(controller.accentColor)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 3, y: -2)
+                    }
+                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
@@ -473,6 +484,12 @@ struct PreviewView: View {
             GeometryReader { _ in
                 ZStack {
                     Rectangle().fill(controller.playerBackground)
+                    // both surfaces stay mounted: swapping views re-created the
+                    // Metal host and the image jumped for a frame on mode switch
+                    LivePreviewContent()
+                        .opacity(controller.viewerMode == .record
+                                 && !(controller.multicamOn
+                                      && !controller.extraChannels.isEmpty) ? 1 : 0)
                     if controller.viewerMode == .playback {
                         let isImage = controller.playbackURL.map {
                             PlaybackContent.imageExtensions.contains(
@@ -531,8 +548,6 @@ struct PreviewView: View {
                         }
                     } else if controller.multicamOn && !controller.extraChannels.isEmpty {
                         MulticamGrid()
-                    } else {
-                        LivePreviewContent()
                     }
                 }
             }
@@ -867,7 +882,9 @@ private struct FooterMonitorButton: View {
                 .foregroundStyle((isPlayback ? controller.playbackVolume > 0
                                              : controller.monitorOn)
                                  ? controller.accentColor : .primary)
-                .frame(width: 22)
+                // fixed BOTH dimensions: the symbol variants differ in size and
+                // a changing anchor makes the volume popover jump around
+                .frame(width: 24, height: 20)
         }
         .disabled(!isPlayback && !controller.isCapturing)
         .help(L("monitor_toggle"))

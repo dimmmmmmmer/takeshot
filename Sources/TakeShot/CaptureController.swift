@@ -379,10 +379,16 @@ final class CaptureController: ObservableObject {
     }
     /// Large audio-channel panel over the player.
     @Published var showAudioPanel = false
-    /// Scopes panel (waveform + histogram) over the player.
-    @Published var showScopes = false {
+    /// Scopes overlay over the player (like the audio panel).
+    @Published var showScopesOverlay = false {
         didSet { updateScopesRunning() }
     }
+    /// The separate scopes window is open.
+    @Published var scopesWindowOpen = false {
+        didSet { updateScopesRunning() }
+    }
+    /// Any scope surface visible (drives the analyzers and the badge tint).
+    var showScopes: Bool { showScopesOverlay || scopesWindowOpen }
     /// Route scope analysis to whichever source is actually on screen.
     private func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
@@ -425,6 +431,11 @@ final class CaptureController: ObservableObject {
             monitorVolume = monitorVolumeBeforeMute > 0 ? monitorVolumeBeforeMute : 1
         }
     }
+
+    /// CSV writes go through one serial queue — two detached writers could
+    /// finish out of order and an older snapshot would overwrite a newer one.
+    nonisolated static let takeLogQueue = DispatchQueue(
+        label: "takeshot.takelog", qos: .utility)
 
     /// Live audio monitoring on/off. Always starts OFF — no surprise audio on set.
     @Published var monitorOn = false {
@@ -1074,13 +1085,19 @@ final class CaptureController: ObservableObject {
     }
 
     /// A blocking flush on app exit — so the file isn't truncated.
+    /// Closes the ACTIVE take too (quitting mid-record used to leave a .mov
+    /// without its moov atom), and waits on a detached task: a MainActor task
+    /// can never run while the main thread is parked in semaphore.wait.
     func flushOnTerminate() {
+        pipeline.captureStopped() // finishes the in-flight take, if any
+        for channel in extraChannels { channel.stop() }
         let sem = DispatchSemaphore(value: 0)
-        Task {
+        let pipeline = self.pipeline
+        Task.detached {
             await pipeline.finishPendingWrites()
             sem.signal()
         }
-        _ = sem.wait(timeout: .now() + 5)
+        _ = sem.wait(timeout: .now() + 10)
     }
 
     private func restartCapture() {
@@ -1241,7 +1258,8 @@ final class CaptureController: ObservableObject {
         Task { [weak self] in
             while let self, !Task.isCancelled {
                 self.scanDestinationFolder()
-                try? await Task.sleep(for: .seconds(5))
+                // the kernel watcher is the primary trigger; this is a safety net
+                try? await Task.sleep(for: .seconds(60))
             }
         }
     }
@@ -1372,6 +1390,10 @@ final class CaptureController: ObservableObject {
         if otherFiles != sorted {
             otherFiles = sorted
             generateOtherThumbnails(for: sorted)
+            // prune caches for files that left the folder
+            let current = Set(sorted)
+            otherThumbnails = otherThumbnails.filter { current.contains($0.key) }
+            otherDurations = otherDurations.filter { current.contains($0.key) }
         }
         // a file may have appeared in the folder externally — refresh the taken-name warning
         refreshNameCollision()
@@ -1392,8 +1414,16 @@ final class CaptureController: ObservableObject {
                 var image: NSImage?
                 let ext = url.pathExtension.lowercased()
                 if Self.imageExtensions.contains(ext) {
-                    if let source = NSImage(contentsOf: url) {
-                        image = source
+                    // thumbnail-sized decode: a full 24 MP still would pin
+                    // ~100 MB in the cache
+                    if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                       let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
+                           kCGImageSourceCreateThumbnailFromImageAlways: true,
+                           kCGImageSourceThumbnailMaxPixelSize: 480,
+                       ] as CFDictionary) {
+                        image = NSImage(cgImage: cg,
+                                        size: NSSize(width: cg.width,
+                                                     height: cg.height))
                     }
                 } else {
                     let asset = AVURLAsset(url: url)
@@ -1447,7 +1477,7 @@ final class CaptureController: ObservableObject {
     private func exportTakeLog() {
         let takes = takes
         let root = destinationRoot
-        Task.detached(priority: .utility) {
+        Self.takeLogQueue.async {
             try? TakeLogExporter.write(takes: takes, toDirectory: root)
         }
     }

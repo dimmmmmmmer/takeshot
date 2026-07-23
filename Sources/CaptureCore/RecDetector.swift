@@ -33,10 +33,16 @@ public struct RecDetectorConfig: Equatable, Sendable {
     public var startDebounceFrames: Int
     /// How many consecutive frames TC must stall/be absent to declare stop.
     public var stopDebounceFrames: Int
+    /// VANC-only: takes start/stop exclusively on explicit VANC triggers; the
+    /// timecode movement machine is disabled (otherwise every frame after a
+    /// VANC start reads as a stall and the take self-terminates).
+    public var vancOnly: Bool
 
-    public init(startDebounceFrames: Int = 4, stopDebounceFrames: Int = 12) {
+    public init(startDebounceFrames: Int = 4, stopDebounceFrames: Int = 12,
+                vancOnly: Bool = false) {
         self.startDebounceFrames = max(1, startDebounceFrames)
         self.stopDebounceFrames = max(1, stopDebounceFrames)
+        self.vancOnly = vancOnly
     }
 }
 
@@ -90,6 +96,11 @@ public final class RecDetector {
             default:
                 break
             }
+        }
+
+        // VANC-only: no timecode-movement starts or stalls-based stops
+        if config.vancOnly {
+            return nil
         }
 
         switch movement(of: sample) {
@@ -160,11 +171,13 @@ public final class RecDetector {
             return .stalled
         }
         // capture may report one TC per pair of frames (PsF) — treat a repeat as
-        // stall, and a step of exactly 1 frame as movement
+        // stall, and a step of exactly 1 frame as movement. A 24h wrap
+        // (23:59:59:MM → 00:00:00:00) is one frame too, not a discontinuity.
+        let dayFrames = 24 * 3600 * max(1, tc.fps)
         let delta = tc.frameNumber - last.frameNumber
         switch delta {
         case 0: return .stalled
-        case 1: return .advancing
+        case 1, 1 - dayFrames: return .advancing
         default: return .discontinuity
         }
     }

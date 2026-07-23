@@ -58,8 +58,32 @@ public final class MetalPreviewLayer: CAMetalLayer {
     /// Re-render the last frame (window resized while paused/no signal —
     /// otherwise the old drawable stretches to the new bounds).
     public func redraw() {
-        guard let buffer = lastBuffer else { return }
+        renderLock.lock()
+        let buffer = lastBuffer // strong read under the lock: present() swaps
+        renderLock.unlock()     // it concurrently on the producer queue
+        guard let buffer else { return }
         present(buffer)
+    }
+
+    /// Blank the layer (signal loss) instead of freezing the last frame.
+    public func clearToBlack() {
+        renderLock.lock()
+        defer { renderLock.unlock() }
+        lastBuffer = nil
+        guard let ciContext else { return }
+        let size = drawableSize
+        guard size.width > 1, size.height > 1,
+              let drawable = nextDrawable() else { return }
+        let bounds = CGRect(origin: .zero, size: size)
+        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0))
+            .cropped(to: bounds)
+        let destination = CIRenderDestination(mtlTexture: drawable.texture,
+                                              commandBuffer: nil)
+        destination.colorSpace = nil
+        if let task = try? ciContext.startTask(toRender: black, to: destination) {
+            _ = try? task.waitUntilCompleted()
+        }
+        drawable.present()
     }
 
     /// Draw a frame (any CoreImage-supported pixel format), aspect-fit.

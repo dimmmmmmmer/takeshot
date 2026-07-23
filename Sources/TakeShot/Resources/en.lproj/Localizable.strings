@@ -257,3 +257,6 @@
 "grab_saved" = "Still saved: %@";
 "reset_interface" = "Reset interface";
 "scope_drag_hint" = "drag scopes to reorder";
+"scope_grid_brightness" = "Graticule brightness";
+"scope_trace_brightness" = "Trace brightness";
+"scope_open_window" = "Open in a separate window";

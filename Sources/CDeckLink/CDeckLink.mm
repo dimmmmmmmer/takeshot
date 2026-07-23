@@ -416,6 +416,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 }
 
 - (void)stop {
+    @synchronized(self) {
     if (_input) {
         _input->StopStreams();
         _input->SetCallback(NULL);
@@ -436,12 +437,16 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         CVPixelBufferPoolRelease(_pixelBufferPool);
         _pixelBufferPool = NULL;
     }
+    }
 }
 
 #pragma mark - callback handling (DeckLink thread)
 
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags {
+    // serialized against stop(): releasing _input/_pixelBufferPool mid-callback
+    // was a use-after-free window during device restarts
+    @synchronized(self) {
     if (!_input) {
         return;
     }
@@ -471,6 +476,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     format.isRGB444 = isRGB444;
     id<CDLCaptureDelegate> delegate = self.delegate;
     [delegate capture:self didDetectFormat:format];
+    }
 }
 
 - (CVPixelBufferRef)copyPixelBufferFromFrame:(IDeckLinkVideoInputFrame *)videoFrame {
@@ -541,8 +547,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 - (void)handleFrame:(IDeckLinkVideoInputFrame *)videoFrame
               audio:(IDeckLinkAudioInputPacket *)audioPacket {
+    @synchronized(self) {
     id<CDLCaptureDelegate> delegate = self.delegate;
-    if (!delegate) {
+    if (!delegate || !_input) {
         return;
     }
 
@@ -640,6 +647,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                           ptsSeconds:(double)packetTime / (double)kScale];
         }
     }
+    }
 }
 
 @end
@@ -650,32 +658,6 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 + (BOOL)isSDKAvailable {
     return NO;
-}
-
-+ (NSArray<NSString *> *)displayModeNamesForDevice:(NSString *)deviceID {
-    NSMutableArray<NSString *> *names = [NSMutableArray array];
-    IDeckLink *deckLink = CDLFindDevice(deviceID);
-    if (!deckLink) {
-        return names;
-    }
-    IDeckLinkInput *input = NULL;
-    if (deckLink->QueryInterface(IID_IDeckLinkInput, (void **)&input) == S_OK && input) {
-        IDeckLinkDisplayModeIterator *iterator = NULL;
-        if (input->GetDisplayModeIterator(&iterator) == S_OK && iterator) {
-            IDeckLinkDisplayMode *mode = NULL;
-            while (iterator->Next(&mode) == S_OK && mode) {
-                CFStringRef name = NULL;
-                if (mode->GetName(&name) == S_OK && name) {
-                    [names addObject:(__bridge_transfer NSString *)name];
-                }
-                mode->Release();
-            }
-            iterator->Release();
-        }
-        input->Release();
-    }
-    deckLink->Release();
-    return names;
 }
 
 + (NSArray<CDLDeviceInfo *> *)devices {

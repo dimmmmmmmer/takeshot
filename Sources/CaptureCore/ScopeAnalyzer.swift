@@ -197,6 +197,13 @@ public enum ScopeAnalyzer {
         /// `nativeChroma`/`nativeLuma`: for YUV sources pass the wire values
         /// (scaled to full range) so illegal chroma/luma excursions are plotted
         /// as-is instead of being folded into the RGB gamut by the clamp.
+        // previous sample of the current scanline — traces are drawn as
+        // connected vertical segments between neighbours (like a real waveform
+        // monitor / Resolve), not scattered dots: this removes both the noise
+        // and the horizontal banding from quantization gaps
+        private var prevLuma = -1
+        private var prevR = -1, prevG = -1, prevB = -1
+
         mutating func add(col: Int, r: Int, g: Int, b: Int,
                           nativeChroma: (cb: Double, cr: Double)? = nil,
                           nativeLuma: Int? = nil) {
@@ -210,17 +217,35 @@ public enum ScopeAnalyzer {
             histB[b] += 1
             histY[luma] += 1
 
+            if col == 0 { prevLuma = -1; prevR = -1; prevG = -1; prevB = -1 }
+
             func rowFor(_ value: Int) -> Int {
                 height - 1 - min(height - 1, value * height / 256)
             }
-            let yIdx = rowFor(luma) * width + col
-            countsY[yIdx] += 1
-            sumR[yIdx] += r
-            sumG[yIdx] += g
-            sumB[yIdx] += b
-            countsR[rowFor(r) * width + col] += 1
-            countsG[rowFor(g) * width + col] += 1
-            countsB[rowFor(b) * width + col] += 1
+            // vertical segment from the previous sample's value to this one
+            func fillSpan(_ counts: inout [Int], value: Int, prev: Int) {
+                let from = prev < 0 ? value : prev
+                let lo = rowFor(max(value, from))
+                let hi = rowFor(min(value, from))
+                for row in lo...hi {
+                    counts[row * width + col] += 1
+                }
+            }
+            fillSpan(&countsR, value: r, prev: prevR)
+            fillSpan(&countsG, value: g, prev: prevG)
+            fillSpan(&countsB, value: b, prev: prevB)
+            // luma span carries the pixel color for the colored trace
+            let from = prevLuma < 0 ? luma : prevLuma
+            let lo = rowFor(max(luma, from))
+            let hi = rowFor(min(luma, from))
+            for row in lo...hi {
+                let idx = row * width + col
+                countsY[idx] += 1
+                sumR[idx] += r
+                sumG[idx] += g
+                sumB[idx] += b
+            }
+            prevLuma = luma; prevR = r; prevG = g; prevB = b
 
             // vectorscope: full-range BT.709 chroma, ±127 → ±half-size
             let (cb, cr) = nativeChroma
@@ -260,6 +285,14 @@ public enum ScopeAnalyzer {
                 colored[i * 4 + 2] = UInt8(min(255, avgB * scale))
                 colored[i * 4 + 3] = 255
             }
+            // vector: adaptive log curve — a fixed gain either clips into a
+            // flat blob or hides low densities
+            let vPeak = max(1, countsV.max() ?? 1)
+            let vScale = 255.0 / Foundation.log(Double(vPeak) + 1)
+            let vectorBytes = countsV.map {
+                $0 == 0 ? UInt8(0)
+                    : UInt8(min(255.0, vScale * Foundation.log(Double($0) + 1)))
+            }
             return ScopeData(waveformY: toBytes(countsY, gain: 96),
                              waveformR: toBytes(countsR, gain: 96),
                              waveformG: toBytes(countsG, gain: 96),
@@ -267,7 +300,7 @@ public enum ScopeAnalyzer {
                              waveformYColor: colored,
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,
-                             vector: toBytes(countsV, gain: 120),
+                             vector: vectorBytes,
                              sequence: ScopeAnalyzer.nextSequence())
         }
     }

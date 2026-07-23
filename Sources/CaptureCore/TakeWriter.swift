@@ -192,12 +192,11 @@ public final class TakeWriter {
     /// that outruns the encoder queue, so wait briefly for readiness instead of
     /// dropping — they are historical frames, timing is not critical.
     @discardableResult
-    public func appendBuffered(pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
-        var waitedMs = 0
+    public func appendBuffered(pixelBuffer: CVPixelBuffer, pts: CMTime,
+                               deadline: Date = Date().addingTimeInterval(0.5)) -> Bool {
         while !videoInput.isReadyForMoreMediaData, writer.status == .writing,
-              waitedMs < 500 {
+              Date() < deadline {
             usleep(2000)
-            waitedMs += 2
         }
         return append(pixelBuffer: pixelBuffer, pts: pts)
     }

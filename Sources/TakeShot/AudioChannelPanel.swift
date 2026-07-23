@@ -49,7 +49,7 @@ struct AudioChannelPanel: View {
                              ? "speaker.slash.fill" : "speaker.wave.2.fill"))
                         .foregroundStyle(controller.monitorOn
                                          ? controller.accentColor : .secondary)
-                        .frame(width: 20)
+                        .frame(width: 24, height: 20)
                 }
                 .buttonStyle(.plain)
                 .help(L("monitor_mute_help"))

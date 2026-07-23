@@ -257,3 +257,6 @@
 "grab_saved" = "Стилл сохранён: %@";
 "reset_interface" = "Сбросить интерфейс";
 "scope_drag_hint" = "скопы можно перетаскивать";
+"scope_grid_brightness" = "Яркость сетки";
+"scope_trace_brightness" = "Яркость трейса";
+"scope_open_window" = "Открыть отдельным окном";

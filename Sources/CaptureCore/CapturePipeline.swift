@@ -158,21 +158,24 @@ public final class CapturePipeline: @unchecked Sendable {
         self.config = config
         self.detector = RecDetector(config: RecDetectorConfig(
             startDebounceFrames: config.settings.startDebounceFrames,
-            stopDebounceFrames: config.settings.stopDebounceFrames))
+            stopDebounceFrames: config.settings.stopDebounceFrames,
+            vancOnly: config.settings.detectionMode == .vanc))
     }
 
     // MARK: - control (from MainActor)
 
     public func update(config: Config) {
         queue.async {
-            let debounceChanged =
+            let detectorChanged =
                 config.settings.startDebounceFrames != self.config.settings.startDebounceFrames
                 || config.settings.stopDebounceFrames != self.config.settings.stopDebounceFrames
+                || config.settings.detectionMode != self.config.settings.detectionMode
             self.config = config
-            if debounceChanged {
+            if detectorChanged {
                 self.detector = RecDetector(config: RecDetectorConfig(
                     startDebounceFrames: config.settings.startDebounceFrames,
-                    stopDebounceFrames: config.settings.stopDebounceFrames))
+                    stopDebounceFrames: config.settings.stopDebounceFrames,
+                    vancOnly: config.settings.detectionMode == .vanc))
             }
         }
     }
@@ -227,6 +230,12 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public func handleSignal(present: Bool) {
+        if !present {
+            // no frozen last frame on signal loss — show black
+            displayLayer.clearToBlack()
+            externalLayer.clearToBlack()
+            fullscreenLayer.clearToBlack()
+        }
         DispatchQueue.main.async { self.onSignal?(present) }
     }
 
@@ -242,6 +251,7 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private var trimFormatCache: CMAudioFormatDescription?
+    private var lastPublishedLevels: [Float] = []
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).
     private var sourceAudioChannels = 0
@@ -274,7 +284,8 @@ public final class CapturePipeline: @unchecked Sendable {
                     onMonitorAudio(monitor)
                 }
             }
-            if !levels.isEmpty {
+            if !levels.isEmpty, levels != self.lastPublishedLevels {
+                self.lastPublishedLevels = levels
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }
             }
         }
@@ -363,11 +374,11 @@ public final class CapturePipeline: @unchecked Sendable {
         var startedThisFrame = false
         let mode = config.settings.detectionMode
         if mode != .manual {
-            // .vanc: TC is hidden from the detector so running timecode alone
-            // (e.g. Resolve playout) can never start a take — VANC triggers only
+            // .vanc is enforced inside the detector (vancOnly): TC is passed
+            // through so the take still records its start timecode
             let sample = FrameSample(
                 index: frameIndex,
-                timecode: mode == .vanc ? nil : timecode,
+                timecode: timecode,
                 vancTrigger: (mode == .auto || mode == .vanc) ? vancTrigger : nil)
             if let event = detector.process(sample) {
                 switch event {
@@ -469,7 +480,7 @@ public final class CapturePipeline: @unchecked Sendable {
     /// cap. Without the cap, 3 s of pre-roll at 4K60 holds ~6 GB of uncompressed
     /// frames in RAM (OOM); at high resolution the pre-roll quietly shortens.
     private var preRollCapacity: Int {
-        let wanted = preRollFrames + config.settings.startDebounceFrames + 25
+        let wanted = preRollFrames + config.settings.startDebounceFrames + 3
         guard let format, format.width > 0, format.height > 0 else { return wanted }
         let bytesPerFrame = format.width * format.height * 4
         let budgetBytes = 1_500_000_000 // ~1.5 GB
@@ -505,11 +516,20 @@ public final class CapturePipeline: @unchecked Sendable {
         // by the pre-roll frames actually written, so the camera-start frame
         // carries exactly the camera's TC and the take stays sync-accurate
         // against the camera original.
-        let cutoffPreview = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
-        let preRollCount = preRollBuffer.filter { $0.index >= cutoffPreview }.count
+        let startIndex = recStartIndex ?? frameIndex
+        let cutoffPreview = max(0, startIndex - preRollFrames)
+        // only the frames written BEFORE the camera-start frame shift the TC —
+        // counting the detection-latency frames too made every take a few
+        // frames early against the camera original
+        let preStartCount = preRollBuffer.filter {
+            $0.index >= cutoffPreview && $0.index < startIndex
+        }.count
         var timecode = rawTimecode
-        if let tc = rawTimecode, preRollCount > 0 {
-            timecode = Timecode(frameNumber: max(0, tc.frameNumber - preRollCount),
+        if let tc = rawTimecode, preStartCount > 0 {
+            let dayFrames = 24 * 3600 * max(1, tc.fps)
+            var shifted = tc.frameNumber - preStartCount
+            if shifted < 0 { shifted += dayFrames } // wrap across midnight
+            timecode = Timecode(frameNumber: shifted,
                                 fps: tc.fps, isDropFrame: tc.isDropFrame)
         }
         let engine = NamingEngine(template: config.settings.namingTemplate)
@@ -563,13 +583,16 @@ public final class CapturePipeline: @unchecked Sendable {
             // in Rec Run their timecode is frozen at the start value, so the take's
             // timecode track stays correct
             let cutoff = max(0, (recStartIndex ?? frameIndex) - preRollFrames)
+            // the burst outruns the encoder queue — wait, but within a total
+            // budget: unbounded waits stall the pipeline queue while capture
+            // callbacks pile up retained 4K frames behind it
+            let drainDeadline = Date().addingTimeInterval(1.5)
             for buffered in preRollBuffer where buffered.index >= cutoff {
                 let frame = lutRecord
                     ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
                     : buffered.pixelBuffer
-                // the burst outruns the encoder queue — wait instead of dropping
-                // (the "Dropped 1 frame" toast on every take start)
-                writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts)
+                writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
+                                      deadline: drainDeadline)
             }
             preRollBuffer.removeAll()
 
@@ -632,13 +655,21 @@ public final class CapturePipeline: @unchecked Sendable {
             return nil
         }
 
-        let input = CIImage(cvPixelBuffer: pixelBuffer)
+        // raw code values on both ends: .cube LUTs are defined on gamma-encoded
+        // codes, and the playback tap renders the same way — a color-managed
+        // render here made live and playback diverge with the LUT on
+        let input = CIImage(cvPixelBuffer: pixelBuffer,
+                            options: [.colorSpace: NSNull()])
         filter.setValue(input, forKey: kCIInputImageKey)
         guard let output = filter.outputImage else { return nil }
         let finalImage = Self.mix(source: input, filtered: output,
                                   intensity: lutIntensity)
-        ciContext.render(finalImage, to: outBuffer, bounds: input.extent,
-                         colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
+        let destination = CIRenderDestination(pixelBuffer: outBuffer)
+        destination.colorSpace = nil
+        if let task = try? ciContext.startTask(toRender: finalImage,
+                                               to: destination) {
+            _ = try? task.waitUntilCompleted()
+        }
         tagColorIfUntagged(outBuffer)
         return outBuffer
     }
