@@ -97,7 +97,10 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
     CVPixelBufferPoolRef _pixelBufferPool;
     long _poolWidth;
     long _poolHeight;
+    OSType _poolFormat;
     BOOL _lastSignalPresent;
+    BMDDisplayMode _currentMode;
+    BMDPixelFormat _currentPixelFormat;
 }
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags;
@@ -247,6 +250,32 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     return YES;
 }
 
++ (NSArray<NSString *> *)displayModeNamesForDevice:(NSString *)deviceID {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    IDeckLink *deckLink = CDLFindDevice(deviceID);
+    if (!deckLink) {
+        return names;
+    }
+    IDeckLinkInput *input = NULL;
+    if (deckLink->QueryInterface(IID_IDeckLinkInput, (void **)&input) == S_OK && input) {
+        IDeckLinkDisplayModeIterator *iterator = NULL;
+        if (input->GetDisplayModeIterator(&iterator) == S_OK && iterator) {
+            IDeckLinkDisplayMode *mode = NULL;
+            while (iterator->Next(&mode) == S_OK && mode) {
+                CFStringRef name = NULL;
+                if (mode->GetName(&name) == S_OK && name) {
+                    [names addObject:(__bridge_transfer NSString *)name];
+                }
+                mode->Release();
+            }
+            iterator->Release();
+        }
+        input->Release();
+    }
+    deckLink->Release();
+    return names;
+}
+
 + (NSArray<CDLDeviceInfo *> *)devices {
     NSMutableArray<CDLDeviceInfo *> *result = [NSMutableArray array];
     IDeckLinkIterator *iterator = CreateDeckLinkIteratorInstance();
@@ -315,9 +344,41 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     _callback = new CDLInputCallback(self);
     _input->SetCallback(_callback);
 
-    // Start with an arbitrary mode — format detection will correct it to the actual one.
-    HRESULT hr = _input->EnableVideoInput(bmdModeHD1080p25, bmdFormat8BitYUV,
-                                          bmdVideoInputEnableFormatDetection);
+    // Forced mode: exact EnableVideoInput without detection, format reported
+    // immediately. Otherwise start with an arbitrary mode — format detection
+    // will correct it to the actual one.
+    IDeckLinkDisplayMode *forced = NULL;
+    if (self.forcedModeName) {
+        IDeckLinkDisplayModeIterator *iterator = NULL;
+        if (_input->GetDisplayModeIterator(&iterator) == S_OK && iterator) {
+            IDeckLinkDisplayMode *mode = NULL;
+            while (iterator->Next(&mode) == S_OK && mode) {
+                CFStringRef name = NULL;
+                BOOL match = NO;
+                if (mode->GetName(&name) == S_OK && name) {
+                    match = [(__bridge NSString *)name
+                        isEqualToString:self.forcedModeName];
+                    CFRelease(name);
+                }
+                if (match && !forced) {
+                    forced = mode; // keep the reference
+                } else {
+                    mode->Release();
+                }
+            }
+            iterator->Release();
+        }
+    }
+    if (forced) {
+        _currentMode = forced->GetDisplayMode();
+        _currentPixelFormat = self.forcedRGB ? bmdFormat8BitBGRA : bmdFormat8BitYUV;
+    } else {
+        _currentMode = bmdModeHD1080p25;
+        _currentPixelFormat = bmdFormat8BitYUV;
+    }
+    HRESULT hr = _input->EnableVideoInput(
+        _currentMode, _currentPixelFormat,
+        forced ? bmdVideoInputFlagDefault : bmdVideoInputEnableFormatDetection);
     if (hr != S_OK) {
         [self stop];
         if (error) {
@@ -332,6 +393,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger, 16);
 
     if (_input->StartStreams() != S_OK) {
+        if (forced) {
+            forced->Release();
+        }
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:4 userInfo:@{
@@ -339,6 +403,14 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
             }];
         }
         return NO;
+    }
+    if (forced) {
+        // no detection callback will come — report the format right away
+        CDLVideoFormat *format = CDLFormatFromDisplayMode(forced);
+        format.isRGB444 = self.forcedRGB;
+        forced->Release();
+        id<CDLCaptureDelegate> delegate = self.delegate;
+        [delegate capture:self didDetectFormat:format];
     }
     return YES;
 }
@@ -373,18 +445,30 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (!_input) {
         return;
     }
-    // RGB sources as BGRA, everything else as 8-bit YUV (2vuy)
-    BMDPixelFormat pixelFormat = (flags & bmdDetectedVideoInputRGB444)
-        ? bmdFormat8BitBGRA
-        : bmdFormat8BitYUV;
+    // RGB sources as BGRA (the board does not convert RGB→YUV on input),
+    // everything else as 8-bit YUV (2vuy)
+    BOOL isRGB444 = (flags & bmdDetectedVideoInputRGB444) != 0;
+    BMDPixelFormat pixelFormat = isRGB444 ? bmdFormat8BitBGRA : bmdFormat8BitYUV;
+
+    // Restart streams only on an actual change. Restarting on every callback
+    // re-arms format detection, which fires the callback again — an endless
+    // pause/flush/start loop that pins stream time at 0 (all frames get PTS 0,
+    // so recording dies on duplicate PTS), drops frames, and burns CPU.
+    BMDDisplayMode mode = newMode->GetDisplayMode();
+    if (mode == _currentMode && pixelFormat == _currentPixelFormat) {
+        return;
+    }
+    _currentMode = mode;
+    _currentPixelFormat = pixelFormat;
 
     _input->PauseStreams();
-    _input->EnableVideoInput(newMode->GetDisplayMode(), pixelFormat,
+    _input->EnableVideoInput(mode, pixelFormat,
                              bmdVideoInputEnableFormatDetection);
     _input->FlushStreams();
     _input->StartStreams();
 
     CDLVideoFormat *format = CDLFormatFromDisplayMode(newMode);
+    format.isRGB444 = isRGB444;
     id<CDLCaptureDelegate> delegate = self.delegate;
     [delegate capture:self didDetectFormat:format];
 }
@@ -396,7 +480,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         ? kCVPixelFormatType_32BGRA
         : kCVPixelFormatType_422YpCbCr8; // '2vuy'
 
-    if (!_pixelBufferPool || _poolWidth != width || _poolHeight != height) {
+    if (!_pixelBufferPool || _poolWidth != width || _poolHeight != height ||
+        _poolFormat != cvFormat) {
         if (_pixelBufferPool) {
             CVPixelBufferPoolRelease(_pixelBufferPool);
             _pixelBufferPool = NULL;
@@ -414,6 +499,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
         _poolWidth = width;
         _poolHeight = height;
+        _poolFormat = cvFormat;
     }
 
     CVPixelBufferRef pixelBuffer = NULL;
@@ -566,11 +652,41 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     return NO;
 }
 
++ (NSArray<NSString *> *)displayModeNamesForDevice:(NSString *)deviceID {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    IDeckLink *deckLink = CDLFindDevice(deviceID);
+    if (!deckLink) {
+        return names;
+    }
+    IDeckLinkInput *input = NULL;
+    if (deckLink->QueryInterface(IID_IDeckLinkInput, (void **)&input) == S_OK && input) {
+        IDeckLinkDisplayModeIterator *iterator = NULL;
+        if (input->GetDisplayModeIterator(&iterator) == S_OK && iterator) {
+            IDeckLinkDisplayMode *mode = NULL;
+            while (iterator->Next(&mode) == S_OK && mode) {
+                CFStringRef name = NULL;
+                if (mode->GetName(&name) == S_OK && name) {
+                    [names addObject:(__bridge_transfer NSString *)name];
+                }
+                mode->Release();
+            }
+            iterator->Release();
+        }
+        input->Release();
+    }
+    deckLink->Release();
+    return names;
+}
+
 + (NSArray<CDLDeviceInfo *> *)devices {
     return @[];
 }
 
 + (void)startWatchingDevicesWithHandler:(void (^)(void))handler {
+}
+
++ (NSArray<NSString *> *)displayModeNamesForDevice:(NSString *)deviceID {
+    return @[];
 }
 
 @end

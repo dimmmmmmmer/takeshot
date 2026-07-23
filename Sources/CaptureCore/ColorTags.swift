@@ -59,6 +59,10 @@ public enum ColorTags {
     }
 
     /// Stamp a pixel buffer with the preset's colorimetry attachments.
+    /// NOTE: full-range BGRA must not be handed to AVSampleBufferDisplayLayer
+    /// directly regardless of tags — the display path renders it with a
+    /// video-range squeeze (washed blacks). The pipeline converts preview
+    /// frames to 2vuy first (see CapturePipeline.previewBuffer).
     public static func tag(_ pixelBuffer: CVPixelBuffer, preset: String?) {
         let v = values(for: preset)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,

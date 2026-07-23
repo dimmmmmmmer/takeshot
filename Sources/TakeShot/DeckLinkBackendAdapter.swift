@@ -9,6 +9,9 @@ import Foundation
 final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     weak var delegate: CaptureBackendDelegate?
 
+    /// Forced input mode (name + RGB flag); nil — autodetect. Set before start.
+    var forcedMode: (name: String, rgb: Bool)?
+
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
 
@@ -35,8 +38,17 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
         stopCapture()
         let capture = CDLCapture()
         capture.delegate = self
+        if let forcedMode {
+            capture.forcedModeName = forcedMode.name
+            capture.forcedRGB = forcedMode.rgb
+        }
         try capture.start(withDeviceID: deviceID)
         self.capture = capture
+    }
+
+    /// Input mode names of a device (for the Settings picker).
+    static func inputModeNames(deviceID: String) -> [String] {
+        CDLDeviceManager.displayModeNames(forDevice: deviceID)
     }
 
     func stopCapture() {
@@ -54,7 +66,8 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
         delegate?.backend(self, didDetectFormat: CaptureFormat(
             width: format.width, height: format.height,
             frameRate: fps, timecodeFPS: Int(format.timecodeFPS),
-            isDropFrame: fractional, name: format.modeName))
+            isDropFrame: fractional, name: format.modeName,
+            isRGB444: format.isRGB444))
     }
 
     func capture(_ capture: CDLCapture, didReceiveVideoFrame pixelBuffer: CVPixelBuffer,

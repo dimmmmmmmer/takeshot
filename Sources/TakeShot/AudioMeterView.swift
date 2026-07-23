@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Vertical audio-channel peak meters (dBFS from -60 to 0).
-/// Green up to -12, yellow up to -3, red beyond.
+/// Green up to -10, yellow -10…-5, red above -5.
 struct AudioMeterView: View {
     let levels: [Float]
     var enabled: [Bool]?
@@ -33,14 +33,14 @@ struct AudioMeterView: View {
     }
 }
 
-/// Classic segmented meter: green up to -12 dB, only the -12…-3 band is yellow,
-/// only what's above -3 is red.
+/// Classic segmented meter: green up to -10 dB, only the -10…-5 band is yellow,
+/// only what's above -5 is red.
 struct SegmentedMeterBar: View {
     let level: Float
 
     private static let range: ClosedRange<Float> = -60...0
-    private static let yellowMark: CGFloat = 0.8   // -12 dB
-    private static let redMark: CGFloat = 0.95     // -3 dB
+    private static let yellowMark: CGFloat = 50.0 / 60.0   // -10 dB
+    private static let redMark: CGFloat = 55.0 / 60.0      // -5 dB
 
     var body: some View {
         GeometryReader { geo in

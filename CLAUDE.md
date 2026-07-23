@@ -91,11 +91,21 @@ hard-coded strings in views.
 1. ✅ Scaffold + core (detector, naming, writer, UI skeleton, tests)
 2. ✅ Capture in `CDeckLink`: input, format auto-detection, frames
    (IDeckLinkVideoBuffer), RP188 timecode, 48k/16-bit audio → callbacks.
-   **Not verified on a live board.**
+   Verified on UltraStudio 4K Mini (HDMI 2160p25, RGB 4:4:4 source): fixed a
+   format-detection restart loop (PTS stuck at 0 → 0-byte takes, frame loss,
+   CPU burn) and limited-range RGB washing out contrast (levels "auto" now
+   expands RGB444 sources). "Input levels" states the SOURCE's range: limited
+   (16-235) is expanded ONCE on gamma-encoded bytes (vImage lookup — a CI
+   matrix in linear space crushes shadows); full passes through untouched
+   (playout devices set to Full output). Never tag buffers reaching the writer
+   with non-standard transfer: the encoder color-converts on tag mismatch, and
+   attachments leak between buffers sharing an IOSurface (both verified on
+   device). Detection default is VANC-only (running TC alone, e.g. Resolve
+   playout, must not start takes).
 3. ✅ Preview (`AVSampleBufferDisplayLayer`), the `CapturePipeline` on a serial
    queue, manual recording, demo source
 4. ✅ Auto-takes + pre-roll buffer (frames from the camera's actual start +
-   configurable lead seconds; covered by synthetic e2e tests). **Needs a board
-   check.**
+   configurable lead seconds; covered by synthetic e2e tests). Recording path
+   verified on the live board (real frames + PTS through TakeWriter).
 5. ⏳ VANC metadata (Blackmagic: tally DID 0x51/SDID 0x52, camera control
    0x51/0x53), names from the camera's reel/scene/take

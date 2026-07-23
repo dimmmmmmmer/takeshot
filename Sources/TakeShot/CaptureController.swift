@@ -5,6 +5,7 @@ import Combine
 import CoreMedia
 import CoreVideo
 import Foundation
+import os.log
 import SwiftUI
 
 /// App UI state. The heavy frame work lives in CapturePipeline; the controller
@@ -23,7 +24,10 @@ final class CaptureController: ObservableObject {
     @Published var isRecording = false
     @Published var signalPresent = true
     @Published var signalFormat: CaptureFormat?
-    @Published var currentTimecode: Timecode?
+    /// Per-frame values (TC/meters/scopes) — deliberately NOT @Published here;
+    /// views that show them observe `live` so the rest of the UI stays still.
+    let live = LiveSignal()
+    var currentTimecode: Timecode? { live.currentTimecode }
     @Published var takes: [Take] = []
     /// Take preview frames for thumbnail mode.
     @Published var thumbnails: [Take.ID: NSImage] = [:]
@@ -67,8 +71,8 @@ final class CaptureController: ObservableObject {
         }
     }
     private var errorDismissTask: Task<Void, Never>?
-    /// Per-channel audio peak levels, dBFS (for the meters).
-    @Published var audioLevels: [Float] = []
+    /// Per-channel audio peak levels, dBFS (for the meters; see `live`).
+    var audioLevels: [Float] { live.audioLevels }
     /// View mode: live signal or playback of a recording.
     @Published var viewerMode: ViewerMode = .record {
         didSet {
@@ -163,6 +167,15 @@ final class CaptureController: ObservableObject {
             .sorted { $0.name < $1.name }
     }
 
+    /// DaVinci Resolve's LUT directory — imported LUTs are mirrored into a
+    /// TakeShot subfolder there, so the same look is at hand in Resolve.
+    nonisolated static var resolveLUTDirectory: URL {
+        FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+            .appendingPathComponent(
+                "Application Support/Blackmagic Design/DaVinci Resolve/LUT/TakeShot",
+                isDirectory: true)
+    }
+
     /// Import .cube: copied into the app folder and selected right away.
     func importLUT() {
         let panel = NSOpenPanel()
@@ -173,11 +186,22 @@ final class CaptureController: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var lastName: String?
         for url in panel.urls {
-            let dest = dir.appendingPathComponent(url.lastPathComponent)
-            try? FileManager.default.removeItem(at: dest)
+            var dest = dir.appendingPathComponent(url.lastPathComponent)
+            if FileManager.default.fileExists(atPath: dest.path) {
+                // duplicate name: let the user decide instead of silently replacing
+                switch Self.askDuplicateLUT(name: url.lastPathComponent) {
+                case .replace:
+                    try? FileManager.default.removeItem(at: dest)
+                case .keepBoth:
+                    dest = CapturePipeline.uniqueURL(for: dest)
+                case .skip:
+                    continue
+                }
+            }
             do {
                 try FileManager.default.copyItem(at: url, to: dest)
-                lastName = url.lastPathComponent
+                lastName = dest.lastPathComponent
+                mirrorLUTToResolve(dest)
             } catch {
                 lastError = "LUT import failed: \(error.localizedDescription)"
             }
@@ -205,6 +229,32 @@ final class CaptureController: ObservableObject {
         }
         selectLUT(fileName: nil)
         reloadLUTList()
+    }
+
+    enum DuplicateLUTChoice { case replace, keepBoth, skip }
+
+    /// Modal: what to do with an already-imported LUT of the same name.
+    private static func askDuplicateLUT(name: String) -> DuplicateLUTChoice {
+        let alert = NSAlert()
+        alert.messageText = L("lut_duplicate_title", name)
+        alert.informativeText = L("lut_duplicate_text")
+        alert.addButton(withTitle: L("lut_replace"))
+        alert.addButton(withTitle: L("lut_keep_both"))
+        alert.addButton(withTitle: L("lut_skip"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .replace
+        case .alertSecondButtonReturn: return .keepBoth
+        default: return .skip
+        }
+    }
+
+    /// Mirror an imported LUT into DaVinci Resolve's LUT/TakeShot folder.
+    private func mirrorLUTToResolve(_ url: URL) {
+        let dir = Self.resolveLUTDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(url.lastPathComponent)
+        try? FileManager.default.removeItem(at: dest)
+        try? FileManager.default.copyItem(at: url, to: dest)
     }
 
     func selectLUT(fileName: String?) {
@@ -307,14 +357,11 @@ final class CaptureController: ObservableObject {
     @Published var showScopes = false {
         didSet { updateScopesRunning() }
     }
-    /// Latest scope data (from live or playback, whichever is visible).
-    @Published var scopeData: ScopeData?
-
     /// Route scope analysis to whichever source is actually on screen.
     private func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
         playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
-        if !showScopes { scopeData = nil }
+        if !showScopes { live.scopeData = nil }
     }
     /// Playback volume (viewing only, doesn't affect recording).
     @Published var playbackVolume: Double = 1.0 {
@@ -350,6 +397,7 @@ final class CaptureController: ObservableObject {
             audioMonitor.volume = Float(newValue)
         }
     }
+
 
     // MARK: - external monitor output
 
@@ -493,6 +541,9 @@ final class CaptureController: ObservableObject {
     /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
         playbackURL = url
+        playbackFormatText = nil
+        playbackStartTC = nil
+        playbackFPS = 25
         if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
             player.pause()
             player.replaceCurrentItem(with: nil)
@@ -503,9 +554,86 @@ final class CaptureController: ObservableObject {
             playbackLUTSuppressed = false
             detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
             player.play()
+            loadPlaybackInfo(for: item)
         }
         viewerMode = .playback
         updateTapRunning()
+    }
+
+    // MARK: - playback info for the player badges
+
+    /// Resolution + fps of the loaded clip ("1920x1080 25p"); nil while loading.
+    @Published var playbackFormatText: String?
+    /// Start TC from the file's timecode track (nil — none).
+    @Published var playbackStartTC: Timecode?
+    private(set) var playbackFPS: Double = 25
+
+    /// Playback position as timecode (start TC + elapsed at the file's fps).
+    var playbackTimecodeText: String {
+        let elapsed = max(0, player.currentTime().seconds)
+        let fps = max(1, playbackFPS)
+        let frames = Int((elapsed * fps).rounded(.down))
+        guard let start = playbackStartTC else {
+            let total = Int(elapsed)
+            let ff = frames % Int(fps.rounded())
+            return String(format: "%02d:%02d:%02d:%02d",
+                          total / 3600, (total / 60) % 60, total % 60, ff)
+        }
+        var tc = start
+        tc.fps = Int(fps.rounded())
+        return Timecode(frameNumber: start.frameNumber + frames,
+                        fps: tc.fps, isDropFrame: start.isDropFrame).description
+    }
+
+    private func loadPlaybackInfo(for item: AVPlayerItem) {
+        Task { [weak self] in
+            let asset = item.asset
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first
+            else { return }
+            let size = (try? await track.load(.naturalSize)) ?? .zero
+            let fps = Double((try? await track.load(.nominalFrameRate)) ?? 25)
+            var startTC: Timecode?
+            if let tcTrack = try? await asset.loadTracks(withMediaType: .timecode).first,
+               let (frame, fdesc) = try? await Self.firstTimecodeSample(of: tcTrack) {
+                let quanta = Int(CMTimeCodeFormatDescriptionGetFrameQuanta(fdesc))
+                let flags = CMTimeCodeFormatDescriptionGetTimeCodeFlags(fdesc)
+                startTC = Timecode(frameNumber: Int(frame), fps: max(1, quanta),
+                                   isDropFrame: flags & kCMTimeCodeFlag_DropFrame != 0)
+            }
+            await MainActor.run { [weak self] in
+                guard let self, self.player.currentItem === item else { return }
+                let fpsText = fps > 0
+                    ? (abs(fps.rounded() - fps) < 0.05
+                       ? String(Int(fps.rounded())) : String(format: "%.2f", fps))
+                    : "?"
+                // same short style as the live badge: 1080p25
+                self.playbackFormatText = "\(Int(size.height))p\(fpsText)"
+                self.playbackStartTC = startTC
+                self.playbackFPS = fps > 0 ? fps : 25
+            }
+        }
+    }
+
+    /// First tc32 sample of a timecode track: the start frame number.
+    nonisolated private static func firstTimecodeSample(
+        of track: AVAssetTrack) async throws -> (UInt32, CMTimeCodeFormatDescription)? {
+        let descriptions = try await track.load(.formatDescriptions)
+        guard let fdesc = descriptions.first,
+              CMFormatDescriptionGetMediaType(fdesc) == kCMMediaType_TimeCode
+        else { return nil }
+        let asset = track.asset
+        guard let asset else { return nil }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(output)
+        reader.startReading()
+        defer { reader.cancelReading() }
+        guard let sample = output.copyNextSampleBuffer(),
+              let block = CMSampleBufferGetDataBuffer(sample) else { return nil }
+        var raw: UInt32 = 0
+        CMBlockBufferCopyDataBytes(block, atOffset: 0,
+                                   dataLength: 4, destination: &raw)
+        return (UInt32(bigEndian: raw), fdesc)
     }
     @Published var settings = CaptureSettings.loaded() {
         didSet {
@@ -514,6 +642,11 @@ final class CaptureController: ObservableObject {
             L10n.apply(appLanguage)
             if oldValue.destinationPath != settings.destinationPath {
                 resetLibraryForNewDestination()
+                startFolderWatcher()
+            }
+            if oldValue.forcedInputMode != settings.forcedInputMode
+                || oldValue.forcedInputRGB != settings.forcedInputRGB {
+                restartCapture()
             }
             // cam/postfix/template/padding affect the name — recompute the warning
             if oldValue.cameraLabel != settings.cameraLabel
@@ -596,6 +729,8 @@ final class CaptureController: ObservableObject {
         refreshDevices() // selecting the first device starts capture via didSet
         startFolderSync()
         refreshNameCollision()
+        applyLetterboxColor()
+        reloadLUTList()
     }
 
     private func bindPipeline() {
@@ -603,7 +738,7 @@ final class CaptureController: ObservableObject {
             self?.signalFormat = format
         }
         pipeline.onTimecode = { [weak self] timecode in
-            self?.currentTimecode = timecode
+            self?.live.currentTimecode = timecode
         }
         pipeline.onRecStateChanged = { [weak self] recording in
             guard let self else { return }
@@ -623,10 +758,10 @@ final class CaptureController: ObservableObject {
             self?.signalPresent = present
         }
         pipeline.onScopeData = { [weak self] data in
-            self?.scopeData = data
+            self?.live.scopeData = data
         }
         playbackTap.onScopeData = { [weak self] data in
-            self?.scopeData = data
+            self?.live.scopeData = data
         }
         // capture the monitor object itself: this fires on the pipeline queue
         // and must not touch the MainActor-isolated controller
@@ -639,7 +774,7 @@ final class CaptureController: ObservableObject {
             self?.vancStats = stats
         }
         pipeline.onAudioLevels = { [weak self] levels in
-            self?.audioLevels = levels
+            self?.live.audioLevels = levels
         }
     }
 
@@ -658,7 +793,23 @@ final class CaptureController: ObservableObject {
             settings.playerBackgroundHex.flatMap(Color.init(hex:))
                 ?? Color(hex: "#000000")!
         }
-        set { settings.playerBackgroundHex = newValue.hexString }
+        set {
+            settings.playerBackgroundHex = newValue.hexString
+            applyLetterboxColor()
+        }
+    }
+
+    /// The Metal preview letterboxes internally — keep its bars in the chosen
+    /// backdrop color (they used to be transparent with the old video layer).
+    func applyLetterboxColor() {
+        let ns = NSColor(playerBackground).usingColorSpace(.sRGB) ?? .black
+        let ci = CIColor(red: ns.redComponent, green: ns.greenComponent,
+                         blue: ns.blueComponent)
+        for layer in [pipeline.displayLayer, pipeline.fullscreenLayer,
+                      pipeline.externalLayer, playbackTap.mainLayer,
+                      playbackTap.fullscreenLayer, playbackTap.externalLayer] {
+            layer.letterboxColor = ci
+        }
     }
 
     /// Control accent color; white by default.
@@ -740,6 +891,7 @@ final class CaptureController: ObservableObject {
     private func pushConfig() {
         pipeline.update(config: .init(
             settings: settings, roll: roll, takeNumber: nextTakeNumber))
+        pipeline.setVideoLevels(settings.videoLevels)
         for channel in extraChannels {
             channel.update(settings: settings, roll: roll, takeNumber: nextTakeNumber)
         }
@@ -822,8 +974,21 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Input mode names of the selected DeckLink (for the Settings picker).
+    var selectedDeviceInputModes: [String] {
+        guard let id = selectedDeviceID, id.hasPrefix("decklink:") else { return [] }
+        return DeckLinkBackendAdapter.inputModeNames(
+            deviceID: String(id.dropFirst("decklink:".count)))
+    }
+
     func startCapture() {
         guard let deviceID = selectedDeviceID else { return }
+        if let adapter = (backend as? AggregateBackend)?
+            .child(of: DeckLinkBackendAdapter.self) {
+            adapter.forcedMode = settings.forcedInputMode.map {
+                (name: $0, rgb: settings.forcedInputRGB ?? false)
+            }
+        }
         do {
             try backend.startCapture(deviceID: deviceID)
             isCapturing = true
@@ -981,12 +1146,51 @@ final class CaptureController: ObservableObject {
     /// Light polling of the record folder: video files not among our takes
     /// are shown in a separate Other content block.
     private func startFolderSync() {
+        startFolderWatcher()
         Task { [weak self] in
             while let self, !Task.isCancelled {
                 self.scanDestinationFolder()
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+    }
+
+    private var folderWatcher: DispatchSourceFileSystemObject?
+    private var folderRescanScheduled = false
+
+    /// Kernel notifications on the record folder: add/delete shows up right away
+    /// (the 5 s poll stays as a safety net for metadata-only changes).
+    func startFolderWatcher() {
+        folderWatcher?.cancel() // its cancel handler closes the old fd
+        folderWatcher = nil
+        try? FileManager.default.createDirectory(at: destinationRoot,
+                                                 withIntermediateDirectories: true)
+        let fd = open(destinationRoot.path, O_EVTONLY)
+        guard fd >= 0 else {
+            os_log("folder watcher FAILED to arm: %{public}s",
+                   log: CapturePipeline.levelsLog, type: .error, destinationRoot.path)
+            return
+        }
+        os_log("folder watcher armed: %{public}s",
+               log: CapturePipeline.levelsLog, type: .default, destinationRoot.path)
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .rename, .delete],
+            queue: .main)
+        source.setEventHandler { [weak self] in
+            guard let self, !self.folderRescanScheduled else { return }
+            // debounce bursts (a recording take touches the folder every frame)
+            self.folderRescanScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                self.folderRescanScheduled = false
+                os_log("folder event -> rescan", log: CapturePipeline.levelsLog,
+                       type: .default)
+                self.scanDestinationFolder()
+            }
+        }
+        source.setCancelHandler { [fd] in close(fd) }
+        source.resume()
+        folderWatcher = source
     }
 
     /// Paths already checked for the TakeShot tag (so we don't re-read metadata).
@@ -1004,6 +1208,17 @@ final class CaptureController: ObservableObject {
     /// Our files (the com.takeshot.origin QuickTime tag) return to the takes list
     /// after a restart; the rest are Other content.
     private func classifyFoundFiles(_ candidates: [URL]) async {
+        // files removed from the folder leave the app too
+        let gone = takes.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
+        if !gone.isEmpty {
+            let goneIDs = Set(gone.map(\.id))
+            takes.removeAll { goneIDs.contains($0.id) }
+            for take in gone {
+                thumbnails[take.id] = nil
+                scannedPaths.remove(take.url.path)
+            }
+            exportTakeLog()
+        }
         var restored: [Take] = []
         var foreign: [URL] = []
         let meta = (try? String(contentsOf: takeLogURL, encoding: .utf8))

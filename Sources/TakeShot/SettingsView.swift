@@ -1,6 +1,29 @@
 import CaptureCore
 import SwiftUI
 
+/// Editable frame-count row: type a number or use the stepper.
+struct FrameCountField: View {
+    let label: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+
+    var body: some View {
+        LabeledContent(label) {
+            HStack(spacing: 6) {
+                TextField("", value: Binding(
+                    get: { value },
+                    set: { value = min(range.upperBound, max(range.lowerBound, $0)) }),
+                    format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 56)
+                Stepper("", value: $value, in: range)
+                    .labelsHidden()
+            }
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
@@ -22,6 +45,20 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(controller.isRecording)
+                Picker(L("input_mode"), selection: Binding(
+                    get: { controller.settings.forcedInputMode ?? "auto" },
+                    set: { controller.settings.forcedInputMode = $0 == "auto" ? nil : $0 })) {
+                    Text(L("input_mode_auto")).tag("auto")
+                    ForEach(controller.selectedDeviceInputModes, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .disabled(controller.isRecording)
+                if controller.settings.forcedInputMode != nil {
+                    Toggle(L("input_mode_rgb"), isOn: Binding(
+                        get: { controller.settings.forcedInputRGB ?? false },
+                        set: { controller.settings.forcedInputRGB = $0 }))
+                }
             }
             Section(L("settings_interface")) {
                 Picker(L("language"), selection: Binding(
@@ -57,6 +94,7 @@ struct SettingsView: View {
                 Button(L("reset_colors"), role: .destructive) {
                     controller.resetColors()
                 }
+                .foregroundStyle(.red)
             }
             Section(L("settings_recording")) {
                 Picker(L("codec"), selection: $controller.settings.codec) {
@@ -71,9 +109,11 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .frame(maxWidth: 240, alignment: .trailing)
                         Button(L("choose_folder")) {
                             controller.chooseDestinationFolder()
                         }
+                        .fixedSize()
                     }
                 }
                 Picker(L("naming_preset"), selection: Binding(
@@ -97,23 +137,16 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Picker(L("color_tags"), selection: Binding(
-                    get: { controller.settings.colorTagPreset ?? "709" },
-                    set: { controller.settings.colorTagPreset = $0 == "709" ? nil : $0 })) {
-                    Text("Rec.709 (1-1-1)").tag("709")
-                    Text("Rec.601").tag("601")
-                    Text("Rec.2020").tag("2020")
-                }
                 Picker(L("video_levels"), selection: Binding(
-                    get: { controller.settings.videoLevels ?? "auto" },
+                    get: {
+                        let v = controller.settings.videoLevels
+                        return v == nil ? "auto" : (v == "off" ? "full" : v!)
+                    },
                     set: { controller.settings.videoLevels = $0 == "auto" ? nil : $0 })) {
                     Text(L("levels_auto")).tag("auto")
                     Text(L("levels_limited")).tag("limited")
                     Text(L("levels_full")).tag("full")
                 }
-                Text(L("color_tags_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Section(L("settings_luts")) {
                 LabeledContent(L("luts_folder")) {
@@ -165,28 +198,23 @@ struct SettingsView: View {
             }
             Section(L("settings_detection")) {
                 Picker(L("detection_mode"), selection: $controller.settings.detectionMode) {
+                    Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
                     Text(L("mode_auto")).tag(RecDetectionMode.auto)
                     Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
                     Text(L("mode_manual")).tag(RecDetectionMode.manual)
                 }
-                Stepper(L("start_debounce", controller.settings.startDebounceFrames),
-                        value: $controller.settings.startDebounceFrames, in: 0...30)
-                Stepper(L("stop_debounce", controller.settings.stopDebounceFrames),
-                        value: $controller.settings.stopDebounceFrames, in: 0...60)
-                Text(L("debounce_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Stepper(L("pre_roll", controller.settings.preRollSecondsEffective),
-                        value: Binding(
-                            get: { controller.settings.preRollSecondsEffective },
-                            set: { controller.settings.preRollSeconds = $0 }),
-                        in: 0...3, step: 0.5)
-                Text(L("pre_roll_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(L("recrun_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                FrameCountField(label: L("start_frames"),
+                                value: $controller.settings.startDebounceFrames,
+                                range: 0...60)
+                FrameCountField(label: L("stop_frames"),
+                                value: $controller.settings.stopDebounceFrames,
+                                range: 0...120)
+                FrameCountField(label: L("pre_roll_frames"), value: Binding(
+                    get: { controller.settings.preRollFramesEffective },
+                    set: {
+                        controller.settings.preRollFrames = $0
+                        controller.settings.preRollSeconds = nil
+                    }), range: 0...100)
             }
             Section(L("settings_hotkeys")) {
                 ForEach(HotkeyAction.allCases) { action in
@@ -206,17 +234,17 @@ struct SettingsView: View {
                               ? controller.accentColor : nil)
                     }
                 }
-                Button(L("reset_hotkeys")) {
+                Button(L("reset_hotkeys"), role: .destructive) {
                     hotkeys.resetToDefaults()
                 }
-                .buttonStyle(.link)
+                .foregroundStyle(.red)
             }
             Section {
                 Button(L("reset_all"), role: .destructive) {
                     controller.resetAllSettings()
                     hotkeys.resetToDefaults()
                 }
-                .frame(maxWidth: .infinity)
+                .foregroundStyle(.red)
             }
         }
         .formStyle(.grouped)

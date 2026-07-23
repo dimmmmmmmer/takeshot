@@ -27,7 +27,7 @@ struct TakeListView: View {
 private struct TakesSection: View {
     @EnvironmentObject private var controller: CaptureController
     @AppStorage("takesViewMode") private var viewMode = "list"
-    @AppStorage("gridTileSize") private var tileSize = 150.0
+    @AppStorage("takesTileSize") private var tileSize = 150.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -110,32 +110,36 @@ private struct TakeRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(take.displayName)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                HStack(spacing: 8) {
-                    if let tc = take.startTimecode {
-                        Text(tc.description)
+            // double-tap lives on the info area only: a gesture on the whole
+            // row delays every tap on the buttons (double-tap disambiguation)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(take.displayName)
+                        .font(.system(.body, design: .monospaced))
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        if let tc = take.startTimecode {
+                            Text(tc.description)
+                        }
+                        Text(durationText(take.durationSeconds))
                     }
-                    Text(durationText(take.durationSeconds))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    if !take.comment.isEmpty {
+                        Text(take.comment)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .italic()
+                            .lineLimit(2)
+                    }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                if !take.comment.isEmpty {
-                    Text(take.comment)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .italic()
-                        .lineLimit(2)
-                }
+                Spacer(minLength: 8)
             }
-            Spacer()
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { controller.play(url: take.url) }
             CommentButton(take: take)
             RatingToggle(take: take)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { controller.play(url: take.url) }
         .contextMenu { TakeContextMenu(take: take) }
     }
 }
@@ -160,6 +164,8 @@ private struct TakeCell: View {
             }
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { controller.play(url: take.url) }
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 4) {
                     CommentButton(take: take)
@@ -183,8 +189,6 @@ private struct TakeCell: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { controller.play(url: take.url) }
         .contextMenu { TakeContextMenu(take: take) }
     }
 }
@@ -194,7 +198,7 @@ private struct TakeCell: View {
 private struct OtherContentSection: View {
     @EnvironmentObject private var controller: CaptureController
     @AppStorage("otherViewMode") private var viewMode = "list"
-    @AppStorage("gridTileSize") private var tileSize = 150.0
+    @AppStorage("otherTileSize") private var tileSize = 150.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -320,7 +324,9 @@ private struct CommentButton: View {
             showPopover = true
         } label: {
             Image(systemName: take.comment.isEmpty ? "bubble.left" : "bubble.left.fill")
+                .font(.system(size: 13))
                 .foregroundStyle(take.comment.isEmpty ? Color.secondary : controller.accentColor)
+                .frame(width: 18, height: 18)
         }
         .buttonStyle(.plain)
         .help(L("comment_help"))
@@ -354,17 +360,21 @@ private struct RatingToggle: View {
         Button {
             controller.cycleRating(take)
         } label: {
-            switch take.rating {
-            case .none:
-                Image(systemName: "circle")
-                    .foregroundStyle(.secondary)
-            case .good:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            case .bad:
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.red)
+            Group {
+                switch take.rating {
+                case .none:
+                    Image(systemName: "circle")
+                        .foregroundStyle(.secondary)
+                case .good:
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                case .bad:
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                }
             }
+            .font(.system(size: 13))
+            .frame(width: 18, height: 18)
         }
         .buttonStyle(.plain)
         .help(L("rating_help"))

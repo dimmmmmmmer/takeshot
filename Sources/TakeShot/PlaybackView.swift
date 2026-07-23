@@ -37,7 +37,7 @@ struct PlaybackContent: View {
         }
     }
 
-    private var layerForTarget: AVSampleBufferDisplayLayer {
+    private var layerForTarget: MetalPreviewLayer {
         switch target {
         case .main: return controller.playbackTap.mainLayer
         case .fullscreen: return controller.playbackTap.fullscreenLayer
@@ -48,15 +48,10 @@ struct PlaybackContent: View {
 
 /// A view around the unified playback render layer.
 private struct TapLayerView: NSViewRepresentable {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = .clear
-        view.layer = layer
-        return view
+        MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -307,15 +302,10 @@ struct ExternalOutputView: View {
 }
 
 private struct ExternalLiveView: NSViewRepresentable {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = .clear
-        view.layer = layer
-        return view
+        MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}

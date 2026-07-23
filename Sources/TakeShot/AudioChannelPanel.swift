@@ -1,16 +1,19 @@
 import AVFoundation
+import CaptureCore
 import SwiftUI
 
 /// Large audio-channel panel over the center of the player: big meters with dB
 /// numbers; clicking a channel toggles whether it's recorded.
 struct AudioChannelPanel: View {
     @EnvironmentObject private var controller: CaptureController
+    // meters update ~25/s — observed separately from the controller
+    @ObservedObject var live: LiveSignal
 
     private let range: ClosedRange<Float> = -60...0
 
     /// Width by content: channels (16+8) + two dB scales.
     private var panelWidth: CGFloat {
-        CGFloat(max(2, controller.audioLevels.count)) * 24 + 44
+        CGFloat(max(2, live.audioLevels.count)) * 24 + 44
     }
 
     var body: some View {
@@ -30,7 +33,7 @@ struct AudioChannelPanel: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 dbScale
-                ForEach(Array(controller.audioLevels.enumerated()), id: \.offset) { index, level in
+                ForEach(Array(live.audioLevels.enumerated()), id: \.offset) { index, level in
                     channelColumn(index: index, level: level)
                 }
                 dbScale
@@ -40,10 +43,13 @@ struct AudioChannelPanel: View {
                 Button {
                     controller.monitorOn.toggle()
                 } label: {
-                    Image(systemName: controller.monitorOn
-                          ? "speaker.wave.2.fill" : "speaker.slash")
+                    Image(systemName: !controller.monitorOn
+                          ? "speaker.slash"
+                          : (controller.monitorVolume == 0
+                             ? "speaker.slash.fill" : "speaker.wave.2.fill"))
                         .foregroundStyle(controller.monitorOn
                                          ? controller.accentColor : .secondary)
+                        .frame(width: 20)
                 }
                 .buttonStyle(.plain)
                 .help(L("monitor_toggle"))
@@ -55,8 +61,8 @@ struct AudioChannelPanel: View {
             .frame(maxWidth: panelWidth)
             Text(L("audio_panel_hint"))
                 .font(.caption)
+                .lineLimit(1)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: panelWidth)
         }
         .padding(14)
@@ -163,15 +169,10 @@ struct LiveFullscreenView: View {
 }
 
 private struct LiveMirrorView: NSViewRepresentable {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = .clear
-        view.layer = layer
-        return view
+        MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}

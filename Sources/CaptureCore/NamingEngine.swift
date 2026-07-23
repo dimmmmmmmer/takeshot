@@ -44,8 +44,8 @@ public struct NamingEngine: Sendable {
     /// {roll}/{clip}/{postfix}) or filled in automatically ({tc}/{date}). The old
     /// names ({project}/{reel}/{take}/{scene}/{clipname}) still work as aliases.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
-                                      "{postfix}", "{tc}", "{date}", "{date6}",
-                                      "{date4}", "{time4}", "{time6}"]
+                                      "{postfix}", "{tc}", "{date}", "{yymmdd}",
+                                      "{mmdd}", "{hhmm}", "{hhmmss}"]
 
     private static func formatted(_ date: Date, _ format: String) -> String {
         let formatter = DateFormatter()
@@ -67,10 +67,15 @@ public struct NamingEngine: Sendable {
             "{project}": context.project,
             "{prefix}": context.project,
             "{date}": dateFormatter.string(from: context.date),
-            "{date6}": Self.formatted(context.date, "yyMMdd"),   // ARRI/Sony: 230715
-            "{date4}": Self.formatted(context.date, "MMdd"),     // RED: 0715
-            "{time4}": Self.formatted(context.date, "HHmm"),     // BMD: 1234
-            "{time6}": Self.formatted(context.date, "HHmmss"),   // ARRI35/Canon: 201535
+            "{yymmdd}": Self.formatted(context.date, "yyMMdd"),  // ARRI/Sony: 230715
+            "{mmdd}": Self.formatted(context.date, "MMdd"),      // RED: 0715
+            "{hhmm}": Self.formatted(context.date, "HHmm"),      // BMD: 1234
+            "{hhmmss}": Self.formatted(context.date, "HHmmss"),  // ARRI35/Canon: 201535
+            // legacy aliases from older templates
+            "{date6}": Self.formatted(context.date, "yyMMdd"),
+            "{date4}": Self.formatted(context.date, "MMdd"),
+            "{time4}": Self.formatted(context.date, "HHmm"),
+            "{time6}": Self.formatted(context.date, "HHmmss"),
             "{scene}": context.scene,
             "{take}": paddedNumber,
             "{clip}": paddedNumber,

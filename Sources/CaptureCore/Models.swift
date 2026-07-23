@@ -8,15 +8,19 @@ public struct CaptureFormat: Equatable, Sendable {
     public var timecodeFPS: Int         // nominal TC numbering (24, 25, 30...)
     public var isDropFrame: Bool
     public var name: String             // human-readable: "1080p25"
+    /// The source is RGB 4:4:4 delivered as full-range BGRA. HDMI cameras
+    /// usually send limited-range RGB — levels "auto" expands it to full.
+    public var isRGB444: Bool
 
     public init(width: Int, height: Int, frameRate: Double, timecodeFPS: Int,
-                isDropFrame: Bool = false, name: String) {
+                isDropFrame: Bool = false, name: String, isRGB444: Bool = false) {
         self.width = width
         self.height = height
         self.frameRate = frameRate
         self.timecodeFPS = timecodeFPS
         self.isDropFrame = isDropFrame
         self.name = name
+        self.isRGB444 = isRGB444
     }
 }
 
@@ -73,6 +77,8 @@ public struct Take: Identifiable, Equatable, Sendable {
 
 /// Take start/stop detection mode.
 public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
+    case vanc           // VANC trigger only (default: TC-run false positives —
+                        // e.g. Resolve playout runs TC — never start a take)
     case auto           // VANC trigger if recognized + running timecode
     case timecodeRun    // running TC only (camera in Rec Run)
     case manual         // in-app button only
@@ -84,17 +90,19 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var namingTemplate: String = "{prefix}_{cam}{roll}C{clip}_{postfix}"
     public var destinationPath: String = NSSearchPathForDirectoriesInDomains(
         .moviesDirectory, .userDomainMask, true).first.map { $0 + "/TakeShot" } ?? "~/Movies/TakeShot"
-    public var detectionMode: RecDetectionMode = .auto
-    public var startDebounceFrames: Int = 4
-    public var stopDebounceFrames: Int = 12
+    public var detectionMode: RecDetectionMode = .vanc
+    public var startDebounceFrames: Int = 0
+    public var stopDebounceFrames: Int = 0
     public var projectName: String = ""
     public var cameraLabel: String = "A"
     /// UI language: "en" (preferred), "ru", nil — system.
     /// Optional — so old saved settings decode without a migration.
     public var appLanguage: String?
-    /// Pre-roll in seconds: how many frames BEFORE the camera's record start to include.
-    /// Optional for the same reason; effective value is preRollSecondsEffective.
+    /// Pre-roll in seconds (legacy; superseded by preRollFrames).
     public var preRollSeconds: Double?
+    /// Pre-roll in frames: how many frames BEFORE the camera's record start to
+    /// include. nil — 5 (or a migrated legacy seconds value).
+    public var preRollFrames: Int?
     /// UI theme: "light" / "dark" / nil — system.
     public var appearance: String?
     /// Player backdrop color, hex "#RRGGBB"; nil — black.
@@ -125,16 +133,29 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var lutIntensity: Double?
     /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020".
     public var colorTagPreset: String?
-    /// Video level processing on pixels: nil/"auto" — leave alone,
-    /// "limited" — compress full→legal 16-235, "full" — stretch legal→0-255.
+    /// Input levels of the source signal: nil/"auto" — RGB 4:4:4 assumed
+    /// limited; "limited" (16-235) — expanded once to full-range BGRA;
+    /// "full" (0-255) — passed through (a playout device already set to Full
+    /// output levels). Legacy "off" is treated as "full".
     public var videoLevels: String?
     /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
     /// OFF on launch (no surprise audio on set).
     public var monitorVolume: Double?
-
+    /// Forced input display mode ("1080p25"…); nil — autodetect.
+    public var forcedInputMode: String?
+    /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
+    public var forcedInputRGB: Bool?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
+
+    /// Effective pre-roll in frames: explicit value, else migrated legacy
+    /// seconds (at 25 fps), else 5.
+    public var preRollFramesEffective: Int {
+        if let preRollFrames { return max(0, preRollFrames) }
+        if let preRollSeconds { return max(0, Int((preRollSeconds * 25).rounded())) }
+        return 5
+    }
 
     public init() {}
 
@@ -157,6 +178,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
             "{cam}{roll}C{clip}_{date}{postfix}": "{cam}{roll}C{clip}_{date6}{postfix}",
             "{cam}{roll}_{date}_C{clip}": "{cam}{roll}_{date4}{time4}_C{clip}",
         ]
+        for (old, new) in [("{date6}", "{yymmdd}"), ("{date4}", "{mmdd}"),
+                           ("{time4}", "{hhmm}"), ("{time6}", "{hhmmss}")] {
+            settings.namingTemplate =
+                settings.namingTemplate.replacingOccurrences(of: old, with: new)
+        }
         if let migrated = presetMigrations[settings.namingTemplate] {
             settings.namingTemplate = migrated
         }

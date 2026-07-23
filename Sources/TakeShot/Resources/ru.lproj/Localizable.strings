@@ -36,6 +36,7 @@
 "placeholders" = "Плейсхолдеры: %@";
 "settings_detection" = "Детекция дублей";
 "detection_mode" = "Режим";
+"mode_vanc" = "Только VANC-триггер";
 "mode_auto" = "Авто (VANC + таймкод)";
 "mode_timecode" = "Только бегущий таймкод";
 "mode_manual" = "Только вручную";
@@ -142,7 +143,7 @@
 
 /* Round 6 */
 "audio_panel_title" = "Аудиоканалы";
-"audio_panel_hint" = "Клик по каналу включает/выключает его запись. Приглушённые каналы в файл не пишутся.";
+"audio_panel_hint" = "Клик по каналу — вкл/выкл запись.";
 "channel_on_help" = "Пишется — клик исключит из файла";
 "channel_off_help" = "Отключён — клик вернёт канал в запись";
 "meters_click_help" = "Аудиоканалы — клик открывает крупную панель с dB и вкл/выкл каналов";
@@ -186,9 +187,10 @@
 
 /* Color tags */
 "color_tags" = "Цветовые теги видео";
-"video_levels" = "Уровни видео";
-"levels_limited" = "Limited (video)";
-"levels_full" = "Full";
+"video_levels" = "Уровни входа";
+"levels_limited" = "Limited (16-235) — расширять";
+"levels_full" = "Full (0-255) — как есть";
+"levels_hint" = "Что источник шлёт по проводу. Limited (например, HDMI камеры) один раз расширяется для корректного контраста; Full (например, плейаут-устройство с выходом Full) проходит без изменений. В файлы всегда пишется стандартный legal-range.";
 "color_tags_hint" = "Дефолт — Rec.709 nclc 1-1-1, limited: то, чего ждут 99% HD-пайплайнов. Настройка уровней полноценно заработает с форматами живого железа";
 
 "preset_arri35" = "ARRI Alexa 35";
@@ -207,7 +209,7 @@
 "reset_colors" = "Сбросить цвета";
 "reset_all" = "Сбросить все настройки";
 
-"levels_auto" = "Авто";
+"levels_auto" = "Авто (RGB-источник: limited)";
 "lut_intensity_label" = "Интенсивность";
 
 "multicam_toggle" = "Мультикам: захват всех камер сразу (в демо — вторая камера; на железе — все другие платы DeckLink)";
@@ -220,7 +222,7 @@
 "clear_data" = "Очистить";
 "cancel" = "Отмена";
 "clear_luts_confirm" = "Удалить все импортированные LUT? Действие необратимо.";
-"placeholders_legend" = "Поля: {prefix} {cam} {roll} {clip} {postfix}. Таймкод: {tc}. Даты: {date}=ГГГГ-ММ-ДД, {date6}=ГГММДД, {date4}=ММДД. Время: {time4}=ЧЧММ, {time6}=ЧЧММСС.";
+"placeholders_legend" = "Поля: {prefix} {cam} {roll} {clip} {postfix}. Таймкод: {tc}. Даты: {date}=YYYY-MM-DD, {yymmdd}, {mmdd}. Время: {hhmm}, {hhmmss}.";
 
 /* Take comments */
 "comment_help" = "Комментарий к дублю (сохраняется в CSV-журнал)";
@@ -236,3 +238,19 @@
 
 /* Audio monitor */
 "monitor_toggle" = "Мониторинг живого звука (первые два включённых канала; при запуске всегда выключен)";
+"monitor_mute_help" = "Мьют/анмьют прослушивания";
+"tc_menu_help" = "Клик: режим детекции тейков";
+"start_frames" = "Подтверждение старта (кадры)";
+"stop_frames" = "Подтверждение стопа (кадры)";
+"pre_roll_frames" = "Пре-ролл (кадры)";
+"lut_duplicate_title" = "LUT «%@» уже импортирован";
+"lut_duplicate_text" = "Выбери, что сделать с дубликатом.";
+"lut_replace" = "Заменить";
+"lut_keep_both" = "Оставить оба";
+"lut_skip" = "Пропустить";
+"input_mode" = "Формат входа";
+"input_mode_auto" = "Автоопределение";
+"input_mode_rgb" = "Сигнал RGB 4:4:4";
+"scope_parade" = "Парад";
+"scope_vector" = "Вектор";
+"scope_none_hint" = "Все скопы выключены";

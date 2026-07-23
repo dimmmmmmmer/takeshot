@@ -32,6 +32,24 @@ struct TakeShotApp: App {
         // window buttons over the content, no separate title-bar strip
         .windowStyle(.hiddenTitleBar)
 
+        // Scopes window: movable/resizable, opened from the player badge
+        Window("Scopes", id: "scopes") {
+            ScopesWindowView()
+                .environmentObject(controller)
+                .tint(controller.accentColor)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 980, height: 380)
+
+        // Audio channels window: big meters + record toggles, movable
+        Window("Audio Channels", id: "audio-channels") {
+            AudioChannelPanel(live: controller.live)
+                .environmentObject(controller)
+                .tint(controller.accentColor)
+                .preferredColorScheme(controller.colorScheme)
+        }
+        .windowResizability(.contentSize)
+
         // VANC packet diagnostics window (opened by a button from the main window)
         Window("VANC Monitor", id: "vanc-monitor") {
             VancMonitorView()
@@ -90,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard window.styleMask.contains(.titled) else { return }
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         window.titleVisibility = .hidden
         window.toolbar = nil
     }

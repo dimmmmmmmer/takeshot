@@ -57,9 +57,41 @@ struct ContentView: View {
     }
 }
 
+/// TC readout that updates every frame — isolated so only this text
+/// re-renders at frame rate (see LiveSignal).
+private struct LiveTimecodeText: View {
+    @ObservedObject var live: LiveSignal
+    let tint: Color
+
+    var body: some View {
+        Text(live.currentTimecode?.description ?? "--:--:--:--")
+            .font(.body)
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .frame(width: 96, alignment: .leading)
+    }
+}
+
+/// Playback position as timecode: file start TC + player time, at the file's fps.
+private struct PlaybackTimecodeText: View {
+    @EnvironmentObject private var controller: CaptureController
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(controller.playbackTimecodeText)
+            .font(.body)
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .frame(width: 96, alignment: .leading)
+            .onReceive(timer) { date in now = date } // re-render tick
+    }
+}
+
 /// Player card: TC, format, and the mode switch live right on it.
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         PreviewView()
@@ -74,12 +106,29 @@ struct PlayerArea: View {
             }
             .overlay(alignment: .topLeading) {
                 overlayBadge {
-                    Text(controller.currentTimecode?.description ?? "--:--:--:--")
-                        .font(.body)
-                        .monospacedDigit()
-                        .foregroundStyle(
-                            controller.isRecording && controller.viewerMode == .record
-                            ? Color.red : Color.white)
+                    if controller.viewerMode == .playback {
+                        PlaybackTimecodeText()
+                    } else {
+                        Menu {
+                            Picker(L("detection_mode"),
+                                   selection: $controller.settings.detectionMode) {
+                                Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
+                                Text(L("mode_auto")).tag(RecDetectionMode.auto)
+                                Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
+                                Text(L("mode_manual")).tag(RecDetectionMode.manual)
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                        } label: {
+                            LiveTimecodeText(
+                                live: controller.live,
+                                tint: controller.isRecording ? Color.red : Color.white)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help(L("tc_menu_help"))
+                    }
                 }
                 // always in the left corner; vertical inset under the window buttons
                 // is already reserved by the windowTopInset strip above the player
@@ -107,18 +156,33 @@ struct PlayerArea: View {
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 6) {
                     overlayBadge {
+                        Button {
+                            openWindow(id: "scopes")
+                        } label: {
+                            Image(systemName: "waveform.path.ecg.rectangle")
+                                .font(.system(size: 13))
+                                .foregroundStyle(controller.showScopes
+                                                 ? controller.accentColor : .white)
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("scopes_toggle"))
+                    }
+                    overlayBadge {
                         LUTMenu()
                     }
                     overlayBadge {
                         Group {
-                            if let format = controller.signalFormat {
+                            if controller.viewerMode == .playback,
+                               let info = controller.playbackFormatText {
+                                Text(info).monospacedDigit()
+                            } else if let format = controller.signalFormat {
                                 Text(Self.shortFormat(format)).monospacedDigit()
                             } else {
                                 Text(L("no_signal_short"))
                             }
                         }
                         .font(.callout)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.white.opacity(0.9))
                     }
                 }
                 .padding(8)
@@ -138,18 +202,6 @@ struct PlayerArea: View {
                     .buttonStyle(.plain)
                     .help(L("fullscreen"))
                     .padding(8)
-                }
-            }
-            .overlay {
-                if controller.showAudioPanel {
-                    AudioChannelPanel()
-                }
-            }
-            .overlay(alignment: .bottomLeading) {
-                if controller.showScopes {
-                    ScopesPanel()
-                        .padding(10)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
@@ -175,7 +227,9 @@ struct PlayerArea: View {
             .foregroundStyle(.white) // readable on any player background (incl. black)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+            .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
     }
 
     static func fpsText(_ fps: Double) -> String {
@@ -202,12 +256,12 @@ struct LUTMenu: View {
             HStack(spacing: 3) {
                 Image(systemName: "camera.filters")
                     .font(.system(size: 12))
-                if controller.settings.lutFileName != nil,
-                   controller.lutPreviewOn || controller.lutRecordOn {
-                    Circle()
-                        .fill(controller.accentColor)
-                        .frame(width: 5, height: 5)
-                }
+                Circle()
+                    .fill(controller.accentColor)
+                    .frame(width: 5, height: 5)
+                    .opacity(controller.settings.lutFileName != nil
+                             && (controller.lutPreviewOn || controller.lutRecordOn)
+                             ? 1 : 0)
             }
         }
         .buttonStyle(.plain)
@@ -504,17 +558,27 @@ struct MulticamGrid: View {
     var body: some View {
         let cols = Array(repeating: GridItem(.flexible(), spacing: 4), count: columns)
         LazyVGrid(columns: cols, spacing: 4) {
-            CameraTile(layer: controller.pipeline.displayLayer,
-                       label: controller.settings.cameraLabel,
-                       timecode: controller.currentTimecode,
-                       recording: controller.isRecording,
-                       background: controller.playerBackground)
+            MainCameraTile(live: controller.live)
             ForEach(controller.extraChannels) { channel in
                 CameraTileChannel(channel: channel,
                                   background: controller.playerBackground)
             }
         }
         .padding(4)
+    }
+}
+
+/// Main-camera tile: observes LiveSignal for TC so only the tile re-renders.
+private struct MainCameraTile: View {
+    @EnvironmentObject private var controller: CaptureController
+    @ObservedObject var live: LiveSignal
+
+    var body: some View {
+        CameraTile(layer: controller.pipeline.displayLayer,
+                   label: controller.settings.cameraLabel,
+                   timecode: live.currentTimecode,
+                   recording: controller.isRecording,
+                   background: controller.playerBackground)
     }
 }
 
@@ -532,7 +596,7 @@ private struct CameraTileChannel: View {
 }
 
 private struct CameraTile: View {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
     let label: String
     let timecode: Timecode?
     let recording: Bool
@@ -568,15 +632,10 @@ private struct CameraTile: View {
 
 /// AVSampleBufferDisplayLayer wrapper for the grid (module-public).
 struct SampleLayerView: NSViewRepresentable {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = .clear
-        view.layer = layer
-        return view
+        MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -612,15 +671,10 @@ struct LivePreviewContent: View {
 
 /// NSView wrapper around AVSampleBufferDisplayLayer.
 private struct DisplayLayerView: NSViewRepresentable {
-    let layer: AVSampleBufferDisplayLayer
+    let layer: MetalPreviewLayer
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        layer.videoGravity = .resizeAspect
-        layer.backgroundColor = .clear
-        view.layer = layer
-        return view
+        MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -655,67 +709,16 @@ struct BottomBarView: View {
 
                             NamingPresetMenu()
 
-                            Button {
-                                controller.toggleMulticam()
-                            } label: {
-                                Image(systemName: controller.multicamOn
-                                      ? "rectangle.split.2x1.fill"
-                                      : "rectangle.split.2x1")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(controller.multicamOn
-                                                     ? controller.accentColor : .primary)
+                            if controller.viewerMode == .record {
+                                FooterMonitorButton()
                             }
-                            .help(L("multicam_toggle"))
-
-                            Button {
-                                controller.grabFrame()
-                            } label: {
-                                Image(systemName: "camera")
-                                    .font(.system(size: 15))
-                            }
-                            .disabled(!controller.isCapturing && controller.playbackURL == nil)
-                            .help(L("grab_frame"))
-
-                            Button {
-                                withAnimation(.easeOut(duration: 0.15)) {
-                                    controller.showScopes.toggle()
-                                }
-                            } label: {
-                                Image(systemName: "waveform.path.ecg.rectangle")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(controller.showScopes
-                                                     ? controller.accentColor : .primary)
-                            }
-                            .help(L("scopes_toggle"))
-
-                            Button {
-                                controller.monitorOn.toggle()
-                            } label: {
-                                Image(systemName: controller.monitorOn
-                                      ? "speaker.wave.2.fill" : "speaker.slash")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(controller.monitorOn
-                                                     ? controller.accentColor : .primary)
-                            }
-                            .disabled(!controller.isCapturing)
-                            .help(L("monitor_toggle"))
                         }
                         .buttonStyle(.borderless)
 
                         Spacer(minLength: 8)
 
-                        if controller.isCapturing, !controller.audioLevels.isEmpty {
-                            Button {
-                                controller.showAudioPanel.toggle()
-                            } label: {
-                                AudioMeterView(
-                                    levels: controller.audioLevels,
-                                    enabled: (0..<controller.audioLevels.count)
-                                        .map { controller.isChannelEnabled($0) })
-                                    .frame(height: 44)
-                            }
-                            .buttonStyle(.plain)
-                            .help(L("meters_click_help"))
+                        if controller.isCapturing {
+                            FooterAudioMeters(live: controller.live)
                         }
 
                         Spacer(minLength: 40)
@@ -726,10 +729,66 @@ struct BottomBarView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 RecordButton()
+                    .overlay(alignment: .center) {
+                        Button {
+                            controller.grabFrame()
+                        } label: {
+                            Image(systemName: "camera")
+                                .font(.system(size: 15))
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!controller.isCapturing && controller.playbackURL == nil)
+                        .help(L("grab_frame"))
+                        .offset(x: 52)
+                    }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+/// Footer speaker: click opens monitoring on/off + volume in one popover.
+private struct FooterMonitorButton: View {
+    @EnvironmentObject private var controller: CaptureController
+    @State private var showPopover = false
+
+    var body: some View {
+        Button {
+            showPopover.toggle()
+        } label: {
+            Image(systemName: controller.monitorOn
+                  ? (controller.monitorVolume == 0
+                     ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                  : "speaker.slash")
+                .font(.system(size: 15))
+                .foregroundStyle(controller.monitorOn
+                                 ? controller.accentColor : .primary)
+                .frame(width: 22)
+        }
+        .disabled(!controller.isCapturing)
+        .help(L("monitor_toggle"))
+        .popover(isPresented: $showPopover, arrowEdge: .top) {
+            HStack(spacing: 10) {
+                Button {
+                    controller.monitorOn.toggle()
+                } label: {
+                    Image(systemName: controller.monitorOn
+                          ? "speaker.wave.2.fill" : "speaker.slash")
+                        .foregroundStyle(controller.monitorOn
+                                         ? controller.accentColor : .secondary)
+                        .frame(width: 20)
+                }
+                .buttonStyle(.plain)
+                .help(L("monitor_toggle"))
+                Slider(value: Binding(
+                    get: { controller.monitorVolume },
+                    set: { controller.monitorVolume = $0 }), in: 0...1)
+                    .frame(width: 140)
+                    .disabled(!controller.monitorOn)
+            }
+            .padding(12)
+        }
     }
 }
 
@@ -928,5 +987,29 @@ struct NamingFieldsView: View {
             }
         }
         .fixedSize()
+    }
+}
+
+/// Footer audio meters — observe LiveSignal so the ~25/s level updates
+/// re-render only this small view, not the whole footer.
+private struct FooterAudioMeters: View {
+    @EnvironmentObject private var controller: CaptureController
+    @ObservedObject var live: LiveSignal
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        if !live.audioLevels.isEmpty {
+            Button {
+                openWindow(id: "audio-channels")
+            } label: {
+                AudioMeterView(
+                    levels: live.audioLevels,
+                    enabled: (0..<live.audioLevels.count)
+                        .map { controller.isChannelEnabled($0) })
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
+            .help(L("meters_click_help"))
+        }
     }
 }

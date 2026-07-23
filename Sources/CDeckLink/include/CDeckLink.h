@@ -16,6 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) double frameRate;      // actual: 23.976, 25, 29.97...
 @property (nonatomic) int timecodeFPS;       // nominal TC numbering: 24, 25, 30...
 @property (nonatomic, copy) NSString *modeName; // "1080p25"
+/// The source is RGB 4:4:4 (frames arrive as BGRA); HDMI cameras usually send
+/// limited-range RGB, which needs level expansion for correct contrast.
+@property (nonatomic) BOOL isRGB444;
 @end
 
 /// Access to the DeckLink API. If the project is built without the SDK headers
@@ -28,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Subscribe to hot-plug: handler is called when any DeckLink device is
 /// connected/disconnected (on the DeckLink thread). Calling again replaces the handler.
 + (void)startWatchingDevicesWithHandler:(void (^)(void))handler;
+/// Input display-mode names of a device ("1080p25", "2160p25", …).
++ (NSArray<NSString *> *)displayModeNamesForDevice:(NSString *)deviceID;
 @end
 
 /// A SMPTE 291M ancillary packet from the frame's VANC region.
@@ -66,6 +71,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// A capture session from a single device.
 @interface CDLCapture : NSObject
 @property (nonatomic, weak, nullable) id<CDLCaptureDelegate> delegate;
+/// Force a fixed input mode by display-mode name (see CDLDeviceManager
+/// displayModeNamesForDevice:). nil — autodetect. Set before start.
+@property (nonatomic, copy, nullable) NSString *forcedModeName;
+/// With a forced mode: treat the signal as RGB 4:4:4 (BGRA) instead of YUV.
+@property (nonatomic) BOOL forcedRGB;
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;

@@ -1,8 +1,10 @@
+import Accelerate
 import AVFoundation
 import CoreImage
 import CoreMedia
 import CoreVideo
 import Foundation
+import os.log
 
 /// Frame pipeline: takes backend callbacks (from capture threads), runs them
 /// through RecDetector, writes takes via TakeWriter, and feeds preview. All work
@@ -44,13 +46,13 @@ public final class CapturePipeline: @unchecked Sendable {
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
 
-    public let displayLayer = AVSampleBufferDisplayLayer()
+    public let displayLayer = MetalPreviewLayer()
     /// Second layer — for output to an external monitor. Frames are mirrored
     /// only when externalMirrorEnabled == true (the copy is cheap).
-    public let externalLayer = AVSampleBufferDisplayLayer()
+    public let externalLayer = MetalPreviewLayer()
     public var externalMirrorEnabled = false
     /// Third layer — the live fullscreen window (player fills the screen).
-    public let fullscreenLayer = AVSampleBufferDisplayLayer()
+    public let fullscreenLayer = MetalPreviewLayer()
     public var fullscreenMirrorEnabled = false
 
     // LUT (all access on queue)
@@ -61,12 +63,20 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lutRecord = false
     private var lutIntensity: Double = 1
     private let lutBufferPool = PixelBufferPool()
-    /// Level processing ("limited"/"full"/nil) — a pixel remap.
+    /// Source input levels ("limited"/"full"; nil — auto by signal type).
     private var levelsMode: String?
 
-    /// Video-level processing mode applied to pixels.
+    /// Input levels of the source signal: nil/"auto" — guess from the signal
+    /// (RGB 4:4:4 → limited), "limited" (16-235) — expand once to full,
+    /// "full" (0-255) — pass through (legacy "off" means the same).
     public func setVideoLevels(_ mode: String?) {
-        queue.async { self.levelsMode = (mode == "auto") ? nil : mode }
+        queue.async {
+            switch mode {
+            case "auto", nil: self.levelsMode = nil
+            case "off": self.levelsMode = "full" // legacy value: pass through
+            default: self.levelsMode = mode
+            }
+        }
     }
 
     /// Set the LUT (nil — off), apply modes, and intensity (0…1).
@@ -103,6 +113,8 @@ public final class CapturePipeline: @unchecked Sendable {
         queue.async { self.monitorEnabled = on }
     }
 
+    public static let levelsLog = OSLog(subsystem: "com.takeshot.app", category: "levels")
+
     private let queue = DispatchQueue(label: "takeshot.pipeline", qos: .userInitiated)
 
     // pipeline state — queue only
@@ -118,7 +130,6 @@ public final class CapturePipeline: @unchecked Sendable {
     private var takeScene = ""
     private var takeRoll = ""
     private var takeNumber = 0
-    private var videoFormatDescription: CMVideoFormatDescription?
     /// One buffered frame awaiting a possible take start.
     private struct PreRollFrame {
         let index: Int
@@ -178,7 +189,6 @@ public final class CapturePipeline: @unchecked Sendable {
             self.detector.reset()
             self.format = nil
             self.lastTimecode = nil
-            self.videoFormatDescription = nil
             self.preRollBuffer.removeAll()
             self.vancStats.removeAll()
             self.vancStatsLastPublish = 0
@@ -195,9 +205,11 @@ public final class CapturePipeline: @unchecked Sendable {
 
     public func handleFormat(_ newFormat: CaptureFormat) {
         queue.async {
+            // a re-announced identical format must not reset detection state:
+            // it would wipe the pre-roll buffer and restart REC debounce mid-take
+            guard newFormat != self.format else { return }
             self.format = newFormat
             self.detector.reset()
-            self.videoFormatDescription = nil
             self.preRollBuffer.removeAll()
             DispatchQueue.main.async { self.onFormatChanged?(newFormat) }
         }
@@ -269,6 +281,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Tag a frame with colorimetry from settings if the backend didn't report it.
     /// Without tags the preview layer and the player interpret color differently.
     /// The values come from ColorTags — the same table the recorded file uses.
+    /// NOTE: the buffer handed to the writer must keep standard tags — the
+    /// encoder color-converts pixels when buffer tags mismatch the file tags
+    /// (verified on device: a display-gamma tag here darkened recorded shadows).
     private func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                     nil) == nil else { return }
@@ -292,22 +307,41 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         lastTimecode = timecode
 
+        // input levels: the setting states what the SOURCE carries on the wire.
+        // "limited" (16-235 RGB) is expanded once to the full-range BGRA the
+        // rest of the pipeline assumes; "full" passes through untouched (e.g.
+        // a playout device already set to Full output levels). auto (nil)
+        // assumes limited for RGB 4:4:4 HDMI (CTA-861 default). Conversion to
+        // legal-range YUV in the recorded file is the encoder's job — never
+        // done on pixels here, so it can't be applied twice.
+        let inputLevels = levelsMode ?? (format.isRGB444 ? "limited" : nil)
+        // one log line per decision change — settles "is expansion active" without
+        // guessing (a stale-settings app instance once recorded an unexpanded take)
+        if lastLoggedLevels != (inputLevels ?? "passthrough") {
+            lastLoggedLevels = inputLevels ?? "passthrough"
+            os_log("levels: mode=%{public}s rgb444=%{public}d effective=%{public}s",
+                   log: Self.levelsLog, type: .default,
+                   levelsMode ?? "auto", format.isRGB444 ? 1 : 0,
+                   inputLevels ?? "passthrough")
+        }
+        let leveled = inputLevels == "limited"
+            ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
+            : pixelBuffer
+
         // while not recording — accumulate frames into the pre-roll buffer (current
         // frame included): when a take starts, frames from the camera's actual record
-        // start (lost to debounce) plus the configured lead seconds are pulled from it
+        // start (lost to debounce) plus the configured lead seconds are pulled from it.
+        // buffered AFTER the levels stage — otherwise a take starts with raw
+        // pre-roll frames and jumps in contrast when live leveled frames follow
         if writer == nil {
             preRollBuffer.append(PreRollFrame(index: frameIndex,
-                                              pixelBuffer: pixelBuffer, pts: pts))
+                                              pixelBuffer: leveled, pts: pts))
             let capacity = preRollCapacity
             if preRollBuffer.count > capacity {
                 preRollBuffer.removeFirst(preRollBuffer.count - capacity)
             }
         }
 
-        // levels first (pixel remap), shared by preview and recording —
-        // it's part of the signal, not a "look" like the LUT
-        let leveled = levelsMode != nil ? (applyLevels(to: pixelBuffer) ?? pixelBuffer)
-                                        : pixelBuffer
         // LUT: preview may have the LUT while recording stays clean (or vice versa)
         let displayBuffer = lutPreview
             ? (applyLUT(to: leveled) ?? leveled) : leveled
@@ -318,8 +352,12 @@ public final class CapturePipeline: @unchecked Sendable {
         var startedThisFrame = false
         let mode = config.settings.detectionMode
         if mode != .manual {
-            let sample = FrameSample(index: frameIndex, timecode: timecode,
-                                     vancTrigger: mode == .auto ? vancTrigger : nil)
+            // .vanc: TC is hidden from the detector so running timecode alone
+            // (e.g. Resolve playout) can never start a take — VANC triggers only
+            let sample = FrameSample(
+                index: frameIndex,
+                timecode: mode == .vanc ? nil : timecode,
+                vancTrigger: (mode == .auto || mode == .vanc) ? vancTrigger : nil)
             if let event = detector.process(sample) {
                 switch event {
                 case .started(let atIndex, let startTC):
@@ -337,7 +375,7 @@ public final class CapturePipeline: @unchecked Sendable {
             if droppedFrames == 1 || droppedFrames % 100 == 0 {
                 let count = droppedFrames
                 DispatchQueue.main.async {
-                    self.onError?("Dropped \(count) recording frame(s) — disk too slow")
+                    self.onError?("Dropped \(count) recording frame(s) — encoder/disk can't keep up")
                 }
             }
         }
@@ -359,6 +397,8 @@ public final class CapturePipeline: @unchecked Sendable {
         DispatchQueue.main.async { self.onTimecode?(timecode) }
     }
 
+    private var lastLoggedLevels = ""
+
     private var frameGrabHandler: ((Data?) -> Void)?
 
     /// Grab the next displayed frame as PNG (WYSIWYG with levels/preview LUT).
@@ -369,9 +409,20 @@ public final class CapturePipeline: @unchecked Sendable {
 
     private static func pngData(from pixelBuffer: CVPixelBuffer,
                                 ciContext: CIContext) -> Data? {
-        let image = CIImage(cvPixelBuffer: pixelBuffer)
-        let space = CGColorSpace(name: CGColorSpace.itur_709)
+        // identity conversion, PNG tagged with the same ICC "HDTV" (Rec.709)
+        // space the preview and the ProRes decoder use — the still looks
+        // exactly like the player in any color-managed viewer
+        let attachments = [
+            kCVImageBufferColorPrimariesKey: kCVImageBufferColorPrimaries_ITU_R_709_2,
+            kCVImageBufferTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_709_2,
+            kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+        ] as CFDictionary
+        let space = CVImageBufferCreateColorSpaceFromAttachments(attachments)?
+            .takeRetainedValue()
+            ?? CGColorSpace(name: CGColorSpace.itur_709)
             ?? CGColorSpaceCreateDeviceRGB()
+        let image = CIImage(cvPixelBuffer: pixelBuffer,
+                            options: [.colorSpace: space])
         return ciContext.pngRepresentation(of: image, format: .RGBA8,
                                            colorSpace: space)
     }
@@ -398,10 +449,9 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
-    /// Pre-roll frame count at the current format.
+    /// Pre-roll frame count (a direct frames setting, fps-independent).
     private var preRollFrames: Int {
-        let fps = format?.frameRate ?? 25
-        return Int((config.settings.preRollSecondsEffective * fps).rounded())
+        config.settings.preRollFramesEffective
     }
 
     /// Buffer capacity: pre-roll + detection latency + slack, but with a memory
@@ -494,7 +544,9 @@ public final class CapturePipeline: @unchecked Sendable {
                 let frame = lutRecord
                     ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
                     : buffered.pixelBuffer
-                writer.append(pixelBuffer: frame, pts: buffered.pts)
+                // the burst outruns the encoder queue — wait instead of dropping
+                // (the "Dropped 1 frame" toast on every take start)
+                writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts)
             }
             preRollBuffer.removeAll()
 
@@ -568,33 +620,39 @@ public final class CapturePipeline: @unchecked Sendable {
         return outBuffer
     }
 
-    private let levelsBufferPool = PixelBufferPool()
+    /// Expansion table 16-235 → 0-255 for limited-range RGB inputs. Defined on
+    /// gamma-encoded code values, so it must run on raw bytes — a CIColorMatrix
+    /// in CI's linear working space crushes shadows and dulls highlights.
+    private static let levelsExpandTable: [UInt8] = (0...255).map {
+        UInt8(min(255, max(0, Int((Double($0) - 16) * 255 / 219 + 0.5))))
+    }
+    private static let levelsTableIdentity: [UInt8] = (0...255).map { UInt8($0) }
 
-    /// Pixel-level remap: "limited" compresses full(0-255)→legal(16-235),
-    /// "full" stretches legal→full. Uses CIColorMatrix (scale+bias).
-    private func applyLevels(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-        guard let mode = levelsMode else { return nil }
-        let scale: CGFloat, bias: CGFloat
-        switch mode {
-        case "limited": scale = 219.0 / 255.0; bias = 16.0 / 255.0   // full -> legal
-        case "full":    scale = 255.0 / 219.0; bias = -16.0 / 219.0   // legal -> full
-        default: return nil
+    /// Expand limited-range (16-235) RGB to full range, in place (vImage byte
+    /// lookup — no CoreImage pass, no extra buffer). BGRA only: this is the
+    /// single levels operation in the pipeline; the encoder handles full-RGB →
+    /// legal-YUV for the file, and YUV sources are legal-range by definition.
+    private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA
+        else { return nil }
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+        var image = vImage_Buffer(
+            data: base,
+            height: vImagePixelCount(CVPixelBufferGetHeight(pixelBuffer)),
+            width: vImagePixelCount(CVPixelBufferGetWidth(pixelBuffer)),
+            rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
+        // byte order is B G R A: remap the three color channels, keep alpha
+        let error = Self.levelsExpandTable.withUnsafeBufferPointer { lut in
+            Self.levelsTableIdentity.withUnsafeBufferPointer { identity in
+                vImageTableLookUp_ARGB8888(&image, &image,
+                                           lut.baseAddress!, lut.baseAddress!,
+                                           lut.baseAddress!, identity.baseAddress!,
+                                           vImage_Flags(kvImageNoFlags))
+            }
         }
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        guard let outBuffer = levelsBufferPool.buffer(width: width, height: height),
-              let matrix = CIFilter(name: "CIColorMatrix") else { return nil }
-        let input = CIImage(cvPixelBuffer: pixelBuffer)
-        matrix.setValue(input, forKey: kCIInputImageKey)
-        matrix.setValue(CIVector(x: scale, y: 0, z: 0, w: 0), forKey: "inputRVector")
-        matrix.setValue(CIVector(x: 0, y: scale, z: 0, w: 0), forKey: "inputGVector")
-        matrix.setValue(CIVector(x: 0, y: 0, z: scale, w: 0), forKey: "inputBVector")
-        matrix.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
-        guard let output = matrix.outputImage else { return nil }
-        ciContext.render(output, to: outBuffer, bounds: input.extent,
-                         colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
-        tagColorIfUntagged(outBuffer)
-        return outBuffer
+        return error == kvImageNoError ? pixelBuffer : nil
     }
 
     /// Blend the original and LUT'd frame by intensity (cross-dissolve).
@@ -609,54 +667,8 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private func enqueuePreview(pixelBuffer: CVPixelBuffer) {
-        if videoFormatDescription.map({
-            !CMVideoFormatDescriptionMatchesImageBuffer($0, imageBuffer: pixelBuffer)
-        }) ?? true {
-            var formatDescription: CMVideoFormatDescription?
-            CMVideoFormatDescriptionCreateForImageBuffer(
-                allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer,
-                formatDescriptionOut: &formatDescription)
-            videoFormatDescription = formatDescription
-        }
-        guard let videoFormatDescription else { return }
-
-        var timing = CMSampleTimingInfo(
-            duration: .invalid,
-            presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
-            decodeTimeStamp: .invalid)
-        var sampleBuffer: CMSampleBuffer?
-        guard CMSampleBufferCreateReadyWithImageBuffer(
-            allocator: kCFAllocatorDefault, imageBuffer: pixelBuffer,
-            formatDescription: videoFormatDescription, sampleTiming: &timing,
-            sampleBufferOut: &sampleBuffer) == noErr, let sampleBuffer else { return }
-
-        // display immediately, not tied to the player clock
-        if let attachments = CMSampleBufferGetSampleAttachmentsArray(
-            sampleBuffer, createIfNecessary: true) as? [CFMutableDictionary],
-           let first = attachments.first {
-            CFDictionarySetValue(
-                first,
-                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
-                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
-        }
-
-        if displayLayer.status == .failed {
-            displayLayer.flush()
-        }
-        displayLayer.enqueue(sampleBuffer)
-
-        for (enabled, layer) in [(externalMirrorEnabled, externalLayer),
-                                 (fullscreenMirrorEnabled, fullscreenLayer)] where enabled {
-            var copy: CMSampleBuffer?
-            CMSampleBufferCreateCopy(allocator: kCFAllocatorDefault,
-                                     sampleBuffer: sampleBuffer,
-                                     sampleBufferOut: &copy)
-            if let copy {
-                if layer.status == .failed {
-                    layer.flush()
-                }
-                layer.enqueue(copy)
-            }
-        }
+        displayLayer.present(pixelBuffer)
+        if externalMirrorEnabled { externalLayer.present(pixelBuffer) }
+        if fullscreenMirrorEnabled { fullscreenLayer.present(pixelBuffer) }
     }
 }

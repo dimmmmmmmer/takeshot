@@ -73,7 +73,9 @@ struct ScopeAnalyzerTests {
         CVPixelBufferUnlockBaseAddress(buffer, [])
 
         let data = try #require(ScopeAnalyzer.analyze(buffer))
-        #expect(data.histY.firstIndex(of: data.histY.max()!) == 180)
+        // luma is normalized to full range like the BGRA path:
+        // video-range 180 → (180-16)*298>>8 = 190
+        #expect(data.histY.firstIndex(of: data.histY.max()!) == 190)
         // neutral chroma → R≈G≈B (video-range 180 → ~191 full-range)
         let rPeak = data.histR.firstIndex(of: data.histR.max()!)!
         let gPeak = data.histG.firstIndex(of: data.histG.max()!)!
@@ -81,9 +83,11 @@ struct ScopeAnalyzerTests {
     }
 
     @Test func unsupportedFormatReturnsNil() {
+        // 420v is supported now (playback/preview frames) — use a format the
+        // analyzer genuinely does not handle
         var pb: CVPixelBuffer?
         CVPixelBufferCreate(kCFAllocatorDefault, 64, 64,
-                            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                            kCVPixelFormatType_OneComponent8,
                             nil, &pb)
         #expect(ScopeAnalyzer.analyze(pb!) == nil)
     }

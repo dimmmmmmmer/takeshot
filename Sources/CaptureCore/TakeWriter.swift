@@ -11,6 +11,7 @@ public final class TakeWriter {
         case cannotCreateWriter(Error)
         case notWritable(AVAssetWriter.Status, Error?)
         case timecodeTrackFailed
+        case emptyTake
 
         public var errorDescription: String? {
             switch self {
@@ -21,6 +22,8 @@ public final class TakeWriter {
                 return "Writer failed: \(reason)"
             case .timecodeTrackFailed:
                 return "Failed to create timecode track"
+            case .emptyTake:
+                return "Take contained no video frames"
             }
         }
     }
@@ -172,6 +175,9 @@ public final class TakeWriter {
     /// acceptable during live capture; the caller keeps the drop counter.
     @discardableResult
     public func append(pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
+        // a duplicate/backwards PTS puts AVAssetWriter into .failed permanently —
+        // dropping the frame keeps the take alive if the backend misdelivers PTS
+        if lastPTS.isValid, pts <= lastPTS { return false }
         startSessionIfNeeded(at: pts)
         guard videoInput.isReadyForMoreMediaData else { return false }
         guard pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: pts) else {
@@ -182,6 +188,20 @@ public final class TakeWriter {
         return true
     }
 
+    /// A buffered (pre-roll) frame: unlike live frames these arrive in a burst
+    /// that outruns the encoder queue, so wait briefly for readiness instead of
+    /// dropping — they are historical frames, timing is not critical.
+    @discardableResult
+    public func appendBuffered(pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
+        var waitedMs = 0
+        while !videoInput.isReadyForMoreMediaData, writer.status == .writing,
+              waitedMs < 500 {
+            usleep(2000)
+            waitedMs += 2
+        }
+        return append(pixelBuffer: pixelBuffer, pts: pts)
+    }
+
     /// PCM audio from the capture board. The input is already created in init (before startWriting).
     public func append(audioSampleBuffer: CMSampleBuffer) {
         guard sessionStarted, let audioInput, audioInput.isReadyForMoreMediaData else { return }
@@ -190,6 +210,12 @@ public final class TakeWriter {
 
     /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
+        // finishing with zero samples fails inside AVAssetWriter (-11800) and
+        // leaves a 0-byte file — cancel and report a meaningful error instead
+        guard appendedFrames > 0 else {
+            cancel()
+            throw WriterError.emptyTake
+        }
         if let timecodeInput, let fdesc = timecodeFormatDescription,
            let tc = startTimecode, sessionStarted {
             appendTimecodeSample(input: timecodeInput, formatDescription: fdesc, timecode: tc)
