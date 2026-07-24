@@ -60,8 +60,14 @@ public final class CapturePipeline: @unchecked Sendable {
         layer.letterboxColor = sinkLetterbox
         displaySinks.add(layer)
         displaySinksLock.unlock()
-        // show the current frame right away — a paused/idle signal won't push one
-        if let buffer = currentPreviewBuffer() { layer.present(buffer) }
+        // show the current frame right away — a paused/idle signal won't push
+        // one; with no signal, blank the surface instead of letting the frame
+        // of the previous source (playback) stick around
+        if let buffer = currentPreviewBuffer() {
+            layer.present(buffer)
+        } else {
+            layer.clearToBlack()
+        }
     }
 
     public func removeDisplaySink(_ layer: MetalPreviewLayer) {

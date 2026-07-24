@@ -56,8 +56,9 @@ private struct TakesSection: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
                 .menuIndicator(.hidden)
+                .controlSize(.small)
                 .fixedSize()
                 .disabled(controller.takes.isEmpty)
                 .help(L("export_menu_help"))
