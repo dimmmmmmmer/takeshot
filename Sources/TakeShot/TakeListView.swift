@@ -33,7 +33,7 @@ private struct TakesSection: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(L("takes"))
                 .font(.headline)
-                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
                 .padding(.top, 8)
             HStack(spacing: 10) {
                 Button {
@@ -225,7 +225,7 @@ private struct OtherContentSection: View {
             Text(L("other_content"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
                 .padding(.top, 6)
             HStack(spacing: 10) {
                 Spacer()

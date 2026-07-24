@@ -878,9 +878,11 @@ struct ViewerSurface: NSViewRepresentable {
                 layer.clearToBlack()
             case .live:
                 pipeline = controller.pipeline
+                layer.debugTag = "viewer-live"
                 controller.pipeline.addDisplaySink(layer)
             case .playback:
                 tap = controller.playbackTap
+                layer.debugTag = "viewer-playback"
                 controller.playbackTap.addSink(layer)
             case .raw:
                 raw = controller.rawPlayer
@@ -933,6 +935,7 @@ struct LivePreviewLayerView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let layer = MetalPreviewLayer()
+        layer.debugTag = "live-mount"
         pipeline.addDisplaySink(layer)
         context.coordinator.pipeline = pipeline
         context.coordinator.layer = layer

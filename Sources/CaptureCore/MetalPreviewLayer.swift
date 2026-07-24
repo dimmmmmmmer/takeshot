@@ -1,4 +1,5 @@
 import CoreImage
+import os.log
 import CoreVideo
 import Metal
 import QuartzCore
@@ -20,6 +21,10 @@ public final class MetalPreviewLayer: CAMetalLayer {
     private var lastBuffer: CVPixelBuffer?
     /// Aspect-fit letterbox color (over the player backdrop).
     public var letterboxColor = CIColor(red: 0, green: 0, blue: 0)
+    /// When set, the center pixel of every ~50th presented frame goes to the
+    /// unified log — parity debugging between surfaces (rec vs playback).
+    public var debugTag: String?
+    private var presentCount = 0
 
     public override init() {
         super.init()
@@ -94,6 +99,25 @@ public final class MetalPreviewLayer: CAMetalLayer {
         renderLock.lock()
         defer { renderLock.unlock() }
         lastBuffer = pixelBuffer
+        if let debugTag {
+            presentCount += 1
+            if presentCount % 50 == 1,
+               CVPixelBufferGetPixelFormatType(pixelBuffer)
+                   == kCVPixelFormatType_32BGRA {
+                CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+                if let base = CVPixelBufferGetBaseAddress(pixelBuffer) {
+                    let w = CVPixelBufferGetWidth(pixelBuffer)
+                    let h = CVPixelBufferGetHeight(pixelBuffer)
+                    let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
+                    let p = base.assumingMemoryBound(to: UInt8.self)
+                        + (h / 2) * bpr + (w / 2) * 4
+                    os_log("probe %{public}s %dx%d center RGB=(%d,%d,%d)",
+                           log: CapturePipeline.levelsLog, type: .default,
+                           debugTag, w, h, p[2], p[1], p[0])
+                }
+                CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+            }
+        }
         let size = drawableSize
         guard size.width > 1, size.height > 1 else { return }
         guard let drawable = nextDrawable() else { return }
