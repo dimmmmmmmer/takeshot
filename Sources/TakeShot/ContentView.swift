@@ -104,8 +104,88 @@ struct PlayerArea: View {
                         .strokeBorder(Color.red.opacity(0.85), lineWidth: 3)
                 }
             }
+            .playerTopBadges()
+            .overlay(alignment: .bottomTrailing) {
+                // player fullscreen — bottom-right (in playback this button is in the transport)
+                if controller.viewerMode == .record {
+                    Button {
+                        controller.toggleLiveFullscreen()
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 13))
+                            .padding(6)
+                            .background(.black.opacity(0.45),
+                                        in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("fullscreen"))
+                    .padding(8)
+                }
+            }
+            .overlay {
+                if controller.showAudioPanel {
+                    AudioChannelPanel(live: controller.live)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if controller.showScopesOverlay, !controller.scopesWindowOpen {
+                    ScopesPanel(live: controller.live, singleScope: true)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(.white.opacity(0.12)))
+                        .frame(maxWidth: 860, maxHeight: 320)
+                        .padding(10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let error = controller.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let notice = controller.lastNotice {
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .lineLimit(2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: controller.lastError)
+            .animation(.easeOut(duration: 0.2), value: controller.lastNotice)
+            .padding(.horizontal, 12)
+    }
+
+    static func fpsText(_ fps: Double) -> String { playerFPSText(fps) }
+
+    static func shortFormat(_ format: CaptureFormat) -> String {
+        playerShortFormat(format)
+    }
+}
+
+/// Top badges over the player: TC menu (left), mode switch + compare (center),
+/// scopes/LUT/format (right). Shared by the main window and the fullscreen
+/// windows (which hide the mode switch).
+struct PlayerTopBadgesModifier: ViewModifier {
+    @EnvironmentObject private var controller: CaptureController
+    var showsModeSwitch = true
+
+    func body(content: Content) -> some View {
+        content
             .overlay(alignment: .topLeading) {
-                overlayBadge {
+                playerOverlayBadge {
                     Menu {
                         Picker(L("detection_mode"),
                                selection: $controller.settings.detectionMode) {
@@ -158,14 +238,16 @@ struct PlayerArea: View {
             }
             .overlay(alignment: .top) {
                 VStack(spacing: 4) {
-                    Picker("", selection: $controller.viewerMode) {
-                        Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
-                        Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+                    if showsModeSwitch {
+                        Picker("", selection: $controller.viewerMode) {
+                            Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
+                            Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 190)
+                        .labelsHidden()
+                        .controlSize(.small)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 190)
-                    .labelsHidden()
-                    .controlSize(.small)
 
                     if (controller.viewerMode == .playback
                         && controller.playbackURL != nil)
@@ -178,7 +260,7 @@ struct PlayerArea: View {
             }
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 6) {
-                    overlayBadge {
+                    playerOverlayBadge {
                         Button {
                             controller.showScopesOverlay.toggle()
                         } label: {
@@ -190,10 +272,10 @@ struct PlayerArea: View {
                         .buttonStyle(.plain)
                         .help(L("scopes_toggle"))
                     }
-                    overlayBadge {
+                    playerOverlayBadge {
                         LUTMenu()
                     }
-                    overlayBadge {
+                    playerOverlayBadge {
                         Menu {
                             Picker(L("input_mode"), selection: Binding(
                                 get: { controller.settings.forcedInputMode ?? "auto" },
@@ -218,7 +300,7 @@ struct PlayerArea: View {
                                    let info = controller.playbackFormatText {
                                     Text(info).monospacedDigit()
                                 } else if let format = controller.signalFormat {
-                                    Text(Self.shortFormat(format)).monospacedDigit()
+                                    Text(playerShortFormat(format)).monospacedDigit()
                                 } else {
                                     Text(L("no_signal_short"))
                                 }
@@ -234,88 +316,34 @@ struct PlayerArea: View {
                 }
                 .padding(8)
             }
-            .overlay(alignment: .bottomTrailing) {
-                // player fullscreen — bottom-right (in playback this button is in the transport)
-                if controller.viewerMode == .record {
-                    Button {
-                        controller.toggleLiveFullscreen()
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 13))
-                            .padding(6)
-                            .background(.black.opacity(0.45),
-                                        in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(.plain)
-                    .help(L("fullscreen"))
-                    .padding(8)
-                }
-            }
-            .overlay {
-                if controller.showAudioPanel {
-                    AudioChannelPanel(live: controller.live)
-                }
-            }
-            .overlay(alignment: .bottomLeading) {
-                if controller.showScopesOverlay, !controller.scopesWindowOpen {
-                    ScopesPanel(live: controller.live)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.white.opacity(0.12)))
-                        .frame(maxWidth: 860, maxHeight: 320)
-                        .padding(10)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if let error = controller.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .lineLimit(2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 10)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else if let notice = controller.lastNotice {
-                    Text(notice)
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                        .lineLimit(2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 10)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.easeOut(duration: 0.2), value: controller.lastError)
-            .animation(.easeOut(duration: 0.2), value: controller.lastNotice)
-            .padding(.horizontal, 12)
     }
+}
 
-    private func overlayBadge(@ViewBuilder content: () -> some View) -> some View {
-        content()
-            .foregroundStyle(.white) // readable on any player background (incl. black)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+extension View {
+    func playerTopBadges(showsModeSwitch: Bool = true) -> some View {
+        modifier(PlayerTopBadgesModifier(showsModeSwitch: showsModeSwitch))
     }
+}
 
-    static func fpsText(_ fps: Double) -> String {
-        fps.truncatingRemainder(dividingBy: 1) == 0
-            ? String(Int(fps))
-            : String(format: "%.2f", fps)
-    }
+/// Badge chrome shared by the player overlays.
+func playerOverlayBadge(@ViewBuilder content: () -> some View) -> some View {
+    content()
+        .foregroundStyle(.white) // readable on any player background (incl. black)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7)
+            .strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+}
 
-    static func shortFormat(_ format: CaptureFormat) -> String {
-        "\(format.height)p\(fpsText(format.frameRate))"
-    }
+func playerFPSText(_ fps: Double) -> String {
+    fps.truncatingRemainder(dividingBy: 1) == 0
+        ? String(Int(fps))
+        : String(format: "%.2f", fps)
+}
+
+func playerShortFormat(_ format: CaptureFormat) -> String {
+    "\(format.height)p\(playerFPSText(format.frameRate))"
 }
 
 /// LUT: choose/import .cube, apply to preview/recording, intensity.
@@ -405,24 +433,35 @@ struct LUTMenu: View {
                 get: { controller.lutRecordOn },
                 set: { controller.lutRecordOn = $0 }))
             Divider()
-            HStack(spacing: 6) {
-                Text(L("lut_intensity_label")).font(.caption)
-                Spacer()
-                TextField("", value: Binding(
-                    get: { Int((controller.lutIntensity * 100).rounded()) },
-                    set: { controller.lutIntensity = Double(min(100, max(0, $0))) / 100 }),
-                    format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 42)
-                    .disabled(controller.settings.lutFileName == nil)
-                Text("%").font(.caption).foregroundStyle(.secondary)
-            }
-            Slider(value: Binding(
-                get: { controller.lutIntensity },
-                set: { controller.lutIntensity = $0 }), in: 0...1)
-            .disabled(controller.settings.lutFileName == nil)
+            LUTIntensityControls(live: controller.live)
         }
+    }
+}
+
+/// Intensity row observing only LiveSignal — dragging must not re-render
+/// the whole window (that read as slider lag).
+private struct LUTIntensityControls: View {
+    @EnvironmentObject private var controller: CaptureController
+    @ObservedObject var live: LiveSignal
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(L("lut_intensity_label")).font(.caption)
+            Spacer()
+            TextField("", value: Binding(
+                get: { Int((live.lutIntensity * 100).rounded()) },
+                set: { controller.lutIntensity = Double(min(100, max(0, $0))) / 100 }),
+                format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 42)
+                .disabled(controller.settings.lutFileName == nil)
+            Text("%").font(.caption).foregroundStyle(.secondary)
+        }
+        Slider(value: Binding(
+            get: { live.lutIntensity },
+            set: { controller.lutIntensity = $0 }), in: 0...1)
+        .disabled(controller.settings.lutFileName == nil)
     }
 }
 

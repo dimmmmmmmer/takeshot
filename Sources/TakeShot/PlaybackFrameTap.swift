@@ -117,6 +117,16 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
     }
 
+    /// Mix coefficient only — no filter rebuild (slider ticks).
+    func setLUTIntensity(_ intensity: Double) {
+        queue.async {
+            self.lutIntensity = intensity
+            if let buffer = self.lastBuffer {
+                self.deliver(buffer, analyzed: false)
+            }
+        }
+    }
+
     func setScopesEnabled(_ on: Bool) {
         queue.async {
             self.scopesEnabled = on

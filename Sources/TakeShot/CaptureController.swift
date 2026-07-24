@@ -410,18 +410,26 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// LUT intensity (0…1); default 1. On each slider tick we do NOT re-read the
-    /// .cube from disk (that hung the slider) — we only change the mix coefficient
-    /// in the pipeline, and touch playback only in playback mode.
+    /// LUT intensity (0…1); default 1. Applied immediately (pipeline + tap mix
+    /// coefficient only — no .cube re-read, no filter rebuild), persisted
+    /// debounced: a settings write per tick re-rendered the window (slider lag).
     var lutIntensity: Double {
-        get { settings.lutIntensity ?? 1 }
+        get { live.lutIntensity }
         set {
             let clamped = min(1, max(0, newValue))
-            settings.lutIntensity = clamped
+            live.lutIntensity = clamped
             pipeline.setLUTIntensity(clamped)
-            if viewerMode == .playback { applyPlaybackLUT() }
+            playbackTap.setLUTIntensity(clamped)
+            lutPersistTask?.cancel()
+            lutPersistTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, let self else { return }
+                self.settings.lutIntensity = self.live.lutIntensity
+            }
         }
     }
+
+    private var lutPersistTask: Task<Void, Never>?
 
     /// Rebuild the filter and hand it to the pipeline and playback.
     func rebuildLUT() {
@@ -438,7 +446,7 @@ final class CaptureController: ObservableObject {
         pipeline.setLUT(currentCube,
                         preview: settings.lutPreviewEnabled ?? false,
                         record: settings.lutRecordEnabled ?? false,
-                        intensity: settings.lutIntensity ?? 1)
+                        intensity: live.lutIntensity)
         pipeline.setVideoLevels(settings.videoLevels)
         applyPlaybackLUT()
     }
@@ -462,8 +470,8 @@ final class CaptureController: ObservableObject {
         }
         os_log("playback LUT ON: %{public}s intensity=%.2f",
                log: CapturePipeline.levelsLog, type: .default,
-               settings.lutFileName ?? "?", settings.lutIntensity ?? 1)
-        playbackTap.setLUT(filter, intensity: settings.lutIntensity ?? 1)
+               settings.lutFileName ?? "?", live.lutIntensity)
+        playbackTap.setLUT(filter, intensity: live.lutIntensity)
     }
 
     /// Check the loaded clip's baked-LUT tag (asynchronously).
@@ -1102,6 +1110,7 @@ final class CaptureController: ObservableObject {
         audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
         audioMonitor.volume = Float(stored.monitorVolume ?? 1)
         live.volume = stored.monitorVolume ?? 1
+        live.lutIntensity = stored.lutIntensity ?? 1
         player.volume = Float(stored.monitorVolume ?? 1)
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in

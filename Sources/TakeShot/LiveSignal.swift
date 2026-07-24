@@ -16,4 +16,7 @@ final class LiveSignal: ObservableObject {
     /// slider drag would otherwise re-render the whole window and persist
     /// JSON on every tick.
     @Published var volume: Double = 1
+    /// LUT intensity — same story as `volume` (slider drags must not write
+    /// settings/re-render the window per tick).
+    @Published var lutIntensity: Double = 1
 }

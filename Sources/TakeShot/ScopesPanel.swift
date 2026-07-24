@@ -11,7 +11,6 @@ struct ScopesWindowView: View {
         ScopesPanel(live: controller.live)
             .onAppear { controller.scopesWindowOpen = true }
             .onDisappear { controller.scopesWindowOpen = false }
-            .ignoresSafeArea(.container, edges: .top)
     }
 }
 
@@ -38,6 +37,9 @@ struct ScopesPanel: View {
     @Environment(\.openWindow) private var openWindow
     // scope data updates ~8/s — observed separately from the controller
     @ObservedObject var live: LiveSignal
+    /// The in-player overlay fits one scope — enabling one disables the rest
+    /// (the separate window keeps the free grid).
+    var singleScope = false
 
     @AppStorage("scopeWaveformOn") private var waveformOn = true
     @AppStorage("scopeParadeOn") private var paradeOn = false
@@ -63,12 +65,41 @@ struct ScopesPanel: View {
         return kinds
     }
 
-    private func isOn(_ kind: ScopeKind) -> Binding<Bool> {
+    private func rawIsOn(_ kind: ScopeKind) -> Binding<Bool> {
         switch kind {
         case .waveform: return $waveformOn
         case .parade: return $paradeOn
         case .histogram: return $histogramOn
         case .vector: return $vectorOn
+        }
+    }
+
+    private func isOn(_ kind: ScopeKind) -> Binding<Bool> {
+        Binding(
+            get: { rawIsOn(kind).wrappedValue },
+            set: { on in
+                if on, singleScope {
+                    for other in ScopeKind.allCases where other != kind {
+                        rawIsOn(other).wrappedValue = false
+                    }
+                }
+                rawIsOn(kind).wrappedValue = on
+            })
+    }
+
+    /// Overlay mode shows at most one scope: collapse a multi-selection
+    /// left over from the window to the first enabled in the order.
+    private func collapseToSingle() {
+        guard singleScope else { return }
+        var found = false
+        for kind in order {
+            if rawIsOn(kind).wrappedValue {
+                if found {
+                    rawIsOn(kind).wrappedValue = false
+                } else {
+                    found = true
+                }
+            }
         }
     }
 
@@ -78,6 +109,7 @@ struct ScopesPanel: View {
                 ForEach(order) { kind in
                     scopeToggle(L(kind.titleKey), isOn: isOn(kind))
                 }
+                .onAppear { collapseToSingle() }
                 Spacer()
                 ChannelPicker(selection: $scaleMode, options: ["100", "1023"])
                 HStack(spacing: 3) {
