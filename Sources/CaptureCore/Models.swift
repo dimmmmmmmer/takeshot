@@ -122,7 +122,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// from an embedded audio channel (`ltcChannel`, 0-based).
     public var timecodeSource: String?
     public var ltcChannel: Int?
-    /// Capture RGB 4:4:4 sources as 10-bit r210 (nil = off until verified).
+    /// Capture RGB 4:4:4 sources as 10-bit r210 (nil = on; verified on the
+    /// UltraStudio 4K Mini — every current Blackmagic board is 10-bit capable).
     public var tenBitCapture: Bool?
     /// Live audio monitor on/off (nil = on) — the footer speaker state.
     public var monitorEnabled: Bool?

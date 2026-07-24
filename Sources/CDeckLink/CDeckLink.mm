@@ -540,15 +540,6 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         return NULL;
     }
     long sourceRowBytes = videoFrame->GetRowBytes();
-    static int probeCount = 0;
-    if (sourceFormat == bmdFormat10BitRGB && probeCount < 3) {
-        probeCount++;
-        const uint32_t *words = (const uint32_t *)sourceBytes;
-        NSLog(@"[tenbit] fmt=%c%c%c%c rowBytes=%ld words: %08X %08X %08X %08X",
-              (char)(sourceFormat >> 24), (char)(sourceFormat >> 16),
-              (char)(sourceFormat >> 8), (char)sourceFormat,
-              sourceRowBytes, words[100], words[101], words[102], words[103]);
-    }
 
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
     uint8_t *dest = (uint8_t *)CVPixelBufferGetBaseAddress(pixelBuffer);

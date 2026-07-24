@@ -1514,7 +1514,7 @@ final class CaptureController: ObservableObject {
             adapter.forcedMode = settings.forcedInputMode.map {
                 (name: $0, rgb: settings.forcedInputRGB ?? false)
             }
-            adapter.preferTenBitRGB = settings.tenBitCapture ?? false
+            adapter.preferTenBitRGB = settings.tenBitCapture ?? true
         }
         do {
             try backend.startCapture(deviceID: deviceID)

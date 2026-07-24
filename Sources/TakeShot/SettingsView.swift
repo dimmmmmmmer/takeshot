@@ -104,7 +104,7 @@ struct SettingsView: View {
                     }
                 }
                 Toggle(L("ten_bit_capture"), isOn: Binding(
-                    get: { controller.settings.tenBitCapture ?? false },
+                    get: { controller.settings.tenBitCapture ?? true },
                     set: { controller.settings.tenBitCapture = $0 }))
                 TextField(L("project"), text: $controller.settings.projectName)
                 HStack(spacing: 8) {
