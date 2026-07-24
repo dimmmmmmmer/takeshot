@@ -109,11 +109,22 @@ public final class MetalPreviewLayer: CAMetalLayer {
                     let w = CVPixelBufferGetWidth(pixelBuffer)
                     let h = CVPixelBufferGetHeight(pixelBuffer)
                     let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
-                    let p = base.assumingMemoryBound(to: UInt8.self)
-                        + (h / 2) * bpr + (w / 2) * 4
-                    os_log("probe %{public}s %dx%d center RGB=(%d,%d,%d)",
+                    let bytes = base.assumingMemoryBound(to: UInt8.self)
+                    let p = bytes + (h / 2) * bpr + (w / 2) * 4
+                    // 16x16 grid mean: catches a global shift in any tonal
+                    // zone, not just whatever sits under the center pixel
+                    var sumR = 0, sumG = 0, sumB = 0
+                    for gy in 0..<16 {
+                        let row = bytes + ((gy * 2 + 1) * h / 32) * bpr
+                        for gx in 0..<16 {
+                            let q = row + ((gx * 2 + 1) * w / 32) * 4
+                            sumB += Int(q[0]); sumG += Int(q[1]); sumR += Int(q[2])
+                        }
+                    }
+                    os_log("probe %{public}s %dx%d center=(%d,%d,%d) mean=(%d,%d,%d)",
                            log: CapturePipeline.levelsLog, type: .default,
-                           debugTag, w, h, p[2], p[1], p[0])
+                           debugTag, w, h, p[2], p[1], p[0],
+                           sumR / 256, sumG / 256, sumB / 256)
                 }
                 CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
             }
