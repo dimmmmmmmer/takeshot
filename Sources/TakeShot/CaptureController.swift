@@ -807,6 +807,26 @@ final class CaptureController: ObservableObject {
         exportTakeLog()
     }
 
+    /// ⇧M: drop the marker under the playhead (±2 frames); while recording —
+    /// the most recent one.
+    func removeNearestMarker() {
+        if viewerMode == .playback {
+            let now = playbackPositionSeconds
+            let tolerance = 2.0 / max(1, playbackFPS)
+            guard let index = playbackMarkers.enumerated()
+                .min(by: { abs($0.element.seconds - now)
+                    < abs($1.element.seconds - now) })?.offset,
+                abs(playbackMarkers[index].seconds - now) <= tolerance
+            else { return }
+            let tc = playbackMarkers[index].timecodeText
+            removePlaybackMarker(at: index)
+            lastNotice = L("marker_removed", tc)
+        } else if isRecording, let last = recordingMarkers.last {
+            recordingMarkers.removeLast()
+            lastNotice = L("marker_removed", last.timecodeText)
+        }
+    }
+
     func clearPlaybackMarkers() {
         guard let url = playbackURL,
               let takeIndex = takes.firstIndex(where: { $0.url == url })

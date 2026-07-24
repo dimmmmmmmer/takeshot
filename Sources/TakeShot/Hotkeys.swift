@@ -59,6 +59,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case grabFrame
     case instantReplay
     case addMarker
+    case removeMarker
 
     var id: String { rawValue }
 
@@ -71,6 +72,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .grabFrame: return "hotkey_grab"
         case .instantReplay: return "hotkey_replay"
         case .addMarker: return "hotkey_marker"
+        case .removeMarker: return "hotkey_marker_delete"
         }
     }
 
@@ -88,9 +90,8 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .fullscreen:
             return KeyCombo(key: "f", modifiers: 0, keyCode: 3)
         case .grabFrame:
-            // ⌘⇧S — grab still
-            return KeyCombo(key: "s",
-                            modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+            // ⌘S — grab still
+            return KeyCombo(key: "s", modifiers: NSEvent.ModifierFlags.command.rawValue,
                             keyCode: 1)
         case .instantReplay:
             // ⌘E — replay the last take
@@ -99,6 +100,10 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .addMarker:
             // M — flag the moment (NLE convention)
             return KeyCombo(key: "m", modifiers: 0, keyCode: 46)
+        case .removeMarker:
+            // ⇧M — remove the marker under the playhead (last one while recording)
+            return KeyCombo(key: "m", modifiers: NSEvent.ModifierFlags.shift.rawValue,
+                            keyCode: 46)
         }
     }
 }
@@ -119,6 +124,13 @@ final class HotkeyManager: ObservableObject {
             var result: [HotkeyAction: KeyCombo] = [:]
             for action in HotkeyAction.allCases {
                 result[action] = stored[action.rawValue] ?? action.defaultCombo
+            }
+            // grab-still default moved ⌘⇧S → ⌘S: migrate an untouched binding
+            let oldGrabDefault = KeyCombo(
+                key: "s", modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+                keyCode: 1)
+            if result[.grabFrame] == oldGrabDefault {
+                result[.grabFrame] = HotkeyAction.grabFrame.defaultCombo
             }
             bindings = result
         } else {
@@ -211,6 +223,8 @@ final class HotkeyManager: ObservableObject {
             controller.instantReplay()
         case .addMarker:
             controller.addMarker()
+        case .removeMarker:
+            controller.removeNearestMarker()
         }
     }
 }

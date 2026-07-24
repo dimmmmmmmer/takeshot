@@ -309,3 +309,6 @@
 "ten_bit_capture" = "10-bit RGB capture (r210)";
 
 "no_audio_short" = "no audio";
+
+"hotkey_marker_delete" = "Delete marker";
+"marker_removed" = "Marker removed %@";

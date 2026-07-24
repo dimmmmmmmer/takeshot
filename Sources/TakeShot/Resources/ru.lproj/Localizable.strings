@@ -309,3 +309,6 @@
 "ten_bit_capture" = "10-битный захват RGB (r210)";
 
 "no_audio_short" = "нет аудио";
+
+"hotkey_marker_delete" = "Удалить маркер";
+"marker_removed" = "Маркер удалён %@";
