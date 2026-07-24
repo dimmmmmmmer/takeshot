@@ -103,9 +103,6 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
-                Toggle(L("ten_bit_capture"), isOn: Binding(
-                    get: { controller.settings.tenBitCapture ?? true },
-                    set: { controller.settings.tenBitCapture = $0 }))
                 TextField(L("project"), text: $controller.settings.projectName)
                 HStack(spacing: 8) {
                     Text(L("backup_folder"))
@@ -198,6 +195,14 @@ struct SettingsView: View {
                     Text(L("external_off")).tag(CGDirectDisplayID?.none)
                     ForEach(controller.availableScreens) { screen in
                         Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
+                    }
+                }
+                Picker(L("monitor_device"), selection: Binding(
+                    get: { controller.settings.monitorDeviceID },
+                    set: { controller.settings.monitorDeviceID = $0 })) {
+                    Text(L("external_off")).tag(String?.none)
+                    ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
+                        Text(device.name).tag(String?.some(device.id))
                     }
                 }
                 Picker(L("playback_output"), selection: Binding(

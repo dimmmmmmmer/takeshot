@@ -129,7 +129,7 @@ struct LiveFullscreenView: View {
                 Color.black
                 LivePreviewLayerView(pipeline: controller.pipeline)
             }
-            .playerTopBadges(showsModeSwitch: false)
+            .playerTopBadges(showsModeSwitch: false, autoHide: true)
             // exit — bottom-right, same place as the player's enter-fullscreen button
             .overlay(alignment: .bottomTrailing) {
                 Button {
@@ -181,7 +181,7 @@ struct PlaybackFullscreenView: View {
                 Color.black
                 PlaybackContent()
             }
-            .playerTopBadges(showsModeSwitch: false)
+            .playerTopBadges(showsModeSwitch: false, autoHide: true)
             .overlay(alignment: .bottom) {
                 if transportHover {
                     TransportBar(player: controller.player)

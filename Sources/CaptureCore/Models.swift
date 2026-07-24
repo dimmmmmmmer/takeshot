@@ -162,6 +162,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var playbackAudioDeviceUID: String?
     /// Control accent color, hex; nil — neutral grey.
     public var accentHex: String?
+    /// DeckLink device for video-out to a monitor (SDI/HDMI); nil — off.
+    public var monitorDeviceID: String?
     /// Number of digits in the clip number (C01 / C001 / C0001); nil — 2.
     public var clipPadWidth: Int?
     /// Filename of the selected LUT (in the app's LUTs folder); nil — no LUT.

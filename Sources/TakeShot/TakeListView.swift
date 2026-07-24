@@ -76,6 +76,10 @@ private struct TakesSection: View {
                         Button(L("export_report_csv")) {
                             controller.exportShiftReport(pdf: false)
                         }
+                        Divider()
+                        Button(L("offload_menu")) {
+                            controller.offloadFolder()
+                        }
                     } label: {
                         Color.clear
                     }
@@ -85,6 +89,12 @@ private struct TakesSection: View {
                 .fixedSize()
                 .disabled(controller.takes.isEmpty)
                 .help(L("export_menu_help"))
+                if let status = controller.offloadStatus {
+                    Text(status)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 if viewMode == "grid" {
                     Slider(value: $tileSize, in: 70...260)
@@ -181,7 +191,6 @@ private struct TakeRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { controller.play(url: take.url) }
-            BackupBadge(url: take.url)
             CommentButton(take: take)
             RatingToggle(take: take)
         }
@@ -249,12 +258,10 @@ private struct OtherContentSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(L("other_content"))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 6)
             HStack(spacing: 10) {
+                Text(L("other_content"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if viewMode == "grid" {
                     Slider(value: $tileSize, in: 70...260)
@@ -265,8 +272,7 @@ private struct OtherContentSection: View {
                 ViewModePicker(mode: $viewMode)
             }
             .padding(.horizontal, 12)
-            .padding(.top, 2)
-            .padding(.bottom, 6)
+            .padding(.vertical, 6)
             Divider()
             if viewMode == "grid" {
                 ScrollView {
@@ -459,34 +465,6 @@ private struct TakeContextMenu: View {
         Divider()
         Button(L("delete_item"), role: .destructive) {
             controller.deleteTake(take)
-        }
-    }
-}
-
-/// Verified-backup indicator for a take row.
-private struct BackupBadge: View {
-    @EnvironmentObject private var controller: CaptureController
-    let url: URL
-
-    var body: some View {
-        switch controller.backupStates[url] {
-        case .copying:
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .help(L("backup_copying"))
-        case .verified:
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.green)
-                .help(L("backup_verified"))
-        case .failed(let reason):
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.red)
-                .help(reason)
-        case nil:
-            EmptyView()
         }
     }
 }

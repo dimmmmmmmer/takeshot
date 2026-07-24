@@ -232,8 +232,8 @@
 
 /* Scopes */
 "scopes_toggle" = "Скопы: waveform по луме + RGB-гистограмма видимого кадра";
-"scope_waveform" = "Waveform (лума)";
-"scope_histogram" = "Гистограмма (RGB)";
+"scope_waveform" = "Waveform";
+"scope_histogram" = "Гистограмма";
 "scope_waiting" = "Ожидание сигнала…";
 
 /* Audio monitor */
@@ -342,3 +342,15 @@
 
 "compare_b_live" = "vs Live";
 "compare_b_help" = "Вторая сторона сравнения: живой сигнал или другой тейк (синхронный транспорт)";
+
+"punch_pan_hint" = "Перетаскивай изображение для панорамирования";
+"offload_menu" = "Проверяемая копия папки...";
+"offload_pick_source" = "Папка для копирования (карта камеры, звук и т.п.)";
+"offload_source_prompt" = "Копировать это";
+"offload_pick_dest" = "Куда положить проверенную копию";
+"offload_dest_prompt" = "Сюда";
+"offload_scanning" = "Сканирую...";
+"offload_progress" = "Офлоад %d/%d";
+"offload_done" = "Офлоад сверен: %d файлов";
+"offload_failed" = "Офлоад: %d файл(ов) с ОШИБКОЙ (%@)";
+"close" = "Закрыть";

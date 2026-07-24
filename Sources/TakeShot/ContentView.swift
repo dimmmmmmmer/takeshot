@@ -3,6 +3,9 @@ import CaptureCore
 import SwiftUI
 
 struct ContentView: View {
+    // NOTE: the .id(appLanguage) below rebuilds the whole tree on a language
+    // switch — cached L() strings in leaf views (the footer) survived otherwise.
+
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
@@ -17,6 +20,7 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
+        .id(controller.settings.appLanguage)
         // clicking empty space clears focus from text fields
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
@@ -181,9 +185,27 @@ struct PlayerArea: View {
 struct PlayerTopBadgesModifier: ViewModifier {
     @EnvironmentObject private var controller: CaptureController
     var showsModeSwitch = true
+    /// Fullscreen: the top chrome hides until the pointer visits the top edge.
+    var autoHide = false
+    @State private var topVisible = true
+
+    private var chromeVisible: Bool { !autoHide || topVisible }
 
     func body(content: Content) -> some View {
         content
+            .onContinuousHover { phase in
+                guard autoHide else { return }
+                switch phase {
+                case .active(let point):
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        topVisible = point.y < 140
+                    }
+                case .ended:
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        topVisible = false
+                    }
+                }
+            }
             .overlay {
                 if controller.settings.framelineRatio != nil
                     || controller.settings.safeAreasOn == true {
@@ -194,6 +216,13 @@ struct PlayerTopBadgesModifier: ViewModifier {
                                 ratio: controller.settings.framelineRatio,
                                 safeAreas: controller.settings.safeAreasOn == true)
                         }
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if controller.assist.colorTool != .off {
+                    AssistLegend(tool: controller.assist.colorTool)
+                        .padding(.bottom, 56)
                         .allowsHitTesting(false)
                 }
             }
@@ -209,6 +238,7 @@ struct PlayerTopBadgesModifier: ViewModifier {
                 }
             }
             .overlay(alignment: .topLeading) {
+                if chromeVisible {
                 playerOverlayBadge {
                     Menu {
                         Picker(L("detection_mode"),
@@ -259,8 +289,10 @@ struct PlayerTopBadgesModifier: ViewModifier {
                 // is already reserved by the windowTopInset strip above the player
                 .padding(.leading, 8)
                 .padding(.top, 8)
+                }
             }
             .overlay(alignment: .top) {
+                if chromeVisible {
                 VStack(spacing: 4) {
                     if showsModeSwitch {
                         Picker("", selection: $controller.viewerMode) {
@@ -281,8 +313,10 @@ struct PlayerTopBadgesModifier: ViewModifier {
                     }
                 }
                 .padding(.top, 8)
+                }
             }
             .overlay(alignment: .topTrailing) {
+                if chromeVisible {
                 HStack(spacing: 6) {
                     playerOverlayBadge {
                         Button {
@@ -342,34 +376,95 @@ struct PlayerTopBadgesModifier: ViewModifier {
                     }
                 }
                 .padding(8)
+                }
             }
     }
 }
 
 extension View {
-    func playerTopBadges(showsModeSwitch: Bool = true) -> some View {
-        modifier(PlayerTopBadgesModifier(showsModeSwitch: showsModeSwitch))
+    func playerTopBadges(showsModeSwitch: Bool = true,
+                         autoHide: Bool = false) -> some View {
+        modifier(PlayerTopBadgesModifier(showsModeSwitch: showsModeSwitch,
+                                         autoHide: autoHide))
     }
 }
 
 /// Operator aids: exposure tools, framelines, desqueeze, punch-in.
+/// A popover, not a Menu — sliders don't work inside NSMenu, and toggles
+/// need to stay open for stacking tools.
 private struct AssistMenu: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
+    @State private var showPopover = false
 
     var body: some View {
-        Menu {
+        Button {
+            showPopover.toggle()
+        } label: {
+            Image(systemName: "viewfinder")
+                .font(.system(size: 13))
+                .foregroundStyle(
+                    controller.assist != ViewAssist()
+                        || controller.settings.framelineRatio != nil
+                    ? controller.accentColor : .white)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            controls.padding(14).frame(width: 260)
+        }
+        .fixedSize()
+        .help(L("assist_help"))
+    }
+
+    @ViewBuilder private var controls: some View {
+        VStack(alignment: .leading, spacing: 10) {
             Picker(L("assist_tool"), selection: Binding(
-                get: { controller.assist.tool },
-                set: { controller.assist.tool = $0 })) {
-                Text(L("assist_off")).tag(ViewAssist.Tool.off)
-                Text(L("assist_false_color")).tag(ViewAssist.Tool.falseColor)
-                Text(L("assist_el_zone")).tag(ViewAssist.Tool.elZone)
-                Text(L("assist_zebra")).tag(ViewAssist.Tool.zebra)
-                Text(L("assist_peaking")).tag(ViewAssist.Tool.peaking)
+                get: { controller.assist.colorTool },
+                set: { controller.assist.colorTool = $0 })) {
+                Text(L("assist_off")).tag(ViewAssist.ColorTool.off)
+                Text(L("assist_false_color")).tag(ViewAssist.ColorTool.falseColor)
+                Text(L("assist_el_zone")).tag(ViewAssist.ColorTool.elZone)
             }
-            .pickerStyle(.inline)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Toggle(L("assist_zebra"), isOn: Binding(
+                get: { controller.assist.zebraOn },
+                set: { controller.assist.zebraOn = $0 }))
+            if controller.assist.zebraOn {
+                HStack(spacing: 6) {
+                    Slider(value: Binding(
+                        get: { controller.assist.zebraThreshold },
+                        set: { controller.assist.zebraThreshold = $0 }),
+                        in: 0.7...1.0)
+                        .controlSize(.mini)
+                    Text("\(Int((controller.assist.zebraThreshold * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, alignment: .trailing)
+                }
+            }
+
+            Toggle(L("assist_peaking"), isOn: Binding(
+                get: { controller.assist.peakingOn },
+                set: { controller.assist.peakingOn = $0 }))
+            if controller.assist.peakingOn {
+                HStack(spacing: 6) {
+                    Slider(value: Binding(
+                        get: { controller.assist.peakingIntensity },
+                        set: { controller.assist.peakingIntensity = $0 }),
+                        in: 2...30)
+                        .controlSize(.mini)
+                    Text("\(Int(controller.assist.peakingIntensity))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 34, alignment: .trailing)
+                }
+            }
+
             Divider()
+
             Picker(L("framelines"), selection: Binding(
                 get: { controller.settings.framelineRatio ?? 0 },
                 set: { controller.settings.framelineRatio = $0 == 0 ? nil : $0 })) {
@@ -384,7 +479,9 @@ private struct AssistMenu: View {
             Toggle(L("safe_areas"), isOn: Binding(
                 get: { controller.settings.safeAreasOn ?? false },
                 set: { controller.settings.safeAreasOn = $0 }))
+
             Divider()
+
             Picker(L("desqueeze"), selection: Binding(
                 get: { controller.assist.desqueeze },
                 set: { controller.assist.desqueeze = $0 })) {
@@ -394,23 +491,82 @@ private struct AssistMenu: View {
                 Text(verbatim: "1.8x").tag(1.8)
                 Text(verbatim: "2x").tag(2.0)
             }
-            Toggle(L("punch_in") + " - "
+
+            Picker(L("punch_in") + " - "
                    + hotkeys.combo(for: .punchIn).display,
-                   isOn: Binding(
-                get: { controller.assist.punchIn > 1 },
-                set: { _ in controller.togglePunchIn() }))
-        } label: {
-            Image(systemName: "viewfinder")
-                .font(.system(size: 13))
-                .foregroundStyle(
-                    controller.assist != ViewAssist()
-                        || controller.settings.framelineRatio != nil
-                    ? controller.accentColor : .white)
+                   selection: Binding(
+                get: { controller.assist.punchIn },
+                set: {
+                    controller.assist.punchIn = $0
+                    if $0 == 1 {
+                        controller.assist.panX = 0
+                        controller.assist.panY = 0
+                    }
+                })) {
+                Text(L("assist_off")).tag(1.0)
+                Text(verbatim: "2x").tag(2.0)
+                Text(verbatim: "4x").tag(4.0)
+            }
+            if controller.assist.punchIn > 1 {
+                Text(L("punch_pan_hint"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help(L("assist_help"))
+    }
+}
+
+/// Color legend for the active exposure tool (false color / EL Zone).
+struct AssistLegend: View {
+    let tool: ViewAssist.ColorTool
+
+    private var entries: [(Color, String)] {
+        switch tool {
+        case .falseColor:
+            return [
+                (Color(red: 0.58, green: 0.20, blue: 0.75), "<2"),
+                (Color(red: 0.16, green: 0.34, blue: 0.90), "2-8"),
+                (Color(white: 0.25), ""),
+                (Color(red: 0.15, green: 0.75, blue: 0.25), "18%"),
+                (Color(white: 0.55), ""),
+                (Color(red: 0.95, green: 0.60, blue: 0.70), "skin"),
+                (Color(white: 0.8), ""),
+                (Color(red: 0.98, green: 0.90, blue: 0.20), "92-97"),
+                (Color(red: 0.95, green: 0.15, blue: 0.10), "clip"),
+            ]
+        case .elZone:
+            let colors: [(Double, Double, Double, String)] = [
+                (0.04, 0.04, 0.04, "-6"), (0.45, 0.15, 0.65, "-5"),
+                (0.15, 0.25, 0.90, "-4"), (0.10, 0.60, 0.70, "-3"),
+                (0.15, 0.65, 0.25, "-2"), (0.32, 0.32, 0.32, "-1"),
+                (0.50, 0.50, 0.50, "0"), (0.68, 0.68, 0.68, "+1"),
+                (0.95, 0.60, 0.65, "+2"), (0.95, 0.55, 0.15, "+3"),
+                (0.98, 0.72, 0.30, "+4"), (0.98, 0.92, 0.25, "+5"),
+                (1, 1, 1, "+6"),
+            ]
+            return colors.map { (Color(red: $0.0, green: $0.1, blue: $0.2), $0.3) }
+        case .off:
+            return []
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                VStack(spacing: 2) {
+                    Rectangle()
+                        .fill(entry.0)
+                        .frame(width: tool == .elZone ? 22 : 30, height: 8)
+                    Text(entry.1)
+                        .font(.system(size: 7).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(height: 8)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -444,13 +600,27 @@ private struct FramelinesOverlay: View {
                     .fill(.black.opacity(0.35), style: FillStyle(eoFill: true))
                 }
                 if safeAreas {
-                    Path { $0.addRect(CGRect(
-                        x: size.width * 0.05, y: size.height * 0.05,
-                        width: size.width * 0.9, height: size.height * 0.9)) }
+                    // safe areas live INSIDE the frameline when one is set
+                    let base: CGRect = {
+                        guard let ratio else {
+                            return CGRect(origin: .zero, size: size)
+                        }
+                        let videoAspect = size.width / max(1, size.height)
+                        return ratio >= videoAspect
+                            ? CGRect(x: 0,
+                                     y: (size.height - size.width / ratio) / 2,
+                                     width: size.width,
+                                     height: size.width / ratio)
+                            : CGRect(x: (size.width - size.height * ratio) / 2,
+                                     y: 0,
+                                     width: size.height * ratio,
+                                     height: size.height)
+                    }()
+                    Path { $0.addRect(base.insetBy(
+                        dx: base.width * 0.05, dy: base.height * 0.05)) }
                         .stroke(.white.opacity(0.45), lineWidth: 0.7)
-                    Path { $0.addRect(CGRect(
-                        x: size.width * 0.1, y: size.height * 0.1,
-                        width: size.width * 0.8, height: size.height * 0.8)) }
+                    Path { $0.addRect(base.insetBy(
+                        dx: base.width * 0.1, dy: base.height * 0.1)) }
                         .stroke(.white.opacity(0.3), lineWidth: 0.7)
                 }
             }
@@ -521,7 +691,6 @@ struct LUTMenu: View {
 
     @ViewBuilder private var lutControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L("lut_help")).font(.caption).foregroundStyle(.secondary)
             // choosing and adding .cube in one dropdown menu (the separate import
             // button is gone: "Add .cube…" right in the list, multi-select)
             Menu {
@@ -725,6 +894,25 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
+    /// Drag to pan while punched in (image-fraction units, clamped).
+    @State private var lastPan: CGSize = .zero
+
+    private var punchPanGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard controller.assist.punchIn > 1 else { return }
+                let scale = 600.0 * controller.assist.punchIn
+                let newX = controller.assist.panX
+                    - Double(value.translation.width - lastPan.width) / scale * 2
+                let newY = controller.assist.panY
+                    - Double(value.translation.height - lastPan.height) / scale * 2
+                controller.assist.panX = min(0.5, max(-0.5, newX))
+                controller.assist.panY = min(0.5, max(-0.5, newY))
+                lastPan = value.translation
+            }
+            .onEnded { _ in lastPan = .zero }
+    }
+
     /// Whether to show the AVPlayer transport (video, not photo/RAW).
     private var showsTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
@@ -779,6 +967,7 @@ struct PreviewView: View {
                         // mode switch re-routes frames into the same surface, so
                         // rec и playback land on identical pixels by construction
                         ViewerSurface(controller: controller, source: surfaceSource)
+                            .gesture(punchPanGesture)
                         if controller.viewerMode == .record {
                             LiveStatusOverlay()
                         } else if controller.playbackURL == nil {

@@ -232,8 +232,8 @@
 
 /* Scopes */
 "scopes_toggle" = "Scopes: luma waveform + RGB histogram of the visible frame";
-"scope_waveform" = "Waveform (luma)";
-"scope_histogram" = "Histogram (RGB)";
+"scope_waveform" = "Waveform";
+"scope_histogram" = "Histogram";
 "scope_waiting" = "Waiting for signal…";
 
 /* Audio monitor */
@@ -342,3 +342,15 @@
 
 "compare_b_live" = "vs Live";
 "compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
+
+"punch_pan_hint" = "Drag the image to pan while punched in";
+"offload_menu" = "Verified copy of a folder...";
+"offload_pick_source" = "Folder to copy (camera card, sound, etc.)";
+"offload_source_prompt" = "Copy this";
+"offload_pick_dest" = "Destination for the verified copy";
+"offload_dest_prompt" = "Copy here";
+"offload_scanning" = "Scanning...";
+"offload_progress" = "Offload %d/%d";
+"offload_done" = "Offload verified: %d files";
+"offload_failed" = "Offload: %d file(s) FAILED (%@)";
+"close" = "Close";

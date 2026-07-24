@@ -6,9 +6,10 @@ import UniformTypeIdentifiers
 /// Scopes window content: enables analysis while the window is on screen.
 struct ScopesWindowView: View {
     @EnvironmentObject private var controller: CaptureController
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScopesPanel(live: controller.live)
+        ScopesPanel(live: controller.live, onCloseWindow: { dismiss() })
             .onAppear { controller.scopesWindowOpen = true }
             .onDisappear { controller.scopesWindowOpen = false }
     }
@@ -40,6 +41,8 @@ struct ScopesPanel: View {
     /// The in-player overlay fits one scope — enabling one disables the rest
     /// (the separate window keeps the free grid).
     var singleScope = false
+    /// Close button for the separate window (nil in the overlay).
+    var onCloseWindow: (() -> Void)?
 
     @AppStorage("scopeWaveformOn") private var waveformOn = true
     @AppStorage("scopeParadeOn") private var paradeOn = false
@@ -133,6 +136,17 @@ struct ScopesPanel: View {
                 Text(L("scope_drag_hint"))
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.3))
+                if let onCloseWindow {
+                    Button {
+                        onCloseWindow()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("close"))
+                }
                 if !controller.scopesWindowOpen {
                     Button {
                         openWindow(id: "scopes")

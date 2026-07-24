@@ -144,59 +144,91 @@ final class CaptureController: ObservableObject {
         didSet { pushCompare() }
     }
 
-    /// Verified-backup state per file (footer of the take rows).
-    enum BackupState: Equatable {
-        case copying
-        case verified
-        case failed(String)
-    }
-
-    @Published var backupStates: [URL: BackupState] = [:]
+    /// Verified offload of an ARBITRARY folder (camera cards, sound, etc.):
+    /// recursive copy with SHA-256 on both sides and a CSV manifest.
+    /// TakeShot's own takes don't need this — they aren't the originals.
+    @Published var offloadStatus: String?
     nonisolated private static let backupQueue = DispatchQueue(
-        label: "takeshot.backup", qos: .utility)
+        label: "takeshot.offload", qos: .utility)
 
-    /// Copy a finished file to the backup folder and verify by SHA-256.
-    /// Failures surface as a toast AND a per-take badge.
-    private func backup(url: URL) {
-        guard let path = settings.backupPath, !path.isEmpty else { return }
-        backupStates[url] = .copying
-        let destDir = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    func offloadFolder() {
+        let sourcePanel = NSOpenPanel()
+        sourcePanel.canChooseFiles = false
+        sourcePanel.canChooseDirectories = true
+        sourcePanel.message = L("offload_pick_source")
+        sourcePanel.prompt = L("offload_source_prompt")
+        guard sourcePanel.runModal() == .OK, let source = sourcePanel.url
+        else { return }
+        let destPanel = NSOpenPanel()
+        destPanel.canChooseFiles = false
+        destPanel.canChooseDirectories = true
+        destPanel.canCreateDirectories = true
+        destPanel.message = L("offload_pick_dest")
+        destPanel.prompt = L("offload_dest_prompt")
+        if let saved = settings.backupPath {
+            destPanel.directoryURL = URL(fileURLWithPath: saved)
+        }
+        guard destPanel.runModal() == .OK, let destRoot = destPanel.url
+        else { return }
+        settings.backupPath = destRoot.path
+        let destDir = destRoot.appendingPathComponent(source.lastPathComponent)
+        offloadStatus = L("offload_scanning")
         Self.backupQueue.async { [weak self] in
-            let result: BackupState
-            do {
-                try FileManager.default.createDirectory(
-                    at: destDir, withIntermediateDirectories: true)
-                let dest = CapturePipeline.uniqueURL(
-                    for: destDir.appendingPathComponent(url.lastPathComponent))
-                try FileManager.default.copyItem(at: url, to: dest)
-                let sourceHash = try Self.sha256(of: url)
-                let destHash = try Self.sha256(of: dest)
-                if sourceHash == destHash {
-                    result = .verified
-                    let line = "\(dest.lastPathComponent),\(sourceHash),"
-                        + "\(ISO8601DateFormatter().string(from: Date()))\n"
-                    let log = destDir.appendingPathComponent("backup-log.csv")
-                    if let handle = try? FileHandle(forWritingTo: log) {
-                        handle.seekToEndOfFile()
-                        handle.write(Data(line.utf8))
-                        try? handle.close()
-                    } else {
-                        try? ("File,SHA256,Backed Up At\n" + line)
-                            .write(to: log, atomically: true, encoding: .utf8)
+            var files: [URL] = []
+            if let enumerator = FileManager.default.enumerator(
+                at: source, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]) {
+                for case let url as URL in enumerator {
+                    if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
+                        .isDirectory != true {
+                        files.append(url)
                     }
-                } else {
-                    try? FileManager.default.removeItem(at: dest)
-                    result = .failed("checksum mismatch")
                 }
-            } catch {
-                result = .failed(error.localizedDescription)
             }
+            var manifest = "File,SHA256,Bytes,Verified At\n"
+            var failures: [String] = []
+            for (index, file) in files.enumerated() {
+                DispatchQueue.main.async { [weak self] in
+                    self?.offloadStatus = L("offload_progress", index + 1,
+                                            files.count)
+                }
+                do {
+                    let relative = file.path.replacingOccurrences(
+                        of: source.path + "/", with: "")
+                    let dest = destDir.appendingPathComponent(relative)
+                    try FileManager.default.createDirectory(
+                        at: dest.deletingLastPathComponent(),
+                        withIntermediateDirectories: true)
+                    if FileManager.default.fileExists(atPath: dest.path) {
+                        try FileManager.default.removeItem(at: dest)
+                    }
+                    try FileManager.default.copyItem(at: file, to: dest)
+                    let sourceHash = try Self.sha256(of: file)
+                    let destHash = try Self.sha256(of: dest)
+                    guard sourceHash == destHash else {
+                        failures.append(relative + " (checksum mismatch)")
+                        continue
+                    }
+                    let size = (try? FileManager.default
+                        .attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
+                    manifest += "\(relative),\(sourceHash),\(size ?? 0),"
+                        + "\(ISO8601DateFormatter().string(from: Date()))\n"
+                } catch {
+                    failures.append(file.lastPathComponent
+                        + " (\(error.localizedDescription))")
+                }
+            }
+            try? manifest.write(
+                to: destDir.appendingPathComponent("offload-manifest.csv"),
+                atomically: true, encoding: .utf8)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.backupStates[url] = result
-                if case .failed(let reason) = result {
-                    self.lastError = L("backup_failed", url.lastPathComponent,
-                                       reason)
+                self.offloadStatus = nil
+                if failures.isEmpty {
+                    self.lastNotice = L("offload_done", files.count)
+                } else {
+                    self.lastError = L("offload_failed", failures.count,
+                                       failures.first ?? "")
                 }
             }
         }
@@ -254,6 +286,10 @@ final class CaptureController: ObservableObject {
 
     func togglePunchIn() {
         assist.punchIn = assist.punchIn > 1 ? 1 : 2
+        if assist.punchIn == 1 {
+            assist.panX = 0
+            assist.panY = 0
+        }
     }
 
     /// A reference frame is pinned for live compare (rec mode wipe/blend).
@@ -1497,7 +1533,6 @@ final class CaptureController: ObservableObject {
             self.exportTakeLog()
             self.generateThumbnail(for: take)
             self.flashNewItem(take.url)
-            self.backup(url: take.url)
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
@@ -1862,7 +1897,6 @@ final class CaptureController: ObservableObject {
             try png.write(to: url)
             scanDestinationFolder() // show it in Other content right away
             flashNewItem(url)
-            backup(url: url)
             lastNotice = L("grab_saved", url.lastPathComponent)
         } catch {
             lastError = "Frame grab failed: \(error.localizedDescription)"

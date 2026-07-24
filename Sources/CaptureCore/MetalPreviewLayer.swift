@@ -4,19 +4,31 @@ import os.log
 /// Operator display aids applied inside the preview render (identically on
 /// every surface: live, playback, RAW, fullscreen, external).
 public struct ViewAssist: Equatable, Sendable {
-    public enum Tool: String, CaseIterable, Sendable {
+    /// Color remap tools are mutually exclusive; zebra/peaking stack on top.
+    public enum ColorTool: String, CaseIterable, Sendable {
         case off
         case falseColor
         case elZone
-        case zebra
-        case peaking
     }
 
-    public var tool: Tool = .off
+    public var colorTool: ColorTool = .off
+    public var zebraOn = false
+    /// Zebra trigger level, 0.70…1.0 of full scale.
+    public var zebraThreshold: Double = 0.95
+    public var peakingOn = false
+    /// Edge gain for the peaking overlay.
+    public var peakingIntensity: Double = 12
     /// Anamorphic desqueeze factor (1 = spherical).
     public var desqueeze: Double = 1
     /// Punch-in magnification (1 = off).
     public var punchIn: Double = 1
+    /// Pan while punched in, in image-fraction units (0 = centered).
+    public var panX: Double = 0
+    public var panY: Double = 0
+
+    public var anyToolActive: Bool {
+        colorTool != .off || zebraOn || peakingOn
+    }
 
     public init() {}
 }
@@ -144,8 +156,15 @@ public final class MetalPreviewLayer: CAMetalLayer {
         return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
     }()
 
-    /// White where luma ≥ 95% — the zebra mask.
-    nonisolated(unsafe) private static let zebraMaskCube: Data = {
+    /// White where luma ≥ threshold — the zebra mask (cached per threshold).
+    nonisolated(unsafe) private static var zebraCubes: [Int: Data] = [:]
+    private static let zebraCubeLock = NSLock()
+
+    private static func zebraMaskCube(threshold: Double) -> Data {
+        let key = Int((threshold * 100).rounded())
+        zebraCubeLock.lock()
+        defer { zebraCubeLock.unlock() }
+        if let cached = zebraCubes[key] { return cached }
         let size = 32
         var rgba = [Float]()
         for b in 0..<size {
@@ -153,65 +172,80 @@ public final class MetalPreviewLayer: CAMetalLayer {
                 for r in 0..<size {
                     let v = (0.2126 * Double(r) + 0.7152 * Double(g)
                         + 0.0722 * Double(b)) / Double(size - 1)
-                    let on: Float = v >= 0.95 ? 1 : 0
+                    let on: Float = v >= Double(key) / 100 ? 1 : 0
                     rgba += [on, on, on, 1]
                 }
             }
         }
-        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
-    }()
+        let data = rgba.withUnsafeBufferPointer { Data(buffer: $0) }
+        zebraCubes[key] = data
+        return data
+    }
 
-    private func applyAssist(_ image: CIImage, tool: ViewAssist.Tool) -> CIImage {
-        switch tool {
+    /// Tools stack: color remap first, then zebra stripes, then peaking edges
+    /// (masks always come from the SOURCE image, so exposure reads true even
+    /// over a false-color remap). Result is cropped to the source extent —
+    /// filter spill outside the frame painted the letterbox red.
+    private func applyAssist(_ source: CIImage, assist: ViewAssist) -> CIImage {
+        var out = source
+        switch assist.colorTool {
         case .off:
-            return image
+            break
         case .falseColor:
-            return Self.grayscale(image).applyingFilter(
+            out = Self.grayscale(source).applyingFilter(
                 "CIColorCube", parameters: [
                     "inputCubeDimension": 64,
                     "inputCubeData": Self.falseColorCube,
                 ])
         case .elZone:
-            return Self.grayscale(image).applyingFilter(
+            out = Self.grayscale(source).applyingFilter(
                 "CIColorCube", parameters: [
                     "inputCubeDimension": 64,
                     "inputCubeData": Self.elZoneCube,
                 ])
-        case .zebra:
-            let mask = Self.grayscale(image).applyingFilter(
+        }
+        if assist.zebraOn {
+            let mask = Self.grayscale(source).applyingFilter(
                 "CIColorCube", parameters: [
                     "inputCubeDimension": 32,
-                    "inputCubeData": Self.zebraMaskCube,
+                    "inputCubeData": Self.zebraMaskCube(
+                        threshold: assist.zebraThreshold),
                 ])
-            guard let stripes = CIFilter(name: "CIStripesGenerator", parameters: [
+            if let stripes = CIFilter(name: "CIStripesGenerator", parameters: [
                 "inputColor0": CIColor(red: 1, green: 1, blue: 1),
                 "inputColor1": CIColor(red: 0, green: 0, blue: 0),
                 "inputWidth": 4,
                 "inputSharpness": 1,
             ])?.outputImage?
                 .transformed(by: CGAffineTransform(rotationAngle: .pi / 4))
-                .cropped(to: image.extent) else { return image }
-            let striped = stripes.applyingFilter("CIMultiplyCompositing", parameters: [
-                kCIInputBackgroundImageKey: mask,
-            ])
-            return CIImage(color: CIColor(red: 1, green: 1, blue: 1))
-                .cropped(to: image.extent)
-                .applyingFilter("CIBlendWithMask", parameters: [
-                    kCIInputBackgroundImageKey: image,
-                    kCIInputMaskImageKey: striped,
+                .cropped(to: source.extent) {
+                let striped = stripes.applyingFilter(
+                    "CIMultiplyCompositing", parameters: [
+                        kCIInputBackgroundImageKey: mask,
+                    ])
+                out = CIImage(color: CIColor(red: 1, green: 1, blue: 1))
+                    .cropped(to: source.extent)
+                    .applyingFilter("CIBlendWithMask", parameters: [
+                        kCIInputBackgroundImageKey: out,
+                        kCIInputMaskImageKey: striped,
+                    ])
+            }
+        }
+        if assist.peakingOn {
+            let edges = Self.grayscale(source)
+                .applyingFilter("CIEdges", parameters: [
+                    "inputIntensity": assist.peakingIntensity,
                 ])
-        case .peaking:
-            let edges = Self.grayscale(image)
-                .applyingFilter("CIEdges", parameters: ["inputIntensity": 12])
                 .applyingFilter("CIColorMatrix", parameters: [
                     "inputRVector": CIVector(x: 2.4, y: 0, z: 0, w: 0),
                     "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                     "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                 ])
-            return edges.applyingFilter("CIScreenBlendMode", parameters: [
-                kCIInputBackgroundImageKey: image,
+            out = edges.applyingFilter("CIScreenBlendMode", parameters: [
+                kCIInputBackgroundImageKey: out,
             ])
         }
+        return out.cropped(to: source.extent)
     }
 
     public override init() {
@@ -323,8 +357,8 @@ public final class MetalPreviewLayer: CAMetalLayer {
         var image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
         let currentAssist = assist
-        if currentAssist.tool != .off {
-            image = applyAssist(image, tool: currentAssist.tool)
+        if currentAssist.anyToolActive {
+            image = applyAssist(image, assist: currentAssist)
         }
         if currentAssist.desqueeze != 1 {
             image = image.transformed(by: CGAffineTransform(
@@ -334,12 +368,17 @@ public final class MetalPreviewLayer: CAMetalLayer {
         guard extent.width > 0, extent.height > 0 else { return }
         var scale = min(size.width / extent.width, size.height / extent.height)
         if currentAssist.punchIn > 1 {
-            scale *= currentAssist.punchIn // centered magnification
+            scale *= currentAssist.punchIn // magnification with pan below
         }
         // integral-pixel placement: fractional offsets shift live vs playback
         // by a visible pixel in the compare modes (wipe/blend/side-by-side)
-        let tx = ((size.width - extent.width * scale) / 2).rounded(.down)
-        let ty = ((size.height - extent.height * scale) / 2).rounded(.down)
+        var tx = ((size.width - extent.width * scale) / 2).rounded(.down)
+        var ty = ((size.height - extent.height * scale) / 2).rounded(.down)
+        if currentAssist.punchIn > 1 {
+            // pan in image fractions; SwiftUI's y grows down, CI's grows up
+            tx -= (currentAssist.panX * extent.width * scale).rounded(.down)
+            ty += (currentAssist.panY * extent.height * scale).rounded(.down)
+        }
         image = image
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
                 .concatenating(CGAffineTransform(translationX: tx, y: ty)))
