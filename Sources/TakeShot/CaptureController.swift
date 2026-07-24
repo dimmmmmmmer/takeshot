@@ -100,10 +100,9 @@ final class CaptureController: ObservableObject {
 
     /// Polling playback frames is only needed when the view is actually visible.
     private func updateTapRunning() {
-        let videoLoaded = playbackURL.map {
-            !Self.imageExtensions.contains($0.pathExtension.lowercased())
-        } ?? false
-        playbackTap.setRunning(viewerMode == .playback && videoLoaded)
+        // stills tick through the tap too (compare keeps the live half moving)
+        let loaded = playbackURL != nil && rawPlayer == nil
+        playbackTap.setRunning(viewerMode == .playback && loaded)
     }
     /// What's currently loaded in the player (for highlighting in the list).
     @Published var playbackURL: URL?
@@ -894,6 +893,9 @@ final class CaptureController: ObservableObject {
         if Self.imageExtensions.contains(ext), !isRaw {
             player.pause()
             player.replaceCurrentItem(with: nil)
+            playbackTap.detach()
+            playbackLUTSuppressed = false
+            loadStill(url: url)
         } else if isRaw {
             player.pause()
             player.replaceCurrentItem(with: nil)
@@ -926,6 +928,52 @@ final class CaptureController: ObservableObject {
         viewerMode = .playback
         updateTapRunning()
         updateScopesRunning()
+    }
+
+    /// Decode a still into Rec.709 display code values and hand it to the tap:
+    /// stills render/compare/LUT exactly like video — SwiftUI Image was
+    /// color-managed differently and stills never matched the player.
+    private func loadStill(url: URL) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let cg = CGImageSourceCreateImageAtIndex(source, 0, [
+                      kCGImageSourceShouldCacheImmediately: true,
+                  ] as CFDictionary) else { return }
+            // managed input (embedded profile) rendered INTO the HDTV space:
+            // identity for our own grabs, correct conversion for foreign files
+            let attachments = [
+                kCVImageBufferColorPrimariesKey: kCVImageBufferColorPrimaries_ITU_R_709_2,
+                kCVImageBufferTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_709_2,
+                kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+            ] as CFDictionary
+            let space = CVImageBufferCreateColorSpaceFromAttachments(attachments)?
+                .takeRetainedValue() ?? CGColorSpaceCreateDeviceRGB()
+            let image = CIImage(cgImage: cg)
+            let attrs: [CFString: Any] = [
+                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+            ]
+            var buffer: CVPixelBuffer?
+            CVPixelBufferCreate(kCFAllocatorDefault, cg.width, cg.height,
+                                kCVPixelFormatType_32BGRA,
+                                attrs as CFDictionary, &buffer)
+            guard let buffer else { return }
+            let destination = CIRenderDestination(pixelBuffer: buffer)
+            destination.colorSpace = space
+            let context = CIContext(options: [.cacheIntermediates: false])
+            guard let task = try? context.startTask(toRender: image,
+                                                    to: destination),
+                  (try? task.waitUntilCompleted()) != nil else { return }
+            await MainActor.run { [weak self] in
+                guard let self, self.playbackURL == url else { return }
+                self.playbackTap.attachStill(buffer)
+                self.playbackFormatText = "\(cg.height)p"
+                self.playbackAspect = cg.height > 0
+                    ? CGFloat(cg.width) / CGFloat(cg.height) : nil
+                self.applyPlaybackLUT()
+                self.updateTapRunning()
+            }
+        }
     }
 
     // MARK: - playback info for the player badges
@@ -1121,6 +1169,9 @@ final class CaptureController: ObservableObject {
         refreshNameCollision()
         applyLetterboxColor()
         reloadLUTList()
+        // the persisted LUT + "apply to preview" must take effect immediately —
+        // without this the checkbox showed enabled while nothing was applied
+        rebuildLUT()
     }
 
     private func bindPipeline() {

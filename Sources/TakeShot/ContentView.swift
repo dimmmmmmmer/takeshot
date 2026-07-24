@@ -544,39 +544,6 @@ private struct CompareControls: View {
 struct PreviewView: View {
     @EnvironmentObject private var controller: CaptureController
 
-    /// Photos keep the SwiftUI graphics path (Image is color-managed correctly,
-    /// and compare masks/opacity over Image views don't shift color).
-    @ViewBuilder private var imagePlaybackBranch: some View {
-        switch controller.compareMode {
-        case .off:
-            PlaybackContent()
-        case .blend:
-            ZStack {
-                LivePreviewContent()
-                PlaybackContent().opacity(controller.blendOpacity)
-            }
-            .aspectRatio(Self.liveAspect(controller.signalFormat),
-                         contentMode: .fit)
-        case .wipe:
-            ZStack {
-                LivePreviewContent()
-                PlaybackContent()
-                    .mask {
-                        WipeMask(orientation: controller.wipeOrientation,
-                                 position: controller.wipePosition)
-                    }
-                WipeHandle()
-            }
-            .aspectRatio(Self.liveAspect(controller.signalFormat),
-                         contentMode: .fit)
-        case .sideBySide:
-            HStack(spacing: 2) {
-                LivePreviewContent()
-                PlaybackContent()
-            }
-        }
-    }
-
     /// The live signal's aspect — a shared compare container so frames of
     /// different resolutions (and the wipe) line up geometrically.
     static func liveAspect(_ format: CaptureFormat?) -> CGFloat {
@@ -602,15 +569,8 @@ struct PreviewView: View {
         return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
     }
 
-    /// Whether the playback file is a photo (a lone still, not a DNG reel).
-    private var isImage: Bool {
-        guard let url = controller.playbackURL, controller.rawPlayer?.url != url
-        else { return false }
-        return PlaybackContent.imageExtensions.contains(
-            url.pathExtension.lowercased())
-    }
-
-    /// What feeds the unified surface right now.
+    /// What feeds the unified surface right now (stills go through the tap
+    /// too — the same render/LUT/compare path as video).
     private var surfaceSource: ViewerSurface.Source {
         if controller.viewerMode == .record { return .live }
         guard let url = controller.playbackURL else { return .none }
@@ -618,9 +578,8 @@ struct PreviewView: View {
         if let raw = controller.rawPlayer, raw.url == url {
             return .raw(ObjectIdentifier(raw))
         }
-        let ext = url.pathExtension.lowercased()
-        if PlaybackContent.imageExtensions.contains(ext) { return .none }
-        if CaptureController.rawExtensions.contains(ext) { return .none }
+        if CaptureController.rawExtensions.contains(
+            url.pathExtension.lowercased()) { return .none }
         return .playback
     }
 
@@ -634,8 +593,6 @@ struct PreviewView: View {
                     if controller.viewerMode == .record, controller.multicamOn,
                        !controller.extraChannels.isEmpty {
                         MulticamGrid()
-                    } else if controller.viewerMode == .playback, isImage {
-                        imagePlaybackBranch
                     } else if controller.viewerMode == .playback,
                               controller.compareMode == .sideBySide,
                               controller.playbackURL != nil {
@@ -709,32 +666,6 @@ struct PreviewView: View {
                     .padding(10)
             }
         }
-    }
-}
-
-/// Mask of the playback area for the wipe (left/top/diagonal from the line) —
-/// used for still images, which render on the color-correct graphics path.
-private struct WipeMask: Shape {
-    let orientation: CaptureController.WipeOrientation
-    let position: Double
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        switch orientation {
-        case .vertical:
-            path.addRect(CGRect(x: 0, y: 0,
-                                width: rect.width * position, height: rect.height))
-        case .horizontal:
-            path.addRect(CGRect(x: 0, y: 0,
-                                width: rect.width, height: rect.height * position))
-        case .diagonal:
-            let t = position * (rect.width + rect.height)
-            path.move(to: .zero)
-            path.addLine(to: CGPoint(x: t, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: t))
-            path.closeSubpath()
-        }
-        return path
     }
 }
 

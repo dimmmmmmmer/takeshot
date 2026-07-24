@@ -15,9 +15,7 @@ struct PlaybackContent: View {
         if let url = controller.playbackURL {
             let ext = url.pathExtension.lowercased()
             let rawOwned = controller.rawPlayer?.url == url
-            if Self.imageExtensions.contains(ext), !rawOwned {
-                ImagePlaybackView(url: url)
-            } else if rawOwned || CaptureController.rawExtensions.contains(ext) {
+            if rawOwned || CaptureController.rawExtensions.contains(ext) {
                 if let model = controller.rawPlayer {
                     RawTapLayerView(model: model)
                 } else {
@@ -186,23 +184,6 @@ struct RawTransportBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.ultraThinMaterial)
-    }
-}
-
-/// A photo on the player backdrop.
-private struct ImagePlaybackView: View {
-    let url: URL
-
-    var body: some View {
-        if let image = NSImage(contentsOf: url) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            Label(url.lastPathComponent, systemImage: "photo")
-                .foregroundStyle(.secondary)
-        }
     }
 }
 

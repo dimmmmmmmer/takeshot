@@ -31,9 +31,11 @@ private struct TakesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text(L("takes"))
+                .font(.headline)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
             HStack(spacing: 10) {
-                Text(L("takes"))
-                    .font(.headline)
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
@@ -69,7 +71,8 @@ private struct TakesSection: View {
                 ViewModePicker(mode: $viewMode)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
             Divider()
             if controller.takes.isEmpty {
                 Spacer()
@@ -219,10 +222,12 @@ private struct OtherContentSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text(L("other_content"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
             HStack(spacing: 10) {
-                Text(L("other_content"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
                 Spacer()
                 if viewMode == "grid" {
                     Slider(value: $tileSize, in: 70...260)
@@ -233,7 +238,8 @@ private struct OtherContentSection: View {
                 ViewModePicker(mode: $viewMode)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.top, 2)
+            .padding(.bottom, 6)
             Divider()
             if viewMode == "grid" {
                 ScrollView {

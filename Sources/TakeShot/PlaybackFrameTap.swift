@@ -69,6 +69,8 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var onScopeData: ((ScopeData) -> Void)?
 
     private var lastBuffer: CVPixelBuffer?
+    /// Static source (a still in the player): composited/analyzed like video.
+    private var stillBuffer: CVPixelBuffer?
 
     // MARK: - compare & LUT (composited HERE, in one Metal layer: SwiftUI
     // masks/opacity over video layers drop the colorspace and shift colors)
@@ -145,6 +147,17 @@ final class PlaybackFrameTap: @unchecked Sendable {
         return result
     }
 
+    /// Show a still through the same render/LUT/compare path as video.
+    func attachStill(_ buffer: CVPixelBuffer) {
+        queue.async {
+            self.detachLocked()
+            self.stillBuffer = buffer
+            self.lastBuffer = buffer
+            self.deliver(buffer, analyzed: self.scopesEnabled)
+            self.startTimerIfNeeded()
+        }
+    }
+
     /// Attach to a new clip (the old output is removed).
     func attach(to item: AVPlayerItem) {
         queue.async {
@@ -186,12 +199,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
         output = nil
         item = nil
+        stillBuffer = nil
     }
 
     private func startTimerIfNeeded() {
         timer?.cancel()
         timer = nil
-        guard running, output != nil else { return }
+        guard running, output != nil || stillBuffer != nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz polling
         timer.setEventHandler { [weak self] in
@@ -202,7 +216,19 @@ final class PlaybackFrameTap: @unchecked Sendable {
     }
 
     private func tick() {
-        guard let output else { return }
+        guard let output else {
+            // still: recomposite at the paused cadence so the live half of a
+            // compare keeps moving (and LUT changes land immediately)
+            if let still = stillBuffer {
+                let interval: Int
+                if case .off = compare { interval = 15 } else { interval = 4 }
+                tickCount += 1
+                if tickCount % interval == 0 {
+                    deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
+                }
+            }
+            return
+        }
         let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
         tickCount += 1
         if !output.hasNewPixelBuffer(forItemTime: itemTime) {
