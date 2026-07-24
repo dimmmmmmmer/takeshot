@@ -116,6 +116,27 @@ struct PlayerArea: View {
                         }
                         .pickerStyle(.inline)
                         .labelsHidden()
+                        Divider()
+                        Picker(L("tc_source"), selection: Binding(
+                            get: {
+                                controller.settings.timecodeSource == "ltc"
+                                    ? 1 + (controller.settings.ltcChannel ?? 0)
+                                    : 0
+                            },
+                            set: { value in
+                                if value == 0 {
+                                    controller.settings.timecodeSource = nil
+                                } else {
+                                    controller.settings.timecodeSource = "ltc"
+                                    controller.settings.ltcChannel = value - 1
+                                }
+                            })) {
+                            Text(L("tc_source_rp188")).tag(0)
+                            ForEach(1...8, id: \.self) { channel in
+                                Text(L("tc_source_ltc", channel)).tag(channel)
+                            }
+                        }
+                        .pickerStyle(.menu)
                     } label: {
                         if controller.viewerMode == .playback {
                             PlaybackTimecodeText()

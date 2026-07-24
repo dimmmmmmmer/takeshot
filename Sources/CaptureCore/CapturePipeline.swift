@@ -362,6 +362,9 @@ public final class CapturePipeline: @unchecked Sendable {
         queue.async {
             let levels = PCMAudio.peakLevels(of: sampleBuffer)
             self.sourceAudioChannels = levels.count
+            if self.config.settings.timecodeSource == "ltc" {
+                self.decodeLTC(from: sampleBuffer, channels: levels.count)
+            }
             // meters show ALL channels; only channels enabled in the mask are written
             var toWrite: CMSampleBuffer? = sampleBuffer
             if let mask = self.config.settings.audioChannelMask {
@@ -389,6 +392,37 @@ public final class CapturePipeline: @unchecked Sendable {
             if !levels.isEmpty, levels != self.lastPublishedLevels {
                 self.lastPublishedLevels = levels
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }
+            }
+        }
+    }
+
+    // LTC from an embedded audio channel (all access on queue).
+    private let ltcDecoder = LTCDecoder()
+    private var latestLTC: Timecode?
+
+    private func decodeLTC(from sampleBuffer: CMSampleBuffer, channels: Int) {
+        guard channels > 0, let format else { return }
+        let channel = min(max(0, config.settings.ltcChannel ?? 0), channels - 1)
+        guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+        var length = 0
+        var pointer: UnsafeMutablePointer<CChar>?
+        guard CMBlockBufferGetDataPointer(
+            block, atOffset: 0, lengthAtOffsetOut: nil,
+            totalLengthOut: &length, dataPointerOut: &pointer) == noErr,
+            let pointer, length >= 2 else { return }
+        let fps = format.timecodeFPS
+        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
+            let frames = (length / 2) / channels
+            guard frames > 0 else { return }
+            // extract the selected channel from the interleaved stream
+            var mono = [Int16](repeating: 0, count: frames)
+            for i in 0..<frames {
+                mono[i] = samples[i * channels + channel]
+            }
+            mono.withUnsafeBufferPointer { buffer in
+                if let tc = ltcDecoder.process(samples: buffer, fps: fps) {
+                    latestLTC = tc
+                }
             }
         }
     }
@@ -428,6 +462,10 @@ public final class CapturePipeline: @unchecked Sendable {
         if var tc = timecode, tc.fps <= 0 {
             tc.fps = format.timecodeFPS
             timecode = tc
+        }
+        // LTC replaces RP188 wholesale when selected (detector, UI, TC track)
+        if config.settings.timecodeSource == "ltc" {
+            timecode = latestLTC
         }
         lastTimecode = timecode
 

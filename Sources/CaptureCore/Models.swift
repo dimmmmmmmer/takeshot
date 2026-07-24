@@ -107,6 +107,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var destinationPath: String = NSSearchPathForDirectoriesInDomains(
         .moviesDirectory, .userDomainMask, true).first.map { $0 + "/TakeShot" } ?? "~/Movies/TakeShot"
     public var detectionMode: RecDetectionMode = .vanc
+    /// Timecode source: nil/"rp188" — from the video stream; "ltc" — decoded
+    /// from an embedded audio channel (`ltcChannel`, 0-based).
+    public var timecodeSource: String?
+    public var ltcChannel: Int?
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     public var projectName: String = ""

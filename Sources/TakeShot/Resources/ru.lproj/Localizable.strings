@@ -289,3 +289,7 @@
 "report_saved" = "Отчёт сохранён: %@";
 
 "r3d_not_supported" = "Воспроизведение R3D пока не подключено (нужен REDCODE SDK)";
+
+"tc_source" = "Источник таймкода";
+"tc_source_rp188" = "RP188 (видеопоток)";
+"tc_source_ltc" = "LTC — аудиоканал %d";
