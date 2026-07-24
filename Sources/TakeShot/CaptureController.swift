@@ -622,6 +622,70 @@ final class CaptureController: ObservableObject {
     /// Why the RAW clip couldn't be opened (SDK missing, bad file).
     @Published var rawPlayerError: String?
 
+    // MARK: - markers
+
+    /// Markers collected while the current take is recording.
+    private var recordingMarkers: [TakeMarker] = []
+    private var recordingStartDate: Date?
+
+    /// Flag the current moment: recording TC while recording, player position
+    /// in playback. Lands in the takeshot-markers.csv sidecar (and EDL export).
+    func addMarker() {
+        if viewerMode == .playback, let url = playbackURL {
+            let seconds: Double
+            if let raw = rawPlayer {
+                seconds = Double(raw.currentFrame) / max(1, raw.frameRate)
+            } else {
+                seconds = max(0, player.currentTime().seconds)
+            }
+            let tcText = playbackTimecodeText
+            guard let index = takes.firstIndex(where: { $0.url == url }) else {
+                lastError = L("marker_only_takes")
+                return
+            }
+            takes[index].markers.append(
+                TakeMarker(seconds: seconds, timecodeText: tcText))
+            takes[index].markers.sort { $0.seconds < $1.seconds }
+            exportTakeLog()
+            lastNotice = L("marker_added", tcText)
+        } else if isRecording {
+            let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
+            let tcText = live.currentTimecode?.description ?? ""
+            recordingMarkers.append(
+                TakeMarker(seconds: seconds, timecodeText: tcText))
+            lastNotice = L("marker_added", tcText)
+        }
+    }
+
+    /// Markers of the clip in the player (transport ticks).
+    var playbackMarkers: [TakeMarker] {
+        guard let url = playbackURL else { return [] }
+        return takes.first { $0.url == url }?.markers ?? []
+    }
+
+    /// Selects EDL: good takes back to back, markers as Resolve locators.
+    func exportSelectsEDL() {
+        let good = takes.filter { $0.rating == .good }
+        guard let edl = EDLExporter.selectsEDL(
+            takes: good, title: "\(settings.projectName) selects",
+            fps: Int(max(1, playbackFPS).rounded()))
+        else {
+            lastError = L("edl_no_good_takes")
+            return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = NamingEngine.sanitize(
+            "\(settings.projectName)_selects") + ".edl"
+        panel.directoryURL = destinationRoot
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try edl.write(to: url, atomically: true, encoding: .utf8)
+            lastNotice = L("edl_saved", url.lastPathComponent)
+        } catch {
+            lastError = "EDL: \(error.localizedDescription)"
+        }
+    }
+
     /// One-shot flag: the transport enables looping when the replayed clip loads.
     var replayLoopRequested = false
 
@@ -890,12 +954,19 @@ final class CaptureController: ObservableObject {
         pipeline.onRecStateChanged = { [weak self] recording in
             guard let self else { return }
             self.isRecording = recording
+            if recording {
+                self.recordingStartDate = Date()
+                self.recordingMarkers = []
+            }
             self.refreshNameCollision() // start hides it, stop recomputes
             // multicam: the other cameras in sync with the main one
             for channel in self.extraChannels { channel.setRecording(recording) }
         }
         pipeline.onTakeFinished = { [weak self] take in
             guard let self else { return }
+            var take = take
+            take.markers = self.recordingMarkers
+            self.recordingMarkers = []
             self.takes.append(take)
             self.nextTakeNumber += 1
             self.exportTakeLog()
@@ -1395,6 +1466,10 @@ final class CaptureController: ObservableObject {
         var foreign: [URL] = []
         let meta = (try? String(contentsOf: takeLogURL, encoding: .utf8))
             .map(TakeLogExporter.parseMetadata(csv:)) ?? [:]
+        let markersURL = destinationRoot
+            .appendingPathComponent(TakeLogExporter.markersFileName)
+        let markers = (try? String(contentsOf: markersURL, encoding: .utf8))
+            .map(TakeLogExporter.parseMarkers(csv:)) ?? [:]
 
         for url in candidates {
             if scannedPaths.contains(url.path) {
@@ -1433,7 +1508,8 @@ final class CaptureController: ObservableObject {
                 durationSeconds: duration,
                 rating: meta[url.lastPathComponent]?.rating ?? .none,
                 comment: meta[url.lastPathComponent]?.comment ?? "",
-                recordedAt: created)
+                recordedAt: created,
+                markers: markers[url.lastPathComponent] ?? [])
             restored.append(take)
         }
 
@@ -1576,6 +1652,7 @@ final class CaptureController: ObservableObject {
         let root = destinationRoot
         Self.takeLogQueue.async {
             try? TakeLogExporter.write(takes: takes, toDirectory: root)
+            try? TakeLogExporter.writeMarkers(takes: takes, toDirectory: root)
         }
     }
 

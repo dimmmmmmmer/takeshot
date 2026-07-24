@@ -44,6 +44,19 @@ public enum TakeRating: String, Equatable, Sendable {
 }
 
 /// A take — one continuous camera recording segment, one file on disk.
+/// A flagged moment inside a take (hotkey during recording or review).
+public struct TakeMarker: Equatable, Sendable {
+    /// Offset from the start of the take.
+    public var seconds: Double
+    /// Timecode of the moment as text (start TC + offset), when known.
+    public var timecodeText: String
+
+    public init(seconds: Double, timecodeText: String = "") {
+        self.seconds = seconds
+        self.timecodeText = timecodeText
+    }
+}
+
 public struct Take: Identifiable, Equatable, Sendable {
     public var id: UUID
     public var url: URL
@@ -56,11 +69,13 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var rating: TakeRating       // good/bad take (in CSV — Good Take + NG marker)
     public var comment: String          // free-text note (in CSV — Comments column)
     public var recordedAt: Date
+    public var markers: [TakeMarker]    // flagged moments (sidecar CSV)
 
     public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
                 roll: String = "", takeNumber: Int, startTimecode: Timecode?,
                 durationSeconds: Double, rating: TakeRating = .none,
-                comment: String = "", recordedAt: Date) {
+                comment: String = "", recordedAt: Date,
+                markers: [TakeMarker] = []) {
         self.id = id
         self.url = url
         self.displayName = displayName
@@ -72,6 +87,7 @@ public struct Take: Identifiable, Equatable, Sendable {
         self.rating = rating
         self.comment = comment
         self.recordedAt = recordedAt
+        self.markers = markers
     }
 }
 

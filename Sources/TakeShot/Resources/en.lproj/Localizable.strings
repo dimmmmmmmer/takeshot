@@ -265,3 +265,12 @@
 
 "hotkey_replay" = "Instant replay";
 "instant_replay_help" = "Replay the last take (loop)";
+
+"hotkey_marker" = "Add marker";
+"marker_add_help" = "Add a marker at the current position";
+"marker_added" = "Marker %@";
+"marker_only_takes" = "Markers work on takes only";
+
+"export_edl_help" = "Export selects EDL (good takes + markers)";
+"edl_no_good_takes" = "No good takes to export";
+"edl_saved" = "EDL saved: %@";

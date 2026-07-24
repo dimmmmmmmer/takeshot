@@ -42,6 +42,15 @@ private struct TakesSection: View {
                 .controlSize(.small)
                 .fixedSize()
                 .help(L("open_folder"))
+                Button {
+                    controller.exportSelectsEDL()
+                } label: {
+                    Image(systemName: "list.and.film")
+                }
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(!controller.takes.contains { $0.rating == .good })
+                .help(L("export_edl_help"))
                 Spacer()
                 if viewMode == "grid" {
                     Slider(value: $tileSize, in: 70...260)

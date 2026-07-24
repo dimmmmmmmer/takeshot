@@ -142,6 +142,11 @@ struct RawTransportBar: View {
                 set: { model.seek(to: Int($0)) }),
                 in: 0...Double(max(1, model.frameCount - 1)))
                 .controlSize(.small)
+                .overlay {
+                    MarkerTicks(markers: controller.playbackMarkers,
+                                duration: Double(model.frameCount)
+                                    / max(1, model.frameRate))
+                }
 
             Text(TransportBar.timeText(Double(model.frameCount)
                                        / max(1, model.frameRate)))
@@ -158,6 +163,8 @@ struct RawTransportBar: View {
             }
             .buttonStyle(.plain)
             .help(L("playback_loop"))
+
+            MarkerButton()
 
             Text("BRAW")
                 .font(.system(size: 9, weight: .semibold))
@@ -239,6 +246,10 @@ struct TransportBar: View {
                 set: { model.seek(to: $0) }),
                 in: 0...max(model.duration, 0.01))
                 .controlSize(.small)
+                .overlay {
+                    MarkerTicks(markers: controller.playbackMarkers,
+                                duration: model.duration)
+                }
 
             Text(Self.timeText(model.duration))
                 .font(.caption.monospacedDigit())
@@ -267,6 +278,8 @@ struct TransportBar: View {
             }
             .buttonStyle(.plain)
             .help(L("playback_loop"))
+
+            MarkerButton()
 
             if controller.playbackFileHasBakedLUT {
                 Image(systemName: "camera.filters")
@@ -324,6 +337,47 @@ struct TransportBar: View {
         guard seconds.isFinite else { return "0:00" }
         let total = Int(seconds.rounded(.down))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// Add-marker flag for both transports.
+private struct MarkerButton: View {
+    @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
+
+    var body: some View {
+        Button {
+            controller.addMarker()
+        } label: {
+            Image(systemName: "flag.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+        }
+        .buttonStyle(.plain)
+        .help("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
+    }
+}
+
+/// Marker positions over a transport slider (display only).
+struct MarkerTicks: View {
+    let markers: [TakeMarker]
+    let duration: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
+                if duration > 0 {
+                    Rectangle()
+                        .fill(.orange)
+                        .frame(width: 2, height: 7)
+                        .position(
+                            x: geo.size.width
+                                * min(1, max(0, marker.seconds / duration)),
+                            y: geo.size.height - 3)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
