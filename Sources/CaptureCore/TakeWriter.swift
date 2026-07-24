@@ -207,6 +207,18 @@ public final class TakeWriter {
         audioInput.append(audioSampleBuffer)
     }
 
+    /// A timecode re-anchor mid-take: the camera's Rec Run TC stood still when
+    /// the take started and began running at `timecode` on the frame at `pts` —
+    /// an extra tc32 sample from that frame keeps the file frame-accurate
+    /// against the camera original in the overlapping region.
+    public func addTimecodeResync(timecode: Timecode, at pts: CMTime) {
+        guard startTimecode != nil, sessionStarted, pts > firstPTS,
+              tcResyncs.count < 32 else { return }
+        tcResyncs.append((pts: pts, timecode: timecode))
+    }
+
+    private var tcResyncs: [(pts: CMTime, timecode: Timecode)] = []
+
     /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
         // finishing with zero samples fails inside AVAssetWriter (-11800) and
@@ -217,7 +229,19 @@ public final class TakeWriter {
         }
         if let timecodeInput, let fdesc = timecodeFormatDescription,
            let tc = startTimecode, sessionStarted {
-            appendTimecodeSample(input: timecodeInput, formatDescription: fdesc, timecode: tc)
+            let frameDuration = CMTime(value: 1000,
+                                       timescale: CMTimeScale(format.frameRate * 1000))
+            let end = CMTimeAdd(lastPTS, frameDuration)
+            var anchors: [(pts: CMTime, timecode: Timecode)] = [(firstPTS, tc)]
+            anchors.append(contentsOf: tcResyncs.filter {
+                $0.pts > firstPTS && $0.pts < end
+            })
+            for (index, anchor) in anchors.enumerated() {
+                let next = index + 1 < anchors.count ? anchors[index + 1].pts : end
+                appendTimecodeSample(input: timecodeInput, formatDescription: fdesc,
+                                     timecode: anchor.timecode,
+                                     from: anchor.pts, until: next)
+            }
         }
         videoInput.markAsFinished()
         audioInput?.markAsFinished()
@@ -250,7 +274,8 @@ public final class TakeWriter {
 
     private func appendTimecodeSample(input: AVAssetWriterInput,
                                       formatDescription: CMTimeCodeFormatDescription,
-                                      timecode: Timecode) {
+                                      timecode: Timecode,
+                                      from: CMTime, until: CMTime) {
         // tc32: one big-endian UInt32 with the start frame number
         var frameNumber = UInt32(clamping: timecode.frameNumber).bigEndian
         var blockBuffer: CMBlockBuffer?
@@ -265,11 +290,9 @@ public final class TakeWriter {
                 offsetIntoDestination: 0, dataLength: 4)
         }
 
-        let frameDuration = CMTime(value: 1000,
-                                   timescale: CMTimeScale(format.frameRate * 1000))
         var timing = CMSampleTimingInfo(
-            duration: CMTimeSubtract(CMTimeAdd(lastPTS, frameDuration), firstPTS),
-            presentationTimeStamp: firstPTS,
+            duration: CMTimeSubtract(until, from),
+            presentationTimeStamp: from,
             decodeTimeStamp: .invalid)
         var sampleSize = 4
         var sampleBuffer: CMSampleBuffer?
@@ -279,6 +302,11 @@ public final class TakeWriter {
             sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
             sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
             sampleBufferOut: &sampleBuffer) == noErr, let sampleBuffer else { return }
+        // several anchors append back to back — wait out the input queue
+        let deadline = Date().addingTimeInterval(0.5)
+        while !input.isReadyForMoreMediaData, Date() < deadline {
+            usleep(1000)
+        }
         input.append(sampleBuffer)
     }
 }

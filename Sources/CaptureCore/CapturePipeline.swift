@@ -493,6 +493,29 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
+        // Rec Run started AFTER the take: while the camera TC stands still the
+        // file's TC track keeps counting, so the overlap would drift by the
+        // frozen duration. Re-anchor the track the moment the TC starts moving.
+        if let writer, let tc = timecode {
+            if let previous = lastWireTimecode {
+                if tc.frameNumber == previous.frameNumber {
+                    frozenTCStreak += 1
+                } else {
+                    if frozenTCStreak >= 3 {
+                        writer.addTimecodeResync(timecode: tc, at: pts)
+                        os_log("TC resync mid-take: %{public}s (frozen %d frames)",
+                               log: Self.levelsLog, type: .default,
+                               tc.description, frozenTCStreak)
+                    }
+                    frozenTCStreak = 0
+                }
+            }
+            lastWireTimecode = tc
+        } else if writer == nil {
+            lastWireTimecode = timecode
+            frozenTCStreak = 0
+        }
+
         if !startedThisFrame, let writer,
            !writer.append(pixelBuffer: recordBuffer, pts: pts) {
             droppedFrames += 1
@@ -532,6 +555,10 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private var lastLoggedLevels = ""
+
+    // TC-run onset detection for the mid-take timecode re-anchor.
+    private var lastWireTimecode: Timecode?
+    private var frozenTCStreak = 0
 
     private var frameGrabHandler: ((Data?) -> Void)?
 
