@@ -197,8 +197,24 @@ public enum TakeLogExporter {
             : value
     }
 
+    /// Public variant for other writers (offload manifest).
+    public static func escapedField(_ value: String) -> String {
+        escape(flattened(value))
+    }
+
     /// RFC 4180 escaping: quote values that contain commas/quotes/newlines.
-    static func escape(_ value: String) -> String {
+    /// Values starting with =, +, - or @ are prefixed with an apostrophe —
+    /// production opens these CSVs in Excel, where such cells execute as
+    /// formulas (a comment like =HYPERLINK(...) is an injection).
+    static func escape(_ rawValue: String) -> String {
+        var value = rawValue
+        if let first = value.first, "=+-@".contains(first) {
+            value = "'" + value
+        }
+        return escapeQuoting(value)
+    }
+
+    private static func escapeQuoting(_ value: String) -> String {
         if value.contains(",") || value.contains("\"") || value.contains("\n") {
             return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }

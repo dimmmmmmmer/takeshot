@@ -60,6 +60,11 @@ final class CaptureController: ObservableObject {
     @Published var otherThumbnails: [URL: NSImage] = [:]
     /// Video durations in Other content (seconds).
     @Published var otherDurations: [URL: Double] = [:]
+    /// Sticky alarm: recording-integrity problems (writer failure, disk low,
+    /// lost takes) must NOT vanish after five seconds like a toast. Cleared
+    /// by the operator or by the next successful take start.
+    @Published var persistentAlert: String?
+
     /// Error toast: pops up over the footer and dismisses itself after a few seconds.
     @Published var lastError: String? {
         didSet {
@@ -93,6 +98,7 @@ final class CaptureController: ObservableObject {
         didSet {
             if viewerMode == .record {
                 player.pause()
+                rawPlayer?.pause() // a looping BRAW decode must not fight capture
             }
             updateTapRunning()
             updateScopesRunning()
@@ -176,9 +182,16 @@ final class CaptureController: ObservableObject {
         offloadStatus = L("offload_scanning")
         Self.backupQueue.async { [weak self] in
             var files: [URL] = []
+            var failures: [String] = []
+            // a card copy must be COMPLETE: hidden files included, and an
+            // unreadable directory is a failure, not a silent skip
             if let enumerator = FileManager.default.enumerator(
                 at: source, includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]) {
+                options: [], errorHandler: { url, error in
+                    failures.append("\(url.lastPathComponent) "
+                        + "(\(error.localizedDescription))")
+                    return true
+                }) {
                 for case let url as URL in enumerator {
                     if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
                         .isDirectory != true {
@@ -187,7 +200,6 @@ final class CaptureController: ObservableObject {
                 }
             }
             var manifest = "File,SHA256,Bytes,Verified At\n"
-            var failures: [String] = []
             for (index, file) in files.enumerated() {
                 DispatchQueue.main.async { [weak self] in
                     self?.offloadStatus = L("offload_progress", index + 1,
@@ -196,32 +208,39 @@ final class CaptureController: ObservableObject {
                 do {
                     let relative = file.path.replacingOccurrences(
                         of: source.path + "/", with: "")
-                    let dest = destDir.appendingPathComponent(relative)
+                    var dest = destDir.appendingPathComponent(relative)
                     try FileManager.default.createDirectory(
                         at: dest.deletingLastPathComponent(),
                         withIntermediateDirectories: true)
-                    if FileManager.default.fileExists(atPath: dest.path) {
-                        try FileManager.default.removeItem(at: dest)
-                    }
+                    // never clobber an existing copy — uniquify instead
+                    dest = CapturePipeline.uniqueURL(for: dest)
                     try FileManager.default.copyItem(at: file, to: dest)
                     let sourceHash = try Self.sha256(of: file)
-                    let destHash = try Self.sha256(of: dest)
+                    let destHash = try Self.sha256(of: dest, bypassCache: true)
                     guard sourceHash == destHash else {
                         failures.append(relative + " (checksum mismatch)")
                         continue
                     }
                     let size = (try? FileManager.default
                         .attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
-                    manifest += "\(relative),\(sourceHash),\(size),"
-                        + "\(ISO8601DateFormatter().string(from: Date()))\n"
+                    manifest += [TakeLogExporter.escapedField(relative),
+                                 sourceHash, String(size),
+                                 ISO8601DateFormatter().string(from: Date())]
+                        .joined(separator: ",") + "\n"
                 } catch {
                     failures.append(file.lastPathComponent
                         + " (\(error.localizedDescription))")
                 }
             }
-            try? manifest.write(
-                to: destDir.appendingPathComponent("offload-manifest.csv"),
-                atomically: true, encoding: .utf8)
+            do {
+                try manifest.write(
+                    to: destDir.appendingPathComponent("offload-manifest.csv"),
+                    atomically: true, encoding: .utf8)
+            } catch {
+                // a vanished backup volume must not report "offload done"
+                failures.append("offload-manifest.csv "
+                    + "(\(error.localizedDescription))")
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.offloadStatus = nil
@@ -235,9 +254,15 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    nonisolated private static func sha256(of url: URL) throws -> String {
+    /// `bypassCache: true` reads through F_NOCACHE — verifying a fresh copy
+    /// through the unified page cache would verify RAM, not the disk.
+    nonisolated private static func sha256(of url: URL,
+                                           bypassCache: Bool = false) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
+        if bypassCache {
+            _ = fcntl(handle.fileDescriptor, F_NOCACHE, 1)
+        }
         var hasher = SHA256()
         while autoreleasepool(invoking: {
             let chunk = handle.readData(ofLength: 8 << 20)
@@ -688,7 +713,7 @@ final class CaptureController: ObservableObject {
             let metadata = (try? await item.asset.load(.metadata)) ?? []
             let baked = metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self, self.player.currentItem === item else { return }
                 self.playbackFileHasBakedLUT = baked
                 self.applyPlaybackLUT()
             }
@@ -1180,6 +1205,7 @@ final class CaptureController: ObservableObject {
             playbackTap.detach()
             playbackURL = nil
         }
+        if compareClipURL == take.url { compareClipURL = nil }
         takes.removeAll { $0.id == take.id }
         thumbnails[take.id] = nil
         scannedPaths.remove(take.url.path)
@@ -1202,6 +1228,7 @@ final class CaptureController: ObservableObject {
             rawPlayer = nil
             playbackURL = nil
         }
+        if compareClipURL == url { compareClipURL = nil }
         otherFiles.removeAll { $0 == url }
         otherThumbnails[url] = nil
         otherDurations[url] = nil
@@ -1545,6 +1572,35 @@ final class CaptureController: ObservableObject {
         // without this the checkbox showed enabled while nothing was applied
         rebuildLUT()
         rebuildPlayout()
+        startDiskWatch()
+    }
+
+    /// Free-space watch on the record volume: warn early, stop the take
+    /// before the writer hits a hard wall (nothing watched disk space at all).
+    private func startDiskWatch() {
+        Task { [weak self] in
+            while let self, !Task.isCancelled {
+                self.checkDiskSpace()
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    private func checkDiskSpace() {
+        guard isCapturing else { return }
+        let values = try? destinationRoot.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let free = values?.volumeAvailableCapacityForImportantUsage
+        else { return }
+        let freeGB = Double(free) / 1_000_000_000
+        if freeGB < 0.5, isRecording {
+            pipeline.toggleManualRecord() // close the take while it can finalize
+            persistentAlert = String(format:
+                "DISK FULL (%.1f GB) — recording stopped", freeGB)
+        } else if freeGB < 5 {
+            persistentAlert = String(format:
+                "Record disk low: %.1f GB free", freeGB)
+        }
     }
 
     private func bindPipeline() {
@@ -1566,6 +1622,7 @@ final class CaptureController: ObservableObject {
             if recording {
                 self.recordingStartDate = Date()
                 self.recordingMarkers = []
+                self.persistentAlert = nil // a clean start clears the alarm
             }
             self.refreshNameCollision() // start hides it, stop recomputes
             // multicam: the other cameras in sync with the main one
@@ -1610,7 +1667,14 @@ final class CaptureController: ObservableObject {
         let monitor = audioMonitor
         pipeline.onMonitorAudio = { monitor.enqueue($0) }
         pipeline.onError = { [weak self] message in
-            self?.lastError = message
+            guard let self else { return }
+            // recording-integrity failures stick; everything else toasts
+            if message.contains("TAKE LOST") || message.contains("Dropped")
+                || message.contains("ingress") {
+                self.persistentAlert = message
+            } else {
+                self.lastError = message
+            }
         }
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
@@ -1770,7 +1834,7 @@ final class CaptureController: ObservableObject {
                 camLabel: nextLetter, backend: mock,
                 deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
             channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-            channel.start()
+            try? channel.start() // the mock cannot fail
             extraChannels = [channel]
         } else {
             // hardware: each OTHER DeckLink board is its own channel
@@ -1782,11 +1846,16 @@ final class CaptureController: ObservableObject {
             for device in others {
                 let rawID = String(device.id.dropFirst("decklink:".count))
                 let channel = CameraChannel(
-                    camLabel: letter, backend: DeckLinkBackendAdapter(),
+                    camLabel: letter,
+                    backend: DeckLinkBackendAdapter(watchesDevices: false),
                     deviceID: rawID, settings: settings, roll: roll)
                 channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-                channel.start()
-                channels.append(channel)
+                do {
+                    try channel.start()
+                    channels.append(channel)
+                } catch {
+                    lastError = "\(device.name): \(error.localizedDescription)"
+                }
                 letter = FieldStepper.stepLetter(letter, by: 1)
             }
             extraChannels = channels
@@ -1855,14 +1924,20 @@ final class CaptureController: ObservableObject {
     /// can never run while the main thread is parked in semaphore.wait.
     func flushOnTerminate() {
         pipeline.captureStopped() // finishes the in-flight take, if any
-        for channel in extraChannels { channel.stop() }
+        for channel in extraChannels { channel.stopStreams() }
         let sem = DispatchSemaphore(value: 0)
         let pipeline = self.pipeline
+        // EVERY pipeline must finalize before exit — the extra channels used
+        // to fire-and-forget, leaving B/C-cam takes without moov atoms
+        let channelPipelines = extraChannels.map(\.pipeline)
         Task.detached {
             await pipeline.finishPendingWrites()
+            for channelPipeline in channelPipelines {
+                await channelPipeline.finishPendingWrites()
+            }
             sem.signal()
         }
-        _ = sem.wait(timeout: .now() + 10)
+        _ = sem.wait(timeout: .now() + 15)
     }
 
     private func restartCapture() {
@@ -2041,7 +2116,18 @@ final class CaptureController: ObservableObject {
             fileDescriptor: fd, eventMask: [.write, .rename, .delete],
             queue: .main)
         source.setEventHandler { [weak self] in
-            guard let self, !self.folderRescanScheduled else { return }
+            guard let self else { return }
+            let flags = source.data
+            if flags.contains(.delete) || flags.contains(.rename) {
+                // the fd now points at an unlinked inode — the watcher is dead
+                // and an open take is writing into an orphan; recreate + rearm
+                try? FileManager.default.createDirectory(
+                    at: self.destinationRoot, withIntermediateDirectories: true)
+                self.lastError = "Record folder was moved/deleted — recreated"
+                self.startFolderWatcher()
+                return
+            }
+            guard !self.folderRescanScheduled else { return }
             // debounce bursts (a recording take touches the folder every frame)
             self.folderRescanScheduled = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -2099,12 +2185,15 @@ final class CaptureController: ObservableObject {
         }
         var restored: [Take] = []
         var foreign: [URL] = []
-        let meta = (try? String(contentsOf: takeLogURL, encoding: .utf8))
-            .map(TakeLogExporter.parseMetadata(csv:)) ?? [:]
+        // lossy decode: one bad byte must not wipe the day's ratings
+        let meta = (try? Data(contentsOf: takeLogURL))
+            .map { TakeLogExporter.parseMetadata(
+                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         let markersURL = destinationRoot
             .appendingPathComponent(TakeLogExporter.markersFileName)
-        let markers = (try? String(contentsOf: markersURL, encoding: .utf8))
-            .map(TakeLogExporter.parseMarkers(csv:)) ?? [:]
+        let markers = (try? Data(contentsOf: markersURL))
+            .map { TakeLogExporter.parseMarkers(
+                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
 
         for url in candidates {
             if scannedPaths.contains(url.path) {
@@ -2315,9 +2404,18 @@ final class CaptureController: ObservableObject {
     private func exportTakeLog() {
         let takes = takes
         let root = destinationRoot
-        Self.takeLogQueue.async {
-            _ = try? TakeLogExporter.write(takes: takes, toDirectory: root)
-            _ = try? TakeLogExporter.writeMarkers(takes: takes, toDirectory: root)
+        Self.takeLogQueue.async { [weak self] in
+            do {
+                _ = try TakeLogExporter.write(takes: takes, toDirectory: root)
+                _ = try TakeLogExporter.writeMarkers(takes: takes,
+                                                     toDirectory: root)
+            } catch {
+                // ratings/comments silently not persisting is a day-loss bug
+                DispatchQueue.main.async {
+                    self?.lastError = "Metadata log NOT saved: "
+                        + error.localizedDescription
+                }
+            }
         }
     }
 

@@ -23,10 +23,17 @@ public enum EDLExporter {
                                    fps: fps, isDropFrame: dropFrame).frameNumber
         for (index, take) in takes.enumerated() {
             let frames = max(1, Int((take.durationSeconds * realRate).rounded()))
+            // source TCs run at the TAKE's own rate (mixed-fps sessions):
+            // using the master rate landed conform on wrong frames
+            let sourceFPS = take.startTimecode?.fps ?? fps
+            let sourceDF = take.startTimecode?.isDropFrame ?? dropFrame
+            let sourceRate = Double(sourceFPS) * (sourceDF ? 1000.0 / 1001.0 : 1)
+            let sourceFrames = max(1, Int((take.durationSeconds
+                * sourceRate).rounded()))
             let sourceIn = take.startTimecode
-                ?? Timecode(frameNumber: 0, fps: fps, isDropFrame: dropFrame)
-            let sourceOut = Timecode(frameNumber: sourceIn.frameNumber + frames,
-                                     fps: fps, isDropFrame: dropFrame)
+                ?? Timecode(frameNumber: 0, fps: sourceFPS, isDropFrame: sourceDF)
+            let sourceOut = Timecode(frameNumber: sourceIn.frameNumber + sourceFrames,
+                                     fps: sourceFPS, isDropFrame: sourceDF)
             let recordIn = Timecode(frameNumber: recordFrame, fps: fps,
                                     isDropFrame: dropFrame)
             let recordOut = Timecode(frameNumber: recordFrame + frames, fps: fps,
@@ -40,13 +47,17 @@ public enum EDLExporter {
                 recordIn.description, recordOut.description))
             lines.append("* FROM CLIP NAME: \(take.url.lastPathComponent)")
             if !take.comment.isEmpty {
-                lines.append("* COMMENT: \(take.comment)")
+                // newlines in a comment would inject arbitrary EDL lines
+                let flat = take.comment
+                    .components(separatedBy: .newlines).joined(separator: " ")
+                lines.append("* COMMENT: \(flat)")
             }
             for marker in take.markers {
                 let offset = Int((marker.seconds * realRate).rounded())
                 let locator = Timecode(frameNumber: recordFrame + offset,
                                        fps: fps, isDropFrame: dropFrame)
                 var name = marker.note
+                    .components(separatedBy: .newlines).joined(separator: " ")
                 if name.isEmpty {
                     name = marker.timecodeText.isEmpty ? "MARKER"
                                                        : marker.timecodeText

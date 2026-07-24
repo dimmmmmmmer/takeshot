@@ -155,6 +155,7 @@ class CBRCallback : public IBlackmagicRawCallback {
     IBlackmagicRawClip *_clip;
     CBRCallback _callback;
     dispatch_queue_t _decodeQueue; // serializes SDK job submission
+    BOOL _broken; // a decode timed out — the SDK state is untrustworthy
 }
 
 + (BOOL)isSDKAvailable {
@@ -243,35 +244,42 @@ class CBRCallback : public IBlackmagicRawCallback {
 }
 
 - (nullable CVPixelBufferRef)copyFrameAtIndex:(uint64_t)index {
-    if (_clip == NULL || index >= _frameCount) {
+    if (_clip == NULL || index >= _frameCount || _broken) {
         return NULL;
     }
     __block CVPixelBufferRef result = NULL;
     dispatch_sync(_decodeQueue, ^{
-      CBRPending pending = {
-          .semaphore = dispatch_semaphore_create(0),
-          .result = NULL,
-          .status = S_OK,
-      };
+      if (self->_broken) {
+          return;
+      }
+      // heap-allocated: a stack slot would be a dead-frame write if the SDK
+      // signaled after a timeout unwound this function
+      CBRPending *pending = new CBRPending{
+          dispatch_semaphore_create(0), NULL, S_OK};
       IBlackmagicRawJob *job = NULL;
       if (self->_clip->CreateJobReadFrame(index, &job) != S_OK ||
           job == NULL) {
+          delete pending;
           return;
       }
-      job->SetUserData(&pending);
+      job->SetUserData(pending);
       if (job->Submit() != S_OK) {
           job->Release();
+          delete pending;
           return;
       }
       // decode of a single frame is seconds at the very worst (network volume)
       if (dispatch_semaphore_wait(
-              pending.semaphore,
+              pending->semaphore,
               dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) != 0) {
-          // timed out: block until the SDK settles rather than let the
-          // callback signal a dead stack slot
-          self->_codec->FlushJobs();
+          // timed out: mark the clip dead so the UI fails fast instead of
+          // stacking blocked tasks; the pending struct leaks deliberately —
+          // a hung SDK callback may still write into it much later
+          self->_broken = YES;
+          return;
       }
-      result = pending.result;
+      result = pending->result;
+      delete pending;
     });
     return result;
 }

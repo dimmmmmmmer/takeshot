@@ -17,8 +17,12 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
 
-    override init() {
+    /// The discovery callback is a bridge-level SINGLETON — a second adapter
+    /// (multicam channels) registering would silently replace the primary's
+    /// hot-plug handling with a no-op.
+    init(watchesDevices: Bool = true) {
         super.init()
+        guard watchesDevices else { return }
         // hot-plug: a board plugged/unplugged — the device list refreshes itself
         CDLDeviceManager.startWatchingDevices { [weak self] in
             guard let self else { return }
@@ -142,11 +146,24 @@ final class AggregateBackend: CaptureBackend {
         }
     }
 
+    enum AggregateError: LocalizedError {
+        case unknownDevice(String)
+        var errorDescription: String? {
+            if case .unknownDevice(let id) = self {
+                return "Unknown capture device \"\(id)\""
+            }
+            return nil
+        }
+    }
+
     func startCapture(deviceID: String) throws {
         stopCapture()
         guard let separator = deviceID.firstIndex(of: ":"),
               let child = children.first(where: { $0.prefix == deviceID[..<separator] })
-        else { return }
+        else {
+            // returning silently made the UI show "capturing" over nothing
+            throw AggregateError.unknownDevice(deviceID)
+        }
         let childDeviceID = String(deviceID[deviceID.index(after: separator)...])
         try child.backend.startCapture(deviceID: childDeviceID)
         activeBackend = child.backend

@@ -279,6 +279,13 @@ public final class CapturePipeline: @unchecked Sendable {
                 config.settings.startDebounceFrames != self.config.settings.startDebounceFrames
                 || config.settings.stopDebounceFrames != self.config.settings.stopDebounceFrames
                 || config.settings.detectionMode != self.config.settings.detectionMode
+            if config.settings.audioChannelMask
+                != self.config.settings.audioChannelMask {
+                // the packed-buffer format caches describe the OLD channel
+                // count — reusing them mis-interleaves audio after a change
+                self.trimFormatCache = nil
+                self.monitorFormatCache = nil
+            }
             self.config = config
             if detectorChanged {
                 self.detector = RecDetector(config: RecDetectorConfig(
@@ -334,6 +341,15 @@ public final class CapturePipeline: @unchecked Sendable {
             // a re-announced identical format must not reset detection state:
             // it would wipe the pre-roll buffer and restart REC debounce mid-take
             guard newFormat != self.format else { return }
+            // a REAL format change restarts the streams (PTS timeline resets),
+            // so an open take would silently starve while REC stayed red —
+            // close it cleanly and tell the operator
+            if self.writer != nil {
+                self.finishTake()
+                DispatchQueue.main.async {
+                    self.onError?("Take closed: input format changed mid-take")
+                }
+            }
             self.format = newFormat
             self.detector.reset()
             self.preRollBuffer.removeAll()
@@ -342,22 +358,54 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public func handleSignal(present: Bool) {
-        if !present {
-            // no frozen last frame on signal loss — show black, and don't let
-            // a later sink registration or the compare pull the stale frame
-            latestPreviewLock.lock()
-            latestPreview = nil
-            latestPreviewLock.unlock()
-            displaySinks.clearToBlack()
+        // called from the DeckLink callback inside its @synchronized region —
+        // clearToBlack does GPU work (nextDrawable can park ~1 s occluded),
+        // so everything hops to our own queues
+        queue.async {
+            if !present {
+                // no stale frame for later sink registrations or the compare
+                self.latestPreviewLock.lock()
+                self.latestPreview = nil
+                self.latestPreviewLock.unlock()
+                self.displayQueue.async {
+                    self.displaySinks.clearToBlack()
+                }
+            }
+            DispatchQueue.main.async { self.onSignal?(present) }
         }
-        DispatchQueue.main.async { self.onSignal?(present) }
     }
+
+    private let inFlightLock = NSLock()
+    private var inFlightFrames = 0
+    private var ingressDrops = 0
 
     public func handleFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                             timecode rawTimecode: Timecode?,
                             vancTrigger: VancTrigger? = nil,
                             ancillaryPackets: [AncillaryPacket] = []) {
+        // backpressure: a stalled destination (NAS waking up) piles retained
+        // UHD buffers into the queue — drop at ingress past a small window
+        inFlightLock.lock()
+        if inFlightFrames >= 12 {
+            ingressDrops += 1
+            let drops = ingressDrops
+            inFlightLock.unlock()
+            if drops == 1 || drops % 100 == 0 {
+                DispatchQueue.main.async {
+                    self.onError?("Pipeline overloaded — \(drops) frame(s) "
+                        + "dropped at ingress")
+                }
+            }
+            return
+        }
+        inFlightFrames += 1
+        inFlightLock.unlock()
         queue.async {
+            defer {
+                self.inFlightLock.lock()
+                self.inFlightFrames -= 1
+                self.inFlightLock.unlock()
+            }
             self.processFrame(pixelBuffer: pixelBuffer, pts: pts,
                               timecode: rawTimecode, vancTrigger: vancTrigger,
                               ancillaryPackets: ancillaryPackets)
@@ -379,7 +427,11 @@ public final class CapturePipeline: @unchecked Sendable {
             }
             // meters show ALL channels; only channels enabled in the mask are written
             var toWrite: CMSampleBuffer? = sampleBuffer
-            if let mask = self.config.settings.audioChannelMask {
+            // the mask is LATCHED for the take: the writer's channel count is
+            // fixed at start, a live change would kill the whole file
+            let activeMask = self.writer != nil
+                ? self.recordingMask : self.config.settings.audioChannelMask
+            if let mask = activeMask {
                 let indices = (0..<32).filter { mask & (1 << $0) != 0 }
                 toWrite = PCMAudio.selectChannels(sampleBuffer, indices: indices,
                                                   formatCache: &self.trimFormatCache)
@@ -641,6 +693,8 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     private var lastLoggedLevels = ""
+    /// Audio channel mask captured at take start (see handleAudio).
+    private var recordingMask: Int?
 
     // TC-run onset detection for the mid-take timecode re-anchor.
     private var lastWireTimecode: Timecode?
@@ -753,6 +807,7 @@ public final class CapturePipeline: @unchecked Sendable {
 
     private func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
+        recordingMask = config.settings.audioChannelMask // latched for the take
         // The file's TC track counts from its FIRST frame — which is pre-roll,
         // shot before the camera's TC started running. Shift the start TC back
         // by the pre-roll frames actually written, so the camera-start frame
@@ -861,16 +916,24 @@ public final class CapturePipeline: @unchecked Sendable {
             recordedAt: takeStartedAt)
         DispatchQueue.main.async {
             self.onRecStateChanged?(false)
-            self.onTakeFinished?(take)
         }
-        // track the finalization task so we can await it on capture stop and app
-        // exit (otherwise the file may be left unfinished)
+        // the take joins the list only after a SUCCESSFUL finalize — a failed
+        // finish used to leave a normal-looking, unplayable file in the panel
         let task = Task { [weak self] in
             do {
                 _ = try await writer.finish()
+                let droppedAudio = writer.droppedAudioPackets
+                DispatchQueue.main.async {
+                    self?.onTakeFinished?(take)
+                    if droppedAudio > 0 {
+                        self?.onError?("Take \(take.displayName): "
+                            + "\(droppedAudio) audio packet(s) dropped")
+                    }
+                }
             } catch {
                 DispatchQueue.main.async {
-                    self?.onError?("Failed to finalize take: \(error.localizedDescription)")
+                    self?.onError?("TAKE LOST — failed to finalize "
+                        + "\(take.displayName): \(error.localizedDescription)")
                 }
             }
         }

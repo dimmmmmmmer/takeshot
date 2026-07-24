@@ -54,11 +54,21 @@ final class CameraChannel: ObservableObject, Identifiable {
         }
     }
 
-    func start() { try? backend.startCapture(deviceID: deviceID) }
+    /// Start capture; the error surfaces to the operator (a board held by
+    /// another app used to fail completely silently).
+    func start() throws {
+        try backend.startCapture(deviceID: deviceID)
+    }
+
     func stop() {
+        stopStreams()
+        Task { await pipeline.finishPendingWrites() }
+    }
+
+    /// Synchronous part of stop — flushOnTerminate awaits the writes itself.
+    func stopStreams() {
         backend.stopCapture()
         pipeline.captureStopped()
-        Task { await pipeline.finishPendingWrites() }
     }
 
     func update(settings: CaptureSettings, roll: String, takeNumber: Int) {

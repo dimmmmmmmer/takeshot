@@ -137,6 +137,29 @@ struct PlayerArea: View {
                     AudioChannelPanel(live: controller.live)
                 }
             }
+            .overlay(alignment: .top) {
+                if let alert = controller.persistentAlert {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.octagon.fill")
+                        Text(alert)
+                            .font(.caption.bold())
+                            .lineLimit(2)
+                        Button {
+                            controller.persistentAlert = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.red.opacity(0.9),
+                                in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 40)
+                }
+            }
             .overlay(alignment: .bottom) {
                 // above the transport bar when one is showing (marker toasts
                 // must not land under the controls)
@@ -329,6 +352,23 @@ struct PlayerTopBadgesModifier: ViewModifier {
                         }
                         .buttonStyle(.plain)
                         .help(L("scopes_toggle"))
+                    }
+                    if controller.devices.filter({
+                        $0.id.hasPrefix("decklink:")
+                    }).count > 1 {
+                        playerOverlayBadge {
+                            Button {
+                                controller.toggleMulticam()
+                            } label: {
+                                Image(systemName: "rectangle.split.2x2")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(controller.multicamOn
+                                                     ? controller.accentColor
+                                                     : .white)
+                            }
+                            .buttonStyle(.plain)
+                            .help(L("multicam_toggle"))
+                        }
                     }
                     playerOverlayBadge {
                         AssistMenu()

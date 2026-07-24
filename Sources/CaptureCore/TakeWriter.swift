@@ -164,6 +164,10 @@ public final class TakeWriter {
             }
         }
 
+        // recoverable files: without fragments a crash/power loss mid-take
+        // loses the WHOLE recording (the moov atom is only written in finish)
+        writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
+
         guard writer.startWriting() else {
             throw WriterError.notWritable(writer.status, writer.error)
         }
@@ -201,9 +205,17 @@ public final class TakeWriter {
         return append(pixelBuffer: pixelBuffer, pts: pts)
     }
 
+    /// Audio packets discarded because the input wasn't ready — sync-critical
+    /// gaps that used to vanish silently (video drops were always counted).
+    public private(set) var droppedAudioPackets = 0
+
     /// PCM audio from the capture board. The input is already created in init (before startWriting).
     public func append(audioSampleBuffer: CMSampleBuffer) {
-        guard sessionStarted, let audioInput, audioInput.isReadyForMoreMediaData else { return }
+        guard sessionStarted, let audioInput else { return }
+        guard audioInput.isReadyForMoreMediaData else {
+            droppedAudioPackets += 1
+            return
+        }
         audioInput.append(audioSampleBuffer)
     }
 

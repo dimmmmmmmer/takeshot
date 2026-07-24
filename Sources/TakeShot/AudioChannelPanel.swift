@@ -91,7 +91,13 @@ struct AudioChannelPanel: View {
                 .foregroundStyle(enabled ? .primary : .tertiary)
         }
         .contentShape(Rectangle())
-        .onTapGesture { controller.toggleAudioChannel(index) }
+        .onTapGesture {
+            // the channel mask is latched per take — flipping it mid-take
+            // would desync the writer's fixed channel count
+            guard !controller.isRecording else { return }
+            controller.toggleAudioChannel(index)
+        }
+        .opacity(controller.isRecording ? 0.55 : 1)
         .help(enabled ? L("channel_on_help") : L("channel_off_help"))
     }
 
