@@ -48,6 +48,44 @@ public enum TakeLogExporter {
         return url
     }
 
+    // MARK: - shift report (full data table, for production paperwork)
+
+    /// End TC of a take: start TC advanced by the recorded frames.
+    public static func endTimecode(of take: Take) -> Timecode? {
+        guard let start = take.startTimecode else { return nil }
+        let frames = Int((take.durationSeconds * Double(start.fps)).rounded())
+        return Timecode(frameNumber: start.frameNumber + frames,
+                        fps: start.fps, isDropFrame: start.isDropFrame)
+    }
+
+    public static func reportCSV(takes: [Take]) -> String {
+        var lines = ["File Name,Roll,Clip,Start TC,End TC,Duration (s),Rating,Comments,Markers,Recorded At"]
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        for take in takes {
+            let rating: String
+            switch take.rating {
+            case .good: rating = "GOOD"
+            case .bad: rating = "NG"
+            case .none: rating = ""
+            }
+            lines.append([
+                escape(take.url.lastPathComponent),
+                escape(take.roll),
+                String(take.takeNumber),
+                take.startTimecode?.description ?? "",
+                endTimecode(of: take)?.description ?? "",
+                String(format: "%.1f", take.durationSeconds),
+                rating,
+                escape(take.comment),
+                escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
+                formatter.string(from: take.recordedAt),
+            ].joined(separator: ","))
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
     // MARK: - markers sidecar (not part of the Resolve metadata CSV)
 
     public static let markersFileName = "takeshot-markers.csv"

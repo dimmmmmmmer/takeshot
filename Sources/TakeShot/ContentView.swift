@@ -484,6 +484,39 @@ private struct CompareControls: View {
 struct PreviewView: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// Photos keep the SwiftUI graphics path (Image is color-managed correctly,
+    /// and compare masks/opacity over Image views don't shift color).
+    @ViewBuilder private var imagePlaybackBranch: some View {
+        switch controller.compareMode {
+        case .off:
+            PlaybackContent()
+        case .blend:
+            ZStack {
+                LivePreviewContent()
+                PlaybackContent().opacity(controller.blendOpacity)
+            }
+            .aspectRatio(Self.liveAspect(controller.signalFormat),
+                         contentMode: .fit)
+        case .wipe:
+            ZStack {
+                LivePreviewContent()
+                PlaybackContent()
+                    .mask {
+                        WipeMask(orientation: controller.wipeOrientation,
+                                 position: controller.wipePosition)
+                    }
+                WipeHandle()
+            }
+            .aspectRatio(Self.liveAspect(controller.signalFormat),
+                         contentMode: .fit)
+        case .sideBySide:
+            HStack(spacing: 2) {
+                LivePreviewContent()
+                PlaybackContent()
+            }
+        }
+    }
+
     /// The live signal's aspect — a shared compare container so frames of
     /// different resolutions (and the wipe) line up geometrically.
     static func liveAspect(_ format: CaptureFormat?) -> CGFloat {
@@ -507,6 +540,28 @@ struct PreviewView: View {
         return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
     }
 
+    /// Whether the playback file is a photo.
+    private var isImage: Bool {
+        controller.playbackURL.map {
+            PlaybackContent.imageExtensions.contains($0.pathExtension.lowercased())
+        } ?? false
+    }
+
+    /// What feeds the unified surface right now.
+    private var surfaceSource: ViewerSurface.Source {
+        if controller.viewerMode == .record { return .live }
+        guard let url = controller.playbackURL else { return .none }
+        let ext = url.pathExtension.lowercased()
+        if PlaybackContent.imageExtensions.contains(ext) { return .none }
+        if CaptureController.rawExtensions.contains(ext) {
+            if let raw = controller.rawPlayer {
+                return .raw(ObjectIdentifier(raw))
+            }
+            return .none
+        }
+        return .playback
+    }
+
     var body: some View {
         // the image area stays the same between record and playback: the transport
         // is a translucent bottom overlay, not a row that squeezes the frame
@@ -514,78 +569,61 @@ struct PreviewView: View {
             GeometryReader { _ in
                 ZStack {
                     Rectangle().fill(controller.playerBackground)
-                    // both surfaces stay mounted: swapping views re-created the
-                    // Metal host and the image jumped for a frame on mode switch
-                    LivePreviewContent()
-                        .opacity(controller.viewerMode == .record
-                                 && !(controller.multicamOn
-                                      && !controller.extraChannels.isEmpty) ? 1 : 0)
-                    if controller.viewerMode == .playback {
-                        let isImage = controller.playbackURL.map {
-                            PlaybackContent.imageExtensions.contains(
-                                $0.pathExtension.lowercased())
-                        } ?? false
-                        switch controller.compareMode {
-                        case .off:
-                            PlaybackContent()
-                        case .blend:
-                            if isImage {
-                                // stills render on the graphics path — SwiftUI
-                                // opacity is color-correct for Image views
-                                ZStack {
-                                    LivePreviewContent()
-                                    PlaybackContent().opacity(controller.blendOpacity)
-                                }
-                                .aspectRatio(Self.liveAspect(controller.signalFormat),
-                                             contentMode: .fit)
-                            } else {
-                                // video is composited inside the playback render:
-                                // SwiftUI opacity over a video layer drops its
-                                // colorspace
-                                PlaybackContent()
-                            }
-                        case .wipe:
-                            if isImage {
-                                ZStack {
-                                    LivePreviewContent()
-                                    PlaybackContent()
-                                        .mask {
-                                            WipeMask(
-                                                orientation: controller.wipeOrientation,
-                                                position: controller.wipePosition)
-                                        }
-                                    WipeHandle()
-                                }
-                                .aspectRatio(Self.liveAspect(controller.signalFormat),
-                                             contentMode: .fit)
-                            } else {
-                                ZStack {
-                                    PlaybackContent()
-                                    WipeHandle()
-                                }
-                                // the composite is playback-sized — the handle
-                                // must live in the same aspect or the seam and
-                                // the line diverge
-                                .aspectRatio(controller.playbackAspect
-                                             ?? Self.liveAspect(controller.signalFormat),
-                                             contentMode: .fit)
-                            }
-                        case .sideBySide:
-                            HStack(spacing: 2) {
-                                LivePreviewContent()
-                                PlaybackContent()
-                            }
-                        }
-                    } else if controller.multicamOn && !controller.extraChannels.isEmpty {
+                    if controller.viewerMode == .record, controller.multicamOn,
+                       !controller.extraChannels.isEmpty {
                         MulticamGrid()
-                    } else if controller.referencePinned,
-                              controller.compareMode == .wipe {
-                        // seam/handle over the live letterbox: the same centered
-                        // aspect-fit box the layer letterboxes into
-                        Color.clear
-                            .aspectRatio(Self.liveAspect(controller.signalFormat),
-                                         contentMode: .fit)
-                            .overlay { WipeHandle() }
+                    } else if controller.viewerMode == .playback, isImage {
+                        imagePlaybackBranch
+                    } else if controller.viewerMode == .playback,
+                              controller.compareMode == .sideBySide,
+                              controller.playbackURL != nil {
+                        HStack(spacing: 2) {
+                            LivePreviewContent()
+                            PlaybackContent()
+                        }
+                    } else {
+                        // ONE NSView/layer for live, playback video and RAW: the
+                        // mode switch re-routes frames into the same surface, so
+                        // rec и playback land on identical pixels by construction
+                        ViewerSurface(controller: controller, source: surfaceSource)
+                        if controller.viewerMode == .record {
+                            LiveStatusOverlay()
+                        } else if controller.playbackURL == nil {
+                            VStack(spacing: 8) {
+                                Image(systemName: "play.rectangle")
+                                    .font(.system(size: 40))
+                                Text(L("playback_pick_hint"))
+                                    .font(.headline)
+                            }
+                            .foregroundStyle(.secondary)
+                        } else if case .none = surfaceSource {
+                            // RAW that failed to open
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 32))
+                                Text(controller.rawPlayerError ?? L("raw_open_failed"))
+                                    .font(.headline)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(20)
+                        }
+                        // the wipe seam/handle rides the same centered aspect-fit
+                        // box the layer letterboxes the composite into
+                        if controller.compareMode == .wipe,
+                           (controller.viewerMode == .playback
+                            && controller.playbackURL != nil)
+                            || (controller.viewerMode == .record
+                                && controller.referencePinned) {
+                            Color.clear
+                                .aspectRatio(
+                                    controller.viewerMode == .playback
+                                        ? (controller.playbackAspect
+                                           ?? Self.liveAspect(controller.signalFormat))
+                                        : Self.liveAspect(controller.signalFormat),
+                                    contentMode: .fit)
+                                .overlay { WipeHandle() }
+                        }
                     }
                 }
             }
@@ -783,24 +821,107 @@ struct LivePreviewContent: View {
     var body: some View {
         ZStack {
             LivePreviewLayerView(pipeline: controller.pipeline)
-            if !controller.isCapturing || controller.devices.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "cable.connector.slash")
-                        .font(.system(size: 40))
-                    Text(controller.backendAvailable
-                         ? L("no_devices_found")
-                         : L("sdk_not_connected"))
-                        .font(.headline)
-                }
-                .foregroundStyle(.secondary)
-            } else if !controller.signalPresent {
-                Text(L("no_signal"))
+            LiveStatusOverlay()
+        }
+    }
+}
+
+/// Status text over the live image (no devices / no signal).
+struct LiveStatusOverlay: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        if !controller.isCapturing || controller.devices.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "cable.connector.slash")
+                    .font(.system(size: 40))
+                Text(controller.backendAvailable
+                     ? L("no_devices_found")
+                     : L("sdk_not_connected"))
                     .font(.headline)
-                    .padding(8)
-                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
-                    .foregroundStyle(.white.opacity(0.75))
+            }
+            .foregroundStyle(.secondary)
+        } else if !controller.signalPresent {
+            Text(L("no_signal"))
+                .font(.headline)
+                .padding(8)
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(.white.opacity(0.75))
+        }
+    }
+}
+
+/// The main viewer surface: one NSView + one MetalPreviewLayer whose frame
+/// source is re-routed between live capture, AVPlayer playback and the RAW
+/// engine. One surface — rec and playback occupy identical pixels, so a mode
+/// switch cannot shift or resize the image.
+struct ViewerSurface: NSViewRepresentable {
+    let controller: CaptureController
+    let source: Source
+
+    enum Source: Equatable {
+        case none
+        case live
+        case playback
+        case raw(ObjectIdentifier)
+    }
+
+    final class Coordinator {
+        var layer: MetalPreviewLayer?
+        weak var pipeline: CapturePipeline?
+        weak var tap: PlaybackFrameTap?
+        weak var raw: RawPlayerModel?
+        var current: Source = .none
+        var attached = false
+
+        @MainActor
+        func attach(_ source: Source, controller: CaptureController) {
+            guard let layer, !attached || source != current else { return }
+            detach()
+            attached = true
+            current = source
+            switch source {
+            case .none:
+                layer.clearToBlack()
+            case .live:
+                pipeline = controller.pipeline
+                controller.pipeline.addDisplaySink(layer)
+            case .playback:
+                tap = controller.playbackTap
+                controller.playbackTap.addSink(layer)
+            case .raw:
+                raw = controller.rawPlayer
+                controller.rawPlayer?.addSink(layer)
             }
         }
+
+        @MainActor
+        func detach() {
+            guard let layer else { return }
+            pipeline?.removeDisplaySink(layer)
+            tap?.removeSink(layer)
+            raw?.removeSink(layer)
+            pipeline = nil
+            tap = nil
+            raw = nil
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let layer = MetalPreviewLayer()
+        context.coordinator.layer = layer
+        context.coordinator.attach(source, controller: controller)
+        return MetalPreviewHostView(layer: layer)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.attach(source, controller: controller)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.detach()
     }
 }
 

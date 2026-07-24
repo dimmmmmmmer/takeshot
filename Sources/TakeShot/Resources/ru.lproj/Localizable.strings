@@ -280,3 +280,10 @@
 "unpin_reference_help" = "Открепить референс";
 "reference_pinned" = "Референс закреплён — сравнивайте с живым сигналом";
 "reference_pin_failed" = "Не удалось закрепить референс";
+
+"export_edl" = "EDL селектов (хорошие тейки)";
+"export_report_pdf" = "Отчёт смены (PDF)";
+"export_report_csv" = "Отчёт смены (CSV)";
+"export_menu_help" = "Экспорт: EDL, отчёт смены";
+"report_no_takes" = "Нет тейков для отчёта";
+"report_saved" = "Отчёт сохранён: %@";

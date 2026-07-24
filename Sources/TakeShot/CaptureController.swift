@@ -451,9 +451,18 @@ final class CaptureController: ObservableObject {
         guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
               !playbackLUTSuppressed,
               let cube = currentCube, let filter = cube.makeFilter() else {
+            os_log("playback LUT OFF: preview=%d baked=%d suppressed=%d cube=%d",
+                   log: CapturePipeline.levelsLog, type: .default,
+                   (settings.lutPreviewEnabled ?? false) ? 1 : 0,
+                   playbackFileHasBakedLUT ? 1 : 0,
+                   playbackLUTSuppressed ? 1 : 0,
+                   currentCube != nil ? 1 : 0)
             playbackTap.setLUT(nil, intensity: 1)
             return
         }
+        os_log("playback LUT ON: %{public}s intensity=%.2f",
+               log: CapturePipeline.levelsLog, type: .default,
+               settings.lutFileName ?? "?", settings.lutIntensity ?? 1)
         playbackTap.setLUT(filter, intensity: settings.lutIntensity ?? 1)
     }
 
@@ -771,6 +780,41 @@ final class CaptureController: ObservableObject {
             lastNotice = L("edl_saved", url.lastPathComponent)
         } catch {
             lastError = "EDL: \(error.localizedDescription)"
+        }
+    }
+
+    /// Shift report: A4 PDF with thumbnails or a full CSV table.
+    func exportShiftReport(pdf: Bool) {
+        guard !takes.isEmpty else {
+            lastError = L("report_no_takes")
+            return
+        }
+        let panel = NSSavePanel()
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyMMdd"
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        panel.nameFieldStringValue = NamingEngine.sanitize(
+            "\(settings.projectName)_report_\(stamp.string(from: Date()))")
+            + (pdf ? ".pdf" : ".csv")
+        panel.directoryURL = destinationRoot
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            if pdf {
+                guard let data = ShiftReport.pdfData(
+                    takes: takes, thumbnails: thumbnails,
+                    project: settings.projectName,
+                    camera: settings.cameraLabel) else {
+                    lastError = "PDF render failed"
+                    return
+                }
+                try data.write(to: url)
+            } else {
+                try TakeLogExporter.reportCSV(takes: takes)
+                    .write(to: url, atomically: true, encoding: .utf8)
+            }
+            lastNotice = L("report_saved", url.lastPathComponent)
+        } catch {
+            lastError = "Report: \(error.localizedDescription)"
         }
     }
 

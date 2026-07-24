@@ -280,3 +280,10 @@
 "unpin_reference_help" = "Unpin the reference";
 "reference_pinned" = "Reference pinned — compare it with the live signal";
 "reference_pin_failed" = "Couldn't pin the reference";
+
+"export_edl" = "Selects EDL (good takes)";
+"export_report_pdf" = "Shift report (PDF)";
+"export_report_csv" = "Shift report (CSV)";
+"export_menu_help" = "Export: EDL, shift report";
+"report_no_takes" = "No takes to report";
+"report_saved" = "Report saved: %@";

@@ -42,15 +42,23 @@ private struct TakesSection: View {
                 .controlSize(.small)
                 .fixedSize()
                 .help(L("open_folder"))
-                Button {
-                    controller.exportSelectsEDL()
+                Menu {
+                    Button(L("export_edl")) { controller.exportSelectsEDL() }
+                        .disabled(!controller.takes.contains { $0.rating == .good })
+                    Button(L("export_report_pdf")) {
+                        controller.exportShiftReport(pdf: true)
+                    }
+                    Button(L("export_report_csv")) {
+                        controller.exportShiftReport(pdf: false)
+                    }
                 } label: {
-                    Image(systemName: "list.and.film")
+                    Image(systemName: "square.and.arrow.up")
                 }
-                .controlSize(.small)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(!controller.takes.contains { $0.rating == .good })
-                .help(L("export_edl_help"))
+                .disabled(controller.takes.isEmpty)
+                .help(L("export_menu_help"))
                 Spacer()
                 if viewMode == "grid" {
                     Slider(value: $tileSize, in: 70...260)

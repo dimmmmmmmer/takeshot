@@ -1,4 +1,5 @@
 import AVFoundation
+import os.log
 import CaptureCore
 import CoreImage
 import CoreMedia
@@ -105,6 +106,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// contrast even on clips it did not visibly change).
     func setLUT(_ filter: CIFilter?, intensity: Double) {
         queue.async {
+            os_log("tap setLUT: filter=%d intensity=%.2f",
+                   log: CapturePipeline.levelsLog, type: .default,
+                   filter != nil ? 1 : 0, intensity)
             self.lutFilter = filter
             self.lutIntensity = intensity
             if let buffer = self.lastBuffer {
