@@ -294,6 +294,7 @@ final class CaptureController: ObservableObject {
 
     func selectLUT(fileName: String?) {
         settings.lutFileName = fileName
+        if fileName != nil, playbackLUTSuppressed { playbackLUTSuppressed = false }
         if fileName != nil, settings.lutPreviewEnabled != true,
            settings.lutRecordEnabled != true {
             settings.lutPreviewEnabled = true // picked a LUT — clearly want to see it
@@ -305,6 +306,9 @@ final class CaptureController: ObservableObject {
         get { settings.lutPreviewEnabled ?? false }
         set {
             settings.lutPreviewEnabled = newValue
+            // a per-clip "LUT off" left behind earlier must not eat the new
+            // explicit enable — that read as "LUT does nothing in playback"
+            if newValue, playbackLUTSuppressed { playbackLUTSuppressed = false }
             rebuildLUT()
         }
     }
@@ -396,10 +400,6 @@ final class CaptureController: ObservableObject {
         // scopeData is kept on close — reopening shows the last picture
         // immediately instead of flashing "waiting for signal"
     }
-    /// Playback volume (viewing only, doesn't affect recording).
-    @Published var playbackVolume: Double = 1.0 {
-        didSet { player.volume = Float(playbackVolume) }
-    }
     /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
     private var playbackFullscreenWindow: NSWindow?
@@ -445,16 +445,37 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Monitor volume 0…1 (persisted; the on/off state is not).
+    /// One volume for the live monitor and the player: switching rec↔playback
+    /// must not change loudness. Applied immediately, persisted debounced —
+    /// writing settings on every drag tick re-rendered the whole window
+    /// (slider lag).
     var monitorVolume: Double {
-        get { settings.monitorVolume ?? 1 }
-        set {
-            settings.monitorVolume = newValue
-            audioMonitor.volume = Float(newValue)
-            // dragging the volume up implies "I want to hear it"
-            if newValue > 0, !monitorOn, isCapturing { monitorOn = true }
+        get { live.volume }
+        set { setVolume(newValue) }
+    }
+
+    var playbackVolume: Double {
+        get { live.volume }
+        set { setVolume(newValue) }
+    }
+
+    private func setVolume(_ newValue: Double) {
+        live.volume = newValue
+        audioMonitor.volume = Float(newValue)
+        player.volume = Float(newValue)
+        // dragging the volume up implies "I want to hear it" (live monitor only)
+        if newValue > 0, !monitorOn, isCapturing, viewerMode == .record {
+            monitorOn = true
+        }
+        volumePersistTask?.cancel()
+        volumePersistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            self.settings.monitorVolume = self.live.volume
         }
     }
+
+    private var volumePersistTask: Task<Void, Never>?
 
 
     // MARK: - external monitor output
@@ -510,7 +531,6 @@ final class CaptureController: ObservableObject {
     private func updateExternalWindow() {
         externalWindow?.orderOut(nil)
         externalWindow = nil
-        pipeline.externalMirrorEnabled = false
 
         guard let displayID = externalDisplayID,
               let screen = NSScreen.screens.first(where: {
@@ -518,7 +538,6 @@ final class CaptureController: ObservableObject {
                    as? CGDirectDisplayID) == displayID
               }) else { return }
 
-        pipeline.externalMirrorEnabled = true
         externalWindow = makeBorderlessWindow(
             on: screen,
             content: ExternalOutputView().environmentObject(self),
@@ -555,12 +574,10 @@ final class CaptureController: ObservableObject {
         if isLiveFullscreen {
             liveFullscreenWindow?.orderOut(nil)
             liveFullscreenWindow = nil
-            pipeline.fullscreenMirrorEnabled = false
             isLiveFullscreen = false
             return
         }
         guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
-        pipeline.fullscreenMirrorEnabled = true
         liveFullscreenWindow = makeBorderlessWindow(
             on: screen,
             content: LiveFullscreenView()
@@ -797,6 +814,8 @@ final class CaptureController: ObservableObject {
         player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
         audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
         audioMonitor.volume = Float(stored.monitorVolume ?? 1)
+        live.volume = stored.monitorVolume ?? 1
+        player.volume = Float(stored.monitorVolume ?? 1)
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
             pipeline.currentPreviewBuffer()
@@ -880,11 +899,8 @@ final class CaptureController: ObservableObject {
         let ns = NSColor(playerBackground).usingColorSpace(.sRGB) ?? .black
         let ci = CIColor(red: ns.redComponent, green: ns.greenComponent,
                          blue: ns.blueComponent)
-        for layer in [pipeline.displayLayer, pipeline.fullscreenLayer,
-                      pipeline.externalLayer, playbackTap.mainLayer,
-                      playbackTap.fullscreenLayer, playbackTap.externalLayer] {
-            layer.letterboxColor = ci
-        }
+        pipeline.setPreviewLetterbox(ci)
+        playbackTap.setLetterbox(ci)
     }
 
     /// Control accent color; white by default.
@@ -1156,32 +1172,10 @@ final class CaptureController: ObservableObject {
         generator.requestedTimeToleranceAfter = .zero
         generator.appliesPreferredTrackTransform = true
         let time = player.currentTime()
-        // the playback LUT lives in the tap render now — bake it into the grab
-        let lutOn = (settings.lutPreviewEnabled ?? false) && !playbackFileHasBakedLUT
-            && !playbackLUTSuppressed
-        let filter = lutOn ? currentCube?.makeFilter() : nil
-        let intensity = settings.lutIntensity ?? 1
+        // stills are deliverables like the recording: the preview LUT is never
+        // baked in — a look appears in a still only when it is in the clip itself
         Task { [weak self] in
-            var cg = try? await generator.image(at: time).image
-            if let source = cg, let filter {
-                // unmanaged like the tap render — the LUT applies to raw code
-                // values, so the still matches the screen
-                let input = CIImage(cgImage: source,
-                                    options: [.colorSpace: NSNull()])
-                filter.setValue(input, forKey: kCIInputImageKey)
-                if let output = filter.outputImage {
-                    let mixed = CapturePipeline.mix(source: input, filtered: output,
-                                                    intensity: intensity)
-                    let context = CIContext(options: [
-                        .workingColorSpace: NSNull(),
-                        .outputColorSpace: NSNull(),
-                    ])
-                    cg = context.createCGImage(
-                        mixed, from: input.extent, format: .RGBA8,
-                        colorSpace: source.colorSpace
-                            ?? CGColorSpaceCreateDeviceRGB()) ?? source
-                }
-            }
+            let cg = try? await generator.image(at: time).image
             await MainActor.run {
                 guard let cg else { self?.lastError = "Frame grab failed"; return }
                 self?.saveGrab(NSBitmapImageRep(cgImage: cg)
@@ -1309,14 +1303,28 @@ final class CaptureController: ObservableObject {
         let root = destinationRoot
         let ownTakePaths = Set(takes.map { $0.url.path })
         Task.detached(priority: .utility) { [weak self] in
-            let candidates = Self.findForeignVideos(root: root, excluding: ownTakePaths)
-            await self?.classifyFoundFiles(candidates)
+            let (candidates, busy) = Self.findForeignVideos(root: root,
+                                                            excluding: ownTakePaths)
+            await self?.classifyFoundFiles(candidates, rescanSoon: busy)
         }
     }
 
+    private var busyRescanScheduled = false
+
     /// Our files (the com.takeshot.origin QuickTime tag) return to the takes list
     /// after a restart; the rest are Other content.
-    private func classifyFoundFiles(_ candidates: [URL]) async {
+    private func classifyFoundFiles(_ candidates: [URL],
+                                    rescanSoon: Bool) async {
+        // a file was skipped as "still being written" — nothing will re-trigger
+        // the scan once the copy finishes, so come back for it ourselves
+        if rescanSoon, !busyRescanScheduled {
+            busyRescanScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self else { return }
+                self.busyRescanScheduled = false
+                self.scanDestinationFolder()
+            }
+        }
         // files removed from the folder leave the app too
         let gone = takes.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
         if !gone.isEmpty {
@@ -1452,24 +1460,33 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    nonisolated private static func findForeignVideos(root: URL,
-                                                      excluding ownPaths: Set<String>) -> [URL] {
+    nonisolated private static func findForeignVideos(
+        root: URL, excluding ownPaths: Set<String>) -> (files: [URL], busy: Bool) {
         var found: [URL] = []
+        var busy = false
         let cutoff = Date().addingTimeInterval(-3) // don't touch files still being written
         if let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
             for case let url as URL in enumerator {
                 let ext = url.pathExtension.lowercased()
-                guard videoExtensions.contains(ext) || imageExtensions.contains(ext),
+                let isVideo = videoExtensions.contains(ext)
+                guard isVideo || imageExtensions.contains(ext),
                       !ownPaths.contains(url.path) else { continue }
-                let modified = (try? url.resourceValues(
-                    forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                if let modified, modified > cutoff { continue }
+                // only videos wait out the write: image writes are single atomic
+                // calls, and a freshly grabbed still must show up immediately
+                if isVideo {
+                    let modified = (try? url.resourceValues(
+                        forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                    if let modified, modified > cutoff {
+                        busy = true
+                        continue
+                    }
+                }
                 found.append(url)
             }
         }
-        return found.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return (found.sorted { $0.lastPathComponent < $1.lastPathComponent }, busy)
     }
 
     /// Resolve-compatible CSV: rewritten on every take and every circle-take mark

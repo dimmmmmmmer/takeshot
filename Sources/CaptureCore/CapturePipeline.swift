@@ -46,15 +46,46 @@ public final class CapturePipeline: @unchecked Sendable {
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
 
-    public let displayLayer = MetalPreviewLayer()
-    /// Second layer — for output to an external monitor. Frames are mirrored
-    /// only when externalMirrorEnabled == true (the copy is cheap).
-    public let externalLayer = MetalPreviewLayer()
-    public var externalMirrorEnabled = false
-    /// Third layer — the live fullscreen window (player fills the screen).
-    public let fullscreenLayer = MetalPreviewLayer()
-    public var fullscreenMirrorEnabled = false
+    /// Live preview sinks: every SwiftUI mount registers its OWN layer. A
+    /// CALayer can be hosted by only one NSView — sharing a single layer
+    /// between the main preview, compare and multicam tiles let the
+    /// last-mounted view steal it, and the survivor drew with the thief's
+    /// stale geometry (image pinned to an edge instead of centered).
+    private let displaySinksLock = NSLock()
+    private let displaySinks = NSHashTable<MetalPreviewLayer>.weakObjects()
+    private var sinkLetterbox = CIColor(red: 0, green: 0, blue: 0)
 
+    public func addDisplaySink(_ layer: MetalPreviewLayer) {
+        displaySinksLock.lock()
+        layer.letterboxColor = sinkLetterbox
+        displaySinks.add(layer)
+        displaySinksLock.unlock()
+        // show the current frame right away — a paused/idle signal won't push one
+        if let buffer = currentPreviewBuffer() { layer.present(buffer) }
+    }
+
+    public func removeDisplaySink(_ layer: MetalPreviewLayer) {
+        displaySinksLock.lock()
+        displaySinks.remove(layer)
+        displaySinksLock.unlock()
+    }
+
+    public func setPreviewLetterbox(_ color: CIColor) {
+        displaySinksLock.lock()
+        sinkLetterbox = color
+        let sinks = displaySinks.allObjects
+        displaySinksLock.unlock()
+        for sink in sinks {
+            sink.letterboxColor = color
+            sink.redraw()
+        }
+    }
+
+    private func allDisplaySinks() -> [MetalPreviewLayer] {
+        displaySinksLock.lock()
+        defer { displaySinksLock.unlock() }
+        return displaySinks.allObjects
+    }
     // LUT (all access on queue)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
     private var lutFilter: CIFilter?
@@ -232,9 +263,7 @@ public final class CapturePipeline: @unchecked Sendable {
     public func handleSignal(present: Bool) {
         if !present {
             // no frozen last frame on signal loss — show black
-            displayLayer.clearToBlack()
-            externalLayer.clearToBlack()
-            fullscreenLayer.clearToBlack()
+            for sink in allDisplaySinks() { sink.clearToBlack() }
         }
         DispatchQueue.main.async { self.onSignal?(present) }
     }
@@ -408,10 +437,11 @@ public final class CapturePipeline: @unchecked Sendable {
             DispatchQueue.main.async { self.onScopeData?(scopeData) }
         }
 
-        // one-shot frame grab: PNG of exactly what's on screen (levels + preview LUT)
+        // one-shot frame grab: stills are deliverables like the recording — the
+        // preview LUT is never baked in, only a look that is being recorded
         if let grab = frameGrabHandler {
             frameGrabHandler = nil
-            let png = Self.pngData(from: displayBuffer, ciContext: ciContext)
+            let png = Self.pngData(from: recordBuffer, ciContext: ciContext)
             DispatchQueue.main.async { grab(png) }
         }
 
@@ -735,8 +765,6 @@ public final class CapturePipeline: @unchecked Sendable {
         latestPreviewLock.lock()
         latestPreview = pixelBuffer
         latestPreviewLock.unlock()
-        displayLayer.present(pixelBuffer)
-        if externalMirrorEnabled { externalLayer.present(pixelBuffer) }
-        if fullscreenMirrorEnabled { fullscreenLayer.present(pixelBuffer) }
+        for sink in allDisplaySinks() { sink.present(pixelBuffer) }
     }
 }

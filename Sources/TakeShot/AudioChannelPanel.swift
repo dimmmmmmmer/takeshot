@@ -127,7 +127,7 @@ struct LiveFullscreenView: View {
         GeometryReader { geo in
             ZStack {
                 Color.black
-                LiveMirrorView(layer: controller.pipeline.fullscreenLayer)
+                LivePreviewLayerView(pipeline: controller.pipeline)
             }
             // exit — bottom-right, same place as the player's enter-fullscreen button
             .overlay(alignment: .bottomTrailing) {
@@ -168,16 +168,6 @@ struct LiveFullscreenView: View {
     }
 }
 
-private struct LiveMirrorView: NSViewRepresentable {
-    let layer: MetalPreviewLayer
-
-    func makeNSView(context: Context) -> NSView {
-        MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
 /// Playback fullscreen window: image and transport only.
 struct PlaybackFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
@@ -188,7 +178,7 @@ struct PlaybackFullscreenView: View {
         GeometryReader { geo in
             ZStack {
                 Color.black
-                PlaybackContent(target: .fullscreen)
+                PlaybackContent()
             }
             .overlay(alignment: .bottom) {
                 if transportHover {

@@ -678,7 +678,7 @@ private struct MainCameraTile: View {
     @ObservedObject var live: LiveSignal
 
     var body: some View {
-        CameraTile(layer: controller.pipeline.displayLayer,
+        CameraTile(pipeline: controller.pipeline,
                    label: controller.settings.cameraLabel,
                    timecode: live.currentTimecode,
                    recording: controller.isRecording,
@@ -691,7 +691,7 @@ private struct CameraTileChannel: View {
     let background: Color
 
     var body: some View {
-        CameraTile(layer: channel.pipeline.displayLayer,
+        CameraTile(pipeline: channel.pipeline,
                    label: channel.camLabel,
                    timecode: channel.currentTimecode,
                    recording: channel.isRecording,
@@ -700,7 +700,7 @@ private struct CameraTileChannel: View {
 }
 
 private struct CameraTile: View {
-    let layer: MetalPreviewLayer
+    let pipeline: CapturePipeline
     let label: String
     let timecode: Timecode?
     let recording: Bool
@@ -709,7 +709,7 @@ private struct CameraTile: View {
     var body: some View {
         ZStack {
             Rectangle().fill(background)
-            SampleLayerView(layer: layer)
+            LivePreviewLayerView(pipeline: pipeline)
         }
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -734,24 +734,13 @@ private struct CameraTile: View {
     }
 }
 
-/// AVSampleBufferDisplayLayer wrapper for the grid (module-public).
-struct SampleLayerView: NSViewRepresentable {
-    let layer: MetalPreviewLayer
-
-    func makeNSView(context: Context) -> NSView {
-        MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
 /// Live signal + status badges.
 struct LivePreviewContent: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
         ZStack {
-            DisplayLayerView(layer: controller.pipeline.displayLayer)
+            LivePreviewLayerView(pipeline: controller.pipeline)
             if !controller.isCapturing || controller.devices.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "cable.connector.slash")
@@ -773,15 +762,34 @@ struct LivePreviewContent: View {
     }
 }
 
-/// NSView wrapper around AVSampleBufferDisplayLayer.
-private struct DisplayLayerView: NSViewRepresentable {
-    let layer: MetalPreviewLayer
+/// Live preview mount: creates its OWN layer and registers it as a pipeline
+/// sink (a CALayer can live in one view only — the pipeline mirrors frames to
+/// every registered sink, so compare/multicam mounts don't fight over one).
+struct LivePreviewLayerView: NSViewRepresentable {
+    let pipeline: CapturePipeline
+
+    final class Coordinator {
+        var pipeline: CapturePipeline?
+        var layer: MetalPreviewLayer?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
-        MetalPreviewHostView(layer: layer)
+        let layer = MetalPreviewLayer()
+        pipeline.addDisplaySink(layer)
+        context.coordinator.pipeline = pipeline
+        context.coordinator.layer = layer
+        return MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        if let layer = coordinator.layer {
+            coordinator.pipeline?.removeDisplaySink(layer)
+        }
+    }
 }
 
 /// Footer: utilities on the left, meters centered in the left half, REC in the
@@ -815,7 +823,7 @@ struct BottomBarView: View {
 
                             NamingPresetMenu()
 
-                            FooterMonitorButton()
+                            FooterMonitorButton(live: controller.live)
                         }
                         .buttonStyle(.borderless)
 
@@ -856,15 +864,18 @@ struct BottomBarView: View {
 /// in playback — the player volume (the transport has no volume of its own).
 private struct FooterMonitorButton: View {
     @EnvironmentObject private var controller: CaptureController
+    @ObservedObject private var live: LiveSignal
     @State private var showPopover = false
+
+    init(live: LiveSignal) {
+        self.live = live
+    }
 
     private var isPlayback: Bool { controller.viewerMode == .playback }
 
     private var volume: Binding<Double> {
-        isPlayback
-            ? $controller.playbackVolume
-            : Binding(get: { controller.monitorVolume },
-                      set: { controller.monitorVolume = $0 })
+        Binding(get: { controller.monitorVolume },
+                set: { controller.monitorVolume = $0 })
     }
 
     var body: some View {
@@ -872,14 +883,14 @@ private struct FooterMonitorButton: View {
             showPopover.toggle()
         } label: {
             Image(systemName: isPlayback
-                  ? (controller.playbackVolume == 0
+                  ? (live.volume == 0
                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
                   : (controller.monitorOn
-                     ? (controller.monitorVolume == 0
+                     ? (live.volume == 0
                         ? "speaker.slash.fill" : "speaker.wave.2.fill")
                      : "speaker.slash"))
                 .font(.system(size: 15))
-                .foregroundStyle((isPlayback ? controller.playbackVolume > 0
+                .foregroundStyle((isPlayback ? live.volume > 0
                                              : controller.monitorOn)
                                  ? controller.accentColor : .primary)
                 // fixed BOTH dimensions: the symbol variants differ in size and
@@ -1037,8 +1048,13 @@ struct NamingFieldsView: View {
             }
             // show only the fields that actually exist in the current template
             if uses("{cam}") {
+                // camera labels are plain uppercase latin (A, B, C…): anything
+                // else lands in file names on other people's systems
                 steppedField(L("cam_label"), width: 40,
-                             text: $controller.settings.cameraLabel,
+                             text: Binding(
+                                 get: { controller.settings.cameraLabel },
+                                 set: { controller.settings.cameraLabel =
+                                     Self.camSanitized($0) }),
                              onStep: { controller.stepCamera($0) })
             }
             if uses("{roll}") {
@@ -1060,6 +1076,10 @@ struct NamingFieldsView: View {
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
         .animation(.easeOut(duration: 0.15), value: controller.settings.namingTemplate)
+    }
+
+    static func camSanitized(_ value: String) -> String {
+        String(value.uppercased().unicodeScalars.filter { ("A"..."Z").contains($0) })
     }
 
     /// Whether a placeholder is in the current template.

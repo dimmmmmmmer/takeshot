@@ -6,15 +6,7 @@ import SwiftUI
 /// Playback content without the transport (also used in compare modes):
 /// video (the unified sample-buffer render, like live) or a photo.
 struct PlaybackContent: View {
-    /// Each window gets its own layer (a CALayer lives in only one view).
-    enum Target {
-        case main
-        case fullscreen
-        case external
-    }
-
     @EnvironmentObject private var controller: CaptureController
-    var target: Target = .main
 
     static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
@@ -24,7 +16,7 @@ struct PlaybackContent: View {
             if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
                 ImagePlaybackView(url: url)
             } else {
-                TapLayerView(layer: layerForTarget)
+                TapLayerView(tap: controller.playbackTap)
             }
         } else {
             VStack(spacing: 8) {
@@ -36,25 +28,34 @@ struct PlaybackContent: View {
             .foregroundStyle(.secondary)
         }
     }
-
-    private var layerForTarget: MetalPreviewLayer {
-        switch target {
-        case .main: return controller.playbackTap.mainLayer
-        case .fullscreen: return controller.playbackTap.fullscreenLayer
-        case .external: return controller.playbackTap.externalLayer
-        }
-    }
 }
 
-/// A view around the unified playback render layer.
+/// Playback mount: its own layer, registered as a tap sink for its lifetime.
 private struct TapLayerView: NSViewRepresentable {
-    let layer: MetalPreviewLayer
+    let tap: PlaybackFrameTap
+
+    final class Coordinator {
+        var tap: PlaybackFrameTap?
+        var layer: MetalPreviewLayer?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
-        MetalPreviewHostView(layer: layer)
+        let layer = MetalPreviewLayer()
+        tap.addSink(layer)
+        context.coordinator.tap = tap
+        context.coordinator.layer = layer
+        return MetalPreviewHostView(layer: layer)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        if let layer = coordinator.layer {
+            coordinator.tap?.removeSink(layer)
+        }
+    }
 }
 
 /// A photo on the player backdrop.
@@ -163,16 +164,8 @@ struct TransportBar: View {
                 .help(L("lut_playback_toggle"))
             }
 
-            HStack(spacing: 4) {
-                Image(systemName: controller.playbackVolume == 0
-                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Slider(value: $controller.playbackVolume, in: 0...1)
-                    .frame(width: 64)
-                    .controlSize(.mini)
-            }
-            .help(L("playback_volume"))
+            TransportVolume(live: controller.live)
+                .help(L("playback_volume"))
 
             Button {
                 controller.togglePlaybackFullscreen()
@@ -195,6 +188,27 @@ struct TransportBar: View {
         guard seconds.isFinite else { return "0:00" }
         let total = Int(seconds.rounded(.down))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// Volume control observing only LiveSignal — dragging must not re-render
+/// the whole transport/window (that read as slider lag).
+private struct TransportVolume: View {
+    @EnvironmentObject private var controller: CaptureController
+    @ObservedObject var live: LiveSignal
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: live.volume == 0
+                  ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Slider(value: Binding(
+                get: { controller.playbackVolume },
+                set: { controller.playbackVolume = $0 }), in: 0...1)
+                .frame(width: 64)
+                .controlSize(.mini)
+        }
     }
 }
 
@@ -292,21 +306,11 @@ struct ExternalOutputView: View {
         ZStack {
             Color.black
             if controller.viewerMode == .playback, controller.playbackURL != nil {
-                PlaybackContent(target: .external)
+                PlaybackContent()
             } else {
-                ExternalLiveView(layer: controller.pipeline.externalLayer)
+                LivePreviewLayerView(pipeline: controller.pipeline)
             }
         }
         .ignoresSafeArea()
     }
-}
-
-private struct ExternalLiveView: NSViewRepresentable {
-    let layer: MetalPreviewLayer
-
-    func makeNSView(context: Context) -> NSView {
-        MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }

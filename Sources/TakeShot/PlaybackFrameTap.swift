@@ -11,12 +11,50 @@ import QuartzCore
 /// the same graphics-path renderer as live. No AVPlayerLayer — live and playback go
 /// through the same display path, so wipe/blend compare fairly and colors match.
 ///
-/// There are three layers (main window, fullscreen, external monitor): a CALayer lives
-/// in only one view, so each window gets its own.
+/// Every mount (main window, compare branches, fullscreen, external monitor)
+/// registers its OWN layer: a CALayer lives in only one NSView, and a shared
+/// instance got stolen between views on branch switches — the survivor then
+/// drew with the thief's stale geometry.
 final class PlaybackFrameTap: @unchecked Sendable {
-    let mainLayer = MetalPreviewLayer()
-    let fullscreenLayer = MetalPreviewLayer()
-    let externalLayer = MetalPreviewLayer()
+    private let sinksLock = NSLock()
+    private let sinks = NSHashTable<MetalPreviewLayer>.weakObjects()
+    private var sinkLetterbox = CIColor(red: 0, green: 0, blue: 0)
+
+    func addSink(_ layer: MetalPreviewLayer) {
+        sinksLock.lock()
+        layer.letterboxColor = sinkLetterbox
+        sinks.add(layer)
+        sinksLock.unlock()
+        // show the current frame right away — a paused player won't push one
+        queue.async {
+            if let buffer = self.lastBuffer {
+                self.deliver(buffer, analyzed: false)
+            }
+        }
+    }
+
+    func removeSink(_ layer: MetalPreviewLayer) {
+        sinksLock.lock()
+        sinks.remove(layer)
+        sinksLock.unlock()
+    }
+
+    func setLetterbox(_ color: CIColor) {
+        sinksLock.lock()
+        sinkLetterbox = color
+        let all = sinks.allObjects
+        sinksLock.unlock()
+        for layer in all {
+            layer.letterboxColor = color
+            layer.redraw()
+        }
+    }
+
+    private func allSinks() -> [MetalPreviewLayer] {
+        sinksLock.lock()
+        defer { sinksLock.unlock() }
+        return sinks.allObjects
+    }
 
     private let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
     private var output: AVPlayerItemVideoOutput?
@@ -171,7 +209,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
         if analyzed, let scopeData = ScopeAnalyzer.analyze(output) {
             DispatchQueue.main.async { self.onScopeData?(scopeData) }
         }
-        for layer in [mainLayer, fullscreenLayer, externalLayer] {
+        for layer in allSinks() {
             layer.present(output)
         }
     }
