@@ -837,6 +837,15 @@ struct BottomBarView: View {
                             NamingPresetMenu()
 
                             FooterMonitorButton(live: controller.live)
+
+                            Button {
+                                controller.instantReplay()
+                            } label: {
+                                Image(systemName: "memories")
+                                    .font(.system(size: 15))
+                            }
+                            .disabled(controller.takes.isEmpty)
+                            .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
                         }
                         .buttonStyle(.borderless)
 

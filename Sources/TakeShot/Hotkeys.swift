@@ -57,6 +57,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case badTakeLast
     case fullscreen
     case grabFrame
+    case instantReplay
 
     var id: String { rawValue }
 
@@ -67,6 +68,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .badTakeLast: return "hotkey_bad"
         case .fullscreen: return "hotkey_fullscreen"
         case .grabFrame: return "hotkey_grab"
+        case .instantReplay: return "hotkey_replay"
         }
     }
 
@@ -88,6 +90,10 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "s",
                             modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
                             keyCode: 1)
+        case .instantReplay:
+            // ⌘E — replay the last take
+            return KeyCombo(key: "e", modifiers: NSEvent.ModifierFlags.command.rawValue,
+                            keyCode: 14)
         }
     }
 }
@@ -196,6 +202,8 @@ final class HotkeyManager: ObservableObject {
             }
         case .grabFrame:
             controller.grabFrame()
+        case .instantReplay:
+            controller.instantReplay()
         }
     }
 }

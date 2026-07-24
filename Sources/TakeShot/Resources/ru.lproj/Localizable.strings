@@ -262,3 +262,6 @@
 "scope_open_window" = "Открыть отдельным окном";
 
 "raw_open_failed" = "Не удалось открыть RAW-клип";
+
+"hotkey_replay" = "Мгновенный повтор";
+"instant_replay_help" = "Повтор последнего тейка (в цикле)";

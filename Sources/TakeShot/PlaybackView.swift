@@ -303,8 +303,21 @@ struct TransportBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.ultraThinMaterial)
-        .onAppear { model.attach(player) }
+        .onAppear {
+            model.attach(player)
+            consumeReplayLoopRequest()
+        }
+        .onChange(of: controller.playbackURL) { _, _ in
+            consumeReplayLoopRequest()
+        }
         .onDisappear { model.detach() }
+    }
+
+    private func consumeReplayLoopRequest() {
+        if controller.replayLoopRequested {
+            model.isLooping = true
+            controller.replayLoopRequested = false
+        }
     }
 
     static func timeText(_ seconds: Double) -> String {

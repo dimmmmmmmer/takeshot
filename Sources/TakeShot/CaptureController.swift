@@ -622,6 +622,21 @@ final class CaptureController: ObservableObject {
     /// Why the RAW clip couldn't be opened (SDK missing, bad file).
     @Published var rawPlayerError: String?
 
+    /// One-shot flag: the transport enables looping when the replayed clip loads.
+    var replayLoopRequested = false
+
+    /// Instant replay (video assist): the freshest take, from the top, looping.
+    func instantReplay() {
+        guard let last = takes.max(by: { $0.recordedAt < $1.recordedAt })
+        else { return }
+        replayLoopRequested = true
+        play(url: last.url)
+        if let raw = rawPlayer {
+            raw.isLooping = true
+            replayLoopRequested = false
+        }
+    }
+
     /// Open a file in the player and switch to playback mode.
     /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
