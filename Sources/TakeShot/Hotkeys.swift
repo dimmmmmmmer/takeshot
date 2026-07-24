@@ -60,6 +60,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case instantReplay
     case addMarker
     case removeMarker
+    case punchIn
 
     var id: String { rawValue }
 
@@ -73,6 +74,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .instantReplay: return "hotkey_replay"
         case .addMarker: return "hotkey_marker"
         case .removeMarker: return "hotkey_marker_delete"
+        case .punchIn: return "hotkey_punch_in"
         }
     }
 
@@ -104,6 +106,9 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             // ⇧M — remove the marker under the playhead (last one while recording)
             return KeyCombo(key: "m", modifiers: NSEvent.ModifierFlags.shift.rawValue,
                             keyCode: 46)
+        case .punchIn:
+            // Z — 2x center magnification (focus check)
+            return KeyCombo(key: "z", modifiers: 0, keyCode: 6)
         }
     }
 }
@@ -225,6 +230,8 @@ final class HotkeyManager: ObservableObject {
             controller.addMarker()
         case .removeMarker:
             controller.removeNearestMarker()
+        case .punchIn:
+            controller.togglePunchIn()
         }
     }
 }

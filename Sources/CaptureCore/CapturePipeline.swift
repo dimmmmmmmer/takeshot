@@ -58,6 +58,7 @@ public final class CapturePipeline: @unchecked Sendable {
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinksLock.lock()
         layer.letterboxColor = sinkLetterbox
+        layer.setAssist(sinkAssist)
         displaySinks.add(layer)
         displaySinksLock.unlock()
         // show the current frame right away — a paused/idle signal won't push
@@ -74,6 +75,16 @@ public final class CapturePipeline: @unchecked Sendable {
         displaySinksLock.lock()
         displaySinks.remove(layer)
         displaySinksLock.unlock()
+    }
+
+    private var sinkAssist = ViewAssist()
+
+    public func setViewAssist(_ assist: ViewAssist) {
+        displaySinksLock.lock()
+        sinkAssist = assist
+        let sinks = displaySinks.allObjects
+        displaySinksLock.unlock()
+        for sink in sinks { sink.setAssist(assist) }
     }
 
     public func setPreviewLetterbox(_ color: CIColor) {

@@ -24,6 +24,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     func addSink(_ layer: MetalPreviewLayer) {
         sinksLock.lock()
         layer.letterboxColor = sinkLetterbox
+        layer.setAssist(sinkAssist)
         sinks.add(layer)
         sinksLock.unlock()
         // show the current frame right away — a paused player won't push one
@@ -38,6 +39,16 @@ final class PlaybackFrameTap: @unchecked Sendable {
         sinksLock.lock()
         sinks.remove(layer)
         sinksLock.unlock()
+    }
+
+    private var sinkAssist = ViewAssist()
+
+    func setViewAssist(_ assist: ViewAssist) {
+        sinksLock.lock()
+        sinkAssist = assist
+        let all = sinks.allObjects
+        sinksLock.unlock()
+        for layer in all { layer.setAssist(assist) }
     }
 
     func setLetterbox(_ color: CIColor) {

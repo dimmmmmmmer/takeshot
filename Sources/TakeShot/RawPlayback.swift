@@ -139,6 +139,9 @@ final class RawPlayerModel: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published var isLooping = false
     @Published private(set) var currentFrame = 0
+    /// Loop range in frames.
+    @Published var inFrame: Int?
+    @Published var outFrame: Int?
 
     let url: URL
     let frameCount: Int
@@ -202,6 +205,7 @@ final class RawPlayerModel: ObservableObject {
     func addSink(_ layer: MetalPreviewLayer) {
         sinksLock.lock()
         layer.letterboxColor = letterbox
+        layer.setAssist(sinkAssist)
         sinks.add(layer)
         sinksLock.unlock()
         if let buffer = lastBuffer {
@@ -215,6 +219,16 @@ final class RawPlayerModel: ObservableObject {
         sinksLock.lock()
         sinks.remove(layer)
         sinksLock.unlock()
+    }
+
+    private var sinkAssist = ViewAssist()
+
+    func setViewAssist(_ assist: ViewAssist) {
+        sinksLock.lock()
+        sinkAssist = assist
+        let all = sinks.allObjects
+        sinksLock.unlock()
+        for layer in all { layer.setAssist(assist) }
     }
 
     func setLetterbox(_ color: CIColor) {
@@ -248,8 +262,10 @@ final class RawPlayerModel: ObservableObject {
         isPlaying = true
         playGeneration += 1
         let generation = playGeneration
-        // restart from the top when play is hit at the end
-        let startFrame = currentFrame >= frameCount - 1 ? 0 : currentFrame
+        // restart from the top (or the in point) when play is hit at the end
+        let floorFrame = inFrame ?? 0
+        let startFrame = currentFrame >= frameCount - 1
+            ? floorFrame : max(currentFrame, 0)
         currentFrame = startFrame
         let clip = clip
         let fps = frameRate
@@ -292,6 +308,24 @@ final class RawPlayerModel: ObservableObject {
                     if wait > 0 {
                         try? await Task.sleep(nanoseconds: UInt64(wait * 1e9))
                     }
+                }
+                let outLimit = await MainActor.run { [weak self] in
+                    self?.outFrame
+                }
+                if let outLimit, next > outLimit {
+                    let looping = await MainActor.run { [weak self] in
+                        self?.isLooping ?? false
+                    }
+                    if looping {
+                        return await MainActor.run { [weak self] in
+                            guard let self, self.isPlaying,
+                                  self.playGeneration == generation else { return }
+                            self.isPlaying = false
+                            self.currentFrame = self.inFrame ?? 0
+                            self.play()
+                        }
+                    }
+                    break
                 }
                 if next >= total {
                     let looping = await MainActor.run { [weak self] in

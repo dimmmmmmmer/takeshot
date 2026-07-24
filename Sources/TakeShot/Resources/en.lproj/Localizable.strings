@@ -317,3 +317,25 @@
 "compare_source" = "Source";
 
 "marker_color_help" = "Click to cycle the marker color";
+
+"assist_help" = "Operator aids: exposure, framelines, desqueeze, punch-in";
+"assist_tool" = "Exposure assist";
+"assist_off" = "Off";
+"assist_false_color" = "False color";
+"assist_zebra" = "Zebra (95%)";
+"assist_peaking" = "Focus peaking";
+"framelines" = "Framelines";
+"safe_areas" = "Safe areas";
+"desqueeze" = "Desqueeze";
+"punch_in" = "Punch-in 2x";
+"hotkey_punch_in" = "Punch-in zoom";
+
+"loop_in_help" = "Set/clear the loop IN point";
+"loop_out_help" = "Set/clear the loop OUT point";
+"backup_folder" = "Verified backup";
+"choose" = "Choose...";
+"backup_copying" = "Backing up...";
+"backup_verified" = "Backed up (checksum verified)";
+"backup_failed" = "Backup failed: %@ (%@)";
+
+"assist_el_zone" = "EL Zone (stops)";

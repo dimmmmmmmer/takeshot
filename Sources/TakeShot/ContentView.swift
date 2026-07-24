@@ -184,6 +184,19 @@ struct PlayerTopBadgesModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .overlay {
+                if controller.settings.framelineRatio != nil
+                    || controller.settings.safeAreasOn == true {
+                    Color.clear
+                        .aspectRatio(controller.displayAspect, contentMode: .fit)
+                        .overlay {
+                            FramelinesOverlay(
+                                ratio: controller.settings.framelineRatio,
+                                safeAreas: controller.settings.safeAreasOn == true)
+                        }
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .bottomLeading) {
                 if controller.showScopesOverlay, !controller.scopesWindowOpen {
                     ScopesPanel(live: controller.live, singleScope: true)
@@ -284,6 +297,9 @@ struct PlayerTopBadgesModifier: ViewModifier {
                         .help(L("scopes_toggle"))
                     }
                     playerOverlayBadge {
+                        AssistMenu()
+                    }
+                    playerOverlayBadge {
                         LUTMenu()
                     }
                     playerOverlayBadge {
@@ -333,6 +349,112 @@ struct PlayerTopBadgesModifier: ViewModifier {
 extension View {
     func playerTopBadges(showsModeSwitch: Bool = true) -> some View {
         modifier(PlayerTopBadgesModifier(showsModeSwitch: showsModeSwitch))
+    }
+}
+
+/// Operator aids: exposure tools, framelines, desqueeze, punch-in.
+private struct AssistMenu: View {
+    @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
+
+    var body: some View {
+        Menu {
+            Picker(L("assist_tool"), selection: Binding(
+                get: { controller.assist.tool },
+                set: { controller.assist.tool = $0 })) {
+                Text(L("assist_off")).tag(ViewAssist.Tool.off)
+                Text(L("assist_false_color")).tag(ViewAssist.Tool.falseColor)
+                Text(L("assist_el_zone")).tag(ViewAssist.Tool.elZone)
+                Text(L("assist_zebra")).tag(ViewAssist.Tool.zebra)
+                Text(L("assist_peaking")).tag(ViewAssist.Tool.peaking)
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Picker(L("framelines"), selection: Binding(
+                get: { controller.settings.framelineRatio ?? 0 },
+                set: { controller.settings.framelineRatio = $0 == 0 ? nil : $0 })) {
+                Text(L("assist_off")).tag(0.0)
+                Text("1.85").tag(1.85)
+                Text("2.00").tag(2.0)
+                Text("2.35").tag(2.35)
+                Text("2.39").tag(2.39)
+                Text("4:3").tag(4.0 / 3.0)
+                Text("9:16").tag(9.0 / 16.0)
+            }
+            Toggle(L("safe_areas"), isOn: Binding(
+                get: { controller.settings.safeAreasOn ?? false },
+                set: { controller.settings.safeAreasOn = $0 }))
+            Divider()
+            Picker(L("desqueeze"), selection: Binding(
+                get: { controller.assist.desqueeze },
+                set: { controller.assist.desqueeze = $0 })) {
+                Text(verbatim: "1x").tag(1.0)
+                Text(verbatim: "1.33x").tag(1.33)
+                Text(verbatim: "1.5x").tag(1.5)
+                Text(verbatim: "1.8x").tag(1.8)
+                Text(verbatim: "2x").tag(2.0)
+            }
+            Toggle(L("punch_in") + " - "
+                   + hotkeys.combo(for: .punchIn).display,
+                   isOn: Binding(
+                get: { controller.assist.punchIn > 1 },
+                set: { _ in controller.togglePunchIn() }))
+        } label: {
+            Image(systemName: "viewfinder")
+                .font(.system(size: 13))
+                .foregroundStyle(
+                    controller.assist != ViewAssist()
+                        || controller.settings.framelineRatio != nil
+                    ? controller.accentColor : .white)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(L("assist_help"))
+    }
+}
+
+/// Framelines + safe areas over the aspect-fit video box.
+private struct FramelinesOverlay: View {
+    let ratio: Double?
+    let safeAreas: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                if let ratio {
+                    let videoAspect = size.width / max(1, size.height)
+                    let rect: CGRect = ratio >= videoAspect
+                        ? CGRect(x: 0,
+                                 y: (size.height - size.width / ratio) / 2,
+                                 width: size.width,
+                                 height: size.width / ratio)
+                        : CGRect(x: (size.width - size.height * ratio) / 2,
+                                 y: 0,
+                                 width: size.height * ratio,
+                                 height: size.height)
+                    Path { $0.addRect(rect) }
+                        .stroke(.white.opacity(0.75), lineWidth: 1)
+                    // matte the outside slightly so the frame reads instantly
+                    Path { path in
+                        path.addRect(CGRect(origin: .zero, size: size))
+                        path.addRect(rect)
+                    }
+                    .fill(.black.opacity(0.35), style: FillStyle(eoFill: true))
+                }
+                if safeAreas {
+                    Path { $0.addRect(CGRect(
+                        x: size.width * 0.05, y: size.height * 0.05,
+                        width: size.width * 0.9, height: size.height * 0.9)) }
+                        .stroke(.white.opacity(0.45), lineWidth: 0.7)
+                    Path { $0.addRect(CGRect(
+                        x: size.width * 0.1, y: size.height * 0.1,
+                        width: size.width * 0.8, height: size.height * 0.8)) }
+                        .stroke(.white.opacity(0.3), lineWidth: 0.7)
+                }
+            }
+        }
     }
 }
 

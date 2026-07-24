@@ -127,6 +127,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var tenBitCapture: Bool?
     /// Live audio monitor on/off (nil = on) — the footer speaker state.
     public var monitorEnabled: Bool?
+    /// Frameline aspect (2.39, 1.85…); nil — off.
+    public var framelineRatio: Double?
+    /// Action/title safe-area guides.
+    public var safeAreasOn: Bool?
+    /// Anamorphic desqueeze factor for the preview (nil = 1).
+    public var desqueezeFactor: Double?
+    /// Verified backup: every finished take/still is copied here with a
+    /// SHA-256 check (nil — off).
+    public var backupPath: String?
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     public var projectName: String = ""

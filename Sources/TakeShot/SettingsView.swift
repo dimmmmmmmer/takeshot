@@ -108,6 +108,29 @@ struct SettingsView: View {
                     set: { controller.settings.tenBitCapture = $0 }))
                 TextField(L("project"), text: $controller.settings.projectName)
                 HStack(spacing: 8) {
+                    Text(L("backup_folder"))
+                        .fixedSize()
+                    Text(controller.settings.backupPath ?? L("assist_off"))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button(L("choose")) {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.canCreateDirectories = true
+                        if panel.runModal() == .OK, let url = panel.url {
+                            controller.settings.backupPath = url.path
+                        }
+                    }
+                    if controller.settings.backupPath != nil {
+                        Button(L("assist_off")) {
+                            controller.settings.backupPath = nil
+                        }
+                    }
+                }
+                HStack(spacing: 8) {
                     Text(L("destination_folder"))
                         .fixedSize()
                     Text(controller.settings.destinationPath)

@@ -1,5 +1,25 @@
 import CoreImage
 import os.log
+
+/// Operator display aids applied inside the preview render (identically on
+/// every surface: live, playback, RAW, fullscreen, external).
+public struct ViewAssist: Equatable, Sendable {
+    public enum Tool: String, CaseIterable, Sendable {
+        case off
+        case falseColor
+        case elZone
+        case zebra
+        case peaking
+    }
+
+    public var tool: Tool = .off
+    /// Anamorphic desqueeze factor (1 = spherical).
+    public var desqueeze: Double = 1
+    /// Punch-in magnification (1 = off).
+    public var punchIn: Double = 1
+
+    public init() {}
+}
 import CoreVideo
 import Metal
 import QuartzCore
@@ -25,6 +45,174 @@ public final class MetalPreviewLayer: CAMetalLayer {
     /// unified log — parity debugging between surfaces (rec vs playback).
     public var debugTag: String?
     private var presentCount = 0
+    /// Display aids (read under renderLock; use setAssist from any thread).
+    private var assist = ViewAssist()
+
+    public func setAssist(_ newValue: ViewAssist) {
+        renderLock.lock()
+        let changed = assist != newValue
+        assist = newValue
+        renderLock.unlock()
+        if changed { redraw() }
+    }
+
+    // MARK: - assist filter chains (static, shared across layers)
+
+    /// Grayscale in BT.709 weights — the base for the luma-driven tools.
+    private static func grayscale(_ image: CIImage) -> CIImage {
+        image.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
+            "inputGVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
+            "inputBVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+        ])
+    }
+
+    /// Exposure bands on gamma-encoded code values (ARRI-style palette).
+    nonisolated(unsafe) private static let falseColorCube: Data = {
+        let size = 64
+        var rgba = [Float]()
+        rgba.reserveCapacity(size * size * size * 4)
+        func band(_ v: Double) -> (Double, Double, Double) {
+            switch v {
+            case ..<0.025: return (0.58, 0.20, 0.75)  // purple — crushed
+            case ..<0.08: return (0.16, 0.34, 0.90)   // blue — deep shadow
+            case ..<0.36: return (v, v, v)            // gray ramp
+            case ..<0.44: return (0.15, 0.75, 0.25)   // green — 18% gray
+            case ..<0.52: return (v, v, v)
+            case ..<0.58: return (0.95, 0.60, 0.70)   // pink — skin highlight
+            case ..<0.92: return (v, v, v)
+            case ..<0.97: return (0.98, 0.90, 0.20)   // yellow — near clip
+            default: return (0.95, 0.15, 0.10)        // red — clipped
+            }
+        }
+        for b in 0..<size {
+            for g in 0..<size {
+                for r in 0..<size {
+                    // input is grayscale (r=g=b on the diagonal); using luma
+                    // keeps off-axis values sane anyway
+                    let v = 0.2126 * Double(r) + 0.7152 * Double(g)
+                        + 0.0722 * Double(b)
+                    let (red, green, blue) = band(v / Double(size - 1))
+                    rgba += [Float(red), Float(green), Float(blue), 1]
+                }
+            }
+        }
+        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
+    }()
+
+    /// EL Zone-style stops around 18% gray: display luma is linearized with
+    /// the inverse BT.709 OETF, zones colored per stop (approximation of the
+    /// Ed Lachman scale).
+    nonisolated(unsafe) private static let elZoneCube: Data = {
+        let size = 64
+        var rgba = [Float]()
+        rgba.reserveCapacity(size * size * size * 4)
+        func zoneColor(_ stop: Double) -> (Double, Double, Double) {
+            switch stop.rounded() {
+            case ..<(-5): return (0.04, 0.04, 0.04)   // ≤ -6: black
+            case -5: return (0.45, 0.15, 0.65)        // purple
+            case -4: return (0.15, 0.25, 0.90)        // blue
+            case -3: return (0.10, 0.60, 0.70)        // teal
+            case -2: return (0.15, 0.65, 0.25)        // green
+            case -1: return (0.32, 0.32, 0.32)        // dark gray
+            case 0: return (0.50, 0.50, 0.50)         // 18% — mid gray
+            case 1: return (0.68, 0.68, 0.68)         // light gray
+            case 2: return (0.95, 0.60, 0.65)         // pink
+            case 3: return (0.95, 0.55, 0.15)         // orange
+            case 4: return (0.98, 0.72, 0.30)         // light orange
+            case 5: return (0.98, 0.92, 0.25)         // yellow
+            default: return (1, 1, 1)                 // ≥ +6: white
+            }
+        }
+        func linear(_ v: Double) -> Double {
+            // inverse BT.709 OETF
+            v < 0.081 ? v / 4.5 : pow((v + 0.099) / 1.099, 1 / 0.45)
+        }
+        for b in 0..<size {
+            for g in 0..<size {
+                for r in 0..<size {
+                    let v = (0.2126 * Double(r) + 0.7152 * Double(g)
+                        + 0.0722 * Double(b)) / Double(size - 1)
+                    let lin = max(1e-6, linear(v))
+                    let stop = log2(lin / 0.18)
+                    let (red, green, blue) = zoneColor(stop)
+                    rgba += [Float(red), Float(green), Float(blue), 1]
+                }
+            }
+        }
+        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
+    }()
+
+    /// White where luma ≥ 95% — the zebra mask.
+    nonisolated(unsafe) private static let zebraMaskCube: Data = {
+        let size = 32
+        var rgba = [Float]()
+        for b in 0..<size {
+            for g in 0..<size {
+                for r in 0..<size {
+                    let v = (0.2126 * Double(r) + 0.7152 * Double(g)
+                        + 0.0722 * Double(b)) / Double(size - 1)
+                    let on: Float = v >= 0.95 ? 1 : 0
+                    rgba += [on, on, on, 1]
+                }
+            }
+        }
+        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
+    }()
+
+    private func applyAssist(_ image: CIImage, tool: ViewAssist.Tool) -> CIImage {
+        switch tool {
+        case .off:
+            return image
+        case .falseColor:
+            return Self.grayscale(image).applyingFilter(
+                "CIColorCube", parameters: [
+                    "inputCubeDimension": 64,
+                    "inputCubeData": Self.falseColorCube,
+                ])
+        case .elZone:
+            return Self.grayscale(image).applyingFilter(
+                "CIColorCube", parameters: [
+                    "inputCubeDimension": 64,
+                    "inputCubeData": Self.elZoneCube,
+                ])
+        case .zebra:
+            let mask = Self.grayscale(image).applyingFilter(
+                "CIColorCube", parameters: [
+                    "inputCubeDimension": 32,
+                    "inputCubeData": Self.zebraMaskCube,
+                ])
+            guard let stripes = CIFilter(name: "CIStripesGenerator", parameters: [
+                "inputColor0": CIColor(red: 1, green: 1, blue: 1),
+                "inputColor1": CIColor(red: 0, green: 0, blue: 0),
+                "inputWidth": 4,
+                "inputSharpness": 1,
+            ])?.outputImage?
+                .transformed(by: CGAffineTransform(rotationAngle: .pi / 4))
+                .cropped(to: image.extent) else { return image }
+            let striped = stripes.applyingFilter("CIMultiplyCompositing", parameters: [
+                kCIInputBackgroundImageKey: mask,
+            ])
+            return CIImage(color: CIColor(red: 1, green: 1, blue: 1))
+                .cropped(to: image.extent)
+                .applyingFilter("CIBlendWithMask", parameters: [
+                    kCIInputBackgroundImageKey: image,
+                    kCIInputMaskImageKey: striped,
+                ])
+        case .peaking:
+            let edges = Self.grayscale(image)
+                .applyingFilter("CIEdges", parameters: ["inputIntensity": 12])
+                .applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: 2.4, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                ])
+            return edges.applyingFilter("CIScreenBlendMode", parameters: [
+                kCIInputBackgroundImageKey: image,
+            ])
+        }
+    }
 
     public override init() {
         super.init()
@@ -134,9 +322,20 @@ public final class MetalPreviewLayer: CAMetalLayer {
         guard let drawable = nextDrawable() else { return }
         var image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
+        let currentAssist = assist
+        if currentAssist.tool != .off {
+            image = applyAssist(image, tool: currentAssist.tool)
+        }
+        if currentAssist.desqueeze != 1 {
+            image = image.transformed(by: CGAffineTransform(
+                scaleX: currentAssist.desqueeze, y: 1))
+        }
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return }
-        let scale = min(size.width / extent.width, size.height / extent.height)
+        var scale = min(size.width / extent.width, size.height / extent.height)
+        if currentAssist.punchIn > 1 {
+            scale *= currentAssist.punchIn // centered magnification
+        }
         // integral-pixel placement: fractional offsets shift live vs playback
         // by a visible pixel in the compare modes (wipe/blend/side-by-side)
         let tx = ((size.width - extent.width * scale) / 2).rounded(.down)

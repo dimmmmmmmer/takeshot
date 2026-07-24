@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CBraw
 import CaptureCore
+import CryptoKit
 import Combine
 import CoreMedia
 import CoreVideo
@@ -141,6 +142,108 @@ final class CaptureController: ObservableObject {
     /// Playback opacity in blend mode.
     @Published var blendOpacity: Double = 0.5 {
         didSet { pushCompare() }
+    }
+
+    /// Verified-backup state per file (footer of the take rows).
+    enum BackupState: Equatable {
+        case copying
+        case verified
+        case failed(String)
+    }
+
+    @Published var backupStates: [URL: BackupState] = [:]
+    nonisolated private static let backupQueue = DispatchQueue(
+        label: "takeshot.backup", qos: .utility)
+
+    /// Copy a finished file to the backup folder and verify by SHA-256.
+    /// Failures surface as a toast AND a per-take badge.
+    private func backup(url: URL) {
+        guard let path = settings.backupPath, !path.isEmpty else { return }
+        backupStates[url] = .copying
+        let destDir = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        Self.backupQueue.async { [weak self] in
+            let result: BackupState
+            do {
+                try FileManager.default.createDirectory(
+                    at: destDir, withIntermediateDirectories: true)
+                let dest = CapturePipeline.uniqueURL(
+                    for: destDir.appendingPathComponent(url.lastPathComponent))
+                try FileManager.default.copyItem(at: url, to: dest)
+                let sourceHash = try Self.sha256(of: url)
+                let destHash = try Self.sha256(of: dest)
+                if sourceHash == destHash {
+                    result = .verified
+                    let line = "\(dest.lastPathComponent),\(sourceHash),"
+                        + "\(ISO8601DateFormatter().string(from: Date()))\n"
+                    let log = destDir.appendingPathComponent("backup-log.csv")
+                    if let handle = try? FileHandle(forWritingTo: log) {
+                        handle.seekToEndOfFile()
+                        handle.write(Data(line.utf8))
+                        try? handle.close()
+                    } else {
+                        try? ("File,SHA256,Backed Up At\n" + line)
+                            .write(to: log, atomically: true, encoding: .utf8)
+                    }
+                } else {
+                    try? FileManager.default.removeItem(at: dest)
+                    result = .failed("checksum mismatch")
+                }
+            } catch {
+                result = .failed(error.localizedDescription)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.backupStates[url] = result
+                if case .failed(let reason) = result {
+                    self.lastError = L("backup_failed", url.lastPathComponent,
+                                       reason)
+                }
+            }
+        }
+    }
+
+    nonisolated private static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while autoreleasepool(invoking: {
+            let chunk = handle.readData(ofLength: 8 << 20)
+            if chunk.isEmpty { return false }
+            hasher.update(data: chunk)
+            return true
+        }) {}
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Operator display aids (false color/zebra/peaking, desqueeze, punch-in).
+    @Published var assist = ViewAssist() {
+        didSet {
+            pipeline.setViewAssist(assist)
+            playbackTap.setViewAssist(assist)
+            rawPlayer?.setViewAssist(assist)
+            if oldValue.desqueeze != assist.desqueeze {
+                settings.desqueezeFactor = assist.desqueeze == 1
+                    ? nil : assist.desqueeze
+            }
+        }
+    }
+
+    /// Aspect of the picture currently in the viewer, desqueeze included —
+    /// the framelines box must hug the visible image.
+    var displayAspect: CGFloat {
+        let base: CGFloat
+        if viewerMode == .playback, let aspect = playbackAspect {
+            base = aspect
+        } else if let format = signalFormat, format.height > 0 {
+            base = CGFloat(format.width) / CGFloat(format.height)
+        } else {
+            base = 16.0 / 9.0
+        }
+        return base * CGFloat(assist.desqueeze)
+    }
+
+    func togglePunchIn() {
+        assist.punchIn = assist.punchIn > 1 ? 1 : 2
     }
 
     /// A reference frame is pinned for live compare (rec mode wipe/blend).
@@ -1052,6 +1155,7 @@ final class CaptureController: ObservableObject {
                     self?.live.scopeData = data
                 }
                 rawPlayer = model
+                model.setViewAssist(assist)
                 playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
                 playbackStartTC = model.startTimecode
                 playbackFPS = model.frameRate
@@ -1323,6 +1427,7 @@ final class CaptureController: ObservableObject {
         live.volume = storedVolume
         live.lutIntensity = stored.lutIntensity ?? 1
         monitorOn = stored.monitorEnabled ?? true
+        assist.desqueeze = stored.desqueezeFactor ?? 1
         player.volume = Float(storedVolume)
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
@@ -1381,6 +1486,7 @@ final class CaptureController: ObservableObject {
             self.exportTakeLog()
             self.generateThumbnail(for: take)
             self.flashNewItem(take.url)
+            self.backup(url: take.url)
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
@@ -1745,6 +1851,7 @@ final class CaptureController: ObservableObject {
             try png.write(to: url)
             scanDestinationFolder() // show it in Other content right away
             flashNewItem(url)
+            backup(url: url)
             lastNotice = L("grab_saved", url.lastPathComponent)
         } catch {
             lastError = "Frame grab failed: \(error.localizedDescription)"

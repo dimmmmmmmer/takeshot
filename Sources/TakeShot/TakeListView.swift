@@ -181,6 +181,7 @@ private struct TakeRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { controller.play(url: take.url) }
+            BackupBadge(url: take.url)
             CommentButton(take: take)
             RatingToggle(take: take)
         }
@@ -458,6 +459,34 @@ private struct TakeContextMenu: View {
         Divider()
         Button(L("delete_item"), role: .destructive) {
             controller.deleteTake(take)
+        }
+    }
+}
+
+/// Verified-backup indicator for a take row.
+private struct BackupBadge: View {
+    @EnvironmentObject private var controller: CaptureController
+    let url: URL
+
+    var body: some View {
+        switch controller.backupStates[url] {
+        case .copying:
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .help(L("backup_copying"))
+        case .verified:
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.green)
+                .help(L("backup_verified"))
+        case .failed(let reason):
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.red)
+                .help(reason)
+        case nil:
+            EmptyView()
         }
     }
 }

@@ -151,6 +151,18 @@ struct RawTransportBar: View {
                 .foregroundStyle(.secondary)
 
             Button {
+                model.toggleRangePoint(out: false)
+            } label: {
+                Image(systemName: "arrow.right.to.line.compact")
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.inPoint != nil
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .help(L("loop_in_help"))
+
+            Button {
                 model.isLooping.toggle()
             } label: {
                 Image(systemName: "repeat")
@@ -160,6 +172,18 @@ struct RawTransportBar: View {
             }
             .buttonStyle(.plain)
             .help(L("playback_loop"))
+
+            Button {
+                model.toggleRangePoint(out: true)
+            } label: {
+                Image(systemName: "arrow.left.to.line.compact")
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.outPoint != nil
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .help(L("loop_out_help"))
 
             MarkerButton()
 
@@ -237,6 +261,18 @@ struct TransportBar: View {
             .help(L("playback_speed"))
 
             Button {
+                model.toggleRangePoint(out: false)
+            } label: {
+                Image(systemName: "arrow.right.to.line.compact")
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.inPoint != nil
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .help(L("loop_in_help"))
+
+            Button {
                 model.isLooping.toggle()
             } label: {
                 Image(systemName: "repeat")
@@ -246,6 +282,18 @@ struct TransportBar: View {
             }
             .buttonStyle(.plain)
             .help(L("playback_loop"))
+
+            Button {
+                model.toggleRangePoint(out: true)
+            } label: {
+                Image(systemName: "arrow.left.to.line.compact")
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.outPoint != nil
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .help(L("loop_out_help"))
 
             MarkerButton()
 
@@ -508,6 +556,37 @@ private struct TransportPositionControls: View {
                 MarkerTicks(markers: controller.playbackMarkers,
                             duration: model.duration)
             }
+            .overlay {
+                RangeTicks(inPoint: model.inPoint, outPoint: model.outPoint,
+                           duration: model.duration,
+                           tint: controller.accentColor)
+            }
+    }
+}
+
+/// In/out loop bounds over the scrubber (display only).
+private struct RangeTicks: View {
+    let inPoint: Double?
+    let outPoint: Double?
+    let duration: Double
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            if duration > 0 {
+                ForEach([inPoint, outPoint].compactMap { $0 },
+                        id: \.self) { seconds in
+                    Rectangle()
+                        .fill(tint)
+                        .frame(width: 2, height: 10)
+                        .position(
+                            x: geo.size.width
+                                * min(1, max(0, seconds / duration)),
+                            y: 2)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -545,6 +624,9 @@ final class TransportModel: ObservableObject {
     let position = TransportPosition()
     var currentTime: Double { position.currentTime }
     @Published var duration: Double = 0
+    /// Loop range (stuntmen watch one beat ten times in a row).
+    @Published var inPoint: Double?
+    @Published var outPoint: Double?
     @Published var isPlaying = false
     @Published var desiredRate: Double = 1.0
     @Published var isLooping = true
@@ -568,6 +650,11 @@ final class TransportModel: ObservableObject {
                    self.duration != item.duration.seconds {
                     self.duration = item.duration.seconds
                 }
+                // loop range: jump back at the out point while playing
+                if playing, self.isLooping, let out = self.outPoint,
+                   time.seconds >= out {
+                    self.seek(to: self.inPoint ?? 0)
+                }
             }
         }
         endObserver = NotificationCenter.default.addObserver(
@@ -578,7 +665,9 @@ final class TransportModel: ObservableObject {
                 guard let self, let player = self.player,
                       (note.object as? AVPlayerItem) === player.currentItem,
                       self.isLooping else { return }
-                player.seek(to: .zero)
+                let start = self.inPoint ?? 0
+                player.seek(to: CMTime(seconds: start, preferredTimescale: 600),
+                            toleranceBefore: .zero, toleranceAfter: .zero)
                 player.rate = Float(self.desiredRate)
             }
         }
@@ -605,6 +694,27 @@ final class TransportModel: ObservableObject {
                 player.seek(to: .zero)
             }
             player.rate = Float(desiredRate)
+        }
+    }
+
+    /// Set/clear the in or out point at the playhead (click near an existing
+    /// point clears it).
+    func toggleRangePoint(out: Bool) {
+        let now = position.currentTime
+        if out {
+            if let existing = outPoint, abs(existing - now) < 0.1 {
+                outPoint = nil
+            } else {
+                outPoint = now
+                if let inP = inPoint, inP >= now { inPoint = nil }
+            }
+        } else {
+            if let existing = inPoint, abs(existing - now) < 0.1 {
+                inPoint = nil
+            } else {
+                inPoint = now
+                if let outP = outPoint, outP <= now { outPoint = nil }
+            }
         }
     }
 

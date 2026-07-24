@@ -317,3 +317,25 @@
 "compare_source" = "Источник";
 
 "marker_color_help" = "Клик — сменить цвет маркера";
+
+"assist_help" = "Инструменты оператора";
+"assist_tool" = "Контроль экспозиции";
+"assist_off" = "Выкл";
+"assist_false_color" = "False color";
+"assist_zebra" = "Зебра (95%)";
+"assist_peaking" = "Focus peaking";
+"framelines" = "Framelines";
+"safe_areas" = "Безопасные зоны";
+"desqueeze" = "Десквиз";
+"punch_in" = "Punch-in 2x";
+"hotkey_punch_in" = "Punch-in зум";
+
+"loop_in_help" = "Поставить/снять точку входа лупа";
+"loop_out_help" = "Поставить/снять точку выхода лупа";
+"backup_folder" = "Проверяемый бэкап";
+"choose" = "Выбрать...";
+"backup_copying" = "Копируется...";
+"backup_verified" = "В бэкапе (чексумма сошлась)";
+"backup_failed" = "Бэкап не удался: %@ (%@)";
+
+"assist_el_zone" = "EL Zone (стопы)";
