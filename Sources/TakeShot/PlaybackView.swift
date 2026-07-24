@@ -14,9 +14,10 @@ struct PlaybackContent: View {
     var body: some View {
         if let url = controller.playbackURL {
             let ext = url.pathExtension.lowercased()
-            if Self.imageExtensions.contains(ext) {
+            let rawOwned = controller.rawPlayer?.url == url
+            if Self.imageExtensions.contains(ext), !rawOwned {
                 ImagePlaybackView(url: url)
-            } else if CaptureController.rawExtensions.contains(ext) {
+            } else if rawOwned || CaptureController.rawExtensions.contains(ext) {
                 if let model = controller.rawPlayer {
                     RawTapLayerView(model: model)
                 } else {
@@ -166,7 +167,7 @@ struct RawTransportBar: View {
 
             MarkerButton()
 
-            Text("BRAW")
+            Text(model.formatBadge)
                 .font(.system(size: 9, weight: .semibold))
                 .padding(.horizontal, 5).padding(.vertical, 2)
                 .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))

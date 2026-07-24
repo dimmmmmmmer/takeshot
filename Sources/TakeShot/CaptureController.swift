@@ -712,7 +712,16 @@ final class CaptureController: ObservableObject {
     }
 
     /// RAW codecs played by our own engine, not AVPlayer.
-    nonisolated static let rawExtensions: Set<String> = ["braw"]
+    nonisolated static let rawExtensions: Set<String> = ["braw", "r3d"]
+
+    /// A folder of .dng frames = one CinemaDNG clip.
+    nonisolated static func isCinemaDNGFolder(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path,
+                                             isDirectory: &isDirectory),
+              isDirectory.boolValue else { return false }
+        return !DNGSequenceSource.frameURLs(in: url).isEmpty
+    }
 
     /// The engine for a loaded RAW clip (nil — AVPlayer/photo content).
     @Published var rawPlayer: RawPlayerModel?
@@ -845,10 +854,11 @@ final class CaptureController: ObservableObject {
         rawPlayer = nil
         rawPlayerError = nil
         let ext = url.pathExtension.lowercased()
-        if Self.imageExtensions.contains(ext) {
+        let isRaw = Self.rawExtensions.contains(ext) || Self.isCinemaDNGFolder(url)
+        if Self.imageExtensions.contains(ext), !isRaw {
             player.pause()
             player.replaceCurrentItem(with: nil)
-        } else if Self.rawExtensions.contains(ext) {
+        } else if isRaw {
             player.pause()
             player.replaceCurrentItem(with: nil)
             playbackTap.detach()
@@ -1499,7 +1509,7 @@ final class CaptureController: ObservableObject {
     // MARK: - folder sync (Other content)
 
     nonisolated private static let videoExtensions: Set<String> =
-        ["mov", "mp4", "mxf", "m4v", "avi", "braw"]
+        ["mov", "mp4", "mxf", "m4v", "avi", "braw", "r3d"]
     nonisolated private static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
@@ -1611,7 +1621,8 @@ final class CaptureController: ObservableObject {
                 continue
             }
             let ext = url.pathExtension.lowercased()
-            guard ext == "mov" || ext == "mp4" else {
+            guard ext == "mov" || ext == "mp4",
+                  !Self.isCinemaDNGFolder(url) else {
                 scannedPaths.insert(url.path)
                 foreign.append(url)
                 continue
@@ -1696,6 +1707,21 @@ final class CaptureController: ObservableObject {
                                         size: NSSize(width: cg.width,
                                                      height: cg.height))
                     }
+                } else if Self.isCinemaDNGFolder(url) {
+                    let frames = DNGSequenceSource.frameURLs(in: url)
+                    if let middle = frames.dropFirst(frames.count / 2).first,
+                       let src = CGImageSourceCreateWithURL(middle as CFURL, nil),
+                       let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
+                           kCGImageSourceCreateThumbnailFromImageAlways: true,
+                           kCGImageSourceThumbnailMaxPixelSize: 480,
+                       ] as CFDictionary) {
+                        image = NSImage(cgImage: cg,
+                                        size: NSSize(width: cg.width,
+                                                     height: cg.height))
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.otherDurations[url] = Double(frames.count) / 24.0
+                    }
                 } else if ext == "braw" {
                     if let clip = try? CBRClip(path: url.path) {
                         if clip.frameCount > 0,
@@ -1757,6 +1783,15 @@ final class CaptureController: ObservableObject {
             at: root, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
             for case let url as URL in enumerator {
+                // a CinemaDNG folder is one clip: list it, skip the frames
+                if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
+                    .isDirectory == true {
+                    if !DNGSequenceSource.frameURLs(in: url).isEmpty {
+                        enumerator.skipDescendants()
+                        found.append(url)
+                    }
+                    continue
+                }
                 let ext = url.pathExtension.lowercased()
                 let isVideo = videoExtensions.contains(ext)
                 guard isVideo || imageExtensions.contains(ext),

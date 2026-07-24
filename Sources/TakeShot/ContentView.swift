@@ -524,41 +524,43 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
-    /// Whether to show the transport (video playback, not a photo).
+    /// Whether to show the AVPlayer transport (video, not photo/RAW).
     private var showsTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
         else { return false }
         let ext = url.pathExtension.lowercased()
         return !PlaybackContent.imageExtensions.contains(ext)
             && !CaptureController.rawExtensions.contains(ext)
+            && controller.rawPlayer?.url != url
     }
 
     /// RAW clips get the engine's own transport.
     private var showsRawTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
         else { return false }
+        if controller.rawPlayer?.url == url { return true }
         return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
     }
 
-    /// Whether the playback file is a photo.
+    /// Whether the playback file is a photo (a lone still, not a DNG reel).
     private var isImage: Bool {
-        controller.playbackURL.map {
-            PlaybackContent.imageExtensions.contains($0.pathExtension.lowercased())
-        } ?? false
+        guard let url = controller.playbackURL, controller.rawPlayer?.url != url
+        else { return false }
+        return PlaybackContent.imageExtensions.contains(
+            url.pathExtension.lowercased())
     }
 
     /// What feeds the unified surface right now.
     private var surfaceSource: ViewerSurface.Source {
         if controller.viewerMode == .record { return .live }
         guard let url = controller.playbackURL else { return .none }
+        // the RAW engine claimed the clip (BRAW/DNG folder/R3D)
+        if let raw = controller.rawPlayer, raw.url == url {
+            return .raw(ObjectIdentifier(raw))
+        }
         let ext = url.pathExtension.lowercased()
         if PlaybackContent.imageExtensions.contains(ext) { return .none }
-        if CaptureController.rawExtensions.contains(ext) {
-            if let raw = controller.rawPlayer {
-                return .raw(ObjectIdentifier(raw))
-            }
-            return .none
-        }
+        if CaptureController.rawExtensions.contains(ext) { return .none }
         return .playback
     }
 

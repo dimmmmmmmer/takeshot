@@ -287,3 +287,5 @@
 "export_menu_help" = "Экспорт: EDL, отчёт смены";
 "report_no_takes" = "Нет тейков для отчёта";
 "report_saved" = "Отчёт сохранён: %@";
+
+"r3d_not_supported" = "Воспроизведение R3D пока не подключено (нужен REDCODE SDK)";

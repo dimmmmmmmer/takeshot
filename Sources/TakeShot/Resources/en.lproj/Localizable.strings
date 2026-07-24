@@ -287,3 +287,5 @@
 "export_menu_help" = "Export: EDL, shift report";
 "report_no_takes" = "No takes to report";
 "report_saved" = "Report saved: %@";
+
+"r3d_not_supported" = "R3D playback isn\u2019t integrated yet (REDCODE SDK required)";
