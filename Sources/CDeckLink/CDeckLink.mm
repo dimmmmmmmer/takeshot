@@ -486,9 +486,16 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 - (CVPixelBufferRef)copyPixelBufferFromFrame:(IDeckLinkVideoInputFrame *)videoFrame {
     long width = videoFrame->GetWidth();
     long height = videoFrame->GetHeight();
-    OSType cvFormat = (videoFrame->GetPixelFormat() == bmdFormat8BitBGRA)
-        ? kCVPixelFormatType_32BGRA
-        : kCVPixelFormatType_422YpCbCr8; // '2vuy'
+    BMDPixelFormat sourceFormat = videoFrame->GetPixelFormat();
+    OSType cvFormat;
+    if (sourceFormat == bmdFormat8BitBGRA) {
+        cvFormat = kCVPixelFormatType_32BGRA;
+    } else if (sourceFormat == bmdFormat10BitRGB) {
+        cvFormat = 0x72323130; // 'r210' — labeled truthfully or the pipeline
+                               // reads 10-bit RGB words as YUV (green mush)
+    } else {
+        cvFormat = kCVPixelFormatType_422YpCbCr8; // '2vuy'
+    }
 
     if (!_pixelBufferPool || _poolWidth != width || _poolHeight != height ||
         _poolFormat != cvFormat) {
