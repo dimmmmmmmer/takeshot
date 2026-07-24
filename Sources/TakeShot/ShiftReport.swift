@@ -58,22 +58,24 @@ enum ShiftReport {
             attributed.draw(in: rect)
         }
 
-        // column layout: thumb | clip | TC in | TC out | dur | rating | comment
+        // columns: thumb | clip | take # | TC in | TC out | dur | OK | notes
         let xThumb = margin
         let xClip = xThumb + thumbSize.width + 8
-        let xTCIn = xClip + 150
-        let xTCOut = xTCIn + 70
-        let xDur = xTCOut + 70
-        let xRating = xDur + 40
+        let xTake = xClip + 136
+        let xTCIn = xTake + 34
+        let xTCOut = xTCIn + 66
+        let xDur = xTCOut + 66
+        let xRating = xDur + 38
         let xComment = xRating + 42
         let commentWidth = pageSize.width - margin - xComment
 
         func drawTableHead() {
-            draw("CLIP", x: xClip, width: 150, font: headFont, color: .darkGray)
-            draw("TC IN", x: xTCIn, width: 70, font: headFont, color: .darkGray)
-            draw("TC OUT", x: xTCOut, width: 70, font: headFont, color: .darkGray)
-            draw("DUR", x: xDur, width: 40, font: headFont, color: .darkGray)
-            draw("TAKE", x: xRating, width: 42, font: headFont, color: .darkGray)
+            draw("CLIP", x: xClip, width: 136, font: headFont, color: .darkGray)
+            draw("TAKE", x: xTake, width: 34, font: headFont, color: .darkGray)
+            draw("TC IN", x: xTCIn, width: 66, font: headFont, color: .darkGray)
+            draw("TC OUT", x: xTCOut, width: 66, font: headFont, color: .darkGray)
+            draw("DUR", x: xDur, width: 38, font: headFont, color: .darkGray)
+            draw("OK", x: xRating, width: 42, font: headFont, color: .darkGray)
             draw("NOTES", x: xComment, width: commentWidth, font: headFont,
                  color: .darkGray)
             y += 16
@@ -125,18 +127,24 @@ enum ShiftReport {
                            fraction: 1)
             }
             let name = take.url.deletingPathExtension().lastPathComponent
-            draw(name, x: xClip, width: 150, font: bodyFont, offset: 2)
+            draw(name, x: xClip, width: 136, font: bodyFont, offset: 2)
             if !take.markers.isEmpty {
-                draw("⚑ \(take.markers.map(\.timecodeText).joined(separator: "  "))",
-                     x: xClip, width: 150, font: NSFont.systemFont(ofSize: 7),
+                let flags = take.markers.map {
+                    $0.note.isEmpty ? $0.timecodeText : "\($0.timecodeText) \($0.note)"
+                }.joined(separator: "   ")
+                draw("⚑ \(flags)", x: xClip,
+                     width: pageSize.width - margin - xClip,
+                     font: NSFont.systemFont(ofSize: 7),
                      color: .orange, offset: 15)
             }
-            draw(take.startTimecode?.description ?? "—", x: xTCIn, width: 70,
+            draw(String(take.takeNumber), x: xTake, width: 34,
+                 font: monoFont, offset: 2)
+            draw(take.startTimecode?.description ?? "—", x: xTCIn, width: 66,
                  font: monoFont, offset: 2)
             draw(TakeLogExporter.endTimecode(of: take)?.description ?? "—",
-                 x: xTCOut, width: 70, font: monoFont, offset: 2)
+                 x: xTCOut, width: 66, font: monoFont, offset: 2)
             draw(String(format: "%.1fs", take.durationSeconds), x: xDur,
-                 width: 40, font: monoFont, offset: 2)
+                 width: 38, font: monoFont, offset: 2)
             switch take.rating {
             case .good:
                 draw("● GOOD", x: xRating, width: 42, font: headFont,

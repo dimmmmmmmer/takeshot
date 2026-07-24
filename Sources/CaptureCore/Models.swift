@@ -46,14 +46,25 @@ public enum TakeRating: String, Equatable, Sendable {
 /// A take — one continuous camera recording segment, one file on disk.
 /// A flagged moment inside a take (hotkey during recording or review).
 public struct TakeMarker: Equatable, Sendable {
+    /// Marker colors (EDL locator palette; also the UI swatches).
+    public static let colors = ["orange", "red", "yellow", "green",
+                                "cyan", "blue", "purple"]
+
     /// Offset from the start of the take.
     public var seconds: Double
     /// Timecode of the moment as text (start TC + offset), when known.
     public var timecodeText: String
+    /// One of `Self.colors`.
+    public var color: String
+    /// Free-text note (goes to the EDL locator name and the shift report).
+    public var note: String
 
-    public init(seconds: Double, timecodeText: String = "") {
+    public init(seconds: Double, timecodeText: String = "",
+                color: String = "orange", note: String = "") {
         self.seconds = seconds
         self.timecodeText = timecodeText
+        self.color = color
+        self.note = note
     }
 }
 

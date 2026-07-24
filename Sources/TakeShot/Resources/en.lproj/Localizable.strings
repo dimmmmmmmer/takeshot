@@ -293,3 +293,8 @@
 "tc_source" = "Timecode source";
 "tc_source_rp188" = "RP188 (video stream)";
 "tc_source_ltc" = "LTC — audio ch %d";
+
+"marker_list_help" = "Markers: jump, note, color, delete";
+"marker_jump_help" = "Jump to the marker";
+"marker_note_placeholder" = "Note";
+"marker_delete_help" = "Delete the marker";

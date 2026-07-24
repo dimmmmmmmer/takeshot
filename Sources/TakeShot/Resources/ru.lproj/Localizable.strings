@@ -293,3 +293,8 @@
 "tc_source" = "Источник таймкода";
 "tc_source_rp188" = "RP188 (видеопоток)";
 "tc_source_ltc" = "LTC — аудиоканал %d";
+
+"marker_list_help" = "Маркеры: переход, заметка, цвет, удаление";
+"marker_jump_help" = "Перейти к маркеру";
+"marker_note_placeholder" = "Заметка";
+"marker_delete_help" = "Удалить маркер";

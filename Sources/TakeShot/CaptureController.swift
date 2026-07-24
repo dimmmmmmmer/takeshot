@@ -769,6 +769,34 @@ final class CaptureController: ObservableObject {
         return takes.first { $0.url == url }?.markers ?? []
     }
 
+    /// Mutate a marker of the current playback clip (list editor).
+    func updatePlaybackMarker(at index: Int,
+                              _ change: (inout TakeMarker) -> Void) {
+        guard let url = playbackURL,
+              let takeIndex = takes.firstIndex(where: { $0.url == url }),
+              takes[takeIndex].markers.indices.contains(index) else { return }
+        change(&takes[takeIndex].markers[index])
+        exportTakeLog()
+    }
+
+    func removePlaybackMarker(at index: Int) {
+        guard let url = playbackURL,
+              let takeIndex = takes.firstIndex(where: { $0.url == url }),
+              takes[takeIndex].markers.indices.contains(index) else { return }
+        takes[takeIndex].markers.remove(at: index)
+        exportTakeLog()
+    }
+
+    /// Jump the player (AVPlayer or RAW) to a position in seconds.
+    func seekPlayback(to seconds: Double) {
+        if let raw = rawPlayer {
+            raw.seek(to: Int((seconds * raw.frameRate).rounded()))
+        } else {
+            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+    }
+
     /// Selects EDL: good takes back to back, markers as Resolve locators.
     func exportSelectsEDL() {
         let good = takes.filter { $0.rating == .good }

@@ -341,10 +341,24 @@ struct TransportBar: View {
     }
 }
 
-/// Add-marker flag for both transports.
+/// The color a marker name maps to (palette in TakeMarker.colors).
+func markerColor(_ name: String) -> Color {
+    switch name {
+    case "red": return .red
+    case "yellow": return .yellow
+    case "green": return .green
+    case "cyan": return .cyan
+    case "blue": return .blue
+    case "purple": return .purple
+    default: return .orange
+    }
+}
+
+/// Add-marker flag + the marker list editor, for both transports.
 private struct MarkerButton: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
+    @State private var showList = false
 
     var body: some View {
         Button {
@@ -356,6 +370,97 @@ private struct MarkerButton: View {
         }
         .buttonStyle(.plain)
         .help("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
+
+        if !controller.playbackMarkers.isEmpty {
+            Button {
+                showList.toggle()
+            } label: {
+                Text("\(controller.playbackMarkers.count)")
+                    .font(.caption2.monospacedDigit().bold())
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help(L("marker_list_help"))
+            .popover(isPresented: $showList, arrowEdge: .top) {
+                MarkerListEditor()
+            }
+        }
+    }
+}
+
+/// Popover list: jump to, recolor, annotate and delete markers.
+private struct MarkerListEditor: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(controller.playbackMarkers.enumerated()),
+                    id: \.offset) { index, marker in
+                HStack(spacing: 8) {
+                    // color swatch menu
+                    Menu {
+                        ForEach(TakeMarker.colors, id: \.self) { name in
+                            Button {
+                                controller.updatePlaybackMarker(at: index) {
+                                    $0.color = name
+                                }
+                            } label: {
+                                Label(name.capitalized,
+                                      systemImage: marker.color == name
+                                          ? "circle.inset.filled" : "circle.fill")
+                            }
+                            .tint(markerColor(name))
+                        }
+                    } label: {
+                        Circle()
+                            .fill(markerColor(marker.color))
+                            .frame(width: 10, height: 10)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+
+                    Button {
+                        controller.seekPlayback(to: marker.seconds)
+                    } label: {
+                        Text(marker.timecodeText.isEmpty
+                             ? TransportBar.timeText(marker.seconds)
+                             : marker.timecodeText)
+                            .font(.caption.monospacedDigit())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("marker_jump_help"))
+
+                    TextField(L("marker_note_placeholder"), text: Binding(
+                        get: { controller.playbackMarkers[safe: index]?.note ?? "" },
+                        set: { note in
+                            controller.updatePlaybackMarker(at: index) {
+                                $0.note = note
+                            }
+                        }))
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .frame(width: 180)
+
+                    Button {
+                        controller.removePlaybackMarker(at: index)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("marker_delete_help"))
+                }
+            }
+        }
+        .padding(12)
+    }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -369,7 +474,7 @@ struct MarkerTicks: View {
             ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
                 if duration > 0 {
                     Rectangle()
-                        .fill(.orange)
+                        .fill(markerColor(marker.color))
                         .frame(width: 2, height: 7)
                         .position(
                             x: geo.size.width

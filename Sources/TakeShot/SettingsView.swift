@@ -240,6 +240,7 @@ struct SettingsView: View {
                     controller.resetAllSettings()
                     hotkeys.resetToDefaults()
                 }
+                .buttonStyle(.plain)
                 .foregroundStyle(.red)
             }
         }

@@ -44,9 +44,13 @@ public enum EDLExporter {
                 let offset = Int((marker.seconds * Double(fps)).rounded())
                 let locator = Timecode(frameNumber: recordFrame + offset,
                                        fps: fps, isDropFrame: dropFrame)
-                let name = marker.timecodeText.isEmpty
-                    ? "MARKER" : marker.timecodeText
-                lines.append("* LOC: \(locator.description) ORANGE \(name)")
+                var name = marker.note
+                if name.isEmpty {
+                    name = marker.timecodeText.isEmpty ? "MARKER"
+                                                       : marker.timecodeText
+                }
+                lines.append("* LOC: \(locator.description) "
+                    + "\(marker.color.uppercased()) \(name)")
             }
             lines.append("")
             recordFrame += frames

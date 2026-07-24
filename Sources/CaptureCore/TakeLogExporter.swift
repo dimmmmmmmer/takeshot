@@ -91,13 +91,15 @@ public enum TakeLogExporter {
     public static let markersFileName = "takeshot-markers.csv"
 
     public static func markersCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Seconds,Timecode"]
+        var lines = ["File Name,Seconds,Timecode,Color,Note"]
         for take in takes {
             for marker in take.markers {
                 lines.append([
                     escape(take.url.lastPathComponent),
                     String(format: "%.3f", marker.seconds),
                     escape(marker.timecodeText),
+                    escape(marker.color),
+                    escape(marker.note),
                 ].joined(separator: ","))
             }
         }
@@ -125,8 +127,11 @@ public enum TakeLogExporter {
             let fields = parseCSVLine(String(line))
             guard fields.count >= 3, !fields[0].isEmpty,
                   let seconds = Double(fields[1]) else { continue }
-            result[fields[0], default: []]
-                .append(TakeMarker(seconds: seconds, timecodeText: fields[2]))
+            result[fields[0], default: []].append(TakeMarker(
+                seconds: seconds, timecodeText: fields[2],
+                color: fields.count > 3 && !fields[3].isEmpty
+                    ? fields[3] : "orange",
+                note: fields.count > 4 ? fields[4] : ""))
         }
         for key in result.keys {
             result[key]?.sort { $0.seconds < $1.seconds }
