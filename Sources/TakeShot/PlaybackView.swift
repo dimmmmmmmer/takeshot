@@ -402,28 +402,24 @@ private struct MarkerListEditor: View {
                         .font(.caption)
                         .lineLimit(1)
                         .frame(width: 76, alignment: .leading)
-                    // color swatch menu
-                    Menu {
-                        ForEach(TakeMarker.colors, id: \.self) { name in
-                            Button {
-                                controller.updatePlaybackMarker(at: index) {
-                                    $0.color = name
-                                }
-                            } label: {
-                                Label(name.capitalized,
-                                      systemImage: marker.color == name
-                                          ? "circle.inset.filled" : "circle.fill")
-                            }
-                            .tint(markerColor(name))
+                    // color swatch: click cycles the palette (a menu on a
+                    // 10 px label was unopenable)
+                    Button {
+                        let palette = TakeMarker.colors
+                        let next = palette[
+                            ((palette.firstIndex(of: marker.color) ?? 0) + 1)
+                                % palette.count]
+                        controller.updatePlaybackMarker(at: index) {
+                            $0.color = next
                         }
                     } label: {
                         Circle()
                             .fill(markerColor(marker.color))
-                            .frame(width: 10, height: 10)
+                            .frame(width: 12, height: 12)
+                            .contentShape(Circle())
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
+                    .buttonStyle(.plain)
+                    .help(L("marker_color_help"))
 
                     Button {
                         controller.seekPlayback(to: marker.seconds)

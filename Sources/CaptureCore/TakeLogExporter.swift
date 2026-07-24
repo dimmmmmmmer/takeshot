@@ -60,8 +60,18 @@ public enum TakeLogExporter {
                         fps: start.fps, isDropFrame: start.isDropFrame)
     }
 
+    /// Take length as timecode at the take's own rate ("00:00:12:07").
+    public static func durationTimecode(of take: Take) -> String {
+        let fps = take.startTimecode?.fps ?? 25
+        let dropFrame = take.startTimecode?.isDropFrame ?? false
+        let realRate = Double(fps) * (dropFrame ? 1000.0 / 1001.0 : 1)
+        let frames = Int((take.durationSeconds * realRate).rounded())
+        return Timecode(frameNumber: frames, fps: max(1, fps),
+                        isDropFrame: dropFrame).description
+    }
+
     public static func reportCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Roll,Clip,Start TC,End TC,Duration (s),Rating,Comments,Markers,Recorded At"]
+        var lines = ["File Name,Roll,Clip,Start TC,End TC,Duration,Rating,Comments,Markers,Recorded At"]
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -78,7 +88,7 @@ public enum TakeLogExporter {
                 String(take.takeNumber),
                 take.startTimecode?.description ?? "",
                 endTimecode(of: take)?.description ?? "",
-                String(format: "%.1f", take.durationSeconds),
+                durationTimecode(of: take),
                 rating,
                 escape(flattened(take.comment)),
                 escape(take.markers.map(\.timecodeText).joined(separator: "; ")),

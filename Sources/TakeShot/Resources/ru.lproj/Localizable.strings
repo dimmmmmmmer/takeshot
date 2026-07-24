@@ -315,3 +315,5 @@
 
 "delete_item" = "В корзину";
 "compare_source" = "Источник";
+
+"marker_color_help" = "Клик — сменить цвет маркера";

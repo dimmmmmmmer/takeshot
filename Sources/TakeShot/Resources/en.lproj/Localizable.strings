@@ -315,3 +315,5 @@
 
 "delete_item" = "Move to Trash";
 "compare_source" = "Source";
+
+"marker_color_help" = "Click to cycle the marker color";
