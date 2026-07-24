@@ -122,6 +122,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// from an embedded audio channel (`ltcChannel`, 0-based).
     public var timecodeSource: String?
     public var ltcChannel: Int?
+    /// Capture RGB 4:4:4 sources as 10-bit r210 (nil = on).
+    public var tenBitCapture: Bool?
+    /// Live audio monitor on/off (nil = on) — the footer speaker state.
+    public var monitorEnabled: Bool?
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     public var projectName: String = ""

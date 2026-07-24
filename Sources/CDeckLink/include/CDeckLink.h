@@ -76,6 +76,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *forcedModeName;
 /// With a forced mode: treat the signal as RGB 4:4:4 (BGRA) instead of YUV.
 @property (nonatomic) BOOL forcedRGB;
+/// Capture RGB 4:4:4 sources as 10-bit r210 instead of 8-bit BGRA.
+@property (nonatomic) BOOL preferTenBitRGB;
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;

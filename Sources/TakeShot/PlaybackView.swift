@@ -132,8 +132,7 @@ struct RawTransportBar: View {
             }
             .buttonStyle(.plain)
 
-            Text(TransportBar.timeText(Double(model.currentFrame)
-                                       / max(1, model.frameRate)))
+            Text(model.timecodeText)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
@@ -148,8 +147,7 @@ struct RawTransportBar: View {
                                     / max(1, model.frameRate))
                 }
 
-            Text(TransportBar.timeText(Double(model.frameCount)
-                                       / max(1, model.frameRate)))
+            Text(model.endTimecodeText)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
@@ -220,7 +218,7 @@ struct TransportBar: View {
             }
             .buttonStyle(.plain)
 
-            Text(Self.timeText(model.currentTime))
+            Text(controller.playbackTC(atSeconds: model.currentTime))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
@@ -234,7 +232,7 @@ struct TransportBar: View {
                                 duration: model.duration)
                 }
 
-            Text(Self.timeText(model.duration))
+            Text(controller.playbackTC(atSeconds: model.duration))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 

@@ -338,6 +338,15 @@ final class RawPlayerModel: ObservableObject {
                         isDropFrame: dropFrame)
     }
 
+    /// End TC of the clip (transport right-hand readout).
+    var endTimecodeText: String {
+        let fps = max(1, Int(frameRate.rounded()))
+        let start = startTimecode?.frameNumber ?? 0
+        return Timecode(frameNumber: start + frameCount, fps: fps,
+                        isDropFrame: startTimecode?.isDropFrame ?? false)
+            .description
+    }
+
     /// Current position as timecode text for the player badge.
     var timecodeText: String {
         let fps = Int(frameRate.rounded())

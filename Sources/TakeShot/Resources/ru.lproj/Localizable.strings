@@ -305,3 +305,5 @@
 "marker_n" = "Маркер %d";
 "marker_prev_help" = "Предыдущий маркер";
 "marker_next_help" = "Следующий маркер";
+
+"ten_bit_capture" = "10-битный захват RGB (r210)";

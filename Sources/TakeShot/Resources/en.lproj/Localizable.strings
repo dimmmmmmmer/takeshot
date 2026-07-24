@@ -305,3 +305,5 @@
 "marker_n" = "Marker %d";
 "marker_prev_help" = "Previous marker";
 "marker_next_help" = "Next marker";
+
+"ten_bit_capture" = "10-bit RGB capture (r210)";

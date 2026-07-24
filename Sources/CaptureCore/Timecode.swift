@@ -31,6 +31,16 @@ public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
     }
 
     /// Inverse transform: real frame number → a timecode label.
+    /// Parse "HH:MM:SS:FF" (";" before FF for drop-frame). nil on junk.
+    public init?(text: String, fps: Int) {
+        let dropFrame = text.contains(";")
+        let parts = text.split(whereSeparator: { $0 == ":" || $0 == ";" })
+            .compactMap { Int($0) }
+        guard parts.count == 4 else { return nil }
+        self.init(hours: parts[0], minutes: parts[1], seconds: parts[2],
+                  frames: parts[3], fps: max(1, fps), isDropFrame: dropFrame)
+    }
+
     public init(frameNumber: Int, fps: Int, isDropFrame: Bool = false) {
         var fn = max(0, frameNumber)
         if isDropFrame, fps % 30 == 0 {

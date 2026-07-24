@@ -371,7 +371,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     }
     if (forced) {
         _currentMode = forced->GetDisplayMode();
-        _currentPixelFormat = self.forcedRGB ? bmdFormat8BitBGRA : bmdFormat8BitYUV;
+        _currentPixelFormat = self.forcedRGB
+            ? (self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA)
+            : bmdFormat8BitYUV;
     } else {
         _currentMode = bmdModeHD1080p25;
         _currentPixelFormat = bmdFormat8BitYUV;
@@ -453,7 +455,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     // RGB sources as BGRA (the board does not convert RGB→YUV on input),
     // everything else as 8-bit YUV (2vuy)
     BOOL isRGB444 = (flags & bmdDetectedVideoInputRGB444) != 0;
-    BMDPixelFormat pixelFormat = isRGB444 ? bmdFormat8BitBGRA : bmdFormat8BitYUV;
+    BMDPixelFormat pixelFormat = isRGB444
+        ? (self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA)
+        : bmdFormat8BitYUV;
 
     // Restart streams only on an actual change. Restarting on every callback
     // re-arms format detection, which fires the callback again — an endless

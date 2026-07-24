@@ -40,7 +40,9 @@ private struct TakesSection: View {
                     controller.openDestinationInFinder()
                 } label: {
                     Image(systemName: "folder")
+                        .frame(width: 14, height: 14)
                 }
+                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
                 .help(L("open_folder"))
@@ -55,8 +57,10 @@ private struct TakesSection: View {
                     }
                 } label: {
                     Image(systemName: "square.and.arrow.up")
+                        .frame(width: 14, height: 14)
                 }
                 .menuStyle(.button)
+                .buttonStyle(.bordered)
                 .menuIndicator(.hidden)
                 .controlSize(.small)
                 .fixedSize()

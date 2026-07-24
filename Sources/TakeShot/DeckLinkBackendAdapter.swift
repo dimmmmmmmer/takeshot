@@ -11,6 +11,8 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
 
     /// Forced input mode (name + RGB flag); nil — autodetect. Set before start.
     var forcedMode: (name: String, rgb: Bool)?
+    /// RGB 4:4:4 sources captured as 10-bit r210 (vs 8-bit BGRA).
+    var preferTenBitRGB = true
 
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
@@ -42,6 +44,7 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
             capture.forcedModeName = forcedMode.name
             capture.forcedRGB = forcedMode.rgb
         }
+        capture.preferTenBitRGB = preferTenBitRGB
         try capture.start(withDeviceID: deviceID)
         self.capture = capture
     }

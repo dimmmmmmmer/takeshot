@@ -103,6 +103,9 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
+                Toggle(L("ten_bit_capture"), isOn: Binding(
+                    get: { controller.settings.tenBitCapture ?? true },
+                    set: { controller.settings.tenBitCapture = $0 }))
                 TextField(L("project"), text: $controller.settings.projectName)
                 HStack(spacing: 8) {
                     Text(L("destination_folder"))

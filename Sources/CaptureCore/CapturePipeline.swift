@@ -102,6 +102,8 @@ public final class CapturePipeline: @unchecked Sendable {
     private let lutBufferPool = PixelBufferPool()
     /// Source input levels ("limited"/"full"; nil — auto by signal type).
     private var levelsMode: String?
+    /// 10-bit RGB wire split (display BGRA + precompensated r210 record).
+    private let tenBitConverter = TenBitConverter()
 
     // Pinned reference compare (all access on queue): the reference frame is
     // composited over the live preview with the shared wipe/blend math.
@@ -492,9 +494,22 @@ public final class CapturePipeline: @unchecked Sendable {
                    levelsMode ?? "auto", format.isRGB444 ? 1 : 0,
                    inputLevels ?? "passthrough")
         }
-        let leveled = inputLevels == "limited"
-            ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
-            : pixelBuffer
+        // 10-bit RGB wire ('r210'): one pass yields the full-range display
+        // BGRA AND the precompensated 10-bit record buffer; levels are applied
+        // inside the converter, so the 8-bit stage below must not run again
+        var tenBitRecord: CVPixelBuffer?
+        let leveled: CVPixelBuffer
+        if CVPixelBufferGetPixelFormatType(pixelBuffer) == TenBitConverter.r210 {
+            tenBitConverter.setLimitedRange(inputLevels != "full")
+            guard let split = tenBitConverter.convert(pixelBuffer) else { return }
+            tagColorIfUntagged(split.display)
+            leveled = split.display
+            tenBitRecord = split.record
+        } else {
+            leveled = inputLevels == "limited"
+                ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
+                : pixelBuffer
+        }
 
         // while not recording — accumulate frames into the pre-roll buffer (current
         // frame included): when a take starts, frames from the camera's actual record
@@ -502,8 +517,10 @@ public final class CapturePipeline: @unchecked Sendable {
         // buffered AFTER the levels stage — otherwise a take starts with raw
         // pre-roll frames and jumps in contrast when live leveled frames follow
         if writer == nil {
+            // the pre-roll must hold what the WRITER gets (10-bit when active)
             preRollBuffer.append(PreRollFrame(index: frameIndex,
-                                              pixelBuffer: leveled, pts: pts))
+                                              pixelBuffer: tenBitRecord ?? leveled,
+                                              pts: pts))
             let capacity = preRollCapacity
             if preRollBuffer.count > capacity {
                 preRollBuffer.removeFirst(preRollBuffer.count - capacity)
@@ -513,9 +530,11 @@ public final class CapturePipeline: @unchecked Sendable {
         // LUT: preview may have the LUT while recording stays clean (or vice versa)
         let displayBuffer = lutPreview
             ? (applyLUT(to: leveled) ?? leveled) : leveled
+        // LUT baking is an 8-bit creative decision — it keeps the BGRA record
+        // path; otherwise the 10-bit record buffer goes to the writer verbatim
         let recordBuffer = lutRecord
             ? (lutPreview ? displayBuffer : (applyLUT(to: leveled) ?? leveled))
-            : leveled
+            : (tenBitRecord ?? leveled)
 
         var startedThisFrame = false
         let mode = config.settings.detectionMode
@@ -581,7 +600,10 @@ public final class CapturePipeline: @unchecked Sendable {
         // preview LUT is never baked in, only a look that is being recorded
         if let grab = frameGrabHandler {
             frameGrabHandler = nil
-            let png = Self.pngData(from: recordBuffer, ciContext: ciContext)
+            // the clean 8-bit frame: CI can't read r210, and the record look
+            // without a baked LUT IS the leveled frame
+            let png = Self.pngData(from: lutRecord ? recordBuffer : leveled,
+                                   ciContext: ciContext)
             DispatchQueue.main.async { grab(png) }
         }
 

@@ -545,11 +545,13 @@ final class CaptureController: ObservableObject {
     nonisolated static let takeLogQueue = DispatchQueue(
         label: "takeshot.takelog", qos: .utility)
 
-    /// Live audio monitoring on/off. Always starts OFF — no surprise audio on set.
-    @Published var monitorOn = false {
+    /// Live audio monitoring on/off; persisted — a 100% volume slider with a
+    /// crossed-out speaker at every launch read as a bug, not caution.
+    @Published var monitorOn = true {
         didSet {
             pipeline.setAudioMonitorEnabled(monitorOn)
             if !monitorOn { audioMonitor.stop() }
+            settings.monitorEnabled = monitorOn
         }
     }
 
@@ -1031,6 +1033,19 @@ final class CaptureController: ObservableObject {
     @Published var playbackAspect: CGFloat?
     private(set) var playbackFPS: Double = 25
 
+    /// TC text for an arbitrary player position (transport readouts).
+    func playbackTC(atSeconds seconds: Double) -> String {
+        let fps = max(1, playbackFPS)
+        let frames = Int((max(0, seconds) * fps).rounded(.down))
+        let fpsInt = max(1, Int(fps.rounded()))
+        if let start = playbackStartTC {
+            return Timecode(frameNumber: start.frameNumber + frames,
+                            fps: fpsInt,
+                            isDropFrame: start.isDropFrame).description
+        }
+        return Timecode(frameNumber: frames, fps: fpsInt).description
+    }
+
     /// Playback position as timecode (start TC + elapsed at the file's fps).
     var playbackTimecodeText: String {
         if let raw = rawPlayer {
@@ -1122,7 +1137,8 @@ final class CaptureController: ObservableObject {
                 startFolderWatcher()
             }
             if oldValue.forcedInputMode != settings.forcedInputMode
-                || oldValue.forcedInputRGB != settings.forcedInputRGB {
+                || oldValue.forcedInputRGB != settings.forcedInputRGB
+                || oldValue.tenBitCapture != settings.tenBitCapture {
                 restartCapture()
             }
             // cam/postfix/template/padding affect the name — recompute the warning
@@ -1207,6 +1223,7 @@ final class CaptureController: ObservableObject {
         audioMonitor.volume = Float(storedVolume)
         live.volume = storedVolume
         live.lutIntensity = stored.lutIntensity ?? 1
+        monitorOn = stored.monitorEnabled ?? true
         player.volume = Float(storedVolume)
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
@@ -1243,7 +1260,18 @@ final class CaptureController: ObservableObject {
         pipeline.onTakeFinished = { [weak self] take in
             guard let self else { return }
             var take = take
-            take.markers = self.recordingMarkers
+            // re-anchor marker positions on the take's actual start TC: the
+            // wall clock measured from the REC press is off by the pre-roll
+            take.markers = self.recordingMarkers.map { marker in
+                var fixed = marker
+                if let start = take.startTimecode,
+                   let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
+                    var frames = tc.frameNumber - start.frameNumber
+                    if frames < 0 { frames += 24 * 3600 * start.fps }
+                    fixed.seconds = Double(frames) / Double(max(1, start.fps))
+                }
+                return fixed
+            }
             self.recordingMarkers = []
             self.takes.append(take)
             self.nextTakeNumber += 1
@@ -1485,6 +1513,7 @@ final class CaptureController: ObservableObject {
             adapter.forcedMode = settings.forcedInputMode.map {
                 (name: $0, rgb: settings.forcedInputRGB ?? false)
             }
+            adapter.preferTenBitRGB = settings.tenBitCapture ?? true
         }
         do {
             try backend.startCapture(deviceID: deviceID)
