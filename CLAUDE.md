@@ -28,6 +28,23 @@ The SDK headers are not committed. Drop them into `vendor/DeckLinkSDK/include/`
 framework linking is needed; the runtime is
 `/Library/Frameworks/DeckLinkAPI.framework` from Blackmagic Desktop Video).
 
+## Blackmagic RAW SDK
+
+Same pattern for `CBraw` (BRAW playback): headers go in
+`vendor/BRAWSDK/include/` (see `vendor/BRAWSDK/README.md`); without them the
+target is a stub (`CBRClip.isSDKAvailable == NO`). The runtime
+BlackmagicRawAPI.framework is loaded dynamically — app bundle Frameworks/
+first, then the Blackmagic RAW install location under /Applications.
+
+## Preview display rule
+
+A CALayer can be hosted by ONE NSView. Every preview mount registers its own
+`MetalPreviewLayer` as a sink (`CapturePipeline.addDisplaySink`,
+`PlaybackFrameTap.addSink`, `RawPlayerModel.addSink`); never share a layer
+between views. The main viewer is a single `ViewerSurface` whose frame source
+is re-routed between live/playback/RAW — do not mount separate per-mode
+surfaces there (independent letterbox rounding shifts the image by a pixel).
+
 ## Architecture
 
 - `Sources/CaptureCore` — SDK-free core: `Timecode` (including drop-frame math),
