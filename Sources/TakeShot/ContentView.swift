@@ -477,7 +477,9 @@ private struct CompareControls: View {
     var body: some View {
         HStack(spacing: 8) {
             Picker("", selection: $controller.compareMode) {
-                Text(L("compare_off")).tag(CaptureController.CompareMode.off)
+                Text(controller.viewerMode == .record && controller.referencePinned
+                     ? L("compare_source") : L("compare_off"))
+                    .tag(CaptureController.CompareMode.off)
                 Text(L("compare_wipe")).tag(CaptureController.CompareMode.wipe)
                 Text(L("compare_blend")).tag(CaptureController.CompareMode.blend)
                 Text(L("compare_side")).tag(CaptureController.CompareMode.sideBySide)
@@ -883,11 +885,9 @@ struct ViewerSurface: NSViewRepresentable {
                 layer.clearToBlack()
             case .live:
                 pipeline = controller.pipeline
-                layer.debugTag = "viewer-live"
                 controller.pipeline.addDisplaySink(layer)
             case .playback:
                 tap = controller.playbackTap
-                layer.debugTag = "viewer-playback"
                 controller.playbackTap.addSink(layer)
             case .raw:
                 raw = controller.rawPlayer
@@ -940,7 +940,6 @@ struct LivePreviewLayerView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let layer = MetalPreviewLayer()
-        layer.debugTag = "live-mount"
         pipeline.addDisplaySink(layer)
         context.coordinator.pipeline = pipeline
         context.coordinator.layer = layer
@@ -988,15 +987,6 @@ struct BottomBarView: View {
                             NamingPresetMenu()
 
                             FooterMonitorButton(live: controller.live)
-
-                            Button {
-                                controller.instantReplay()
-                            } label: {
-                                Image(systemName: "memories")
-                                    .font(.system(size: 15))
-                            }
-                            .disabled(controller.takes.isEmpty)
-                            .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
                         }
                         .buttonStyle(.borderless)
 
@@ -1013,19 +1003,30 @@ struct BottomBarView: View {
                     NamingFieldsView()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                RecordButton()
-                    .overlay(alignment: .center) {
-                        Button {
-                            controller.grabFrame()
-                        } label: {
-                            Image(systemName: "camera")
-                                .font(.system(size: 15))
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(!controller.isCapturing && controller.playbackURL == nil)
-                        .help(L("grab_frame"))
-                        .offset(x: 52)
+                HStack(spacing: 18) {
+                    Button {
+                        controller.instantReplay()
+                    } label: {
+                        Image(systemName: "memories")
+                            .font(.system(size: 16))
                     }
+                    .buttonStyle(.borderless)
+                    .disabled(controller.takes.isEmpty)
+                    .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
+                    RecordButton()
+                        .overlay(alignment: .center) {
+                            Button {
+                                controller.grabFrame()
+                            } label: {
+                                Image(systemName: "camera")
+                                    .font(.system(size: 15))
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(!controller.isCapturing && controller.playbackURL == nil)
+                            .help(L("grab_frame"))
+                            .offset(x: 52)
+                        }
+                }
             }
         }
         .padding(.horizontal, 14)

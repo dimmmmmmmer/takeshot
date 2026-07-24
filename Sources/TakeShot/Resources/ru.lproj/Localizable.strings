@@ -312,3 +312,6 @@
 
 "hotkey_marker_delete" = "Удалить маркер";
 "marker_removed" = "Маркер удалён %@";
+
+"delete_item" = "В корзину";
+"compare_source" = "Источник";

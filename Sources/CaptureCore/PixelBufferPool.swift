@@ -23,8 +23,14 @@ public final class PixelBufferPool {
                 kCVPixelBufferHeightKey: height,
                 kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
             ]
+            // cached buffers expire — a pre-roll burst must not pin its
+            // high-water mark (up to ~1.5 GB at UHD) for the whole shift
+            let poolAttrs: [CFString: Any] = [
+                kCVPixelBufferPoolMaximumBufferAgeKey: 3.0,
+            ]
             var newPool: CVPixelBufferPool?
-            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil,
+            CVPixelBufferPoolCreate(kCFAllocatorDefault,
+                                    poolAttrs as CFDictionary,
                                     attrs as CFDictionary, &newPool)
             pool = newPool
             self.width = width

@@ -104,6 +104,9 @@ public final class CapturePipeline: @unchecked Sendable {
     private var levelsMode: String?
     /// 10-bit RGB wire split (display BGRA + precompensated r210 record).
     private let tenBitConverter = TenBitConverter()
+    /// Scope analysis runs here, never on the capture-critical queue.
+    private let scopeQueue = DispatchQueue(label: "takeshot.scopes", qos: .utility)
+    private var scopeBusy = false // pipeline-queue confined
 
     // Pinned reference compare (all access on queue): the reference frame is
     // composited over the live preview with the shared wipe/blend math.
@@ -155,13 +158,25 @@ public final class CapturePipeline: @unchecked Sendable {
         return copy
     }
 
+    // fitted reference is invariant per (buffer, extent) — rebuilt only when
+    // the pin or the live frame size changes
+    private var fittedReferenceCache: (source: CVPixelBuffer, extent: CGRect,
+                                       image: CIImage)?
+
     /// Reference (front, left/top of the wipe) over the live frame.
     private func compositeReference(_ reference: CVPixelBuffer,
                                     over live: CVPixelBuffer) -> CVPixelBuffer? {
         let back = CIImage(cvPixelBuffer: live, options: [.colorSpace: NSNull()])
-        let front = CompareCompositor.fitted(
-            CIImage(cvPixelBuffer: reference, options: [.colorSpace: NSNull()]),
-            into: back.extent)
+        let front: CIImage
+        if let cache = fittedReferenceCache, cache.source === reference,
+           cache.extent == back.extent {
+            front = cache.image
+        } else {
+            front = CompareCompositor.fitted(
+                CIImage(cvPixelBuffer: reference, options: [.colorSpace: NSNull()]),
+                into: back.extent)
+            fittedReferenceCache = (reference, back.extent, front)
+        }
         let result = CompareCompositor.compose(front: front, back: back,
                                                mode: previewCompare)
         let width = Int(back.extent.width.rounded())
@@ -594,10 +609,19 @@ public final class CapturePipeline: @unchecked Sendable {
             }
         }
 
-        // scopes: analyze the displayed frame at ~1/3 frame rate while enabled
-        if scopesEnabled, frameIndex % 3 == 0,
-           let scopeData = ScopeAnalyzer.analyze(displayBuffer) {
-            DispatchQueue.main.async { self.onScopeData?(scopeData) }
+        // scopes: analyzed OFF the pipeline queue (content-dependent cost —
+        // noisy frames measured two orders slower than flat ones); if the
+        // previous pass is still running the frame is simply skipped
+        if scopesEnabled, frameIndex % 3 == 0, !scopeBusy {
+            scopeBusy = true
+            let frame = displayBuffer // retained: the pool won't recycle it
+            scopeQueue.async { [weak self] in
+                let data = ScopeAnalyzer.analyze(frame)
+                self?.queue.async { self?.scopeBusy = false }
+                if let data {
+                    DispatchQueue.main.async { self?.onScopeData?(data) }
+                }
+            }
         }
 
         // one-shot frame grab: stills are deliverables like the recording — the
@@ -940,6 +964,16 @@ public final class CapturePipeline: @unchecked Sendable {
         return latestPreview
     }
 
+    // Presentation runs on its own queue with latest-wins coalescing:
+    // MetalPreviewLayer.present renders + waits on the GPU and nextDrawable()
+    // can park for a vsync when the window is occluded — none of that may
+    // stall the capture-critical queue.
+    private let displayQueue = DispatchQueue(label: "takeshot.display",
+                                             qos: .userInteractive)
+    private let presentLock = NSLock()
+    private var pendingPresent: CVPixelBuffer?
+    private var presentScheduled = false
+
     /// `pixelBuffer` is the clean processed frame (compare provider, pinning);
     /// `screen` is what the preview sinks draw (may carry the reference wipe).
     private func enqueuePreview(pixelBuffer: CVPixelBuffer,
@@ -948,6 +982,21 @@ public final class CapturePipeline: @unchecked Sendable {
         latestPreview = pixelBuffer
         latestPreviewLock.unlock()
         let presented = screen ?? pixelBuffer
-        for sink in allDisplaySinks() { sink.present(presented) }
+        presentLock.lock()
+        pendingPresent = presented
+        let schedule = !presentScheduled
+        presentScheduled = true
+        presentLock.unlock()
+        guard schedule else { return } // a newer frame replaces the pending one
+        displayQueue.async { [weak self] in
+            guard let self else { return }
+            self.presentLock.lock()
+            let buffer = self.pendingPresent
+            self.pendingPresent = nil
+            self.presentScheduled = false
+            self.presentLock.unlock()
+            guard let buffer else { return }
+            for sink in self.allDisplaySinks() { sink.present(buffer) }
+        }
     }
 }

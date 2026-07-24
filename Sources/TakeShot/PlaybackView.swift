@@ -57,7 +57,6 @@ private struct TapLayerView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let layer = MetalPreviewLayer()
-        layer.debugTag = "playback-mount"
         tap.addSink(layer)
         context.coordinator.tap = tap
         context.coordinator.layer = layer

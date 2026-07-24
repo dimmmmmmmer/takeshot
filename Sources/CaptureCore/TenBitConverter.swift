@@ -80,28 +80,36 @@ public final class TenBitConverter {
         let sbpr = CVPixelBufferGetBytesPerRow(source)
         let dbpr = CVPixelBufferGetBytesPerRow(display)
         let rbpr = CVPixelBufferGetBytesPerRow(record)
+        // rows are independent and the tables are read-only: split into bands
+        // (~11 ms single-threaded at UHD → ~2-3 ms) so the pipeline queue gets
+        // its frame budget back
+        let bands = min(8, max(1, height / 270))
         expand.withUnsafeBufferPointer { exp in
             precomp.withUnsafeBufferPointer { pre in
-                for y in 0..<height {
-                    let srow = sb.advanced(by: y * sbpr)
-                        .assumingMemoryBound(to: UInt32.self)
-                    let drow = db.advanced(by: y * dbpr)
-                        .assumingMemoryBound(to: UInt8.self)
-                    let rrow = rb.advanced(by: y * rbpr)
-                        .assumingMemoryBound(to: UInt32.self)
-                    for x in 0..<width {
-                        let word = UInt32(bigEndian: srow[x])
-                        let r = Int((word >> 20) & 0x3FF)
-                        let g = Int((word >> 10) & 0x3FF)
-                        let b = Int(word & 0x3FF)
-                        let d = drow + x * 4
-                        d[0] = UInt8(exp[b] >> 2)
-                        d[1] = UInt8(exp[g] >> 2)
-                        d[2] = UInt8(exp[r] >> 2)
-                        d[3] = 255
-                        rrow[x] = ((UInt32(pre[r]) << 20)
-                            | (UInt32(pre[g]) << 10)
-                            | UInt32(pre[b])).bigEndian
+                DispatchQueue.concurrentPerform(iterations: bands) { band in
+                    let yStart = band * height / bands
+                    let yEnd = (band + 1) * height / bands
+                    for y in yStart..<yEnd {
+                        let srow = sb.advanced(by: y * sbpr)
+                            .assumingMemoryBound(to: UInt32.self)
+                        let drow = db.advanced(by: y * dbpr)
+                            .assumingMemoryBound(to: UInt32.self)
+                        let rrow = rb.advanced(by: y * rbpr)
+                            .assumingMemoryBound(to: UInt32.self)
+                        for x in 0..<width {
+                            let word = UInt32(bigEndian: srow[x])
+                            let r = Int((word >> 20) & 0x3FF)
+                            let g = Int((word >> 10) & 0x3FF)
+                            let b = Int(word & 0x3FF)
+                            // BGRA little-endian as one 32-bit store
+                            drow[x] = UInt32(exp[b] >> 2)
+                                | (UInt32(exp[g] >> 2) << 8)
+                                | (UInt32(exp[r] >> 2) << 16)
+                                | 0xFF00_0000
+                            rrow[x] = ((UInt32(pre[r]) << 20)
+                                | (UInt32(pre[g]) << 10)
+                                | UInt32(pre[b])).bigEndian
+                        }
                     }
                 }
             }

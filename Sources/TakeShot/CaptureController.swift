@@ -933,6 +933,62 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// Freshly recorded take / saved still — the list flashes a border on it.
+    @Published var recentlyAddedURL: URL?
+    private var recentHighlightTask: Task<Void, Never>?
+
+    private func flashNewItem(_ url: URL) {
+        recentlyAddedURL = url
+        recentHighlightTask?.cancel()
+        recentHighlightTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            self?.recentlyAddedURL = nil
+        }
+    }
+
+    /// Move a take to the Trash and drop it from the session.
+    func deleteTake(_ take: Take) {
+        do {
+            try FileManager.default.trashItem(at: take.url, resultingItemURL: nil)
+        } catch {
+            lastError = "Delete: \(error.localizedDescription)"
+            return
+        }
+        if playbackURL == take.url {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            playbackTap.detach()
+            playbackURL = nil
+        }
+        takes.removeAll { $0.id == take.id }
+        thumbnails[take.id] = nil
+        scannedPaths.remove(take.url.path)
+        exportTakeLog()
+    }
+
+    /// Move an Other-content file to the Trash.
+    func deleteOtherFile(_ url: URL) {
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        } catch {
+            lastError = "Delete: \(error.localizedDescription)"
+            return
+        }
+        if playbackURL == url {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            playbackTap.detach()
+            rawPlayer?.pause()
+            rawPlayer = nil
+            playbackURL = nil
+        }
+        otherFiles.removeAll { $0 == url }
+        otherThumbnails[url] = nil
+        otherDurations[url] = nil
+        scannedPaths.remove(url.path)
+    }
+
     /// One-shot flag: the transport enables looping when the replayed clip loads.
     var replayLoopRequested = false
 
@@ -1268,7 +1324,8 @@ final class CaptureController: ObservableObject {
             self?.signalFormat = format
         }
         pipeline.onTimecode = { [weak self] timecode in
-            self?.live.currentTimecode = timecode
+            guard let self, self.live.currentTimecode != timecode else { return }
+            self.live.currentTimecode = timecode
         }
         pipeline.onRecStateChanged = { [weak self] recording in
             guard let self else { return }
@@ -1301,6 +1358,7 @@ final class CaptureController: ObservableObject {
             self.nextTakeNumber += 1
             self.exportTakeLog()
             self.generateThumbnail(for: take)
+            self.flashNewItem(take.url)
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
@@ -1654,6 +1712,7 @@ final class CaptureController: ObservableObject {
                 at: destinationRoot, withIntermediateDirectories: true)
             try png.write(to: url)
             scanDestinationFolder() // show it in Other content right away
+            flashNewItem(url)
             lastNotice = L("grab_saved", url.lastPathComponent)
         } catch {
             lastError = "Frame grab failed: \(error.localizedDescription)"
@@ -1857,7 +1916,11 @@ final class CaptureController: ObservableObject {
                 continueClipNumbering()
             }
         }
-        let sorted = foreign.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+        }
+        let sorted = foreign.sorted { modified($0) > modified($1) }
         if otherFiles != sorted {
             otherFiles = sorted
             generateOtherThumbnails(for: sorted)

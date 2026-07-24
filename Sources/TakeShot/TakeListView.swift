@@ -1,6 +1,16 @@
 import CaptureCore
 import SwiftUI
 
+extension View {
+    /// Accent flash around a freshly recorded take / saved still.
+    func newItemHighlight(_ active: Bool, tint: Color) -> some View {
+        overlay(RoundedRectangle(cornerRadius: 8)
+            .strokeBorder(tint, lineWidth: 2)
+            .opacity(active ? 1 : 0))
+            .animation(.easeOut(duration: 0.5), value: active)
+    }
+}
+
 /// Takes panel: a list or a thumbnail grid, with a circle-take mark
 /// (goes into takeshot-log.csv as a Good Take for DaVinci Resolve).
 /// Below — Other content: files that landed in the record folder outside TakeShot.
@@ -165,6 +175,8 @@ private struct TakeRow: View {
             RatingToggle(take: take)
         }
         .contextMenu { TakeContextMenu(take: take) }
+        .newItemHighlight(controller.recentlyAddedURL == take.url,
+                          tint: controller.accentColor)
     }
 }
 
@@ -311,6 +323,8 @@ private struct OtherCell: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { controller.play(url: url) }
         .contextMenu { OtherContextMenu(url: url) }
+        .newItemHighlight(controller.recentlyAddedURL == url,
+                          tint: controller.accentColor)
     }
 }
 
@@ -322,6 +336,9 @@ private struct OtherContextMenu: View {
         Button(L("play")) { controller.play(url: url) }
         if PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased()) {
             Button(L("pin_reference")) { controller.pinReference(imageURL: url) }
+        }
+        Button(L("delete_item"), role: .destructive) {
+            controller.deleteOtherFile(url)
         }
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -427,6 +444,10 @@ private struct TakeContextMenu: View {
         Divider()
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([take.url])
+        }
+        Divider()
+        Button(L("delete_item"), role: .destructive) {
+            controller.deleteTake(take)
         }
     }
 }

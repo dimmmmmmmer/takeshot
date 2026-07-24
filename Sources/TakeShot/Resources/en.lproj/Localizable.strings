@@ -312,3 +312,6 @@
 
 "hotkey_marker_delete" = "Delete marker";
 "marker_removed" = "Marker removed %@";
+
+"delete_item" = "Move to Trash";
+"compare_source" = "Source";
