@@ -143,6 +143,31 @@ final class RawPlayerModel: ObservableObject {
     @Published var inFrame: Int?
     @Published var outFrame: Int?
 
+    /// Seconds view of the range (shared transport UI).
+    var inPoint: Double? { inFrame.map { Double($0) / max(1, frameRate) } }
+    var outPoint: Double? { outFrame.map { Double($0) / max(1, frameRate) } }
+
+    /// Set/clear the in or out point at the playhead (same semantics as the
+    /// AVPlayer transport: clicking near an existing point clears it).
+    func toggleRangePoint(out: Bool) {
+        let now = currentFrame
+        if out {
+            if let existing = outFrame, abs(existing - now) < 2 {
+                outFrame = nil
+            } else {
+                outFrame = now
+                if let inF = inFrame, inF >= now { inFrame = nil }
+            }
+        } else {
+            if let existing = inFrame, abs(existing - now) < 2 {
+                inFrame = nil
+            } else {
+                inFrame = now
+                if let outF = outFrame, outF <= now { outFrame = nil }
+            }
+        }
+    }
+
     let url: URL
     let frameCount: Int
     let frameRate: Double
