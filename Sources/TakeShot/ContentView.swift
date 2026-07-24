@@ -128,6 +128,11 @@ struct PlayerArea: View {
                 }
             }
             .overlay(alignment: .bottom) {
+                // above the transport bar when one is showing (marker toasts
+                // must not land under the controls)
+                let transportInset: CGFloat =
+                    controller.viewerMode == .playback
+                    && controller.playbackURL != nil ? 52 : 10
                 if let error = controller.lastError {
                     Text(error)
                         .font(.caption)
@@ -137,7 +142,7 @@ struct PlayerArea: View {
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.6),
                                     in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 10)
+                        .padding(.bottom, transportInset)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let notice = controller.lastNotice {
                     Text(notice)
@@ -148,7 +153,7 @@ struct PlayerArea: View {
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.6),
                                     in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 10)
+                        .padding(.bottom, transportInset)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
