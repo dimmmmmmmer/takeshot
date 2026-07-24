@@ -580,15 +580,18 @@ private struct FramelinesOverlay: View {
             let size = geo.size
             ZStack {
                 if let ratio {
+                    // explicit CGFloat: the CI toolchain can't resolve the
+                    // mixed Double/CGFloat arithmetic the local one accepts
+                    let r = CGFloat(ratio)
                     let videoAspect = size.width / max(1, size.height)
-                    let rect: CGRect = ratio >= videoAspect
+                    let rect: CGRect = r >= videoAspect
                         ? CGRect(x: 0,
-                                 y: (size.height - size.width / ratio) / 2,
+                                 y: (size.height - size.width / r) / 2,
                                  width: size.width,
-                                 height: size.width / ratio)
-                        : CGRect(x: (size.width - size.height * ratio) / 2,
+                                 height: size.width / r)
+                        : CGRect(x: (size.width - size.height * r) / 2,
                                  y: 0,
-                                 width: size.height * ratio,
+                                 width: size.height * r,
                                  height: size.height)
                     Path { $0.addRect(rect) }
                         .stroke(.white.opacity(0.75), lineWidth: 1)
@@ -605,15 +608,16 @@ private struct FramelinesOverlay: View {
                         guard let ratio else {
                             return CGRect(origin: .zero, size: size)
                         }
+                        let r = CGFloat(ratio)
                         let videoAspect = size.width / max(1, size.height)
-                        return ratio >= videoAspect
+                        return r >= videoAspect
                             ? CGRect(x: 0,
-                                     y: (size.height - size.width / ratio) / 2,
+                                     y: (size.height - size.width / r) / 2,
                                      width: size.width,
-                                     height: size.width / ratio)
-                            : CGRect(x: (size.width - size.height * ratio) / 2,
+                                     height: size.width / r)
+                            : CGRect(x: (size.width - size.height * r) / 2,
                                      y: 0,
-                                     width: size.height * ratio,
+                                     width: size.height * r,
                                      height: size.height)
                     }()
                     Path { $0.addRect(base.insetBy(
