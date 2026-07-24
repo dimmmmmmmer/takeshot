@@ -376,6 +376,19 @@ private struct MarkerListEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L("markers_title"))
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(L("markers_clear_all"), role: .destructive) {
+                    controller.clearPlaybackMarkers()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
+            Divider()
             ForEach(Array(controller.playbackMarkers.enumerated()),
                     id: \.offset) { index, marker in
                 HStack(spacing: 8) {

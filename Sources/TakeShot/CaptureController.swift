@@ -797,6 +797,14 @@ final class CaptureController: ObservableObject {
         exportTakeLog()
     }
 
+    func clearPlaybackMarkers() {
+        guard let url = playbackURL,
+              let takeIndex = takes.firstIndex(where: { $0.url == url })
+        else { return }
+        takes[takeIndex].markers.removeAll()
+        exportTakeLog()
+    }
+
     /// Jump the player (AVPlayer or RAW) to a position in seconds.
     func seekPlayback(to seconds: Double) {
         if let raw = rawPlayer {

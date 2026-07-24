@@ -298,3 +298,6 @@
 "marker_jump_help" = "Перейти к маркеру";
 "marker_note_placeholder" = "Заметка";
 "marker_delete_help" = "Удалить маркер";
+
+"markers_title" = "Маркеры";
+"markers_clear_all" = "Очистить все";
