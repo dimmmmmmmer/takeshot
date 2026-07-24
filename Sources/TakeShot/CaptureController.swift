@@ -215,6 +215,16 @@ final class CaptureController: ObservableObject {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
+    /// B-side clip for take-vs-take compare (nil — compare against live).
+    @Published var compareClipURL: URL? {
+        didSet {
+            playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
+            if compareClipURL != nil, compareMode == .off {
+                compareMode = .wipe
+            }
+        }
+    }
+
     /// Operator display aids (false color/zebra/peaking, desqueeze, punch-in).
     @Published var assist = ViewAssist() {
         didSet {
@@ -1170,6 +1180,7 @@ final class CaptureController: ObservableObject {
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
             playbackTap.attach(to: item)
+            playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
             playbackLUTSuppressed = false
             detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
             player.play()

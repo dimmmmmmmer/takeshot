@@ -105,6 +105,57 @@ final class PlaybackFrameTap: @unchecked Sendable {
     }
     private var lutFilter: CIFilter?
     private var lutIntensity: Double = 1
+
+    // B-side clip (take vs take): its own slaved player; when set, the
+    // compare back half comes from it instead of the live signal
+    private var comparePlayer: AVPlayer?
+    private var compareOutput: AVPlayerItemVideoOutput?
+    private var lastCompareBuffer: CVPixelBuffer?
+    private weak var syncPlayer: AVPlayer?
+
+    /// Compare against another clip (nil — back to the live signal).
+    /// `syncTo` is the main player; the B player follows its rate/position.
+    func setCompareClip(url: URL?, syncTo player: AVPlayer?) {
+        queue.async {
+            self.idleDelivered = false
+            self.comparePlayer?.pause()
+            self.comparePlayer = nil
+            self.compareOutput = nil
+            self.lastCompareBuffer = nil
+            self.syncPlayer = nil
+            if let url {
+                let item = AVPlayerItem(url: url)
+                let attrs: [String: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey as String:
+                        kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                ]
+                let output = AVPlayerItemVideoOutput(pixelBufferAttributes: attrs)
+                item.add(output)
+                let bPlayer = AVPlayer(playerItem: item)
+                bPlayer.volume = 0
+                self.comparePlayer = bPlayer
+                self.compareOutput = output
+                self.syncPlayer = player
+            }
+            if let buffer = self.lastBuffer {
+                self.deliver(buffer, analyzed: false)
+            }
+        }
+    }
+
+    /// Keep the B player glued to the main transport (rate + position).
+    private func syncCompareClip() {
+        guard let bPlayer = comparePlayer, let main = syncPlayer else { return }
+        if bPlayer.rate != main.rate {
+            bPlayer.rate = main.rate
+        }
+        let drift = main.currentTime().seconds - bPlayer.currentTime().seconds
+        if abs(drift) > 0.08 {
+            bPlayer.seek(to: main.currentTime(),
+                         toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+    }
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
     private let composePool = PixelBufferPool()
 
@@ -235,6 +286,10 @@ final class PlaybackFrameTap: @unchecked Sendable {
     }
 
     private func tick() {
+        if comparePlayer != nil {
+            syncCompareClip()
+            idleDelivered = false // the B half advances even when A is paused
+        }
         guard let output else {
             // still: recomposite at the paused cadence so the live half of a
             // compare keeps moving (and LUT changes land immediately)
@@ -329,8 +384,21 @@ final class PlaybackFrameTap: @unchecked Sendable {
         return out
     }
 
-    /// Latest live frame aspect-fitted (letterboxed) into the playback extent.
+    /// The compare back half: the B clip when one is set, else the live frame.
     private func liveImage(matching extent: CGRect) -> CIImage? {
+        if let compareOutput {
+            let time = compareOutput.itemTime(forHostTime: CACurrentMediaTime())
+            if compareOutput.hasNewPixelBuffer(forItemTime: time),
+               let buffer = compareOutput.copyPixelBuffer(
+                   forItemTime: time, itemTimeForDisplay: nil) {
+                lastCompareBuffer = buffer
+            }
+            guard let buffer = lastCompareBuffer else { return nil }
+            let image = CIImage(cvPixelBuffer: buffer,
+                                options: [.colorSpace: NSNull()])
+            guard image.extent.width > 0 else { return nil }
+            return CompareCompositor.fitted(image, into: extent)
+        }
         guard let live = liveBufferProvider?() else { return nil }
         let isBGRA = CVPixelBufferGetPixelFormatType(live) == kCVPixelFormatType_32BGRA
         // BGRA carries raw full-range codes; YUV needs CI's managed decode

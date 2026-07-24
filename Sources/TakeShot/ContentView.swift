@@ -634,6 +634,45 @@ private struct CompareControls: View {
                 .labelsHidden()
                 .controlSize(.mini)
             }
+            if controller.viewerMode == .playback,
+               controller.rawPlayer == nil {
+                Menu {
+                    Button {
+                        controller.compareClipURL = nil
+                    } label: {
+                        if controller.compareClipURL == nil {
+                            Label(L("compare_b_live"), systemImage: "checkmark")
+                        } else {
+                            Text(L("compare_b_live"))
+                        }
+                    }
+                    Divider()
+                    ForEach(controller.takes) { take in
+                        Button {
+                            controller.compareClipURL = take.url
+                        } label: {
+                            if controller.compareClipURL == take.url {
+                                Label(take.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(take.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    Text(controller.compareClipURL == nil
+                         ? L("compare_b_live")
+                         : (controller.takes.first {
+                             $0.url == controller.compareClipURL
+                         }?.displayName ?? "B"))
+                        .font(.caption)
+                        .lineLimit(1)
+                        .frame(maxWidth: 120)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help(L("compare_b_help"))
+            }
+
             Button {
                 controller.pinReferenceFromCurrentFrame()
             } label: {

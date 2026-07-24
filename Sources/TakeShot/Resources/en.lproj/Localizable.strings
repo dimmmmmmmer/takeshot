@@ -339,3 +339,6 @@
 "backup_failed" = "Backup failed: %@ (%@)";
 
 "assist_el_zone" = "EL Zone (stops)";
+
+"compare_b_live" = "vs Live";
+"compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
