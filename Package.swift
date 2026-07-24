@@ -23,10 +23,19 @@ let package = Package(
                 .headerSearchPath("../../vendor/DeckLinkSDK/include")
             ]
         ),
+        // Obj-C++ bridge to the Blackmagic RAW SDK (playback of .braw takes).
+        // Headers go in vendor/BRAWSDK/include (see vendor/BRAWSDK/README.md);
+        // without them the target builds as a stub (CBRClip.isSDKAvailable == NO).
+        .target(
+            name: "CBraw",
+            cxxSettings: [
+                .headerSearchPath("../../vendor/BRAWSDK/include")
+            ]
+        ),
         // The app.
         .executableTarget(
             name: "TakeShot",
-            dependencies: ["CaptureCore", "CDeckLink"],
+            dependencies: ["CaptureCore", "CDeckLink", "CBraw"],
             resources: [.process("Resources")],
             swiftSettings: swift5Mode
         ),

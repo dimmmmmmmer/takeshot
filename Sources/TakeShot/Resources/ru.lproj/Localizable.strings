@@ -260,3 +260,5 @@
 "scope_grid_brightness" = "Яркость сетки";
 "scope_trace_brightness" = "Яркость трейса";
 "scope_open_window" = "Открыть отдельным окном";
+
+"raw_open_failed" = "Не удалось открыть RAW-клип";

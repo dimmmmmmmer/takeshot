@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CBraw
 import CaptureCore
 import Combine
 import CoreMedia
@@ -397,6 +398,7 @@ final class CaptureController: ObservableObject {
     private func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
         playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
+        rawPlayer?.scopesEnabled = showScopes && viewerMode == .playback
         // scopeData is kept on close — reopening shows the last picture
         // immediately instead of flashing "waiting for signal"
     }
@@ -612,6 +614,14 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// RAW codecs played by our own engine, not AVPlayer.
+    nonisolated static let rawExtensions: Set<String> = ["braw"]
+
+    /// The engine for a loaded RAW clip (nil — AVPlayer/photo content).
+    @Published var rawPlayer: RawPlayerModel?
+    /// Why the RAW clip couldn't be opened (SDK missing, bad file).
+    @Published var rawPlayerError: String?
+
     /// Open a file in the player and switch to playback mode.
     /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
@@ -620,9 +630,33 @@ final class CaptureController: ObservableObject {
         playbackStartTC = nil
         playbackAspect = nil
         playbackFPS = 25
-        if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+        rawPlayer?.pause()
+        rawPlayer = nil
+        rawPlayerError = nil
+        let ext = url.pathExtension.lowercased()
+        if Self.imageExtensions.contains(ext) {
             player.pause()
             player.replaceCurrentItem(with: nil)
+        } else if Self.rawExtensions.contains(ext) {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            playbackTap.detach()
+            var openError: String?
+            if let model = RawPlayerModel(url: url, error: &openError) {
+                model.onScopeData = { [weak self] data in
+                    self?.live.scopeData = data
+                }
+                rawPlayer = model
+                playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
+                playbackStartTC = model.startTimecode
+                playbackFPS = model.frameRate
+                playbackAspect = model.height > 0
+                    ? CGFloat(model.width) / CGFloat(model.height) : nil
+                applyLetterboxColor()
+                model.play()
+            } else {
+                rawPlayerError = openError
+            }
         } else {
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
@@ -634,6 +668,7 @@ final class CaptureController: ObservableObject {
         }
         viewerMode = .playback
         updateTapRunning()
+        updateScopesRunning()
     }
 
     // MARK: - playback info for the player badges
@@ -648,6 +683,9 @@ final class CaptureController: ObservableObject {
 
     /// Playback position as timecode (start TC + elapsed at the file's fps).
     var playbackTimecodeText: String {
+        if let raw = rawPlayer {
+            return raw.timecodeText
+        }
         let elapsed = max(0, player.currentTime().seconds)
         let fps = max(1, playbackFPS)
         let frames = Int((elapsed * fps).rounded(.down))
@@ -901,6 +939,7 @@ final class CaptureController: ObservableObject {
                          blue: ns.blueComponent)
         pipeline.setPreviewLetterbox(ci)
         playbackTap.setLetterbox(ci)
+        rawPlayer?.setLetterbox(ci)
     }
 
     /// Control accent color; white by default.
@@ -1241,7 +1280,8 @@ final class CaptureController: ObservableObject {
 
     // MARK: - folder sync (Other content)
 
-    nonisolated private static let videoExtensions: Set<String> = ["mov", "mp4", "mxf", "m4v", "avi"]
+    nonisolated private static let videoExtensions: Set<String> =
+        ["mov", "mp4", "mxf", "m4v", "avi", "braw"]
     nonisolated private static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
@@ -1433,6 +1473,20 @@ final class CaptureController: ObservableObject {
                                         size: NSSize(width: cg.width,
                                                      height: cg.height))
                     }
+                } else if ext == "braw" {
+                    if let clip = try? CBRClip(path: url.path) {
+                        if clip.frameCount > 0,
+                           let buffer = clip.copyFrame(at: clip.frameCount / 2) {
+                            image = Self.thumbnail(from: buffer, maxSize: 480)
+                        }
+                        if clip.frameRate > 0 {
+                            let seconds = Double(clip.frameCount)
+                                / Double(clip.frameRate)
+                            await MainActor.run { [weak self] in
+                                self?.otherDurations[url] = seconds
+                            }
+                        }
+                    }
                 } else {
                     let asset = AVURLAsset(url: url)
                     let generator = AVAssetImageGenerator(asset: asset)
@@ -1458,6 +1512,17 @@ final class CaptureController: ObservableObject {
                 }
             }
         }
+    }
+
+    nonisolated private static func thumbnail(from buffer: CVPixelBuffer,
+                                              maxSize: CGFloat) -> NSImage? {
+        let image = CIImage(cvPixelBuffer: buffer)
+        let scale = min(1, maxSize / max(image.extent.width, image.extent.height))
+        let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let context = CIContext(options: [.cacheIntermediates: false])
+        guard let cg = context.createCGImage(scaled, from: scaled.extent)
+        else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
     nonisolated private static func findForeignVideos(

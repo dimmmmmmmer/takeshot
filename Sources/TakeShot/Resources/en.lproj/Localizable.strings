@@ -260,3 +260,5 @@
 "scope_grid_brightness" = "Graticule brightness";
 "scope_trace_brightness" = "Trace brightness";
 "scope_open_window" = "Open in a separate window";
+
+"raw_open_failed" = "Can't open the RAW clip";

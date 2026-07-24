@@ -474,7 +474,16 @@ struct PreviewView: View {
     private var showsTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
         else { return false }
-        return !PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased())
+        let ext = url.pathExtension.lowercased()
+        return !PlaybackContent.imageExtensions.contains(ext)
+            && !CaptureController.rawExtensions.contains(ext)
+    }
+
+    /// RAW clips get the engine's own transport.
+    private var showsRawTransport: Bool {
+        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        else { return false }
+        return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
     }
 
     var body: some View {
@@ -554,6 +563,10 @@ struct PreviewView: View {
             if showsTransport {
                 TransportBar(player: controller.player)
                     .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(6)
+            } else if showsRawTransport, let model = controller.rawPlayer {
+                RawTransportBar(model: model)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(6)
             }

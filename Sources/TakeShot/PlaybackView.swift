@@ -13,8 +13,23 @@ struct PlaybackContent: View {
 
     var body: some View {
         if let url = controller.playbackURL {
-            if Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+            let ext = url.pathExtension.lowercased()
+            if Self.imageExtensions.contains(ext) {
                 ImagePlaybackView(url: url)
+            } else if CaptureController.rawExtensions.contains(ext) {
+                if let model = controller.rawPlayer {
+                    RawTapLayerView(model: model)
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 32))
+                        Text(controller.rawPlayerError ?? L("raw_open_failed"))
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(20)
+                }
             } else {
                 TapLayerView(tap: controller.playbackTap)
             }
@@ -55,6 +70,114 @@ private struct TapLayerView: NSViewRepresentable {
         if let layer = coordinator.layer {
             coordinator.tap?.removeSink(layer)
         }
+    }
+}
+
+/// RAW playback mount: its own layer, registered with the engine.
+private struct RawTapLayerView: NSViewRepresentable {
+    let model: RawPlayerModel
+
+    final class Coordinator {
+        var model: RawPlayerModel?
+        var layer: MetalPreviewLayer?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let layer = MetalPreviewLayer()
+        model.addSink(layer)
+        context.coordinator.model = model
+        context.coordinator.layer = layer
+        return MetalPreviewHostView(layer: layer)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        if let layer = coordinator.layer {
+            coordinator.model?.removeSink(layer)
+        }
+    }
+}
+
+/// Transport for the RAW engine: play/pause, frame scrubber, loop.
+struct RawTransportBar: View {
+    @ObservedObject var model: RawPlayerModel
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                model.seek(to: model.currentFrame - Int(model.frameRate * 5))
+            } label: {
+                Image(systemName: "gobackward.5")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.togglePlay()
+            } label: {
+                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 15))
+                    .frame(width: 18)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.space, modifiers: [])
+
+            Button {
+                model.seek(to: model.currentFrame + Int(model.frameRate * 5))
+            } label: {
+                Image(systemName: "goforward.5")
+            }
+            .buttonStyle(.plain)
+
+            Text(TransportBar.timeText(Double(model.currentFrame)
+                                       / max(1, model.frameRate)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            Slider(value: Binding(
+                get: { Double(model.currentFrame) },
+                set: { model.seek(to: Int($0)) }),
+                in: 0...Double(max(1, model.frameCount - 1)))
+                .controlSize(.small)
+
+            Text(TransportBar.timeText(Double(model.frameCount)
+                                       / max(1, model.frameRate)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            Button {
+                model.isLooping.toggle()
+            } label: {
+                Image(systemName: "repeat")
+                    .foregroundStyle(model.isLooping
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .help(L("playback_loop"))
+
+            Text("BRAW")
+                .font(.system(size: 9, weight: .semibold))
+                .padding(.horizontal, 5).padding(.vertical, 2)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                .foregroundStyle(.secondary)
+
+            Button {
+                controller.togglePlaybackFullscreen()
+            } label: {
+                Image(systemName: controller.isPlaybackFullscreen
+                      ? "arrow.down.right.and.arrow.up.left"
+                      : "arrow.up.left.and.arrow.down.right")
+            }
+            .buttonStyle(.plain)
+            .help(L("fullscreen_playback"))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.ultraThinMaterial)
     }
 }
 
