@@ -46,21 +46,12 @@ public final class CapturePipeline: @unchecked Sendable {
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
 
-    /// Live preview sinks: every SwiftUI mount registers its OWN layer. A
-    /// CALayer can be hosted by only one NSView — sharing a single layer
-    /// between the main preview, compare and multicam tiles let the
-    /// last-mounted view steal it, and the survivor drew with the thief's
-    /// stale geometry (image pinned to an edge instead of centered).
-    private let displaySinksLock = NSLock()
-    private let displaySinks = NSHashTable<MetalPreviewLayer>.weakObjects()
-    private var sinkLetterbox = CIColor(red: 0, green: 0, blue: 0)
+    /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
+    /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
+    public let displaySinks = PreviewSinkRegistry()
 
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
-        displaySinksLock.lock()
-        layer.letterboxColor = sinkLetterbox
-        layer.setAssist(sinkAssist)
         displaySinks.add(layer)
-        displaySinksLock.unlock()
         // show the current frame right away — a paused/idle signal won't push
         // one; with no signal, blank the surface instead of letting the frame
         // of the previous source (playback) stick around
@@ -72,36 +63,15 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public func removeDisplaySink(_ layer: MetalPreviewLayer) {
-        displaySinksLock.lock()
         displaySinks.remove(layer)
-        displaySinksLock.unlock()
     }
 
-    private var sinkAssist = ViewAssist()
-
     public func setViewAssist(_ assist: ViewAssist) {
-        displaySinksLock.lock()
-        sinkAssist = assist
-        let sinks = displaySinks.allObjects
-        displaySinksLock.unlock()
-        for sink in sinks { sink.setAssist(assist) }
+        displaySinks.setAssist(assist)
     }
 
     public func setPreviewLetterbox(_ color: CIColor) {
-        displaySinksLock.lock()
-        sinkLetterbox = color
-        let sinks = displaySinks.allObjects
-        displaySinksLock.unlock()
-        for sink in sinks {
-            sink.letterboxColor = color
-            sink.redraw()
-        }
-    }
-
-    private func allDisplaySinks() -> [MetalPreviewLayer] {
-        displaySinksLock.lock()
-        defer { displaySinksLock.unlock() }
-        return displaySinks.allObjects
+        displaySinks.setLetterbox(color)
     }
     // LUT (all access on queue)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
@@ -376,7 +346,7 @@ public final class CapturePipeline: @unchecked Sendable {
             latestPreviewLock.lock()
             latestPreview = nil
             latestPreviewLock.unlock()
-            for sink in allDisplaySinks() { sink.clearToBlack() }
+            displaySinks.clearToBlack()
         }
         DispatchQueue.main.async { self.onSignal?(present) }
     }
@@ -487,8 +457,8 @@ public final class CapturePipeline: @unchecked Sendable {
     /// encoder color-converts pixels when buffer tags mismatch the file tags
     /// (verified on device: a display-gamma tag here darkened recorded shadows).
     private func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
-        guard CVBufferGetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
-                                    nil) == nil else { return }
+        guard CVBufferCopyAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
+                                     nil) == nil else { return }
         ColorTags.tag(pixelBuffer, preset: config.settings.colorTagPreset)
     }
 
@@ -1034,7 +1004,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.presentScheduled = false
             self.presentLock.unlock()
             guard let buffer else { return }
-            for sink in self.allDisplaySinks() { sink.present(buffer) }
+            self.displaySinks.present(buffer)
         }
     }
 }

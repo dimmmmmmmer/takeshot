@@ -17,16 +17,10 @@ import QuartzCore
 /// instance got stolen between views on branch switches — the survivor then
 /// drew with the thief's stale geometry.
 final class PlaybackFrameTap: @unchecked Sendable {
-    private let sinksLock = NSLock()
-    private let sinks = NSHashTable<MetalPreviewLayer>.weakObjects()
-    private var sinkLetterbox = CIColor(red: 0, green: 0, blue: 0)
+    let sinks = PreviewSinkRegistry()
 
     func addSink(_ layer: MetalPreviewLayer) {
-        sinksLock.lock()
-        layer.letterboxColor = sinkLetterbox
-        layer.setAssist(sinkAssist)
         sinks.add(layer)
-        sinksLock.unlock()
         // show the current frame right away — a paused player won't push one
         queue.async {
             if let buffer = self.lastBuffer {
@@ -36,36 +30,15 @@ final class PlaybackFrameTap: @unchecked Sendable {
     }
 
     func removeSink(_ layer: MetalPreviewLayer) {
-        sinksLock.lock()
         sinks.remove(layer)
-        sinksLock.unlock()
     }
 
-    private var sinkAssist = ViewAssist()
-
     func setViewAssist(_ assist: ViewAssist) {
-        sinksLock.lock()
-        sinkAssist = assist
-        let all = sinks.allObjects
-        sinksLock.unlock()
-        for layer in all { layer.setAssist(assist) }
+        sinks.setAssist(assist)
     }
 
     func setLetterbox(_ color: CIColor) {
-        sinksLock.lock()
-        sinkLetterbox = color
-        let all = sinks.allObjects
-        sinksLock.unlock()
-        for layer in all {
-            layer.letterboxColor = color
-            layer.redraw()
-        }
-    }
-
-    private func allSinks() -> [MetalPreviewLayer] {
-        sinksLock.lock()
-        defer { sinksLock.unlock() }
-        return sinks.allObjects
+        sinks.setLetterbox(color)
     }
 
     private let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
@@ -340,9 +313,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
         if analyzed, let scopeData = ScopeAnalyzer.analyze(output) {
             DispatchQueue.main.async { self.onScopeData?(scopeData) }
         }
-        for layer in allSinks() {
-            layer.present(output)
-        }
+        sinks.present(output)
     }
 
     /// LUT + compare composite in raw code values (color management off — the

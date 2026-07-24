@@ -342,6 +342,7 @@ private struct OtherCell: View {
         .contextMenu { OtherContextMenu(url: url) }
         .newItemHighlight(controller.recentlyAddedURL == url,
                           tint: controller.accentColor)
+        .onAppear { controller.requestOtherThumbnail(for: url) }
     }
 }
 

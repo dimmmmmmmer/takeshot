@@ -187,9 +187,7 @@ final class RawPlayerModel: ObservableObject {
     private var playGeneration = 0
 
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
-    private let sinksLock = NSLock()
-    private let sinks = NSHashTable<MetalPreviewLayer>.weakObjects()
-    private var letterbox = CIColor(red: 0, green: 0, blue: 0)
+    private let sinks = PreviewSinkRegistry()
     /// Last decoded frame — re-presented to newly registered sinks.
     private var lastBuffer: CVPixelBuffer?
 
@@ -228,11 +226,7 @@ final class RawPlayerModel: ObservableObject {
     // MARK: - sinks
 
     func addSink(_ layer: MetalPreviewLayer) {
-        sinksLock.lock()
-        layer.letterboxColor = letterbox
-        layer.setAssist(sinkAssist)
         sinks.add(layer)
-        sinksLock.unlock()
         if let buffer = lastBuffer {
             layer.present(buffer)
         } else {
@@ -241,39 +235,19 @@ final class RawPlayerModel: ObservableObject {
     }
 
     func removeSink(_ layer: MetalPreviewLayer) {
-        sinksLock.lock()
         sinks.remove(layer)
-        sinksLock.unlock()
     }
 
-    private var sinkAssist = ViewAssist()
-
     func setViewAssist(_ assist: ViewAssist) {
-        sinksLock.lock()
-        sinkAssist = assist
-        let all = sinks.allObjects
-        sinksLock.unlock()
-        for layer in all { layer.setAssist(assist) }
+        sinks.setAssist(assist)
     }
 
     func setLetterbox(_ color: CIColor) {
-        sinksLock.lock()
-        letterbox = color
-        let all = sinks.allObjects
-        sinksLock.unlock()
-        for layer in all {
-            layer.letterboxColor = color
-            layer.redraw()
-        }
+        sinks.setLetterbox(color)
     }
 
     nonisolated private func present(_ buffer: CVPixelBuffer) {
-        sinksLock.lock()
-        let all = sinks.allObjects
-        sinksLock.unlock()
-        for layer in all {
-            layer.present(buffer)
-        }
+        sinks.present(buffer)
     }
 
     // MARK: - transport
@@ -316,9 +290,11 @@ final class RawPlayerModel: ObservableObject {
                 // analysis stays OFF the MainActor: noisy frames are expensive
                 let scopeData = scopeCounter % 6 == 0 && state.scopes
                     ? ScopeAnalyzer.analyze(buffer) : nil
+                let boxed = UncheckedSendable(buffer)
+                let frameIndex = index
                 await MainActor.run {
-                    self.lastBuffer = buffer
-                    self.currentFrame = index
+                    self.lastBuffer = boxed.value
+                    self.currentFrame = frameIndex
                     if let scopeData {
                         self.onScopeData?(scopeData)
                     }
@@ -403,9 +379,11 @@ final class RawPlayerModel: ObservableObject {
             let live = await MainActor.run { self.playGeneration == generation }
             guard live else { return }
             self.present(buffer)
+            let data = ScopeAnalyzer.analyze(buffer) // off-main, like the loop
+            let boxed = UncheckedSendable(buffer)
             await MainActor.run {
-                self.lastBuffer = buffer
-                if self.scopesEnabled, let data = ScopeAnalyzer.analyze(buffer) {
+                self.lastBuffer = boxed.value
+                if self.scopesEnabled, let data {
                     self.onScopeData?(data)
                 }
             }

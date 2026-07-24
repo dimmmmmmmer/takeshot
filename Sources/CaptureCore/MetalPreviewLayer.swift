@@ -81,7 +81,7 @@ public final class MetalPreviewLayer: CAMetalLayer {
     }
 
     /// Exposure bands on gamma-encoded code values (ARRI-style palette).
-    nonisolated(unsafe) private static let falseColorCube: Data = {
+    private static let falseColorCube: Data = {
         let size = 64
         var rgba = [Float]()
         rgba.reserveCapacity(size * size * size * 4)
@@ -116,7 +116,7 @@ public final class MetalPreviewLayer: CAMetalLayer {
     /// EL Zone-style stops around 18% gray: display luma is linearized with
     /// the inverse BT.709 OETF, zones colored per stop (approximation of the
     /// Ed Lachman scale).
-    nonisolated(unsafe) private static let elZoneCube: Data = {
+    private static let elZoneCube: Data = {
         let size = 64
         var rgba = [Float]()
         rgba.reserveCapacity(size * size * size * 4)

@@ -211,7 +211,7 @@ final class CaptureController: ObservableObject {
                     }
                     let size = (try? FileManager.default
                         .attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
-                    manifest += "\(relative),\(sourceHash),\(size ?? 0),"
+                    manifest += "\(relative),\(sourceHash),\(size),"
                         + "\(ISO8601DateFormatter().string(from: Date()))\n"
                 } catch {
                     failures.append(file.lastPathComponent
@@ -1261,9 +1261,10 @@ final class CaptureController: ObservableObject {
             guard let task = try? context.startTask(toRender: image,
                                                     to: destination),
                   (try? task.waitUntilCompleted()) != nil else { return }
+            let boxed = UncheckedSendable(buffer)
             await MainActor.run { [weak self] in
                 guard let self, self.playbackURL == url else { return }
-                self.playbackTap.attachStill(buffer)
+                self.playbackTap.attachStill(boxed.value)
                 self.playbackFormatText = "\(cg.height)p"
                 self.playbackAspect = cg.height > 0
                     ? CGFloat(cg.width) / CGFloat(cg.height) : nil
@@ -1764,8 +1765,7 @@ final class CaptureController: ObservableObject {
 
     func startCapture() {
         guard let deviceID = selectedDeviceID else { return }
-        if let adapter = (backend as? AggregateBackend)?
-            .child(of: DeckLinkBackendAdapter.self) {
+        if let adapter = backend.child(of: DeckLinkBackendAdapter.self) {
             adapter.forcedMode = settings.forcedInputMode.map {
                 (name: $0, rgb: settings.forcedInputRGB ?? false)
             }
@@ -2061,11 +2061,13 @@ final class CaptureController: ObservableObject {
             }
             let asset = AVURLAsset(url: url)
             let metadata = (try? await asset.load(.metadata)) ?? []
-            func value(_ key: String) -> String? {
-                metadata.first { ($0.key as? String) == key }?.stringValue
+            func value(_ key: String) async -> String? {
+                guard let item = metadata.first(where: { ($0.key as? String) == key })
+                else { return nil }
+                return try? await item.load(.stringValue)
             }
             scannedPaths.insert(url.path)
-            guard value(TakeWriter.markerKey) != nil else {
+            guard await value(TakeWriter.markerKey) != nil else {
                 foreign.append(url)
                 continue
             }
@@ -2077,8 +2079,8 @@ final class CaptureController: ObservableObject {
                 url: url,
                 displayName: url.deletingPathExtension().lastPathComponent,
                 scene: "",
-                roll: value(TakeWriter.rollKey) ?? "",
-                takeNumber: Int(value(TakeWriter.clipKey) ?? "") ?? 0,
+                roll: await value(TakeWriter.rollKey) ?? "",
+                takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
                 startTimecode: startTC,
                 durationSeconds: duration,
                 rating: meta[url.lastPathComponent]?.rating ?? .none,
@@ -2094,9 +2096,8 @@ final class CaptureController: ObservableObject {
             if !new.isEmpty {
                 takes.append(contentsOf: new)
                 takes.sort { $0.recordedAt < $1.recordedAt }
-                for take in new {
-                    generateThumbnail(for: take)
-                }
+                // thumbnails load lazily as cells appear (restored sessions
+                // used to decode hundreds of files at startup)
                 continueClipNumbering()
             }
         }
@@ -2107,8 +2108,7 @@ final class CaptureController: ObservableObject {
         let sorted = foreign.sorted { modified($0) > modified($1) }
         if otherFiles != sorted {
             otherFiles = sorted
-            generateOtherThumbnails(for: sorted)
-            // prune caches for files that left the folder
+            // thumbnails load lazily per cell; prune caches for files that left
             let current = Set(sorted)
             otherThumbnails = otherThumbnails.filter { current.contains($0.key) }
             otherDurations = otherDurations.filter { current.contains($0.key) }
@@ -2193,6 +2193,7 @@ final class CaptureController: ObservableObject {
                 if let image {
                     await MainActor.run { [weak self] in
                         self?.otherThumbnails[url] = image
+                        self?.otherThumbsInFlight.remove(url)
                     }
                 }
             }
@@ -2254,9 +2255,28 @@ final class CaptureController: ObservableObject {
         let takes = takes
         let root = destinationRoot
         Self.takeLogQueue.async {
-            try? TakeLogExporter.write(takes: takes, toDirectory: root)
-            try? TakeLogExporter.writeMarkers(takes: takes, toDirectory: root)
+            _ = try? TakeLogExporter.write(takes: takes, toDirectory: root)
+            _ = try? TakeLogExporter.writeMarkers(takes: takes, toDirectory: root)
         }
+    }
+
+    private var thumbnailsInFlight: Set<Take.ID> = []
+    private var otherThumbsInFlight: Set<URL> = []
+
+    /// Grid cells ask for thumbnails as they appear — decoding every take
+    /// eagerly pinned 100+ MB of images the list mode never shows.
+    func requestThumbnail(for take: Take) {
+        guard thumbnails[take.id] == nil,
+              !thumbnailsInFlight.contains(take.id) else { return }
+        thumbnailsInFlight.insert(take.id)
+        generateThumbnail(for: take)
+    }
+
+    func requestOtherThumbnail(for url: URL) {
+        guard otherThumbnails[url] == nil,
+              !otherThumbsInFlight.contains(url) else { return }
+        otherThumbsInFlight.insert(url)
+        generateOtherThumbnails(for: [url])
     }
 
     /// A preview frame from the recorded file; the file finalizes asynchronously,
@@ -2277,6 +2297,7 @@ final class CaptureController: ObservableObject {
                                                          height: cgImage.height))
                         await MainActor.run { [weak self] in
                             self?.thumbnails[take.id] = image
+                            self?.thumbnailsInFlight.remove(take.id)
                         }
                         return
                     }
