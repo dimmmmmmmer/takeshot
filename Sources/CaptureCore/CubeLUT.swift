@@ -32,15 +32,18 @@ public struct CubeLUT: Sendable {
         var values: [Float] = []
         for rawLine in text.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
-            let upper = line.uppercased()
-            if upper.hasPrefix("LUT_3D_SIZE") {
-                size = Int(line.split(separator: " ").last.map(String.init) ?? "") ?? 0
+            guard let first = line.first, first != "#" else { continue }
+            // uppercase only header lines: a 65³ cube is ~275k DATA lines and
+            // a per-line uppercased() measured as a 100-300 ms launch stall
+            if first.isLetter {
+                let upper = line.uppercased()
+                if upper.hasPrefix("LUT_3D_SIZE") {
+                    size = Int(line.split(separator: " ").last
+                        .map(String.init) ?? "") ?? 0
+                }
+                // TITLE, DOMAIN_MIN/MAX, LUT_1D_* — skip
                 continue
             }
-            // TITLE, DOMAIN_MIN/MAX, LUT_1D_* — skip
-            if upper.hasPrefix("TITLE") || upper.hasPrefix("DOMAIN")
-                || upper.hasPrefix("LUT_") { continue }
             let parts = line.split(separator: " ").compactMap { Float($0) }
             if parts.count == 3 {
                 values.append(contentsOf: parts)

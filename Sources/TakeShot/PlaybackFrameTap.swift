@@ -71,6 +71,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
     private var lastBuffer: CVPixelBuffer?
     /// Static source (a still in the player): composited/analyzed like video.
     private var stillBuffer: CVPixelBuffer?
+    /// Idle output already delivered — with compare off, a paused/still frame
+    /// is re-rendered only when the LUT/compare/scopes inputs change.
+    private var idleDelivered = false
 
     // MARK: - compare & LUT (composited HERE, in one Metal layer: SwiftUI
     // masks/opacity over video layers drop the colorspace and shift colors)
@@ -96,6 +99,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
 
     func setCompare(_ mode: Compare) {
         queue.async {
+            self.idleDelivered = false
             self.compare = mode
             // re-render immediately so a paused player reflects the change
             if let buffer = self.lastBuffer {
@@ -111,6 +115,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
             os_log("tap setLUT: filter=%d intensity=%.2f",
                    log: CapturePipeline.levelsLog, type: .default,
                    filter != nil ? 1 : 0, intensity)
+            self.idleDelivered = false
             self.lutFilter = filter
             self.lutIntensity = intensity
             if let buffer = self.lastBuffer {
@@ -122,6 +127,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// Mix coefficient only — no filter rebuild (slider ticks).
     func setLUTIntensity(_ intensity: Double) {
         queue.async {
+            self.idleDelivered = false
             self.lutIntensity = intensity
             if let buffer = self.lastBuffer {
                 self.deliver(buffer, analyzed: false)
@@ -131,6 +137,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
 
     func setScopesEnabled(_ on: Bool) {
         queue.async {
+            self.idleDelivered = false
             self.scopesEnabled = on
             // paused player delivers no new frames — analyze right away (via
             // deliver, so scopes see the same composed output as the screen)
@@ -151,6 +158,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     func attachStill(_ buffer: CVPixelBuffer) {
         queue.async {
             self.detachLocked()
+            self.idleDelivered = false
             self.stillBuffer = buffer
             self.lastBuffer = buffer
             self.deliver(buffer, analyzed: self.scopesEnabled)
@@ -220,15 +228,16 @@ final class PlaybackFrameTap: @unchecked Sendable {
             // still: recomposite at the paused cadence so the live half of a
             // compare keeps moving (and LUT changes land immediately)
             if let still = stillBuffer {
-                let interval: Int
-                if case .off = compare { interval = 15 } else { interval = 4 }
                 tickCount += 1
-                if tickCount % interval == 0 {
-                    // the analysis gate must be a multiple of the delivery
-                    // interval — 15 and 16 are coprime, so scopes only fired
-                    // every ~4 s instead of ~1 s
-                    deliver(still, analyzed: scopesEnabled
-                        && tickCount % (interval * 4) == 0)
+                if case .off = compare {
+                    // static output: one delivery until an input changes
+                    if !idleDelivered {
+                        idleDelivered = true
+                        deliver(still, analyzed: scopesEnabled)
+                    }
+                } else if tickCount % 4 == 0 {
+                    // the live half of the compare keeps moving
+                    deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
                 }
             }
             return
@@ -236,20 +245,24 @@ final class PlaybackFrameTap: @unchecked Sendable {
         let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
         tickCount += 1
         if !output.hasNewPixelBuffer(forItemTime: itemTime) {
-            // paused player: no "new" frames, but the current one must still
-            // reach the layers/scopes — and with compare active the LIVE half
-            // must keep moving, so recomposite at ~15 Hz instead of ~4
-            let interval: Int
-            if case .off = compare { interval = 15 } else { interval = 4 }
-            if tickCount % interval == 0,
-               let pixelBuffer = output.copyPixelBuffer(
-                   forItemTime: itemTime, itemTimeForDisplay: nil) {
+            // paused player: static output — deliver once, then only keep the
+            // live half of an active compare moving (~15 Hz)
+            if case .off = compare {
+                if !idleDelivered,
+                   let pixelBuffer = output.copyPixelBuffer(
+                       forItemTime: itemTime, itemTimeForDisplay: nil) {
+                    idleDelivered = true
+                    deliver(pixelBuffer, analyzed: scopesEnabled)
+                }
+            } else if tickCount % 4 == 0,
+                      let pixelBuffer = output.copyPixelBuffer(
+                          forItemTime: itemTime, itemTimeForDisplay: nil) {
                 deliver(pixelBuffer,
-                        analyzed: scopesEnabled
-                            && tickCount % (interval * 4) == 0)
+                        analyzed: scopesEnabled && tickCount % 16 == 0)
             }
             return
         }
+        idleDelivered = false // playing again: idle state re-arms
         guard let pixelBuffer = output.copyPixelBuffer(
             forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
         deliver(pixelBuffer, analyzed: scopesEnabled && tickCount % 8 == 0)

@@ -36,8 +36,6 @@ public struct ScopeData: Sendable {
     /// window resize doesn't rebuild them.
     public let sequence: Int
 
-    /// Legacy alias (luma waveform).
-    public var waveform: [UInt8] { waveformY }
 }
 
 /// Computes scope data from capture/playback pixel buffers.

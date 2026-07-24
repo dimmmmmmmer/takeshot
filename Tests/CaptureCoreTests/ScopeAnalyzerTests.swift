@@ -36,7 +36,7 @@ struct ScopeAnalyzerTests {
         let width = ScopeData.waveWidth
         let height = ScopeData.waveHeight
         let nonEmptyRows = (0..<height).filter { row in
-            (0..<width).contains { data.waveform[row * width + $0] > 0 }
+            (0..<width).contains { data.waveformY[row * width + $0] > 0 }
         }
         #expect((1...3).contains(nonEmptyRows.count))
         // 128/255 luma → the middle of the scope (row ≈ height/2)
@@ -44,7 +44,7 @@ struct ScopeAnalyzerTests {
         #expect(abs(center - height / 2) <= 2)
         // the true row must dominate its soft edges
         let rowMax = nonEmptyRows.map { row in
-            (0..<width).map { Int(data.waveform[row * width + $0]) }.max() ?? 0
+            (0..<width).map { Int(data.waveformY[row * width + $0]) }.max() ?? 0
         }
         #expect(rowMax.max() == rowMax[nonEmptyRows.count / 2])
     }

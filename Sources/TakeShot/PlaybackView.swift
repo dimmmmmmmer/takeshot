@@ -217,19 +217,7 @@ struct TransportBar: View {
             }
             .buttonStyle(.plain)
 
-            Text(controller.playbackTC(atSeconds: model.currentTime))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            Slider(value: Binding(
-                get: { model.currentTime },
-                set: { model.seek(to: $0) }),
-                in: 0...max(model.duration, 0.01))
-                .controlSize(.small)
-                .overlay {
-                    MarkerTicks(markers: controller.playbackMarkers,
-                                duration: model.duration)
-                }
+            TransportPositionControls(model: model, position: model.position)
 
             Text(controller.playbackTC(atSeconds: model.duration))
                 .font(.caption.monospacedDigit())
@@ -504,6 +492,29 @@ struct MarkerTicks: View {
     }
 }
 
+/// TC readout + scrubber: the only part of the bar that re-renders at 10 Hz.
+private struct TransportPositionControls: View {
+    @EnvironmentObject private var controller: CaptureController
+    let model: TransportModel
+    @ObservedObject var position: TransportPosition
+
+    var body: some View {
+        Text(controller.playbackTC(atSeconds: position.currentTime))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+
+        Slider(value: Binding(
+            get: { position.currentTime },
+            set: { model.seek(to: $0) }),
+            in: 0...max(model.duration, 0.01))
+            .controlSize(.small)
+            .overlay {
+                MarkerTicks(markers: controller.playbackMarkers,
+                            duration: model.duration)
+            }
+    }
+}
+
 /// Volume control observing only LiveSignal — dragging must not re-render
 /// the whole transport/window (that read as slider lag).
 private struct TransportVolume: View {
@@ -525,10 +536,18 @@ private struct TransportVolume: View {
     }
 }
 
+/// Playhead position only — isolated so the 10 Hz tick re-renders just the
+/// TC readout and the slider, not the whole transport bar.
+@MainActor
+final class TransportPosition: ObservableObject {
+    @Published var currentTime: Double = 0
+}
+
 /// Observing AVPlayer for the transport: time, speed, loop.
 @MainActor
 final class TransportModel: ObservableObject {
-    @Published var currentTime: Double = 0
+    let position = TransportPosition()
+    var currentTime: Double { position.currentTime }
     @Published var duration: Double = 0
     @Published var isPlaying = false
     @Published var desiredRate: Double = 1.0
@@ -546,9 +565,11 @@ final class TransportModel: ObservableObject {
         ) { [weak self] time in
             Task { @MainActor [weak self] in
                 guard let self, let player = self.player else { return }
-                self.currentTime = time.seconds
-                self.isPlaying = player.rate != 0
-                if let item = player.currentItem, item.duration.isNumeric {
+                self.position.currentTime = time.seconds
+                let playing = player.rate != 0
+                if self.isPlaying != playing { self.isPlaying = playing }
+                if let item = player.currentItem, item.duration.isNumeric,
+                   self.duration != item.duration.seconds {
                     self.duration = item.duration.seconds
                 }
             }

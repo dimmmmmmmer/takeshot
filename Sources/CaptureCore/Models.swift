@@ -147,16 +147,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var appBackgroundHex: String?
     /// Filename postfix ({postfix} in the template).
     public var postfix: String?
-    /// How many leading audio channels to write (deprecated, replaced by the mask).
-    public var recordChannelCount: Int?
     /// Bit mask of recorded channels (bit i = channel i); nil — all.
     public var audioChannelMask: Int?
     /// Audio device UID for playback output; nil — system.
     public var playbackAudioDeviceUID: String?
     /// Control accent color, hex; nil — neutral grey.
     public var accentHex: String?
-    /// DeckLink device for video-out to a monitor (SDI/HDMI); nil — off.
-    public var monitorDeviceID: String?
     /// Number of digits in the clip number (C01 / C001 / C0001); nil — 2.
     public var clipPadWidth: Int?
     /// Filename of the selected LUT (in the app's LUTs folder); nil — no LUT.
@@ -182,8 +178,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
     public var forcedInputRGB: Bool?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
-
-    public var preRollSecondsEffective: Double { preRollSeconds ?? 1.0 }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy
     /// seconds (at 25 fps), else 5.

@@ -430,16 +430,24 @@ final class CaptureController: ObservableObject {
 
     private var lutPersistTask: Task<Void, Never>?
 
+    private var cubeCache: (fileName: String, cube: CubeLUT)?
+
     /// Rebuild the filter and hand it to the pipeline and playback.
     func rebuildLUT() {
         currentCube = nil
         if let fileName = settings.lutFileName {
-            let url = Self.lutsDirectory.appendingPathComponent(fileName)
-            do {
-                currentCube = try CubeLUT.load(url: url)
-            } catch {
-                lastError = "LUT: \(error.localizedDescription)"
-                settings.lutFileName = nil
+            if let cache = cubeCache, cache.fileName == fileName {
+                currentCube = cache.cube // checkbox flips must not re-read disk
+            } else {
+                let url = Self.lutsDirectory.appendingPathComponent(fileName)
+                do {
+                    let cube = try CubeLUT.load(url: url)
+                    currentCube = cube
+                    cubeCache = (fileName, cube)
+                } catch {
+                    lastError = "LUT: \(error.localizedDescription)"
+                    settings.lutFileName = nil
+                }
             }
         }
         pipeline.setLUT(currentCube,
@@ -1977,7 +1985,7 @@ final class CaptureController: ObservableObject {
                     if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
                        let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
                            kCGImageSourceCreateThumbnailFromImageAlways: true,
-                           kCGImageSourceThumbnailMaxPixelSize: 480,
+                           kCGImageSourceThumbnailMaxPixelSize: 256,
                        ] as CFDictionary) {
                         image = NSImage(cgImage: cg,
                                         size: NSSize(width: cg.width,
@@ -1989,7 +1997,7 @@ final class CaptureController: ObservableObject {
                        let src = CGImageSourceCreateWithURL(middle as CFURL, nil),
                        let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
                            kCGImageSourceCreateThumbnailFromImageAlways: true,
-                           kCGImageSourceThumbnailMaxPixelSize: 480,
+                           kCGImageSourceThumbnailMaxPixelSize: 256,
                        ] as CFDictionary) {
                         image = NSImage(cgImage: cg,
                                         size: NSSize(width: cg.width,
@@ -2002,7 +2010,7 @@ final class CaptureController: ObservableObject {
                     if let clip = try? CBRClip(path: url.path) {
                         if clip.frameCount > 0,
                            let buffer = clip.copyFrame(at: clip.frameCount / 2) {
-                            image = Self.thumbnail(from: buffer, maxSize: 480)
+                            image = Self.thumbnail(from: buffer, maxSize: 256)
                         }
                         if clip.frameRate > 0 {
                             let seconds = Double(clip.frameCount)
@@ -2016,7 +2024,7 @@ final class CaptureController: ObservableObject {
                     let asset = AVURLAsset(url: url)
                     let generator = AVAssetImageGenerator(asset: asset)
                     generator.appliesPreferredTrackTransform = true
-                    generator.maximumSize = CGSize(width: 480, height: 480)
+                    generator.maximumSize = CGSize(width: 256, height: 256)
                     if let (cgImage, _) = try? await generator.image(
                         at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
                         image = NSImage(cgImage: cgImage,
@@ -2108,7 +2116,7 @@ final class CaptureController: ObservableObject {
                     let asset = AVURLAsset(url: take.url)
                     let generator = AVAssetImageGenerator(asset: asset)
                     generator.appliesPreferredTrackTransform = true
-                    generator.maximumSize = CGSize(width: 480, height: 480)
+                    generator.maximumSize = CGSize(width: 256, height: 256)
                     let time = CMTime(seconds: min(1.0, take.durationSeconds / 2),
                                       preferredTimescale: 600)
                     if let (cgImage, _) = try? await generator.image(at: time) {

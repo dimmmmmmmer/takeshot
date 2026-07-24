@@ -275,7 +275,6 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Frames before record start — for pre-roll (only while writer == nil).
     private var preRollBuffer: [PreRollFrame] = []
     /// Accumulated VANC stats by (DID, SDID).
-    private var vancStats: [String: VancPacketStat] = [:]
     private var vancStatsDirty = false
     private var vancStatsLastPublish = 0
     /// Pending file-finalization tasks (awaited on stop/exit).
@@ -334,7 +333,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.latestPreviewLock.lock()
             self.latestPreview = nil // don't compare against a frozen frame
             self.latestPreviewLock.unlock()
-            self.vancStats.removeAll()
+            self.rawVancStats.removeAll()
             self.vancStatsLastPublish = 0
             DispatchQueue.main.async {
                 self.onFormatChanged?(nil)
@@ -692,16 +691,26 @@ public final class CapturePipeline: @unchecked Sendable {
                                            colorSpace: space)
     }
 
+    // raw packet snapshots; the hex dump is built only at publish time —
+    // formatting per packet per frame was thousands of string allocs a second
+    private struct RawVancStat {
+        var did: UInt8
+        var sdid: UInt8
+        var count: Int
+        var lastLine: UInt32
+        var lastData: Data
+    }
+    private var rawVancStats: [String: RawVancStat] = [:]
+
     private func updateVancStats(_ packets: [AncillaryPacket]) {
         for packet in packets {
             let key = String(format: "%02X/%02X", packet.did, packet.sdid)
-            let hex = packet.data.prefix(24)
-                .map { String(format: "%02X", $0) }.joined(separator: " ")
-            let previous = vancStats[key]
-            vancStats[key] = VancPacketStat(
+            let previous = rawVancStats[key]
+            rawVancStats[key] = RawVancStat(
                 did: packet.did, sdid: packet.sdid,
                 count: (previous?.count ?? 0) + 1,
-                lastLine: packet.lineNumber, lastDataHex: hex)
+                lastLine: packet.lineNumber,
+                lastData: Data(packet.data.prefix(24)))
             vancStatsDirty = true
         }
         // publish at most ~once a second so we don't poke the UI every frame
@@ -709,7 +718,14 @@ public final class CapturePipeline: @unchecked Sendable {
         if vancStatsDirty, frameIndex - vancStatsLastPublish >= interval {
             vancStatsDirty = false
             vancStatsLastPublish = frameIndex
-            let stats = vancStats.values.sorted { $0.key < $1.key }
+            let stats = rawVancStats.values.map { raw in
+                VancPacketStat(
+                    did: raw.did, sdid: raw.sdid, count: raw.count,
+                    lastLine: raw.lastLine,
+                    lastDataHex: raw.lastData
+                        .map { String(format: "%02X", $0) }
+                        .joined(separator: " "))
+            }.sorted { $0.key < $1.key }
             DispatchQueue.main.async { self.onVancStats?(stats) }
         }
     }

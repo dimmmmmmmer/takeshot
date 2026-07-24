@@ -58,11 +58,10 @@ enum ShiftReport {
             attributed.draw(in: rect)
         }
 
-        // columns: thumb | clip | take # | TC in | TC out | dur | OK | notes
+        // columns: thumb | clip | TC in | TC out | dur | OK | notes
         let xThumb = margin
         let xClip = xThumb + thumbSize.width + 8
-        let xTake = xClip + 136
-        let xTCIn = xTake + 34
+        let xTCIn = xClip + 158
         let xTCOut = xTCIn + 66
         let xDur = xTCOut + 66
         let xRating = xDur + 38
@@ -70,8 +69,7 @@ enum ShiftReport {
         let commentWidth = pageSize.width - margin - xComment
 
         func drawTableHead() {
-            draw("CLIP", x: xClip, width: 136, font: headFont, color: .darkGray)
-            draw("TAKE", x: xTake, width: 34, font: headFont, color: .darkGray)
+            draw("CLIP", x: xClip, width: 158, font: headFont, color: .darkGray)
             draw("TC IN", x: xTCIn, width: 66, font: headFont, color: .darkGray)
             draw("TC OUT", x: xTCOut, width: 66, font: headFont, color: .darkGray)
             draw("DUR", x: xDur, width: 38, font: headFont, color: .darkGray)
@@ -127,7 +125,7 @@ enum ShiftReport {
                            fraction: 1)
             }
             let name = take.url.deletingPathExtension().lastPathComponent
-            draw(name, x: xClip, width: 136, font: bodyFont, offset: 2)
+            draw(name, x: xClip, width: 158, font: bodyFont, offset: 2)
             if !take.markers.isEmpty {
                 let flags = take.markers.map {
                     $0.note.isEmpty ? $0.timecodeText : "\($0.timecodeText) \($0.note)"
@@ -137,8 +135,6 @@ enum ShiftReport {
                      font: NSFont.systemFont(ofSize: 7),
                      color: .orange, offset: 15)
             }
-            draw(String(take.takeNumber), x: xTake, width: 34,
-                 font: monoFont, offset: 2)
             draw(take.startTimecode?.description ?? "—", x: xTCIn, width: 66,
                  font: monoFont, offset: 2)
             draw(TakeLogExporter.endTimecode(of: take)?.description ?? "—",

@@ -177,14 +177,6 @@ struct SettingsView: View {
                         Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
                     }
                 }
-                Picker(L("monitor_device"), selection: Binding(
-                    get: { controller.settings.monitorDeviceID },
-                    set: { controller.settings.monitorDeviceID = $0 })) {
-                    Text(L("external_off")).tag(String?.none)
-                    ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
-                        Text(device.name).tag(String?.some(device.id))
-                    }
-                }
                 Picker(L("playback_output"), selection: Binding(
                     get: { controller.playbackOutputUID },
                     set: { controller.playbackOutputUID = $0 })) {
