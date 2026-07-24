@@ -831,7 +831,8 @@ final class CaptureController: ObservableObject {
                 .first { $0.element.seconds > now + 0.05 }
                 .map { ($0.offset, $0.element) }
         } else {
-            hit = markers.enumerated()
+            // Array(): EnumeratedSequence has no .last on the CI toolchain
+            hit = Array(markers.enumerated())
                 .last { $0.element.seconds < now - 0.05 }
                 .map { ($0.offset, $0.element) }
         }
