@@ -224,7 +224,11 @@ final class PlaybackFrameTap: @unchecked Sendable {
                 if case .off = compare { interval = 15 } else { interval = 4 }
                 tickCount += 1
                 if tickCount % interval == 0 {
-                    deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
+                    // the analysis gate must be a multiple of the delivery
+                    // interval — 15 and 16 are coprime, so scopes only fired
+                    // every ~4 s instead of ~1 s
+                    deliver(still, analyzed: scopesEnabled
+                        && tickCount % (interval * 4) == 0)
                 }
             }
             return
@@ -241,7 +245,8 @@ final class PlaybackFrameTap: @unchecked Sendable {
                let pixelBuffer = output.copyPixelBuffer(
                    forItemTime: itemTime, itemTimeForDisplay: nil) {
                 deliver(pixelBuffer,
-                        analyzed: scopesEnabled && tickCount % 16 == 0)
+                        analyzed: scopesEnabled
+                            && tickCount % (interval * 4) == 0)
             }
             return
         }

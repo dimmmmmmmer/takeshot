@@ -56,22 +56,32 @@ private struct TakesSection: View {
                 .controlSize(.small)
                 .fixedSize()
                 .help(L("open_folder"))
-                Menu {
-                    Button(L("export_edl")) { controller.exportSelectsEDL() }
-                        .disabled(!controller.takes.contains { $0.rating == .good })
-                    Button(L("export_report_pdf")) {
-                        controller.exportShiftReport(pdf: true)
-                    }
-                    Button(L("export_report_csv")) {
-                        controller.exportShiftReport(pdf: false)
-                    }
-                } label: {
+                // a real bordered Button for the chrome (pixel-identical to the
+                // folder button), with an invisible Menu stretched on top —
+                // no Menu style matched the Button metrics exactly
+                Button {} label: {
                     Image(systemName: "square.and.arrow.up")
                         .frame(width: 14, height: 14)
                 }
-                .menuStyle(.borderedButton) // matches the folder Button chrome
-                .menuIndicator(.hidden)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
+                .allowsHitTesting(false)
+                .overlay {
+                    Menu {
+                        Button(L("export_edl")) { controller.exportSelectsEDL() }
+                            .disabled(!controller.takes.contains { $0.rating == .good })
+                        Button(L("export_report_pdf")) {
+                            controller.exportShiftReport(pdf: true)
+                        }
+                        Button(L("export_report_csv")) {
+                            controller.exportShiftReport(pdf: false)
+                        }
+                    } label: {
+                        Color.clear
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                }
                 .fixedSize()
                 .disabled(controller.takes.isEmpty)
                 .help(L("export_menu_help"))

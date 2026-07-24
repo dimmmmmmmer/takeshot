@@ -382,6 +382,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         _currentMode, _currentPixelFormat,
         forced ? bmdVideoInputFlagDefault : bmdVideoInputEnableFormatDetection);
     if (hr != S_OK) {
+        if (forced) {
+            forced->Release(); // the success and StartStreams paths release it
+        }
         [self stop];
         if (error) {
             *error = [NSError errorWithDomain:CDLErrorDomain code:3 userInfo:@{

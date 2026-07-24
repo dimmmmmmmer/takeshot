@@ -987,45 +987,40 @@ struct BottomBarView: View {
                             NamingPresetMenu()
 
                             FooterMonitorButton(live: controller.live)
+
+                            if controller.isCapturing {
+                                FooterAudioMeters(live: controller.live)
+                            }
                         }
                         .buttonStyle(.borderless)
 
                         Spacer(minLength: 8)
-
-                        if controller.isCapturing {
-                            FooterAudioMeters(live: controller.live)
-                        }
-
-                        Spacer(minLength: 40)
                     }
                     .frame(maxWidth: .infinity)
 
                     NamingFieldsView()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                HStack(spacing: 18) {
+                HStack(spacing: 12) {
                     Button {
                         controller.instantReplay()
                     } label: {
                         Image(systemName: "memories")
-                            .font(.system(size: 16))
+                            .font(.system(size: 15))
                     }
                     .buttonStyle(.borderless)
                     .disabled(controller.takes.isEmpty)
                     .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
                     RecordButton()
-                        .overlay(alignment: .center) {
-                            Button {
-                                controller.grabFrame()
-                            } label: {
-                                Image(systemName: "camera")
-                                    .font(.system(size: 15))
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(!controller.isCapturing && controller.playbackURL == nil)
-                            .help(L("grab_frame"))
-                            .offset(x: 52)
-                        }
+                    Button {
+                        controller.grabFrame()
+                    } label: {
+                        Image(systemName: "camera")
+                            .font(.system(size: 15))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!controller.isCapturing && controller.playbackURL == nil)
+                    .help(L("grab_frame"))
                 }
             }
         }

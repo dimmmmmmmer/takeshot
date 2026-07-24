@@ -173,7 +173,8 @@ public final class RecDetector {
         // capture may report one TC per pair of frames (PsF) — treat a repeat as
         // stall, and a step of exactly 1 frame as movement. A 24h wrap
         // (23:59:59:MM → 00:00:00:00) is one frame too, not a discontinuity.
-        let dayFrames = 24 * 3600 * max(1, tc.fps)
+        let dayFrames = Timecode.dayFrames(fps: tc.fps,
+                                           isDropFrame: tc.isDropFrame)
         let delta = tc.frameNumber - last.frameNumber
         switch delta {
         case 0: return .stalled

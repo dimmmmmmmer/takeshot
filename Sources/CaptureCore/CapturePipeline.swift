@@ -327,6 +327,9 @@ public final class CapturePipeline: @unchecked Sendable {
             self.detector.reset()
             self.format = nil
             self.lastTimecode = nil
+            self.latestLTC = nil // the old session's LTC must not name new takes
+            self.ltcDecoder.reset()
+            self.frameGrabHandler = nil
             self.preRollBuffer.removeAll()
             self.latestPreviewLock.lock()
             self.latestPreview = nil // don't compare against a frozen frame
@@ -358,7 +361,11 @@ public final class CapturePipeline: @unchecked Sendable {
 
     public func handleSignal(present: Bool) {
         if !present {
-            // no frozen last frame on signal loss — show black
+            // no frozen last frame on signal loss — show black, and don't let
+            // a later sink registration or the compare pull the stale frame
+            latestPreviewLock.lock()
+            latestPreview = nil
+            latestPreviewLock.unlock()
             for sink in allDisplaySinks() { sink.clearToBlack() }
         }
         DispatchQueue.main.async { self.onSignal?(present) }
@@ -536,9 +543,12 @@ public final class CapturePipeline: @unchecked Sendable {
         // buffered AFTER the levels stage — otherwise a take starts with raw
         // pre-roll frames and jumps in contrast when live leveled frames follow
         if writer == nil {
-            // the pre-roll must hold what the WRITER gets (10-bit when active)
+            // the pre-roll must hold what the WRITER gets: 10-bit when active,
+            // but BGRA when a LUT is baked into the recording — beginTake runs
+            // applyLUT over these frames and CoreImage cannot read r210
+            let preRollFrameBuffer = lutRecord ? leveled : (tenBitRecord ?? leveled)
             preRollBuffer.append(PreRollFrame(index: frameIndex,
-                                              pixelBuffer: tenBitRecord ?? leveled,
+                                              pixelBuffer: preRollFrameBuffer,
                                               pts: pts))
             let capacity = preRollCapacity
             if preRollBuffer.count > capacity {
@@ -662,7 +672,7 @@ public final class CapturePipeline: @unchecked Sendable {
         queue.async { self.frameGrabHandler = handler }
     }
 
-    private static func pngData(from pixelBuffer: CVPixelBuffer,
+    public static func pngData(from pixelBuffer: CVPixelBuffer,
                                 ciContext: CIContext) -> Data? {
         // identity conversion, PNG tagged with the same ICC "HDTV" (Rec.709)
         // space the preview and the ProRes decoder use — the still looks
@@ -759,7 +769,8 @@ public final class CapturePipeline: @unchecked Sendable {
         }.count
         var timecode = rawTimecode
         if let tc = rawTimecode, preStartCount > 0 {
-            let dayFrames = 24 * 3600 * max(1, tc.fps)
+            let dayFrames = Timecode.dayFrames(fps: tc.fps,
+                                               isDropFrame: tc.isDropFrame)
             var shifted = tc.frameNumber - preStartCount
             if shifted < 0 { shifted += dayFrames } // wrap across midnight
             timecode = Timecode(frameNumber: shifted,
@@ -899,10 +910,10 @@ public final class CapturePipeline: @unchecked Sendable {
                                   intensity: lutIntensity)
         let destination = CIRenderDestination(pixelBuffer: outBuffer)
         destination.colorSpace = nil
-        if let task = try? ciContext.startTask(toRender: finalImage,
-                                               to: destination) {
-            _ = try? task.waitUntilCompleted()
-        }
+        // a failed render MUST NOT hand uninitialized pool memory to the writer
+        guard let task = try? ciContext.startTask(toRender: finalImage,
+                                                  to: destination),
+              (try? task.waitUntilCompleted()) != nil else { return nil }
         tagColorIfUntagged(outBuffer)
         return outBuffer
     }

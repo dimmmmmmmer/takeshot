@@ -947,6 +947,17 @@ final class CaptureController: ObservableObject {
         }
     }
 
+    /// PNG of a playback buffer (RAW engine / still tap) in display code values.
+    private func saveGrab(buffer: CVPixelBuffer) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let context = CIContext(options: [.cacheIntermediates: false])
+            let png = CapturePipeline.pngData(from: buffer, ciContext: context)
+            await MainActor.run { [weak self] in
+                self?.saveGrab(png)
+            }
+        }
+    }
+
     /// Move a take to the Trash and drop it from the session.
     func deleteTake(_ take: Take) {
         do {
@@ -1348,7 +1359,10 @@ final class CaptureController: ObservableObject {
                 if let start = take.startTimecode,
                    let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
                     var frames = tc.frameNumber - start.frameNumber
-                    if frames < 0 { frames += 24 * 3600 * start.fps }
+                    if frames < 0 {
+                        frames += Timecode.dayFrames(fps: start.fps,
+                                                     isDropFrame: start.isDropFrame)
+                    }
                     fixed.seconds = Double(frames) / Double(max(1, start.fps))
                 }
                 return fixed
@@ -1671,12 +1685,22 @@ final class CaptureController: ObservableObject {
     /// Grab the current frame as a PNG next to the takes. In playback it grabs the
     /// current player frame (with the LUT); otherwise the live processed frame.
     func grabFrame() {
-        if viewerMode == .playback, let item = player.currentItem,
-           let url = playbackURL,
-           !Self.imageExtensions.contains(url.pathExtension.lowercased()) {
-            grabPlaybackFrame(item: item)
-        } else {
+        if viewerMode == .playback, playbackURL != nil {
+            // RAW engine and stills have no AVPlayer item — grab what's on
+            // screen instead of silently arming a LIVE-camera grab
+            if let raw = rawPlayer, let buffer = raw.currentBuffer() {
+                saveGrab(buffer: buffer)
+            } else if let item = player.currentItem {
+                grabPlaybackFrame(item: item)
+            } else if let buffer = playbackTap.currentBuffer() {
+                saveGrab(buffer: buffer)
+            } else {
+                lastError = "Frame grab failed"
+            }
+        } else if isCapturing {
             pipeline.grabNextFrame { [weak self] png in self?.saveGrab(png) }
+        } else {
+            lastError = L("no_signal")
         }
     }
 

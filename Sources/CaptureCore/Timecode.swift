@@ -31,6 +31,13 @@ public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
     }
 
     /// Inverse transform: real frame number → a timecode label.
+    /// Frames in a 24 h day at this TC's rate — drop-frame compensated
+    /// (2,589,408 at 30 DF, not the nominal 2,592,000).
+    public static func dayFrames(fps: Int, isDropFrame: Bool) -> Int {
+        Timecode(hours: 24, minutes: 0, seconds: 0, frames: 0,
+                 fps: max(1, fps), isDropFrame: isDropFrame).frameNumber
+    }
+
     /// Parse "HH:MM:SS:FF" (";" before FF for drop-frame). nil on junk.
     public init?(text: String, fps: Int) {
         let dropFrame = text.contains(";")

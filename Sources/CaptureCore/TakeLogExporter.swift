@@ -32,7 +32,7 @@ public enum TakeLogExporter {
     /// The Comments column value: an "NG" marker for bad takes plus the free-text
     /// comment. "NG", "NG: soft focus", or just "soft focus" for good/unrated takes.
     static func commentsField(rating: TakeRating, comment: String) -> String {
-        let text = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = flattened(comment).trimmingCharacters(in: .whitespacesAndNewlines)
         if rating == .bad {
             return text.isEmpty ? "NG" : "NG: \(text)"
         }
@@ -53,7 +53,9 @@ public enum TakeLogExporter {
     /// End TC of a take: start TC advanced by the recorded frames.
     public static func endTimecode(of take: Take) -> Timecode? {
         guard let start = take.startTimecode else { return nil }
-        let frames = Int((take.durationSeconds * Double(start.fps)).rounded())
+        let realRate = Double(start.fps)
+            * (start.isDropFrame ? 1000.0 / 1001.0 : 1)
+        let frames = Int((take.durationSeconds * realRate).rounded())
         return Timecode(frameNumber: start.frameNumber + frames,
                         fps: start.fps, isDropFrame: start.isDropFrame)
     }
@@ -78,7 +80,7 @@ public enum TakeLogExporter {
                 endTimecode(of: take)?.description ?? "",
                 String(format: "%.1f", take.durationSeconds),
                 rating,
-                escape(take.comment),
+                escape(flattened(take.comment)),
                 escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
                 formatter.string(from: take.recordedAt),
             ].joined(separator: ","))
@@ -99,7 +101,7 @@ public enum TakeLogExporter {
                     String(format: "%.3f", marker.seconds),
                     escape(marker.timecodeText),
                     escape(marker.color),
-                    escape(marker.note),
+                    escape(flattened(marker.note)),
                 ].joined(separator: ","))
             }
         }
@@ -173,6 +175,16 @@ public enum TakeLogExporter {
             return (.bad, comment)
         }
         return (good ? .good : .none, trimmed)
+    }
+
+    /// The parsers split records on newlines BEFORE unquoting, so multi-line
+    /// text must be flattened at the source or the file breaks on restart.
+    static func flattened(_ value: String) -> String {
+        value.contains(where: \.isNewline)
+            ? value.replacingOccurrences(of: "\r\n", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+            : value
     }
 
     /// RFC 4180 escaping: quote values that contain commas/quotes/newlines.

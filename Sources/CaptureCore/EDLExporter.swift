@@ -16,11 +16,13 @@ public enum EDLExporter {
             "FCM: \(dropFrame ? "DROP FRAME" : "NON-DROP FRAME")",
             "",
         ]
+        // drop-frame TC runs at fps*1000/1001 real frames per second
+        let realRate = Double(fps) * (dropFrame ? 1000.0 / 1001.0 : 1)
         // record timeline starts at 01:00:00:00, takes cut back to back
-        var recordFrame = 3600 * fps
+        var recordFrame = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0,
+                                   fps: fps, isDropFrame: dropFrame).frameNumber
         for (index, take) in takes.enumerated() {
-            let frames = max(1, Int((take.durationSeconds
-                * Double(fps)).rounded()))
+            let frames = max(1, Int((take.durationSeconds * realRate).rounded()))
             let sourceIn = take.startTimecode
                 ?? Timecode(frameNumber: 0, fps: fps, isDropFrame: dropFrame)
             let sourceOut = Timecode(frameNumber: sourceIn.frameNumber + frames,
@@ -41,7 +43,7 @@ public enum EDLExporter {
                 lines.append("* COMMENT: \(take.comment)")
             }
             for marker in take.markers {
-                let offset = Int((marker.seconds * Double(fps)).rounded())
+                let offset = Int((marker.seconds * realRate).rounded())
                 let locator = Timecode(frameNumber: recordFrame + offset,
                                        fps: fps, isDropFrame: dropFrame)
                 var name = marker.note

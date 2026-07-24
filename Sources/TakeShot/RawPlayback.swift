@@ -46,6 +46,9 @@ struct BRAWSource: RawClipSource, @unchecked Sendable {
 /// surface in the app draws.
 struct DNGSequenceSource: RawClipSource, @unchecked Sendable {
     let formatBadge = "DNG"
+    // decodes arrive from the play loop AND from seek's detached task — the
+    // pool rebuild inside PixelBufferPool is not thread-safe
+    private let decodeQueue = DispatchQueue(label: "takeshot.dng.decode")
     private let frames: [URL]
     let frameCount: Int
     let frameRate: Double
@@ -95,6 +98,10 @@ struct DNGSequenceSource: RawClipSource, @unchecked Sendable {
     }
 
     func copyFrame(at index: Int) -> CVPixelBuffer? {
+        decodeQueue.sync { decodeFrame(at: index) }
+    }
+
+    private func decodeFrame(at index: Int) -> CVPixelBuffer? {
         guard frames.indices.contains(index) else { return nil }
         let url = frames[index]
         var image: CIImage?
@@ -147,6 +154,9 @@ final class RawPlayerModel: ObservableObject {
 
     private let clip: RawClipSource
     private var playTask: Task<Void, Never>?
+    /// Bumped on every play/pause/seek: a cancelled loop parked in a blocking
+    /// decode wakes up later — its writes must not clobber the new session.
+    private var playGeneration = 0
 
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
     private let sinksLock = NSLock()
@@ -236,6 +246,8 @@ final class RawPlayerModel: ObservableObject {
     func play() {
         guard !isPlaying, frameCount > 0 else { return }
         isPlaying = true
+        playGeneration += 1
+        let generation = playGeneration
         // restart from the top when play is hit at the end
         let startFrame = currentFrame >= frameCount - 1 ? 0 : currentFrame
         currentFrame = startFrame
@@ -251,15 +263,23 @@ final class RawPlayerModel: ObservableObject {
                     break
                 }
                 guard let self else { return }
+                // a stale loop (pause/seek happened mid-decode) must not
+                // present or touch the transport state
+                let state = await MainActor.run {
+                    (live: self.playGeneration == generation && self.isPlaying,
+                     scopes: self.scopesEnabled)
+                }
+                guard state.live else { return }
                 self.present(buffer)
                 scopeCounter += 1
-                let analyze = scopeCounter % 6 == 0
+                // analysis stays OFF the MainActor: noisy frames are expensive
+                let scopeData = scopeCounter % 6 == 0 && state.scopes
+                    ? ScopeAnalyzer.analyze(buffer) : nil
                 await MainActor.run {
                     self.lastBuffer = buffer
                     self.currentFrame = index
-                    if analyze, self.scopesEnabled,
-                       let data = ScopeAnalyzer.analyze(buffer) {
-                        self.onScopeData?(data)
+                    if let scopeData {
+                        self.onScopeData?(scopeData)
                     }
                 }
                 // real-time mapping: skip frames if decode is slower than fps
@@ -280,7 +300,8 @@ final class RawPlayerModel: ObservableObject {
                     if !looping { break }
                     // loop restarts the time base at frame 0
                     return await MainActor.run { [weak self] in
-                        guard let self, self.isPlaying else { return }
+                        guard let self, self.isPlaying,
+                              self.playGeneration == generation else { return }
                         self.isPlaying = false
                         self.currentFrame = 0
                         self.play()
@@ -289,12 +310,14 @@ final class RawPlayerModel: ObservableObject {
                 index = next
             }
             await MainActor.run { [weak self] in
-                self?.isPlaying = false
+                guard let self, self.playGeneration == generation else { return }
+                self.isPlaying = false
             }
         }
     }
 
     func pause() {
+        playGeneration += 1 // orphan any loop parked in a blocking decode
         playTask?.cancel()
         playTask = nil
         isPlaying = false
@@ -314,9 +337,12 @@ final class RawPlayerModel: ObservableObject {
 
     private func showFrame(_ index: Int) {
         let clip = clip
+        let generation = playGeneration
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let buffer = clip.copyFrame(at: index) else { return }
             guard let self else { return }
+            let live = await MainActor.run { self.playGeneration == generation }
+            guard live else { return }
             self.present(buffer)
             await MainActor.run {
                 self.lastBuffer = buffer
@@ -337,6 +363,9 @@ final class RawPlayerModel: ObservableObject {
                         frames: parts[3], fps: max(1, fps),
                         isDropFrame: dropFrame)
     }
+
+    /// The frame currently on screen (grab-still in RAW playback).
+    func currentBuffer() -> CVPixelBuffer? { lastBuffer }
 
     /// End TC of the clip (transport right-hand readout).
     var endTimecodeText: String {
