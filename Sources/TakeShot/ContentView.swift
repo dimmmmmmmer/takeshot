@@ -127,17 +127,6 @@ struct PlayerArea: View {
                     AudioChannelPanel(live: controller.live)
                 }
             }
-            .overlay(alignment: .bottomLeading) {
-                if controller.showScopesOverlay, !controller.scopesWindowOpen {
-                    ScopesPanel(live: controller.live, singleScope: true)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.white.opacity(0.12)))
-                        .frame(maxWidth: 860, maxHeight: 320)
-                        .padding(10)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
             .overlay(alignment: .bottom) {
                 if let error = controller.lastError {
                     Text(error)
@@ -184,6 +173,17 @@ struct PlayerTopBadgesModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .overlay(alignment: .bottomLeading) {
+                if controller.showScopesOverlay, !controller.scopesWindowOpen {
+                    ScopesPanel(live: controller.live, singleScope: true)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(.white.opacity(0.12)))
+                        .frame(maxWidth: 860, maxHeight: 320)
+                        .padding(10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .overlay(alignment: .topLeading) {
                 playerOverlayBadge {
                     Menu {
