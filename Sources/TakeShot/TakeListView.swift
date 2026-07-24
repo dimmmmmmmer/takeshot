@@ -302,6 +302,9 @@ private struct OtherContextMenu: View {
 
     var body: some View {
         Button(L("play")) { controller.play(url: url) }
+        if PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased()) {
+            Button(L("pin_reference")) { controller.pinReference(imageURL: url) }
+        }
         Button(L("show_in_finder")) {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }

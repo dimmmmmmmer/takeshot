@@ -97,6 +97,79 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Source input levels ("limited"/"full"; nil — auto by signal type).
     private var levelsMode: String?
 
+    // Pinned reference compare (all access on queue): the reference frame is
+    // composited over the live preview with the shared wipe/blend math.
+    private var previewReference: CVPixelBuffer?
+    private var previewCompare: CompareCompositor.Mode = .off
+    private let comparePool = PixelBufferPool()
+
+    /// Pin an already-decoded frame (deep copy — pooled buffers get reused).
+    public func setPreviewReference(buffer: CVPixelBuffer?) {
+        queue.async {
+            self.previewReference = buffer.flatMap { self.deepCopy($0) }
+        }
+    }
+
+    /// Pin the current live frame.
+    public func pinReferenceFromCurrentFrame() {
+        queue.async {
+            guard let current = self.currentPreviewBuffer() else { return }
+            self.previewReference = self.deepCopy(current)
+        }
+    }
+
+    public func setPreviewCompare(_ mode: CompareCompositor.Mode) {
+        queue.async {
+            self.previewCompare = mode
+        }
+    }
+
+    private func deepCopy(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let image = CIImage(cvPixelBuffer: buffer,
+                            options: [.colorSpace: NSNull()])
+        let attrs: [CFString: Any] = [
+            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
+        ]
+        var copy: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height,
+                            kCVPixelFormatType_32BGRA,
+                            attrs as CFDictionary, &copy)
+        guard let copy else { return nil }
+        let destination = CIRenderDestination(pixelBuffer: copy)
+        destination.colorSpace = nil
+        guard let task = try? ciContext.startTask(toRender: image,
+                                                  to: destination)
+        else { return nil }
+        _ = try? task.waitUntilCompleted()
+        return copy
+    }
+
+    /// Reference (front, left/top of the wipe) over the live frame.
+    private func compositeReference(_ reference: CVPixelBuffer,
+                                    over live: CVPixelBuffer) -> CVPixelBuffer? {
+        let back = CIImage(cvPixelBuffer: live, options: [.colorSpace: NSNull()])
+        let front = CompareCompositor.fitted(
+            CIImage(cvPixelBuffer: reference, options: [.colorSpace: NSNull()]),
+            into: back.extent)
+        let result = CompareCompositor.compose(front: front, back: back,
+                                               mode: previewCompare)
+        let width = Int(back.extent.width.rounded())
+        let height = Int(back.extent.height.rounded())
+        guard width > 0, height > 0,
+              let out = comparePool.buffer(width: width, height: height)
+        else { return nil }
+        let destination = CIRenderDestination(pixelBuffer: out)
+        destination.colorSpace = nil
+        guard let task = try? ciContext.startTask(toRender: result,
+                                                  to: destination)
+        else { return nil }
+        _ = try? task.waitUntilCompleted()
+        return out
+    }
+
     /// Input levels of the source signal: nil/"auto" — guess from the signal
     /// (RGB 4:4:4 → limited), "limited" (16-235) — expand once to full,
     /// "full" (0-255) — pass through (legacy "off" means the same).
@@ -445,7 +518,16 @@ public final class CapturePipeline: @unchecked Sendable {
             DispatchQueue.main.async { grab(png) }
         }
 
-        enqueuePreview(pixelBuffer: displayBuffer)
+        // pinned reference compare — on screen only (scopes/stills/the
+        // compare-provider frame stay clean)
+        var screenBuffer = displayBuffer
+        if let reference = previewReference {
+            if case .off = previewCompare {} else {
+                screenBuffer = compositeReference(reference, over: displayBuffer)
+                    ?? displayBuffer
+            }
+        }
+        enqueuePreview(pixelBuffer: displayBuffer, screen: screenBuffer)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
     }
 
@@ -761,10 +843,14 @@ public final class CapturePipeline: @unchecked Sendable {
         return latestPreview
     }
 
-    private func enqueuePreview(pixelBuffer: CVPixelBuffer) {
+    /// `pixelBuffer` is the clean processed frame (compare provider, pinning);
+    /// `screen` is what the preview sinks draw (may carry the reference wipe).
+    private func enqueuePreview(pixelBuffer: CVPixelBuffer,
+                                screen: CVPixelBuffer? = nil) {
         latestPreviewLock.lock()
         latestPreview = pixelBuffer
         latestPreviewLock.unlock()
-        for sink in allDisplaySinks() { sink.present(pixelBuffer) }
+        let presented = screen ?? pixelBuffer
+        for sink in allDisplaySinks() { sink.present(presented) }
     }
 }

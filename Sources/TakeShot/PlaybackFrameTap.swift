@@ -75,7 +75,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     enum Compare {
         case off
         case blend(opacity: Double)
-        case wipe(orientation: CaptureController.WipeOrientation, position: Double)
+        case wipe(axis: CompareCompositor.Axis, position: Double)
     }
 
     private var compare: Compare = .off
@@ -122,6 +122,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
                 self.deliver(buffer, analyzed: true)
             }
         }
+    }
+
+    /// The current playback frame (pin-as-reference). Queue-synchronous.
+    func currentBuffer() -> CVPixelBuffer? {
+        var result: CVPixelBuffer?
+        queue.sync { result = self.lastBuffer }
+        return result
     }
 
     /// Attach to a new clip (the old output is removed).
@@ -232,49 +239,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
             if lutFilter == nil { return nil } // untouched frame — no render needed
         case .blend(let opacity):
             guard let liveImage = liveImage(matching: playback.extent) else { break }
-            // cross-dissolve, not an alpha matrix: fading only the alpha of a
-            // premultiplied image leaves RGB at full strength and over-brightens
-            result = CapturePipeline.mix(source: liveImage, filtered: playback,
-                                         intensity: opacity)
-        case .wipe(let orientation, let position):
+            result = CompareCompositor.compose(front: playback, back: liveImage,
+                                               mode: .blend(opacity: opacity))
+        case .wipe(let axis, let position):
             guard let liveImage = liveImage(matching: playback.extent) else { break }
-            let extent = playback.extent
-            var rect = CGRect.zero
-            switch orientation {
-            case .vertical:
-                rect = CGRect(x: extent.minX, y: extent.minY,
-                              width: extent.width * position, height: extent.height)
-            case .horizontal:
-                // SwiftUI's wipe drags from the top; CI origin is bottom-left
-                rect = CGRect(x: extent.minX,
-                              y: extent.minY + extent.height * (1 - position),
-                              width: extent.width, height: extent.height * position)
-            case .diagonal:
-                break // gradient mask below, no crop rect
-            }
-            if orientation == .diagonal {
-                // SwiftUI wipe region (top-left origin): x + y ≤ t. In CI's
-                // bottom-left coordinates that is d(x,y) = x − y ≤ t − height.
-                // A 1-px gradient across that line makes an exact hard mask.
-                let t = position * Double(extent.width + extent.height)
-                let threshold = t - Double(extent.height)
-                func pointAt(_ d: Double) -> CIVector {
-                    CIVector(x: d / 2, y: -d / 2) // the point where x − y = d
-                }
-                if let mask = CIFilter(name: "CILinearGradient", parameters: [
-                    "inputPoint0": pointAt(threshold - 0.5),
-                    "inputPoint1": pointAt(threshold + 0.5),
-                    "inputColor0": CIColor.white,
-                    "inputColor1": CIColor.black,
-                ])?.outputImage?.cropped(to: extent) {
-                    result = playback.applyingFilter("CIBlendWithMask", parameters: [
-                        kCIInputBackgroundImageKey: liveImage,
-                        kCIInputMaskImageKey: mask,
-                    ])
-                }
-            } else {
-                result = playback.cropped(to: rect).composited(over: liveImage)
-            }
+            result = CompareCompositor.compose(
+                front: playback, back: liveImage,
+                mode: .wipe(axis: axis, position: position))
         }
         let width = Int(playback.extent.width.rounded())
         let height = Int(playback.extent.height.rounded())
@@ -289,26 +260,15 @@ final class PlaybackFrameTap: @unchecked Sendable {
         return out
     }
 
-    /// Latest live frame aspect-fitted (letterboxed) into the playback extent —
-    /// an anamorphic stretch would make the geometric comparison meaningless.
+    /// Latest live frame aspect-fitted (letterboxed) into the playback extent.
     private func liveImage(matching extent: CGRect) -> CIImage? {
         guard let live = liveBufferProvider?() else { return nil }
         let isBGRA = CVPixelBufferGetPixelFormatType(live) == kCVPixelFormatType_32BGRA
         // BGRA carries raw full-range codes; YUV needs CI's managed decode
-        var image = isBGRA
+        let image = isBGRA
             ? CIImage(cvPixelBuffer: live, options: [.colorSpace: NSNull()])
             : CIImage(cvPixelBuffer: live)
-        let le = image.extent
-        guard le.width > 0, le.height > 0 else { return nil }
-        if le.size != extent.size {
-            let scale = min(extent.width / le.width, extent.height / le.height)
-            let tx = (extent.width - le.width * scale) / 2
-            let ty = (extent.height - le.height * scale) / 2
-            image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)
-                .concatenating(CGAffineTransform(translationX: tx, y: ty)))
-                .composited(over: CIImage(color: CIColor(red: 0, green: 0, blue: 0))
-                    .cropped(to: extent))
-        }
-        return image
+        guard image.extent.width > 0, image.extent.height > 0 else { return nil }
+        return CompareCompositor.fitted(image, into: extent)
     }
 }

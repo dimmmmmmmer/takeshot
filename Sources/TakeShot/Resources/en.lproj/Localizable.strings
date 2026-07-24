@@ -274,3 +274,9 @@
 "export_edl_help" = "Export selects EDL (good takes + markers)";
 "edl_no_good_takes" = "No good takes to export";
 "edl_saved" = "EDL saved: %@";
+
+"pin_reference" = "Pin as reference";
+"pin_reference_help" = "Pin the current frame as a reference for live compare";
+"unpin_reference_help" = "Unpin the reference";
+"reference_pinned" = "Reference pinned — compare it with the live signal";
+"reference_pin_failed" = "Couldn't pin the reference";

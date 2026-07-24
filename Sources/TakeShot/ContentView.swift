@@ -146,8 +146,10 @@ struct PlayerArea: View {
                     .labelsHidden()
                     .controlSize(.small)
 
-                    if controller.viewerMode == .playback,
-                       controller.playbackURL != nil {
+                    if (controller.viewerMode == .playback
+                        && controller.playbackURL != nil)
+                        || (controller.viewerMode == .record
+                            && controller.referencePinned) {
                         CompareControls()
                     }
                 }
@@ -437,6 +439,25 @@ private struct CompareControls: View {
                 .labelsHidden()
                 .controlSize(.mini)
             }
+            Button {
+                controller.pinReferenceFromCurrentFrame()
+            } label: {
+                Image(systemName: "pin")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .help(L("pin_reference_help"))
+            if controller.referencePinned {
+                Button {
+                    controller.unpinReference()
+                } label: {
+                    Image(systemName: "pin.slash.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+                .buttonStyle(.plain)
+                .help(L("unpin_reference_help"))
+            }
             if controller.compareMode == .blend {
                 Slider(value: $controller.blendOpacity, in: 0...1)
                     .frame(width: 90)
@@ -557,6 +578,14 @@ struct PreviewView: View {
                         }
                     } else if controller.multicamOn && !controller.extraChannels.isEmpty {
                         MulticamGrid()
+                    } else if controller.referencePinned,
+                              controller.compareMode == .wipe {
+                        // seam/handle over the live letterbox: the same centered
+                        // aspect-fit box the layer letterboxes into
+                        Color.clear
+                            .aspectRatio(Self.liveAspect(controller.signalFormat),
+                                         contentMode: .fit)
+                            .overlay { WipeHandle() }
                     }
                 }
             }
