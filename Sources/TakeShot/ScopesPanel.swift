@@ -484,9 +484,14 @@ private struct HistogramView: View {
             ForEach(Array(series.enumerated()), id: \.offset) { index, item in
                 GeometryReader { geo in
                     ZStack {
-                        channelPath(item.bins, peak: max(1, item.bins.max() ?? 1),
-                                    in: geo.size)
-                            .fill(item.color.opacity(0.75))
+                        let peak = max(1, item.bins.max() ?? 1)
+                        channelPath(item.bins, peak: peak, in: geo.size)
+                            .fill(LinearGradient(
+                                colors: [item.color.opacity(0.85),
+                                         item.color.opacity(0.35)],
+                                startPoint: .top, endPoint: .bottom))
+                        channelPath(item.bins, peak: peak, in: geo.size)
+                            .stroke(item.color, lineWidth: 1)
                         Path { p in
                             for mark in [0.0, 0.25, 0.5, 0.75, 1.0] {
                                 let x = geo.size.width * mark
@@ -532,16 +537,30 @@ private struct HistogramView: View {
     }
 
     private func smoothed(_ bins: [Int]) -> [Int] {
-        stride(from: 0, to: bins.count - 1, by: 2).map { bins[$0] + bins[$0 + 1] }
+        // pair bins, then a 1-2-1 pass — kills comb artifacts from quantized
+        // sources without washing out the shape
+        let paired = stride(from: 0, to: bins.count - 1, by: 2).map {
+            bins[$0] + bins[$0 + 1]
+        }
+        return paired.indices.map { i in
+            let left = i > 0 ? paired[i - 1] : paired[i]
+            let right = i < paired.count - 1 ? paired[i + 1] : paired[i]
+            return (left + paired[i] * 2 + right) / 4
+        }
     }
 
     private func channelPath(_ bins: [Int], peak: Int, in size: CGSize) -> Path {
-        Path { p in
-            let step = size.width / CGFloat(bins.count)
+        // log heights, like the traces: a linear scale turns a histogram with
+        // one dominant tone into a lone spike over a flat line
+        let logPeak = Foundation.log(Double(peak) + 1)
+        return Path { p in
+            let step = size.width / CGFloat(bins.count - 1)
             p.move(to: CGPoint(x: 0, y: size.height))
             for (i, count) in bins.enumerated() {
-                let h = size.height * CGFloat(count) / CGFloat(peak)
-                p.addLine(to: CGPoint(x: CGFloat(i) * step, y: size.height - h))
+                let h = count == 0 ? 0
+                    : size.height * Foundation.log(Double(count) + 1) / logPeak
+                p.addLine(to: CGPoint(x: CGFloat(i) * step,
+                                      y: size.height - CGFloat(h)))
             }
             p.addLine(to: CGPoint(x: size.width, y: size.height))
             p.closeSubpath()

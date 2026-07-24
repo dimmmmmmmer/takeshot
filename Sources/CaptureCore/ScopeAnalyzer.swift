@@ -256,26 +256,64 @@ public enum ScopeAnalyzer {
             countsV[vy * size + vx] += 1
         }
 
-        func finish() -> ScopeData {
-            // sqrt tone curve: a linear gain saturates after a few hits and the
-            // trace turns binary; sqrt keeps single hits visible with readable
-            // density gradation
-            func toBytes(_ counts: [Int], gain: Double) -> [UInt8] {
-                counts.map {
-                    $0 == 0 ? 0
-                        : UInt8(min(255.0, gain * Double($0).squareRoot()))
+        /// Separable 1-2-1 blur over the density map: CRT-like soft traces
+        /// instead of hard single-pixel lines (the "noisy" look).
+        static func blurred(_ counts: [Int]) -> [Int] {
+            let width = ScopeData.waveWidth
+            let height = ScopeData.waveHeight
+            var tmp = [Int](repeating: 0, count: counts.count)
+            for row in 0..<height {
+                let base = row * width
+                for col in 0..<width {
+                    let left = col > 0 ? counts[base + col - 1] : 0
+                    let right = col < width - 1 ? counts[base + col + 1] : 0
+                    tmp[base + col] = counts[base + col] * 2 + left + right
                 }
             }
-            // colored luma trace: brightness from density, chroma kept exactly
-            // as the image's (no re-saturation)
+            var out = [Int](repeating: 0, count: counts.count)
+            for row in 0..<height {
+                let base = row * width
+                for col in 0..<width {
+                    let up = row > 0 ? tmp[base - width + col] : 0
+                    let down = row < height - 1 ? tmp[base + width + col] : 0
+                    out[base + col] = tmp[base + col] * 2 + up + down
+                }
+            }
+            return out
+        }
+
+        func finish() -> ScopeData {
+            // adaptive log curve — the same treatment as the vectorscope:
+            // single hits stay visible, dense areas keep gradation instead
+            // of clipping into a binary trace
+            func toBytesLog(_ counts: [Int]) -> [UInt8] {
+                let peak = max(1, counts.max() ?? 1)
+                let scale = 255.0 / Foundation.log(Double(peak) + 1)
+                return counts.map {
+                    $0 == 0 ? 0
+                        : UInt8(min(255.0, scale * Foundation.log(Double($0) + 1)))
+                }
+            }
+            let softY = Self.blurred(countsY)
+            let softR = Self.blurred(countsR)
+            let softG = Self.blurred(countsG)
+            let softB = Self.blurred(countsB)
+            // colored luma trace: brightness from the softened density (log),
+            // chroma from the blurred means so color follows the soft edge
+            let colorR = Self.blurred(sumR)
+            let colorG = Self.blurred(sumG)
+            let colorB = Self.blurred(sumB)
             var colored = [UInt8](repeating: 0, count: countsY.count * 4)
+            let yPeak = max(1, softY.max() ?? 1)
+            let yScale = 255.0 / Foundation.log(Double(yPeak) + 1)
             for i in 0..<countsY.count {
-                let count = countsY[i]
-                guard count > 0 else { continue }
-                let brightness = min(255.0, 96 * Double(count).squareRoot())
-                let avgR = Double(sumR[i]) / Double(count)
-                let avgG = Double(sumG[i]) / Double(count)
-                let avgB = Double(sumB[i]) / Double(count)
+                let density = softY[i]
+                guard density > 0 else { continue }
+                let brightness = min(255.0,
+                                     yScale * Foundation.log(Double(density) + 1))
+                let avgR = Double(colorR[i]) / Double(density)
+                let avgG = Double(colorG[i]) / Double(density)
+                let avgB = Double(colorB[i]) / Double(density)
                 // scale the mean color so its BT.709 luma equals the trace
                 // brightness: hue and saturation stay true to the image
                 let avgY = max(1, 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB)
@@ -293,10 +331,10 @@ public enum ScopeAnalyzer {
                 $0 == 0 ? UInt8(0)
                     : UInt8(min(255.0, vScale * Foundation.log(Double($0) + 1)))
             }
-            return ScopeData(waveformY: toBytes(countsY, gain: 96),
-                             waveformR: toBytes(countsR, gain: 96),
-                             waveformG: toBytes(countsG, gain: 96),
-                             waveformB: toBytes(countsB, gain: 96),
+            return ScopeData(waveformY: toBytesLog(softY),
+                             waveformR: toBytesLog(softR),
+                             waveformG: toBytesLog(softG),
+                             waveformB: toBytesLog(softB),
                              waveformYColor: colored,
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,

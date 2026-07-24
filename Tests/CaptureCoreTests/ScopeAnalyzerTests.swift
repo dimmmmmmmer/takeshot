@@ -31,15 +31,22 @@ struct ScopeAnalyzerTests {
         // all histogram energy in bin 128 (luma of equal RGB = the value itself)
         #expect(data.histY.firstIndex(of: data.histY.max()!) == 128)
         #expect(data.histR.firstIndex(of: data.histR.max()!) == 128)
-        // the waveform trace sits on a single luma row: exactly one non-empty row
+        // the trace sits on one luma row; the 1-2-1 softening bleeds one row
+        // to each side, so up to three, centered on the true value
         let width = ScopeData.waveWidth
         let height = ScopeData.waveHeight
         let nonEmptyRows = (0..<height).filter { row in
             (0..<width).contains { data.waveform[row * width + $0] > 0 }
         }
-        #expect(nonEmptyRows.count == 1)
+        #expect((1...3).contains(nonEmptyRows.count))
         // 128/255 luma → the middle of the scope (row ≈ height/2)
-        #expect(abs(nonEmptyRows[0] - height / 2) <= 2)
+        let center = nonEmptyRows[nonEmptyRows.count / 2]
+        #expect(abs(center - height / 2) <= 2)
+        // the true row must dominate its soft edges
+        let rowMax = nonEmptyRows.map { row in
+            (0..<width).map { Int(data.waveform[row * width + $0]) }.max() ?? 0
+        }
+        #expect(rowMax.max() == rowMax[nonEmptyRows.count / 2])
     }
 
     @Test func pureRedShowsOnlyRedHistogram() throws {

@@ -527,14 +527,16 @@ final class CaptureController: ObservableObject {
     func toggleMonitorMute() {
         if !monitorOn {
             monitorOn = true
-            if monitorVolume == 0 { monitorVolume = monitorVolumeBeforeMute }
+            if monitorVolume == 0 { setVolume(monitorVolumeBeforeMute, persist: false) }
             return
         }
         if monitorVolume > 0 {
             monitorVolumeBeforeMute = monitorVolume
-            monitorVolume = 0
+            // mute is transient: persisting 0 made every launch start silent
+            setVolume(0, persist: false)
         } else {
-            monitorVolume = monitorVolumeBeforeMute > 0 ? monitorVolumeBeforeMute : 1
+            setVolume(monitorVolumeBeforeMute > 0 ? monitorVolumeBeforeMute : 1,
+                      persist: false)
         }
     }
 
@@ -565,7 +567,7 @@ final class CaptureController: ObservableObject {
         set { setVolume(newValue) }
     }
 
-    private func setVolume(_ newValue: Double) {
+    private func setVolume(_ newValue: Double, persist: Bool = true) {
         live.volume = newValue
         audioMonitor.volume = Float(newValue)
         player.volume = Float(newValue)
@@ -574,6 +576,7 @@ final class CaptureController: ObservableObject {
             monitorOn = true
         }
         volumePersistTask?.cancel()
+        guard persist else { return }
         volumePersistTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, let self else { return }
@@ -1156,10 +1159,13 @@ final class CaptureController: ObservableObject {
         L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
         player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
         audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
-        audioMonitor.volume = Float(stored.monitorVolume ?? 1)
-        live.volume = stored.monitorVolume ?? 1
+        // 0 in old saves came from the mute button, not a chosen level
+        let storedVolume = (stored.monitorVolume ?? 1) > 0
+            ? (stored.monitorVolume ?? 1) : 1
+        audioMonitor.volume = Float(storedVolume)
+        live.volume = storedVolume
         live.lutIntensity = stored.lutIntensity ?? 1
-        player.volume = Float(stored.monitorVolume ?? 1)
+        player.volume = Float(storedVolume)
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
             pipeline.currentPreviewBuffer()
