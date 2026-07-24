@@ -307,3 +307,5 @@
 "marker_next_help" = "Next marker";
 
 "ten_bit_capture" = "10-bit RGB capture (r210)";
+
+"no_audio_short" = "no audio";

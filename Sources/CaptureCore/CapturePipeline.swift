@@ -398,6 +398,10 @@ public final class CapturePipeline: @unchecked Sendable {
                 }
             }
             if !levels.isEmpty, levels != self.lastPublishedLevels {
+                if self.lastPublishedLevels.isEmpty {
+                    os_log("audio: %d channel(s) flowing",
+                           log: Self.levelsLog, type: .default, levels.count)
+                }
                 self.lastPublishedLevels = levels
                 DispatchQueue.main.async { self.onAudioLevels?(levels) }
             }

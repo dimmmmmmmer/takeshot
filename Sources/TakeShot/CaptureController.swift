@@ -761,9 +761,11 @@ final class CaptureController: ObservableObject {
                 lastError = L("marker_only_takes")
                 return
             }
-            // one marker per moment — repeated hits must not pile up
+            // one marker per FRAME — close markers are legitimate for editing
+            let frameStep = 1.0 / max(1, playbackFPS)
             guard !takes[index].markers.contains(
-                where: { abs($0.seconds - seconds) < 0.5 }) else { return }
+                where: { abs($0.seconds - seconds) < frameStep * 0.6 })
+            else { return }
             takes[index].markers.append(
                 TakeMarker(seconds: seconds, timecodeText: tcText))
             takes[index].markers.sort { $0.seconds < $1.seconds }
@@ -771,8 +773,9 @@ final class CaptureController: ObservableObject {
             lastNotice = L("marker_added", tcText)
         } else if isRecording {
             let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
+            let fps = Double(max(1, live.currentTimecode?.fps ?? 25))
             guard !recordingMarkers.contains(
-                where: { abs($0.seconds - seconds) < 0.5 }) else { return }
+                where: { abs($0.seconds - seconds) < 0.6 / fps }) else { return }
             let tcText = live.currentTimecode?.description ?? ""
             recordingMarkers.append(
                 TakeMarker(seconds: seconds, timecodeText: tcText))

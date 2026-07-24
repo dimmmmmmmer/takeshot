@@ -307,3 +307,5 @@
 "marker_next_help" = "Следующий маркер";
 
 "ten_bit_capture" = "10-битный захват RGB (r210)";
+
+"no_audio_short" = "нет аудио";

@@ -59,8 +59,7 @@ private struct TakesSection: View {
                     Image(systemName: "square.and.arrow.up")
                         .frame(width: 14, height: 14)
                 }
-                .menuStyle(.button)
-                .buttonStyle(.bordered)
+                .menuStyle(.borderedButton) // matches the folder Button chrome
                 .menuIndicator(.hidden)
                 .controlSize(.small)
                 .fixedSize()

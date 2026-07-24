@@ -1306,7 +1306,15 @@ private struct FooterAudioMeters: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if !live.audioLevels.isEmpty {
+        if live.audioLevels.isEmpty {
+            // audio stopped/never arrived: say so instead of vanishing
+            Text(L("no_audio_short"))
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(.black.opacity(0.25), in: Capsule())
+        } else {
             Button {
                 controller.showAudioPanel.toggle()
             } label: {
