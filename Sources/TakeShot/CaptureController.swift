@@ -96,6 +96,7 @@ final class CaptureController: ObservableObject {
             }
             updateTapRunning()
             updateScopesRunning()
+            wirePlayoutRouting()
         }
     }
 
@@ -245,6 +246,56 @@ final class CaptureController: ObservableObject {
             return true
         }) {}
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Hardware playout: mirrors the viewer to the DeckLink output chosen in
+    /// settings. Rebuilt on device/format changes; routed by viewer mode.
+    private var playoutFeeder: PlayoutFeeder?
+
+    func rebuildPlayout() {
+        playoutFeeder?.stop()
+        playoutFeeder = nil
+        guard let deviceID = settings.monitorDeviceID,
+              deviceID.hasPrefix("decklink:") else {
+            wirePlayoutRouting()
+            return
+        }
+        // output mode follows the live signal; 1080p25 until one is known
+        let width = signalFormat?.width ?? 1920
+        let height = signalFormat?.height ?? 1080
+        let rate = signalFormat?.frameRate ?? 25
+        do {
+            playoutFeeder = try PlayoutFeeder(
+                deviceID: String(deviceID.dropFirst("decklink:".count)),
+                width: width, height: height, frameRate: rate)
+        } catch {
+            // fall back to the universal 1080p25 raster (frames are scaled)
+            do {
+                playoutFeeder = try PlayoutFeeder(
+                    deviceID: String(deviceID.dropFirst("decklink:".count)),
+                    width: 1920, height: 1080, frameRate: 25)
+            } catch {
+                lastError = "Output: \(error.localizedDescription)"
+            }
+        }
+        wirePlayoutRouting()
+    }
+
+    /// The output mirrors whatever the viewer shows.
+    private func wirePlayoutRouting() {
+        guard let feeder = playoutFeeder else {
+            pipeline.onDisplayFrame = nil
+            playbackTap.onDisplayFrame = nil
+            rawPlayer?.setOnDisplayFrame(nil)
+            return
+        }
+        let routeLive = viewerMode == .record
+        let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
+            feeder.submit(buffer)
+        }
+        pipeline.onDisplayFrame = routeLive ? handler : nil
+        playbackTap.onDisplayFrame = routeLive ? nil : handler
+        rawPlayer?.setOnDisplayFrame(routeLive ? nil : handler)
     }
 
     /// B-side clip for take-vs-take compare (nil — compare against live).
@@ -1202,6 +1253,7 @@ final class CaptureController: ObservableObject {
                 }
                 rawPlayer = model
                 model.setViewAssist(assist)
+                wirePlayoutRouting()
                 playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
                 playbackStartTC = model.startTimecode
                 playbackFPS = model.frameRate
@@ -1383,6 +1435,9 @@ final class CaptureController: ObservableObject {
             if irrelevant != settings {
                 pushConfig()
             }
+            if oldValue.monitorDeviceID != settings.monitorDeviceID {
+                rebuildPlayout()
+            }
             if oldValue.destinationPath != settings.destinationPath {
                 resetLibraryForNewDestination()
                 startFolderWatcher()
@@ -1489,11 +1544,17 @@ final class CaptureController: ObservableObject {
         // the persisted LUT + "apply to preview" must take effect immediately —
         // without this the checkbox showed enabled while nothing was applied
         rebuildLUT()
+        rebuildPlayout()
     }
 
     private func bindPipeline() {
         pipeline.onFormatChanged = { [weak self] format in
-            self?.signalFormat = format
+            guard let self else { return }
+            let changed = self.signalFormat != format
+            self.signalFormat = format
+            if changed, format != nil, self.playoutFeeder != nil {
+                self.rebuildPlayout()
+            }
         }
         pipeline.onTimecode = { [weak self] timecode in
             guard let self, self.live.currentTimecode != timecode else { return }

@@ -49,6 +49,8 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
     /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
     public let displaySinks = PreviewSinkRegistry()
+    /// Every displayed frame, on the display queue — hardware playout mirror.
+    public var onDisplayFrame: (@Sendable (CVPixelBuffer) -> Void)?
 
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.add(layer)
@@ -1005,6 +1007,7 @@ public final class CapturePipeline: @unchecked Sendable {
             self.presentLock.unlock()
             guard let buffer else { return }
             self.displaySinks.present(buffer)
+            self.onDisplayFrame?(buffer)
         }
     }
 }

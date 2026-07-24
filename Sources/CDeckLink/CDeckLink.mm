@@ -666,6 +666,183 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 @end
 
+
+#pragma mark - CDLPlayout
+
+@interface CDLPlayout () {
+    IDeckLink *_deckLink;
+    IDeckLinkOutput *_output;
+    IDeckLinkMutableVideoFrame *_frame;
+    int _width;
+    int _height;
+}
+@end
+
+@implementation CDLPlayout
+
+- (nullable instancetype)initWithDeviceID:(NSString *)deviceID
+                                    width:(int)width
+                                   height:(int)height
+                                frameRate:(double)frameRate
+                                    error:(NSError **)error {
+    self = [super init];
+    if (!self) {
+        return nil;
+    }
+    _deckLink = CDLFindDevice(deviceID);
+    if (!_deckLink) {
+        if (error) {
+            *error = [NSError errorWithDomain:CDLErrorDomain code:10 userInfo:@{
+                NSLocalizedDescriptionKey :
+                    [NSString stringWithFormat:@"Output device \"%@\" not found",
+                                               deviceID]
+            }];
+        }
+        return nil;
+    }
+    if (_deckLink->QueryInterface(IID_IDeckLinkOutput, (void **)&_output) != S_OK
+        || !_output) {
+        _output = NULL;
+        [self stop];
+        if (error) {
+            *error = [NSError errorWithDomain:CDLErrorDomain code:11 userInfo:@{
+                NSLocalizedDescriptionKey : @"Device does not support playout"
+            }];
+        }
+        return nil;
+    }
+    // pick the output mode matching the viewer geometry and rate
+    IDeckLinkDisplayModeIterator *iterator = NULL;
+    IDeckLinkDisplayMode *chosen = NULL;
+    if (_output->GetDisplayModeIterator(&iterator) == S_OK && iterator) {
+        IDeckLinkDisplayMode *mode = NULL;
+        while (iterator->Next(&mode) == S_OK && mode) {
+            BMDTimeValue duration = 0;
+            BMDTimeScale scale = 0;
+            double fps = 0;
+            if (mode->GetFrameRate(&duration, &scale) == S_OK && duration > 0) {
+                fps = (double)scale / (double)duration;
+            }
+            if (mode->GetWidth() == width && mode->GetHeight() == height
+                && fabs(fps - frameRate) < 0.02 && !chosen) {
+                chosen = mode; // keep the reference
+            } else {
+                mode->Release();
+            }
+        }
+        iterator->Release();
+    }
+    if (!chosen) {
+        [self stop];
+        if (error) {
+            *error = [NSError errorWithDomain:CDLErrorDomain code:12 userInfo:@{
+                NSLocalizedDescriptionKey : [NSString
+                    stringWithFormat:@"No %dx%d@%.3f output mode on this device",
+                                     width, height, frameRate]
+            }];
+        }
+        return nil;
+    }
+    BMDDisplayMode displayMode = chosen->GetDisplayMode();
+    chosen->Release();
+    if (_output->EnableVideoOutput(displayMode, bmdVideoOutputFlagDefault)
+        != S_OK) {
+        [self stop];
+        if (error) {
+            *error = [NSError errorWithDomain:CDLErrorDomain code:13 userInfo:@{
+                NSLocalizedDescriptionKey :
+                    @"Failed to open video output (output may be in use)"
+            }];
+        }
+        return nil;
+    }
+    if (_output->CreateVideoFrame(width, height, width * 4, bmdFormat8BitBGRA,
+                                  bmdFrameFlagDefault, &_frame) != S_OK
+        || !_frame) {
+        _frame = NULL;
+        [self stop];
+        if (error) {
+            *error = [NSError errorWithDomain:CDLErrorDomain code:14 userInfo:@{
+                NSLocalizedDescriptionKey : @"Failed to allocate an output frame"
+            }];
+        }
+        return nil;
+    }
+    _width = width;
+    _height = height;
+    return self;
+}
+
+- (int)width { return _width; }
+- (int)height { return _height; }
+
+- (BOOL)displayFrame:(CVPixelBufferRef)pixelBuffer {
+    @synchronized(self) {
+        if (!_output || !_frame) {
+            return NO;
+        }
+        if ((int)CVPixelBufferGetWidth(pixelBuffer) != _width ||
+            (int)CVPixelBufferGetHeight(pixelBuffer) != _height ||
+            CVPixelBufferGetPixelFormatType(pixelBuffer)
+                != kCVPixelFormatType_32BGRA) {
+            return NO;
+        }
+        // SDK 14.x: frame bytes go through IDeckLinkVideoBuffer
+        IDeckLinkVideoBuffer *videoBuffer = NULL;
+        if (_frame->QueryInterface(IID_IDeckLinkVideoBuffer,
+                                   (void **)&videoBuffer) != S_OK || !videoBuffer) {
+            return NO;
+        }
+        void *frameBytes = NULL;
+        if (videoBuffer->StartAccess(bmdBufferAccessWrite) != S_OK ||
+            videoBuffer->GetBytes(&frameBytes) != S_OK || !frameBytes) {
+            videoBuffer->Release();
+            return NO;
+        }
+        CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+        const uint8_t *src =
+            (const uint8_t *)CVPixelBufferGetBaseAddress(pixelBuffer);
+        size_t srcRowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer);
+        uint8_t *dst = (uint8_t *)frameBytes;
+        size_t dstRowBytes = (size_t)_width * 4;
+        size_t copyRowBytes = MIN(srcRowBytes, dstRowBytes);
+        for (int row = 0; row < _height; row++) {
+            memcpy(dst + row * dstRowBytes, src + row * srcRowBytes,
+                   copyRowBytes);
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+        videoBuffer->EndAccess(bmdBufferAccessWrite);
+        videoBuffer->Release();
+        return _output->DisplayVideoFrameSync(_frame) == S_OK;
+    }
+}
+
+- (void)stop {
+    @synchronized(self) {
+        if (_output) {
+            _output->DisableVideoOutput();
+        }
+        if (_frame) {
+            _frame->Release();
+            _frame = NULL;
+        }
+        if (_output) {
+            _output->Release();
+            _output = NULL;
+        }
+        if (_deckLink) {
+            _deckLink->Release();
+            _deckLink = NULL;
+        }
+    }
+}
+
+- (void)dealloc {
+    [self stop];
+}
+
+@end
+
 #else // stub without SDK
 
 @implementation CDLDeviceManager
@@ -700,6 +877,30 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 - (void)stop {
 }
+
+@end
+
+
+@implementation CDLPlayout
+
+- (nullable instancetype)initWithDeviceID:(NSString *)deviceID
+                                    width:(int)width
+                                   height:(int)height
+                                frameRate:(double)frameRate
+                                    error:(NSError **)error {
+    (void)deviceID; (void)width; (void)height; (void)frameRate;
+    if (error) {
+        *error = [NSError errorWithDomain:CDLErrorDomain code:0 userInfo:@{
+            NSLocalizedDescriptionKey : @"Built without the DeckLink SDK"
+        }];
+    }
+    return nil;
+}
+
+- (int)width { return 0; }
+- (int)height { return 0; }
+- (BOOL)displayFrame:(CVPixelBufferRef)pixelBuffer { (void)pixelBuffer; return NO; }
+- (void)stop {}
 
 @end
 

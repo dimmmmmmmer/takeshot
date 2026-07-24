@@ -188,6 +188,18 @@ final class RawPlayerModel: ObservableObject {
 
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
     private let sinks = PreviewSinkRegistry()
+    /// Every presented frame — hardware playout mirror. Set from the main
+    /// actor, read on the decode task; a tiny lock keeps it honest.
+    private let displayFrameLock = NSLock()
+    nonisolated(unsafe) private var displayFrameHandler:
+        (@Sendable (CVPixelBuffer) -> Void)?
+
+    nonisolated func setOnDisplayFrame(
+        _ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+        displayFrameLock.lock()
+        displayFrameHandler = handler
+        displayFrameLock.unlock()
+    }
     /// Last decoded frame — re-presented to newly registered sinks.
     private var lastBuffer: CVPixelBuffer?
 
@@ -248,6 +260,10 @@ final class RawPlayerModel: ObservableObject {
 
     nonisolated private func present(_ buffer: CVPixelBuffer) {
         sinks.present(buffer)
+        displayFrameLock.lock()
+        let handler = displayFrameHandler
+        displayFrameLock.unlock()
+        handler?(buffer)
     }
 
     // MARK: - transport

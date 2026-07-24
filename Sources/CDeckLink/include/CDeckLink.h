@@ -83,4 +83,27 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)stop;
 @end
 
+/// Hardware playout: mirrors the viewer to a DeckLink output (SDI/HDMI).
+/// Frames are shown synchronously (immediate display, no scheduling) — the
+/// right model for a monitor mirror.
+@interface CDLPlayout : NSObject
+
+/// Open the output of `deviceID` in a mode matching the given geometry.
+/// Fails when the device has no output or no matching display mode.
+- (nullable instancetype)initWithDeviceID:(NSString *)deviceID
+                                    width:(int)width
+                                   height:(int)height
+                                frameRate:(double)frameRate
+                                    error:(NSError *_Nullable *_Nullable)error;
+
+@property (nonatomic, readonly) int width;
+@property (nonatomic, readonly) int height;
+
+/// Display one BGRA frame; dimensions must match width/height.
+- (BOOL)displayFrame:(CVPixelBufferRef)pixelBuffer;
+
+- (void)stop;
+
+@end
+
 NS_ASSUME_NONNULL_END
