@@ -301,3 +301,7 @@
 
 "markers_title" = "Маркеры";
 "markers_clear_all" = "Очистить все";
+
+"marker_n" = "Маркер %d";
+"marker_prev_help" = "Предыдущий маркер";
+"marker_next_help" = "Следующий маркер";

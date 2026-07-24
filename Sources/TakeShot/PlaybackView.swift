@@ -355,6 +355,16 @@ private struct MarkerButton: View {
 
         if !controller.playbackMarkers.isEmpty {
             Button {
+                controller.jumpToMarker(forward: false)
+            } label: {
+                Image(systemName: "chevron.backward.2")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help(L("marker_prev_help"))
+
+            Button {
                 showList.toggle()
             } label: {
                 Text("\(controller.playbackMarkers.count)")
@@ -366,6 +376,16 @@ private struct MarkerButton: View {
             .popover(isPresented: $showList, arrowEdge: .top) {
                 MarkerListEditor()
             }
+
+            Button {
+                controller.jumpToMarker(forward: true)
+            } label: {
+                Image(systemName: "chevron.forward.2")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help(L("marker_next_help"))
         }
     }
 }
@@ -392,6 +412,11 @@ private struct MarkerListEditor: View {
             ForEach(Array(controller.playbackMarkers.enumerated()),
                     id: \.offset) { index, marker in
                 HStack(spacing: 8) {
+                    Text(marker.note.isEmpty
+                         ? L("marker_n", index + 1) : marker.note)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .frame(width: 76, alignment: .leading)
                     // color swatch menu
                     Menu {
                         ForEach(TakeMarker.colors, id: \.self) { name in

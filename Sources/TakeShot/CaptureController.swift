@@ -810,6 +810,35 @@ final class CaptureController: ObservableObject {
         exportTakeLog()
     }
 
+    /// Current playback position in seconds (marker navigation).
+    private var playbackPositionSeconds: Double {
+        if let raw = rawPlayer {
+            return Double(raw.currentFrame) / max(1, raw.frameRate)
+        }
+        return max(0, player.currentTime().seconds)
+    }
+
+    /// Jump to the next/previous marker of the current clip.
+    func jumpToMarker(forward: Bool) {
+        let markers = playbackMarkers
+        guard !markers.isEmpty else { return }
+        let now = playbackPositionSeconds
+        let hit: (Int, TakeMarker)?
+        if forward {
+            hit = markers.enumerated()
+                .first { $0.element.seconds > now + 0.05 }
+                .map { ($0.offset, $0.element) }
+        } else {
+            hit = markers.enumerated()
+                .last { $0.element.seconds < now - 0.05 }
+                .map { ($0.offset, $0.element) }
+        }
+        guard let (index, marker) = hit else { return }
+        seekPlayback(to: marker.seconds)
+        let name = marker.note.isEmpty ? L("marker_n", index + 1) : marker.note
+        lastNotice = "⚑ \(name) — \(marker.timecodeText)"
+    }
+
     /// Jump the player (AVPlayer or RAW) to a position in seconds.
     func seekPlayback(to seconds: Double) {
         if let raw = rawPlayer {

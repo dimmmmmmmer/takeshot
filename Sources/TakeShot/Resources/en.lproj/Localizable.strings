@@ -301,3 +301,7 @@
 
 "markers_title" = "Markers";
 "markers_clear_all" = "Clear all";
+
+"marker_n" = "Marker %d";
+"marker_prev_help" = "Previous marker";
+"marker_next_help" = "Next marker";
