@@ -155,7 +155,7 @@ struct TakeWriterTests {
                 attempts += 1
                 try await Task.sleep(for: .milliseconds(5))
             }
-            var samples = [Int16](repeating: 500, count: 1920 * channels)
+            let samples = [Int16](repeating: 500, count: 1920 * channels)
             samples.withUnsafeBytes { raw in
                 if let base = raw.baseAddress,
                    let sb = PCMAudio.makeSampleBuffer(

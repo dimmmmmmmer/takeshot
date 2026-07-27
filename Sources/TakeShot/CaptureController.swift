@@ -2397,8 +2397,9 @@ final class CaptureController: ObservableObject {
                     }
                 }
                 if let image {
+                    let boxed = UncheckedSendable(image) // NSImage predates Sendable
                     await MainActor.run { [weak self] in
-                        self?.otherThumbnails[url] = image
+                        self?.otherThumbnails[url] = boxed.value
                         self?.otherThumbsInFlight.remove(url)
                     }
                 }
@@ -2527,11 +2528,14 @@ final class CaptureController: ObservableObject {
                     let time = CMTime(seconds: min(1.0, take.durationSeconds / 2),
                                       preferredTimescale: 600)
                     if let (cgImage, _) = try? await generator.image(at: time) {
-                        let image = NSImage(cgImage: cgImage,
-                                            size: NSSize(width: cgImage.width,
-                                                         height: cgImage.height))
+                        // NSImage predates Sendable; the box states the contract
+                        // (built here, handed over once, used only on main)
+                        let image = UncheckedSendable(NSImage(
+                            cgImage: cgImage,
+                            size: NSSize(width: cgImage.width,
+                                         height: cgImage.height)))
                         await MainActor.run { [weak self] in
-                            self?.storeThumbnail(image, for: take.id)
+                            self?.storeThumbnail(image.value, for: take.id)
                             self?.thumbnailsInFlight.remove(take.id)
                         }
                         return

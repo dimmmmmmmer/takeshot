@@ -668,7 +668,14 @@ public final class CapturePipeline: @unchecked Sendable {
                 }
             } else {
                 droppedFrames += 1
-                if droppedFrames == 1 || droppedFrames % 100 == 0 {
+                // The encoder is still swallowing the pre-roll burst when the
+                // first live frame arrives, so virtually every take drops one
+                // frame. Alarming on that trains the operator to ignore the
+                // banner — which is the one thing a real disk failure needs.
+                // Sustained loss still alarms, and the take's total is reported
+                // when it closes either way.
+                if droppedFrames == Self.droppedFrameAlarmThreshold
+                    || droppedFrames % 100 == 0 {
                     let count = droppedFrames
                     DispatchQueue.main.async {
                         self.onError?("Dropped \(count) recording frame(s) "
@@ -955,6 +962,11 @@ public final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// How many frames a take must lose before the sticky alarm fires. One
+    /// isolated drop at take start is normal encoder back-pressure; sustained
+    /// loss is not.
+    static let droppedFrameAlarmThreshold = 5
+
     /// Suffix that marks a take whose finalize failed. Renaming is best-effort:
     /// if it does not work the original path is returned and the operator still
     /// gets the alarm.
@@ -997,6 +1009,7 @@ public final class CapturePipeline: @unchecked Sendable {
         // would otherwise hold one handle per take until the app exits
         let finishID = nextFinishID
         nextFinishID += 1
+        let droppedVideo = droppedFrames
         let task = Task { [weak self] in
             defer {
                 self?.queue.async {
@@ -1011,6 +1024,12 @@ public final class CapturePipeline: @unchecked Sendable {
                     if droppedAudio > 0 {
                         self?.onError?("Take \(take.displayName): "
                             + "\(droppedAudio) audio packet(s) dropped")
+                    }
+                    // the live alarm only fires on sustained loss, so the take's
+                    // real total is stated here — quietly, but never hidden
+                    if droppedVideo > 0 {
+                        self?.onError?("Take \(take.displayName): "
+                            + "\(droppedVideo) video frame(s) dropped")
                     }
                 }
             } catch {

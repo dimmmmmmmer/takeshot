@@ -40,7 +40,7 @@ import Testing
         let out = try await writer.finish()
         let size = (try? FileManager.default.attributesOfItem(atPath: out.path)[.size]
                     as? Int) ?? 0
-        #expect((size ?? 0) > 0)
+        #expect(size > 0)
     }
 
     @Test func zeroFrameTakeThrowsAndLeavesNoFile() async throws {
