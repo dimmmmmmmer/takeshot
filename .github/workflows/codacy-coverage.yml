@@ -27,11 +27,20 @@ jobs:
         run: |
           BIN=$(swift build --show-bin-path)
           PROF="$BIN/codecov/default.profdata"
-          # the test-bundle binary for llvm-cov
-          XCTEST=$(find "$BIN" -name '*.xctest' -maxdepth 2 | head -1)
-          BINARY="$XCTEST/Contents/MacOS/$(basename "$XCTEST" .xctest)"
+          # every test bundle counts: the first is positional, the rest are
+          # -object, otherwise a second test target drops out of the report
+          OBJECTS=()
+          while IFS= read -r XCTEST; do
+              BINARY="$XCTEST/Contents/MacOS/$(basename "$XCTEST" .xctest)"
+              if [ ${#OBJECTS[@]} -eq 0 ]; then
+                  OBJECTS+=("$BINARY")
+              else
+                  OBJECTS+=(-object "$BINARY")
+              fi
+          done < <(find "$BIN" -name '*.xctest' -maxdepth 2)
+          echo "test bundles: ${#OBJECTS[@]}"
           xcrun llvm-cov export \
-            "$BINARY" \
+            "${OBJECTS[@]}" \
             -instr-profile "$PROF" \
             -format=lcov \
             -ignore-filename-regex='(Tests|\.build)/' \

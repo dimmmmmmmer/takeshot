@@ -19,9 +19,25 @@ final class AudioMonitor: @unchecked Sendable {
         sync.addRenderer(renderer)
     }
 
+    /// The renderer object itself is replaced on `queue` when the output device
+    /// changes, so the level is kept here and applied on that same queue —
+    /// touching `renderer` straight from a slider callback on the main thread
+    /// raced the swap and left the new output at the old level.
+    private let volumeLock = NSLock()
+    private var storedVolume: Float = 1
+
     var volume: Float {
-        get { renderer.volume }
-        set { renderer.volume = newValue }
+        get {
+            volumeLock.lock()
+            defer { volumeLock.unlock() }
+            return storedVolume
+        }
+        set {
+            volumeLock.lock()
+            storedVolume = newValue
+            volumeLock.unlock()
+            queue.async { [self] in renderer.volume = newValue }
+        }
     }
 
     /// Output device UID (nil — system default); shares the playback picker.
@@ -36,10 +52,12 @@ final class AudioMonitor: @unchecked Sendable {
                 if let newValue {
                     renderer.audioOutputDeviceUniqueID = newValue
                 } else {
-                    let volume = renderer.volume
+                    volumeLock.lock()
+                    let level = storedVolume
+                    volumeLock.unlock()
                     sync.removeRenderer(renderer, at: .zero)
                     renderer = AVSampleBufferAudioRenderer()
-                    renderer.volume = volume
+                    renderer.volume = level
                     sync.addRenderer(renderer)
                     offset = nil
                 }

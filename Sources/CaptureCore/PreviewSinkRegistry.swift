@@ -19,10 +19,15 @@ public final class PreviewSinkRegistry: @unchecked Sendable {
     /// Register a layer; the current letterbox/assist state applies at once.
     public func add(_ layer: MetalPreviewLayer) {
         lock.lock()
-        layer.letterboxColor = letterbox
-        layer.setAssist(assist)
+        let color = letterbox
+        let currentAssist = assist
         sinks.add(layer)
         lock.unlock()
+        // applied outside the lock: a layer call can wait on that layer's own
+        // render lock, and holding the registry lock through it would stall
+        // every producer mirroring frames
+        layer.letterboxColor = color
+        layer.setAssist(currentAssist)
     }
 
     public func remove(_ layer: MetalPreviewLayer) {

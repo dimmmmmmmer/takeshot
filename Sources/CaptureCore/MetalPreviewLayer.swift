@@ -51,8 +51,54 @@ public final class MetalPreviewLayer: CAMetalLayer {
     private var ciContext: CIContext?
     private let renderLock = NSLock()
     private var lastBuffer: CVPixelBuffer?
-    /// Aspect-fit letterbox color (over the player backdrop).
-    public var letterboxColor = CIColor(red: 0, green: 0, blue: 0)
+    /// Guards the handful of values the main thread hands to the renderer.
+    /// Deliberately NOT renderLock: that one is held across GPU work, and a
+    /// settings change must never wait on a parked nextDrawable().
+    private let stateLock = NSLock()
+    private var storedLetterboxColor = CIColor(red: 0, green: 0, blue: 0)
+    private var pendingDrawableSize: CGSize?
+    /// Where UI-triggered re-renders run, so they never block the main thread.
+    private let redrawQueue = DispatchQueue(label: "takeshot.preview-redraw",
+                                            qos: .userInitiated)
+    /// Aspect-fit letterbox color (over the player backdrop). Safe to set from
+    /// any thread while a producer queue is presenting.
+    public var letterboxColor: CIColor {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return storedLetterboxColor
+        }
+        set {
+            stateLock.lock()
+            storedLetterboxColor = newValue
+            stateLock.unlock()
+        }
+    }
+
+    /// Resize the drawable from the view's layout pass. The renderer applies it
+    /// itself: assigning `drawableSize` reallocates CAMetalLayer's drawable pool,
+    /// and doing that while a producer queue sits in `nextDrawable()` either
+    /// renders one frame at the wrong geometry or wedges the display queue.
+    public func setDrawableSize(_ size: CGSize) {
+        stateLock.lock()
+        let changed = pendingDrawableSize != size && drawableSize != size
+        if changed { pendingDrawableSize = size }
+        stateLock.unlock()
+        // paused playback / no signal: no new frame will arrive to fill the
+        // resized drawable — redraw the last one right away
+        if changed { redraw() }
+    }
+
+    /// Adopt a size requested by the view. Call under renderLock only.
+    private func applyPendingDrawableSize() {
+        stateLock.lock()
+        let requested = pendingDrawableSize
+        pendingDrawableSize = nil
+        stateLock.unlock()
+        if let requested, requested != drawableSize {
+            drawableSize = requested
+        }
+    }
     /// When set, the center pixel of every ~50th presented frame goes to the
     /// unified log — parity debugging between surfaces (rec vs playback).
     public var debugTag: String?
@@ -157,14 +203,23 @@ public final class MetalPreviewLayer: CAMetalLayer {
     }()
 
     /// White where luma ≥ threshold — the zebra mask (cached per threshold).
+    /// Each cube is 512 KB and the slider offers 31 distinct thresholds, so the
+    /// cache is capped: one sweep of the slider would otherwise pin ~16 MB for
+    /// the rest of the session.
     nonisolated(unsafe) private static var zebraCubes: [Int: Data] = [:]
+    nonisolated(unsafe) private static var zebraCubeOrder: [Int] = []
     private static let zebraCubeLock = NSLock()
+    private static let zebraCubeLimit = 4
 
     private static func zebraMaskCube(threshold: Double) -> Data {
         let key = Int((threshold * 100).rounded())
         zebraCubeLock.lock()
         defer { zebraCubeLock.unlock() }
-        if let cached = zebraCubes[key] { return cached }
+        if let cached = zebraCubes[key] {
+            zebraCubeOrder.removeAll { $0 == key }
+            zebraCubeOrder.append(key)
+            return cached
+        }
         let size = 32
         var rgba = [Float]()
         for b in 0..<size {
@@ -179,6 +234,10 @@ public final class MetalPreviewLayer: CAMetalLayer {
         }
         let data = rgba.withUnsafeBufferPointer { Data(buffer: $0) }
         zebraCubes[key] = data
+        zebraCubeOrder.append(key)
+        while zebraCubeOrder.count > zebraCubeLimit {
+            zebraCubes.removeValue(forKey: zebraCubeOrder.removeFirst())
+        }
         return data
     }
 
@@ -284,12 +343,22 @@ public final class MetalPreviewLayer: CAMetalLayer {
 
     /// Re-render the last frame (window resized while paused/no signal —
     /// otherwise the old drawable stretches to the new bounds).
+    ///
+    /// Runs off the caller's thread: every trigger for a redraw is a UI event
+    /// (letterbox color, assist sliders, punch-in pan, layout), and rendering
+    /// can park for ~1 s inside `nextDrawable()` when the window is occluded or
+    /// the external monitor sleeps — long enough to freeze the REC button
+    /// mid-take. Re-rendering always picks up the newest `lastBuffer`, so
+    /// running late cannot show a stale frame.
     public func redraw() {
-        renderLock.lock()
-        let buffer = lastBuffer // strong read under the lock: present() swaps
-        renderLock.unlock()     // it concurrently on the producer queue
-        guard let buffer else { return }
-        present(buffer)
+        redrawQueue.async { [weak self] in
+            guard let self else { return }
+            renderLock.lock()
+            let buffer = lastBuffer // strong read under the lock: present() swaps
+            renderLock.unlock()     // it concurrently on the producer queue
+            guard let buffer else { return }
+            present(buffer)
+        }
     }
 
     /// Blank the layer (signal loss) instead of freezing the last frame.
@@ -298,6 +367,7 @@ public final class MetalPreviewLayer: CAMetalLayer {
         defer { renderLock.unlock() }
         lastBuffer = nil
         guard let ciContext else { return }
+        applyPendingDrawableSize()
         let size = drawableSize
         guard size.width > 1, size.height > 1,
               let drawable = nextDrawable() else { return }
@@ -351,6 +421,7 @@ public final class MetalPreviewLayer: CAMetalLayer {
                 CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
             }
         }
+        applyPendingDrawableSize()
         let size = drawableSize
         guard size.width > 1, size.height > 1 else { return }
         guard let drawable = nextDrawable() else { return }
@@ -383,8 +454,11 @@ public final class MetalPreviewLayer: CAMetalLayer {
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
                 .concatenating(CGAffineTransform(translationX: tx, y: ty)))
         let bounds = CGRect(origin: .zero, size: size)
+        stateLock.lock()
+        let letterbox = storedLetterboxColor
+        stateLock.unlock()
         let composed = image.composited(over:
-            CIImage(color: letterboxColor).cropped(to: bounds))
+            CIImage(color: letterbox).cropped(to: bounds))
         // color management off on both ends: code values pass through unchanged,
         // and the layer's `colorspace` alone tells the compositor what they mean
         let destination = CIRenderDestination(mtlTexture: drawable.texture,

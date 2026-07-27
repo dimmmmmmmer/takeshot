@@ -173,6 +173,17 @@ public final class TakeWriter {
         }
     }
 
+    /// True once AVAssetWriter has failed permanently. A dropped frame on its
+    /// own is routine back-pressure; this is the difference between "the encoder
+    /// is behind" and "nothing will ever be written again", and the caller has
+    /// to close the take instead of counting drops forever.
+    public var hasFailed: Bool { writer.status == .failed }
+
+    /// Why the writer died, for the operator-facing alarm.
+    public var failureReason: String {
+        writer.error?.localizedDescription ?? "writer failed"
+    }
+
     /// A video frame. `pts` is the presentation time on the capture timeline (any
     /// base; the session starts from the first frame passed in).
     /// Returns false if the frame was dropped (encoder/disk can't keep up) —

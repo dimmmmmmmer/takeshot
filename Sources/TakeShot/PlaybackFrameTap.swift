@@ -18,8 +18,17 @@ import QuartzCore
 /// drew with the thief's stale geometry.
 final class PlaybackFrameTap: @unchecked Sendable {
     let sinks = PreviewSinkRegistry()
-    /// Every delivered frame (tap queue) — hardware playout mirror.
-    var onDisplayFrame: (@Sendable (CVPixelBuffer) -> Void)?
+    /// Every delivered frame (tap queue) — hardware playout mirror. Set from the
+    /// main actor while the tap queue reads it, so it goes through a lock (see
+    /// the same pattern in CapturePipeline and RawPlayerModel).
+    private let displayFrameLock = NSLock()
+    private var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+
+    func setOnDisplayFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+        displayFrameLock.lock()
+        displayFrameHandler = handler
+        displayFrameLock.unlock()
+    }
 
     func addSink(_ layer: MetalPreviewLayer) {
         sinks.add(layer)
@@ -316,7 +325,10 @@ final class PlaybackFrameTap: @unchecked Sendable {
             DispatchQueue.main.async { self.onScopeData?(scopeData) }
         }
         sinks.present(output)
-        onDisplayFrame?(output)
+        displayFrameLock.lock()
+        let handler = displayFrameHandler
+        displayFrameLock.unlock()
+        handler?(output)
     }
 
     /// LUT + compare composite in raw code values (color management off — the

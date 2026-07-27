@@ -33,12 +33,10 @@ final class MetalPreviewHostView: NSView {
         previewLayer.contentsScale = scale
         let size = CGSize(width: bounds.width * scale,
                           height: bounds.height * scale)
-        if size.width > 0, size.height > 0, previewLayer.drawableSize != size {
-            previewLayer.drawableSize = size
-            // paused playback / no signal: no new frame will arrive to fill the
-            // resized drawable — redraw the last one right away or the image
-            // stretches/jumps for a frame
-            previewLayer.redraw()
-        }
+        guard size.width > 0, size.height > 0 else { return }
+        // the layer adopts the size inside its own render pass — assigning
+        // drawableSize here would reallocate the drawable pool underneath a
+        // producer queue sitting in nextDrawable()
+        previewLayer.setDrawableSize(size)
     }
 }

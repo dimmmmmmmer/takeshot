@@ -221,6 +221,7 @@ private struct TakeCell: View {
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
+            .onAppear { controller.requestThumbnail(for: take) }
             .onTapGesture(count: 2) { controller.play(url: take.url) }
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 4) {

@@ -512,7 +512,15 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
             (id)kCVPixelBufferHeightKey : @(height),
             (id)kCVPixelBufferIOSurfacePropertiesKey : @{},
         };
-        if (CVPixelBufferPoolCreate(kCFAllocatorDefault, NULL,
+        // Buffers vended here end up in the pre-roll ring, so the pool's
+        // high-water mark is the whole pre-roll depth (~1.9 GB at UHD with a
+        // 3 s lead). Age them out, or that peak stays resident for the rest of
+        // the shift — the same policy PixelBufferPool applies on the Swift side.
+        NSDictionary *poolAttrs = @{
+            (id)kCVPixelBufferPoolMaximumBufferAgeKey : @3.0,
+        };
+        if (CVPixelBufferPoolCreate(kCFAllocatorDefault,
+                                    (__bridge CFDictionaryRef)poolAttrs,
                                     (__bridge CFDictionaryRef)attrs,
                                     &_pixelBufferPool) != kCVReturnSuccess) {
             return NULL;
@@ -535,9 +543,15 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         CVPixelBufferRelease(pixelBuffer);
         return NULL;
     }
+    if (videoBuffer->StartAccess(bmdBufferAccessRead) != S_OK) {
+        videoBuffer->Release();
+        CVPixelBufferRelease(pixelBuffer);
+        return NULL;
+    }
+    // past this point access is open and every exit must close it
     void *sourceBytes = NULL;
-    if (videoBuffer->StartAccess(bmdBufferAccessRead) != S_OK ||
-        videoBuffer->GetBytes(&sourceBytes) != S_OK || !sourceBytes) {
+    if (videoBuffer->GetBytes(&sourceBytes) != S_OK || !sourceBytes) {
+        videoBuffer->EndAccess(bmdBufferAccessRead);
         videoBuffer->Release();
         CVPixelBufferRelease(pixelBuffer);
         return NULL;

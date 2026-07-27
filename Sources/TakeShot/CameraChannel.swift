@@ -25,6 +25,11 @@ final class CameraChannel: ObservableObject, Identifiable {
 
     /// Callback upward: the channel recorded a take (to add to the shared list).
     var onTakeFinished: ((Take) -> Void)?
+    /// Callback upward: a recording failure on this channel. Without it every
+    /// integrity message of the extra cameras — writer death, dropped frames,
+    /// a take that never finalized — was discarded, and since a take joins the
+    /// list only on success, a failed B-cam take left no trace at all.
+    var onError: ((String) -> Void)?
 
     init(camLabel: String, backend: CaptureBackend, deviceID: String,
          settings: CaptureSettings, roll: String) {
@@ -46,11 +51,21 @@ final class CameraChannel: ObservableObject, Identifiable {
         pipeline.onTimecode = { [weak self] tc in self?.currentTimecode = tc }
         pipeline.onSignal = { [weak self] p in self?.signalPresent = p }
         pipeline.onAudioLevels = { [weak self] l in self?.audioLevels = l }
-        pipeline.onRecStateChanged = { [weak self] r in self?.isRecording = r }
+        pipeline.onRecStateChanged = { [weak self] r in
+            self?.isRecording = r
+            // the pipeline can close a take on its own (writer failure, format
+            // change) — drop the request with it, or the next REC would be
+            // read as "already recording" and swallowed
+            if !r { self?.recordingRequested = false }
+        }
         pipeline.onTakeFinished = { [weak self] take in
             guard let self else { return }
             self.takeNumber += 1
             self.onTakeFinished?(take)
+        }
+        pipeline.onError = { [weak self] message in
+            guard let self else { return }
+            self.onError?("\(self.camLabel): \(message)")
         }
     }
 
@@ -69,6 +84,7 @@ final class CameraChannel: ObservableObject, Identifiable {
     func stopStreams() {
         backend.stopCapture()
         pipeline.captureStopped()
+        recordingRequested = false
     }
 
     func update(settings: CaptureSettings, roll: String, takeNumber: Int) {
@@ -78,8 +94,18 @@ final class CameraChannel: ObservableObject, Identifiable {
         pipeline.update(config: .init(settings: camSettings, roll: roll, takeNumber: takeNumber))
     }
 
+    /// What REC has asked of this channel. Deliberately NOT `isRecording`: that
+    /// one only flips once the pipeline reports back, which happens after the
+    /// pre-roll drain (up to 1.5 s). A take short enough to stop inside that
+    /// window used to leave the request unmatched — the channel kept writing,
+    /// the next start was swallowed as "already recording", and B-cam ran one
+    /// continuous clip out of phase with A-cam for the rest of the day.
+    private var recordingRequested = false
+
     func setRecording(_ recording: Bool) {
-        if recording != isRecording { pipeline.toggleManualRecord() }
+        guard recording != recordingRequested else { return }
+        recordingRequested = recording
+        pipeline.toggleManualRecord()
     }
 }
 

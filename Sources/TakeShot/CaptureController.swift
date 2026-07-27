@@ -309,8 +309,8 @@ final class CaptureController: ObservableObject {
     /// The output mirrors whatever the viewer shows.
     private func wirePlayoutRouting() {
         guard let feeder = playoutFeeder else {
-            pipeline.onDisplayFrame = nil
-            playbackTap.onDisplayFrame = nil
+            pipeline.setOnDisplayFrame(nil)
+            playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
             return
         }
@@ -318,8 +318,8 @@ final class CaptureController: ObservableObject {
         let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
             feeder.submit(buffer)
         }
-        pipeline.onDisplayFrame = routeLive ? handler : nil
-        playbackTap.onDisplayFrame = routeLive ? nil : handler
+        pipeline.setOnDisplayFrame(routeLive ? handler : nil)
+        playbackTap.setOnDisplayFrame(routeLive ? nil : handler)
         rawPlayer?.setOnDisplayFrame(routeLive ? nil : handler)
     }
 
@@ -1504,7 +1504,9 @@ final class CaptureController: ObservableObject {
 
     /// New record folder: old takes/files don't apply — clear and rescan.
     private func resetLibraryForNewDestination() {
+        libraryGeneration += 1 // invalidate a scan already walking the old folder
         takes.removeAll()
+        retiredTakes.removeAll() // a new folder gets its own log
         otherFiles.removeAll()
         thumbnails.removeAll()
         otherThumbnails.removeAll()
@@ -1650,7 +1652,7 @@ final class CaptureController: ObservableObject {
             self.takes.append(take)
             self.nextTakeNumber += 1
             self.exportTakeLog()
-            self.generateThumbnail(for: take)
+            self.requestThumbnail(for: take) // deduped against a cell's request
             self.flashNewItem(take.url)
         }
         pipeline.onSignal = { [weak self] present in
@@ -1667,20 +1669,31 @@ final class CaptureController: ObservableObject {
         let monitor = audioMonitor
         pipeline.onMonitorAudio = { monitor.enqueue($0) }
         pipeline.onError = { [weak self] message in
-            guard let self else { return }
-            // recording-integrity failures stick; everything else toasts
-            if message.contains("TAKE LOST") || message.contains("Dropped")
-                || message.contains("ingress") {
-                self.persistentAlert = message
-            } else {
-                self.lastError = message
-            }
+            self?.reportPipelineError(message)
         }
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
         }
         pipeline.onAudioLevels = { [weak self] levels in
             self?.live.audioLevels = levels
+        }
+    }
+
+    /// Recording-integrity failures stick in the alarm banner; everything else
+    /// toasts for five seconds.
+    ///
+    /// "Failed to start recording" and a take truncated by a format change used
+    /// to toast: the two cases where footage is missing outright, announced more
+    /// quietly than a dropped frame. An operator watching the slate rather than
+    /// the screen had no way to learn about them.
+    private func reportPipelineError(_ message: String) {
+        let sticky = ["TAKE LOST", "Dropped", "ingress",
+                      "Failed to start recording", "Take closed:",
+                      "Pre-roll incomplete"]
+        if sticky.contains(where: message.contains) {
+            persistentAlert = message
+        } else {
+            lastError = message
         }
     }
 
@@ -1834,6 +1847,7 @@ final class CaptureController: ObservableObject {
                 camLabel: nextLetter, backend: mock,
                 deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
             channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
+            channel.onError = { [weak self] message in self?.reportPipelineError(message) }
             try? channel.start() // the mock cannot fail
             extraChannels = [channel]
         } else {
@@ -1850,6 +1864,7 @@ final class CaptureController: ObservableObject {
                     backend: DeckLinkBackendAdapter(watchesDevices: false),
                     deviceID: rawID, settings: settings, roll: roll)
                 channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
+                channel.onError = { [weak self] message in self?.reportPipelineError(message) }
                 do {
                     try channel.start()
                     channels.append(channel)
@@ -1866,7 +1881,7 @@ final class CaptureController: ObservableObject {
         takes.append(take)
         takes.sort { $0.recordedAt < $1.recordedAt }
         exportTakeLog()
-        generateThumbnail(for: take)
+        requestThumbnail(for: take)
     }
 
     // MARK: - capture control
@@ -2146,14 +2161,47 @@ final class CaptureController: ObservableObject {
     /// Paths already checked for the TakeShot tag (so we don't re-read metadata).
     private var scannedPaths: Set<String> = []
 
+    /// Bumped whenever the library is reset (a new destination folder). A scan
+    /// that started against the old folder carries the old value and discards
+    /// itself instead of pouring the previous folder's takes into the new one.
+    private var libraryGeneration = 0
+    /// A scan is walking the folder or classifying its results.
+    private var scanInFlight = false
+    /// The folder changed while a scan was running — rescan when it lands.
+    private var rescanWhenIdle = false
+
     private func scanDestinationFolder() {
+        guard !scanInFlight else {
+            // classifyFoundFiles suspends on metadata loads, and the MainActor
+            // runs other work at every suspension point — including another
+            // scan. Overlapping runs interleaved their results: the same file
+            // ended up in the takes list and in Other content at once.
+            rescanWhenIdle = true
+            return
+        }
+        scanInFlight = true
         let root = destinationRoot
+        let generation = libraryGeneration
         let ownTakePaths = Set(takes.map { $0.url.path })
         Task.detached(priority: .utility) { [weak self] in
             let (candidates, busy) = Self.findForeignVideos(root: root,
                                                             excluding: ownTakePaths)
-            await self?.classifyFoundFiles(candidates, rescanSoon: busy)
+            await self?.finishScan(candidates, rescanSoon: busy,
+                                   generation: generation)
         }
+    }
+
+    private func finishScan(_ candidates: [URL], rescanSoon: Bool,
+                            generation: Int) async {
+        defer {
+            scanInFlight = false
+            if rescanWhenIdle {
+                rescanWhenIdle = false
+                scanDestinationFolder()
+            }
+        }
+        guard generation == libraryGeneration else { return }
+        await classifyFoundFiles(candidates, rescanSoon: rescanSoon)
     }
 
     private var busyRescanScheduled = false
@@ -2172,7 +2220,11 @@ final class CaptureController: ObservableObject {
                 self.scanDestinationFolder()
             }
         }
-        // files removed from the folder leave the app too
+        // files removed from the folder leave the panel, but NOT the shift log:
+        // the normal way a day ends is the DIT moving the takes into the archive
+        // structure, and rewriting the CSV from the shrunken list turned that
+        // safe-looking move into the destruction of every rating, comment and
+        // marker of the day
         let gone = takes.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
         if !gone.isEmpty {
             let goneIDs = Set(gone.map(\.id))
@@ -2181,7 +2233,7 @@ final class CaptureController: ObservableObject {
                 thumbnails[take.id] = nil
                 scannedPaths.remove(take.url.path)
             }
-            exportTakeLog()
+            retiredTakes.append(contentsOf: gone)
         }
         var restored: [Take] = []
         var foreign: [URL] = []
@@ -2244,6 +2296,10 @@ final class CaptureController: ObservableObject {
             let known = Set(takes.map { $0.url.path })
             let new = restored.filter { !known.contains($0.url.path) }
             if !new.isEmpty {
+                // a file that came back (volume remounted, take moved back) is
+                // live again, so it must not also sit in the retired list
+                let returned = Set(new.map { $0.url.path })
+                retiredTakes.removeAll { returned.contains($0.url.path) }
                 takes.append(contentsOf: new)
                 takes.sort { $0.recordedAt < $1.recordedAt }
                 // thumbnails load lazily as cells appear (restored sessions
@@ -2399,10 +2455,15 @@ final class CaptureController: ObservableObject {
         return (found.sorted { $0.lastPathComponent < $1.lastPathComponent }, busy)
     }
 
+    /// Takes whose files have left the record folder. They are gone from the
+    /// panel but stay in the log, so moving footage off the card does not erase
+    /// the day's metadata. Cleared when the destination itself changes.
+    private var retiredTakes: [Take] = []
+
     /// Resolve-compatible CSV: rewritten on every take and every circle-take mark
     /// — in Resolve it's imported via Media Pool → Import Metadata.
     private func exportTakeLog() {
-        let takes = takes
+        let takes = (takes + retiredTakes).sorted { $0.recordedAt < $1.recordedAt }
         let root = destinationRoot
         Self.takeLogQueue.async { [weak self] in
             do {
@@ -2438,6 +2499,21 @@ final class CaptureController: ObservableObject {
         generateOtherThumbnails(for: [url])
     }
 
+    /// Decoded thumbnails, least-recently-used first. A busy day is ~500 takes
+    /// and each decoded 256x144 image pins ~150 KB, so the cache is bounded and
+    /// cells re-request what was evicted when they scroll back into view.
+    private var thumbnailLRU: [Take.ID] = []
+    private static let thumbnailCacheLimit = 120
+
+    private func storeThumbnail(_ image: NSImage, for id: Take.ID) {
+        thumbnails[id] = image
+        thumbnailLRU.removeAll { $0 == id }
+        thumbnailLRU.append(id)
+        while thumbnailLRU.count > Self.thumbnailCacheLimit {
+            thumbnails[thumbnailLRU.removeFirst()] = nil
+        }
+    }
+
     /// A preview frame from the recorded file; the file finalizes asynchronously,
     /// so several attempts with a pause.
     private func generateThumbnail(for take: Take) {
@@ -2455,13 +2531,18 @@ final class CaptureController: ObservableObject {
                                             size: NSSize(width: cgImage.width,
                                                          height: cgImage.height))
                         await MainActor.run { [weak self] in
-                            self?.thumbnails[take.id] = image
+                            self?.storeThumbnail(image, for: take.id)
                             self?.thumbnailsInFlight.remove(take.id)
                         }
                         return
                     }
                 }
                 try? await Task.sleep(for: .milliseconds(500))
+            }
+            // every attempt failed: clear the in-flight mark or this take can
+            // never be retried for the rest of the session
+            await MainActor.run { [weak self] in
+                _ = self?.thumbnailsInFlight.remove(take.id)
             }
         }
     }

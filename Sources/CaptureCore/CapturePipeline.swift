@@ -50,7 +50,18 @@ public final class CapturePipeline: @unchecked Sendable {
     /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
     public let displaySinks = PreviewSinkRegistry()
     /// Every displayed frame, on the display queue — hardware playout mirror.
-    public var onDisplayFrame: (@Sendable (CVPixelBuffer) -> Void)?
+    /// Re-routed from the main actor on every record/playback switch while the
+    /// display queue is calling it, so it goes through a lock: a plain closure
+    /// property is a two-word value with an ARC-managed context, and a torn
+    /// read releases the box under the reader's feet.
+    private let displayFrameLock = NSLock()
+    private var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+
+    public func setOnDisplayFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+        displayFrameLock.lock()
+        displayFrameHandler = handler
+        displayFrameLock.unlock()
+    }
 
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.add(layer)
@@ -260,8 +271,10 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Accumulated VANC stats by (DID, SDID).
     private var vancStatsDirty = false
     private var vancStatsLastPublish = 0
-    /// Pending file-finalization tasks (awaited on stop/exit).
-    private var pendingFinishTasks: [Task<Void, Never>] = []
+    /// Pending file-finalization tasks (awaited on stop/exit), keyed so each
+    /// one can drop itself when it completes.
+    private var pendingFinishTasks: [Int: Task<Void, Never>] = [:]
+    private var nextFinishID = 0
 
     public init(config: Config) {
         self.config = config
@@ -644,11 +657,23 @@ public final class CapturePipeline: @unchecked Sendable {
 
         if !startedThisFrame, let writer,
            !writer.append(pixelBuffer: recordBuffer, pts: pts) {
-            droppedFrames += 1
-            if droppedFrames == 1 || droppedFrames % 100 == 0 {
-                let count = droppedFrames
+            if writer.hasFailed {
+                // permanent: the volume went away, the disk filled, the encoder
+                // died. Counting drops here would keep REC red for the rest of
+                // the take while nothing at all reaches the file.
+                let reason = writer.failureReason
+                finishTake() // clears the writer, so this branch fires once
                 DispatchQueue.main.async {
-                    self.onError?("Dropped \(count) recording frame(s) — encoder/disk can't keep up")
+                    self.onError?("TAKE LOST — recording stopped, writer failed: \(reason)")
+                }
+            } else {
+                droppedFrames += 1
+                if droppedFrames == 1 || droppedFrames % 100 == 0 {
+                    let count = droppedFrames
+                    DispatchQueue.main.async {
+                        self.onError?("Dropped \(count) recording frame(s) "
+                            + "— encoder/disk can't keep up")
+                    }
                 }
             }
         }
@@ -877,6 +902,21 @@ public final class CapturePipeline: @unchecked Sendable {
             takeNumber = config.takeNumber
             droppedFrames = 0
 
+            // The writer's audio input is created from the channel count learned
+            // from the first audio packet. A take that starts before any packet
+            // has arrived — relaunch or device restart while the camera is
+            // already rolling, where a VANC trigger fires on capture frame 1 —
+            // gets no audio input at all, and every packet of the take is then
+            // discarded without a counter. Say so: silent scratch audio is only
+            // discovered in the edit.
+            if recordChannelCount == 0 {
+                DispatchQueue.main.async {
+                    self.onError?("TAKE LOST audio — \(url.lastPathComponent) "
+                        + "started before the audio format was known and has no "
+                        + "audio track")
+                }
+            }
+
             // pull frames from the buffer from (camera start - pre-roll) to current;
             // in Rec Run their timecode is frozen at the start value, so the take's
             // timecode track stays correct
@@ -885,20 +925,53 @@ public final class CapturePipeline: @unchecked Sendable {
             // budget: unbounded waits stall the pipeline queue while capture
             // callbacks pile up retained 4K frames behind it
             let drainDeadline = Date().addingTimeInterval(1.5)
+            var lostPreRoll = 0
             for buffered in preRollBuffer where buffered.index >= cutoff {
                 let frame = lutRecord
                     ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
                     : buffered.pixelBuffer
-                writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
-                                      deadline: drainDeadline)
+                if !writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
+                                          deadline: drainDeadline) {
+                    lostPreRoll += 1
+                }
             }
             preRollBuffer.removeAll()
+            // once the drain budget is spent the rest of the burst is dropped —
+            // and those are the frames closest to the camera's REC press, the
+            // whole point of pre-roll. Silence here reads as a clean head.
+            if lostPreRoll > 0 {
+                let count = lostPreRoll
+                DispatchQueue.main.async {
+                    self.onError?("Pre-roll incomplete: \(count) frame(s) "
+                        + "before the REC point were not written")
+                }
+            }
 
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
         } catch {
             DispatchQueue.main.async {
                 self.onError?("Failed to start recording: \(error.localizedDescription)")
             }
+        }
+    }
+
+    /// Suffix that marks a take whose finalize failed. Renaming is best-effort:
+    /// if it does not work the original path is returned and the operator still
+    /// gets the alarm.
+    static let failedTakeSuffix = "_FAILED"
+
+    static func markFailed(_ url: URL) -> URL {
+        let name = url.deletingPathExtension().lastPathComponent
+        guard !name.hasSuffix(failedTakeSuffix) else { return url }
+        let renamed = url.deletingLastPathComponent()
+            .appendingPathComponent(name + failedTakeSuffix)
+            .appendingPathExtension(url.pathExtension)
+        let target = uniqueURL(for: renamed)
+        do {
+            try FileManager.default.moveItem(at: url, to: target)
+            return target
+        } catch {
+            return url
         }
     }
 
@@ -919,7 +992,17 @@ public final class CapturePipeline: @unchecked Sendable {
         }
         // the take joins the list only after a SUCCESSFUL finalize — a failed
         // finish used to leave a normal-looking, unplayable file in the panel
+        // pruned by the task itself: the handles are only awaited at capture
+        // stop and at quit, and a shooting day never stops capture — the list
+        // would otherwise hold one handle per take until the app exits
+        let finishID = nextFinishID
+        nextFinishID += 1
         let task = Task { [weak self] in
+            defer {
+                self?.queue.async {
+                    self?.pendingFinishTasks.removeValue(forKey: finishID)
+                }
+            }
             do {
                 _ = try await writer.finish()
                 let droppedAudio = writer.droppedAudioPackets
@@ -931,20 +1014,28 @@ public final class CapturePipeline: @unchecked Sendable {
                     }
                 }
             } catch {
+                // The half-written file keeps the com.takeshot.origin tag from
+                // its initial moov, so the folder scan re-adopts it within
+                // seconds and it sits in the panel looking like a healthy take.
+                // It is not deleted — with fragmented moov atoms most of it is
+                // usually still recoverable — but it must not pass for good
+                // footage in the panel or in the log handed to post.
+                let marked = Self.markFailed(take.url)
                 DispatchQueue.main.async {
                     self?.onError?("TAKE LOST — failed to finalize "
-                        + "\(take.displayName): \(error.localizedDescription)")
+                        + "\(marked.deletingPathExtension().lastPathComponent): "
+                        + error.localizedDescription)
                 }
             }
         }
-        pendingFinishTasks.append(task)
+        pendingFinishTasks[finishID] = task
     }
 
     /// Await finalization of all files still being written (capture stop, exit).
     public func finishPendingWrites() async {
         let tasks: [Task<Void, Never>] = await withCheckedContinuation { cont in
             queue.async {
-                let snapshot = self.pendingFinishTasks
+                let snapshot = Array(self.pendingFinishTasks.values)
                 self.pendingFinishTasks.removeAll()
                 cont.resume(returning: snapshot)
             }
@@ -1070,7 +1161,10 @@ public final class CapturePipeline: @unchecked Sendable {
             self.presentLock.unlock()
             guard let buffer else { return }
             self.displaySinks.present(buffer)
-            self.onDisplayFrame?(buffer)
+            self.displayFrameLock.lock()
+            let handler = self.displayFrameHandler
+            self.displayFrameLock.unlock()
+            handler?(buffer)
         }
     }
 }
