@@ -1,0 +1,104 @@
+import Accelerate
+import AVFoundation
+import CoreImage
+import CoreMedia
+import CoreVideo
+import Foundation
+import os.log
+
+/// Audio: levels for the meters, the monitor feed, LTC decoding, and the
+/// channel mask latched for the take.
+///
+/// Split out of CapturePipeline, which had grown past 1300 lines.
+extension CapturePipeline {
+    /// Toggle the live audio monitor feed (onMonitorAudio).
+    public func setAudioMonitorEnabled(_ on: Bool) {
+        queue.async { self.monitorEnabled = on }
+    }
+    /// What the backend says its audio input is configured for, before any
+    /// packet has arrived. A take can start on capture frame 1 (a VANC trigger
+    /// fires with no debounce), and without this the writer got no audio input
+    /// at all and every packet of that take was discarded in silence. The first
+    /// real packet still wins — this is only the head start.
+    public func setExpectedAudioChannels(_ count: Int) {
+        queue.async {
+            guard count > 0, self.sourceAudioChannels == 0 else { return }
+            self.sourceAudioChannels = count
+        }
+    }
+    public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
+        queue.async {
+            let levels = PCMAudio.peakLevels(of: sampleBuffer)
+            self.sourceAudioChannels = levels.count
+            if self.config.settings.timecodeSource == "ltc" {
+                self.decodeLTC(from: sampleBuffer, channels: levels.count)
+            }
+            // meters show ALL channels; only channels enabled in the mask are written
+            var toWrite: CMSampleBuffer? = sampleBuffer
+            // the mask is LATCHED for the take: the writer's channel count is
+            // fixed at start, a live change would kill the whole file
+            let activeMask = self.writer != nil
+                ? self.recordingMask : self.config.settings.audioChannelMask
+            if let mask = activeMask {
+                let indices = (0..<32).filter { mask & (1 << $0) != 0 }
+                toWrite = PCMAudio.selectChannels(sampleBuffer, indices: indices,
+                                                  formatCache: &self.trimFormatCache)
+            }
+            if let writer = self.writer {
+                if let toWrite { writer.append(audioSampleBuffer: toWrite) }
+            } else if self.preRollFrames > 0 {
+                // not recording: keep the sound of the pre-roll window, so the
+                // take that starts in a moment has audio under its first frames
+                self.bufferPreRollAudio(sampleBuffer)
+            }
+            // monitor: the first two ENABLED channels as a stereo feed
+            if self.monitorEnabled, let onMonitorAudio = self.onMonitorAudio {
+                let indices: [Int]
+                if let mask = self.config.settings.audioChannelMask {
+                    indices = Array((0..<32).filter { mask & (1 << $0) != 0 }.prefix(2))
+                } else {
+                    indices = [0, 1]
+                }
+                if let monitor = PCMAudio.selectChannels(
+                    sampleBuffer, indices: indices,
+                    formatCache: &self.monitorFormatCache) {
+                    onMonitorAudio(monitor)
+                }
+            }
+            if !levels.isEmpty, levels != self.lastPublishedLevels {
+                if self.lastPublishedLevels.isEmpty {
+                    os_log("audio: %d channel(s) flowing",
+                           log: Self.levelsLog, type: .default, levels.count)
+                }
+                self.lastPublishedLevels = levels
+                DispatchQueue.main.async { self.onAudioLevels?(levels) }
+            }
+        }
+    }
+    private func decodeLTC(from sampleBuffer: CMSampleBuffer, channels: Int) {
+        guard channels > 0, let format else { return }
+        let channel = min(max(0, config.settings.ltcChannel ?? 0), channels - 1)
+        guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+        var length = 0
+        var pointer: UnsafeMutablePointer<CChar>?
+        guard CMBlockBufferGetDataPointer(
+            block, atOffset: 0, lengthAtOffsetOut: nil,
+            totalLengthOut: &length, dataPointerOut: &pointer) == noErr,
+            let pointer, length >= 2 else { return }
+        let fps = format.timecodeFPS
+        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
+            let frames = (length / 2) / channels
+            guard frames > 0 else { return }
+            // extract the selected channel from the interleaved stream
+            var mono = [Int16](repeating: 0, count: frames)
+            for i in 0..<frames {
+                mono[i] = samples[i * channels + channel]
+            }
+            mono.withUnsafeBufferPointer { buffer in
+                if let tc = ltcDecoder.process(samples: buffer, fps: fps) {
+                    latestLTC = tc
+                }
+            }
+        }
+    }
+}

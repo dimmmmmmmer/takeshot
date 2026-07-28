@@ -108,7 +108,7 @@ final class CaptureController: ObservableObject {
     }
 
     /// Polling playback frames is only needed when the view is actually visible.
-    private func updateTapRunning() {
+    func updateTapRunning() {
         // stills tick through the tap too (compare keeps the live half moving)
         let loaded = playbackURL != nil && rawPlayer == nil
         playbackTap.setRunning(viewerMode == .playback && loaded)
@@ -156,172 +156,12 @@ final class CaptureController: ObservableObject {
     /// recursive copy with SHA-256 on both sides and a CSV manifest.
     /// TakeShot's own takes don't need this — they aren't the originals.
     @Published var offloadStatus: String?
-    nonisolated private static let backupQueue = DispatchQueue(
+    nonisolated static let backupQueue = DispatchQueue(
         label: "takeshot.offload", qos: .utility)
-
-    func offloadFolder() {
-        let sourcePanel = NSOpenPanel()
-        sourcePanel.canChooseFiles = false
-        sourcePanel.canChooseDirectories = true
-        sourcePanel.message = L("offload_pick_source")
-        sourcePanel.prompt = L("offload_source_prompt")
-        guard sourcePanel.runModal() == .OK, let source = sourcePanel.url
-        else { return }
-        let destPanel = NSOpenPanel()
-        destPanel.canChooseFiles = false
-        destPanel.canChooseDirectories = true
-        destPanel.canCreateDirectories = true
-        destPanel.message = L("offload_pick_dest")
-        destPanel.prompt = L("offload_dest_prompt")
-        if let saved = settings.backupPath {
-            destPanel.directoryURL = URL(fileURLWithPath: saved)
-        }
-        guard destPanel.runModal() == .OK, let destRoot = destPanel.url
-        else { return }
-        settings.backupPath = destRoot.path
-        let destDir = destRoot.appendingPathComponent(source.lastPathComponent)
-        offloadStatus = L("offload_scanning")
-        Self.backupQueue.async { [weak self] in
-            var files: [URL] = []
-            var failures: [String] = []
-            // a card copy must be COMPLETE: hidden files included, and an
-            // unreadable directory is a failure, not a silent skip
-            if let enumerator = FileManager.default.enumerator(
-                at: source, includingPropertiesForKeys: [.isDirectoryKey],
-                options: [], errorHandler: { url, error in
-                    failures.append("\(url.lastPathComponent) "
-                        + "(\(error.localizedDescription))")
-                    return true
-                }) {
-                for case let url as URL in enumerator
-                where (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
-                    .isDirectory != true {
-                    files.append(url)
-                }
-            }
-            var manifest = "File,SHA256,Bytes,Verified At\n"
-            for (index, file) in files.enumerated() {
-                DispatchQueue.main.async { [weak self] in
-                    self?.offloadStatus = L("offload_progress", index + 1,
-                                            files.count)
-                }
-                do {
-                    let relative = file.path.replacingOccurrences(
-                        of: source.path + "/", with: "")
-                    var dest = destDir.appendingPathComponent(relative)
-                    try FileManager.default.createDirectory(
-                        at: dest.deletingLastPathComponent(),
-                        withIntermediateDirectories: true)
-                    // never clobber an existing copy — uniquify instead
-                    dest = CapturePipeline.uniqueURL(for: dest)
-                    try FileManager.default.copyItem(at: file, to: dest)
-                    let sourceHash = try Self.sha256(of: file)
-                    let destHash = try Self.sha256(of: dest, bypassCache: true)
-                    guard sourceHash == destHash else {
-                        failures.append(relative + " (checksum mismatch)")
-                        continue
-                    }
-                    let size = (try? FileManager.default
-                        .attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
-                    manifest += [TakeLogExporter.escapedField(relative),
-                                 sourceHash, String(size),
-                                 ISO8601DateFormatter().string(from: Date())]
-                        .joined(separator: ",") + "\n"
-                } catch {
-                    failures.append(file.lastPathComponent
-                        + " (\(error.localizedDescription))")
-                }
-            }
-            do {
-                try manifest.write(
-                    to: destDir.appendingPathComponent("offload-manifest.csv"),
-                    atomically: true, encoding: .utf8)
-            } catch {
-                // a vanished backup volume must not report "offload done"
-                failures.append("offload-manifest.csv "
-                    + "(\(error.localizedDescription))")
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.offloadStatus = nil
-                if failures.isEmpty {
-                    self.lastNotice = L("offload_done", files.count)
-                } else {
-                    self.lastError = L("offload_failed", failures.count,
-                                       failures.first ?? "")
-                }
-            }
-        }
-    }
-
-    /// `bypassCache: true` reads through F_NOCACHE — verifying a fresh copy
-    /// through the unified page cache would verify RAM, not the disk.
-    nonisolated private static func sha256(of url: URL,
-                                           bypassCache: Bool = false) throws -> String {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        if bypassCache {
-            _ = fcntl(handle.fileDescriptor, F_NOCACHE, 1)
-        }
-        var hasher = SHA256()
-        while autoreleasepool(invoking: {
-            let chunk = handle.readData(ofLength: 8 << 20)
-            if chunk.isEmpty { return false }
-            hasher.update(data: chunk)
-            return true
-        }) {}
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
 
     /// Hardware playout: mirrors the viewer to the DeckLink output chosen in
     /// settings. Rebuilt on device/format changes; routed by viewer mode.
-    private var playoutFeeder: PlayoutFeeder?
-
-    func rebuildPlayout() {
-        playoutFeeder?.stop()
-        playoutFeeder = nil
-        guard let deviceID = settings.monitorDeviceID,
-              deviceID.hasPrefix("decklink:") else {
-            wirePlayoutRouting()
-            return
-        }
-        // output mode follows the live signal; 1080p25 until one is known
-        let width = signalFormat?.width ?? 1920
-        let height = signalFormat?.height ?? 1080
-        let rate = signalFormat?.frameRate ?? 25
-        do {
-            playoutFeeder = try PlayoutFeeder(
-                deviceID: String(deviceID.dropFirst("decklink:".count)),
-                width: width, height: height, frameRate: rate)
-        } catch {
-            // fall back to the universal 1080p25 raster (frames are scaled)
-            do {
-                playoutFeeder = try PlayoutFeeder(
-                    deviceID: String(deviceID.dropFirst("decklink:".count)),
-                    width: 1920, height: 1080, frameRate: 25)
-            } catch {
-                lastError = "Output: \(error.localizedDescription)"
-            }
-        }
-        wirePlayoutRouting()
-    }
-
-    /// The output mirrors whatever the viewer shows.
-    private func wirePlayoutRouting() {
-        guard let feeder = playoutFeeder else {
-            pipeline.setOnDisplayFrame(nil)
-            playbackTap.setOnDisplayFrame(nil)
-            rawPlayer?.setOnDisplayFrame(nil)
-            return
-        }
-        let routeLive = viewerMode == .record
-        let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
-            feeder.submit(buffer)
-        }
-        pipeline.setOnDisplayFrame(routeLive ? handler : nil)
-        playbackTap.setOnDisplayFrame(routeLive ? nil : handler)
-        rawPlayer?.setOnDisplayFrame(routeLive ? nil : handler)
-    }
+    var playoutFeeder: PlayoutFeeder?
 
     /// B-side clip for take-vs-take compare (nil — compare against live).
     @Published var compareClipURL: URL? {
@@ -360,115 +200,9 @@ final class CaptureController: ObservableObject {
         return base * CGFloat(assist.desqueeze)
     }
 
-    func togglePunchIn() {
-        assist.punchIn = assist.punchIn > 1 ? 1 : 2
-        if assist.punchIn == 1 {
-            assist.panX = 0
-            assist.panY = 0
-        }
-    }
-
     /// A reference frame is pinned for live compare (rec mode wipe/blend).
     @Published var referencePinned = false
 
-    /// Pin the current frame (live preview or the paused player frame).
-    func pinReferenceFromCurrentFrame() {
-        if viewerMode == .playback {
-            guard let buffer = playbackTap.currentBuffer() else {
-                lastError = L("reference_pin_failed")
-                return
-            }
-            pipeline.setPreviewReference(buffer: buffer)
-        } else {
-            pipeline.pinReferenceFromCurrentFrame()
-        }
-        referencePinned = true
-        // pinning means "compare me": default to the wipe in rec mode
-        if compareMode == .off { compareMode = .wipe }
-        if viewerMode == .playback { viewerMode = .record }
-        pushCompare()
-        lastNotice = L("reference_pinned")
-    }
-
-    /// Pin a still/photo from the record folder.
-    func pinReference(imageURL: URL) {
-        guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            lastError = L("reference_pin_failed")
-            return
-        }
-        // raw code values, like every other surface in the app
-        let image = CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
-        let attrs: [CFString: Any] = [
-            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-        ]
-        var buffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, cg.width, cg.height,
-                            kCVPixelFormatType_32BGRA,
-                            attrs as CFDictionary, &buffer)
-        guard let buffer else {
-            lastError = L("reference_pin_failed")
-            return
-        }
-        let destination = CIRenderDestination(pixelBuffer: buffer)
-        destination.colorSpace = nil
-        let context = CIContext(options: [.cacheIntermediates: false])
-        guard let task = try? context.startTask(toRender: image, to: destination),
-              (try? task.waitUntilCompleted()) != nil else {
-            lastError = L("reference_pin_failed")
-            return
-        }
-        pipeline.setPreviewReference(buffer: buffer)
-        referencePinned = true
-        if compareMode == .off { compareMode = .wipe }
-        viewerMode = .record
-        pushCompare()
-        lastNotice = L("reference_pinned")
-    }
-
-    func unpinReference() {
-        pipeline.setPreviewReference(buffer: nil)
-        referencePinned = false
-        pushCompare()
-    }
-
-    private static func compareAxis(
-        _ orientation: WipeOrientation) -> CompareCompositor.Axis {
-        switch orientation {
-        case .vertical: return .vertical
-        case .horizontal: return .horizontal
-        case .diagonal: return .diagonal
-        }
-    }
-
-    /// Wipe/blend are composited inside the playback render (SwiftUI masking of
-    /// video layers drops the colorspace) — push the parameters to the tap,
-    /// and to the pipeline when a reference is pinned for live compare.
-    private func pushCompare() {
-        switch compareMode {
-        case .off, .sideBySide:
-            playbackTap.setCompare(.off)
-        case .blend:
-            playbackTap.setCompare(.blend(opacity: blendOpacity))
-        case .wipe:
-            playbackTap.setCompare(.wipe(
-                axis: Self.compareAxis(wipeOrientation), position: wipePosition))
-        }
-        guard referencePinned else {
-            pipeline.setPreviewCompare(.off)
-            return
-        }
-        switch compareMode {
-        case .off, .sideBySide:
-            pipeline.setPreviewCompare(.off)
-        case .blend:
-            pipeline.setPreviewCompare(.blend(opacity: blendOpacity))
-        case .wipe:
-            pipeline.setPreviewCompare(.wipe(
-                axis: Self.compareAxis(wipeOrientation), position: wipePosition))
-        }
-    }
     /// Takes-panel position (left/right) — reactive for all windows.
     @Published var panelSide: String =
         UserDefaults.standard.string(forKey: "panelSide") ?? "right" {
@@ -489,7 +223,7 @@ final class CaptureController: ObservableObject {
 
     /// Imported LUT files (the Application Support/TakeShot/LUTs folder).
     @Published var availableLUTs: [LUTInfo] = []
-    private var currentCube: CubeLUT?
+    var currentCube: CubeLUT?
     /// The current playback file already has the look baked in (com.takeshot.lut tag).
     @Published var playbackFileHasBakedLUT = false
     /// Manual LUT off for the current clip (the look came from the camera, etc.).
@@ -503,18 +237,6 @@ final class CaptureController: ObservableObject {
         return base.appendingPathComponent("TakeShot/LUTs", isDirectory: true)
     }
 
-    func reloadLUTList() {
-        let dir = Self.lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil)) ?? []
-        availableLUTs = files
-            .filter { $0.pathExtension.lowercased() == "cube" }
-            .map { LUTInfo(fileName: $0.lastPathComponent,
-                           name: $0.deletingPathExtension().lastPathComponent) }
-            .sorted { $0.name < $1.name }
-    }
-
     /// DaVinci Resolve's LUT directory — imported LUTs are mirrored into a
     /// TakeShot subfolder there, so the same look is at hand in Resolve.
     nonisolated static var resolveLUTDirectory: URL {
@@ -524,96 +246,7 @@ final class CaptureController: ObservableObject {
                 isDirectory: true)
     }
 
-    /// Import .cube: copied into the app folder and selected right away.
-    func importLUT() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "cube")!]
-        panel.allowsMultipleSelection = true
-        guard panel.runModal() == .OK else { return }
-        let dir = Self.lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var lastName: String?
-        for url in panel.urls {
-            var dest = dir.appendingPathComponent(url.lastPathComponent)
-            if FileManager.default.fileExists(atPath: dest.path) {
-                // duplicate name: let the user decide instead of silently replacing
-                switch Self.askDuplicateLUT(name: url.lastPathComponent) {
-                case .replace:
-                    try? FileManager.default.removeItem(at: dest)
-                case .keepBoth:
-                    dest = CapturePipeline.uniqueURL(for: dest)
-                case .skip:
-                    continue
-                }
-            }
-            do {
-                try FileManager.default.copyItem(at: url, to: dest)
-                lastName = dest.lastPathComponent
-                mirrorLUTToResolve(dest)
-            } catch {
-                lastError = "LUT import failed: \(error.localizedDescription)"
-            }
-        }
-        reloadLUTList()
-        if let lastName {
-            selectLUT(fileName: lastName)
-        }
-    }
-
-    /// Open the imported-LUTs folder in Finder.
-    func openLUTsInFinder() {
-        let dir = Self.lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
-    }
-
-    /// Delete all imported .cube files and clear the selected LUT.
-    func clearLUTs() {
-        let dir = Self.lutsDirectory
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil)) ?? []
-        for file in files where file.pathExtension.lowercased() == "cube" {
-            try? FileManager.default.removeItem(at: file)
-        }
-        selectLUT(fileName: nil)
-        reloadLUTList()
-    }
-
     enum DuplicateLUTChoice { case replace, keepBoth, skip }
-
-    /// Modal: what to do with an already-imported LUT of the same name.
-    private static func askDuplicateLUT(name: String) -> DuplicateLUTChoice {
-        let alert = NSAlert()
-        alert.messageText = L("lut_duplicate_title", name)
-        alert.informativeText = L("lut_duplicate_text")
-        alert.addButton(withTitle: L("lut_replace"))
-        alert.addButton(withTitle: L("lut_keep_both"))
-        alert.addButton(withTitle: L("lut_skip"))
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .replace
-        case .alertSecondButtonReturn: return .keepBoth
-        default: return .skip
-        }
-    }
-
-    /// Mirror an imported LUT into DaVinci Resolve's LUT/TakeShot folder.
-    private func mirrorLUTToResolve(_ url: URL) {
-        let dir = Self.resolveLUTDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent(url.lastPathComponent)
-        try? FileManager.default.removeItem(at: dest)
-        try? FileManager.default.copyItem(at: url, to: dest)
-    }
-
-    func selectLUT(fileName: String?) {
-        settings.lutFileName = fileName
-        if fileName != nil, playbackLUTSuppressed { playbackLUTSuppressed = false }
-        if fileName != nil, settings.lutPreviewEnabled != true,
-           settings.lutRecordEnabled != true {
-            settings.lutPreviewEnabled = true // picked a LUT — clearly want to see it
-        }
-        rebuildLUT()
-    }
 
     var lutPreviewOn: Bool {
         get { settings.lutPreviewEnabled ?? false }
@@ -655,70 +288,8 @@ final class CaptureController: ObservableObject {
 
     private var lutPersistTask: Task<Void, Never>?
 
-    private var cubeCache: (fileName: String, cube: CubeLUT)?
+    var cubeCache: (fileName: String, cube: CubeLUT)?
 
-    /// Rebuild the filter and hand it to the pipeline and playback.
-    func rebuildLUT() {
-        currentCube = nil
-        if let fileName = settings.lutFileName {
-            if let cache = cubeCache, cache.fileName == fileName {
-                currentCube = cache.cube // checkbox flips must not re-read disk
-            } else {
-                let url = Self.lutsDirectory.appendingPathComponent(fileName)
-                do {
-                    let cube = try CubeLUT.load(url: url)
-                    currentCube = cube
-                    cubeCache = (fileName, cube)
-                } catch {
-                    lastError = "LUT: \(error.localizedDescription)"
-                    settings.lutFileName = nil
-                }
-            }
-        }
-        pipeline.setLUT(currentCube,
-                        preview: settings.lutPreviewEnabled ?? false,
-                        record: settings.lutRecordEnabled ?? false,
-                        intensity: live.lutIntensity)
-        pipeline.setVideoLevels(settings.videoLevels)
-        applyPlaybackLUT()
-    }
-
-    /// LUT on playback — applied in the tap's own render (AVVideoComposition's
-    /// pipeline shifted contrast even on untouched clips), accounting for an
-    /// already-baked look: our file tagged com.takeshot.lut or a manual
-    /// per-clip off — the LUT isn't applied twice.
-    func applyPlaybackLUT() {
-        guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
-              !playbackLUTSuppressed,
-              let cube = currentCube, let filter = cube.makeFilter() else {
-            os_log("playback LUT OFF: preview=%d baked=%d suppressed=%d cube=%d",
-                   log: CapturePipeline.levelsLog, type: .default,
-                   (settings.lutPreviewEnabled ?? false) ? 1 : 0,
-                   playbackFileHasBakedLUT ? 1 : 0,
-                   playbackLUTSuppressed ? 1 : 0,
-                   currentCube != nil ? 1 : 0)
-            playbackTap.setLUT(nil, intensity: 1)
-            return
-        }
-        os_log("playback LUT ON: %{public}s intensity=%.2f",
-               log: CapturePipeline.levelsLog, type: .default,
-               settings.lutFileName ?? "?", live.lutIntensity)
-        playbackTap.setLUT(filter, intensity: live.lutIntensity)
-    }
-
-    /// Check the loaded clip's baked-LUT tag (asynchronously).
-    private func detectBakedLUT(for item: AVPlayerItem) {
-        playbackFileHasBakedLUT = false
-        Task { [weak self] in
-            let metadata = (try? await item.asset.load(.metadata)) ?? []
-            let baked = metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
-            await MainActor.run { [weak self] in
-                guard let self, self.player.currentItem === item else { return }
-                self.playbackFileHasBakedLUT = baked
-                self.applyPlaybackLUT()
-            }
-        }
-    }
     /// Large audio-channel panel over the player.
     @Published var showAudioPanel = false
     /// Scopes overlay over the player (like the audio panel).
@@ -732,7 +303,7 @@ final class CaptureController: ObservableObject {
     /// Any scope surface visible (drives the analyzers and the badge tint).
     var showScopes: Bool { showScopesOverlay || scopesWindowOpen }
     /// Route scope analysis to whichever source is actually on screen.
-    private func updateScopesRunning() {
+    func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
         playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
         rawPlayer?.scopesEnabled = showScopes && viewerMode == .playback
@@ -741,10 +312,10 @@ final class CaptureController: ObservableObject {
     }
     /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
-    private var playbackFullscreenWindow: NSWindow?
+    var playbackFullscreenWindow: NSWindow?
     /// Live-signal fullscreen window (player fills the screen in record mode).
     @Published var isLiveFullscreen = false
-    private var liveFullscreenWindow: NSWindow?
+    var liveFullscreenWindow: NSWindow?
 
     /// Player for reviewing takes.
     let player = AVPlayer()
@@ -845,7 +416,7 @@ final class CaptureController: ObservableObject {
             updateExternalWindow()
         }
     }
-    private var externalWindow: NSWindow?
+    var externalWindow: NSWindow?
 
     struct ScreenOption: Identifiable, Equatable {
         var id: CGDirectDisplayID
@@ -862,87 +433,6 @@ final class CaptureController: ObservableObject {
             else { return nil }
             return ScreenOption(id: id, name: screen.localizedName)
         }
-    }
-
-    /// Shared factory for the borderless full-screen output windows
-    /// (playback fullscreen, live fullscreen, external monitor).
-    private func makeBorderlessWindow(
-        on screen: NSScreen, content: some View,
-        behavior: NSWindow.CollectionBehavior = [.fullScreenAuxiliary],
-        makeKey: Bool = true) -> NSWindow {
-        let window = NSWindow(contentRect: screen.frame, styleMask: [.borderless],
-                              backing: .buffered, defer: false, screen: screen)
-        window.level = .statusBar
-        window.backgroundColor = .black
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = behavior
-        window.contentView = NSHostingView(rootView: content)
-        window.setFrame(screen.frame, display: true)
-        if makeKey {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            window.orderFront(nil)
-        }
-        return window
-    }
-
-    private func updateExternalWindow() {
-        externalWindow?.orderOut(nil)
-        externalWindow = nil
-
-        guard let displayID = externalDisplayID,
-              let screen = NSScreen.screens.first(where: {
-                  ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                   as? CGDirectDisplayID) == displayID
-              }) else { return }
-
-        externalWindow = makeBorderlessWindow(
-            on: screen,
-            content: ExternalOutputView().environmentObject(self),
-            behavior: [.fullScreenAuxiliary, .stationary],
-            makeKey: false)
-    }
-
-    /// System fullscreen of the main window (immersive mode).
-    func toggleFullscreen() {
-        NSApp.mainWindow?.toggleFullScreen(nil)
-    }
-
-    /// Fullscreen for PLAYBACK ONLY: a borderless full-screen window;
-    /// the app itself stays as it was (this isn't the green button).
-    func togglePlaybackFullscreen() {
-        if isPlaybackFullscreen {
-            playbackFullscreenWindow?.orderOut(nil)
-            playbackFullscreenWindow = nil
-            isPlaybackFullscreen = false
-            return
-        }
-        guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
-        playbackFullscreenWindow = makeBorderlessWindow(
-            on: screen,
-            content: PlaybackFullscreenView()
-                .environmentObject(self)
-                .environmentObject(hotkeysRef ?? HotkeyManager())
-                .tint(accentColor))
-        isPlaybackFullscreen = true
-    }
-
-    /// Fullscreen for the PLAYER ONLY in record mode (a live mirror in a borderless window).
-    func toggleLiveFullscreen() {
-        if isLiveFullscreen {
-            liveFullscreenWindow?.orderOut(nil)
-            liveFullscreenWindow = nil
-            isLiveFullscreen = false
-            return
-        }
-        guard let screen = NSApp.mainWindow?.screen ?? NSScreen.main else { return }
-        liveFullscreenWindow = makeBorderlessWindow(
-            on: screen,
-            content: LiveFullscreenView()
-                .environmentObject(self)
-                .environmentObject(hotkeysRef ?? HotkeyManager())
-                .tint(accentColor))
-        isLiveFullscreen = true
     }
 
     // MARK: - audio channels (record mask)
@@ -990,45 +480,8 @@ final class CaptureController: ObservableObject {
     // MARK: - markers
 
     /// Markers collected while the current take is recording.
-    private var recordingMarkers: [TakeMarker] = []
-    private var recordingStartDate: Date?
-
-    /// Flag the current moment: recording TC while recording, player position
-    /// in playback. Lands in the takeshot-markers.csv sidecar (and EDL export).
-    func addMarker() {
-        if viewerMode == .playback, let url = playbackURL {
-            let seconds: Double
-            if let raw = rawPlayer {
-                seconds = Double(raw.currentFrame) / max(1, raw.frameRate)
-            } else {
-                seconds = max(0, player.currentTime().seconds)
-            }
-            let tcText = playbackTimecodeText
-            guard let index = takes.firstIndex(where: { $0.url == url }) else {
-                lastError = L("marker_only_takes")
-                return
-            }
-            // one marker per FRAME — close markers are legitimate for editing
-            let frameStep = 1.0 / max(1, playbackFPS)
-            guard !takes[index].markers.contains(
-                where: { abs($0.seconds - seconds) < frameStep * 0.6 })
-            else { return }
-            takes[index].markers.append(
-                TakeMarker(seconds: seconds, timecodeText: tcText))
-            takes[index].markers.sort { $0.seconds < $1.seconds }
-            exportTakeLog()
-            lastNotice = L("marker_added", tcText)
-        } else if isRecording {
-            let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
-            let fps = Double(max(1, live.currentTimecode?.fps ?? 25))
-            guard !recordingMarkers.contains(
-                where: { abs($0.seconds - seconds) < 0.6 / fps }) else { return }
-            let tcText = live.currentTimecode?.description ?? ""
-            recordingMarkers.append(
-                TakeMarker(seconds: seconds, timecodeText: tcText))
-            lastNotice = L("marker_added", tcText)
-        }
-    }
+    var recordingMarkers: [TakeMarker] = []
+    var recordingStartDate: Date?
 
     /// Markers of the clip in the player (transport ticks).
     var playbackMarkers: [TakeMarker] {
@@ -1036,329 +489,20 @@ final class CaptureController: ObservableObject {
         return takes.first { $0.url == url }?.markers ?? []
     }
 
-    /// Mutate a marker of the current playback clip (list editor).
-    func updatePlaybackMarker(at index: Int,
-                              _ change: (inout TakeMarker) -> Void) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        change(&takes[takeIndex].markers[index])
-        exportTakeLog()
-    }
-
-    func removePlaybackMarker(at index: Int) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        takes[takeIndex].markers.remove(at: index)
-        exportTakeLog()
-    }
-
-    /// ⇧M: drop the marker under the playhead (±2 frames); while recording —
-    /// the most recent one.
-    func removeNearestMarker() {
-        if viewerMode == .playback {
-            let now = playbackPositionSeconds
-            let tolerance = 2.0 / max(1, playbackFPS)
-            guard let index = playbackMarkers.enumerated()
-                .min(by: { abs($0.element.seconds - now)
-                    < abs($1.element.seconds - now) })?.offset,
-                abs(playbackMarkers[index].seconds - now) <= tolerance
-            else { return }
-            let tc = playbackMarkers[index].timecodeText
-            removePlaybackMarker(at: index)
-            lastNotice = L("marker_removed", tc)
-        } else if isRecording, let last = recordingMarkers.last {
-            recordingMarkers.removeLast()
-            lastNotice = L("marker_removed", last.timecodeText)
-        }
-    }
-
-    func clearPlaybackMarkers() {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url })
-        else { return }
-        takes[takeIndex].markers.removeAll()
-        exportTakeLog()
-    }
-
     /// Current playback position in seconds (marker navigation).
-    private var playbackPositionSeconds: Double {
+    var playbackPositionSeconds: Double {
         if let raw = rawPlayer {
             return Double(raw.currentFrame) / max(1, raw.frameRate)
         }
         return max(0, player.currentTime().seconds)
     }
 
-    /// Jump to the next/previous marker of the current clip.
-    func jumpToMarker(forward: Bool) {
-        let markers = playbackMarkers
-        guard !markers.isEmpty else { return }
-        let now = playbackPositionSeconds
-        let index = forward
-            ? markers.firstIndex { $0.seconds > now + 0.05 }
-            : markers.lastIndex { $0.seconds < now - 0.05 }
-        guard let index else { return }
-        let marker = markers[index]
-        seekPlayback(to: marker.seconds)
-        let name = marker.note.isEmpty ? L("marker_n", index + 1) : marker.note
-        lastNotice = "⚑ \(name) — \(marker.timecodeText)"
-    }
-
-    /// Jump the player (AVPlayer or RAW) to a position in seconds.
-    func seekPlayback(to seconds: Double) {
-        if let raw = rawPlayer {
-            raw.seek(to: Int((seconds * raw.frameRate).rounded()))
-        } else {
-            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
-                        toleranceBefore: .zero, toleranceAfter: .zero)
-        }
-    }
-
-    /// Selects EDL: good takes back to back, markers as Resolve locators.
-    func exportSelectsEDL() {
-        let good = takes.filter { $0.rating == .good }
-        guard let edl = EDLExporter.selectsEDL(
-            takes: good, title: "\(settings.projectName) selects",
-            fps: Int(max(1, playbackFPS).rounded()))
-        else {
-            lastError = L("edl_no_good_takes")
-            return
-        }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_selects") + ".edl"
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try edl.write(to: url, atomically: true, encoding: .utf8)
-            lastNotice = L("edl_saved", url.lastPathComponent)
-        } catch {
-            lastError = "EDL: \(error.localizedDescription)"
-        }
-    }
-
-    /// Shift report: A4 PDF with thumbnails or a full CSV table.
-    func exportShiftReport(pdf: Bool) {
-        guard !takes.isEmpty else {
-            lastError = L("report_no_takes")
-            return
-        }
-        let panel = NSSavePanel()
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyMMdd"
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_report_\(stamp.string(from: Date()))")
-            + (pdf ? ".pdf" : ".csv")
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            if pdf {
-                guard let data = ShiftReport.pdfData(
-                    takes: takes, thumbnails: thumbnails,
-                    project: settings.projectName,
-                    camera: settings.cameraLabel) else {
-                    lastError = "PDF render failed"
-                    return
-                }
-                try data.write(to: url)
-            } else {
-                try TakeLogExporter.reportCSV(takes: takes)
-                    .write(to: url, atomically: true, encoding: .utf8)
-            }
-            lastNotice = L("report_saved", url.lastPathComponent)
-        } catch {
-            lastError = "Report: \(error.localizedDescription)"
-        }
-    }
-
     /// Freshly recorded take / saved still — the list flashes a border on it.
     @Published var recentlyAddedURL: URL?
-    private var recentHighlightTask: Task<Void, Never>?
-
-    private func flashNewItem(_ url: URL) {
-        recentlyAddedURL = url
-        recentHighlightTask?.cancel()
-        recentHighlightTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            self?.recentlyAddedURL = nil
-        }
-    }
-
-    /// PNG of a playback buffer (RAW engine / still tap) in display code values.
-    private func saveGrab(buffer: CVPixelBuffer) {
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let context = CIContext(options: [.cacheIntermediates: false])
-            let png = CapturePipeline.pngData(from: buffer, ciContext: context)
-            await MainActor.run { [weak self] in
-                self?.saveGrab(png)
-            }
-        }
-    }
-
-    /// Move a take to the Trash and drop it from the session.
-    func deleteTake(_ take: Take) {
-        do {
-            try FileManager.default.trashItem(at: take.url, resultingItemURL: nil)
-        } catch {
-            lastError = "Delete: \(error.localizedDescription)"
-            return
-        }
-        if playbackURL == take.url {
-            player.pause()
-            player.replaceCurrentItem(with: nil)
-            playbackTap.detach()
-            playbackURL = nil
-        }
-        if compareClipURL == take.url { compareClipURL = nil }
-        takes.removeAll { $0.id == take.id }
-        thumbnails[take.id] = nil
-        scannedPaths.remove(take.url.path)
-        exportTakeLog()
-    }
-
-    /// Move an Other-content file to the Trash.
-    func deleteOtherFile(_ url: URL) {
-        do {
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-        } catch {
-            lastError = "Delete: \(error.localizedDescription)"
-            return
-        }
-        if playbackURL == url {
-            player.pause()
-            player.replaceCurrentItem(with: nil)
-            playbackTap.detach()
-            rawPlayer?.pause()
-            rawPlayer = nil
-            playbackURL = nil
-        }
-        if compareClipURL == url { compareClipURL = nil }
-        otherFiles.removeAll { $0 == url }
-        otherThumbnails[url] = nil
-        otherDurations[url] = nil
-        scannedPaths.remove(url.path)
-    }
+    var recentHighlightTask: Task<Void, Never>?
 
     /// One-shot flag: the transport enables looping when the replayed clip loads.
     var replayLoopRequested = false
-
-    /// Instant replay (video assist): the freshest take, from the top, looping.
-    func instantReplay() {
-        guard let last = takes.max(by: { $0.recordedAt < $1.recordedAt })
-        else { return }
-        replayLoopRequested = true
-        play(url: last.url)
-        if let raw = rawPlayer {
-            raw.isLooping = true
-            replayLoopRequested = false
-        }
-    }
-
-    /// Open a file in the player and switch to playback mode.
-    /// Photos are just displayed (AVPlayer isn't needed for them).
-    func play(url: URL) {
-        playbackURL = url
-        playbackFormatText = nil
-        playbackStartTC = nil
-        playbackAspect = nil
-        playbackFPS = 25
-        rawPlayer?.pause()
-        rawPlayer = nil
-        rawPlayerError = nil
-        let ext = url.pathExtension.lowercased()
-        let isRaw = Self.rawExtensions.contains(ext) || Self.isCinemaDNGFolder(url)
-        if Self.imageExtensions.contains(ext), !isRaw {
-            player.pause()
-            player.replaceCurrentItem(with: nil)
-            playbackTap.detach()
-            playbackLUTSuppressed = false
-            loadStill(url: url)
-        } else if isRaw {
-            player.pause()
-            player.replaceCurrentItem(with: nil)
-            playbackTap.detach()
-            var openError: String?
-            if let model = RawPlayerModel(url: url, error: &openError) {
-                model.onScopeData = { [weak self] data in
-                    self?.live.scopeData = data
-                }
-                rawPlayer = model
-                model.setViewAssist(assist)
-                wirePlayoutRouting()
-                playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
-                playbackStartTC = model.startTimecode
-                playbackFPS = model.frameRate
-                playbackAspect = model.height > 0
-                    ? CGFloat(model.width) / CGFloat(model.height) : nil
-                applyLetterboxColor()
-                model.play()
-            } else {
-                rawPlayerError = openError
-            }
-        } else {
-            let item = AVPlayerItem(url: url)
-            player.replaceCurrentItem(with: item)
-            playbackTap.attach(to: item)
-            playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
-            playbackLUTSuppressed = false
-            detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
-            player.play()
-            loadPlaybackInfo(for: item)
-        }
-        viewerMode = .playback
-        updateTapRunning()
-        updateScopesRunning()
-    }
-
-    /// Decode a still into Rec.709 display code values and hand it to the tap:
-    /// stills render/compare/LUT exactly like video — SwiftUI Image was
-    /// color-managed differently and stills never matched the player.
-    private func loadStill(url: URL) {
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let cg = CGImageSourceCreateImageAtIndex(source, 0, [
-                      kCGImageSourceShouldCacheImmediately: true,
-                  ] as CFDictionary) else { return }
-            // managed input (embedded profile) rendered INTO the HDTV space:
-            // identity for our own grabs, correct conversion for foreign files
-            let attachments = [
-                kCVImageBufferColorPrimariesKey: kCVImageBufferColorPrimaries_ITU_R_709_2,
-                kCVImageBufferTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_709_2,
-                kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
-            ] as CFDictionary
-            let space = CVImageBufferCreateColorSpaceFromAttachments(attachments)?
-                .takeRetainedValue() ?? CGColorSpaceCreateDeviceRGB()
-            let image = CIImage(cgImage: cg)
-            let attrs: [CFString: Any] = [
-                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-            ]
-            var buffer: CVPixelBuffer?
-            CVPixelBufferCreate(kCFAllocatorDefault, cg.width, cg.height,
-                                kCVPixelFormatType_32BGRA,
-                                attrs as CFDictionary, &buffer)
-            guard let buffer else { return }
-            let destination = CIRenderDestination(pixelBuffer: buffer)
-            destination.colorSpace = space
-            let context = CIContext(options: [.cacheIntermediates: false])
-            guard let task = try? context.startTask(toRender: image,
-                                                    to: destination),
-                  (try? task.waitUntilCompleted()) != nil else { return }
-            let boxed = UncheckedSendable(buffer)
-            await MainActor.run { [weak self] in
-                guard let self, self.playbackURL == url else { return }
-                self.playbackTap.attachStill(boxed.value)
-                self.playbackFormatText = "\(cg.height)p"
-                self.playbackAspect = cg.height > 0
-                    ? CGFloat(cg.width) / CGFloat(cg.height) : nil
-                self.applyPlaybackLUT()
-                self.updateTapRunning()
-            }
-        }
-    }
 
     // MARK: - playback info for the player badges
 
@@ -1368,20 +512,8 @@ final class CaptureController: ObservableObject {
     @Published var playbackStartTC: Timecode?
     /// Aspect ratio of the loaded clip (nil while loading / images).
     @Published var playbackAspect: CGFloat?
-    private(set) var playbackFPS: Double = 25
-
-    /// TC text for an arbitrary player position (transport readouts).
-    func playbackTC(atSeconds seconds: Double) -> String {
-        let fps = max(1, playbackFPS)
-        let frames = Int((max(0, seconds) * fps).rounded(.down))
-        let fpsInt = max(1, Int(fps.rounded()))
-        if let start = playbackStartTC {
-            return Timecode(frameNumber: start.frameNumber + frames,
-                            fps: fpsInt,
-                            isDropFrame: start.isDropFrame).description
-        }
-        return Timecode(frameNumber: frames, fps: fpsInt).description
-    }
+    /// Set from CaptureController+Playback when a clip loads.
+    var playbackFPS: Double = 25
 
     /// Playback position as timecode (start TC + elapsed at the file's fps).
     var playbackTimecodeText: String {
@@ -1403,58 +535,6 @@ final class CaptureController: ObservableObject {
                         fps: tc.fps, isDropFrame: start.isDropFrame).description
     }
 
-    private func loadPlaybackInfo(for item: AVPlayerItem) {
-        Task { [weak self] in
-            let asset = item.asset
-            guard let track = try? await asset.loadTracks(withMediaType: .video).first
-            else { return }
-            let size = (try? await track.load(.naturalSize)) ?? .zero
-            let fps = Double((try? await track.load(.nominalFrameRate)) ?? 25)
-            var startTC: Timecode?
-            if let tcTrack = try? await asset.loadTracks(withMediaType: .timecode).first,
-               let (frame, fdesc) = try? await Self.firstTimecodeSample(of: tcTrack) {
-                let quanta = Int(CMTimeCodeFormatDescriptionGetFrameQuanta(fdesc))
-                let flags = CMTimeCodeFormatDescriptionGetTimeCodeFlags(fdesc)
-                startTC = Timecode(frameNumber: Int(frame), fps: max(1, quanta),
-                                   isDropFrame: flags & kCMTimeCodeFlag_DropFrame != 0)
-            }
-            await MainActor.run { [weak self] in
-                guard let self, self.player.currentItem === item else { return }
-                let fpsText = fps > 0
-                    ? (abs(fps.rounded() - fps) < 0.05
-                       ? String(Int(fps.rounded())) : String(format: "%.2f", fps))
-                    : "?"
-                // same short style as the live badge: 1080p25
-                self.playbackFormatText = "\(Int(size.height))p\(fpsText)"
-                self.playbackStartTC = startTC
-                self.playbackFPS = fps > 0 ? fps : 25
-                self.playbackAspect = size.height > 0
-                    ? size.width / size.height : nil
-            }
-        }
-    }
-
-    /// First tc32 sample of a timecode track: the start frame number.
-    nonisolated private static func firstTimecodeSample(
-        of track: AVAssetTrack) async throws -> (UInt32, CMTimeCodeFormatDescription)? {
-        let descriptions = try await track.load(.formatDescriptions)
-        guard let fdesc = descriptions.first,
-              CMFormatDescriptionGetMediaType(fdesc) == kCMMediaType_TimeCode
-        else { return nil }
-        let asset = track.asset
-        guard let asset else { return nil }
-        let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
-        reader.add(output)
-        reader.startReading()
-        defer { reader.cancelReading() }
-        guard let sample = output.copyNextSampleBuffer(),
-              let block = CMSampleBufferGetDataBuffer(sample) else { return nil }
-        var raw: UInt32 = 0
-        CMBlockBufferCopyDataBytes(block, atOffset: 0,
-                                   dataLength: 4, destination: &raw)
-        return (UInt32(bigEndian: raw), fdesc)
-    }
     @Published var settings = CaptureSettings.loaded() {
         didSet {
             settings.save()
@@ -1491,38 +571,6 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Recompute the taken-name warning for the NEXT take.
-    /// Not shown while recording: the file being written naturally exists.
-    func refreshNameCollision() {
-        guard !isRecording else { nameCollision = nil; return }
-        let engine = NamingEngine(template: settings.namingTemplate)
-        let context = NamingContext(
-            project: settings.projectName, date: Date(),
-            take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
-            postfix: settings.postfix ?? "",
-            clipPadding: settings.clipPadWidthEffective,
-            timecode: currentTimecode)
-        let url = destinationRoot
-            .appendingPathComponent(engine.fileName(for: context))
-            .appendingPathExtension("mov")
-        nameCollision = FileManager.default.fileExists(atPath: url.path)
-            ? url.lastPathComponent : nil
-    }
-
-    /// New record folder: old takes/files don't apply — clear and rescan.
-    private func resetLibraryForNewDestination() {
-        libraryGeneration += 1 // invalidate a scan already walking the old folder
-        takes.removeAll()
-        retiredTakes.removeAll() // a new folder gets its own log
-        otherFiles.removeAll()
-        thumbnails.removeAll()
-        otherThumbnails.removeAll()
-        otherDurations.removeAll()
-        scannedPaths.removeAll()
-        nextTakeNumber = 1
-        scanDestinationFolder()
-    }
-
     /// UI language; English by default.
     var appLanguage: AppLanguage {
         get { settings.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english }
@@ -1531,7 +579,7 @@ final class CaptureController: ObservableObject {
 
     let pipeline: CapturePipeline
 
-    private let backend: AggregateBackend
+    let backend: AggregateBackend
 
     var backendAvailable: Bool { backend.isAvailable }
 
@@ -1583,146 +631,6 @@ final class CaptureController: ObservableObject {
         rebuildLUT()
         rebuildPlayout()
         startDiskWatch()
-    }
-
-    /// Free-space watch on the record volume: warn early, stop the take
-    /// before the writer hits a hard wall (nothing watched disk space at all).
-    private func startDiskWatch() {
-        Task { [weak self] in
-            while let self, !Task.isCancelled {
-                self.checkDiskSpace()
-                try? await Task.sleep(for: .seconds(10))
-            }
-        }
-    }
-
-    private func checkDiskSpace() {
-        guard isCapturing else { return }
-        let values = try? destinationRoot.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        guard let free = values?.volumeAvailableCapacityForImportantUsage
-        else {
-            // Asking a volume that is no longer mounted is exactly how this
-            // query fails, so returning quietly meant the watchdog went silent
-            // in the one case it exists for. A take still "recording" onto a
-            // vanished destination writes nothing at all.
-            // A merely absent folder is recoverable and normal (a fresh
-            // destination path), so try that first and only alarm if the
-            // volume itself is unreachable.
-            try? FileManager.default.createDirectory(
-                at: destinationRoot, withIntermediateDirectories: true)
-            guard !FileManager.default.fileExists(atPath: destinationRoot.path)
-            else { return }
-            if isRecording {
-                pipeline.toggleManualRecord()
-                persistentAlert = "RECORD VOLUME UNREACHABLE — recording stopped"
-            } else {
-                persistentAlert = "Record folder unreachable: "
-                    + destinationRoot.path
-            }
-            return
-        }
-        let freeGB = Double(free) / 1_000_000_000
-        if freeGB < 0.5, isRecording {
-            pipeline.toggleManualRecord() // close the take while it can finalize
-            persistentAlert = String(format:
-                "DISK FULL (%.1f GB) — recording stopped", freeGB)
-        } else if freeGB < 5 {
-            persistentAlert = String(format:
-                "Record disk low: %.1f GB free", freeGB)
-        }
-    }
-
-    private func bindPipeline() {
-        pipeline.onFormatChanged = { [weak self] format in
-            guard let self else { return }
-            let changed = self.signalFormat != format
-            self.signalFormat = format
-            if changed, format != nil, self.playoutFeeder != nil {
-                self.rebuildPlayout()
-            }
-        }
-        pipeline.onTimecode = { [weak self] timecode in
-            guard let self, self.live.currentTimecode != timecode else { return }
-            self.live.currentTimecode = timecode
-        }
-        pipeline.onRecStateChanged = { [weak self] recording in
-            guard let self else { return }
-            self.isRecording = recording
-            if recording {
-                self.recordingStartDate = Date()
-                self.recordingMarkers = []
-                self.persistentAlert = nil // a clean start clears the alarm
-            }
-            self.refreshNameCollision() // start hides it, stop recomputes
-            // multicam: the other cameras in sync with the main one
-            for channel in self.extraChannels { channel.setRecording(recording) }
-        }
-        pipeline.onTakeFinished = { [weak self] take in
-            guard let self else { return }
-            var take = take
-            // re-anchor marker positions on the take's actual start TC: the
-            // wall clock measured from the REC press is off by the pre-roll
-            take.markers = self.recordingMarkers.map { marker in
-                var fixed = marker
-                if let start = take.startTimecode,
-                   let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
-                    var frames = tc.frameNumber - start.frameNumber
-                    if frames < 0 {
-                        frames += Timecode.dayFrames(fps: start.fps,
-                                                     isDropFrame: start.isDropFrame)
-                    }
-                    fixed.seconds = Double(frames) / Double(max(1, start.fps))
-                }
-                return fixed
-            }
-            self.recordingMarkers = []
-            self.takes.append(take)
-            self.nextTakeNumber += 1
-            self.exportTakeLog()
-            self.requestThumbnail(for: take) // deduped against a cell's request
-            self.flashNewItem(take.url)
-        }
-        pipeline.onSignal = { [weak self] present in
-            self?.signalPresent = present
-        }
-        pipeline.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
-        }
-        playbackTap.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
-        }
-        // capture the monitor object itself: this fires on the pipeline queue
-        // and must not touch the MainActor-isolated controller
-        let monitor = audioMonitor
-        pipeline.onMonitorAudio = { monitor.enqueue($0) }
-        pipeline.onError = { [weak self] message in
-            self?.reportPipelineError(message)
-        }
-        pipeline.onVancStats = { [weak self] stats in
-            self?.vancStats = stats
-        }
-        pipeline.onAudioLevels = { [weak self] levels in
-            self?.live.audioLevels = levels
-        }
-    }
-
-    /// Recording-integrity failures stick in the alarm banner; everything else
-    /// toasts for five seconds.
-    ///
-    /// "Failed to start recording" and a take truncated by a format change used
-    /// to toast: the two cases where footage is missing outright, announced more
-    /// quietly than a dropped frame. An operator watching the slate rather than
-    /// the screen had no way to learn about them.
-    private func reportPipelineError(_ message: String) {
-        let sticky = ["TAKE LOST", "Dropped", "ingress",
-                      "Failed to start recording", "Take closed:",
-                      "Pre-roll incomplete"]
-        if sticky.contains(where: message.contains) {
-            persistentAlert = message
-        } else {
-            lastError = message
-        }
     }
 
     /// UI theme from settings.
@@ -1836,15 +744,6 @@ final class CaptureController: ObservableObject {
         setRating(last.rating == rating ? .none : rating, for: last)
     }
 
-    private func pushConfig() {
-        pipeline.update(config: .init(
-            settings: settings, roll: roll, takeNumber: nextTakeNumber))
-        pipeline.setVideoLevels(settings.videoLevels)
-        for channel in extraChannels {
-            channel.update(settings: settings, roll: roll, takeNumber: nextTakeNumber)
-        }
-    }
-
     // MARK: - multicam
 
     /// Extra cameras (the first/main one lives in this controller).
@@ -1857,144 +756,13 @@ final class CaptureController: ObservableObject {
         [settings.cameraLabel] + extraChannels.map(\.camLabel)
     }
 
-    func toggleMulticam() {
-        setMulticam(!multicamOn)
-    }
-
-    func setMulticam(_ on: Bool) {
-        for channel in extraChannels { channel.stop() }
-        extraChannels.removeAll()
-        multicamOn = on
-        guard on else { return }
-
-        let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)
-        if isMockSelected {
-            // demo: a second mock camera
-            let mock = MockCaptureBackend()
-            let channel = CameraChannel(
-                camLabel: nextLetter, backend: mock,
-                deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
-            channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-            channel.onError = { [weak self] message in self?.reportPipelineError(message) }
-            try? channel.start() // the mock cannot fail
-            extraChannels = [channel]
-        } else {
-            // hardware: each OTHER DeckLink board is its own channel
-            let others = devices.filter {
-                $0.id.hasPrefix("decklink:") && $0.id != selectedDeviceID
-            }
-            var channels: [CameraChannel] = []
-            var letter = nextLetter
-            for device in others {
-                let rawID = String(device.id.dropFirst("decklink:".count))
-                let channel = CameraChannel(
-                    camLabel: letter,
-                    backend: DeckLinkBackendAdapter(watchesDevices: false),
-                    deviceID: rawID, settings: settings, roll: roll)
-                channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-                channel.onError = { [weak self] message in self?.reportPipelineError(message) }
-                do {
-                    try channel.start()
-                    channels.append(channel)
-                } catch {
-                    lastError = "\(device.name): \(error.localizedDescription)"
-                }
-                letter = FieldStepper.stepLetter(letter, by: 1)
-            }
-            extraChannels = channels
-        }
-    }
-
-    private func appendChannelTake(_ take: Take) {
-        takes.append(take)
-        takes.sort { $0.recordedAt < $1.recordedAt }
-        exportTakeLog()
-        requestThumbnail(for: take)
-    }
-
     // MARK: - capture control
-
-    func refreshDevices() {
-        devices = backend.devices()
-
-        let realDevices = devices.filter { !$0.id.hasPrefix("mock:") }
-        if let selected = selectedDeviceID, !devices.contains(where: { $0.id == selected }) {
-            // the selected device was unplugged — fall back to the first available
-            lastError = L("device_disconnected")
-            selectedDeviceID = devices.first?.id
-        } else if selectedDeviceID == nil || (isMockSelected && !realDevices.isEmpty) {
-            // nothing selected, or the demo source is selected but a real board
-            // appeared — switch to it (capture starts itself via didSet)
-            selectedDeviceID = realDevices.first?.id ?? devices.first?.id
-        }
-    }
 
     /// Input mode names of the selected DeckLink (for the Settings picker).
     var selectedDeviceInputModes: [String] {
         guard let id = selectedDeviceID, id.hasPrefix("decklink:") else { return [] }
         return DeckLinkBackendAdapter.inputModeNames(
             deviceID: String(id.dropFirst("decklink:".count)))
-    }
-
-    func startCapture() {
-        guard let deviceID = selectedDeviceID else { return }
-        if let adapter = backend.child(of: DeckLinkBackendAdapter.self) {
-            adapter.forcedMode = settings.forcedInputMode.map {
-                (name: $0, rgb: settings.forcedInputRGB ?? false)
-            }
-            adapter.preferTenBitRGB = settings.tenBitCapture ?? true
-        }
-        do {
-            try backend.startCapture(deviceID: deviceID)
-            // before any audio packet, so a take triggered on frame 1 still gets
-            // an audio track
-            pipeline.setExpectedAudioChannels(backend.embeddedAudioChannels)
-            isCapturing = true
-            lastError = nil
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    func stopCapture() {
-        backend.stopCapture()
-        pipeline.captureStopped()
-        isCapturing = false
-        // await finishing the files in the background (without blocking the UI)
-        Task { await pipeline.finishPendingWrites() }
-    }
-
-    /// A blocking flush on app exit — so the file isn't truncated.
-    /// Closes the ACTIVE take too (quitting mid-record used to leave a .mov
-    /// without its moov atom), and waits on a detached task: a MainActor task
-    /// can never run while the main thread is parked in semaphore.wait.
-    func flushOnTerminate() {
-        pipeline.captureStopped() // finishes the in-flight take, if any
-        for channel in extraChannels { channel.stopStreams() }
-        let sem = DispatchSemaphore(value: 0)
-        let pipeline = self.pipeline
-        // EVERY pipeline must finalize before exit — the extra channels used
-        // to fire-and-forget, leaving B/C-cam takes without moov atoms
-        let channelPipelines = extraChannels.map(\.pipeline)
-        Task.detached {
-            await pipeline.finishPendingWrites()
-            for channelPipeline in channelPipelines {
-                await channelPipeline.finishPendingWrites()
-            }
-            sem.signal()
-        }
-        _ = sem.wait(timeout: .now() + 15)
-    }
-
-    private func restartCapture() {
-        if isCapturing {
-            stopCapture()
-        }
-        startCapture()
-    }
-
-    func toggleManualRecord() {
-        pipeline.toggleManualRecord()
     }
 
     /// Click the circle: none → good → bad → none.
@@ -2024,74 +792,6 @@ final class CaptureController: ObservableObject {
 
     // MARK: - frame grab
 
-    /// Grab the current frame as a PNG next to the takes. In playback it grabs the
-    /// current player frame (with the LUT); otherwise the live processed frame.
-    func grabFrame() {
-        if viewerMode == .playback, playbackURL != nil {
-            // RAW engine and stills have no AVPlayer item — grab what's on
-            // screen instead of silently arming a LIVE-camera grab
-            if let raw = rawPlayer, let buffer = raw.currentBuffer() {
-                saveGrab(buffer: buffer)
-            } else if let item = player.currentItem {
-                grabPlaybackFrame(item: item)
-            } else if let buffer = playbackTap.currentBuffer() {
-                saveGrab(buffer: buffer)
-            } else {
-                lastError = "Frame grab failed"
-            }
-        } else if isCapturing {
-            pipeline.grabNextFrame { [weak self] png in self?.saveGrab(png) }
-        } else {
-            lastError = L("no_signal")
-        }
-    }
-
-    private func grabPlaybackFrame(item: AVPlayerItem) {
-        let generator = AVAssetImageGenerator(asset: item.asset)
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
-        generator.appliesPreferredTrackTransform = true
-        let time = player.currentTime()
-        // stills are deliverables like the recording: the preview LUT is never
-        // baked in — a look appears in a still only when it is in the clip itself
-        Task { [weak self] in
-            let cg = try? await generator.image(at: time).image
-            await MainActor.run {
-                guard let cg else { self?.lastError = "Frame grab failed"; return }
-                self?.saveGrab(NSBitmapImageRep(cgImage: cg)
-                    .representation(using: .png, properties: [:]))
-            }
-        }
-    }
-
-    private func saveGrab(_ png: Data?) {
-        guard let png else { lastError = "Frame grab failed"; return }
-        // project_cam_still_timecode
-        let stamp = currentTimecode?.fileNameSafe ?? Self.grabTimeStamp()
-        let name = NamingEngine.sanitize(
-            [settings.projectName, settings.cameraLabel, "still", stamp]
-                .filter { !$0.isEmpty }.joined(separator: "_"))
-        let url = CapturePipeline.uniqueURL(for: destinationRoot
-            .appendingPathComponent(name).appendingPathExtension("png"))
-        do {
-            try FileManager.default.createDirectory(
-                at: destinationRoot, withIntermediateDirectories: true)
-            try png.write(to: url)
-            scanDestinationFolder() // show it in Other content right away
-            flashNewItem(url)
-            lastNotice = L("grab_saved", url.lastPathComponent)
-        } catch {
-            lastError = "Frame grab failed: \(error.localizedDescription)"
-        }
-    }
-
-    private static func grabTimeStamp() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HHmmss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: Date())
-    }
-
     /// The metadata log URL (for "show in Finder").
     var takeLogURL: URL {
         destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
@@ -2102,490 +802,44 @@ final class CaptureController: ObservableObject {
         URL(fileURLWithPath: (settings.destinationPath as NSString).expandingTildeInPath)
     }
 
-    func openDestinationInFinder() {
-        try? FileManager.default.createDirectory(at: destinationRoot,
-                                                 withIntermediateDirectories: true)
-        NSWorkspace.shared.open(destinationRoot)
-    }
-
-    /// Change-record-folder dialog (used from both Settings and the bottom bar).
-    func chooseDestinationFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = destinationRoot
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.destinationPath = url.path
-        }
-    }
-
     // MARK: - folder sync (Other content)
 
-    nonisolated private static let videoExtensions: Set<String> =
+    nonisolated static let videoExtensions: Set<String> =
         ["mov", "mp4", "mxf", "m4v", "avi", "braw", "r3d"]
-    nonisolated private static let imageExtensions: Set<String> =
+    nonisolated static let imageExtensions: Set<String> =
         ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
 
-    /// Light polling of the record folder: video files not among our takes
-    /// are shown in a separate Other content block.
-    private func startFolderSync() {
-        startFolderWatcher()
-        Task { [weak self] in
-            while let self, !Task.isCancelled {
-                self.scanDestinationFolder()
-                // the kernel watcher is the primary trigger; this is a safety net
-                try? await Task.sleep(for: .seconds(60))
-            }
-        }
-    }
-
-    private var folderWatcher: DispatchSourceFileSystemObject?
-    private var folderRescanScheduled = false
-
-    /// Kernel notifications on the record folder: add/delete shows up right away
-    /// (the 5 s poll stays as a safety net for metadata-only changes).
-    func startFolderWatcher() {
-        folderWatcher?.cancel() // its cancel handler closes the old fd
-        folderWatcher = nil
-        try? FileManager.default.createDirectory(at: destinationRoot,
-                                                 withIntermediateDirectories: true)
-        let fd = open(destinationRoot.path, O_EVTONLY)
-        guard fd >= 0 else {
-            os_log("folder watcher FAILED to arm: %{public}s",
-                   log: CapturePipeline.levelsLog, type: .error, destinationRoot.path)
-            return
-        }
-        os_log("folder watcher armed: %{public}s",
-               log: CapturePipeline.levelsLog, type: .default, destinationRoot.path)
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.write, .rename, .delete],
-            queue: .main)
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            let flags = source.data
-            if flags.contains(.delete) || flags.contains(.rename) {
-                // the fd now points at an unlinked inode — the watcher is dead
-                // and an open take is writing into an orphan; recreate + rearm
-                try? FileManager.default.createDirectory(
-                    at: self.destinationRoot, withIntermediateDirectories: true)
-                self.lastError = "Record folder was moved/deleted — recreated"
-                self.startFolderWatcher()
-                return
-            }
-            guard !self.folderRescanScheduled else { return }
-            // debounce bursts (a recording take touches the folder every frame)
-            self.folderRescanScheduled = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                guard let self else { return }
-                self.folderRescanScheduled = false
-                os_log("folder event -> rescan", log: CapturePipeline.levelsLog,
-                       type: .default)
-                self.scanDestinationFolder()
-            }
-        }
-        source.setCancelHandler { [fd] in close(fd) }
-        source.resume()
-        folderWatcher = source
-    }
+    var folderWatcher: DispatchSourceFileSystemObject?
+    var folderRescanScheduled = false
 
     /// Paths already checked for the TakeShot tag (so we don't re-read metadata).
-    private var scannedPaths: Set<String> = []
+    var scannedPaths: Set<String> = []
 
     /// Bumped whenever the library is reset (a new destination folder). A scan
     /// that started against the old folder carries the old value and discards
     /// itself instead of pouring the previous folder's takes into the new one.
-    private var libraryGeneration = 0
+    var libraryGeneration = 0
     /// A scan is walking the folder or classifying its results.
-    private var scanInFlight = false
+    var scanInFlight = false
     /// The folder changed while a scan was running — rescan when it lands.
-    private var rescanWhenIdle = false
+    var rescanWhenIdle = false
 
-    private func scanDestinationFolder() {
-        guard !scanInFlight else {
-            // classifyFoundFiles suspends on metadata loads, and the MainActor
-            // runs other work at every suspension point — including another
-            // scan. Overlapping runs interleaved their results: the same file
-            // ended up in the takes list and in Other content at once.
-            rescanWhenIdle = true
-            return
-        }
-        scanInFlight = true
-        let root = destinationRoot
-        let generation = libraryGeneration
-        let ownTakePaths = Set(takes.map { $0.url.path })
-        Task.detached(priority: .utility) { [weak self] in
-            let (candidates, busy) = Self.findForeignVideos(root: root,
-                                                            excluding: ownTakePaths)
-            await self?.finishScan(candidates, rescanSoon: busy,
-                                   generation: generation)
-        }
-    }
-
-    private func finishScan(_ candidates: [URL], rescanSoon: Bool,
-                            generation: Int) async {
-        defer {
-            scanInFlight = false
-            if rescanWhenIdle {
-                rescanWhenIdle = false
-                scanDestinationFolder()
-            }
-        }
-        guard generation == libraryGeneration else { return }
-        await classifyFoundFiles(candidates, rescanSoon: rescanSoon)
-    }
-
-    private var busyRescanScheduled = false
-
-    /// Our files (the com.takeshot.origin QuickTime tag) return to the takes list
-    /// after a restart; the rest are Other content.
-    private func classifyFoundFiles(_ candidates: [URL],
-                                    rescanSoon: Bool) async {
-        // a file was skipped as "still being written" — nothing will re-trigger
-        // the scan once the copy finishes, so come back for it ourselves
-        if rescanSoon, !busyRescanScheduled {
-            busyRescanScheduled = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                guard let self else { return }
-                self.busyRescanScheduled = false
-                self.scanDestinationFolder()
-            }
-        }
-        // files removed from the folder leave the panel, but NOT the shift log:
-        // the normal way a day ends is the DIT moving the takes into the archive
-        // structure, and rewriting the CSV from the shrunken list turned that
-        // safe-looking move into the destruction of every rating, comment and
-        // marker of the day
-        let gone = takes.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
-        if !gone.isEmpty {
-            let goneIDs = Set(gone.map(\.id))
-            takes.removeAll { goneIDs.contains($0.id) }
-            for take in gone {
-                thumbnails[take.id] = nil
-                scannedPaths.remove(take.url.path)
-            }
-            retiredTakes.append(contentsOf: gone)
-        }
-        var restored: [Take] = []
-        var foreign: [URL] = []
-        // Lossy decode on purpose: one bad byte must not wipe the day's
-        // ratings. The failable String(bytes:encoding:) the linter prefers
-        // would return nil for the whole file, which is exactly the outcome
-        // this guards against.
-        // swiftlint:disable optional_data_string_conversion
-        let meta = (try? Data(contentsOf: takeLogURL))
-            .map { TakeLogExporter.parseMetadata(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
-        let markersURL = destinationRoot
-            .appendingPathComponent(TakeLogExporter.markersFileName)
-        let markers = (try? Data(contentsOf: markersURL))
-            .map { TakeLogExporter.parseMarkers(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
-        // swiftlint:enable optional_data_string_conversion
-
-        for url in candidates {
-            if scannedPaths.contains(url.path) {
-                if !takes.contains(where: { $0.url.path == url.path }) {
-                    foreign.append(url)
-                }
-                continue
-            }
-            let ext = url.pathExtension.lowercased()
-            guard ext == "mov" || ext == "mp4",
-                  !Self.isCinemaDNGFolder(url) else {
-                scannedPaths.insert(url.path)
-                foreign.append(url)
-                continue
-            }
-            let asset = AVURLAsset(url: url)
-            let metadata = (try? await asset.load(.metadata)) ?? []
-            func value(_ key: String) async -> String? {
-                guard let item = metadata.first(where: { ($0.key as? String) == key })
-                else { return nil }
-                return try? await item.load(.stringValue)
-            }
-            scannedPaths.insert(url.path)
-            guard await value(TakeWriter.markerKey) != nil else {
-                foreign.append(url)
-                continue
-            }
-            let duration = (try? await asset.load(.duration))?.seconds ?? 0
-            let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?
-                .creationDate ?? Date.distantPast
-            let startTC = await TimecodeReader.startTimecode(of: asset)
-            let take = Take(
-                url: url,
-                displayName: url.deletingPathExtension().lastPathComponent,
-                scene: "",
-                roll: await value(TakeWriter.rollKey) ?? "",
-                takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
-                startTimecode: startTC,
-                durationSeconds: duration,
-                rating: meta[url.lastPathComponent]?.rating ?? .none,
-                comment: meta[url.lastPathComponent]?.comment ?? "",
-                recordedAt: created,
-                markers: markers[url.lastPathComponent] ?? [])
-            restored.append(take)
-        }
-
-        if !restored.isEmpty {
-            let known = Set(takes.map { $0.url.path })
-            let new = restored.filter { !known.contains($0.url.path) }
-            if !new.isEmpty {
-                // a file that came back (volume remounted, take moved back) is
-                // live again, so it must not also sit in the retired list
-                let returned = Set(new.map { $0.url.path })
-                retiredTakes.removeAll { returned.contains($0.url.path) }
-                takes.append(contentsOf: new)
-                takes.sort { $0.recordedAt < $1.recordedAt }
-                // thumbnails load lazily as cells appear (restored sessions
-                // used to decode hundreds of files at startup)
-                continueClipNumbering()
-            }
-        }
-        func modified(_ url: URL) -> Date {
-            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate ?? .distantPast
-        }
-        let sorted = foreign.sorted { modified($0) > modified($1) }
-        if otherFiles != sorted {
-            otherFiles = sorted
-            // thumbnails load lazily per cell; prune caches for files that left
-            let current = Set(sorted)
-            otherThumbnails = otherThumbnails.filter { current.contains($0.key) }
-            otherDurations = otherDurations.filter { current.contains($0.key) }
-        }
-        // a file may have appeared in the folder externally — refresh the taken-name warning
-        refreshNameCollision()
-    }
-
-    /// The next clip number — after the max in the current roll.
-    private func continueClipNumbering() {
-        let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
-        nextTakeNumber = maxClip + 1
-    }
-
-    /// Thumbnails for Other content: photos directly, videos via a frame generator.
-    private func generateOtherThumbnails(for urls: [URL]) {
-        let missing = urls.filter { otherThumbnails[$0] == nil }
-        guard !missing.isEmpty else { return }
-        Task.detached(priority: .utility) { [weak self] in
-            for url in missing {
-                var image: NSImage?
-                let ext = url.pathExtension.lowercased()
-                if Self.imageExtensions.contains(ext) {
-                    // thumbnail-sized decode: a full 24 MP still would pin
-                    // ~100 MB in the cache
-                    if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-                       let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
-                           kCGImageSourceCreateThumbnailFromImageAlways: true,
-                           kCGImageSourceThumbnailMaxPixelSize: 256,
-                       ] as CFDictionary) {
-                        image = NSImage(cgImage: cg,
-                                        size: NSSize(width: cg.width,
-                                                     height: cg.height))
-                    }
-                } else if Self.isCinemaDNGFolder(url) {
-                    let frames = DNGSequenceSource.frameURLs(in: url)
-                    if let middle = frames.dropFirst(frames.count / 2).first,
-                       let src = CGImageSourceCreateWithURL(middle as CFURL, nil),
-                       let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
-                           kCGImageSourceCreateThumbnailFromImageAlways: true,
-                           kCGImageSourceThumbnailMaxPixelSize: 256,
-                       ] as CFDictionary) {
-                        image = NSImage(cgImage: cg,
-                                        size: NSSize(width: cg.width,
-                                                     height: cg.height))
-                    }
-                    await MainActor.run { [weak self] in
-                        self?.otherDurations[url] = Double(frames.count) / 24.0
-                    }
-                } else if ext == "braw" {
-                    if let clip = try? CBRClip(path: url.path) {
-                        if clip.frameCount > 0,
-                           let buffer = clip.copyFrame(at: clip.frameCount / 2) {
-                            image = Self.thumbnail(from: buffer, maxSize: 256)
-                        }
-                        if clip.frameRate > 0 {
-                            let seconds = Double(clip.frameCount)
-                                / Double(clip.frameRate)
-                            await MainActor.run { [weak self] in
-                                self?.otherDurations[url] = seconds
-                            }
-                        }
-                    }
-                } else {
-                    let asset = AVURLAsset(url: url)
-                    let generator = AVAssetImageGenerator(asset: asset)
-                    generator.appliesPreferredTrackTransform = true
-                    generator.maximumSize = CGSize(width: 256, height: 256)
-                    if let (cgImage, _) = try? await generator.image(
-                        at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
-                        image = NSImage(cgImage: cgImage,
-                                        size: NSSize(width: cgImage.width,
-                                                     height: cgImage.height))
-                    }
-                    if let duration = try? await asset.load(.duration) {
-                        let seconds = duration.seconds
-                        await MainActor.run { [weak self] in
-                            self?.otherDurations[url] = seconds
-                        }
-                    }
-                }
-                if let image {
-                    let boxed = UncheckedSendable(image) // NSImage predates Sendable
-                    await MainActor.run { [weak self] in
-                        self?.otherThumbnails[url] = boxed.value
-                        self?.otherThumbsInFlight.remove(url)
-                    }
-                }
-            }
-        }
-    }
-
-    nonisolated private static func thumbnail(from buffer: CVPixelBuffer,
-                                              maxSize: CGFloat) -> NSImage? {
-        let image = CIImage(cvPixelBuffer: buffer)
-        let scale = min(1, maxSize / max(image.extent.width, image.extent.height))
-        let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let context = CIContext(options: [.cacheIntermediates: false])
-        guard let cg = context.createCGImage(scaled, from: scaled.extent)
-        else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-    }
-
-    nonisolated private static func findForeignVideos(
-        root: URL, excluding ownPaths: Set<String>) -> (files: [URL], busy: Bool) {
-        var found: [URL] = []
-        var busy = false
-        let cutoff = Date().addingTimeInterval(-3) // don't touch files still being written
-        if let enumerator = FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
-            for case let url as URL in enumerator {
-                // a CinemaDNG folder is one clip: list it, skip the frames
-                if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
-                    .isDirectory == true {
-                    if !DNGSequenceSource.frameURLs(in: url).isEmpty {
-                        enumerator.skipDescendants()
-                        found.append(url)
-                    }
-                    continue
-                }
-                let ext = url.pathExtension.lowercased()
-                let isVideo = videoExtensions.contains(ext)
-                guard isVideo || imageExtensions.contains(ext),
-                      !ownPaths.contains(url.path) else { continue }
-                // only videos wait out the write: image writes are single atomic
-                // calls, and a freshly grabbed still must show up immediately
-                if isVideo {
-                    let modified = (try? url.resourceValues(
-                        forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                    if let modified, modified > cutoff {
-                        busy = true
-                        continue
-                    }
-                }
-                found.append(url)
-            }
-        }
-        return (found.sorted { $0.lastPathComponent < $1.lastPathComponent }, busy)
-    }
+    var busyRescanScheduled = false
 
     /// Takes whose files have left the record folder. They are gone from the
     /// panel but stay in the log, so moving footage off the card does not erase
     /// the day's metadata. Cleared when the destination itself changes.
-    private var retiredTakes: [Take] = []
+    var retiredTakes: [Take] = []
 
-    /// Resolve-compatible CSV: rewritten on every take and every circle-take mark
-    /// — in Resolve it's imported via Media Pool → Import Metadata.
-    private func exportTakeLog() {
-        let takes = (takes + retiredTakes).sorted { $0.recordedAt < $1.recordedAt }
-        let root = destinationRoot
-        Self.takeLogQueue.async { [weak self] in
-            do {
-                _ = try TakeLogExporter.write(takes: takes, toDirectory: root)
-                _ = try TakeLogExporter.writeMarkers(takes: takes,
-                                                     toDirectory: root)
-            } catch {
-                // ratings/comments silently not persisting is a day-loss bug
-                DispatchQueue.main.async {
-                    self?.lastError = "Metadata log NOT saved: "
-                        + error.localizedDescription
-                }
-            }
-        }
-    }
-
-    private var thumbnailsInFlight: Set<Take.ID> = []
-    private var otherThumbsInFlight: Set<URL> = []
-
-    /// Grid cells ask for thumbnails as they appear — decoding every take
-    /// eagerly pinned 100+ MB of images the list mode never shows.
-    func requestThumbnail(for take: Take) {
-        guard thumbnails[take.id] == nil,
-              !thumbnailsInFlight.contains(take.id) else { return }
-        thumbnailsInFlight.insert(take.id)
-        generateThumbnail(for: take)
-    }
-
-    func requestOtherThumbnail(for url: URL) {
-        guard otherThumbnails[url] == nil,
-              !otherThumbsInFlight.contains(url) else { return }
-        otherThumbsInFlight.insert(url)
-        generateOtherThumbnails(for: [url])
-    }
+    var thumbnailsInFlight: Set<Take.ID> = []
+    var otherThumbsInFlight: Set<URL> = []
 
     /// Decoded thumbnails, least-recently-used first. A busy day is ~500 takes
     /// and each decoded 256x144 image pins ~150 KB, so the cache is bounded and
     /// cells re-request what was evicted when they scroll back into view.
-    private var thumbnailLRU: [Take.ID] = []
-    private static let thumbnailCacheLimit = 120
+    var thumbnailLRU: [Take.ID] = []
+    static let thumbnailCacheLimit = 120
 
-    private func storeThumbnail(_ image: NSImage, for id: Take.ID) {
-        thumbnails[id] = image
-        thumbnailLRU.removeAll { $0 == id }
-        thumbnailLRU.append(id)
-        while thumbnailLRU.count > Self.thumbnailCacheLimit {
-            thumbnails[thumbnailLRU.removeFirst()] = nil
-        }
-    }
-
-    /// A preview frame from the recorded file; the file finalizes asynchronously,
-    /// so several attempts with a pause.
-    private func generateThumbnail(for take: Take) {
-        Task.detached(priority: .utility) { [weak self] in
-            for _ in 0..<10 {
-                if FileManager.default.fileExists(atPath: take.url.path) {
-                    let asset = AVURLAsset(url: take.url)
-                    let generator = AVAssetImageGenerator(asset: asset)
-                    generator.appliesPreferredTrackTransform = true
-                    generator.maximumSize = CGSize(width: 256, height: 256)
-                    let time = CMTime(seconds: min(1.0, take.durationSeconds / 2),
-                                      preferredTimescale: 600)
-                    if let (cgImage, _) = try? await generator.image(at: time) {
-                        // NSImage predates Sendable; the box states the contract
-                        // (built here, handed over once, used only on main)
-                        let image = UncheckedSendable(NSImage(
-                            cgImage: cgImage,
-                            size: NSSize(width: cgImage.width,
-                                         height: cgImage.height)))
-                        await MainActor.run { [weak self] in
-                            self?.storeThumbnail(image.value, for: take.id)
-                            self?.thumbnailsInFlight.remove(take.id)
-                        }
-                        return
-                    }
-                }
-                try? await Task.sleep(for: .milliseconds(500))
-            }
-            // every attempt failed: clear the in-flight mark or this take can
-            // never be retried for the rest of the session
-            await MainActor.run { [weak self] in
-                _ = self?.thumbnailsInFlight.remove(take.id)
-            }
-        }
-    }
 }
 
 // MARK: - CaptureBackendDelegate (callbacks from capture threads — straight into the pipeline)
