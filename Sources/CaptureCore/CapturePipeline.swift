@@ -1,8 +1,8 @@
-import Accelerate
-import AVFoundation
-import CoreImage
-import CoreMedia
-import CoreVideo
+@preconcurrency import Accelerate
+@preconcurrency import AVFoundation
+@preconcurrency import CoreImage
+@preconcurrency import CoreMedia
+@preconcurrency import CoreVideo
 import Foundation
 import os.log
 
@@ -13,7 +13,7 @@ import os.log
 /// @unchecked Sendable: all mutable state is touched only on `queue`; UI callbacks
 /// are assigned once before capture starts and invoked on main.
 public final class CapturePipeline: @unchecked Sendable {
-    public struct Config {
+    public struct Config: Sendable {
         public var settings: CaptureSettings
         public var scene: String
         public var roll: String
@@ -45,6 +45,19 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Stereo monitor feed (first two enabled channels) while audio monitoring
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
+
+    /// The two callbacks a finalizing take needs, snapshotted so the detached
+    /// finish task can hand results to the main queue without sending the
+    /// pipeline itself across isolation.
+    struct TakeReport: @unchecked Sendable {
+        let finished: (Take) -> Void
+        let failed: (String) -> Void
+    }
+
+    var takeReport: TakeReport {
+        TakeReport(finished: { [onTakeFinished] in onTakeFinished?($0) },
+                   failed: { [onError] in onError?($0) })
+    }
 
     /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
     /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
@@ -537,9 +550,11 @@ public final class CapturePipeline: @unchecked Sendable {
             let frame = displayBuffer // retained: the pool won't recycle it
             scopeQueue.async { [weak self] in
                 let data = ScopeAnalyzer.analyze(frame)
-                self?.queue.async { self?.scopeBusy = false }
+                guard let pipeline = self else { return }
+                pipeline.queue.async { pipeline.scopeBusy = false }
                 if let data {
-                    DispatchQueue.main.async { self?.onScopeData?(data) }
+                    let report = pipeline.onScopeData
+                    DispatchQueue.main.async { report?(data) }
                 }
             }
         }
@@ -576,7 +591,7 @@ public final class CapturePipeline: @unchecked Sendable {
     private var lastWireTimecode: Timecode?
     private var frozenTCStreak = 0
 
-    var frameGrabHandler: ((Data?) -> Void)?
+    var frameGrabHandler: (@Sendable (Data?) -> Void)?
 
     // raw packet snapshots; the hex dump is built only at publish time —
     // formatting per packet per frame was thousands of string allocs a second
@@ -643,7 +658,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// event — multicam with a template that carries no {cam} token — both saw
     /// the path free and both claimed it. The reservation closes that window.
     static let reservationLock = NSLock()
-    static var reservedPaths: Set<String> = []
+    /// Guarded by reservationLock — the annotation states that contract, the
+    /// same way the zebra cube cache does in MetalPreviewLayer.
+    nonisolated(unsafe) static var reservedPaths: Set<String> = []
 
     /// How many frames a take must lose before the sticky alarm fires. One
     /// isolated drop at take start is normal encoder back-pressure; sustained

@@ -1,5 +1,5 @@
-import CoreImage
-import CoreVideo
+@preconcurrency import CoreImage
+@preconcurrency import CoreVideo
 import Foundation
 
 /// Thread-safe registry of preview layers shared by every frame producer

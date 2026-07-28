@@ -1,5 +1,5 @@
-import AVFoundation
-import CoreMedia
+@preconcurrency import AVFoundation
+@preconcurrency import CoreMedia
 import Foundation
 
 /// Reads the start timecode from a .mov timecode track

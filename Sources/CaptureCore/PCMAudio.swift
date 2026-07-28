@@ -1,4 +1,4 @@
-import CoreMedia
+@preconcurrency import CoreMedia
 import Foundation
 
 /// Utilities for 16-bit interleaved PCM audio (shared by backends and pipeline).

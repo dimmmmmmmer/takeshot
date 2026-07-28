@@ -1,4 +1,4 @@
-import CoreVideo
+@preconcurrency import CoreVideo
 import Foundation
 
 /// Converter for 10-bit RGB capture ('r210', big-endian 2:10:10:10 as the
@@ -74,9 +74,15 @@ public final class TenBitConverter {
             CVPixelBufferUnlockBaseAddress(display, [])
             CVPixelBufferUnlockBaseAddress(record, [])
         }
-        guard let sb = CVPixelBufferGetBaseAddress(source),
-              let db = CVPixelBufferGetBaseAddress(display),
-              let rb = CVPixelBufferGetBaseAddress(record) else { return nil }
+        guard let sourceBase = CVPixelBufferGetBaseAddress(source),
+              let displayBase = CVPixelBufferGetBaseAddress(display),
+              let recordBase = CVPixelBufferGetBaseAddress(record) else { return nil }
+        // nonisolated(unsafe): the bands below run concurrently over these
+        // pointers, and that is safe by construction — each band owns a disjoint
+        // range of rows and the two tables are read-only for the whole pass.
+        nonisolated(unsafe) let sb = sourceBase
+        nonisolated(unsafe) let db = displayBase
+        nonisolated(unsafe) let rb = recordBase
         let sbpr = CVPixelBufferGetBytesPerRow(source)
         let dbpr = CVPixelBufferGetBytesPerRow(display)
         let rbpr = CVPixelBufferGetBytesPerRow(record)
@@ -84,8 +90,11 @@ public final class TenBitConverter {
         // (~11 ms single-threaded at UHD → ~2-3 ms) so the pipeline queue gets
         // its frame budget back
         let bands = min(8, max(1, height / 270))
-        expand.withUnsafeBufferPointer { exp in
-            precomp.withUnsafeBufferPointer { pre in
+        expand.withUnsafeBufferPointer { expandTable in
+            precomp.withUnsafeBufferPointer { precompTable in
+                // read-only for the whole pass — see the note above
+                nonisolated(unsafe) let exp = expandTable
+                nonisolated(unsafe) let pre = precompTable
                 DispatchQueue.concurrentPerform(iterations: bands) { band in
                     let yStart = band * height / bands
                     let yEnd = (band + 1) * height / bands

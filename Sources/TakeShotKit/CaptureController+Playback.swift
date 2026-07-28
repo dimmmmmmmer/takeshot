@@ -214,7 +214,10 @@ extension CaptureController {
                 lastError = "Frame grab failed"
             }
         } else if isCapturing {
-            pipeline.grabNextFrame { [weak self] png in self?.saveGrab(png) }
+            // the grab lands on the pipeline queue; saving is main-actor work
+            pipeline.grabNextFrame { [weak self] png in
+                Task { @MainActor in self?.saveGrab(png) }
+            }
         } else {
             lastError = L("no_signal")
         }

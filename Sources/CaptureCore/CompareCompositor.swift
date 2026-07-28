@@ -1,4 +1,4 @@
-import CoreImage
+@preconcurrency import CoreImage
 
 /// Shared wipe/blend compositing math: the playback tap (playback vs live)
 /// and the live pipeline (live vs pinned reference) must draw the exact same
@@ -10,7 +10,7 @@ public enum CompareCompositor {
         case diagonal    // 45°
     }
 
-    public enum Mode {
+    public enum Mode: Sendable {
         case off
         case blend(opacity: Double)
         case wipe(axis: Axis, position: Double)

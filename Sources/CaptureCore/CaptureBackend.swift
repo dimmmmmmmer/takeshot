@@ -1,5 +1,5 @@
-import CoreMedia
-import CoreVideo
+@preconcurrency import CoreMedia
+@preconcurrency import CoreVideo
 import Foundation
 
 /// Description of a capture device (board/input).

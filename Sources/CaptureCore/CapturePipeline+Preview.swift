@@ -1,8 +1,8 @@
-import Accelerate
-import AVFoundation
-import CoreImage
-import CoreMedia
-import CoreVideo
+@preconcurrency import Accelerate
+@preconcurrency import AVFoundation
+@preconcurrency import CoreImage
+@preconcurrency import CoreMedia
+@preconcurrency import CoreVideo
 import Foundation
 import os.log
 
@@ -119,7 +119,7 @@ extension CapturePipeline {
     }
     /// Grab the next displayed frame as PNG (WYSIWYG with levels/preview LUT).
     /// The handler fires once, on the main queue.
-    public func grabNextFrame(_ handler: @escaping (Data?) -> Void) {
+    public func grabNextFrame(_ handler: @escaping @Sendable (Data?) -> Void) {
         queue.async { self.frameGrabHandler = handler }
     }
     public static func pngData(from pixelBuffer: CVPixelBuffer,

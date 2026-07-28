@@ -1,4 +1,4 @@
-import CoreVideo
+@preconcurrency import CoreVideo
 import Foundation
 
 /// A reusable pixel-buffer pool (BGRA by default) that rebuilds itself when the

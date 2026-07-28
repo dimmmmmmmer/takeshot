@@ -1,4 +1,4 @@
-import CoreImage
+@preconcurrency import CoreImage
 import Foundation
 
 /// A 3D LUT from a .cube file (Adobe/Resolve format).

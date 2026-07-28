@@ -1,8 +1,8 @@
-import Accelerate
-import AVFoundation
-import CoreImage
-import CoreMedia
-import CoreVideo
+@preconcurrency import Accelerate
+@preconcurrency import AVFoundation
+@preconcurrency import CoreImage
+@preconcurrency import CoreMedia
+@preconcurrency import CoreVideo
 import Foundation
 import os.log
 

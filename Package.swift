@@ -1,7 +1,9 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// Swift 6 strict concurrency will be turned on later, in a separate pass.
+// CaptureCore is on Swift 6 (see its target below). The app layer is still
+// Swift 5: SwiftUI/AppKit isolation there needs a pass of its own — 61 errors
+// at last count, mostly main-actor sending and app-level global state.
 let swift5Mode: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
@@ -12,7 +14,7 @@ let package = Package(
         // Core: REC detection, naming, take writing. No DeckLink SDK dependency.
         .target(
             name: "CaptureCore",
-            swiftSettings: swift5Mode
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // Obj-C++ bridge to the Blackmagic DeckLink SDK.
         // SDK headers go in vendor/DeckLinkSDK/include (see vendor/DeckLinkSDK/README.md).

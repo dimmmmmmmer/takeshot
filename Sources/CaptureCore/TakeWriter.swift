@@ -1,5 +1,5 @@
-import AVFoundation
-import CoreVideo
+@preconcurrency import AVFoundation
+@preconcurrency import CoreVideo
 import Foundation
 
 /// Writes one take to a .mov: video in the chosen codec, PCM audio passthrough,

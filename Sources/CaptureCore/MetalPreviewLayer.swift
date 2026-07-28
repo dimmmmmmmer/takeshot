@@ -1,4 +1,4 @@
-import CoreImage
+@preconcurrency import CoreImage
 import os.log
 
 /// Operator display aids applied inside the preview render (identically on
@@ -32,9 +32,9 @@ public struct ViewAssist: Equatable, Sendable {
 
     public init() {}
 }
-import CoreVideo
+@preconcurrency import CoreVideo
 import Metal
-import QuartzCore
+@preconcurrency import QuartzCore
 
 /// Video preview drawn through the ordinary graphics compositor (CAMetalLayer
 /// + CoreImage), the way every image in every app is shown: the layer declares
@@ -47,7 +47,10 @@ import QuartzCore
 /// getting the hardware video plane, video-range codes reach the screen
 /// unexpanded — washed blacks that no buffer format or tagging fixes (BGRA,
 /// 2vuy and 420v all measured identically wrong).
-public final class MetalPreviewLayer: CAMetalLayer {
+/// @unchecked Sendable: the layer is handed between the main thread (mounts,
+/// settings) and producer queues (frames). Everything shared is behind
+/// renderLock (the render itself) or stateLock (the values main hands over).
+public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     private var ciContext: CIContext?
     private let renderLock = NSLock()
     private var lastBuffer: CVPixelBuffer?

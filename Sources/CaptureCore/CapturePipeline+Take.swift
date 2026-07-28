@@ -1,8 +1,8 @@
-import Accelerate
-import AVFoundation
-import CoreImage
-import CoreMedia
-import CoreVideo
+@preconcurrency import Accelerate
+@preconcurrency import AVFoundation
+@preconcurrency import CoreImage
+@preconcurrency import CoreMedia
+@preconcurrency import CoreVideo
 import Foundation
 import os.log
 
@@ -252,23 +252,29 @@ extension CapturePipeline {
         let droppedVideo = droppedFrames
         let task = Task { [weak self] in
             defer {
-                self?.queue.async {
-                    self?.pendingFinishTasks.removeValue(forKey: finishID)
+                if let pipeline = self {
+                    pipeline.queue.async {
+                        pipeline.pendingFinishTasks.removeValue(forKey: finishID)
+                    }
                 }
             }
             do {
                 _ = try await writer.finish()
                 let droppedAudio = writer.droppedAudioPackets
+                // the callbacks are read here, on the task, and only the
+                // resulting values cross to main — sending `self` itself into a
+                // main-actor closure is what Swift 6 rightly objects to
+                let report = self?.takeReport
                 DispatchQueue.main.async {
-                    self?.onTakeFinished?(take)
+                    report?.finished(take)
                     if droppedAudio > 0 {
-                        self?.onError?("Take \(take.displayName): "
+                        report?.failed("Take \(take.displayName): "
                             + "\(droppedAudio) audio packet(s) dropped")
                     }
                     // the live alarm only fires on sustained loss, so the take's
                     // real total is stated here — quietly, but never hidden
                     if droppedVideo > 0 {
-                        self?.onError?("Take \(take.displayName): "
+                        report?.failed("Take \(take.displayName): "
                             + "\(droppedVideo) video frame(s) dropped")
                     }
                 }
@@ -280,8 +286,9 @@ extension CapturePipeline {
                 // usually still recoverable — but it must not pass for good
                 // footage in the panel or in the log handed to post.
                 let marked = Self.markFailed(take.url)
+                let report = self?.takeReport
                 DispatchQueue.main.async {
-                    self?.onError?("TAKE LOST — failed to finalize "
+                    report?.failed("TAKE LOST — failed to finalize "
                         + "\(marked.deletingPathExtension().lastPathComponent): "
                         + error.localizedDescription)
                 }

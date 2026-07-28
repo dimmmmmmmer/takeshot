@@ -1,4 +1,4 @@
-import CoreVideo
+@preconcurrency import CoreVideo
 import Foundation
 
 /// One frame's worth of scope data: per-channel waveform density maps, RGB/luma

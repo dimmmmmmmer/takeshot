@@ -1,5 +1,5 @@
-import AVFoundation
-import CoreVideo
+@preconcurrency import AVFoundation
+@preconcurrency import CoreVideo
 import Foundation
 
 /// Single source of truth for the colorimetry presets ("709" / "601" / "2020").
