@@ -1054,7 +1054,7 @@ struct PreviewView: View {
                 }
             }
             if showsTransport {
-                TransportBar(player: controller.player)
+                TransportBar(player: controller.player, model: controller.transport)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(6)

@@ -73,6 +73,7 @@ final class CameraChannel: ObservableObject, Identifiable {
     /// another app used to fail completely silently).
     func start() throws {
         try backend.startCapture(deviceID: deviceID)
+        pipeline.setExpectedAudioChannels(backend.embeddedAudioChannels)
     }
 
     func stop() {

@@ -190,7 +190,7 @@ struct PlaybackFullscreenView: View {
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
             .overlay(alignment: .bottom) {
                 if transportHover {
-                    TransportBar(player: controller.player)
+                    TransportBar(player: controller.player, model: controller.transport)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 60)
                         .padding(.bottom, 18)

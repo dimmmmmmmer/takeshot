@@ -25,3 +25,25 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 codesign --force --sign - "$APP"
 
 echo "Done: $APP"
+
+# An app INSIDE ~/Documents (or Desktop/Downloads) needs the Documents TCC
+# permission just to read its own resource bundle, and an ad-hoc signature
+# changes with every build — so macOS treats each build as a new app and asks
+# again, every single launch, blocking startup until it is answered.
+# Installing outside the protected folders makes the question go away entirely:
+# the app itself never touches Documents (takes go to the chosen record folder).
+# Set TAKESHOT_NO_INSTALL=1 to skip (CI only wants build/TakeShot.app).
+case "$PWD/" in
+    "$HOME/Documents/"*|"$HOME/Desktop/"*|"$HOME/Downloads/"*)
+        if [ -z "${TAKESHOT_NO_INSTALL:-}" ]; then
+            INSTALLED="$HOME/Applications/TakeShot.app"
+            mkdir -p "$HOME/Applications"
+            rm -rf "$INSTALLED"
+            cp -R "$APP" "$INSTALLED"
+            echo "Installed: $INSTALLED"
+            echo "  (launch this copy — the one under $PWD is inside a" \
+                 "protected folder and macOS asks for Documents access on" \
+                 "every ad-hoc build)"
+        fi
+        ;;
+esac

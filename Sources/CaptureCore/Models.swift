@@ -202,10 +202,39 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
 
     private static let defaultsKey = "TakeShot.CaptureSettings"
 
+    /// Schema version of what this build writes. Bump it when a change cannot be
+    /// expressed by "add an Optional field", and add the step to `migrate`.
+    ///
+    /// 1 — everything up to and including the naming-template migrations below,
+    ///     which used to run unconditionally on every load.
+    public static let currentSchemaVersion = 1
+
+    /// Version of the decoded blob. Optional so that saves written before this
+    /// field existed decode as nil and are treated as version 0.
+    public var schemaVersion: Int?
+
     public static func loaded(from defaults: UserDefaults = .standard) -> CaptureSettings {
         guard let data = defaults.data(forKey: defaultsKey),
               var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
         else { return CaptureSettings() }
+        settings = migrate(settings)
+        settings.schemaVersion = currentSchemaVersion
+        return settings
+    }
+
+    /// Explicit, ordered migration chain. Previously every rule below ran on
+    /// every load forever, which quietly forbids ever reusing an old template
+    /// string and gives no place to put a change that is not a new Optional.
+    static func migrate(_ input: CaptureSettings) -> CaptureSettings {
+        var settings = input
+        if (settings.schemaVersion ?? 0) < 1 {
+            settings = migrateToVersion1(settings)
+        }
+        return settings
+    }
+
+    private static func migrateToVersion1(_ input: CaptureSettings) -> CaptureSettings {
+        var settings = input
         // migrate default templates from earlier versions
         if ["{scene}_T{take}_{cam}_{tc}",
             "{prefix}_{cam}_{roll}_C{clip}",

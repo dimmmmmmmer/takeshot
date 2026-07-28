@@ -100,6 +100,7 @@ final class CaptureController: ObservableObject {
                 player.pause()
                 rawPlayer?.pause() // a looping BRAW decode must not fight capture
             }
+            updateAudioMonitorRouting()
             updateTapRunning()
             updateScopesRunning()
             wirePlayoutRouting()
@@ -748,6 +749,12 @@ final class CaptureController: ObservableObject {
 
     /// Player for reviewing takes.
     let player = AVPlayer()
+    /// ONE transport for the whole app. Each TransportBar used to own a
+    /// @StateObject of its own, and the bar appears twice (the footer and the
+    /// audio panel overlay): both attached their own end-of-clip observer to the
+    /// same player with their own loop flag, so turning loop off in the bar you
+    /// could see left the other one still seeking back — the clip kept looping.
+    let transport = TransportModel()
     /// Unified playback render (frames from the player → sample-buffer layers).
     let playbackTap = PlaybackFrameTap()
     /// Live capture audio monitor (renderer to a system output).
@@ -782,10 +789,19 @@ final class CaptureController: ObservableObject {
     /// crossed-out speaker at every launch read as a bug, not caution.
     @Published var monitorOn = true {
         didSet {
-            pipeline.setAudioMonitorEnabled(monitorOn)
-            if !monitorOn { audioMonitor.stop() }
+            updateAudioMonitorRouting()
             settings.monitorEnabled = monitorOn
         }
+    }
+
+    /// The live feed is only monitored while the viewer is showing it. Without
+    /// this the capture audio kept playing over a clip in playback — two sound
+    /// sources at once, and the operator hears the room instead of the take.
+    /// `monitorOn` stays the operator's preference and is not overwritten.
+    private func updateAudioMonitorRouting() {
+        let live = monitorOn && viewerMode == .record
+        pipeline.setAudioMonitorEnabled(live)
+        if !live { audioMonitor.stop() }
     }
 
     /// One volume for the live monitor and the player: switching rec↔playback
@@ -1561,6 +1577,7 @@ final class CaptureController: ObservableObject {
         monitorOn = stored.monitorEnabled ?? true
         assist.desqueeze = stored.desqueezeFactor ?? 1
         player.volume = Float(storedVolume)
+        transport.attach(player) // one attachment for the app's lifetime
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
             pipeline.currentPreviewBuffer()
@@ -1593,7 +1610,27 @@ final class CaptureController: ObservableObject {
         let values = try? destinationRoot.resourceValues(
             forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         guard let free = values?.volumeAvailableCapacityForImportantUsage
-        else { return }
+        else {
+            // Asking a volume that is no longer mounted is exactly how this
+            // query fails, so returning quietly meant the watchdog went silent
+            // in the one case it exists for. A take still "recording" onto a
+            // vanished destination writes nothing at all.
+            // A merely absent folder is recoverable and normal (a fresh
+            // destination path), so try that first and only alarm if the
+            // volume itself is unreachable.
+            try? FileManager.default.createDirectory(
+                at: destinationRoot, withIntermediateDirectories: true)
+            guard !FileManager.default.fileExists(atPath: destinationRoot.path)
+            else { return }
+            if isRecording {
+                pipeline.toggleManualRecord()
+                persistentAlert = "RECORD VOLUME UNREACHABLE — recording stopped"
+            } else {
+                persistentAlert = "Record folder unreachable: "
+                    + destinationRoot.path
+            }
+            return
+        }
         let freeGB = Double(free) / 1_000_000_000
         if freeGB < 0.5, isRecording {
             pipeline.toggleManualRecord() // close the take while it can finalize
@@ -1918,6 +1955,9 @@ final class CaptureController: ObservableObject {
         }
         do {
             try backend.startCapture(deviceID: deviceID)
+            // before any audio packet, so a take triggered on frame 1 still gets
+            // an audio track
+            pipeline.setExpectedAudioChannels(backend.embeddedAudioChannels)
             isCapturing = true
             lastError = nil
         } catch {

@@ -81,6 +81,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;
+/// Channels the audio input is enabled with, whatever the source actually
+/// carries (the board pads the rest). Known before the first packet arrives, so
+/// a take starting on capture frame 1 can still be given an audio track.
++ (NSInteger)embeddedAudioChannels;
 @end
 
 /// Hardware playout: mirrors the viewer to a DeckLink output (SDI/HDMI).

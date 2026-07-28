@@ -307,6 +307,10 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     CDLInputCallback *_callback;
 }
 
++ (NSInteger)embeddedAudioChannels {
+    return 16;
+}
+
 - (instancetype)init {
     if ((self = [super init])) {
         _lastSignalPresent = YES;
@@ -395,7 +399,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         return NO;
     }
     // SDI carries up to 16 channels of embedded audio — take them all
-    _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger, 16);
+    _input->EnableAudioInput(bmdAudioSampleRate48kHz, bmdAudioSampleType16bitInteger,
+                             (uint32_t)[CDLCapture embeddedAudioChannels]);
 
     if (_input->StartStreams() != S_OK) {
         if (forced) {
@@ -879,6 +884,10 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 @end
 
 @implementation CDLCapture
+
++ (NSInteger)embeddedAudioChannels {
+    return 16;
+}
 
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error {
     if (error) {

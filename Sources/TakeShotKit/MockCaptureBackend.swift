@@ -12,6 +12,9 @@ final class MockCaptureBackend: CaptureBackend {
 
     weak var delegate: CaptureBackendDelegate?
     var isAvailable: Bool { true }
+    /// Matches the 16-channel SDI-style embed the demo signal generates.
+    var embeddedAudioChannels: Int { Self.audioChannels }
+    static let audioChannels = 16
 
     /// Demo source — "camera in standby": TC frozen (Rec Run), signal live.
     /// Recording is manual via the REC button only; auto-detection fires on a real

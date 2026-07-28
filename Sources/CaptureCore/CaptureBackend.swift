@@ -28,7 +28,19 @@ public protocol CaptureBackendDelegate: AnyObject {
 public protocol CaptureBackend: AnyObject {
     var delegate: CaptureBackendDelegate? { get set }
     var isAvailable: Bool { get }          // false if the SDK/driver isn't found
+    /// Channels the backend's audio input is configured for, known before the
+    /// first packet arrives. The writer's audio track is created when the take
+    /// starts, and a take can start on capture frame 1 (a VANC trigger fires
+    /// with no debounce) — deriving the count from the first audio packet meant
+    /// such a take was written with no audio track at all. 0 — unknown.
+    var embeddedAudioChannels: Int { get }
     func devices() -> [CaptureDeviceInfo]
     func startCapture(deviceID: String) throws
     func stopCapture()
+}
+
+public extension CaptureBackend {
+    /// Backends that cannot state it up front keep the old behaviour: the count
+    /// is learned from the first audio packet.
+    var embeddedAudioChannels: Int { 0 }
 }

@@ -34,6 +34,10 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
         CDLDeviceManager.isSDKAvailable()
     }
 
+    /// The bridge enables the audio input with a fixed channel count, so the
+    /// writer can be given an audio track before the first packet arrives.
+    var embeddedAudioChannels: Int { CDLCapture.embeddedAudioChannels() }
+
     func devices() -> [CaptureDeviceInfo] {
         CDLDeviceManager.devices().map {
             CaptureDeviceInfo(id: $0.persistentID, name: $0.name)
@@ -137,6 +141,9 @@ final class AggregateBackend: CaptureBackend {
     }
 
     var isAvailable: Bool { children.contains { $0.backend.isAvailable } }
+
+    /// Whatever the source that is actually running reports.
+    var embeddedAudioChannels: Int { activeBackend?.embeddedAudioChannels ?? 0 }
 
     func devices() -> [CaptureDeviceInfo] {
         children.flatMap { child in

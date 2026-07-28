@@ -57,6 +57,9 @@ public final class MetalPreviewLayer: CAMetalLayer {
     private let stateLock = NSLock()
     private var storedLetterboxColor = CIColor(red: 0, green: 0, blue: 0)
     private var pendingDrawableSize: CGSize?
+    /// Latest frame waiting to be drawn, and whether a draw is already queued.
+    private var pendingPresent: CVPixelBuffer?
+    private var presentScheduled = false
     /// Where UI-triggered re-renders run, so they never block the main thread.
     private let redrawQueue = DispatchQueue(label: "takeshot.preview-redraw",
                                             qos: .userInitiated)
@@ -357,12 +360,18 @@ public final class MetalPreviewLayer: CAMetalLayer {
             let buffer = lastBuffer // strong read under the lock: present() swaps
             renderLock.unlock()     // it concurrently on the producer queue
             guard let buffer else { return }
-            present(buffer)
+            render(buffer)
         }
     }
 
     /// Blank the layer (signal loss) instead of freezing the last frame.
+    /// Queued like every other render, so it cannot overtake or be overtaken by
+    /// a frame that was already on its way.
     public func clearToBlack() {
+        redrawQueue.async { [weak self] in self?.clearToBlackNow() }
+    }
+
+    private func clearToBlackNow() {
         renderLock.lock()
         defer { renderLock.unlock() }
         lastBuffer = nil
@@ -383,10 +392,36 @@ public final class MetalPreviewLayer: CAMetalLayer {
         drawable.present()
     }
 
-    /// Draw a frame (any CoreImage-supported pixel format), aspect-fit.
-    /// Safe to call from the producer's queue; pixel values are passed through
-    /// unmanaged — the layer's `colorspace` tells the compositor what they mean.
+    /// Show a frame. Safe to call from any thread — the main one included: the
+    /// work is handed to this layer's own queue, latest frame wins.
+    ///
+    /// Rendering can park for ~1 s inside `nextDrawable()` when the window is
+    /// occluded or an external monitor sleeps. Done inline, that stalled every
+    /// other sink sharing the producer's queue, and blocked the main thread
+    /// outright wherever the mount code presented directly.
     public func present(_ pixelBuffer: CVPixelBuffer) {
+        stateLock.lock()
+        pendingPresent = pixelBuffer
+        let schedule = !presentScheduled
+        presentScheduled = true
+        stateLock.unlock()
+        guard schedule else { return } // a newer frame replaces the pending one
+        redrawQueue.async { [weak self] in
+            guard let self else { return }
+            stateLock.lock()
+            let buffer = pendingPresent
+            pendingPresent = nil
+            presentScheduled = false
+            stateLock.unlock()
+            guard let buffer else { return }
+            render(buffer)
+        }
+    }
+
+    /// Draw a frame (any CoreImage-supported pixel format), aspect-fit.
+    /// Runs on redrawQueue; pixel values are passed through unmanaged — the
+    /// layer's `colorspace` tells the compositor what they mean.
+    private func render(_ pixelBuffer: CVPixelBuffer) {
         guard let ciContext else { return }
         renderLock.lock()
         defer { renderLock.unlock() }

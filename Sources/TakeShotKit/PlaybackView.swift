@@ -213,7 +213,9 @@ struct RawTransportBar: View {
 struct TransportBar: View {
     let player: AVPlayer
     @EnvironmentObject private var controller: CaptureController
-    @StateObject private var model = TransportModel()
+    /// The app's single transport (CaptureController.transport) — never a
+    /// per-view @StateObject: this bar exists in more than one place at once.
+    @ObservedObject var model: TransportModel
 
     var body: some View {
         HStack(spacing: 10) {
@@ -332,14 +334,13 @@ struct TransportBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.ultraThinMaterial)
-        .onAppear {
-            model.attach(player)
-            consumeReplayLoopRequest()
-        }
+        // the transport is attached once, by the controller: this bar can be on
+        // screen twice, and a disappearing copy must not tear down the
+        // observers the other one is still using
+        .onAppear { consumeReplayLoopRequest() }
         .onChange(of: controller.playbackURL) { _, _ in
             consumeReplayLoopRequest()
         }
-        .onDisappear { model.detach() }
     }
 
     private func consumeReplayLoopRequest() {
@@ -634,10 +635,21 @@ final class TransportModel: ObservableObject {
     private weak var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var statusObservation: NSKeyValueObservation?
 
     func attach(_ player: AVPlayer) {
         detach()
         self.player = player
+        // The periodic observer below only fires while time advances, so when
+        // playback stopped, `isPlaying` stayed true and the transport kept
+        // showing a pause button over a stopped clip. The player's own status
+        // reports the stop.
+        statusObservation = player.observe(\.timeControlStatus,
+                                           options: [.initial, .new]) { player, _ in
+            Task { @MainActor [weak self] in
+                self?.isPlaying = player.timeControlStatus == .playing
+            }
+        }
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(value: 1, timescale: 10), queue: .main
         ) { [weak self] time in
@@ -682,6 +694,8 @@ final class TransportModel: ObservableObject {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil
         }
+        statusObservation?.invalidate()
+        statusObservation = nil
     }
 
     func togglePlay() {
