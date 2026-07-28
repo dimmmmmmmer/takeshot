@@ -1,14 +1,17 @@
 import AppKit
 import SwiftUI
 
-@main
-struct TakeShotApp: App {
+/// The app scene. `@main` lives in the executable target's main.swift, which
+/// calls `TakeShotApp.main()` — see the comment there.
+public struct TakeShotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var controller = CaptureController()
 
     @StateObject private var hotkeys = HotkeyManager()
 
-    var body: some Scene {
+    public init() {}
+
+    public var body: some Scene {
         WindowGroup("TakeShot") {
             ContentView()
                 .environmentObject(controller)

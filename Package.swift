@@ -32,11 +32,20 @@ let package = Package(
                 .headerSearchPath("../../vendor/BRAWSDK/include")
             ]
         ),
-        // The app.
-        .executableTarget(
-            name: "TakeShot",
+        // The application layer. A library rather than part of the executable:
+        // SwiftPM cannot import an executable target from tests, so everything
+        // here — CaptureController, the session logic, the mock backend — was
+        // untestable while it lived in the executable.
+        .target(
+            name: "TakeShotKit",
             dependencies: ["CaptureCore", "CDeckLink", "CBraw"],
             resources: [.process("Resources")],
+            swiftSettings: swift5Mode
+        ),
+        // The executable is the entry point and nothing else.
+        .executableTarget(
+            name: "TakeShot",
+            dependencies: ["TakeShotKit"],
             swiftSettings: swift5Mode
         ),
         // CLI smoke test: list DeckLink devices.
@@ -49,6 +58,13 @@ let package = Package(
         .testTarget(
             name: "CaptureCoreTests",
             dependencies: ["CaptureCore"],
+            swiftSettings: swift5Mode
+        ),
+        // Application-layer tests: the take session driven end to end through
+        // the mock backend, with no hardware and no window.
+        .testTarget(
+            name: "TakeShotKitTests",
+            dependencies: ["TakeShotKit"],
             swiftSettings: swift5Mode
         ),
     ],
