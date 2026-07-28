@@ -119,6 +119,20 @@ public final class MetalPreviewLayer: CAMetalLayer {
 
     // MARK: - assist filter chains (static, shared across layers)
 
+    /// One entry of an exposure palette. A named type rather than a triple:
+    /// three unlabelled Doubles read the same whatever order they are in.
+    private struct BandColor {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        init(_ red: Double, _ green: Double, _ blue: Double) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+        }
+    }
+
     /// Grayscale in BT.709 weights — the base for the luma-driven tools.
     private static func grayscale(_ image: CIImage) -> CIImage {
         image.applyingFilter("CIColorMatrix", parameters: [
@@ -134,17 +148,17 @@ public final class MetalPreviewLayer: CAMetalLayer {
         let size = 64
         var rgba = [Float]()
         rgba.reserveCapacity(size * size * size * 4)
-        func band(_ v: Double) -> (Double, Double, Double) {
+        func band(_ v: Double) -> BandColor {
             switch v {
-            case ..<0.025: return (0.58, 0.20, 0.75)  // purple — crushed
-            case ..<0.08: return (0.16, 0.34, 0.90)   // blue — deep shadow
-            case ..<0.36: return (v, v, v)            // gray ramp
-            case ..<0.44: return (0.15, 0.75, 0.25)   // green — 18% gray
-            case ..<0.52: return (v, v, v)
-            case ..<0.58: return (0.95, 0.60, 0.70)   // pink — skin highlight
-            case ..<0.92: return (v, v, v)
-            case ..<0.97: return (0.98, 0.90, 0.20)   // yellow — near clip
-            default: return (0.95, 0.15, 0.10)        // red — clipped
+            case ..<0.025: return BandColor(0.58, 0.20, 0.75)  // purple — crushed
+            case ..<0.08: return BandColor(0.16, 0.34, 0.90)   // blue — deep shadow
+            case ..<0.36: return BandColor(v, v, v)            // gray ramp
+            case ..<0.44: return BandColor(0.15, 0.75, 0.25)   // green — 18% gray
+            case ..<0.52: return BandColor(v, v, v)
+            case ..<0.58: return BandColor(0.95, 0.60, 0.70)   // pink — skin highlight
+            case ..<0.92: return BandColor(v, v, v)
+            case ..<0.97: return BandColor(0.98, 0.90, 0.20)   // yellow — near clip
+            default: return BandColor(0.95, 0.15, 0.10)        // red — clipped
             }
         }
         for b in 0..<size {
@@ -154,8 +168,8 @@ public final class MetalPreviewLayer: CAMetalLayer {
                     // keeps off-axis values sane anyway
                     let v = 0.2126 * Double(r) + 0.7152 * Double(g)
                         + 0.0722 * Double(b)
-                    let (red, green, blue) = band(v / Double(size - 1))
-                    rgba += [Float(red), Float(green), Float(blue), 1]
+                    let color = band(v / Double(size - 1))
+                    rgba += [Float(color.red), Float(color.green), Float(color.blue), 1]
                 }
             }
         }
@@ -169,21 +183,21 @@ public final class MetalPreviewLayer: CAMetalLayer {
         let size = 64
         var rgba = [Float]()
         rgba.reserveCapacity(size * size * size * 4)
-        func zoneColor(_ stop: Double) -> (Double, Double, Double) {
+        func zoneColor(_ stop: Double) -> BandColor {
             switch stop.rounded() {
-            case ..<(-5): return (0.04, 0.04, 0.04)   // ≤ -6: black
-            case -5: return (0.45, 0.15, 0.65)        // purple
-            case -4: return (0.15, 0.25, 0.90)        // blue
-            case -3: return (0.10, 0.60, 0.70)        // teal
-            case -2: return (0.15, 0.65, 0.25)        // green
-            case -1: return (0.32, 0.32, 0.32)        // dark gray
-            case 0: return (0.50, 0.50, 0.50)         // 18% — mid gray
-            case 1: return (0.68, 0.68, 0.68)         // light gray
-            case 2: return (0.95, 0.60, 0.65)         // pink
-            case 3: return (0.95, 0.55, 0.15)         // orange
-            case 4: return (0.98, 0.72, 0.30)         // light orange
-            case 5: return (0.98, 0.92, 0.25)         // yellow
-            default: return (1, 1, 1)                 // ≥ +6: white
+            case ..<(-5): return BandColor(0.04, 0.04, 0.04)   // ≤ -6: black
+            case -5: return BandColor(0.45, 0.15, 0.65)        // purple
+            case -4: return BandColor(0.15, 0.25, 0.90)        // blue
+            case -3: return BandColor(0.10, 0.60, 0.70)        // teal
+            case -2: return BandColor(0.15, 0.65, 0.25)        // green
+            case -1: return BandColor(0.32, 0.32, 0.32)        // dark gray
+            case 0: return BandColor(0.50, 0.50, 0.50)         // 18% — mid gray
+            case 1: return BandColor(0.68, 0.68, 0.68)         // light gray
+            case 2: return BandColor(0.95, 0.60, 0.65)         // pink
+            case 3: return BandColor(0.95, 0.55, 0.15)         // orange
+            case 4: return BandColor(0.98, 0.72, 0.30)         // light orange
+            case 5: return BandColor(0.98, 0.92, 0.25)         // yellow
+            default: return BandColor(1, 1, 1)                 // ≥ +6: white
             }
         }
         func linear(_ v: Double) -> Double {
@@ -197,8 +211,8 @@ public final class MetalPreviewLayer: CAMetalLayer {
                         + 0.0722 * Double(b)) / Double(size - 1)
                     let lin = max(1e-6, linear(v))
                     let stop = log2(lin / 0.18)
-                    let (red, green, blue) = zoneColor(stop)
-                    rgba += [Float(red), Float(green), Float(blue), 1]
+                    let color = zoneColor(stop)
+                    rgba += [Float(color.red), Float(color.green), Float(color.blue), 1]
                 }
             }
         }

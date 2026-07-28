@@ -15,13 +15,19 @@ struct CompareCompositorTests {
         CIImage(color: color).cropped(to: extent)
     }
 
-    /// RGBA of one pixel, sampled in CoreImage coordinates (origin bottom-left).
-    private func pixel(_ image: CIImage, x: Int, y: Int) -> (r: UInt8, g: UInt8, b: UInt8) {
+    private struct Sample {
+        let r: UInt8
+        let g: UInt8
+        let b: UInt8
+    }
+
+    /// RGB of one pixel, sampled in CoreImage coordinates (origin bottom-left).
+    private func pixel(_ image: CIImage, x: Int, y: Int) -> Sample {
         var bytes = [UInt8](repeating: 0, count: 4)
         context.render(image, toBitmap: &bytes, rowBytes: 4,
                        bounds: CGRect(x: x, y: y, width: 1, height: 1),
                        format: .RGBA8, colorSpace: nil)
-        return (bytes[0], bytes[1], bytes[2])
+        return Sample(r: bytes[0], g: bytes[1], b: bytes[2])
     }
 
     private var red: CIImage { solid(CIColor(red: 1, green: 0, blue: 0)) }

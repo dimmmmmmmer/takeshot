@@ -62,8 +62,8 @@ final class MockCaptureBackend: CaptureBackend {
         frameCounter += 1
         guard let pixelBuffer = renderFrame() else { return }
         let pts = CMTime(value: CMTimeValue(frameCounter * 40), timescale: 1000)
-        delegate?.backend(self, didReceiveFrame: pixelBuffer, pts: pts,
-                          timecode: timecode, vancTrigger: nil, ancillaryPackets: [])
+        delegate?.backend(self, didReceive: CapturedFrame(
+            pixelBuffer: pixelBuffer, pts: pts, timecode: timecode))
         emitAudio(ptsSeconds: Double(frameCounter) * 0.04)
     }
 

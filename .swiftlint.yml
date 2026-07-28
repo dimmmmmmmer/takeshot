@@ -9,6 +9,10 @@
 
 identifier_name:
   min_length: 1
+  # L("key") is the project's localization helper — a single capital letter
+  # keeps view code readable, and it is used on nearly every UI line.
+  excluded:
+    - L
 
 disabled_rules:
   - trailing_comma

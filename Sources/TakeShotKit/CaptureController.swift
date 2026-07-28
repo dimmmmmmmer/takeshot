@@ -193,11 +193,10 @@ final class CaptureController: ObservableObject {
                         + "(\(error.localizedDescription))")
                     return true
                 }) {
-                for case let url as URL in enumerator {
-                    if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
-                        .isDirectory != true {
-                        files.append(url)
-                    }
+                for case let url as URL in enumerator
+                where (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
+                    .isDirectory != true {
+                    files.append(url)
                 }
             }
             var manifest = "File,SHA256,Bytes,Verified At\n"
@@ -837,7 +836,6 @@ final class CaptureController: ObservableObject {
 
     private var volumePersistTask: Task<Void, Never>?
 
-
     // MARK: - external monitor output
 
     /// The selected external display (by displayID); nil — off.
@@ -1097,18 +1095,11 @@ final class CaptureController: ObservableObject {
         let markers = playbackMarkers
         guard !markers.isEmpty else { return }
         let now = playbackPositionSeconds
-        let hit: (Int, TakeMarker)?
-        if forward {
-            hit = markers.enumerated()
-                .first { $0.element.seconds > now + 0.05 }
-                .map { ($0.offset, $0.element) }
-        } else {
-            // Array(): EnumeratedSequence has no .last on the CI toolchain
-            hit = Array(markers.enumerated())
-                .last { $0.element.seconds < now - 0.05 }
-                .map { ($0.offset, $0.element) }
-        }
-        guard let (index, marker) = hit else { return }
+        let index = forward
+            ? markers.firstIndex { $0.seconds > now + 0.05 }
+            : markers.lastIndex { $0.seconds < now - 0.05 }
+        guard let index else { return }
+        let marker = markers[index]
         seekPlayback(to: marker.seconds)
         let name = marker.note.isEmpty ? L("marker_n", index + 1) : marker.note
         lastNotice = "⚑ \(name) — \(marker.timecodeText)"
@@ -2277,7 +2268,11 @@ final class CaptureController: ObservableObject {
         }
         var restored: [Take] = []
         var foreign: [URL] = []
-        // lossy decode: one bad byte must not wipe the day's ratings
+        // Lossy decode on purpose: one bad byte must not wipe the day's
+        // ratings. The failable String(bytes:encoding:) the linter prefers
+        // would return nil for the whole file, which is exactly the outcome
+        // this guards against.
+        // swiftlint:disable optional_data_string_conversion
         let meta = (try? Data(contentsOf: takeLogURL))
             .map { TakeLogExporter.parseMetadata(
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
@@ -2286,6 +2281,7 @@ final class CaptureController: ObservableObject {
         let markers = (try? Data(contentsOf: markersURL))
             .map { TakeLogExporter.parseMarkers(
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+        // swiftlint:enable optional_data_string_conversion
 
         for url in candidates {
             if scannedPaths.contains(url.path) {
@@ -2599,12 +2595,8 @@ extension CaptureController: CaptureBackendDelegate {
         pipeline.handleFormat(format)
     }
 
-    nonisolated func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                             pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
-                             ancillaryPackets: [AncillaryPacket]) {
-        pipeline.handleFrame(pixelBuffer: pixelBuffer, pts: pts,
-                             timecode: timecode, vancTrigger: vancTrigger,
-                             ancillaryPackets: ancillaryPackets)
+    nonisolated func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
+        pipeline.handleFrame(frame)
     }
 
     nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {

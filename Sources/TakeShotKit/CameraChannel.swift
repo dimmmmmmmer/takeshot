@@ -114,12 +114,8 @@ extension CameraChannel: CaptureBackendDelegate {
     nonisolated func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat) {
         pipeline.handleFormat(format)
     }
-    nonisolated func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                             pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
-                             ancillaryPackets: [AncillaryPacket]) {
-        pipeline.handleFrame(pixelBuffer: pixelBuffer, pts: pts,
-                             timecode: timecode, vancTrigger: vancTrigger,
-                             ancillaryPackets: ancillaryPackets)
+    nonisolated func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
+        pipeline.handleFrame(frame)
     }
     nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {
         pipeline.handleAudio(sampleBuffer)

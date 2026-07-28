@@ -81,6 +81,10 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
             isRGB444: format.isRGB444))
     }
 
+    // The signature mirrors the Obj-C protocol in CDeckLink.h one-to-one; the
+    // timecode components arrive separately because the bridge has no Swift
+    // types. This is the boundary where they are folded into a CapturedFrame.
+    // swiftlint:disable:next function_parameter_count
     func capture(_ capture: CDLCapture, didReceiveVideoFrame pixelBuffer: CVPixelBuffer,
                  ptsSeconds: Double, hasTimecode: Bool,
                  tcHours: Int32, tcMinutes: Int32, tcSeconds: Int32, tcFrames: Int32,
@@ -97,10 +101,10 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
             AncillaryPacket(did: $0.did, sdid: $0.sdid,
                             lineNumber: $0.lineNumber, data: [UInt8]($0.data))
         }
-        delegate?.backend(self, didReceiveFrame: pixelBuffer,
-                          pts: CMTime(seconds: ptsSeconds, preferredTimescale: 240_000),
-                          timecode: timecode, vancTrigger: nil,
-                          ancillaryPackets: packets)
+        delegate?.backend(self, didReceive: CapturedFrame(
+            pixelBuffer: pixelBuffer,
+            pts: CMTime(seconds: ptsSeconds, preferredTimescale: 240_000),
+            timecode: timecode, ancillaryPackets: packets))
     }
 
     func capture(_ capture: CDLCapture, didReceiveAudioBytes bytes: UnsafeRawPointer,
@@ -192,12 +196,8 @@ extension AggregateBackend: CaptureBackendDelegate {
         delegate?.backend(self, didDetectFormat: format)
     }
 
-    func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
-                 ancillaryPackets: [AncillaryPacket]) {
-        delegate?.backend(self, didReceiveFrame: pixelBuffer, pts: pts,
-                          timecode: timecode, vancTrigger: vancTrigger,
-                          ancillaryPackets: ancillaryPackets)
+    func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
+        delegate?.backend(self, didReceive: frame)
     }
 
     func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {

@@ -13,12 +13,32 @@ public struct CaptureDeviceInfo: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Everything one captured video frame carries. A value rather than a growing
+/// parameter list: the list gained VANC triggers and then ancillary packets,
+/// and every implementer had to be edited in lockstep each time.
+public struct CapturedFrame {
+    public var pixelBuffer: CVPixelBuffer
+    /// Presentation time on the capture timeline (the backend's own base).
+    public var pts: CMTime
+    public var timecode: Timecode?
+    public var vancTrigger: VancTrigger?
+    public var ancillaryPackets: [AncillaryPacket]
+
+    public init(pixelBuffer: CVPixelBuffer, pts: CMTime,
+                timecode: Timecode? = nil, vancTrigger: VancTrigger? = nil,
+                ancillaryPackets: [AncillaryPacket] = []) {
+        self.pixelBuffer = pixelBuffer
+        self.pts = pts
+        self.timecode = timecode
+        self.vancTrigger = vancTrigger
+        self.ancillaryPackets = ancillaryPackets
+    }
+}
+
 /// Input-signal events. Callbacks arrive on the background capture thread.
 public protocol CaptureBackendDelegate: AnyObject {
     func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat)
-    func backend(_ backend: CaptureBackend, didReceiveFrame pixelBuffer: CVPixelBuffer,
-                 pts: CMTime, timecode: Timecode?, vancTrigger: VancTrigger?,
-                 ancillaryPackets: [AncillaryPacket])
+    func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame)
     func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer)
     func backend(_ backend: CaptureBackend, signalPresent: Bool)
     func backendDeviceListChanged(_ backend: CaptureBackend)

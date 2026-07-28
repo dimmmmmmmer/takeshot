@@ -575,16 +575,22 @@ struct AssistLegend: View {
                 (Color(red: 0.95, green: 0.15, blue: 0.10), "clip"),
             ]
         case .elZone:
-            let colors: [(Double, Double, Double, String)] = [
-                (0.04, 0.04, 0.04, "-6"), (0.45, 0.15, 0.65, "-5"),
-                (0.15, 0.25, 0.90, "-4"), (0.10, 0.60, 0.70, "-3"),
-                (0.15, 0.65, 0.25, "-2"), (0.32, 0.32, 0.32, "-1"),
-                (0.50, 0.50, 0.50, "0"), (0.68, 0.68, 0.68, "+1"),
-                (0.95, 0.60, 0.65, "+2"), (0.95, 0.55, 0.15, "+3"),
-                (0.98, 0.72, 0.30, "+4"), (0.98, 0.92, 0.25, "+5"),
-                (1, 1, 1, "+6"),
+            // the same stop palette the layer renders with (MetalPreviewLayer)
+            return [
+                (Color(red: 0.04, green: 0.04, blue: 0.04), "-6"),
+                (Color(red: 0.45, green: 0.15, blue: 0.65), "-5"),
+                (Color(red: 0.15, green: 0.25, blue: 0.90), "-4"),
+                (Color(red: 0.10, green: 0.60, blue: 0.70), "-3"),
+                (Color(red: 0.15, green: 0.65, blue: 0.25), "-2"),
+                (Color(white: 0.32), "-1"),
+                (Color(white: 0.50), "0"),
+                (Color(white: 0.68), "+1"),
+                (Color(red: 0.95, green: 0.60, blue: 0.65), "+2"),
+                (Color(red: 0.95, green: 0.55, blue: 0.15), "+3"),
+                (Color(red: 0.98, green: 0.72, blue: 0.30), "+4"),
+                (Color(red: 0.98, green: 0.92, blue: 0.25), "+5"),
+                (Color(white: 1), "+6"),
             ]
-            return colors.map { (Color(red: $0.0, green: $0.1, blue: $0.2), $0.3) }
         case .off:
             return []
         }

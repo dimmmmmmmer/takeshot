@@ -192,9 +192,9 @@ public enum ScopeAnalyzer {
         var sumG = [Int](repeating: 0, count: Self.cells)
         var sumB = [Int](repeating: 0, count: Self.cells)
 
-        /// `nativeChroma`/`nativeLuma`: for YUV sources pass the wire values
-        /// (scaled to full range) so illegal chroma/luma excursions are plotted
-        /// as-is instead of being folded into the RGB gamut by the clamp.
+        // `nativeChroma`/`nativeLuma`: for YUV sources pass the wire values
+        // (scaled to full range) so illegal chroma/luma excursions are plotted
+        // as-is instead of being folded into the RGB gamut by the clamp.
         // previous sample of the current scanline — traces are drawn as
         // connected vertical segments between neighbours (like a real waveform
         // monitor / Resolve), not scattered dots: this removes both the noise

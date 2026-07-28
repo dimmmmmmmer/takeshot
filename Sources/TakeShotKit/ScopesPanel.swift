@@ -95,13 +95,11 @@ struct ScopesPanel: View {
     private func collapseToSingle() {
         guard singleScope else { return }
         var found = false
-        for kind in order {
-            if rawIsOn(kind).wrappedValue {
-                if found {
-                    rawIsOn(kind).wrappedValue = false
-                } else {
-                    found = true
-                }
+        for kind in order where rawIsOn(kind).wrappedValue {
+            if found {
+                rawIsOn(kind).wrappedValue = false
+            } else {
+                found = true
             }
         }
     }
@@ -616,19 +614,27 @@ private struct VectorscopeView: View {
         return lut
     }()
 
+    /// One 75% color-bar target box on the vectorscope.
+    struct VectorTarget: Identifiable {
+        let id: String       // "R", "Cy", …
+        let x: CGFloat       // unit position inside the scope square
+        let y: CGFloat
+    }
+
     /// 75% color-bar targets — positioned by the exact same chroma math the
     /// analyzer plots with, so bars land on their boxes.
-    private static let targets: [(String, CGFloat, CGFloat)] = {
-        func point(_ r: Int, _ g: Int, _ b: Int) -> (CGFloat, CGFloat) {
+    private static let targets: [VectorTarget] = {
+        func target(_ name: String, _ r: Int, _ g: Int, _ b: Int) -> VectorTarget {
             let (cb, cr) = ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
                                                 b: Double(b))
-            return (CGFloat(0.5 + cb / 255), CGFloat(0.5 - cr / 255))
+            return VectorTarget(id: name,
+                                x: CGFloat(0.5 + cb / 255),
+                                y: CGFloat(0.5 - cr / 255))
         }
         let v = 191 // 75%
-        let r = point(v, 0, 0), g = point(0, v, 0), b = point(0, 0, v)
-        let cy = point(0, v, v), mg = point(v, 0, v), yl = point(v, v, 0)
-        return [("R", r.0, r.1), ("G", g.0, g.1), ("B", b.0, b.1),
-                ("Cy", cy.0, cy.1), ("Mg", mg.0, mg.1), ("Yl", yl.0, yl.1)]
+        return [target("R", v, 0, 0), target("G", 0, v, 0), target("B", 0, 0, v),
+                target("Cy", 0, v, v), target("Mg", v, 0, v),
+                target("Yl", v, v, 0)]
     }()
 
     var body: some View {
@@ -661,14 +667,14 @@ private struct VectorscopeView: View {
                     p.addLine(to: CGPoint(x: cx - side * 0.26, y: cy - side * 0.40))
                 }
                 .stroke(.white.opacity(0.22), lineWidth: 0.5)
-                ForEach(Self.targets, id: \.0) { name, tx, ty in
-                    let px = cx - side / 2 + tx * side
-                    let py = cy - side / 2 + ty * side
+                ForEach(Self.targets) { target in
+                    let px = cx - side / 2 + target.x * side
+                    let py = cy - side / 2 + target.y * side
                     Rectangle()
                         .strokeBorder(.white.opacity(0.5), lineWidth: 0.7)
                         .frame(width: 7, height: 7)
                         .position(x: px, y: py)
-                    Text(name)
+                    Text(target.id)
                         .font(.system(size: 7, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
                         .position(x: px + 9, y: py - 7)

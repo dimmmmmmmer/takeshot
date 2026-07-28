@@ -269,7 +269,7 @@ final class RawPlayerModel: ObservableObject {
     // MARK: - transport
 
     func togglePlay() {
-        isPlaying ? pause() : play()
+        if isPlaying { pause() } else { play() }
     }
 
     func play() {

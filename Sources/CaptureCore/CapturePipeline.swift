@@ -152,10 +152,15 @@ public final class CapturePipeline: @unchecked Sendable {
         return copy
     }
 
-    // fitted reference is invariant per (buffer, extent) — rebuilt only when
-    // the pin or the live frame size changes
-    private var fittedReferenceCache: (source: CVPixelBuffer, extent: CGRect,
-                                       image: CIImage)?
+    /// The fitted reference is invariant per (buffer, extent) — rebuilt only
+    /// when the pin or the live frame size changes.
+    private struct FittedReference {
+        let source: CVPixelBuffer
+        let extent: CGRect
+        let image: CIImage
+    }
+
+    private var fittedReferenceCache: FittedReference?
 
     /// Reference (front, left/top of the wipe) over the live frame.
     private func compositeReference(_ reference: CVPixelBuffer,
@@ -169,7 +174,8 @@ public final class CapturePipeline: @unchecked Sendable {
             front = CompareCompositor.fitted(
                 CIImage(cvPixelBuffer: reference, options: [.colorSpace: NSNull()]),
                 into: back.extent)
-            fittedReferenceCache = (reference, back.extent, front)
+            fittedReferenceCache = FittedReference(
+                source: reference, extent: back.extent, image: front)
         }
         let result = CompareCompositor.compose(front: front, back: back,
                                                mode: previewCompare)
@@ -416,6 +422,13 @@ public final class CapturePipeline: @unchecked Sendable {
     private let inFlightLock = NSLock()
     private var inFlightFrames = 0
     private var ingressDrops = 0
+
+    /// What the backends deliver.
+    public func handleFrame(_ frame: CapturedFrame) {
+        handleFrame(pixelBuffer: frame.pixelBuffer, pts: frame.pts,
+                    timecode: frame.timecode, vancTrigger: frame.vancTrigger,
+                    ancillaryPackets: frame.ancillaryPackets)
+    }
 
     public func handleFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                             timecode rawTimecode: Timecode?,
@@ -782,7 +795,7 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     public static func pngData(from pixelBuffer: CVPixelBuffer,
-                                ciContext: CIContext) -> Data? {
+                               ciContext: CIContext) -> Data? {
         // identity conversion, PNG tagged with the same ICC "HDTV" (Rec.709)
         // space the preview and the ProRes decoder use — the still looks
         // exactly like the player in any color-managed viewer
