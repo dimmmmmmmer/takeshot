@@ -76,9 +76,9 @@ struct CapturePipelineTests {
         // wide tolerance: under load (parallel tests, CI) the encoder may drop
         // some synthetic frames — what matters is the take exists and is ~2 s
         #expect(duration.seconds > 1.2 && duration.seconds < 2.6)
-        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let videoTracks = try await asset.tracks(ofType: .video)
         #expect(videoTracks.count == 1)
-        let tcTracks = try await asset.loadTracks(withMediaType: .timecode)
+        let tcTracks = try await asset.tracks(ofType: .timecode)
         #expect(tcTracks.count == 1)
     }
 

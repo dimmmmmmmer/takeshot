@@ -142,7 +142,7 @@ enum TestAudio {
     /// anything checking pre-roll sound has to read the samples themselves.
     static func span(of url: URL) async throws -> (first: Double?, seconds: Double) {
         let asset = AVURLAsset(url: url)
-        guard let track = try await asset.loadTracks(withMediaType: .audio).first
+        guard let track = try await asset.tracks(ofType: .audio).first
         else { return (nil, 0) }
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)

@@ -187,12 +187,12 @@ extension CaptureController {
     private func loadPlaybackInfo(for item: AVPlayerItem) {
         Task { [weak self] in
             let asset = item.asset
-            guard let track = try? await asset.loadTracks(withMediaType: .video).first
+            guard let track = try? await asset.tracks(ofType: .video).first
             else { return }
             let size = (try? await track.load(.naturalSize)) ?? .zero
             let fps = Double((try? await track.load(.nominalFrameRate)) ?? 25)
             var startTC: Timecode?
-            if let tcTrack = try? await asset.loadTracks(withMediaType: .timecode).first,
+            if let tcTrack = try? await asset.tracks(ofType: .timecode).first,
                let (frame, fdesc) = try? await Self.firstTimecodeSample(of: tcTrack) {
                 let quanta = Int(CMTimeCodeFormatDescriptionGetFrameQuanta(fdesc))
                 let flags = CMTimeCodeFormatDescriptionGetTimeCodeFlags(fdesc)

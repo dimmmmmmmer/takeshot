@@ -44,7 +44,7 @@ struct PreRollAudioTests {
         await TestWait.fileExists(at: take.url)
 
         let asset = AVURLAsset(url: take.url)
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let audioTracks = try await asset.tracks(ofType: .audio)
         #expect(audioTracks.count == 1, "the take must have an audio track")
         let videoDuration = try await asset.load(.duration).seconds
         let audio = try await TestAudio.span(of: take.url)

@@ -6,7 +6,7 @@ import Foundation
 /// (the inverse of what TakeWriter writes).
 public enum TimecodeReader {
     public static func startTimecode(of asset: AVAsset) async -> Timecode? {
-        guard let track = try? await asset.loadTracks(withMediaType: .timecode).first,
+        guard let track = try? await asset.tracks(ofType: .timecode).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         guard reader.canAdd(output) else { return nil }

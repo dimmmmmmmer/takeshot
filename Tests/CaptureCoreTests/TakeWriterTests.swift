@@ -43,13 +43,13 @@ struct TakeWriterTests {
         let duration = try await asset.load(.duration)
         #expect(abs(duration.seconds - 1.0) < 0.1)
 
-        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let videoTracks = try await asset.tracks(ofType: .video)
         #expect(videoTracks.count == 1)
         let size = try await videoTracks[0].load(.naturalSize)
         #expect(Int(size.width) == 1280)
         #expect(Int(size.height) == 720)
 
-        let timecodeTracks = try await asset.loadTracks(withMediaType: .timecode)
+        let timecodeTracks = try await asset.tracks(ofType: .timecode)
         #expect(timecodeTracks.count == 1, "a timecode track must be present")
 
         // and the start TC reads back exactly as written
@@ -136,7 +136,7 @@ struct TakeWriterTests {
         let url = try await writer.finish()
 
         let asset = AVURLAsset(url: url)
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let audioTracks = try await asset.tracks(ofType: .audio)
         #expect(audioTracks.count == 1, "the file must have an audio track")
     }
 
@@ -187,7 +187,7 @@ extension TakeWriterTests {
 
         let asset = AVURLAsset(url: url)
         let track = try #require(
-            try await asset.loadTracks(withMediaType: .timecode).first)
+            try await asset.tracks(ofType: .timecode).first)
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         reader.add(output)
