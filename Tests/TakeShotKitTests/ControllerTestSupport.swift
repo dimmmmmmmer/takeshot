@@ -290,9 +290,15 @@ enum ControllerFixtures {
 
     /// Age a file past the scan's three-second "still being written" window.
     static func settle(_ url: URL) throws {
-        try FileManager.default.setAttributes(
-            [.modificationDate: Date().addingTimeInterval(-30)],
-            ofItemAtPath: url.path)
+        try setModified(url, .init(timeIntervalSinceNow: -30))
+    }
+
+    /// Put a file's modification date wherever the test needs it — including
+    /// the future, which is how a write is held open for the scan without
+    /// racing a wall-clock window.
+    static func setModified(_ url: URL, _ date: Date) throws {
+        try FileManager.default.setAttributes([.modificationDate: date],
+                                              ofItemAtPath: url.path)
     }
 
     /// A take that does not need a file behind it — enough for the list, the

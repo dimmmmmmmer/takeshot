@@ -75,17 +75,20 @@ import Testing
         try await ControllerHarness.run { controller, root in
             let clip = root.appendingPathComponent("dropped.mp4")
             try Data([0x00]).write(to: clip)
-            // a second into the future, so the first scan still reads it as
-            // mid-write even if a loaded machine takes its time getting there
-            try FileManager.default.setAttributes(
-                [.modificationDate: Date().addingTimeInterval(1)],
-                ofItemAtPath: clip.path)
+            // The scan skips anything modified within the last three seconds.
+            // Rather than race that window — which a machine running the suite
+            // under coverage instrumentation loses — the write is dated well
+            // into the future, so no scan can mistake it for finished.
+            try ControllerFixtures.setModified(clip, .init(timeIntervalSinceNow: 3600))
 
             await scan(controller)
             #expect(controller.otherFiles.isEmpty, "a fresh write must settle first")
 
+            // the copy finished: age it past the window and let the scan's own
+            // retry come back for it, with nothing else prompting a rescan
+            try ControllerFixtures.setModified(clip, .init(timeIntervalSinceNow: -3600))
             await ControllerWait.until({ controller.otherFiles == [clip] },
-                                       timeout: .seconds(20))
+                                       timeout: .seconds(30))
             #expect(controller.otherFiles == [clip])
         }
     }
