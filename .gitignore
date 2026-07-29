@@ -3,6 +3,10 @@ build/
 .DS_Store
 *.xcodeproj
 .swiftpm/
+# Working notes, kept out of the published repository
+CLAUDE.md
+ROADMAP.md
+
 # Blackmagic SDK headers are not redistributed — vendor them locally
 vendor/DeckLinkSDK/include/
 vendor/BRAWSDK/include/

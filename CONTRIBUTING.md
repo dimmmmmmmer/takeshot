@@ -4,19 +4,46 @@ Thanks for looking. This is a tool people record irreplaceable footage with, so
 the bar for anything touching the capture path is high — the rules below exist
 because each of them was learned the expensive way.
 
-## Getting set up
+## Building from source
+
+Xcode is not required — the Command Line Tools are enough. Everything runs
+through SwiftPM:
 
 ```bash
 swift build                    # build
 scripts/test.sh                # both test suites
+scripts/test.sh --sanitize=thread   # the same suites under ThreadSanitizer
+scripts/lint.sh                # SwiftLint (brew install swiftlint first)
 scripts/bundle-app.sh          # build/TakeShot.app
-swift run takeshot-devices     # list capture devices
-swiftlint                      # lint (brew install swiftlint)
+swift run takeshot-devices     # CLI smoke test: list capture devices
 ```
 
-Xcode is not required; the Command Line Tools are enough. The SDK setup is in
-[README.md](README.md) — without the SDKs the bridges build as stubs and the
-app runs against its demo source, which is enough for most UI and logic work.
+Two test targets: `CaptureCoreTests` covers the core logic against synthetic
+signals, `TakeShotKitTests` drives a session end to end through the mock
+backend with no hardware and no window.
+
+`scripts/lint.sh` exists because SourceKitten looks for sourcekitd inside a
+toolchain directory and the Command Line Tools have no `Toolchains` folder; the
+script points `TOOLCHAIN_DIR` at the CLT root. Without it SwiftLint dies on
+startup.
+
+### Vendored SDKs
+
+Neither Blackmagic SDK is redistributable, so neither is committed. Both
+bridges build as stubs without them and the app still runs against its demo
+source — enough for most UI and logic work.
+
+| SDK | Headers go in | Without it |
+| --- | --- | --- |
+| [DeckLink](https://www.blackmagicdesign.com/developer/) | `vendor/DeckLinkSDK/include/` | no capture devices (`CDLDeviceManager.isSDKAvailable == false`) |
+| [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/include/` | `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
+
+Neither runtime is linked at build time — `DeckLinkAPIDispatch.cpp` is included
+directly in the bridge and the RAW framework is loaded dynamically — so a build
+made without the SDKs still runs on a machine that has them.
+
+For how the pieces fit together, and the hardware behaviour the capture path
+depends on, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Before you open a pull request
 

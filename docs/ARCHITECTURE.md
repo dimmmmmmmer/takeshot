@@ -1,0 +1,176 @@
+# Architecture
+
+How TakeShot is put together, and the hardware behaviour the code depends on.
+Read this before changing anything on the capture path.
+
+## Targets
+
+| Target | What it is |
+| --- | --- |
+| `CaptureCore` | The SDK-free core, compiled in **Swift 6 language mode** |
+| `CDeckLink` | Obj-C++ bridge to the DeckLink SDK: `CDLCapture` (input), `CDLPlayout` (hardware monitor output) |
+| `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
+| `TakeShotKit` | The application layer, as a library so tests can reach it |
+| `TakeShot` | The executable entry point and nothing else |
+
+`CaptureCore` holds `Timecode` (drop-frame math, `dayFrames` for the midnight
+wrap), `RecDetector` (the REC/IDLE state machine), `LTCDecoder` (SMPTE 12M
+biphase decode from PCM), `NamingEngine`, `TakeWriter` (AVAssetWriter: video,
+audio and a possibly multi-sample timecode track — one file is one take),
+`CapturePipeline` (the per-frame path), `TenBitConverter`, `MetalPreviewLayer`
+with `PreviewSinkRegistry`, `ScopeAnalyzer`, `CompareCompositor`, `CubeLUT`,
+the exporters, and the `CaptureBackend` protocol that keeps a future AJA
+backend possible. `Sendability.swift` states the cross-thread contracts in one
+place rather than boxing at a hundred call sites.
+
+`TakeShotKit` holds `CaptureController` and its domain extensions (`+Capture`,
+`+Playback`, `+Compare`, `+LUT`, `+Markers`, `+Library`, `+Offload`,
+`+Windows`, `+Settings`, `+Takes`, `+Thumbnails`, `+Audio`, `+Naming`,
+`+Viewer`), the two playback engines (`PlaybackFrameTap` for AVPlayer video and
+stills, `RawPlayerModel` for BRAW and CinemaDNG), `PlayoutFeeder`, and the
+SwiftUI views.
+
+`CaptureController` and `CapturePipeline` were 2615 and 1315 lines before they
+were split — the size at which nobody reads a type top to bottom any more. New
+behaviour goes into the matching domain extension, not back into the class.
+
+## Threading
+
+Backend callbacks arrive on a background thread and are hopped onto the
+MainActor. The queues that must never be blocked:
+
+- **The capture queue** owns per-frame work.
+- **Presentation**, **scope analysis** and **playout** each run on their own
+  queue with latest-wins coalescing.
+
+Anything doing GPU work or file I/O belongs off the capture queue — including
+UI-triggered redraws, because `nextDrawable()` parks for up to a second on an
+occluded window.
+
+Closure properties that cross threads go behind a lock. A closure is two words
+with an ARC-managed context: read it on one thread while another writes it and
+the caller gets a function pointer paired with the wrong context, which crashes
+with whatever signal the garbage earns. `displayFrameHandler` and the take
+callbacks in `CapturePipeline` are locked for exactly this reason — it cost a
+week of red CI to learn once.
+
+## Preview display rule
+
+A CALayer can be hosted by **one** NSView. Every preview mount registers its own
+`MetalPreviewLayer` as a sink (`CapturePipeline.addDisplaySink`,
+`PlaybackFrameTap.addSink`, `RawPlayerModel.addSink`); never share a layer
+between views.
+
+The main viewer is a single `ViewerSurface` whose frame source is re-routed
+between live, playback and RAW. Do not mount separate per-mode surfaces there —
+their letterboxes round independently and the image shifts by a pixel when the
+operator switches modes.
+
+## Color pipeline
+
+RGB 4:4:4 sources are captured as 10-bit `r210` by default. `TenBitConverter`
+splits each wire frame in one pass into two products:
+
+- a full-range 8-bit BGRA **display** buffer, which feeds preview, LUTs, scopes
+  and grabs;
+- a **record** `r210` buffer precompensated for VideoToolbox's measured
+  convention — it treats `r210` content as video-range 64–960 and expands it
+  inside the codec.
+
+Measured result: decoded files return to the intended values within ±1 in
+10-bit units, unbiased. The old 8-bit BGRA path carried a systematic +0.4-code
+lift, which steep viewing LUTs amplified into a visible mismatch between what
+the operator saw live and what came back on playback.
+
+## Recording integrity
+
+These are load-bearing. A change that touches one belongs in its own commit
+with the reasoning stated.
+
+- `movieFragmentInterval` is set: a crash or power loss mid-take must not lose
+  the whole file.
+- A mid-take format change, a signal loss, or a dead writer closes the take
+  with a **sticky** alarm. The writer returning `false` is ambiguous between
+  "busy encoder" and "volume detached"; `TakeWriter.hasFailed` disambiguates.
+- A take joins the list only after a successful finalize. A failed finalize is
+  renamed `*_FAILED.mov` rather than re-adopted by the folder scan as healthy
+  footage.
+- The audio channel mask is latched per take — the writer's channel count is
+  fixed at take start, and changing it live kills the file.
+- Pre-roll carries audio as well as picture.
+- Dropped video, audio and pre-roll frames are counted and shown.
+- Free space is watched: a warning under 5 GB, the take is closed under 0.5 GB.
+
+## Hard-won facts
+
+Each of these cost a session on real hardware. The code comments at the sites
+carry the detail.
+
+- **Format-detection restart loop.** Restarting the streams from the format
+  callback re-arms detection, which fires the callback again — an endless loop
+  that pins stream time at 0, so every frame gets PTS 0 and takes come out
+  0 bytes. Guard on an actual mode or pixel-format change.
+- **Input levels state the SOURCE's range.** Limited (16–235, or 64–940 in
+  10-bit) is expanded exactly once, on gamma-encoded values — a CoreImage
+  matrix in linear space crushes the shadows. Full passes through untouched.
+  Auto assumes limited for RGB 4:4:4 HDMI, the CTA-861 default.
+- **Never tag writer-bound buffers with a non-standard transfer.** The encoder
+  color-converts on tag mismatch, and CVBuffer attachments leak between buffers
+  that share an IOSurface. Both measured on device.
+- **`AVSampleBufferDisplayLayer` is off-limits for the viewer.** Composited
+  (rounded corners, overlays) it shows video-range codes unexpanded — washed
+  blacks that no pixel format or tagging fixes.
+- **Detection defaults to VANC-only.** Running timecode alone is not evidence a
+  camera is rolling: a Resolve playout feeding the board runs timecode too, and
+  it must never start a take.
+- **Stills are deliverables, not screenshots.** Grabs never bake the preview
+  LUT, and stills in the player go through the same tap render as video —
+  SwiftUI's `Image` is color-managed differently and never matched.
+- **Ad-hoc signing changes the cdhash on every rebuild**, so TCC grants die and
+  the app hangs at first launch. Until there is a stable signing identity, run
+  the binary directly from the shell.
+
+## Demo source
+
+`MockCaptureBackend` is hidden from the production UI. It appears in the device
+list only when the app is launched as `TakeShot --demo` (or with
+`TAKESHOT_DEMO=1`), and generates a 1080p25 signal with Rec Run timecode; a
+"REC demo camera" button shows up when it is selected. This is how the GUI and
+the take logic are exercised end to end without a board.
+
+## UI layout
+
+The capture device is chosen in Settings, not in the main window. Above the
+player: timecode on the left, resolution and frame rate on the right. Below it:
+a large red REC button dead centre; settings, the VANC monitor and the folder
+picker bottom-left; the Prefix/Cam/Roll/Clip fields on the right. Changing the
+roll resets the clip number. The title bar is hidden. Theme and the player
+background colour live in Settings.
+
+The takes panel has an "open folder" button and an Other content block for
+files that arrive in the record folder from outside the app. The metadata CSV
+uses a Reel Name column, which is the roll.
+
+## Localization
+
+The base language is English. UI strings go through `L("key")`
+(`Sources/TakeShotKit/L10n.swift`) with the tables in
+`Sources/TakeShotKit/Resources/{en,ru}.lproj/Localizable.strings`. The language
+switch swaps the `.lproj` bundle and is stored in `CaptureSettings.appLanguage`
+(nil means follow the system).
+
+Make new settings fields **Optional** — otherwise saved JSON from an older
+build will not decode. Core errors (`CaptureCore`, `CDeckLink`) are English and
+not localized. Add every new string to both tables.
+
+## CI
+
+- `ci.yml` — build, lint (`--strict`), tests, and a `TakeShot.zip` artifact on
+  every push and pull request, plus a separate ThreadSanitizer job.
+- `codacy-coverage.yml` — uploads lcov coverage. The token lives in the
+  `CODACY_PROJECT_TOKEN` repository secret and is never committed.
+- `release.yml` — on a `v*` tag, builds the app and publishes a GitHub Release
+  with a DMG.
+
+The runners are two major versions behind a current developer machine, which is
+a feature: it is where timing-dependent bugs surface.
