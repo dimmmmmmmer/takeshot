@@ -33,10 +33,13 @@ Neither Blackmagic SDK is redistributable, so neither is committed. Both
 bridges build as stubs without them and the app still runs against its demo
 source — enough for most UI and logic work.
 
-| SDK | Headers go in | Without it |
+| SDK | Goes in | Without it |
 | --- | --- | --- |
 | [DeckLink](https://www.blackmagicdesign.com/developer/) | `vendor/DeckLinkSDK/include/` | no capture devices (`CDLDeviceManager.isSDKAvailable == false`) |
 | [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/include/` | `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
+| [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | `.r3d` files are reported as unsupported |
+
+Each `vendor/*/README.md` says exactly which files to copy where.
 
 Neither runtime is linked at build time — `DeckLinkAPIDispatch.cpp` is included
 directly in the bridge and the RAW framework is loaded dynamically — so a build

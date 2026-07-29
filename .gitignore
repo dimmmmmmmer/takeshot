@@ -10,3 +10,6 @@ ROADMAP.md
 # Blackmagic SDK headers are not redistributed — vendor them locally
 vendor/DeckLinkSDK/include/
 vendor/BRAWSDK/include/
+vendor/R3DSDK/include/
+vendor/R3DSDK/lib/
+vendor/R3DSDK/redistributable/
