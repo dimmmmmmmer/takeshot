@@ -1,0 +1,36 @@
+# Dependabot keeps the actions used by the workflows current.
+#
+# Only one ecosystem is configured. The package has no external dependencies:
+# every target in Package.swift is local, and the two Blackmagic SDKs are
+# vendored headers the operator drops in by hand — there is nothing for the
+# `swift` ecosystem to resolve, so it is deliberately not listed here.
+#
+# The workflows pin each action to a commit SHA with the release tag in a
+# trailing comment. Dependabot reads that comment to work out the current
+# version and rewrites both the SHA and the comment on an update.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    # "/" is the whole repository for this ecosystem — it covers
+    # .github/workflows, not a directory that has to be named per workflow.
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      # The history uses "Area: what changed"; this keeps the bumps in line
+      # with it rather than introducing Conventional Commits for four PRs a
+      # year.
+      prefix: CI
+    groups:
+      # One pull request a week for the routine bumps instead of one per
+      # action. Majors are left ungrouped on purpose: they are the ones that
+      # break a workflow, and they are worth reading on their own.
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

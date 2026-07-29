@@ -8,9 +8,12 @@
 # Everything else stays at defaults so real complexity findings still surface.
 
 # Build output is not source: SwiftPM's generated resource accessors and the
-# test runner it synthesizes trip a dozen rules nobody can act on.
+# test runner it synthesizes trip a dozen rules nobody can act on. `.claude`
+# holds throwaway worktrees — linting them reports the same file several times
+# and mixes half-finished copies into the count.
 excluded:
   - .build
+  - .claude
 
 identifier_name:
   min_length: 1

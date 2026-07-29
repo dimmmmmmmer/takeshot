@@ -1,0 +1,24 @@
+# Shapes the notes that `gh release create --generate-notes` writes in
+# .github/workflows/release.yml. Without this the notes are one flat list of
+# pull request titles; with it an operator reading a release page can see at a
+# glance whether anything about recording changed.
+#
+# Anything not carrying one of these labels still appears, under "Other
+# changes" — nothing is silently dropped.
+changelog:
+  categories:
+    - title: New
+      labels:
+        - enhancement
+    - title: Fixed
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Build and CI
+      labels:
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"

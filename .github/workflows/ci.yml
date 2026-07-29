@@ -7,11 +7,16 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here writes back to the repository; the Dependabot pull requests in
+# particular should not be running with a writable token.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Toolchain versions
         run: |
@@ -38,7 +43,7 @@ jobs:
         run: ditto -c -k --keepParent build/TakeShot.app build/TakeShot.zip
 
       - name: Build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TakeShot-${{ github.sha }}
           path: build/TakeShot.zip
@@ -52,7 +57,7 @@ jobs:
   thread-sanitizer:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Tests under ThreadSanitizer
         run: ./scripts/test.sh --sanitize=thread

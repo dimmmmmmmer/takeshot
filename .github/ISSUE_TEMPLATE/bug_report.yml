@@ -5,14 +5,34 @@ body:
   - type: markdown
     attributes:
       value: |
-        If this happened during a take, say whether the file survived. That
-        separates a UI bug from a recording bug, and recording bugs jump the
-        queue.
+        Most bugs here turn out to be specific to one signal or one board, so
+        the environment fields matter as much as the description. If this
+        happened during a take, say whether the file survived — that separates
+        a UI bug from a recording bug, and recording bugs jump the queue.
   - type: textarea
     id: what
     attributes:
       label: What happened
       description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: dropdown
+    id: recording
+    attributes:
+      label: Did this touch a recording?
+      options:
+        - "No — nothing was recording at the time"
+        - "Yes, and the take on disk is fine"
+        - "Yes, and the take is damaged, truncated or missing"
+        - "Yes, and a take started or stopped when it should not have"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TakeShot version
+      description: The About window, or the tag of the build you downloaded.
+      placeholder: "0.1.0"
     validations:
       required: true
   - type: input
@@ -23,16 +43,31 @@ body:
     validations:
       required: true
   - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      description: Apple menu → About This Mac, plus which port the board is on.
+      placeholder: "Mac mini M2 Pro, rear Thunderbolt port"
+    validations:
+      required: true
+  - type: input
     id: device
     attributes:
       label: Capture device and Desktop Video version
       placeholder: "UltraStudio 4K Mini, Desktop Video 14.4"
+    validations:
+      required: true
   - type: input
     id: signal
     attributes:
       label: Signal
-      description: Resolution, frame rate, RGB or YUV, timecode source.
-      placeholder: "2160p25, RGB 4:4:4 HDMI, RP188"
+      description: |
+        Resolution, frame rate, RGB or YUV, bit depth, and where timecode comes
+        from. Blackmagic Desktop Video Setup reports the incoming format if the
+        camera does not.
+      placeholder: "2160p25, RGB 4:4:4 HDMI 10-bit, RP188 from the camera"
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:

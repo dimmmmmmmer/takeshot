@@ -91,29 +91,11 @@ public final class TakeWriter {
         let fdesc = try Self.makeTimecodeFormatDescription(startTimecode: startTimecode,
                                                            format: format)
         timecodeFormatDescription = fdesc
-        if let fdesc {
-            let input = AVAssetWriterInput(mediaType: .timecode, outputSettings: nil,
-                                           sourceFormatHint: fdesc)
-            input.expectsMediaDataInRealTime = false
-            timecodeInput = input
-            writer.add(input)
-        } else {
-            timecodeInput = nil
-        }
+        timecodeInput = Self.addTimecodeInput(formatDescription: fdesc, to: writer)
 
-        // The audio input MUST be added BEFORE startWriting() — otherwise canAdd
-        // returns false and the file has no audio track. The format is known
-        // up front (PCM 48k/16-bit, channel count comes from the pipeline).
-        if audioChannelCount > 0 {
-            let input = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: Self.audioSettings(channelCount: audioChannelCount))
-            input.expectsMediaDataInRealTime = true
-            if writer.canAdd(input) {
-                writer.add(input)
-                audioInput = input
-            }
-        }
+        // Both track inputs MUST be added BEFORE startWriting() below — after it
+        // canAdd returns false and the file comes out with no audio track.
+        audioInput = Self.addAudioInput(channelCount: audioChannelCount, to: writer)
 
         // recoverable files: without fragments a crash/power loss mid-take
         // loses the WHOLE recording (the moov atom is only written in finish)
@@ -122,6 +104,35 @@ public final class TakeWriter {
         guard writer.startWriting() else {
             throw WriterError.notWritable(writer.status, writer.error)
         }
+    }
+
+    /// The take's timecode track, or nil when the source gave us no timecode to
+    /// anchor it to. One tc32 sample covers the whole take; a second anchor is
+    /// appended in `finish()` if the camera's Rec Run started mid-take.
+    private static func addTimecodeInput(
+        formatDescription: CMTimeCodeFormatDescription?,
+        to writer: AVAssetWriter) -> AVAssetWriterInput? {
+        guard let formatDescription else { return nil }
+        let input = AVAssetWriterInput(mediaType: .timecode, outputSettings: nil,
+                                       sourceFormatHint: formatDescription)
+        input.expectsMediaDataInRealTime = false
+        writer.add(input)
+        return input
+    }
+
+    /// The take's audio track, or nil when the source has no channels or the
+    /// writer refuses the input. The format is known up front — PCM 48k/16-bit,
+    /// channel count from the pipeline.
+    private static func addAudioInput(channelCount: Int,
+                                      to writer: AVAssetWriter) -> AVAssetWriterInput? {
+        guard channelCount > 0 else { return nil }
+        let input = AVAssetWriterInput(
+            mediaType: .audio,
+            outputSettings: Self.audioSettings(channelCount: channelCount))
+        input.expectsMediaDataInRealTime = true
+        guard writer.canAdd(input) else { return nil }
+        writer.add(input)
+        return input
     }
 
     /// True once AVAssetWriter has failed permanently. A dropped frame on its

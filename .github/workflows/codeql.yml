@@ -1,0 +1,55 @@
+# CodeQL code scanning for the Swift sources.
+#
+# Swift is a compiled language for CodeQL: the extractor observes a real
+# compilation, so this has to build the package rather than read the tree.
+# `build-mode: manual` runs the same `swift build` CI runs, between the init
+# and analyze steps. It also has to run on macOS — there is no Swift extractor
+# on the Linux runners.
+#
+# The runner is pinned to macos-15 to match ci.yml: same Xcode, same Swift, so
+# a CodeQL failure means CodeQL and not a toolchain the build has never seen.
+# The DeckLink and BRAW SDK headers are absent here, exactly as in CI, so the
+# two bridge targets compile as stubs; the Swift that CodeQL cares about —
+# CaptureCore and TakeShotKit — is built in full.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Monday morning, so a new query release is caught without a push.
+    - cron: "23 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze Swift
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      # Uploading the SARIF results is the only write this workflow needs.
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: swift
+          build-mode: manual
+
+      # Between init and analyze, and traced by the extractor. Only the Swift
+      # build: the app bundle and the tests are ci.yml's job.
+      - name: Build
+        run: swift build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: "/language:swift"

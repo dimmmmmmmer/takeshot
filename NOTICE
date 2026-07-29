@@ -1,0 +1,25 @@
+TakeShot
+Copyright (c) 2026 enrvate
+
+This product is licensed under the MIT License; see LICENSE.
+
+Third-party components
+----------------------
+
+TakeShot builds against vendor SDKs that are NOT included in this repository
+and are NOT covered by the MIT License above. Each is distributed by its vendor
+under that vendor's own terms; download them yourself and place them as
+described in the matching vendor/<sdk>/README.md.
+
+  Blackmagic DeckLink SDK   <https://www.blackmagicdesign.com/developer/>
+  Blackmagic RAW SDK        <https://www.blackmagicdesign.com/developer/>
+  RED R3D SDK               <https://www.red.com/developers>
+  NDI SDK (Vizrt)           <https://ndi.video/for-developers/ndi-sdk/>
+  AJA NTV2 SDK (MIT)        <https://github.com/aja-video/libajantv2>
+
+Without the Blackmagic SDKs the corresponding targets build as stubs and the
+application still runs against its demo source. The remaining entries are
+prepared slots; no code reads them yet.
+
+Runtime frameworks installed by Blackmagic Desktop Video and Blackmagic RAW are
+loaded dynamically at run time and are likewise not redistributed here.

@@ -19,17 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Third-party components
-
-This project builds against two Blackmagic Design SDKs that are NOT included
-in this repository and are NOT covered by the license above:
-
-- Blackmagic DeckLink SDK — https://www.blackmagicdesign.com/developer/
-- Blackmagic RAW SDK — https://www.blackmagicdesign.com/developer/
-
-Both are distributed by Blackmagic Design under their own terms. Download them
-yourself and place the headers as described in README.md; without them the
-corresponding targets build as stubs.

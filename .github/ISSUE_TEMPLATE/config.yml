@@ -1,0 +1,7 @@
+# A blank issue is almost always a bug report with the environment fields left
+# out, and those fields are the ones that make a capture bug reproducible.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dimmmmmmmer/takeshot/security/policy
+    about: Report privately instead of opening a public issue.

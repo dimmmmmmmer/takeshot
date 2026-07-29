@@ -3,13 +3,18 @@ build/
 .DS_Store
 *.xcodeproj
 .swiftpm/
+# Local tooling state: throwaway worktrees and machine-specific settings.
+# A shared .claude/settings.json stays committable.
+.claude/worktrees/
+.claude/settings.local.json
 # Working notes, kept out of the published repository
 CLAUDE.md
 ROADMAP.md
 
-# Blackmagic SDK headers are not redistributed — vendor them locally
-vendor/DeckLinkSDK/include/
-vendor/BRAWSDK/include/
-vendor/R3DSDK/include/
-vendor/R3DSDK/lib/
-vendor/R3DSDK/redistributable/
+# Vendored SDKs are not redistributable. Ignore everything a vendor drop puts
+# under vendor/<sdk>/ and keep only our own instructions: naming the individual
+# folders missed the licence PDFs, sample code and release notes that ship
+# alongside them, and relied on the case-insensitive default of a Mac volume to
+# match an archive whose folders are capitalised.
+vendor/*/*
+!vendor/*/README.md

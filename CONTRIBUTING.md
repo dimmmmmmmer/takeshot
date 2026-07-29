@@ -29,17 +29,24 @@ startup.
 
 ### Vendored SDKs
 
-Neither Blackmagic SDK is redistributable, so neither is committed. Both
-bridges build as stubs without them and the app still runs against its demo
-source — enough for most UI and logic work.
+No vendored SDK is committed — most are not redistributable — so everything
+under `vendor/` is ignored except each directory's `README.md`. Both Blackmagic
+bridges build as stubs without their SDK and the app still runs against its
+demo source, which is enough for most UI and logic work.
 
-| SDK | Goes in | Without it |
+The first two are wired up. The rest are slots: the SDK has somewhere to go and
+its terms are written down, but no code reads them yet.
+
+| SDK | Goes in | State |
 | --- | --- | --- |
-| [DeckLink](https://www.blackmagicdesign.com/developer/) | `vendor/DeckLinkSDK/include/` | no capture devices (`CDLDeviceManager.isSDKAvailable == false`) |
-| [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/include/` | `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
-| [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | `.r3d` files are reported as unsupported |
+| [DeckLink](https://www.blackmagicdesign.com/developer/) | `vendor/DeckLinkSDK/` | in use; without it there are no capture devices (`CDLDeviceManager.isSDKAvailable == false`) |
+| [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/` | in use; without it `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
+| [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | slot only — `.r3d` is recognized and reported as unsupported |
+| [NDI](https://ndi.video/for-developers/ndi-sdk/) | `vendor/NDISDK/` | slot only — network output is planned, not built |
+| [AJA NTV2](https://github.com/aja-video/libajantv2) | `vendor/AJANTV2/` | slot only — an AJA `CaptureBackend` is planned, not built |
 
-Each `vendor/*/README.md` says exactly which files to copy where.
+Each `vendor/*/README.md` says exactly which files to copy where, and what the
+licence lets you ship.
 
 Neither runtime is linked at build time — `DeckLinkAPIDispatch.cpp` is included
 directly in the bridge and the RAW framework is loaded dynamically — so a build

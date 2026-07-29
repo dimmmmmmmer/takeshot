@@ -24,7 +24,7 @@ instead of a double-click; macOS then remembers the choice.
 
 ## Features
 
-**Recording**
+### Recording
 
 - Auto-takes from the camera's REC state — VANC trigger by default, running
   timecode or manual as alternatives.
@@ -41,7 +41,7 @@ instead of a double-click; macOS then remembers the choice.
   closed on format change or signal loss, disk-space watch, sticky alarms for
   anything that threatens a recording.
 
-**Review**
+### Review
 
 - One render path for live, playback, stills and RAW — what you compare is
   what you recorded, pixel for pixel.
@@ -53,7 +53,7 @@ instead of a double-click; macOS then remembers the choice.
 - Viewing LUTs (.cube) for preview and/or baked into the recording, mirrored
   into the DaVinci Resolve LUT folder on import.
 
-**Operator tools**
+### Operator tools
 
 - False color, EL Zone, zebra and focus peaking — stacking, with a legend.
 - Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
@@ -61,7 +61,7 @@ instead of a double-click; macOS then remembers the choice.
 - Markers with timecode while recording and while reviewing.
 - Keyboard shortcuts for everything on the shot floor, all remappable.
 
-**Handover**
+### Handover
 
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
   locators, shift report as PDF and CSV.
@@ -100,5 +100,5 @@ so a card copied in by hand is one double-click from playback.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The Blackmagic SDKs it builds against are
-covered by Blackmagic Design's own terms.
+MIT — see [LICENSE](LICENSE). The vendor SDKs TakeShot builds against are not
+included here and stay under their own terms; [NOTICE](NOTICE) lists them.

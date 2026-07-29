@@ -117,12 +117,17 @@ struct NamingEngineTests {
     @Test func vendorPresetExactNames() {
         // date/time from real user examples, where they matter:
         // ARRI35 A_0003C004_251031_201535..., Canon ...X260327_192707...
+        // "yyyy-MM-dd HH:mm:ss" rather than six separate components: the
+        // expectations below are real camera filenames, and the date reads
+        // straight off them this way.
         func name(_ template: String, roll: String, clip: Int, pad: Int,
                   cam: String = "A", postfix: String = "", prefix: String = "",
-                  y: Int = 2023, mo: Int = 7, d: Int = 15,
-                  h: Int = 12, mi: Int = 34, s: Int = 0) -> String {
+                  at moment: String = "2023-07-15 12:34:00") -> String {
+            let parts = moment.split(whereSeparator: { " -:".contains($0) })
+                .compactMap { Int($0) }
             var c = DateComponents()
-            c.year = y; c.month = mo; c.day = d; c.hour = h; c.minute = mi; c.second = s
+            (c.year, c.month, c.day) = (parts[0], parts[1], parts[2])
+            (c.hour, c.minute, c.second) = (parts[3], parts[4], parts[5])
             let date = Calendar(identifier: .gregorian).date(from: c)!
             return NamingEngine(template: template).fileName(for: NamingContext(
                 project: prefix, date: date, take: clip, reel: roll,
@@ -132,34 +137,34 @@ struct NamingEngineTests {
         // ARRI classic: A001C002_250904_R1Y2 (user example)
         #expect(name("{cam}{roll}C{clip}_{date6}_{postfix}",
                      roll: "001", clip: 2, pad: 3, postfix: "R1Y2",
-                     y: 2025, mo: 9, d: 4)
+                     at: "2025-09-04 12:34:00")
                 == "A001C002_250904_R1Y2")
         // ARRI Alexa 35: A_0003C004_251031_201535_h1ENU (user example)
         #expect(name("{cam}_{roll}C{clip}_{date6}_{time6}_{postfix}",
                      roll: "0003", clip: 4, pad: 3, postfix: "h1ENU",
-                     y: 2025, mo: 10, d: 31, h: 20, mi: 15, s: 35)
+                     at: "2025-10-31 20:15:35")
                 == "A_0003C004_251031_201535_h1ENU")
         // RED: A108_A064_0416UM (user example, no span segment)
         #expect(name("{cam}{roll}_{cam}{clip}_{date4}{postfix}",
                      roll: "108", clip: 64, pad: 3, postfix: "UM",
-                     mo: 4, d: 16)
+                     at: "2023-04-16 12:34:00")
                 == "A108_A064_0416UM")
         // Sony: A001C040_26022658 (user example)
         #expect(name("{cam}{roll}C{clip}_{date6}{postfix}",
                      roll: "001", clip: 40, pad: 3, postfix: "58",
-                     y: 2026, mo: 2, d: 26)
+                     at: "2026-02-26 12:34:00")
                 == "A001C040_26022658")
         // Sony (Legacy): C0001
         #expect(name("C{clip}", roll: "", clip: 1, pad: 4) == "C0001")
         // Blackmagic: A001_11301823_C065 (user example)
         #expect(name("{cam}{roll}_{date4}{time4}_C{clip}",
                      roll: "001", clip: 65, pad: 3,
-                     mo: 11, d: 30, h: 18, mi: 23)
+                     at: "2023-11-30 18:23:00")
                 == "A001_11301823_C065")
         // Canon: A_0002C188X260327_1927075S_CANON (user example)
         #expect(name("{cam}_{roll}C{clip}X{date6}_{time6}{postfix}_CANON",
                      roll: "0002", clip: 188, pad: 3, postfix: "5S",
-                     y: 2026, mo: 3, d: 27, h: 19, mi: 27, s: 7)
+                     at: "2026-03-27 19:27:07")
                 == "A_0002C188X260327_1927075S_CANON")
         // TakeShot default: Film_A001C01_night
         #expect(name("{prefix}_{cam}{roll}C{clip}_{postfix}",
