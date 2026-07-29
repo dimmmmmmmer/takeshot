@@ -28,6 +28,10 @@ app runs against its demo source, which is enough for most UI and logic work.
 - If you changed take detection, timecode, or the writer, add a test. Those
   areas are covered against synthetic signals precisely because the failures
   are silent and only show up on set.
+- If you touched anything that crosses threads, run `scripts/test.sh
+  --sanitize=thread`. CI runs it too, but finding a race locally costs
+  minutes and finding it in CI costs a day — the last one hid behind a green
+  local suite for a week.
 
 ## House rules
 

@@ -18,17 +18,32 @@ extension CaptureController {
     /// parts of the app the change actually touches are rebuilt — see below.
     func applySettingsChange(from oldValue: CaptureSettings) {
         settings.save()
-        // volume slider ticks land here too — only re-apply localization on
-        // an actual language change (Bundle lookups hit the disk), and only
-        // push the pipeline config when something it reads has changed
-        if oldValue.appLanguage != settings.appLanguage {
-            L10n.apply(appLanguage)
-        }
-        var irrelevant = oldValue
-        irrelevant.monitorVolume = settings.monitorVolume
-        if irrelevant != settings {
-            pushConfig()
-        }
+        // A settings write fans out only to the subsystems the change actually
+        // touches: a volume slider tick lands here too, and rebuilding the
+        // world on every one of them is what made the sliders lag.
+        applyLanguageChange(from: oldValue)
+        applyPipelineChange(from: oldValue)
+        applyDeviceChange(from: oldValue)
+        applyNamingChange(from: oldValue)
+    }
+
+    /// Bundle lookups hit the disk — only on an actual language change.
+    private func applyLanguageChange(from oldValue: CaptureSettings) {
+        guard oldValue.appLanguage != settings.appLanguage else { return }
+        L10n.apply(appLanguage)
+    }
+
+    /// The pipeline only needs a push when something it reads has changed;
+    /// monitor volume is the one field it does not read.
+    private func applyPipelineChange(from oldValue: CaptureSettings) {
+        var pipelineRelevant = oldValue
+        pipelineRelevant.monitorVolume = settings.monitorVolume
+        guard pipelineRelevant != settings else { return }
+        pushConfig()
+    }
+
+    /// Hardware and destination: each of these restarts something.
+    private func applyDeviceChange(from oldValue: CaptureSettings) {
         if oldValue.monitorDeviceID != settings.monitorDeviceID {
             rebuildPlayout()
         }
@@ -41,13 +56,16 @@ extension CaptureController {
             || oldValue.tenBitCapture != settings.tenBitCapture {
             restartCapture()
         }
-        // cam/postfix/template/padding affect the name — recompute the warning
-        if oldValue.cameraLabel != settings.cameraLabel
+    }
+
+    /// cam/postfix/template/padding all feed the filename — recompute the
+    /// "this name is already taken" warning.
+    private func applyNamingChange(from oldValue: CaptureSettings) {
+        guard oldValue.cameraLabel != settings.cameraLabel
             || oldValue.postfix != settings.postfix
             || oldValue.namingTemplate != settings.namingTemplate
-            || oldValue.clipPadWidth != settings.clipPadWidth {
-            refreshNameCollision()
-        }
+            || oldValue.clipPadWidth != settings.clipPadWidth else { return }
+        refreshNameCollision()
     }
 
     /// UI language; English by default.

@@ -307,41 +307,57 @@ extension CaptureController {
         let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
         nextTakeNumber = maxClip + 1
     }
+    /// What one entry in the record folder turned out to be.
+    private enum ScanEntry {
+        case clip          // playable, list it
+        case clipReel      // a DNG folder: one clip, do not descend into it
+        case stillWriting  // a video whose write has not settled — come back
+        case ignore
+    }
+
     nonisolated private static func findForeignVideos(
         root: URL, excluding ownPaths: Set<String>) -> (files: [URL], busy: Bool) {
         var found: [URL] = []
         var busy = false
         let cutoff = Date().addingTimeInterval(-3) // don't touch files still being written
-        if let enumerator = FileManager.default.enumerator(
+        guard let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
-            for case let url as URL in enumerator {
-                // a CinemaDNG folder is one clip: list it, skip the frames
-                if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?
-                    .isDirectory == true {
-                    if !DNGSequenceSource.frameURLs(in: url).isEmpty {
-                        enumerator.skipDescendants()
-                        found.append(url)
-                    }
-                    continue
-                }
-                let ext = url.pathExtension.lowercased()
-                let isVideo = videoExtensions.contains(ext)
-                guard isVideo || imageExtensions.contains(ext),
-                      !ownPaths.contains(url.path) else { continue }
-                // only videos wait out the write: image writes are single atomic
-                // calls, and a freshly grabbed still must show up immediately
-                if isVideo {
-                    let modified = (try? url.resourceValues(
-                        forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                    if let modified, modified > cutoff {
-                        busy = true
-                        continue
-                    }
-                }
+            options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return ([], false) }
+
+        for case let url as URL in enumerator {
+            switch classify(url, excluding: ownPaths, settledBefore: cutoff) {
+            case .clip:
                 found.append(url)
+            case .clipReel:
+                enumerator.skipDescendants()
+                found.append(url)
+            case .stillWriting:
+                busy = true
+            case .ignore:
+                break
             }
         }
         return (found.sorted { $0.lastPathComponent < $1.lastPathComponent }, busy)
+    }
+
+    nonisolated private static func classify(
+        _ url: URL, excluding ownPaths: Set<String>,
+        settledBefore cutoff: Date) -> ScanEntry {
+        // a CinemaDNG folder is one clip, not thousands of frames
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            return DNGSequenceSource.frameURLs(in: url).isEmpty ? .ignore : .clipReel
+        }
+        let ext = url.pathExtension.lowercased()
+        let isVideo = videoExtensions.contains(ext)
+        guard isVideo || imageExtensions.contains(ext),
+              !ownPaths.contains(url.path) else { return .ignore }
+        // only videos wait out the write: image writes are single atomic
+        // calls, and a freshly grabbed still must show up immediately
+        guard isVideo else { return .clip }
+        let modified = (try? url.resourceValues(
+            forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let modified, modified > cutoff { return .stillWriting }
+        return .clip
     }
 }

@@ -43,3 +43,16 @@ jobs:
           name: TakeShot-${{ github.sha }}
           path: build/TakeShot.zip
           retention-days: 14
+
+  # A data race in the localisation bundle crashed this workflow with SIGBUS
+  # for days and never once reproduced on a developer machine — the timing
+  # differs. ThreadSanitizer named it in a single run, so it runs here now.
+  # Separate job: instrumented tests are several times slower, and a race is
+  # not a reason to hold up the build artifact.
+  thread-sanitizer:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tests under ThreadSanitizer
+        run: ./scripts/test.sh --sanitize=thread

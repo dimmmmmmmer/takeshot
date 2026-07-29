@@ -37,9 +37,34 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onFormatChanged: ((CaptureFormat?) -> Void)?
     public var onTimecode: ((Timecode?) -> Void)?
     public var onRecStateChanged: ((Bool) -> Void)?
-    public var onTakeFinished: ((Take) -> Void)?
     public var onSignal: ((Bool) -> Void)?
-    public var onError: ((String) -> Void)?
+
+    /// These two are the only callbacks read away from the main queue: the
+    /// detached finalize task snapshots them on its own thread (see
+    /// `takeReport`). Every other callback above is both written and read on
+    /// main, so a plain property is fine for them — these two are not.
+    ///
+    /// A closure property is a two-word value with an ARC-managed context. Read
+    /// it on one thread while another writes it and you get a function pointer
+    /// paired with the wrong context, which crashes with whatever signal the
+    /// garbage happens to earn — SIGBUS on one machine, SIGSEGV on the next,
+    /// and nothing at all on the machine you develop on. `displayFrameHandler`
+    /// below already carries a lock for exactly this reason; these were left
+    /// bare when the finalize task moved off the main queue, and it crashed CI
+    /// on every push for a week.
+    private let takeCallbackLock = NSLock()
+    private var storedOnTakeFinished: ((Take) -> Void)?
+    private var storedOnError: ((String) -> Void)?
+
+    public var onTakeFinished: ((Take) -> Void)? {
+        get { takeCallbackLock.withLock { storedOnTakeFinished } }
+        set { takeCallbackLock.withLock { storedOnTakeFinished = newValue } }
+    }
+
+    public var onError: ((String) -> Void)? {
+        get { takeCallbackLock.withLock { storedOnError } }
+        set { takeCallbackLock.withLock { storedOnError = newValue } }
+    }
     /// VANC packet stats (for the monitor); sent about once a second on changes.
     public var onVancStats: (([VancPacketStat]) -> Void)?
     /// Per-channel audio peak levels, dBFS. Arrive at the audio-packet rate (~25 Hz).
@@ -59,9 +84,13 @@ public final class CapturePipeline: @unchecked Sendable {
         let failed: (String) -> Void
     }
 
+    /// Both callbacks copied out under one lock, so the task holds values
+    /// rather than a reference to the pipeline's mutable state.
     var takeReport: TakeReport {
-        TakeReport(finished: { [onTakeFinished] in onTakeFinished?($0) },
-                   failed: { [onError] in onError?($0) })
+        takeCallbackLock.withLock {
+            TakeReport(finished: { [storedOnTakeFinished] in storedOnTakeFinished?($0) },
+                       failed: { [storedOnError] in storedOnError?($0) })
+        }
     }
 
     /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
