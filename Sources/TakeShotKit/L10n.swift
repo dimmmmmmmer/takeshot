@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// UI language. English is the preferred (and base) language for new strings.
 enum AppLanguage: String, CaseIterable, Codable, Identifiable {
@@ -12,20 +13,33 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
 /// Localization with on-the-fly language switching: strings come from the
 /// selected language's .lproj bundle, bypassing the system setting.
 enum L10n {
-    private static var bundle: Bundle = .module
+    /// The bundle is swapped on the main thread when the operator changes the
+    /// language, and read from any thread that formats a message — the offload
+    /// worker reports its progress from its own queue, and error toasts are
+    /// built wherever the failure happened. As a plain `static var` that is a
+    /// data race: ThreadSanitizer flags it, and a torn read of the reference
+    /// is a crash on a machine whose timing differs from the one it ran on.
+    private static let state = OSAllocatedUnfairLock(initialState: Bundle.module)
+
+    /// Copied out under the lock; the string lookup itself runs outside it.
+    private static var bundle: Bundle {
+        state.withLock { $0 }
+    }
 
     static func apply(_ language: AppLanguage) {
+        let selected: Bundle
         switch language {
         case .system:
-            bundle = .module
+            selected = .module
         case .english, .russian:
             if let path = Bundle.module.path(forResource: language.rawValue, ofType: "lproj"),
                let languageBundle = Bundle(path: path) {
-                bundle = languageBundle
+                selected = languageBundle
             } else {
-                bundle = .module
+                selected = .module
             }
         }
+        state.withLock { $0 = selected }
     }
 
     static func string(_ key: String) -> String {

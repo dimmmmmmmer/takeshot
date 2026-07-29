@@ -148,40 +148,51 @@ struct RecDetectorTests {
 
     // MARK: - several takes in a row
 
+    /// Counts the take boundaries a run of frames produces.
+    private struct EventTally {
+        var starts = 0
+        var stops = 0
+
+        mutating func record(_ event: RecEvent) {
+            if case .started = event { starts += 1 } else { stops += 1 }
+        }
+    }
+
+    /// Push `count` frames carrying `timecode` and tally what comes back.
+    private func feed(_ detector: RecDetector, frames count: Int,
+                      timecode: Timecode, index: inout Int,
+                      tally: inout EventTally) {
+        for _ in 0..<count {
+            index += 1
+            guard let event = detector.process(
+                FrameSample(index: index, timecode: timecode)) else { continue }
+            tally.record(event)
+        }
+    }
+
     @Test func threeConsecutiveTakes() {
         let detector = RecDetector(config: RecDetectorConfig(startDebounceFrames: 2,
                                                              stopDebounceFrames: 2))
-        var starts = 0
-        var stops = 0
+        var tally = EventTally()
         var index = 0
         var tcBase = 10_000
 
         for _ in 1...3 {
             // pause: TC stalled
-            for _ in 1...5 {
-                index += 1
-                if let e = detector.process(FrameSample(index: index, timecode: tc(tcBase))) {
-                    if case .started = e { starts += 1 } else { stops += 1 }
-                }
-            }
+            feed(detector, frames: 5, timecode: tc(tcBase),
+                 index: &index, tally: &tally)
             // recording: TC advances for 10 frames
-            for f in 1...10 {
-                index += 1
-                if let e = detector.process(FrameSample(index: index, timecode: tc(tcBase + f))) {
-                    if case .started = e { starts += 1 } else { stops += 1 }
-                }
+            for frame in 1...10 {
+                feed(detector, frames: 1, timecode: tc(tcBase + frame),
+                     index: &index, tally: &tally)
             }
             tcBase += 10
         }
         // final pause to close the last take
-        for _ in 1...5 {
-            index += 1
-            if let e = detector.process(FrameSample(index: index, timecode: tc(tcBase))) {
-                if case .started = e { starts += 1 } else { stops += 1 }
-            }
-        }
+        feed(detector, frames: 5, timecode: tc(tcBase),
+             index: &index, tally: &tally)
 
-        #expect(starts == 3)
-        #expect(stops == 3)
+        #expect(tally.starts == 3)
+        #expect(tally.stops == 3)
     }
 }
