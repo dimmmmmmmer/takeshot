@@ -7,10 +7,12 @@ import Testing
     private func makeTake(name: String, roll: String = "001",
                           tc: Timecode?, duration: Double,
                           markers: [TakeMarker] = []) -> Take {
-        Take(url: URL(fileURLWithPath: "/tmp/\(name)"), displayName: name,
-             scene: "", roll: roll, takeNumber: 1, startTimecode: tc,
-             durationSeconds: duration, rating: .good, comment: "",
-             recordedAt: Date(), markers: markers)
+        var take = Take(url: URL(fileURLWithPath: "/tmp/\(name)"),
+                        scene: "", roll: roll, takeNumber: 1, startTimecode: tc,
+                        durationSeconds: duration, recordedAt: Date())
+        take.rating = .good
+        take.markers = markers
+        return take
     }
 
     @Test func emptySelectsReturnNil() {

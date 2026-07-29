@@ -5,10 +5,13 @@ import Testing
 struct TakeLogExporterTests {
     private func makeTake(name: String, scene: String, number: Int,
                           rating: TakeRating = .none, comment: String = "") -> Take {
-        Take(url: URL(fileURLWithPath: "/tmp/x/\(name)"),
-             displayName: name, scene: scene, takeNumber: number,
-             startTimecode: nil, durationSeconds: 10,
-             rating: rating, comment: comment, recordedAt: Date(timeIntervalSince1970: 0))
+        var take = Take(url: URL(fileURLWithPath: "/tmp/x/\(name)"),
+                        scene: scene, takeNumber: number,
+                        startTimecode: nil, durationSeconds: 10,
+                        recordedAt: Date(timeIntervalSince1970: 0))
+        take.rating = rating
+        take.comment = comment
+        return take
     }
 
     @Test func csvHasResolveColumnsAndRatings() {

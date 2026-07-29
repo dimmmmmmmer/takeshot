@@ -69,36 +69,39 @@ public struct TakeMarker: Equatable, Sendable {
 }
 
 public struct Take: Identifiable, Equatable, Sendable {
-    public var id: UUID
+    public let id = UUID()
     public var url: URL
-    public var displayName: String
     public var scene: String
     public var roll: String
     public var takeNumber: Int
     public var startTimecode: Timecode?
     public var durationSeconds: Double
-    public var rating: TakeRating       // good/bad take (in CSV — Good Take + NG marker)
-    public var comment: String          // free-text note (in CSV — Comments column)
     public var recordedAt: Date
-    public var markers: [TakeMarker]    // flagged moments (sidecar CSV)
 
-    public init(id: UUID = UUID(), url: URL, displayName: String, scene: String,
-                roll: String = "", takeNumber: Int, startTimecode: Timecode?,
-                durationSeconds: Double, rating: TakeRating = .none,
-                comment: String = "", recordedAt: Date,
-                markers: [TakeMarker] = []) {
-        self.id = id
+    /// The label in the take list. Derived from the file rather than stored
+    /// alongside it: both places that built a take computed exactly this, and a
+    /// stored copy starts lying the moment the file is renamed underneath it.
+    public var displayName: String {
+        url.deletingPathExtension().lastPathComponent
+    }
+
+    // Review state. Not initializer parameters, because none of it is known
+    // when a take is recorded — the operator adds it afterwards and it is
+    // persisted to the sidecars rather than the file.
+    public var rating: TakeRating = .none   // in CSV — Good Take + NG marker
+    public var comment: String = ""         // in CSV — Comments column
+    public var markers: [TakeMarker] = []   // flagged moments (sidecar CSV)
+
+    public init(url: URL, scene: String, roll: String = "", takeNumber: Int,
+                startTimecode: Timecode?, durationSeconds: Double,
+                recordedAt: Date) {
         self.url = url
-        self.displayName = displayName
         self.scene = scene
         self.roll = roll
         self.takeNumber = takeNumber
         self.startTimecode = startTimecode
         self.durationSeconds = durationSeconds
-        self.rating = rating
-        self.comment = comment
         self.recordedAt = recordedAt
-        self.markers = markers
     }
 }
 

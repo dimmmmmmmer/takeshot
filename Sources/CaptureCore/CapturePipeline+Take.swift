@@ -305,7 +305,6 @@ extension CapturePipeline {
     private func describeTake(from writer: TakeWriter) -> Take {
         Take(
             url: writer.url,
-            displayName: writer.url.deletingPathExtension().lastPathComponent,
             scene: takeScene,
             roll: takeRoll,
             takeNumber: takeNumber,

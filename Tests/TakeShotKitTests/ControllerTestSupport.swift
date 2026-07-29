@@ -145,16 +145,13 @@ enum ControllerWait {
 /// Stand-in for the demo source: the same device ID, the same 1080p25 format
 /// and the same 16-channel embed, feeding blank frames and near-silence.
 ///
-/// `MockCaptureBackend` itself is not used to drive the controller for two
-/// reasons, both reported rather than worked around:
-///
-/// 1. It burns a timecode badge into every frame with AppKit string drawing on
-///    its own dispatch queue. That crashed this suite twice — once with
-///    NSInvalidArgumentException raised inside NSStringDrawing from a nil font
-///    (CoreText's font machinery reached first from a background thread), once
-///    as a bare process death during a live take.
-/// 2. Its audio is real sine tones at full listening level, which the app then
-///    plays out of the machine's speakers whenever live monitoring is on.
+/// `MockCaptureBackend` itself is not used to drive the controller. Writing
+/// these suites is what found the crash in it — it burned its timecode badge
+/// with AppKit string drawing on its own dispatch queue, which killed the
+/// process twice here, and that has since been fixed. What remains is that its
+/// audio is real sine tones at full listening level, which the app plays out of
+/// the machine's speakers whenever live monitoring is on, and that its picture
+/// changes every frame for no benefit to these assertions.
 ///
 /// Nothing the controller suites assert depends on the picture content or the
 /// tone; the pipeline, writer and take-list paths are the same either way.
@@ -303,7 +300,7 @@ enum ControllerFixtures {
     static func take(named name: String, in root: URL, roll: String = "001",
                      clip: Int = 1, recordedAt: Date = Date()) -> Take {
         Take(url: root.appendingPathComponent("\(name).mov"),
-             displayName: name, scene: "", roll: roll, takeNumber: clip,
+             scene: "", roll: roll, takeNumber: clip,
              startTimecode: Timecode(hours: 10, minutes: 0, seconds: 0,
                                      frames: 0, fps: 25),
              durationSeconds: 4, recordedAt: recordedAt)

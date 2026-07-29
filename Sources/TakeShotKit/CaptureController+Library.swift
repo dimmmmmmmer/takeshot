@@ -243,18 +243,20 @@ extension CaptureController {
             .creationDate ?? Date.distantPast
         let startTC = await TimecodeReader.startTimecode(of: asset)
         let name = url.lastPathComponent
-        return .take(Take(
+        var take = Take(
             url: url,
-            displayName: url.deletingPathExtension().lastPathComponent,
             scene: "",
             roll: await value(TakeWriter.rollKey) ?? "",
             takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
             startTimecode: startTC,
             durationSeconds: duration,
-            rating: stored.meta[name]?.rating ?? .none,
-            comment: stored.meta[name]?.comment ?? "",
-            recordedAt: created,
-            markers: stored.markers[name] ?? []))
+            recordedAt: created)
+        // the operator's own work, restored from the sidecars rather than read
+        // off the file
+        take.rating = stored.meta[name]?.rating ?? .none
+        take.comment = stored.meta[name]?.comment ?? ""
+        take.markers = stored.markers[name] ?? []
+        return .take(take)
     }
     /// Files removed from the folder leave the panel, but NOT the shift log:
     /// the normal way a day ends is the DIT moving the takes into the archive

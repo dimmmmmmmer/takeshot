@@ -14,13 +14,17 @@ struct ModelShiftReportTests {
     private func take(_ index: Int, rating: TakeRating = .none,
                       comment: String = "", markers: [TakeMarker] = [],
                       duration: Double = 12) -> Take {
-        Take(url: URL(fileURLWithPath: "/tmp/CLIP\(String(format: "%03d", index)).mov"),
-             displayName: "CLIP\(index)", scene: "",
-             roll: "001", takeNumber: index,
-             startTimecode: Timecode(hours: 10, minutes: 0, seconds: index,
-                                     frames: 0, fps: 25),
-             durationSeconds: duration, rating: rating, comment: comment,
-             recordedAt: Date(timeIntervalSince1970: 0), markers: markers)
+        var take = Take(
+            url: URL(fileURLWithPath: "/tmp/CLIP\(String(format: "%03d", index)).mov"),
+            scene: "", roll: "001", takeNumber: index,
+            startTimecode: Timecode(hours: 10, minutes: 0, seconds: index,
+                                    frames: 0, fps: 25),
+            durationSeconds: duration,
+            recordedAt: Date(timeIntervalSince1970: 0))
+        take.rating = rating
+        take.comment = comment
+        take.markers = markers
+        return take
     }
 
     private func document(_ takes: [Take],
