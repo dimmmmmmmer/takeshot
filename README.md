@@ -10,6 +10,8 @@ Built for DITs and video-assist operators who want the take-collecting of
 Resolve Capture with the review layer of a proper assist station.
 
 [![CI](https://github.com/dimmmmmmmer/takeshot/actions/workflows/ci.yml/badge.svg)](https://github.com/dimmmmmmmer/takeshot/actions/workflows/ci.yml)
+[![Code quality](https://app.codacy.com/project/badge/Grade/5223b50b77af47e3a35f9d49b9b9c9e9)](https://app.codacy.com/gh/dimmmmmmmer/takeshot/dashboard)
+[![Coverage](https://app.codacy.com/project/badge/Coverage/5223b50b77af47e3a35f9d49b9b9c9e9)](https://app.codacy.com/gh/dimmmmmmmer/takeshot/coverage/dashboard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
