@@ -24,10 +24,9 @@ What is in scope:
   or CSV files the app parses.
 - Writing outside the destination and offload folders the operator selected
   (path traversal through file names read from disk).
-- Content injected into exports (CSV, or an EDL edit decision list) that
-  executes when a production opens them in another application — spreadsheet
-  formula injection was fixed in this class and regressions count as
-  vulnerabilities.
+- Content injected into exports (CSV, or an edit decision list) that executes
+  when a production opens them in another application — spreadsheet formula
+  injection was fixed in this class and regressions count as vulnerabilities.
 
 What is not in scope: the Blackmagic SDKs and their runtimes (report those to
 Blackmagic Design), and anything requiring the attacker to already have the

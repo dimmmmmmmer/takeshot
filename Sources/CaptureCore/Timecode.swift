@@ -49,6 +49,13 @@ public struct Timecode: Equatable, Hashable, Sendable, CustomStringConvertible {
     }
 
     public init(frameNumber: Int, fps: Int, isDropFrame: Bool = false) {
+        // Clamped like `init?(text:fps:)` and `dayFrames(fps:)` — this one was
+        // the odd initializer out, and the divisions below trap on fps 0.
+        // Timecodes with fps 0 are not hypothetical: the DeckLink adapter builds
+        // every frame's timecode that way on purpose and lets the pipeline fill
+        // the rate in from the format, and the bridge derives that rate as
+        // lround(frameRate), which is 0 for anything under 0.5 fps.
+        let fps = max(1, fps)
         var fn = max(0, frameNumber)
         if isDropFrame, fps % 30 == 0 {
             let dropPerMinute = fps / 15

@@ -13,6 +13,7 @@ final class AudioMonitor: @unchecked Sendable {
     private let sync = AVSampleBufferRenderSynchronizer()
     private let queue = DispatchQueue(label: "takeshot.audio-monitor")
     private var offset: CMTime?
+    private let deviceLock = NSLock()
     private var deviceUID: String?
 
     init() {
@@ -43,12 +44,26 @@ final class AudioMonitor: @unchecked Sendable {
     /// Output device UID (nil — system default); shares the playback picker.
     /// The renderer rejects a nil assignment (NSException), so "back to system
     /// default" is implemented by swapping in a fresh renderer.
+    ///
+    /// The UID is locked for the same reason as the volume above, and the store
+    /// happens on the caller's thread rather than on `queue`: the getter used to
+    /// read it unsynchronized while the setter wrote it from the queue, so a
+    /// settings read-back straight after a device change reported the previous
+    /// device. Only the renderer work — which must not race the swap — is
+    /// deferred to the queue.
     var outputDeviceUID: String? {
-        get { deviceUID }
+        get {
+            deviceLock.lock()
+            defer { deviceLock.unlock() }
+            return deviceUID
+        }
         set {
+            deviceLock.lock()
+            let unchanged = deviceUID == newValue
+            deviceUID = newValue
+            deviceLock.unlock()
+            guard !unchanged else { return }
             queue.async { [self] in
-                guard deviceUID != newValue else { return }
-                deviceUID = newValue
                 if let newValue {
                     renderer.audioOutputDeviceUniqueID = newValue
                 } else {

@@ -121,10 +121,14 @@ final class HotkeyManager: ObservableObject {
     @Published var recordingAction: HotkeyAction?
 
     private var monitor: Any?
+    /// Injectable so tests get their own suite instead of the operator's
+    /// bindings; production always uses the standard defaults.
+    private let defaults: UserDefaults
     private static let defaultsKey = "TakeShot.Hotkeys"
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.defaultsKey),
            let stored = try? JSONDecoder().decode([String: KeyCombo].self, from: data) {
             var result: [HotkeyAction: KeyCombo] = [:]
             for action in HotkeyAction.allCases {
@@ -153,7 +157,7 @@ final class HotkeyManager: ObservableObject {
         let stored = Dictionary(uniqueKeysWithValues:
             bindings.map { ($0.key.rawValue, $0.value) })
         if let data = try? JSONEncoder().encode(stored) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+            defaults.set(data, forKey: Self.defaultsKey)
         }
     }
 
