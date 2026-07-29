@@ -77,7 +77,11 @@ extension CaptureController {
 
     /// Every file on the card. A card copy must be COMPLETE: hidden files
     /// included, and an unreadable directory is a failure, not a silent skip.
-    nonisolated private static func scanOffloadSource(
+    ///
+    /// Internal rather than private: the verified-copy core is the part worth
+    /// testing, and `offloadFolder` above can only be reached through two modal
+    /// panels.
+    nonisolated static func scanOffloadSource(
         _ source: URL) -> (files: [URL], failures: [String]) {
         var files: [URL] = []
         var failures: [String] = []
@@ -99,7 +103,7 @@ extension CaptureController {
 
     /// Copy one file and verify both sides by SHA-256. Returns its manifest
     /// row, or nil after appending the reason to `failures`.
-    nonisolated private static func copyVerified(
+    nonisolated static func copyVerified(
         _ file: URL, from source: URL, to destDir: URL,
         failures: inout [String]) -> String? {
         let relative = file.path.replacingOccurrences(
@@ -131,8 +135,8 @@ extension CaptureController {
         }
     }
 
-    nonisolated private static func writeManifest(_ manifest: String, to destDir: URL,
-                                                  failures: inout [String]) {
+    nonisolated static func writeManifest(_ manifest: String, to destDir: URL,
+                                          failures: inout [String]) {
         do {
             try manifest.write(
                 to: destDir.appendingPathComponent("offload-manifest.csv"),

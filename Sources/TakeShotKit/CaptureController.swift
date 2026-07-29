@@ -162,9 +162,10 @@ final class CaptureController: ObservableObject {
     @Published var referencePinned = false
 
     /// Takes-panel position (left/right) — reactive for all windows.
-    @Published var panelSide: String =
-        UserDefaults.standard.string(forKey: "panelSide") ?? "right" {
-        didSet { UserDefaults.standard.set(panelSide, forKey: "panelSide") }
+    /// Seeded from `defaults` in init; the observer never fires for that
+    /// assignment, so a fresh controller does not write back what it just read.
+    @Published var panelSide: String = "right" {
+        didSet { defaults.set(panelSide, forKey: "panelSide") }
     }
     /// Hotkey manager (for the fullscreen windows' environment).
     weak var hotkeysRef: HotkeyManager?
@@ -263,7 +264,7 @@ final class CaptureController: ObservableObject {
     /// Set from CaptureController+Playback when a clip loads.
     var playbackFPS: Double = 25
 
-    @Published var settings = CaptureSettings.loaded() {
+    @Published var settings: CaptureSettings {
         didSet { applySettingsChange(from: oldValue) }
     }
 
@@ -271,18 +272,32 @@ final class CaptureController: ObservableObject {
 
     let backend: AggregateBackend
 
-    init(extraBackends: [(String, CaptureBackend)] = []) {
-        // the demo source is always last; when a real board appears the app
-        // switches to it automatically (see refreshDevices)
-        var children: [(String, CaptureBackend)] = [
-            ("decklink", DeckLinkBackendAdapter()),
-            ("mock", MockCaptureBackend()),
-        ]
-        children.append(contentsOf: extraBackends)
-        let backend = AggregateBackend(children: children)
+    /// Where the app's own preferences live. `.standard` in the app; tests hand
+    /// in a scratch suite so a headless controller cannot read or overwrite the
+    /// operator's real settings (record folder included).
+    let defaults: UserDefaults
+
+    /// What the app itself runs on: the DeckLink bridge plus the demo source.
+    /// The demo source is always last; when a real board appears the app
+    /// switches to it automatically (see refreshDevices).
+    static func shippingBackends() -> [(String, CaptureBackend)] {
+        [("decklink", DeckLinkBackendAdapter()),
+         ("mock", MockCaptureBackend())]
+    }
+
+    /// `backends` defaults to the shipping set. Tests pass the demo source
+    /// alone: constructing the DeckLink adapter installs a process-wide
+    /// hot-plug callback and adopts whatever board is attached to the machine
+    /// running the tests, which no headless test can be deterministic against.
+    init(backends: [(String, CaptureBackend)]? = nil,
+         defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let backend = AggregateBackend(children: backends ?? Self.shippingBackends())
         self.backend = backend
 
-        let stored = CaptureSettings.loaded()
+        let stored = CaptureSettings.loaded(from: defaults)
+        self.settings = stored
+        self.panelSide = defaults.string(forKey: "panelSide") ?? "right"
         self.pipeline = CapturePipeline(config: .init(
             settings: stored, roll: "001", takeNumber: 1))
 

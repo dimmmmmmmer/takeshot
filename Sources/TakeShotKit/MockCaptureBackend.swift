@@ -160,14 +160,35 @@ final class MockCaptureBackend: CaptureBackend {
         context.setFillColor(CGColor(gray: 0, alpha: 0.75))
         context.fill(CGRect(x: 0, y: 0, width: CGFloat(width), height: 160))
 
-        let text = "\(timecode)  \(isCameraRecording ? "● REC" : "STBY")" as NSString
-        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = graphicsContext
-        text.draw(at: NSPoint(x: 40, y: 40), withAttributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 72, weight: .bold),
-            .foregroundColor: isCameraRecording ? NSColor.red : NSColor.white,
+        let text = "\(timecode)  \(isCameraRecording ? "● REC" : "STBY")"
+        drawBadgeText(text, in: context, at: CGPoint(x: 40, y: 40),
+                      color: isCameraRecording
+                          ? CGColor(red: 1, green: 0.2, blue: 0.2, alpha: 1)
+                          : CGColor(gray: 1, alpha: 1))
+    }
+
+    /// The font is built once, up front, and the line is drawn with Core Text
+    /// straight into the context.
+    ///
+    /// This used to be `NSString.draw(at:withAttributes:)` through an
+    /// `NSGraphicsContext`, called from the source's own dispatch queue. AppKit
+    /// text drawing is not thread-safe, and it killed the process: reaching
+    /// Core Text's font machinery first from a background thread returned a nil
+    /// font, and `CTLineCreateWithAttributedString` then raised
+    /// "attempt to insert nil object from objects[0]". It is rare enough to
+    /// look like bad luck and it is the shipping `--demo` path, with multicam
+    /// running two of these sources at once.
+    private static let badgeFont: CTFont =
+        CTFontCreateWithName("Menlo-Bold" as CFString, 72, nil)
+
+    private func drawBadgeText(_ text: String, in context: CGContext,
+                               at origin: CGPoint, color: CGColor) {
+        let attributed = NSAttributedString(string: text, attributes: [
+            .font: Self.badgeFont,
+            .foregroundColor: color,
         ])
-        NSGraphicsContext.restoreGraphicsState()
+        let line = CTLineCreateWithAttributedString(attributed)
+        context.textPosition = origin
+        CTLineDraw(line, context)
     }
 }

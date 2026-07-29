@@ -243,8 +243,12 @@ extension CaptureController {
         let realDevices = devices.filter { !$0.id.hasPrefix("mock:") }
         if let selected = selectedDeviceID, !devices.contains(where: { $0.id == selected }) {
             // the selected device was unplugged — fall back to the first available
-            lastError = L("device_disconnected")
             selectedDeviceID = devices.first?.id
+            // after the switch, not before it: assigning the device restarts
+            // capture from its didSet, and a successful start clears lastError,
+            // so setting the notice first meant unplugging a board while another
+            // one was attached went by in silence.
+            lastError = L("device_disconnected")
         } else if selectedDeviceID == nil || (isMockSelected && !realDevices.isEmpty) {
             // nothing selected, or the demo source is selected but a real board
             // appeared — switch to it (capture starts itself via didSet)

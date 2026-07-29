@@ -23,7 +23,7 @@ extension CaptureController {
 
     /// Click the circle: none → good → bad → none.
     func cycleRating(_ take: Take) {
-        guard let idx = takes.firstIndex(of: take) else { return }
+        guard let idx = takes.firstIndex(where: { $0.id == take.id }) else { return }
         switch takes[idx].rating {
         case .none: takes[idx].rating = .good
         case .good: takes[idx].rating = .bad
@@ -33,7 +33,7 @@ extension CaptureController {
     }
 
     func setRating(_ rating: TakeRating, for take: Take) {
-        guard let idx = takes.firstIndex(of: take) else { return }
+        guard let idx = takes.firstIndex(where: { $0.id == take.id }) else { return }
         takes[idx].rating = rating
         exportTakeLog()
     }
@@ -46,7 +46,7 @@ extension CaptureController {
 
     /// Set a free-text comment on a take (persisted to the CSV Comments column).
     func setComment(_ comment: String, for take: Take) {
-        guard let idx = takes.firstIndex(of: take) else { return }
+        guard let idx = takes.firstIndex(where: { $0.id == take.id }) else { return }
         guard takes[idx].comment != comment else { return }
         takes[idx].comment = comment
         exportTakeLog()

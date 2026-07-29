@@ -17,7 +17,7 @@ extension CaptureController {
     /// Every settings write lands here (from the `settings` didSet). Only the
     /// parts of the app the change actually touches are rebuilt — see below.
     func applySettingsChange(from oldValue: CaptureSettings) {
-        settings.save()
+        settings.save(to: defaults)
         // A settings write fans out only to the subsystems the change actually
         // touches: a volume slider tick lands here too, and rebuilding the
         // world on every one of them is what made the sliders lag.
@@ -139,7 +139,7 @@ extension CaptureController {
         fresh.destinationPath = keepDestination
         settings = fresh
         panelSide = "right"
-        UserDefaults.standard.removeObject(forKey: "TakeShot.Hotkeys")
+        defaults.removeObject(forKey: "TakeShot.Hotkeys")
         L10n.apply(appLanguage)
         rebuildLUT()
     }
