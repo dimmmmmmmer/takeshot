@@ -14,6 +14,25 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    var backendAvailable: Bool { backend.isAvailable }
+
+    /// Whether the demo source is selected (to show the "REC demo camera" button).
+    var isMockSelected: Bool {
+        selectedDeviceID?.hasPrefix("mock:") ?? false
+    }
+
+    /// Input mode names of the selected DeckLink (for the Settings picker).
+    var selectedDeviceInputModes: [String] {
+        guard let id = selectedDeviceID, id.hasPrefix("decklink:") else { return [] }
+        return DeckLinkBackendAdapter.inputModeNames(
+            deviceID: String(id.dropFirst("decklink:".count)))
+    }
+
+    /// All cameras for the preview grid: main (nil channel) + extras.
+    var allCameraLabels: [String] {
+        [settings.cameraLabel] + extraChannels.map(\.camLabel)
+    }
+
     /// Free-space watch on the record volume: warn early, stop the take
     /// before the writer hits a hard wall (nothing watched disk space at all).
     func startDiskWatch() {
@@ -74,41 +93,10 @@ extension CaptureController {
             self.live.currentTimecode = timecode
         }
         pipeline.onRecStateChanged = { [weak self] recording in
-            guard let self else { return }
-            self.isRecording = recording
-            if recording {
-                self.recordingStartDate = Date()
-                self.recordingMarkers = []
-                self.persistentAlert = nil // a clean start clears the alarm
-            }
-            self.refreshNameCollision() // start hides it, stop recomputes
-            // multicam: the other cameras in sync with the main one
-            for channel in self.extraChannels { channel.setRecording(recording) }
+            self?.handleRecState(recording)
         }
         pipeline.onTakeFinished = { [weak self] take in
-            guard let self else { return }
-            var take = take
-            // re-anchor marker positions on the take's actual start TC: the
-            // wall clock measured from the REC press is off by the pre-roll
-            take.markers = self.recordingMarkers.map { marker in
-                var fixed = marker
-                if let start = take.startTimecode,
-                   let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
-                    var frames = tc.frameNumber - start.frameNumber
-                    if frames < 0 {
-                        frames += Timecode.dayFrames(fps: start.fps,
-                                                     isDropFrame: start.isDropFrame)
-                    }
-                    fixed.seconds = Double(frames) / Double(max(1, start.fps))
-                }
-                return fixed
-            }
-            self.recordingMarkers = []
-            self.takes.append(take)
-            self.nextTakeNumber += 1
-            self.exportTakeLog()
-            self.requestThumbnail(for: take) // deduped against a cell's request
-            self.flashNewItem(take.url)
+            self?.adoptFinishedTake(take)
         }
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
@@ -131,6 +119,45 @@ extension CaptureController {
         }
         pipeline.onAudioLevels = { [weak self] levels in
             self?.live.audioLevels = levels
+        }
+    }
+    private func handleRecState(_ recording: Bool) {
+        isRecording = recording
+        if recording {
+            recordingStartDate = Date()
+            recordingMarkers = []
+            persistentAlert = nil // a clean start clears the alarm
+        }
+        refreshNameCollision() // start hides it, stop recomputes
+        // multicam: the other cameras in sync with the main one
+        for channel in extraChannels { channel.setRecording(recording) }
+    }
+    /// A finalized take joins the list, the log and the thumbnail queue.
+    private func adoptFinishedTake(_ take: Take) {
+        var take = take
+        take.markers = anchoredMarkers(for: take)
+        recordingMarkers = []
+        takes.append(take)
+        nextTakeNumber += 1
+        exportTakeLog()
+        requestThumbnail(for: take) // deduped against a cell's request
+        flashNewItem(take.url)
+    }
+    /// Re-anchor marker positions on the take's actual start TC: the wall
+    /// clock measured from the REC press is off by the pre-roll.
+    private func anchoredMarkers(for take: Take) -> [TakeMarker] {
+        recordingMarkers.map { marker in
+            var fixed = marker
+            if let start = take.startTimecode,
+               let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
+                var frames = tc.frameNumber - start.frameNumber
+                if frames < 0 {
+                    frames += Timecode.dayFrames(fps: start.fps,
+                                                 isDropFrame: start.isDropFrame)
+                }
+                fixed.seconds = Double(frames) / Double(max(1, start.fps))
+            }
+            return fixed
         }
     }
     /// Recording-integrity failures stick in the alarm banner; everything else
@@ -279,5 +306,31 @@ extension CaptureController {
     }
     func toggleManualRecord() {
         pipeline.toggleManualRecord()
+    }
+}
+
+// MARK: - CaptureBackendDelegate (callbacks from capture threads — straight into the pipeline)
+
+extension CaptureController: CaptureBackendDelegate {
+    nonisolated func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat) {
+        pipeline.handleFormat(format)
+    }
+
+    nonisolated func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
+        pipeline.handleFrame(frame)
+    }
+
+    nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {
+        pipeline.handleAudio(sampleBuffer)
+    }
+
+    nonisolated func backend(_ backend: CaptureBackend, signalPresent: Bool) {
+        pipeline.handleSignal(present: signalPresent)
+    }
+
+    nonisolated func backendDeviceListChanged(_ backend: CaptureBackend) {
+        Task { @MainActor in
+            self.refreshDevices()
+        }
     }
 }

@@ -13,6 +13,38 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    /// RAW codecs played by our own engine, not AVPlayer.
+    nonisolated static let rawExtensions: Set<String> = ["braw", "r3d"]
+
+    /// A folder of .dng frames = one CinemaDNG clip.
+    nonisolated static func isCinemaDNGFolder(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path,
+                                             isDirectory: &isDirectory),
+              isDirectory.boolValue else { return false }
+        return !DNGSequenceSource.frameURLs(in: url).isEmpty
+    }
+
+    /// Playback position as timecode (start TC + elapsed at the file's fps).
+    var playbackTimecodeText: String {
+        if let raw = rawPlayer {
+            return raw.timecodeText
+        }
+        let elapsed = max(0, player.currentTime().seconds)
+        let fps = max(1, playbackFPS)
+        let frames = Int((elapsed * fps).rounded(.down))
+        guard let start = playbackStartTC else {
+            let total = Int(elapsed)
+            let ff = frames % Int(fps.rounded())
+            return String(format: "%02d:%02d:%02d:%02d",
+                          total / 3600, (total / 60) % 60, total % 60, ff)
+        }
+        var tc = start
+        tc.fps = Int(fps.rounded())
+        return Timecode(frameNumber: start.frameNumber + frames,
+                        fps: tc.fps, isDropFrame: start.isDropFrame).description
+    }
+
     /// PNG of a playback buffer (RAW engine / still tap) in display code values.
     private func saveGrab(buffer: CVPixelBuffer) {
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -57,24 +89,7 @@ extension CaptureController {
             player.pause()
             player.replaceCurrentItem(with: nil)
             playbackTap.detach()
-            var openError: String?
-            if let model = RawPlayerModel(url: url, error: &openError) {
-                model.onScopeData = { [weak self] data in
-                    self?.live.scopeData = data
-                }
-                rawPlayer = model
-                model.setViewAssist(assist)
-                wirePlayoutRouting()
-                playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
-                playbackStartTC = model.startTimecode
-                playbackFPS = model.frameRate
-                playbackAspect = model.height > 0
-                    ? CGFloat(model.width) / CGFloat(model.height) : nil
-                applyLetterboxColor()
-                model.play()
-            } else {
-                rawPlayerError = openError
-            }
+            openRawClip(url: url)
         } else {
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
@@ -88,6 +103,28 @@ extension CaptureController {
         viewerMode = .playback
         updateTapRunning()
         updateScopesRunning()
+    }
+    /// BRAW/CinemaDNG: our own engine, not AVPlayer. The badges come from the
+    /// clip itself — there is no AVAsset to load them from.
+    private func openRawClip(url: URL) {
+        var openError: String?
+        guard let model = RawPlayerModel(url: url, error: &openError) else {
+            rawPlayerError = openError
+            return
+        }
+        model.onScopeData = { [weak self] data in
+            self?.live.scopeData = data
+        }
+        rawPlayer = model
+        model.setViewAssist(assist)
+        wirePlayoutRouting()
+        playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
+        playbackStartTC = model.startTimecode
+        playbackFPS = model.frameRate
+        playbackAspect = model.height > 0
+            ? CGFloat(model.width) / CGFloat(model.height) : nil
+        applyLetterboxColor()
+        model.play()
     }
     /// Decode a still into Rec.709 display code values and hand it to the tap:
     /// stills render/compare/LUT exactly like video — SwiftUI Image was

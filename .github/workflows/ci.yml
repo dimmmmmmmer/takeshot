@@ -21,6 +21,13 @@ jobs:
       - name: Build
         run: swift build
 
+      - name: Lint
+        # Style regressions are cheap to prevent and expensive to clean up in
+        # bulk — the tree is at zero findings and stays there.
+        run: |
+          brew install swiftlint
+          ./scripts/lint.sh lint --strict
+
       - name: Test
         run: ./scripts/test.sh
 

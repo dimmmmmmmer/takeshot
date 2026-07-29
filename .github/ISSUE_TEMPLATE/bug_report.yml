@@ -1,0 +1,42 @@
+name: Bug report
+description: Something misbehaved — especially if it touched a recording.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this happened during a take, say whether the file survived. That
+        separates a UI bug from a recording bug, and recording bugs jump the
+        queue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.2"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Capture device and Desktop Video version
+      placeholder: "UltraStudio 4K Mini, Desktop Video 14.4"
+  - type: input
+    id: signal
+    attributes:
+      label: Signal
+      description: Resolution, frame rate, RGB or YUV, timecode source.
+      placeholder: "2160p25, RGB 4:4:4 HDMI, RP188"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output
+      description: |
+        log show --last 10m --predicate 'subsystem == "com.takeshot.app"'
+      render: shell

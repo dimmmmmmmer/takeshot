@@ -14,6 +14,67 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    struct LUTInfo: Identifiable, Equatable {
+        var id: String { fileName }
+        var fileName: String
+        var name: String
+    }
+
+    enum DuplicateLUTChoice { case replace, keepBoth, skip }
+
+    nonisolated static var lutsDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        return base.appendingPathComponent("TakeShot/LUTs", isDirectory: true)
+    }
+
+    /// DaVinci Resolve's LUT directory — imported LUTs are mirrored into a
+    /// TakeShot subfolder there, so the same look is at hand in Resolve.
+    nonisolated static var resolveLUTDirectory: URL {
+        FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+            .appendingPathComponent(
+                "Application Support/Blackmagic Design/DaVinci Resolve/LUT/TakeShot",
+                isDirectory: true)
+    }
+
+    var lutPreviewOn: Bool {
+        get { settings.lutPreviewEnabled ?? false }
+        set {
+            settings.lutPreviewEnabled = newValue
+            // a per-clip "LUT off" left behind earlier must not eat the new
+            // explicit enable — that read as "LUT does nothing in playback"
+            if newValue, playbackLUTSuppressed { playbackLUTSuppressed = false }
+            rebuildLUT()
+        }
+    }
+
+    var lutRecordOn: Bool {
+        get { settings.lutRecordEnabled ?? false }
+        set {
+            settings.lutRecordEnabled = newValue
+            rebuildLUT()
+        }
+    }
+
+    /// LUT intensity (0…1); default 1. Applied immediately (pipeline + tap mix
+    /// coefficient only — no .cube re-read, no filter rebuild), persisted
+    /// debounced: a settings write per tick re-rendered the window (slider lag).
+    var lutIntensity: Double {
+        get { live.lutIntensity }
+        set {
+            let clamped = min(1, max(0, newValue))
+            live.lutIntensity = clamped
+            pipeline.setLUTIntensity(clamped)
+            playbackTap.setLUTIntensity(clamped)
+            lutPersistTask?.cancel()
+            lutPersistTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, let self else { return }
+                self.settings.lutIntensity = self.live.lutIntensity
+            }
+        }
+    }
+
     func reloadLUTList() {
         let dir = Self.lutsDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

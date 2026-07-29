@@ -1,0 +1,23 @@
+name: Feature request
+description: Something the tool should do on set and does not.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The situation on set
+      description: |
+        Describe the moment this would help — the shot, the pressure, what you
+        do today instead. Features that come from a real shooting day land
+        better than features that come from a feature list.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would want it to do
+  - type: input
+    id: prior
+    attributes:
+      label: Prior art
+      description: Does QTAKE, Silverstack, Livegrade or a monitor do this? How?

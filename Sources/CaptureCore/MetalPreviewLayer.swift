@@ -1,37 +1,4 @@
 @preconcurrency import CoreImage
-import os.log
-
-/// Operator display aids applied inside the preview render (identically on
-/// every surface: live, playback, RAW, fullscreen, external).
-public struct ViewAssist: Equatable, Sendable {
-    /// Color remap tools are mutually exclusive; zebra/peaking stack on top.
-    public enum ColorTool: String, CaseIterable, Sendable {
-        case off
-        case falseColor
-        case elZone
-    }
-
-    public var colorTool: ColorTool = .off
-    public var zebraOn = false
-    /// Zebra trigger level, 0.70…1.0 of full scale.
-    public var zebraThreshold: Double = 0.95
-    public var peakingOn = false
-    /// Edge gain for the peaking overlay.
-    public var peakingIntensity: Double = 12
-    /// Anamorphic desqueeze factor (1 = spherical).
-    public var desqueeze: Double = 1
-    /// Punch-in magnification (1 = off).
-    public var punchIn: Double = 1
-    /// Pan while punched in, in image-fraction units (0 = centered).
-    public var panX: Double = 0
-    public var panY: Double = 0
-
-    public var anyToolActive: Bool {
-        colorTool != .off || zebraOn || peakingOn
-    }
-
-    public init() {}
-}
 @preconcurrency import CoreVideo
 import Metal
 @preconcurrency import QuartzCore
@@ -50,22 +17,26 @@ import Metal
 /// @unchecked Sendable: the layer is handed between the main thread (mounts,
 /// settings) and producer queues (frames). Everything shared is behind
 /// renderLock (the render itself) or stateLock (the values main hands over).
+///
+/// The draw path lives in `+Render`, the display aids in `+Assist`. The state
+/// below is internal rather than private for exactly that reason — never wider
+/// than the module.
 public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
-    private var ciContext: CIContext?
-    private let renderLock = NSLock()
-    private var lastBuffer: CVPixelBuffer?
+    var ciContext: CIContext?
+    let renderLock = NSLock()
+    var lastBuffer: CVPixelBuffer?
     /// Guards the handful of values the main thread hands to the renderer.
     /// Deliberately NOT renderLock: that one is held across GPU work, and a
     /// settings change must never wait on a parked nextDrawable().
-    private let stateLock = NSLock()
-    private var storedLetterboxColor = CIColor(red: 0, green: 0, blue: 0)
-    private var pendingDrawableSize: CGSize?
+    let stateLock = NSLock()
+    var storedLetterboxColor = CIColor(red: 0, green: 0, blue: 0)
+    var pendingDrawableSize: CGSize?
     /// Latest frame waiting to be drawn, and whether a draw is already queued.
-    private var pendingPresent: CVPixelBuffer?
-    private var presentScheduled = false
+    var pendingPresent: CVPixelBuffer?
+    var presentScheduled = false
     /// Where UI-triggered re-renders run, so they never block the main thread.
-    private let redrawQueue = DispatchQueue(label: "takeshot.preview-redraw",
-                                            qos: .userInitiated)
+    let redrawQueue = DispatchQueue(label: "takeshot.preview-redraw",
+                                    qos: .userInitiated)
     /// Aspect-fit letterbox color (over the player backdrop). Safe to set from
     /// any thread while a producer queue is presenting.
     public var letterboxColor: CIColor {
@@ -95,22 +66,12 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
         if changed { redraw() }
     }
 
-    /// Adopt a size requested by the view. Call under renderLock only.
-    private func applyPendingDrawableSize() {
-        stateLock.lock()
-        let requested = pendingDrawableSize
-        pendingDrawableSize = nil
-        stateLock.unlock()
-        if let requested, requested != drawableSize {
-            drawableSize = requested
-        }
-    }
     /// When set, the center pixel of every ~50th presented frame goes to the
     /// unified log — parity debugging between surfaces (rec vs playback).
     public var debugTag: String?
-    private var presentCount = 0
+    var presentCount = 0
     /// Display aids (read under renderLock; use setAssist from any thread).
-    private var assist = ViewAssist()
+    var assist = ViewAssist()
 
     public func setAssist(_ newValue: ViewAssist) {
         renderLock.lock()
@@ -118,213 +79,6 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
         assist = newValue
         renderLock.unlock()
         if changed { redraw() }
-    }
-
-    // MARK: - assist filter chains (static, shared across layers)
-
-    /// One entry of an exposure palette. A named type rather than a triple:
-    /// three unlabelled Doubles read the same whatever order they are in.
-    private struct BandColor {
-        let red: Double
-        let green: Double
-        let blue: Double
-
-        init(_ red: Double, _ green: Double, _ blue: Double) {
-            self.red = red
-            self.green = green
-            self.blue = blue
-        }
-    }
-
-    /// Grayscale in BT.709 weights — the base for the luma-driven tools.
-    private static func grayscale(_ image: CIImage) -> CIImage {
-        image.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
-            "inputGVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
-            "inputBVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
-        ])
-    }
-
-    /// Exposure bands on gamma-encoded code values (ARRI-style palette).
-    private static let falseColorCube: Data = {
-        let size = 64
-        var rgba = [Float]()
-        rgba.reserveCapacity(size * size * size * 4)
-        func band(_ v: Double) -> BandColor {
-            switch v {
-            case ..<0.025: return BandColor(0.58, 0.20, 0.75)  // purple — crushed
-            case ..<0.08: return BandColor(0.16, 0.34, 0.90)   // blue — deep shadow
-            case ..<0.36: return BandColor(v, v, v)            // gray ramp
-            case ..<0.44: return BandColor(0.15, 0.75, 0.25)   // green — 18% gray
-            case ..<0.52: return BandColor(v, v, v)
-            case ..<0.58: return BandColor(0.95, 0.60, 0.70)   // pink — skin highlight
-            case ..<0.92: return BandColor(v, v, v)
-            case ..<0.97: return BandColor(0.98, 0.90, 0.20)   // yellow — near clip
-            default: return BandColor(0.95, 0.15, 0.10)        // red — clipped
-            }
-        }
-        for b in 0..<size {
-            for g in 0..<size {
-                for r in 0..<size {
-                    // input is grayscale (r=g=b on the diagonal); using luma
-                    // keeps off-axis values sane anyway
-                    let v = 0.2126 * Double(r) + 0.7152 * Double(g)
-                        + 0.0722 * Double(b)
-                    let color = band(v / Double(size - 1))
-                    rgba += [Float(color.red), Float(color.green), Float(color.blue), 1]
-                }
-            }
-        }
-        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
-    }()
-
-    /// EL Zone-style stops around 18% gray: display luma is linearized with
-    /// the inverse BT.709 OETF, zones colored per stop (approximation of the
-    /// Ed Lachman scale).
-    private static let elZoneCube: Data = {
-        let size = 64
-        var rgba = [Float]()
-        rgba.reserveCapacity(size * size * size * 4)
-        func zoneColor(_ stop: Double) -> BandColor {
-            switch stop.rounded() {
-            case ..<(-5): return BandColor(0.04, 0.04, 0.04)   // ≤ -6: black
-            case -5: return BandColor(0.45, 0.15, 0.65)        // purple
-            case -4: return BandColor(0.15, 0.25, 0.90)        // blue
-            case -3: return BandColor(0.10, 0.60, 0.70)        // teal
-            case -2: return BandColor(0.15, 0.65, 0.25)        // green
-            case -1: return BandColor(0.32, 0.32, 0.32)        // dark gray
-            case 0: return BandColor(0.50, 0.50, 0.50)         // 18% — mid gray
-            case 1: return BandColor(0.68, 0.68, 0.68)         // light gray
-            case 2: return BandColor(0.95, 0.60, 0.65)         // pink
-            case 3: return BandColor(0.95, 0.55, 0.15)         // orange
-            case 4: return BandColor(0.98, 0.72, 0.30)         // light orange
-            case 5: return BandColor(0.98, 0.92, 0.25)         // yellow
-            default: return BandColor(1, 1, 1)                 // ≥ +6: white
-            }
-        }
-        func linear(_ v: Double) -> Double {
-            // inverse BT.709 OETF
-            v < 0.081 ? v / 4.5 : pow((v + 0.099) / 1.099, 1 / 0.45)
-        }
-        for b in 0..<size {
-            for g in 0..<size {
-                for r in 0..<size {
-                    let v = (0.2126 * Double(r) + 0.7152 * Double(g)
-                        + 0.0722 * Double(b)) / Double(size - 1)
-                    let lin = max(1e-6, linear(v))
-                    let stop = log2(lin / 0.18)
-                    let color = zoneColor(stop)
-                    rgba += [Float(color.red), Float(color.green), Float(color.blue), 1]
-                }
-            }
-        }
-        return rgba.withUnsafeBufferPointer { Data(buffer: $0) }
-    }()
-
-    /// White where luma ≥ threshold — the zebra mask (cached per threshold).
-    /// Each cube is 512 KB and the slider offers 31 distinct thresholds, so the
-    /// cache is capped: one sweep of the slider would otherwise pin ~16 MB for
-    /// the rest of the session.
-    nonisolated(unsafe) private static var zebraCubes: [Int: Data] = [:]
-    nonisolated(unsafe) private static var zebraCubeOrder: [Int] = []
-    private static let zebraCubeLock = NSLock()
-    private static let zebraCubeLimit = 4
-
-    private static func zebraMaskCube(threshold: Double) -> Data {
-        let key = Int((threshold * 100).rounded())
-        zebraCubeLock.lock()
-        defer { zebraCubeLock.unlock() }
-        if let cached = zebraCubes[key] {
-            zebraCubeOrder.removeAll { $0 == key }
-            zebraCubeOrder.append(key)
-            return cached
-        }
-        let size = 32
-        var rgba = [Float]()
-        for b in 0..<size {
-            for g in 0..<size {
-                for r in 0..<size {
-                    let v = (0.2126 * Double(r) + 0.7152 * Double(g)
-                        + 0.0722 * Double(b)) / Double(size - 1)
-                    let on: Float = v >= Double(key) / 100 ? 1 : 0
-                    rgba += [on, on, on, 1]
-                }
-            }
-        }
-        let data = rgba.withUnsafeBufferPointer { Data(buffer: $0) }
-        zebraCubes[key] = data
-        zebraCubeOrder.append(key)
-        while zebraCubeOrder.count > zebraCubeLimit {
-            zebraCubes.removeValue(forKey: zebraCubeOrder.removeFirst())
-        }
-        return data
-    }
-
-    /// Tools stack: color remap first, then zebra stripes, then peaking edges
-    /// (masks always come from the SOURCE image, so exposure reads true even
-    /// over a false-color remap). Result is cropped to the source extent —
-    /// filter spill outside the frame painted the letterbox red.
-    private func applyAssist(_ source: CIImage, assist: ViewAssist) -> CIImage {
-        var out = source
-        switch assist.colorTool {
-        case .off:
-            break
-        case .falseColor:
-            out = Self.grayscale(source).applyingFilter(
-                "CIColorCube", parameters: [
-                    "inputCubeDimension": 64,
-                    "inputCubeData": Self.falseColorCube,
-                ])
-        case .elZone:
-            out = Self.grayscale(source).applyingFilter(
-                "CIColorCube", parameters: [
-                    "inputCubeDimension": 64,
-                    "inputCubeData": Self.elZoneCube,
-                ])
-        }
-        if assist.zebraOn {
-            let mask = Self.grayscale(source).applyingFilter(
-                "CIColorCube", parameters: [
-                    "inputCubeDimension": 32,
-                    "inputCubeData": Self.zebraMaskCube(
-                        threshold: assist.zebraThreshold),
-                ])
-            if let stripes = CIFilter(name: "CIStripesGenerator", parameters: [
-                "inputColor0": CIColor(red: 1, green: 1, blue: 1),
-                "inputColor1": CIColor(red: 0, green: 0, blue: 0),
-                "inputWidth": 4,
-                "inputSharpness": 1,
-            ])?.outputImage?
-                .transformed(by: CGAffineTransform(rotationAngle: .pi / 4))
-                .cropped(to: source.extent) {
-                let striped = stripes.applyingFilter(
-                    "CIMultiplyCompositing", parameters: [
-                        kCIInputBackgroundImageKey: mask,
-                    ])
-                out = CIImage(color: CIColor(red: 1, green: 1, blue: 1))
-                    .cropped(to: source.extent)
-                    .applyingFilter("CIBlendWithMask", parameters: [
-                        kCIInputBackgroundImageKey: out,
-                        kCIInputMaskImageKey: striped,
-                    ])
-            }
-        }
-        if assist.peakingOn {
-            let edges = Self.grayscale(source)
-                .applyingFilter("CIEdges", parameters: [
-                    "inputIntensity": assist.peakingIntensity,
-                ])
-                .applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 2.4, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                ])
-            out = edges.applyingFilter("CIScreenBlendMode", parameters: [
-                kCIInputBackgroundImageKey: out,
-            ])
-        }
-        return out.cropped(to: source.extent)
     }
 
     public override init() {
@@ -359,166 +113,5 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
             ciContext = CIContext(mtlDevice: device,
                                   options: [.cacheIntermediates: false])
         }
-    }
-
-    /// Re-render the last frame (window resized while paused/no signal —
-    /// otherwise the old drawable stretches to the new bounds).
-    ///
-    /// Runs off the caller's thread: every trigger for a redraw is a UI event
-    /// (letterbox color, assist sliders, punch-in pan, layout), and rendering
-    /// can park for ~1 s inside `nextDrawable()` when the window is occluded or
-    /// the external monitor sleeps — long enough to freeze the REC button
-    /// mid-take. Re-rendering always picks up the newest `lastBuffer`, so
-    /// running late cannot show a stale frame.
-    public func redraw() {
-        redrawQueue.async { [weak self] in
-            guard let self else { return }
-            renderLock.lock()
-            let buffer = lastBuffer // strong read under the lock: present() swaps
-            renderLock.unlock()     // it concurrently on the producer queue
-            guard let buffer else { return }
-            render(buffer)
-        }
-    }
-
-    /// Blank the layer (signal loss) instead of freezing the last frame.
-    /// Queued like every other render, so it cannot overtake or be overtaken by
-    /// a frame that was already on its way.
-    public func clearToBlack() {
-        redrawQueue.async { [weak self] in self?.clearToBlackNow() }
-    }
-
-    private func clearToBlackNow() {
-        renderLock.lock()
-        defer { renderLock.unlock() }
-        lastBuffer = nil
-        guard let ciContext else { return }
-        applyPendingDrawableSize()
-        let size = drawableSize
-        guard size.width > 1, size.height > 1,
-              let drawable = nextDrawable() else { return }
-        let bounds = CGRect(origin: .zero, size: size)
-        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0))
-            .cropped(to: bounds)
-        let destination = CIRenderDestination(mtlTexture: drawable.texture,
-                                              commandBuffer: nil)
-        destination.colorSpace = nil
-        if let task = try? ciContext.startTask(toRender: black, to: destination) {
-            _ = try? task.waitUntilCompleted()
-        }
-        drawable.present()
-    }
-
-    /// Show a frame. Safe to call from any thread — the main one included: the
-    /// work is handed to this layer's own queue, latest frame wins.
-    ///
-    /// Rendering can park for ~1 s inside `nextDrawable()` when the window is
-    /// occluded or an external monitor sleeps. Done inline, that stalled every
-    /// other sink sharing the producer's queue, and blocked the main thread
-    /// outright wherever the mount code presented directly.
-    public func present(_ pixelBuffer: CVPixelBuffer) {
-        stateLock.lock()
-        pendingPresent = pixelBuffer
-        let schedule = !presentScheduled
-        presentScheduled = true
-        stateLock.unlock()
-        guard schedule else { return } // a newer frame replaces the pending one
-        redrawQueue.async { [weak self] in
-            guard let self else { return }
-            stateLock.lock()
-            let buffer = pendingPresent
-            pendingPresent = nil
-            presentScheduled = false
-            stateLock.unlock()
-            guard let buffer else { return }
-            render(buffer)
-        }
-    }
-
-    /// Draw a frame (any CoreImage-supported pixel format), aspect-fit.
-    /// Runs on redrawQueue; pixel values are passed through unmanaged — the
-    /// layer's `colorspace` tells the compositor what they mean.
-    private func render(_ pixelBuffer: CVPixelBuffer) {
-        guard let ciContext else { return }
-        renderLock.lock()
-        defer { renderLock.unlock() }
-        lastBuffer = pixelBuffer
-        if let debugTag {
-            presentCount += 1
-            if presentCount % 50 == 1,
-               CVPixelBufferGetPixelFormatType(pixelBuffer)
-                   == kCVPixelFormatType_32BGRA {
-                CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-                if let base = CVPixelBufferGetBaseAddress(pixelBuffer) {
-                    let w = CVPixelBufferGetWidth(pixelBuffer)
-                    let h = CVPixelBufferGetHeight(pixelBuffer)
-                    let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
-                    let bytes = base.assumingMemoryBound(to: UInt8.self)
-                    let p = bytes + (h / 2) * bpr + (w / 2) * 4
-                    // 16x16 grid mean: catches a global shift in any tonal
-                    // zone, not just whatever sits under the center pixel
-                    var sumR = 0, sumG = 0, sumB = 0
-                    for gy in 0..<16 {
-                        let row = bytes + ((gy * 2 + 1) * h / 32) * bpr
-                        for gx in 0..<16 {
-                            let q = row + ((gx * 2 + 1) * w / 32) * 4
-                            sumB += Int(q[0]); sumG += Int(q[1]); sumR += Int(q[2])
-                        }
-                    }
-                    os_log("probe %{public}s %dx%d center=(%d,%d,%d) mean=(%d,%d,%d)",
-                           log: CapturePipeline.levelsLog, type: .default,
-                           debugTag, w, h, p[2], p[1], p[0],
-                           sumR / 256, sumG / 256, sumB / 256)
-                }
-                CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
-            }
-        }
-        applyPendingDrawableSize()
-        let size = drawableSize
-        guard size.width > 1, size.height > 1 else { return }
-        guard let drawable = nextDrawable() else { return }
-        var image = CIImage(cvPixelBuffer: pixelBuffer,
-                            options: [.colorSpace: NSNull()])
-        let currentAssist = assist
-        if currentAssist.anyToolActive {
-            image = applyAssist(image, assist: currentAssist)
-        }
-        if currentAssist.desqueeze != 1 {
-            image = image.transformed(by: CGAffineTransform(
-                scaleX: currentAssist.desqueeze, y: 1))
-        }
-        let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { return }
-        var scale = min(size.width / extent.width, size.height / extent.height)
-        if currentAssist.punchIn > 1 {
-            scale *= currentAssist.punchIn // magnification with pan below
-        }
-        // integral-pixel placement: fractional offsets shift live vs playback
-        // by a visible pixel in the compare modes (wipe/blend/side-by-side)
-        var tx = ((size.width - extent.width * scale) / 2).rounded(.down)
-        var ty = ((size.height - extent.height * scale) / 2).rounded(.down)
-        if currentAssist.punchIn > 1 {
-            // pan in image fractions; SwiftUI's y grows down, CI's grows up
-            tx -= (currentAssist.panX * extent.width * scale).rounded(.down)
-            ty += (currentAssist.panY * extent.height * scale).rounded(.down)
-        }
-        image = image
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
-                .concatenating(CGAffineTransform(translationX: tx, y: ty)))
-        let bounds = CGRect(origin: .zero, size: size)
-        stateLock.lock()
-        let letterbox = storedLetterboxColor
-        stateLock.unlock()
-        let composed = image.composited(over:
-            CIImage(color: letterbox).cropped(to: bounds))
-        // color management off on both ends: code values pass through unchanged,
-        // and the layer's `colorspace` alone tells the compositor what they mean
-        let destination = CIRenderDestination(mtlTexture: drawable.texture,
-                                              commandBuffer: nil)
-        destination.colorSpace = nil
-        guard let task = try? ciContext.startTask(toRender: composed,
-                                                  to: destination) else { return }
-        _ = try? task.waitUntilCompleted()
-        drawable.present()
     }
 }

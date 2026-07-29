@@ -7,6 +7,11 @@
 #   multiline collection literals (smaller diffs when appending).
 # Everything else stays at defaults so real complexity findings still surface.
 
+# Build output is not source: SwiftPM's generated resource accessors and the
+# test runner it synthesizes trip a dozen rules nobody can act on.
+excluded:
+  - .build
+
 identifier_name:
   min_length: 1
   # L("key") is the project's localization helper — a single capital letter

@@ -16,13 +16,17 @@ import QuartzCore
 /// registers its OWN layer: a CALayer lives in only one NSView, and a shared
 /// instance got stolen between views on branch switches — the survivor then
 /// drew with the thief's stale geometry.
+///
+/// The LUT/compare composite and its B-side clip live in
+/// `PlaybackFrameTap+Compose.swift`; members it reaches are module-internal
+/// rather than private for that reason.
 final class PlaybackFrameTap: @unchecked Sendable {
     let sinks = PreviewSinkRegistry()
     /// Every delivered frame (tap queue) — hardware playout mirror. Set from the
     /// main actor while the tap queue reads it, so it goes through a lock (see
     /// the same pattern in CapturePipeline and RawPlayerModel).
-    private let displayFrameLock = NSLock()
-    private var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+    let displayFrameLock = NSLock()
+    var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
 
     func setOnDisplayFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
         displayFrameLock.lock()
@@ -52,26 +56,27 @@ final class PlaybackFrameTap: @unchecked Sendable {
         sinks.setLetterbox(color)
     }
 
-    private let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
+    let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
     private var output: AVPlayerItemVideoOutput?
     private weak var item: AVPlayerItem?
     private var timer: DispatchSourceTimer?
     private var running = false
-    private var scopesEnabled = false
+    var scopesEnabled = false
     private var tickCount = 0
 
     /// Scope data from playback frames (~8 Hz while enabled), on the main queue.
     var onScopeData: ((ScopeData) -> Void)?
 
-    private var lastBuffer: CVPixelBuffer?
+    var lastBuffer: CVPixelBuffer?
     /// Static source (a still in the player): composited/analyzed like video.
     private var stillBuffer: CVPixelBuffer?
     /// Idle output already delivered — with compare off, a paused/still frame
     /// is re-rendered only when the LUT/compare/scopes inputs change.
-    private var idleDelivered = false
+    var idleDelivered = false
 
-    // MARK: - compare & LUT (composited HERE, in one Metal layer: SwiftUI
-    // masks/opacity over video layers drop the colorspace and shift colors)
+    // MARK: - compare & LUT (composited in PlaybackFrameTap+Compose, in one
+    // Metal layer: SwiftUI masks/opacity over video layers drop the colorspace
+    // and shift colors)
 
     enum Compare {
         case off
@@ -79,107 +84,26 @@ final class PlaybackFrameTap: @unchecked Sendable {
         case wipe(axis: CompareCompositor.Axis, position: Double)
     }
 
-    private var compare: Compare = .off
+    var compare: Compare = .off
     /// Pulls the latest live preview frame (assigned via setLiveBufferProvider).
-    private var liveBufferProvider: (() -> CVPixelBuffer?)?
+    var liveBufferProvider: (() -> CVPixelBuffer?)?
 
     /// Queue-confined setter — the provider is read on the tap queue.
     func setLiveBufferProvider(_ provider: @escaping () -> CVPixelBuffer?) {
         queue.async { self.liveBufferProvider = provider }
     }
-    private var lutFilter: CIFilter?
-    private var lutIntensity: Double = 1
+    var lutFilter: CIFilter?
+    var lutIntensity: Double = 1
 
     // B-side clip (take vs take): its own slaved player; when set, the
     // compare back half comes from it instead of the live signal
-    private var comparePlayer: AVPlayer?
-    private var compareOutput: AVPlayerItemVideoOutput?
-    private var lastCompareBuffer: CVPixelBuffer?
-    private weak var syncPlayer: AVPlayer?
+    var comparePlayer: AVPlayer?
+    var compareOutput: AVPlayerItemVideoOutput?
+    var lastCompareBuffer: CVPixelBuffer?
+    weak var syncPlayer: AVPlayer?
 
-    /// Compare against another clip (nil — back to the live signal).
-    /// `syncTo` is the main player; the B player follows its rate/position.
-    func setCompareClip(url: URL?, syncTo player: AVPlayer?) {
-        queue.async {
-            self.idleDelivered = false
-            self.comparePlayer?.pause()
-            self.comparePlayer = nil
-            self.compareOutput = nil
-            self.lastCompareBuffer = nil
-            self.syncPlayer = nil
-            if let url {
-                let item = AVPlayerItem(url: url)
-                let attrs: [String: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey as String:
-                        kCVPixelFormatType_32BGRA,
-                    kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-                ]
-                let output = AVPlayerItemVideoOutput(pixelBufferAttributes: attrs)
-                item.add(output)
-                let bPlayer = AVPlayer(playerItem: item)
-                bPlayer.volume = 0
-                self.comparePlayer = bPlayer
-                self.compareOutput = output
-                self.syncPlayer = player
-            }
-            if let buffer = self.lastBuffer {
-                self.deliver(buffer, analyzed: false)
-            }
-        }
-    }
-
-    /// Keep the B player glued to the main transport (rate + position).
-    private func syncCompareClip() {
-        guard let bPlayer = comparePlayer, let main = syncPlayer else { return }
-        if bPlayer.rate != main.rate {
-            bPlayer.rate = main.rate
-        }
-        let drift = main.currentTime().seconds - bPlayer.currentTime().seconds
-        if abs(drift) > 0.08 {
-            bPlayer.seek(to: main.currentTime(),
-                         toleranceBefore: .zero, toleranceAfter: .zero)
-        }
-    }
-    private let ciContext = CIContext(options: [.cacheIntermediates: false])
-    private let composePool = PixelBufferPool()
-
-    func setCompare(_ mode: Compare) {
-        queue.async {
-            self.idleDelivered = false
-            self.compare = mode
-            // re-render immediately so a paused player reflects the change
-            if let buffer = self.lastBuffer {
-                self.deliver(buffer, analyzed: self.scopesEnabled)
-            }
-        }
-    }
-
-    /// Playback LUT (replaces AVVideoComposition: its render pipeline shifted
-    /// contrast even on clips it did not visibly change).
-    func setLUT(_ filter: CIFilter?, intensity: Double) {
-        queue.async {
-            os_log("tap setLUT: filter=%d intensity=%.2f",
-                   log: CapturePipeline.levelsLog, type: .default,
-                   filter != nil ? 1 : 0, intensity)
-            self.idleDelivered = false
-            self.lutFilter = filter
-            self.lutIntensity = intensity
-            if let buffer = self.lastBuffer {
-                self.deliver(buffer, analyzed: self.scopesEnabled)
-            }
-        }
-    }
-
-    /// Mix coefficient only — no filter rebuild (slider ticks).
-    func setLUTIntensity(_ intensity: Double) {
-        queue.async {
-            self.idleDelivered = false
-            self.lutIntensity = intensity
-            if let buffer = self.lastBuffer {
-                self.deliver(buffer, analyzed: false)
-            }
-        }
-    }
+    let ciContext = CIContext(options: [.cacheIntermediates: false])
+    let composePool = PixelBufferPool()
 
     func setScopesEnabled(_ on: Bool) {
         queue.async {
@@ -275,41 +199,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
             idleDelivered = false // the B half advances even when A is paused
         }
         guard let output else {
-            // still: recomposite at the paused cadence so the live half of a
-            // compare keeps moving (and LUT changes land immediately)
-            if let still = stillBuffer {
-                tickCount += 1
-                if case .off = compare {
-                    // static output: one delivery until an input changes
-                    if !idleDelivered {
-                        idleDelivered = true
-                        deliver(still, analyzed: scopesEnabled)
-                    }
-                } else if tickCount % 4 == 0 {
-                    // the live half of the compare keeps moving
-                    deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
-                }
-            }
+            tickStill()
             return
         }
         let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
         tickCount += 1
         if !output.hasNewPixelBuffer(forItemTime: itemTime) {
-            // paused player: static output — deliver once, then only keep the
-            // live half of an active compare moving (~15 Hz)
-            if case .off = compare {
-                if !idleDelivered,
-                   let pixelBuffer = output.copyPixelBuffer(
-                       forItemTime: itemTime, itemTimeForDisplay: nil) {
-                    idleDelivered = true
-                    deliver(pixelBuffer, analyzed: scopesEnabled)
-                }
-            } else if tickCount % 4 == 0,
-                      let pixelBuffer = output.copyPixelBuffer(
-                          forItemTime: itemTime, itemTimeForDisplay: nil) {
-                deliver(pixelBuffer,
-                        analyzed: scopesEnabled && tickCount % 16 == 0)
-            }
+            tickPaused(output, at: itemTime)
             return
         }
         idleDelivered = false // playing again: idle state re-arms
@@ -318,80 +214,38 @@ final class PlaybackFrameTap: @unchecked Sendable {
         deliver(pixelBuffer, analyzed: scopesEnabled && tickCount % 8 == 0)
     }
 
-    private func deliver(_ pixelBuffer: CVPixelBuffer, analyzed: Bool) {
-        lastBuffer = pixelBuffer
-        let output = composed(from: pixelBuffer) ?? pixelBuffer
-        if analyzed, let scopeData = ScopeAnalyzer.analyze(output) {
-            DispatchQueue.main.async { self.onScopeData?(scopeData) }
+    /// Still: recomposite at the paused cadence so the live half of a compare
+    /// keeps moving (and LUT changes land immediately).
+    private func tickStill() {
+        guard let still = stillBuffer else { return }
+        tickCount += 1
+        if case .off = compare {
+            // static output: one delivery until an input changes
+            if !idleDelivered {
+                idleDelivered = true
+                deliver(still, analyzed: scopesEnabled)
+            }
+        } else if tickCount % 4 == 0 {
+            // the live half of the compare keeps moving
+            deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
         }
-        sinks.present(output)
-        displayFrameLock.lock()
-        let handler = displayFrameHandler
-        displayFrameLock.unlock()
-        handler?(output)
     }
 
-    /// LUT + compare composite in raw code values (color management off — the
-    /// values pass through exactly like the live path's).
-    private func composed(from playbackBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-        var playback = CIImage(cvPixelBuffer: playbackBuffer,
-                               options: [.colorSpace: NSNull()])
-        if let lutFilter {
-            lutFilter.setValue(playback, forKey: kCIInputImageKey)
-            if let filtered = lutFilter.outputImage {
-                playback = CapturePipeline.mix(source: playback, filtered: filtered,
-                                               intensity: lutIntensity)
+    /// Paused player: static output — deliver once, then only keep the live
+    /// half of an active compare moving (~15 Hz).
+    private func tickPaused(_ output: AVPlayerItemVideoOutput, at itemTime: CMTime) {
+        if case .off = compare {
+            if !idleDelivered,
+               let pixelBuffer = output.copyPixelBuffer(
+                   forItemTime: itemTime, itemTimeForDisplay: nil) {
+                idleDelivered = true
+                deliver(pixelBuffer, analyzed: scopesEnabled)
             }
+        } else if tickCount % 4 == 0,
+                  let pixelBuffer = output.copyPixelBuffer(
+                      forItemTime: itemTime, itemTimeForDisplay: nil) {
+            deliver(pixelBuffer,
+                    analyzed: scopesEnabled && tickCount % 16 == 0)
         }
-        var result = playback
-        switch compare {
-        case .off:
-            if lutFilter == nil { return nil } // untouched frame — no render needed
-        case .blend(let opacity):
-            guard let liveImage = liveImage(matching: playback.extent) else { break }
-            result = CompareCompositor.compose(front: playback, back: liveImage,
-                                               mode: .blend(opacity: opacity))
-        case .wipe(let axis, let position):
-            guard let liveImage = liveImage(matching: playback.extent) else { break }
-            result = CompareCompositor.compose(
-                front: playback, back: liveImage,
-                mode: .wipe(axis: axis, position: position))
-        }
-        let width = Int(playback.extent.width.rounded())
-        let height = Int(playback.extent.height.rounded())
-        guard width > 0, height > 0,
-              let out = composePool.buffer(width: width, height: height)
-        else { return nil }
-        let destination = CIRenderDestination(pixelBuffer: out)
-        destination.colorSpace = nil
-        guard let task = try? ciContext.startTask(toRender: result, to: destination)
-        else { return nil }
-        _ = try? task.waitUntilCompleted()
-        return out
-    }
-
-    /// The compare back half: the B clip when one is set, else the live frame.
-    private func liveImage(matching extent: CGRect) -> CIImage? {
-        if let compareOutput {
-            let time = compareOutput.itemTime(forHostTime: CACurrentMediaTime())
-            if compareOutput.hasNewPixelBuffer(forItemTime: time),
-               let buffer = compareOutput.copyPixelBuffer(
-                   forItemTime: time, itemTimeForDisplay: nil) {
-                lastCompareBuffer = buffer
-            }
-            guard let buffer = lastCompareBuffer else { return nil }
-            let image = CIImage(cvPixelBuffer: buffer,
-                                options: [.colorSpace: NSNull()])
-            guard image.extent.width > 0 else { return nil }
-            return CompareCompositor.fitted(image, into: extent)
-        }
-        guard let live = liveBufferProvider?() else { return nil }
-        let isBGRA = CVPixelBufferGetPixelFormatType(live) == kCVPixelFormatType_32BGRA
-        // BGRA carries raw full-range codes; YUV needs CI's managed decode
-        let image = isBGRA
-            ? CIImage(cvPixelBuffer: live, options: [.colorSpace: NSNull()])
-            : CIImage(cvPixelBuffer: live)
-        guard image.extent.width > 0, image.extent.height > 0 else { return nil }
-        return CompareCompositor.fitted(image, into: extent)
     }
 }

@@ -5,95 +5,109 @@ import Foundation
 /// Shift report as a paginated A4 PDF: header with the day's totals, then a
 /// take table with thumbnails, TC in/out, ratings, comments and markers.
 enum ShiftReport {
-    private static let pageSize = CGSize(width: 595, height: 842) // A4, points
-    private static let margin: CGFloat = 36
-    private static let rowHeight: CGFloat = 46
-    private static let thumbSize = CGSize(width: 64, height: 36)
-
     static func pdfData(takes: [Take], thumbnails: [UUID: NSImage],
                         project: String, camera: String) -> Data? {
         let data = NSMutableData()
-        var mediaBox = CGRect(origin: .zero, size: pageSize)
+        var mediaBox = CGRect(origin: .zero, size: ReportPage.pageSize)
         guard let consumer = CGDataConsumer(data: data),
               let context = CGContext(consumer: consumer,
                                       mediaBox: &mediaBox, nil)
         else { return nil }
 
-        let titleFont = NSFont.boldSystemFont(ofSize: 16)
-        let headFont = NSFont.boldSystemFont(ofSize: 9)
-        let bodyFont = NSFont.systemFont(ofSize: 9)
-        let monoFont = NSFont.monospacedDigitSystemFont(ofSize: 9,
-                                                        weight: .regular)
+        let page = ReportPage(context: context)
+        page.open()
+        page.drawHeader(takes: takes, project: project, camera: camera)
+        page.drawTableHead()
 
-        var y: CGFloat = 0 // distance from the TOP of the page
-        var pageOpen = false
-
-        func openPage() {
-            context.beginPDFPage(nil)
-            NSGraphicsContext.current = NSGraphicsContext(cgContext: context,
-                                                          flipped: false)
-            pageOpen = true
-            y = margin
+        for take in takes {
+            if page.rowOverflowsPage {
+                page.close()
+                page.open()
+                page.drawTableHead()
+            }
+            page.drawRow(take, thumbnail: thumbnails[take.id])
         }
 
-        func closePage() {
-            guard pageOpen else { return }
-            NSGraphicsContext.current = nil
-            context.endPDFPage()
-            pageOpen = false
-        }
+        page.close()
+        context.closePDF()
+        return data as Data
+    }
+}
 
-        func draw(_ text: String, x: CGFloat, width: CGFloat, font: NSFont,
-                  color: NSColor = .black, offset: CGFloat = 0) {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byTruncatingTail
-            let attributed = NSAttributedString(string: text, attributes: [
-                .font: font, .foregroundColor: color,
-                .paragraphStyle: paragraph,
-            ])
-            // PDF origin is bottom-left; y counts from the top
-            let height = font.pointSize + 6
-            let rect = CGRect(x: x, y: pageSize.height - y - offset - height,
-                              width: width, height: height)
-            attributed.draw(in: rect)
-        }
+/// The paginated drawing state: the PDF context, the distance from the TOP of
+/// the page, and the column layout the header and the rows share.
+private final class ReportPage {
+    static let pageSize = CGSize(width: 595, height: 842) // A4, points
+    static let margin: CGFloat = 36
+    static let rowHeight: CGFloat = 46
+    static let thumbSize = CGSize(width: 64, height: 36)
 
-        // columns: thumb | clip | TC in | TC out | dur | OK | notes
-        let xThumb = margin
-        let xClip = xThumb + thumbSize.width + 8
-        let xTCIn = xClip + 158
-        let xTCOut = xTCIn + 66
-        let xDur = xTCOut + 66
-        let xRating = xDur + 38
-        let xComment = xRating + 42
-        let commentWidth = pageSize.width - margin - xComment
+    // columns: thumb | clip | TC in | TC out | dur | OK | notes
+    static let xThumb = margin
+    static let xClip = xThumb + thumbSize.width + 8
+    static let xTCIn = xClip + 158
+    static let xTCOut = xTCIn + 66
+    static let xDur = xTCOut + 66
+    static let xRating = xDur + 38
+    static let xComment = xRating + 42
+    static let commentWidth = pageSize.width - margin - xComment
 
-        func drawTableHead() {
-            draw("CLIP", x: xClip, width: 158, font: headFont, color: .darkGray)
-            draw("TC IN", x: xTCIn, width: 66, font: headFont, color: .darkGray)
-            draw("TC OUT", x: xTCOut, width: 66, font: headFont, color: .darkGray)
-            draw("DUR", x: xDur, width: 38, font: headFont, color: .darkGray)
-            draw("OK", x: xRating, width: 42, font: headFont, color: .darkGray)
-            draw("NOTES", x: xComment, width: commentWidth, font: headFont,
-                 color: .darkGray)
-            y += 16
-            context.setStrokeColor(NSColor.lightGray.cgColor)
-            context.setLineWidth(0.5)
-            context.move(to: CGPoint(x: margin, y: pageSize.height - y + 4))
-            context.addLine(to: CGPoint(x: pageSize.width - margin,
-                                        y: pageSize.height - y + 4))
-            context.strokePath()
-        }
+    private let titleFont = NSFont.boldSystemFont(ofSize: 16)
+    private let headFont = NSFont.boldSystemFont(ofSize: 9)
+    private let bodyFont = NSFont.systemFont(ofSize: 9)
+    private let monoFont = NSFont.monospacedDigitSystemFont(ofSize: 9,
+                                                            weight: .regular)
 
-        openPage()
+    private let context: CGContext
+    private var y: CGFloat = 0 // distance from the TOP of the page
+    private var pageOpen = false
 
-        // header
+    init(context: CGContext) {
+        self.context = context
+    }
+
+    /// The next row no longer fits above the bottom margin.
+    var rowOverflowsPage: Bool {
+        y + Self.rowHeight > Self.pageSize.height - Self.margin
+    }
+
+    func open() {
+        context.beginPDFPage(nil)
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context,
+                                                      flipped: false)
+        pageOpen = true
+        y = Self.margin
+    }
+
+    func close() {
+        guard pageOpen else { return }
+        NSGraphicsContext.current = nil
+        context.endPDFPage()
+        pageOpen = false
+    }
+
+    private func draw(_ text: String, x: CGFloat, width: CGFloat, font: NSFont,
+                      color: NSColor = .black, offset: CGFloat = 0) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let attributed = NSAttributedString(string: text, attributes: [
+            .font: font, .foregroundColor: color,
+            .paragraphStyle: paragraph,
+        ])
+        // PDF origin is bottom-left; y counts from the top
+        let height = font.pointSize + 6
+        let rect = CGRect(x: x, y: Self.pageSize.height - y - offset - height,
+                          width: width, height: height)
+        attributed.draw(in: rect)
+    }
+
+    func drawHeader(takes: [Take], project: String, camera: String) {
         let formatter = DateFormatter()
         formatter.dateStyle = .long
         formatter.timeStyle = .none
         draw("\(project.isEmpty ? "TakeShot" : project) — shift report",
-             x: margin, width: pageSize.width - 2 * margin, font: titleFont,
-             offset: 4)
+             x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
+             font: titleFont, offset: 4)
         y += 24
         let good = takes.filter { $0.rating == .good }.count
         let bad = takes.filter { $0.rating == .bad }.count
@@ -104,63 +118,76 @@ enum ShiftReport {
         draw("\(formatter.string(from: Date()))\(cameraPart)   "
              + "\(takes.count) takes (\(good) good, \(bad) NG)   "
              + "footage \(totalText)",
-             x: margin, width: pageSize.width - 2 * margin, font: bodyFont,
-             color: .darkGray)
+             x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
+             font: bodyFont, color: .darkGray)
         y += 24
-        drawTableHead()
+    }
 
-        for take in takes {
-            if y + rowHeight > pageSize.height - margin {
-                closePage()
-                openPage()
-                drawTableHead()
-            }
-            // thumbnail
-            if let thumb = thumbnails[take.id] {
-                let rect = NSRect(x: xThumb,
-                                  y: pageSize.height - y - thumbSize.height - 2,
-                                  width: thumbSize.width,
-                                  height: thumbSize.height)
-                thumb.draw(in: rect, from: .zero, operation: .sourceOver,
-                           fraction: 1)
-            }
-            let name = take.url.deletingPathExtension().lastPathComponent
-            draw(name, x: xClip, width: 158, font: bodyFont, offset: 2)
-            if !take.markers.isEmpty {
-                let flags = take.markers.map {
-                    $0.note.isEmpty ? $0.timecodeText : "\($0.timecodeText) \($0.note)"
-                }.joined(separator: "   ")
-                draw("⚑ \(flags)", x: xClip,
-                     width: pageSize.width - margin - xClip,
-                     font: NSFont.systemFont(ofSize: 7),
-                     color: .orange, offset: 15)
-            }
-            draw(take.startTimecode?.description ?? "—", x: xTCIn, width: 66,
-                 font: monoFont, offset: 2)
-            draw(TakeLogExporter.endTimecode(of: take)?.description ?? "—",
-                 x: xTCOut, width: 66, font: monoFont, offset: 2)
-            draw(String(format: "%.1fs", take.durationSeconds), x: xDur,
-                 width: 38, font: monoFont, offset: 2)
-            switch take.rating {
-            case .good:
-                draw("● GOOD", x: xRating, width: 42, font: headFont,
-                     color: NSColor(calibratedRed: 0.1, green: 0.55, blue: 0.2,
-                                    alpha: 1), offset: 2)
-            case .bad:
-                draw("✕ NG", x: xRating, width: 42, font: headFont,
-                     color: NSColor(calibratedRed: 0.75, green: 0.15, blue: 0.1,
-                                    alpha: 1), offset: 2)
-            case .none:
-                draw("—", x: xRating, width: 42, font: bodyFont,
-                     color: .lightGray, offset: 2)
-            }
-            draw(take.comment, x: xComment, width: commentWidth, font: bodyFont,
-                 offset: 2)
-            y += rowHeight
+    func drawTableHead() {
+        draw("CLIP", x: Self.xClip, width: 158, font: headFont, color: .darkGray)
+        draw("TC IN", x: Self.xTCIn, width: 66, font: headFont, color: .darkGray)
+        draw("TC OUT", x: Self.xTCOut, width: 66, font: headFont,
+             color: .darkGray)
+        draw("DUR", x: Self.xDur, width: 38, font: headFont, color: .darkGray)
+        draw("OK", x: Self.xRating, width: 42, font: headFont, color: .darkGray)
+        draw("NOTES", x: Self.xComment, width: Self.commentWidth, font: headFont,
+             color: .darkGray)
+        y += 16
+        context.setStrokeColor(NSColor.lightGray.cgColor)
+        context.setLineWidth(0.5)
+        context.move(to: CGPoint(x: Self.margin,
+                                 y: Self.pageSize.height - y + 4))
+        context.addLine(to: CGPoint(x: Self.pageSize.width - Self.margin,
+                                    y: Self.pageSize.height - y + 4))
+        context.strokePath()
+    }
+
+    func drawRow(_ take: Take, thumbnail: NSImage?) {
+        // thumbnail
+        if let thumb = thumbnail {
+            let rect = NSRect(x: Self.xThumb,
+                              y: Self.pageSize.height - y - Self.thumbSize.height - 2,
+                              width: Self.thumbSize.width,
+                              height: Self.thumbSize.height)
+            thumb.draw(in: rect, from: .zero, operation: .sourceOver,
+                       fraction: 1)
         }
+        let name = take.url.deletingPathExtension().lastPathComponent
+        draw(name, x: Self.xClip, width: 158, font: bodyFont, offset: 2)
+        if !take.markers.isEmpty {
+            let flags = take.markers.map {
+                $0.note.isEmpty ? $0.timecodeText : "\($0.timecodeText) \($0.note)"
+            }.joined(separator: "   ")
+            draw("⚑ \(flags)", x: Self.xClip,
+                 width: Self.pageSize.width - Self.margin - Self.xClip,
+                 font: NSFont.systemFont(ofSize: 7),
+                 color: .orange, offset: 15)
+        }
+        draw(take.startTimecode?.description ?? "—", x: Self.xTCIn, width: 66,
+             font: monoFont, offset: 2)
+        draw(TakeLogExporter.endTimecode(of: take)?.description ?? "—",
+             x: Self.xTCOut, width: 66, font: monoFont, offset: 2)
+        draw(String(format: "%.1fs", take.durationSeconds), x: Self.xDur,
+             width: 38, font: monoFont, offset: 2)
+        drawRating(take.rating)
+        draw(take.comment, x: Self.xComment, width: Self.commentWidth,
+             font: bodyFont, offset: 2)
+        y += Self.rowHeight
+    }
 
-        closePage()
-        context.closePDF()
-        return data as Data
+    private func drawRating(_ rating: TakeRating) {
+        switch rating {
+        case .good:
+            draw("● GOOD", x: Self.xRating, width: 42, font: headFont,
+                 color: NSColor(calibratedRed: 0.1, green: 0.55, blue: 0.2,
+                                alpha: 1), offset: 2)
+        case .bad:
+            draw("✕ NG", x: Self.xRating, width: 42, font: headFont,
+                 color: NSColor(calibratedRed: 0.75, green: 0.15, blue: 0.1,
+                                alpha: 1), offset: 2)
+        case .none:
+            draw("—", x: Self.xRating, width: 42, font: bodyFont,
+                 color: .lightGray, offset: 2)
+        }
     }
 }

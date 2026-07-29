@@ -81,29 +81,23 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
             isRGB444: format.isRGB444))
     }
 
-    // The signature mirrors the Obj-C protocol in CDeckLink.h one-to-one; the
-    // timecode components arrive separately because the bridge has no Swift
-    // types. This is the boundary where they are folded into a CapturedFrame.
-    // swiftlint:disable:next function_parameter_count
-    func capture(_ capture: CDLCapture, didReceiveVideoFrame pixelBuffer: CVPixelBuffer,
-                 ptsSeconds: Double, hasTimecode: Bool,
-                 tcHours: Int32, tcMinutes: Int32, tcSeconds: Int32, tcFrames: Int32,
-                 tcDropFrame: Bool, ancillaryPackets: [CDLAncillaryPacket]) {
+    // This is the boundary where the bridge's plain values become domain types.
+    func capture(_ capture: CDLCapture, didReceiveVideoFrame frame: CDLCapturedFrame) {
         var timecode: Timecode?
-        if hasTimecode {
+        if frame.hasTimecode {
             // the bridge doesn't know the timecode fps — components come with fps 0,
             // the pipeline fills it from the current format
-            timecode = Timecode(hours: Int(tcHours), minutes: Int(tcMinutes),
-                                seconds: Int(tcSeconds), frames: Int(tcFrames),
-                                fps: 0, isDropFrame: tcDropFrame)
+            timecode = Timecode(hours: Int(frame.tcHours), minutes: Int(frame.tcMinutes),
+                                seconds: Int(frame.tcSeconds), frames: Int(frame.tcFrames),
+                                fps: 0, isDropFrame: frame.tcDropFrame)
         }
-        let packets = ancillaryPackets.map {
+        let packets = frame.ancillaryPackets.map {
             AncillaryPacket(did: $0.did, sdid: $0.sdid,
                             lineNumber: $0.lineNumber, data: [UInt8]($0.data))
         }
         delegate?.backend(self, didReceive: CapturedFrame(
-            pixelBuffer: pixelBuffer,
-            pts: CMTime(seconds: ptsSeconds, preferredTimescale: 240_000),
+            pixelBuffer: frame.pixelBuffer,
+            pts: CMTime(seconds: frame.ptsSeconds, preferredTimescale: 240_000),
             timecode: timecode, ancillaryPackets: packets))
     }
 

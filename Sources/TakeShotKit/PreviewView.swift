@@ -1,0 +1,242 @@
+import CaptureCore
+import SwiftUI
+
+/// Preview: live, playback, and compare modes.
+struct PreviewView: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    /// The live signal's aspect — a shared compare container so frames of
+    /// different resolutions (and the wipe) line up geometrically.
+    static func liveAspect(_ format: CaptureFormat?) -> CGFloat {
+        guard let format, format.height > 0 else { return 16.0 / 9.0 }
+        return CGFloat(format.width) / CGFloat(format.height)
+    }
+
+    /// Drag to pan while punched in (image-fraction units, clamped).
+    @State private var lastPan: CGSize = .zero
+
+    private var punchPanGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard controller.assist.punchIn > 1 else { return }
+                let scale = 600.0 * controller.assist.punchIn
+                let newX = controller.assist.panX
+                    - Double(value.translation.width - lastPan.width) / scale * 2
+                let newY = controller.assist.panY
+                    - Double(value.translation.height - lastPan.height) / scale * 2
+                controller.assist.panX = min(0.5, max(-0.5, newX))
+                controller.assist.panY = min(0.5, max(-0.5, newY))
+                lastPan = value.translation
+            }
+            .onEnded { _ in lastPan = .zero }
+    }
+
+    /// Whether to show the AVPlayer transport (video, not photo/RAW).
+    private var showsTransport: Bool {
+        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        else { return false }
+        let ext = url.pathExtension.lowercased()
+        return !PlaybackContent.imageExtensions.contains(ext)
+            && !CaptureController.rawExtensions.contains(ext)
+            && controller.rawPlayer?.url != url
+    }
+
+    /// RAW clips get the engine's own transport.
+    private var showsRawTransport: Bool {
+        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        else { return false }
+        if controller.rawPlayer?.url == url { return true }
+        return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    /// What feeds the unified surface right now (stills go through the tap
+    /// too — the same render/LUT/compare path as video).
+    private var surfaceSource: ViewerSurface.Source {
+        if controller.viewerMode == .record { return .live }
+        guard let url = controller.playbackURL else { return .none }
+        // the RAW engine claimed the clip (BRAW/DNG folder/R3D)
+        if let raw = controller.rawPlayer, raw.url == url {
+            return .raw(ObjectIdentifier(raw))
+        }
+        if CaptureController.rawExtensions.contains(
+            url.pathExtension.lowercased()) { return .none }
+        return .playback
+    }
+
+    var body: some View {
+        // the image area stays the same between record and playback: the transport
+        // is a translucent bottom overlay, not a row that squeezes the frame
+        ZStack(alignment: .bottom) {
+            GeometryReader { _ in
+                ZStack {
+                    Rectangle().fill(controller.playerBackground)
+                    if controller.viewerMode == .record, controller.multicamOn,
+                       !controller.extraChannels.isEmpty {
+                        MulticamGrid()
+                    } else if controller.viewerMode == .playback,
+                              controller.compareMode == .sideBySide,
+                              controller.playbackURL != nil {
+                        HStack(spacing: 2) {
+                            LivePreviewContent()
+                            PlaybackContent()
+                        }
+                    } else {
+                        // ONE NSView/layer for live, playback video and RAW: the
+                        // mode switch re-routes frames into the same surface, so
+                        // rec и playback land on identical pixels by construction
+                        ViewerSurface(controller: controller, source: surfaceSource)
+                            .gesture(punchPanGesture)
+                        if controller.viewerMode == .record {
+                            LiveStatusOverlay()
+                        } else if controller.playbackURL == nil {
+                            VStack(spacing: 8) {
+                                Image(systemName: "play.rectangle")
+                                    .font(.system(size: 40))
+                                Text(L("playback_pick_hint"))
+                                    .font(.headline)
+                            }
+                            .foregroundStyle(.secondary)
+                        } else if case .none = surfaceSource {
+                            // RAW that failed to open
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 32))
+                                Text(controller.rawPlayerError ?? L("raw_open_failed"))
+                                    .font(.headline)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(20)
+                        }
+                        // the wipe seam/handle rides the same centered aspect-fit
+                        // box the layer letterboxes the composite into
+                        if controller.compareMode == .wipe,
+                           (controller.viewerMode == .playback
+                            && controller.playbackURL != nil)
+                            || (controller.viewerMode == .record
+                                && controller.referencePinned) {
+                            Color.clear
+                                .aspectRatio(
+                                    controller.viewerMode == .playback
+                                        ? (controller.playbackAspect
+                                           ?? Self.liveAspect(controller.signalFormat))
+                                        : Self.liveAspect(controller.signalFormat),
+                                    contentMode: .fit)
+                                .overlay { WipeHandle() }
+                        }
+                    }
+                }
+            }
+            if showsTransport {
+                TransportBar(player: controller.player, model: controller.transport)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(6)
+            } else if showsRawTransport, let model = controller.rawPlayer {
+                RawTransportBar(model: model)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottomLeading) {
+            if controller.isRecording, controller.viewerMode == .record {
+                Label(L("rec"), systemImage: "record.circle.fill")
+                    .font(.headline.bold())
+                    .foregroundStyle(.red)
+                    .padding(10)
+            }
+        }
+    }
+}
+
+/// Draggable compare wipe (line + handle, any direction).
+private struct WipeHandle: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        GeometryReader { geo in
+            let (p1, p2) = endpoints(in: geo.size)
+            ZStack {
+                Path { path in
+                    path.move(to: p1)
+                    path.addLine(to: p2)
+                }
+                .stroke(.white.opacity(0.9), lineWidth: 2)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 14, height: 14)
+                    .shadow(radius: 2)
+                    .position(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                let size = geo.size
+                let raw: Double
+                switch controller.wipeOrientation {
+                case .vertical:
+                    raw = value.location.x / size.width
+                case .horizontal:
+                    raw = value.location.y / size.height
+                case .diagonal:
+                    raw = (value.location.x + value.location.y)
+                        / (size.width + size.height)
+                }
+                controller.wipePosition = min(1, max(0, raw))
+            })
+        }
+    }
+
+    private func endpoints(in size: CGSize) -> (CGPoint, CGPoint) {
+        switch controller.wipeOrientation {
+        case .vertical:
+            let x = size.width * controller.wipePosition
+            return (CGPoint(x: x, y: 0), CGPoint(x: x, y: size.height))
+        case .horizontal:
+            let y = size.height * controller.wipePosition
+            return (CGPoint(x: 0, y: y), CGPoint(x: size.width, y: y))
+        case .diagonal:
+            let t = controller.wipePosition * (size.width + size.height)
+            let p1 = CGPoint(x: max(0, t - size.height), y: min(t, size.height))
+            let p2 = CGPoint(x: min(t, size.width), y: max(0, t - size.width))
+            return (p1, p2)
+        }
+    }
+}
+
+/// Live signal + status badges.
+struct LivePreviewContent: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        ZStack {
+            LivePreviewLayerView(pipeline: controller.pipeline)
+            LiveStatusOverlay()
+        }
+    }
+}
+
+/// Status text over the live image (no devices / no signal).
+struct LiveStatusOverlay: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        if !controller.isCapturing || controller.devices.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "cable.connector.slash")
+                    .font(.system(size: 40))
+                Text(controller.backendAvailable
+                     ? L("no_devices_found")
+                     : L("sdk_not_connected"))
+                    .font(.headline)
+            }
+            .foregroundStyle(.secondary)
+        } else if !controller.signalPresent {
+            Text(L("no_signal"))
+                .font(.headline)
+                .padding(8)
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(.white.opacity(0.75))
+        }
+    }
+}

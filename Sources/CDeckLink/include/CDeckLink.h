@@ -43,6 +43,21 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSData *data;
 @end
 
+/// One captured frame with everything the bridge knows about it. The
+/// timecode arrives as components because the bridge has no Swift types; the
+/// adapter folds them into a `Timecode` on the other side.
+@interface CDLCapturedFrame : NSObject
+@property (nonatomic) CVPixelBufferRef pixelBuffer; // borrowed for the callback
+@property (nonatomic) double ptsSeconds;
+@property (nonatomic) BOOL hasTimecode;
+@property (nonatomic) int tcHours;
+@property (nonatomic) int tcMinutes;
+@property (nonatomic) int tcSeconds;
+@property (nonatomic) int tcFrames;
+@property (nonatomic) BOOL tcDropFrame;
+@property (nonatomic, copy) NSArray<CDLAncillaryPacket *> *ancillaryPackets;
+@end
+
 @class CDLCapture;
 
 /// Capture callbacks. Invoked on DeckLink's internal thread —
@@ -50,15 +65,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol CDLCaptureDelegate <NSObject>
 - (void)capture:(CDLCapture *)capture didDetectFormat:(CDLVideoFormat *)format;
 - (void)capture:(CDLCapture *)capture
-    didReceiveVideoFrame:(CVPixelBufferRef)pixelBuffer
-              ptsSeconds:(double)ptsSeconds
-             hasTimecode:(BOOL)hasTimecode
-                 tcHours:(int)tcHours
-               tcMinutes:(int)tcMinutes
-               tcSeconds:(int)tcSeconds
-                tcFrames:(int)tcFrames
-             tcDropFrame:(BOOL)tcDropFrame
-        ancillaryPackets:(NSArray<CDLAncillaryPacket *> *)ancillaryPackets;
+    didReceiveVideoFrame:(CDLCapturedFrame *)frame;
 /// PCM 48 kHz, 16-bit, interleaved.
 - (void)capture:(CDLCapture *)capture
     didReceiveAudioBytes:(const void *)bytes

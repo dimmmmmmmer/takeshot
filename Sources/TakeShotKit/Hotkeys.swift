@@ -208,6 +208,7 @@ final class HotkeyManager: ObservableObject {
         }
     }
 
+    /// Actions on the recording and the take list.
     private func perform(_ action: HotkeyAction, controller: CaptureController) {
         switch action {
         case .toggleRecord:
@@ -216,22 +217,33 @@ final class HotkeyManager: ObservableObject {
             controller.toggleLastRating(.good)
         case .badTakeLast:
             controller.toggleLastRating(.bad)
+        case .grabFrame:
+            controller.grabFrame()
+        case .instantReplay:
+            controller.instantReplay()
+        case .fullscreen, .addMarker, .removeMarker, .punchIn:
+            performViewer(action, controller: controller)
+        }
+    }
+
+    /// Actions on the viewer itself (fullscreen, markers, punch-in).
+    private func performViewer(_ action: HotkeyAction,
+                               controller: CaptureController) {
+        switch action {
         case .fullscreen:
             if controller.viewerMode == .playback, controller.playbackURL != nil {
                 controller.togglePlaybackFullscreen()
             } else {
                 controller.toggleLiveFullscreen()
             }
-        case .grabFrame:
-            controller.grabFrame()
-        case .instantReplay:
-            controller.instantReplay()
         case .addMarker:
             controller.addMarker()
         case .removeMarker:
             controller.removeNearestMarker()
         case .punchIn:
             controller.togglePunchIn()
+        default:
+            break // handled by perform(_:controller:)
         }
     }
 }

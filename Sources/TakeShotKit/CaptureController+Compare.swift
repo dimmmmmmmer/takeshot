@@ -13,6 +13,22 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    /// Live vs. playback compare mode.
+    enum CompareMode: String, CaseIterable, Identifiable {
+        case off        // playback only
+        case wipe       // wipe
+        case blend      // overlay with transparency
+        case sideBySide // side by side
+        var id: String { rawValue }
+    }
+
+    /// Compare wipe direction.
+    enum WipeOrientation: String, CaseIterable {
+        case vertical    // vertical line, drags horizontally
+        case horizontal  // horizontal line, drags vertically
+        case diagonal    // 45°
+    }
+
     func togglePunchIn() {
         assist.punchIn = assist.punchIn > 1 ? 1 : 2
         if assist.punchIn == 1 {

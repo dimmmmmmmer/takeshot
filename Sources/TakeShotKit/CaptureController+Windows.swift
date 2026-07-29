@@ -13,6 +13,23 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    struct ScreenOption: Identifiable, Equatable {
+        var id: CGDirectDisplayID
+        var name: String
+    }
+
+    /// Displays other than the one the app's main window is on.
+    var availableScreens: [ScreenOption] {
+        let currentScreen = NSApp.mainWindow?.screen
+        return NSScreen.screens.compactMap { screen in
+            guard screen != currentScreen,
+                  let id = screen.deviceDescription[
+                      NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+            else { return nil }
+            return ScreenOption(id: id, name: screen.localizedName)
+        }
+    }
+
     func rebuildPlayout() {
         playoutFeeder?.stop()
         playoutFeeder = nil

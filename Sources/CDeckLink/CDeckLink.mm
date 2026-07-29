@@ -24,6 +24,9 @@ static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 @implementation CDLAncillaryPacket
 @end
 
+@implementation CDLCapturedFrame
+@end
+
 #if TAKESHOT_HAS_DECKLINK_SDK
 
 #pragma mark - Helpers
@@ -651,16 +654,17 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
             CVPixelBufferRef pixelBuffer = [self copyPixelBufferFromFrame:videoFrame];
             if (pixelBuffer) {
-                [delegate capture:self
-                    didReceiveVideoFrame:pixelBuffer
-                              ptsSeconds:pts
-                             hasTimecode:hasTC
-                                 tcHours:h
-                               tcMinutes:m
-                               tcSeconds:s
-                                tcFrames:f
-                             tcDropFrame:dropFrame
-                        ancillaryPackets:ancPackets];
+                CDLCapturedFrame *frame = [[CDLCapturedFrame alloc] init];
+                frame.pixelBuffer = pixelBuffer;
+                frame.ptsSeconds = pts;
+                frame.hasTimecode = hasTC;
+                frame.tcHours = h;
+                frame.tcMinutes = m;
+                frame.tcSeconds = s;
+                frame.tcFrames = f;
+                frame.tcDropFrame = dropFrame;
+                frame.ancillaryPackets = ancPackets;
+                [delegate capture:self didReceiveVideoFrame:frame];
                 CVPixelBufferRelease(pixelBuffer);
             }
         }

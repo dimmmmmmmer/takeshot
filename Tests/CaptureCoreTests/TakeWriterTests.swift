@@ -11,19 +11,7 @@ struct TakeWriterTests {
     }
 
     private func makePixelBuffer(width: Int, height: Int) -> CVPixelBuffer {
-        var pixelBuffer: CVPixelBuffer?
-        let attrs: [CFString: Any] = [
-            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary
-        ]
-        CVPixelBufferCreate(kCFAllocatorDefault, width, height,
-                            kCVPixelFormatType_32BGRA, attrs as CFDictionary, &pixelBuffer)
-        let buffer = pixelBuffer!
-        CVPixelBufferLockBaseAddress(buffer, [])
-        if let base = CVPixelBufferGetBaseAddress(buffer) {
-            memset(base, 0x80, CVPixelBufferGetDataSize(buffer))
-        }
-        CVPixelBufferUnlockBaseAddress(buffer, [])
-        return buffer
+        TestMedia.pixelBuffer(width: width, height: height)
     }
 
     @Test func writesTakeWithVideoAndTimecodeTracks() async throws {
@@ -75,31 +63,11 @@ struct TakeWriterTests {
         let tempURL = makeTempURL()
         defer { try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent()) }
 
-        func makeGray(_ value: UInt8) -> CVPixelBuffer {
-            var pb: CVPixelBuffer?
-            CVPixelBufferCreate(kCFAllocatorDefault, 320, 180, kCVPixelFormatType_32BGRA,
-                                [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
-                                &pb)
-            let buffer = pb!
-            CVPixelBufferLockBaseAddress(buffer, [])
-            memset(CVPixelBufferGetBaseAddress(buffer), Int32(value),
-                   CVPixelBufferGetDataSize(buffer))
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-            for (key, value) in [
-                (kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2),
-                (kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2),
-                (kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2),
-            ] {
-                CVBufferSetAttachment(buffer, key, value, .shouldPropagate)
-            }
-            return buffer
-        }
-
         let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
                                    timecodeFPS: 25, name: "test")
         let writer = try TakeWriter(url: tempURL, format: format,
                                     codec: .proRes422, startTimecode: nil)
-        let gray = makeGray(128) // ~50% grey
+        let gray = TestMedia.grayBuffer(128) // ~50% grey
         for frame in 0..<10 {
             let pts = CMTime(value: CMTimeValue(frame * 40), timescale: 1000)
             var attempts = 0

@@ -57,76 +57,97 @@ public enum PCMAudio {
     /// selected; nil if not a single existing channel is selected.
     public static func selectChannels(_ sampleBuffer: CMSampleBuffer, indices: [Int],
                                       formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
-        guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
-              asbd.mBitsPerChannel == 16 else { return sampleBuffer }
+        guard let asbd = interleavedPCM16(of: sampleBuffer) else { return sampleBuffer }
         let sourceChannels = Int(asbd.mChannelsPerFrame)
         let selected = indices.filter { $0 >= 0 && $0 < sourceChannels }.sorted()
         guard !selected.isEmpty else { return nil }
+        // everything selected, or nothing to read: the original already is the answer
         guard selected != Array(0..<sourceChannels),
-              let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+              let samples = interleavedSamples(of: sampleBuffer) else {
             return sampleBuffer
         }
 
-        var length = 0
-        var pointer: UnsafeMutablePointer<CChar>?
-        guard CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0,
-                                          lengthAtOffsetOut: nil, totalLengthOut: &length,
-                                          dataPointerOut: &pointer) == noErr,
-              let pointer else { return sampleBuffer }
-
-        let frames = length / 2 / sourceChannels
-        let outChannels = selected.count
-        var packed = [Int16](repeating: 0, count: frames * outChannels)
-        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
-            for frame in 0..<frames {
-                for (slot, channel) in selected.enumerated() {
-                    packed[frame * outChannels + slot] =
-                        samples[frame * sourceChannels + channel]
-                }
-            }
-        }
+        let frames = samples.count / sourceChannels
+        let packed = pack(samples, frames: frames,
+                          sourceChannels: sourceChannels, keeping: selected)
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
         return packed.withUnsafeBytes { raw -> CMSampleBuffer? in
             guard let base = raw.baseAddress else { return nil }
             return makeSampleBuffer(bytes: base, sampleFrames: frames,
-                                    channelCount: outChannels, ptsSeconds: pts,
+                                    channelCount: selected.count, ptsSeconds: pts,
                                     formatCache: &formatCache)
         }
     }
 
-    /// Per-channel peak levels in dBFS (-∞ → -100) from an interleaved PCM16 sample buffer.
-    public static func peakLevels(of sampleBuffer: CMSampleBuffer) -> [Float] {
+    /// The stream description, if this really is interleaved 16-bit PCM.
+    private static func interleavedPCM16(
+        of sampleBuffer: CMSampleBuffer) -> AudioStreamBasicDescription? {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
-              asbd.mFormatID == kAudioFormatLinearPCM, asbd.mBitsPerChannel == 16,
-              let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
-        else { return [] }
+              asbd.mBitsPerChannel == 16 else { return nil }
+        return asbd
+    }
 
-        let channels = Int(asbd.mChannelsPerFrame)
-        guard channels > 0 else { return [] }
-
+    /// A copy of the buffer's samples. Copying costs one packet's worth of
+    /// memory and buys a lifetime the caller can reason about — the block
+    /// buffer's pointer is only valid while the sample buffer is retained.
+    private static func interleavedSamples(
+        of sampleBuffer: CMSampleBuffer) -> [Int16]? {
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
+        else { return nil }
         var length = 0
         var pointer: UnsafeMutablePointer<CChar>?
         guard CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0,
-                                          lengthAtOffsetOut: nil, totalLengthOut: &length,
+                                          lengthAtOffsetOut: nil,
+                                          totalLengthOut: &length,
                                           dataPointerOut: &pointer) == noErr,
-              let pointer, length >= 2 * channels
-        else { return [] }
+              let pointer, length >= 2 else { return nil }
+        return pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) {
+            Array(UnsafeBufferPointer(start: $0, count: length / 2))
+        }
+    }
 
-        var peaks = [Int16](repeating: 0, count: channels)
-        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
-            let frameCount = length / 2 / channels
-            for frame in 0..<frameCount {
-                for channel in 0..<channels {
-                    let value = samples[frame * channels + channel]
-                    let magnitude = value == Int16.min ? Int16.max : abs(value)
-                    if magnitude > peaks[channel] { peaks[channel] = magnitude }
-                }
+    /// Re-interleave, keeping only `selected` channels in their given order.
+    private static func pack(_ samples: [Int16], frames: Int,
+                             sourceChannels: Int, keeping selected: [Int]) -> [Int16] {
+        let outChannels = selected.count
+        var packed = [Int16](repeating: 0, count: frames * outChannels)
+        for frame in 0..<frames {
+            for (slot, channel) in selected.enumerated() {
+                packed[frame * outChannels + slot] =
+                    samples[frame * sourceChannels + channel]
             }
         }
-        return peaks.map { peak in
-            peak == 0 ? -100 : max(-100, 20 * log10(Float(peak) / Float(Int16.max)))
+        return packed
+    }
+
+    /// Per-channel peak levels in dBFS (-∞ → -100) from an interleaved PCM16 sample buffer.
+    public static func peakLevels(of sampleBuffer: CMSampleBuffer) -> [Float] {
+        guard let asbd = interleavedPCM16(of: sampleBuffer),
+              asbd.mFormatID == kAudioFormatLinearPCM else { return [] }
+        let channels = Int(asbd.mChannelsPerFrame)
+        guard channels > 0,
+              let samples = interleavedSamples(of: sampleBuffer),
+              samples.count >= channels else { return [] }
+        return peaks(of: samples, channels: channels).map(Self.dBFS)
+    }
+
+    /// Largest magnitude per channel.
+    private static func peaks(of samples: [Int16], channels: Int) -> [Int16] {
+        var peaks = [Int16](repeating: 0, count: channels)
+        for frame in 0..<(samples.count / channels) {
+            for channel in 0..<channels {
+                let value = samples[frame * channels + channel]
+                // Int16.min has no positive counterpart — clamp to max
+                let magnitude = value == Int16.min ? Int16.max : abs(value)
+                if magnitude > peaks[channel] { peaks[channel] = magnitude }
+            }
         }
+        return peaks
+    }
+
+    /// Sample magnitude as dBFS, with silence pinned at the meter floor.
+    private static func dBFS(_ peak: Int16) -> Float {
+        peak == 0 ? -100 : max(-100, 20 * log10(Float(peak) / Float(Int16.max)))
     }
 }

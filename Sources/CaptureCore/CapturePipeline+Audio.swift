@@ -33,47 +33,59 @@ extension CapturePipeline {
             if self.config.settings.timecodeSource == "ltc" {
                 self.decodeLTC(from: sampleBuffer, channels: levels.count)
             }
-            // meters show ALL channels; only channels enabled in the mask are written
-            var toWrite: CMSampleBuffer? = sampleBuffer
-            // the mask is LATCHED for the take: the writer's channel count is
-            // fixed at start, a live change would kill the whole file
-            let activeMask = self.writer != nil
-                ? self.recordingMask : self.config.settings.audioChannelMask
-            if let mask = activeMask {
-                let indices = (0..<32).filter { mask & (1 << $0) != 0 }
-                toWrite = PCMAudio.selectChannels(sampleBuffer, indices: indices,
-                                                  formatCache: &self.trimFormatCache)
-            }
-            if let writer = self.writer {
-                if let toWrite { writer.append(audioSampleBuffer: toWrite) }
-            } else if self.preRollFrames > 0 {
-                // not recording: keep the sound of the pre-roll window, so the
-                // take that starts in a moment has audio under its first frames
-                self.bufferPreRollAudio(sampleBuffer)
-            }
-            // monitor: the first two ENABLED channels as a stereo feed
-            if self.monitorEnabled, let onMonitorAudio = self.onMonitorAudio {
-                let indices: [Int]
-                if let mask = self.config.settings.audioChannelMask {
-                    indices = Array((0..<32).filter { mask & (1 << $0) != 0 }.prefix(2))
-                } else {
-                    indices = [0, 1]
-                }
-                if let monitor = PCMAudio.selectChannels(
-                    sampleBuffer, indices: indices,
-                    formatCache: &self.monitorFormatCache) {
-                    onMonitorAudio(monitor)
-                }
-            }
-            if !levels.isEmpty, levels != self.lastPublishedLevels {
-                if self.lastPublishedLevels.isEmpty {
-                    os_log("audio: %d channel(s) flowing",
-                           log: Self.levelsLog, type: .default, levels.count)
-                }
-                self.lastPublishedLevels = levels
-                DispatchQueue.main.async { self.onAudioLevels?(levels) }
-            }
+            self.recordAudio(sampleBuffer)
+            self.feedMonitor(sampleBuffer)
+            self.publishLevels(levels)
         }
+    }
+
+    /// Route the packet to the take (or the pre-roll ring while standing by).
+    /// Meters show ALL channels; only the ones in the mask are written.
+    private func recordAudio(_ sampleBuffer: CMSampleBuffer) {
+        // the mask is LATCHED for the take: the writer's channel count is
+        // fixed at start, a live change would kill the whole file
+        let activeMask = writer != nil
+            ? recordingMask : config.settings.audioChannelMask
+        var toWrite: CMSampleBuffer? = sampleBuffer
+        if let mask = activeMask {
+            toWrite = PCMAudio.selectChannels(sampleBuffer,
+                                              indices: Self.channels(in: mask),
+                                              formatCache: &trimFormatCache)
+        }
+        if let writer {
+            if let toWrite { writer.append(audioSampleBuffer: toWrite) }
+        } else if preRollFrames > 0 {
+            // not recording: keep the sound of the pre-roll window, so the
+            // take that starts in a moment has audio under its first frames
+            bufferPreRollAudio(sampleBuffer)
+        }
+    }
+
+    /// The first two ENABLED channels as a stereo feed for the operator.
+    private func feedMonitor(_ sampleBuffer: CMSampleBuffer) {
+        guard monitorEnabled, let onMonitorAudio else { return }
+        let mask = config.settings.audioChannelMask
+        let indices = mask.map { Array(Self.channels(in: $0).prefix(2)) } ?? [0, 1]
+        if let monitor = PCMAudio.selectChannels(sampleBuffer, indices: indices,
+                                                 formatCache: &monitorFormatCache) {
+            onMonitorAudio(monitor)
+        }
+    }
+
+    /// Meters, deduplicated — identical level arrays are not worth a main hop.
+    private func publishLevels(_ levels: [Float]) {
+        guard !levels.isEmpty, levels != lastPublishedLevels else { return }
+        if lastPublishedLevels.isEmpty {
+            os_log("audio: %d channel(s) flowing",
+                   log: Self.levelsLog, type: .default, levels.count)
+        }
+        lastPublishedLevels = levels
+        DispatchQueue.main.async { self.onAudioLevels?(levels) }
+    }
+
+    /// Channel indices set in a bit mask (bit i = channel i).
+    private static func channels(in mask: Int) -> [Int] {
+        (0..<32).filter { mask & (1 << $0) != 0 }
     }
     private func decodeLTC(from sampleBuffer: CMSampleBuffer, channels: Int) {
         guard channels > 0, let format else { return }

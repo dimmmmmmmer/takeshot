@@ -7,17 +7,8 @@ import Testing
 /// End-to-end pipeline test without hardware: a synthetic signal with Rec Run
 /// timecode goes through the detector, writer, and naming — a finished take appears on disk.
 struct CapturePipelineTests {
-    private func makePixelBuffer() -> CVPixelBuffer {
-        var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, 320, 180, kCVPixelFormatType_32BGRA,
-                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
-                            &pixelBuffer)
-        return pixelBuffer!
-    }
-
     @Test func autoTakeFromRunningTimecodeProducesFile() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PipelineTests-\(UUID().uuidString)")
+        let root = TestMedia.scratchDirectory("PipelineTests")
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
@@ -45,35 +36,18 @@ struct CapturePipelineTests {
             pipeline.handleFormat(CaptureFormat(
                 width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
 
-            let pixelBuffer = makePixelBuffer()
-            var tc = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
-            var frame = 0
+            let pixelBuffer = TestMedia.pixelBuffer()
+            let driver = SignalDriver(pipeline: pipeline)
+            let standby = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
 
-            // real 40ms/frame pace: like a live signal — otherwise under load
-            // (CI, parallel encoder) the synthetic feed outruns the writer and the test flakes
-            func push(_ timecode: Timecode) async throws {
-                frame += 1
-                pipeline.handleFrame(
-                    pixelBuffer: pixelBuffer,
-                    pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
-                    timecode: timecode, vancTrigger: nil)
-                try await Task.sleep(for: .milliseconds(40))
-            }
-
-            // standby: TC stalled
-            for _ in 0..<10 { try await push(tc) }
+            try await driver.pushStalled(standby, count: 10, pixelBuffer: pixelBuffer)
             // "camera recording": TC runs for 50 frames (2 seconds)
-            for _ in 0..<50 {
-                tc = tc.advanced(by: 1)
-                try await push(tc)
-            }
-            // stop: TC stalled again
-            for _ in 0..<10 { try await push(tc) }
+            let rolled = try await driver.pushRunning(from: standby, count: 50,
+                                                      pixelBuffer: pixelBuffer)
+            try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
             // the pipeline processes asynchronously — wait for the take-finished event
-            for _ in 0..<100 where finishedTakes.isEmpty {
-                try? await Task.sleep(for: .milliseconds(50))
-            }
+            await TestWait.until { !finishedTakes.isEmpty }
         }
 
         let take = try #require(finishedTakes.first)
@@ -88,15 +62,9 @@ struct CapturePipelineTests {
         #expect(take.url.path.hasSuffix(".mov"))
 
         // the file is finished asynchronously after the event — wait for it to appear
-        var fileExists = false
-        for _ in 0..<100 {
-            if FileManager.default.fileExists(atPath: take.url.path) {
-                fileExists = true
-                break
-            }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(fileExists, "the take file must exist: \(take.url.path)")
+        await TestWait.fileExists(at: take.url)
+        #expect(FileManager.default.fileExists(atPath: take.url.path),
+                "the take file must exist: \(take.url.path)")
 
         // and it's a valid ~2 s clip with video and timecode tracks
         let asset = AVURLAsset(url: take.url)
@@ -111,8 +79,7 @@ struct CapturePipelineTests {
     }
 
     @Test func preRollIncludesFramesBeforeRecStart() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PipelineTests-\(UUID().uuidString)")
+        let root = TestMedia.scratchDirectory("PipelineTests")
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
@@ -130,41 +97,22 @@ struct CapturePipelineTests {
 
         pipeline.handleFormat(CaptureFormat(
             width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
-        let pixelBuffer = makePixelBuffer()
-        var tc = Timecode(hours: 12, minutes: 0, seconds: 0, frames: 0, fps: 25)
-        var frame = 0
-        func push(_ timecode: Timecode) async throws {
-            frame += 1
-            pipeline.handleFrame(
-                pixelBuffer: pixelBuffer,
-                pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
-                timecode: timecode, vancTrigger: nil)
-            try await Task.sleep(for: .milliseconds(40))
-        }
+        let pixelBuffer = TestMedia.pixelBuffer()
+        let driver = SignalDriver(pipeline: pipeline)
+        let standby = Timecode(hours: 12, minutes: 0, seconds: 0, frames: 0, fps: 25)
 
         // long standby — the pre-roll buffer has time to fill
-        for _ in 0..<30 { try await push(tc) }
+        try await driver.pushStalled(standby, count: 30, pixelBuffer: pixelBuffer)
         // record 50 frames, then stop
-        for _ in 0..<50 {
-            tc = tc.advanced(by: 1)
-            try await push(tc)
-        }
-        for _ in 0..<10 { try await push(tc) }
+        let rolled = try await driver.pushRunning(from: standby, count: 50,
+                                                  pixelBuffer: pixelBuffer)
+        try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
-        for _ in 0..<100 where finishedTakes.isEmpty {
-            try await Task.sleep(for: .milliseconds(50))
-        }
+        await TestWait.until { !finishedTakes.isEmpty }
         let take = try #require(finishedTakes.first)
 
-        var fileExists = false
-        for _ in 0..<100 {
-            if FileManager.default.fileExists(atPath: take.url.path) {
-                fileExists = true
-                break
-            }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(fileExists)
+        await TestWait.fileExists(at: take.url)
+        #expect(FileManager.default.fileExists(atPath: take.url.path))
 
         // 50 recorded frames + ~4 trailing + 20 pre-roll ≈ 74 frames ≈ 2.96 s;
         // without pre-roll it would be ~2.2 s — verify the pre-REC frames are included
@@ -242,7 +190,7 @@ struct CapturePipelineTests {
 
         pipeline.handleFormat(CaptureFormat(
             width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
-        let pixelBuffer = makePixelBuffer()
+        let pixelBuffer = TestMedia.pixelBuffer()
         var tc = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0, fps: 25)
         for frame in 1...30 {
             tc = tc.advanced(by: 1)
@@ -260,7 +208,7 @@ struct CapturePipelineTests {
                                                      takeNumber: 1))
         pipeline.handleFormat(CaptureFormat(width: 320, height: 180, frameRate: 25,
                                             timecodeFPS: 25, name: "t"))
-        let pixelBuffer = makePixelBuffer()
+        let pixelBuffer = TestMedia.pixelBuffer()
         let png: Data? = await withCheckedContinuation { cont in
             pipeline.grabNextFrame { cont.resume(returning: $0) }
             for frame in 0..<3 {

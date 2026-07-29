@@ -21,8 +21,17 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
-# ad-hoc signing is enough for local launch
-codesign --force --sign - "$APP"
+# Ad-hoc signing is enough to launch locally, but its cdhash changes on every
+# build, so macOS treats each build as a new app and TCC grants do not stick.
+# Export CODESIGN_IDENTITY to a Developer ID ("Developer ID Application: Name
+# (TEAMID)") once you have one and the grants survive rebuilds.
+IDENTITY="${CODESIGN_IDENTITY:--}"
+codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP"
+if [ "$IDENTITY" = "-" ]; then
+    echo "Signed ad-hoc. Set CODESIGN_IDENTITY for a stable signature."
+else
+    echo "Signed with: $IDENTITY"
+fi
 
 echo "Done: $APP"
 

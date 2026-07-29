@@ -85,17 +85,8 @@ public final class RecDetector {
         }
 
         // A VANC trigger is explicit knowledge — fires without debounce.
-        if let trigger = sample.vancTrigger {
-            switch trigger {
-            case .recordStart where !isRecording:
-                beginRecording()
-                return .started(atIndex: sample.index, timecode: sample.timecode)
-            case .recordStop where isRecording:
-                endRecording()
-                return .stopped(atIndex: sample.index)
-            default:
-                break
-            }
+        if let event = vancEvent(for: sample) {
+            return event
         }
 
         // VANC-only: no timecode-movement starts or stalls-based stops
@@ -103,59 +94,82 @@ public final class RecDetector {
             return nil
         }
 
+        // One row of the state table per case: what the timecode did on this
+        // frame decides which accumulator moves.
         switch movement(of: sample) {
         case .advancing:
-            stallRunLength = 0
-            if !isRecording {
-                if advanceRunLength == 0 {
-                    // first frame of movement — the previous frame is already part
-                    // of the take (TC "started" between the previous and current frame)
-                    runStartIndex = max(0, sample.index - 1)
-                    runStartTimecode = lastTimecode
-                }
-                advanceRunLength += 1
-                if advanceRunLength >= config.startDebounceFrames {
-                    beginRecording()
-                    return .started(atIndex: runStartIndex, timecode: runStartTimecode)
-                }
-            }
+            return accumulateAdvance(at: sample.index)
 
         case .stalled:
-            advanceRunLength = 0
-            if isRecording {
-                if stallRunLength == 0 { stallStartIndex = sample.index }
-                stallRunLength += 1
-                if stallRunLength >= config.stopDebounceFrames {
-                    endRecording()
-                    return .stopped(atIndex: max(0, stallStartIndex - 1))
-                }
-            }
+            return accumulateStall(at: sample.index)
 
         case .discontinuity:
-            // TC jump: while recording it means the camera stopped (and maybe
-            // immediately started a new take — the next run of advancing frames catches it)
-            advanceRunLength = 0
-            if isRecording {
-                endRecording()
-                return .stopped(atIndex: max(0, sample.index - 1))
-            }
+            return handleDiscontinuity(at: sample.index)
 
         case .noData:
-            advanceRunLength = 0
-            if isRecording {
-                if stallRunLength == 0 { stallStartIndex = sample.index }
-                stallRunLength += 1
-                if stallRunLength >= config.stopDebounceFrames {
-                    endRecording()
-                    return .stopped(atIndex: max(0, stallStartIndex - 1))
-                }
-            }
+            // no timecode on the wire at all — same stop accumulation as a
+            // stalled one: both mean "the camera is not laying down frames"
+            return accumulateStall(at: sample.index)
         }
-
-        return nil
     }
 
     // MARK: - private
+
+    /// The explicit-trigger row of the table: a recognized VANC start/stop
+    /// takes effect on the spot, no debounce. A trigger that repeats the state
+    /// we are already in (start while recording, stop while idle) is ignored,
+    /// and the timecode machine below still gets the frame.
+    private func vancEvent(for sample: FrameSample) -> RecEvent? {
+        guard let trigger = sample.vancTrigger else { return nil }
+        switch trigger {
+        case .recordStart where !isRecording:
+            beginRecording()
+            return .started(atIndex: sample.index, timecode: sample.timecode)
+        case .recordStop where isRecording:
+            endRecording()
+            return .stopped(atIndex: sample.index)
+        default:
+            return nil
+        }
+    }
+
+    /// TC advanced by a frame: run up the start debounce while idle. Any
+    /// movement also breaks a stop run in progress.
+    private func accumulateAdvance(at index: Int) -> RecEvent? {
+        stallRunLength = 0
+        guard !isRecording else { return nil }
+        if advanceRunLength == 0 {
+            // first frame of movement — the previous frame is already part
+            // of the take (TC "started" between the previous and current frame)
+            runStartIndex = max(0, index - 1)
+            runStartTimecode = lastTimecode
+        }
+        advanceRunLength += 1
+        guard advanceRunLength >= config.startDebounceFrames else { return nil }
+        beginRecording()
+        return .started(atIndex: runStartIndex, timecode: runStartTimecode)
+    }
+
+    /// TC stood still (or was absent): run up the stop debounce while
+    /// recording. The take's last frame is the one before the stall began.
+    private func accumulateStall(at index: Int) -> RecEvent? {
+        advanceRunLength = 0
+        guard isRecording else { return nil }
+        if stallRunLength == 0 { stallStartIndex = index }
+        stallRunLength += 1
+        guard stallRunLength >= config.stopDebounceFrames else { return nil }
+        endRecording()
+        return .stopped(atIndex: max(0, stallStartIndex - 1))
+    }
+
+    /// TC jump: while recording it means the camera stopped (and maybe
+    /// immediately started a new take — the next run of advancing frames catches it)
+    private func handleDiscontinuity(at index: Int) -> RecEvent? {
+        advanceRunLength = 0
+        guard isRecording else { return nil }
+        endRecording()
+        return .stopped(atIndex: max(0, index - 1))
+    }
 
     private enum Movement {
         case advancing      // TC grew by exactly 1 frame

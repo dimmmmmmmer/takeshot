@@ -95,34 +95,68 @@ public final class TenBitConverter {
                 // read-only for the whole pass — see the note above
                 nonisolated(unsafe) let exp = expandTable
                 nonisolated(unsafe) let pre = precompTable
+                // the type is named in full: `Self` inside a closure reads as a
+                // capture of the instance, and nothing here may retain it
                 DispatchQueue.concurrentPerform(iterations: bands) { band in
-                    let yStart = band * height / bands
-                    let yEnd = (band + 1) * height / bands
-                    for y in yStart..<yEnd {
-                        let srow = sb.advanced(by: y * sbpr)
-                            .assumingMemoryBound(to: UInt32.self)
-                        let drow = db.advanced(by: y * dbpr)
-                            .assumingMemoryBound(to: UInt32.self)
-                        let rrow = rb.advanced(by: y * rbpr)
-                            .assumingMemoryBound(to: UInt32.self)
-                        for x in 0..<width {
-                            let word = UInt32(bigEndian: srow[x])
-                            let r = Int((word >> 20) & 0x3FF)
-                            let g = Int((word >> 10) & 0x3FF)
-                            let b = Int(word & 0x3FF)
-                            // BGRA little-endian as one 32-bit store
-                            drow[x] = UInt32(exp[b] >> 2)
-                                | (UInt32(exp[g] >> 2) << 8)
-                                | (UInt32(exp[r] >> 2) << 16)
-                                | 0xFF00_0000
-                            rrow[x] = ((UInt32(pre[r]) << 20)
-                                | (UInt32(pre[g]) << 10)
-                                | UInt32(pre[b])).bigEndian
-                        }
-                    }
+                    // the Pass is built HERE, from the values the closure
+                    // already captures — it is never captured itself
+                    TenBitConverter.convertRows(
+                        (band * height / bands)..<((band + 1) * height / bands),
+                        Pass(source: Plane(base: sb, rowBytes: sbpr),
+                             display: Plane(base: db, rowBytes: dbpr),
+                             record: Plane(base: rb, rowBytes: rbpr),
+                             width: width, expand: exp, precomp: pre))
                 }
             }
         }
         return (display, record)
+    }
+
+    /// One locked buffer as the row loop sees it: base address and row stride.
+    private struct Plane {
+        let base: UnsafeMutableRawPointer
+        let rowBytes: Int
+
+        /// r210 and BGRA are both 32 bits per pixel, so every plane here is
+        /// addressed as words.
+        func row(_ y: Int) -> UnsafeMutablePointer<UInt32> {
+            base.advanced(by: y * rowBytes).assumingMemoryBound(to: UInt32.self)
+        }
+    }
+
+    /// Everything one band of rows needs. Grouped into a value so the row loop
+    /// takes two arguments instead of eight.
+    private struct Pass {
+        let source: Plane
+        let display: Plane
+        let record: Plane
+        let width: Int
+        let expand: UnsafeBufferPointer<UInt16>
+        let precomp: UnsafeBufferPointer<UInt16>
+    }
+
+    /// One band's worth of rows, split out of `convert` so the setup above
+    /// stays readable. Runs on a concurrentPerform worker: `rows` is this
+    /// band's disjoint range and the two tables are read-only for the pass.
+    private static func convertRows(_ rows: Range<Int>, _ pass: Pass) {
+        for y in rows {
+            let srow = pass.source.row(y)
+            let drow = pass.display.row(y)
+            let rrow = pass.record.row(y)
+            for x in 0..<pass.width {
+                let word = UInt32(bigEndian: srow[x])
+                let r = Int((word >> 20) & 0x3FF)
+                let g = Int((word >> 10) & 0x3FF)
+                let b = Int(word & 0x3FF)
+                // BGRA little-endian as one 32-bit store
+                drow[x] = UInt32(pass.expand[b] >> 2)
+                    | (UInt32(pass.expand[g] >> 2) << 8)
+                    | (UInt32(pass.expand[r] >> 2) << 16)
+                    | 0xFF00_0000
+                rrow[x] = ((UInt32(pass.precomp[r]) << 20)
+                    | (UInt32(pass.precomp[g]) << 10)
+                    | UInt32(pass.precomp[b])).bigEndian
+            }
+        }
     }
 }

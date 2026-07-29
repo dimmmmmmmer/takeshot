@@ -6,11 +6,20 @@ import CoreGraphics
 
 let space = CGColorSpaceCreateDeviceRGB()
 
+/// The icon is drawn on a 1024-point canvas and scaled to whatever size the
+/// iconset needs, in three pieces: the tile it sits on, the clapperboard, and
+/// the striped bar hinged open above it.
 func drawIcon(into ctx: CGContext, size: CGFloat) {
-    let s = size / 1024.0
     ctx.saveGState()
-    ctx.scaleBy(x: s, y: s)
+    ctx.scaleBy(x: size / 1024.0, y: size / 1024.0)
+    drawBackgroundTile(into: ctx)
+    drawClapperBody(into: ctx)
+    drawClapperBar(into: ctx)
+    ctx.restoreGState()
+}
 
+private func drawBackgroundTile(into ctx: CGContext) {
+    ctx.saveGState()
     // --- background: dark rounded tile ---
     let margin: CGFloat = 100
     let rect = CGRect(x: margin, y: margin, width: 1024 - margin * 2, height: 1024 - margin * 2)
@@ -29,7 +38,10 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
     ctx.setLineWidth(4)
     ctx.addPath(bg)
     ctx.strokePath()
+    ctx.restoreGState()
+}
 
+private func drawClapperBody(into ctx: CGContext) {
     // --- clapperboard body ---
     let bodyRect = CGRect(x: 232, y: 300, width: 560, height: 310)
     let body = CGPath(roundedRect: bodyRect, cornerWidth: 36, cornerHeight: 36, transform: nil)
@@ -65,7 +77,9 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
         ctx.restoreGState()
     }
     ctx.restoreGState()
+}
 
+private func drawClapperBar(into ctx: CGContext) {
     // --- top bar: slightly open, diagonal stripes ---
     ctx.saveGState()
     ctx.translateBy(x: 232, y: 622)
@@ -87,8 +101,6 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
         ctx.fillPath()
         x += 140
     }
-    ctx.restoreGState()
-
     ctx.restoreGState()
 }
 

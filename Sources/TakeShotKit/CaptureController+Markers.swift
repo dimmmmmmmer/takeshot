@@ -13,6 +13,20 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    /// Markers of the clip in the player (transport ticks).
+    var playbackMarkers: [TakeMarker] {
+        guard let url = playbackURL else { return [] }
+        return takes.first { $0.url == url }?.markers ?? []
+    }
+
+    /// Current playback position in seconds (marker navigation).
+    var playbackPositionSeconds: Double {
+        if let raw = rawPlayer {
+            return Double(raw.currentFrame) / max(1, raw.frameRate)
+        }
+        return max(0, player.currentTime().seconds)
+    }
+
     /// Flag the current moment: recording TC while recording, player position
     /// in playback. Lands in the takeshot-markers.csv sidecar (and EDL export).
     func addMarker() {
