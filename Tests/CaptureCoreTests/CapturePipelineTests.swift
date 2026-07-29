@@ -26,29 +26,33 @@ struct CapturePipelineTests {
 
         var finishedTakes: [Take] = []
         var recStates: [Bool] = []
-        try await confirmation("take closed") { takeDone in
-            pipeline.onTakeFinished = { take in
-                finishedTakes.append(take)
-                takeDone()
-            }
-            pipeline.onRecStateChanged = { recStates.append($0) }
+        // Deliberately NOT a `confirmation`: its token is only valid inside the
+        // body, the pipeline holds onTakeFinished past it, and the take is
+        // published from a detached finalize task. On a slow machine that call
+        // lands after the body has gone and retains a dead confirmation —
+        // which is the SIGBUS that took CI down for a week. The wait below and
+        // the #require afterwards assert exactly the same thing.
+        pipeline.onTakeFinished = { finishedTakes.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
 
-            pipeline.handleFormat(CaptureFormat(
-                width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
+        pipeline.handleFormat(CaptureFormat(
+            width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
 
-            let pixelBuffer = TestMedia.pixelBuffer()
-            let driver = SignalDriver(pipeline: pipeline)
-            let standby = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
+        let pixelBuffer = TestMedia.pixelBuffer()
+        let driver = SignalDriver(pipeline: pipeline)
+        let standby = Timecode(hours: 11, minutes: 0, seconds: 0, frames: 0, fps: 25)
 
-            try await driver.pushStalled(standby, count: 10, pixelBuffer: pixelBuffer)
-            // "camera recording": TC runs for 50 frames (2 seconds)
-            let rolled = try await driver.pushRunning(from: standby, count: 50,
-                                                      pixelBuffer: pixelBuffer)
-            try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
+        try await driver.pushStalled(standby, count: 10, pixelBuffer: pixelBuffer)
+        // "camera recording": TC runs for 50 frames (2 seconds)
+        let rolled = try await driver.pushRunning(from: standby, count: 50,
+                                                  pixelBuffer: pixelBuffer)
+        try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
-            // the pipeline processes asynchronously — wait for the take-finished event
-            await TestWait.until { !finishedTakes.isEmpty }
-        }
+        // the pipeline processes asynchronously — wait for the take-finished event
+        await TestWait.until { !finishedTakes.isEmpty }
+        // and let every finalize task complete before the defer above removes
+        // the folder out from under a writer that is still finishing
+        await pipeline.finishPendingWrites()
 
         let take = try #require(finishedTakes.first)
         #expect(recStates.contains(true) && recStates.last == false)
@@ -109,6 +113,7 @@ struct CapturePipelineTests {
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
         await TestWait.until { !finishedTakes.isEmpty }
+        await pipeline.finishPendingWrites()
         let take = try #require(finishedTakes.first)
 
         await TestWait.fileExists(at: take.url)
