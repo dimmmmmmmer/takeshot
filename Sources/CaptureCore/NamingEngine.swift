@@ -8,14 +8,12 @@ public struct NamingContext: Sendable {
     public var take: Int
     public var reel: String
     public var camera: String
-    public var clipName: String
     public var postfix: String
-    public var clipPadding: Int
     public var timecode: Timecode?
 
     public init(project: String = "", date: Date = Date(), scene: String = "",
                 take: Int = 0, reel: String = "", camera: String = "",
-                clipName: String = "", postfix: String = "", clipPadding: Int = 2,
+                postfix: String = "",
                 timecode: Timecode? = nil) {
         self.project = project
         self.date = date
@@ -23,9 +21,7 @@ public struct NamingContext: Sendable {
         self.take = take
         self.reel = reel
         self.camera = camera
-        self.clipName = clipName
         self.postfix = postfix
-        self.clipPadding = max(1, clipPadding)
         self.timecode = timecode
     }
 }
@@ -35,14 +31,18 @@ public struct NamingContext: Sendable {
 /// Unknown placeholders and empty values are dropped; repeated separators collapse.
 public struct NamingEngine: Sendable {
     public var template: String
+    /// Width of `{clip}`/`{take}`. It says how the template renders a number,
+    /// not anything about the take being named, so it belongs with the template.
+    public var clipPadding: Int
 
-    public init(template: String) {
+    public init(template: String, clipPadding: Int = 2) {
         self.template = template
+        self.clipPadding = max(1, clipPadding)
     }
 
     /// Public list — only what's actually set from the UI ({prefix}/{cam}/
     /// {roll}/{clip}/{postfix}) or filled in automatically ({tc}/{date}). The old
-    /// names ({project}/{reel}/{take}/{scene}/{clipname}) still work as aliases.
+    /// names ({project}/{reel}/{take}/{scene}) still work as aliases.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
                                       "{postfix}", "{tc}", "{date}", "{yymmdd}",
                                       "{mmdd}", "{hhmm}", "{hhmmss}"]
@@ -62,7 +62,7 @@ public struct NamingEngine: Sendable {
 
         var result = template
         let paddedNumber = context.take >= 0
-            ? String(format: "%0\(context.clipPadding)d", context.take) : ""
+            ? String(format: "%0\(clipPadding)d", context.take) : ""
         let substitutions: [String: String] = [
             "{project}": context.project,
             "{prefix}": context.project,
@@ -82,7 +82,6 @@ public struct NamingEngine: Sendable {
             "{reel}": context.reel,
             "{roll}": context.reel,
             "{cam}": context.camera,
-            "{clipname}": context.clipName,
             "{postfix}": context.postfix,
             "{tc}": context.timecode?.fileNameSafe ?? "",
         ]

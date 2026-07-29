@@ -32,9 +32,10 @@ struct ModelNamingPresetTests {
     private func name(_ preset: NamingPreset, roll: String, clip: Int,
                       cam: String = "A", postfix: String = "",
                       prefix: String = "", date: Date) -> String {
-        NamingEngine(template: preset.template).fileName(for: NamingContext(
-            project: prefix, date: date, take: clip, reel: roll, camera: cam,
-            postfix: postfix, clipPadding: preset.clipDigits))
+        NamingEngine(template: preset.template, clipPadding: preset.clipDigits)
+            .fileName(for: NamingContext(
+                project: prefix, date: date, take: clip, reel: roll, camera: cam,
+                postfix: postfix))
     }
 
     /// Each expected name is a filename a real camera of that make produced.

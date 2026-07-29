@@ -70,6 +70,15 @@ depends on, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   minutes and finding it in CI costs a day — the last one hid behind a green
   local suite for a week.
 
+**Tests keep to themselves.** A test must not reach anything outside its own
+scratch directory: no writing the operator's real `UserDefaults` keys, no
+opening an audio output device, no touching a configured destination folder.
+Types that talk to those take an injected seam (`HotkeyManager(defaults:)` is
+the pattern) and the fixtures pass a throwaway one. This is not fastidiousness
+— the demo source generates sine tones, and a controller built with monitoring
+at its default plays them out of the speakers of whoever runs the suite, while
+also making the run depend on a device the CI runner may not have.
+
 ## House rules
 
 **Language.** Code, comments, commit messages and documentation are in English.

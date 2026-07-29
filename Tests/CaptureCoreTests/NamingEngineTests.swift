@@ -24,16 +24,16 @@ struct NamingEngineTests {
     }
 
     @Test func sanitizesForbiddenCharacters() {
-        let engine = NamingEngine(template: "{scene}_{clipname}")
+        let engine = NamingEngine(template: "{scene}")
         // non-ASCII (Cyrillic) is intentional: verifies sanitize preserves unicode
         // letters while stripping the forbidden / : * ? characters
         let name = engine.fileName(for: NamingContext(
-            scene: "INT/КУХНЯ: день", clipName: "clip*01?"))
+            scene: "INT/КУХНЯ: день*01?"))
         #expect(!name.contains("/"))
         #expect(!name.contains(":"))
         #expect(!name.contains("*"))
         #expect(!name.contains("?"))
-        #expect(name == "INT_КУХНЯ_день_clip_01")
+        #expect(name == "INT_КУХНЯ_день_01")
     }
 
     @Test func unknownPlaceholderRemoved() {
@@ -67,9 +67,12 @@ struct NamingEngineTests {
     @Test func clipPaddingWidths() {
         let engine = NamingEngine(template: "C{clip}")
         #expect(engine.fileName(for: NamingContext(take: 7)) == "C07")
-        #expect(engine.fileName(for: NamingContext(take: 7, clipPadding: 3)) == "C007")
-        #expect(engine.fileName(for: NamingContext(take: 7, clipPadding: 4)) == "C0007")
-        #expect(engine.fileName(for: NamingContext(take: 1234, clipPadding: 2)) == "C1234")
+        #expect(NamingEngine(template: "C{clip}", clipPadding: 3)
+            .fileName(for: NamingContext(take: 7)) == "C007")
+        #expect(NamingEngine(template: "C{clip}", clipPadding: 4)
+            .fileName(for: NamingContext(take: 7)) == "C0007")
+        #expect(NamingEngine(template: "C{clip}", clipPadding: 2)
+            .fileName(for: NamingContext(take: 1234)) == "C1234")
     }
 
     @Test func fieldStepperNumbersAndLetters() {
@@ -129,9 +132,10 @@ struct NamingEngineTests {
             (c.year, c.month, c.day) = (parts[0], parts[1], parts[2])
             (c.hour, c.minute, c.second) = (parts[3], parts[4], parts[5])
             let date = Calendar(identifier: .gregorian).date(from: c)!
-            return NamingEngine(template: template).fileName(for: NamingContext(
-                project: prefix, date: date, take: clip, reel: roll,
-                camera: cam, postfix: postfix, clipPadding: pad))
+            return NamingEngine(template: template, clipPadding: pad)
+                .fileName(for: NamingContext(
+                    project: prefix, date: date, take: clip, reel: roll,
+                    camera: cam, postfix: postfix))
         }
 
         // ARRI classic: A001C002_250904_R1Y2 (user example)

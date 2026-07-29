@@ -36,6 +36,9 @@ struct ModelColorHexTests {
         #expect(Color(hex: "#12345Z") == nil)
         #expect(Color(hex: "red") == nil)
         #expect(Color(hex: "#FF0000FF") == nil)     // RGBA is not this format
+        // UInt32(_:radix:) takes a sign, so these used to parse as colours
+        #expect(Color(hex: "+FF000") == nil)
+        #expect(Color(hex: "-FF000") == nil)
     }
 
     /// The channel order is the one thing a hex parser gets wrong silently:

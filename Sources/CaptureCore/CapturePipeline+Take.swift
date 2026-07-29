@@ -136,7 +136,8 @@ extension CapturePipeline {
 
     /// The take's path from the naming template, before the collision suffix.
     private func takeFileURL(timecode: Timecode?) -> URL {
-        let engine = NamingEngine(template: config.settings.namingTemplate)
+        let engine = NamingEngine(template: config.settings.namingTemplate,
+                                  clipPadding: config.settings.clipPadWidthEffective)
         let context = NamingContext(
             project: config.settings.projectName,
             date: Date(),
@@ -144,9 +145,7 @@ extension CapturePipeline {
             take: config.takeNumber,
             reel: config.roll,
             camera: config.settings.cameraLabel,
-            clipName: "",
             postfix: config.settings.postfix ?? "",
-            clipPadding: config.settings.clipPadWidthEffective,
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.destinationPath as NSString).expandingTildeInPath)
