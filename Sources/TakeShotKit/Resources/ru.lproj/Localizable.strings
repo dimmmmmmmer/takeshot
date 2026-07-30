@@ -446,3 +446,5 @@
 "trash_done" = "В Корзину перемещено: %@";
 "trash_selection" = "Переместить %@ в Корзину";
 "reveal_selection" = "Показать %@ в Finder";
+/* player chrome, markers, windows, focus (owner items 10, 23, 24, 24b, 26, 28) */
+"marker_new_color_help" = "Цвет новых маркеров — нажмите, чтобы сменить";

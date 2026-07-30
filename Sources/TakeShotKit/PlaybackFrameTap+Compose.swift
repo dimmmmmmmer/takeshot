@@ -97,15 +97,51 @@ extension PlaybackFrameTap {
 
     func deliver(_ pixelBuffer: CVPixelBuffer, analyzed: Bool) {
         lastBuffer = pixelBuffer
+        // ONE pull of the B clip per delivered frame, before composing. The
+        // composite's back half and the A/B pane read the same
+        // `lastCompareBuffer`: pulling per consumer would show them different
+        // moments of the same clip. Skipped when neither wants it — a
+        // copyPixelBuffer on every 60 Hz tick for a surface nobody mounted is a
+        // decode a frame for nothing.
+        let sidePanes = compareSinks.all()
+        if !sidePanes.isEmpty || !isCompareOff {
+            pullCompareBuffer()
+        }
         let output = composed(from: pixelBuffer) ?? pixelBuffer
         if analyzed {
             analyzeScopes(of: output)
         }
         sinks.present(output)
+        // A/B side by side: the A pane is its own surface, so the compare source
+        // goes out uncomposited instead of into the wipe.
+        if !sidePanes.isEmpty, let side = lastCompareBuffer {
+            compareSinks.present(side)
+        }
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
         handler?(output)
+    }
+
+    /// Whether nothing is being composited over the playback frame.
+    var isCompareOff: Bool {
+        if case .off = compare { return true }
+        return false
+    }
+
+    /// Latest frame of the B clip into `lastCompareBuffer`, or leave the previous
+    /// one in place when the slaved player has nothing new (it runs at the clip's
+    /// rate, the tap polls at 60 Hz).
+    ///
+    /// Call on `queue`.
+    private func pullCompareBuffer() {
+        guard let compareOutput else { return }
+        let time = compareOutput.itemTime(forHostTime: CACurrentMediaTime())
+        guard compareOutput.hasNewPixelBuffer(forItemTime: time),
+              let buffer = compareOutput.copyPixelBuffer(
+                  forItemTime: time, itemTimeForDisplay: nil)
+        else { return }
+        lastCompareBuffer = buffer
     }
 
     /// Hand the composed frame to the analyzer on its own queue.
@@ -202,14 +238,11 @@ extension PlaybackFrameTap {
     }
 
     /// The compare back half: the B clip when one is set, else the live frame.
+    ///
+    /// Reads the buffer `deliver` already pulled rather than pulling its own —
+    /// see the comment there for why there is exactly one pull per frame.
     private func liveImage(matching extent: CGRect) -> CIImage? {
-        if let compareOutput {
-            let time = compareOutput.itemTime(forHostTime: CACurrentMediaTime())
-            if compareOutput.hasNewPixelBuffer(forItemTime: time),
-               let buffer = compareOutput.copyPixelBuffer(
-                   forItemTime: time, itemTimeForDisplay: nil) {
-                lastCompareBuffer = buffer
-            }
+        if compareOutput != nil {
             guard let buffer = lastCompareBuffer else { return nil }
             let image = CIImage(cvPixelBuffer: buffer,
                                 options: [.colorSpace: NSNull()])

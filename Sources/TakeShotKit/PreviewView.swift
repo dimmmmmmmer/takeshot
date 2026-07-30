@@ -60,8 +60,11 @@ struct PreviewView: View {
                     } else if controller.viewerMode == .playback,
                               controller.compareMode == .sideBySide,
                               controller.playbackURL != nil {
+                        // A | B. A is the chosen compare source — the other clip
+                        // when there is one, the live signal otherwise; B is the
+                        // take under review.
                         HStack(spacing: 2) {
-                            LivePreviewContent()
+                            CompareSourceContent()
                             PlaybackContent()
                         }
                     } else {

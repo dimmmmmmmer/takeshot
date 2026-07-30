@@ -14,8 +14,13 @@ func markerColor(_ name: String) -> Color {
     }
 }
 
-/// Add-marker flag + the marker list editor, for both transports.
+/// Add-marker flag + the current-color swatch + the marker list editor, for both
+/// transports.
 struct MarkerButton: View {
+    /// The current-color swatch. Same size as the per-marker swatch in the list,
+    /// so the two read as the same control.
+    static let swatchSize: CGFloat = 11
+
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var showList = false
@@ -24,12 +29,29 @@ struct MarkerButton: View {
         Button {
             controller.addMarker()
         } label: {
+            // the flag wears the color the marker it drops will be born with —
+            // it was a fixed orange, which said nothing about the outcome
             Image(systemName: "flag.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.orange)
+                .foregroundStyle(markerColor(controller.newMarkerColor))
         }
         .buttonStyle(.plain)
         .help("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
+
+        // Choose the color BEFORE placing a marker. Click-to-cycle rather than a
+        // menu, exactly like the per-marker swatch in the list: at this size a
+        // menu label cannot be hit reliably, and the palette is seven entries.
+        Button {
+            controller.cycleNewMarkerColor()
+        } label: {
+            Circle()
+                .fill(markerColor(controller.newMarkerColor))
+                .frame(width: Self.swatchSize, height: Self.swatchSize)
+                .overlay(Circle().strokeBorder(.white.opacity(0.5), lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L("marker_new_color_help"))
 
         if !controller.playbackMarkers.isEmpty {
             Button {
@@ -95,6 +117,11 @@ struct MarkerListEditor: View {
                     Text(marker.note.isEmpty
                          ? L("marker_n", index + 1) : marker.note)
                         .font(.caption)
+                        // the caption is the marker, so it is the marker's color:
+                        // the list is read while matching it against the ticks on
+                        // the scrubber, and a uniformly tinted list of captions
+                        // makes that a hunt for the right row
+                        .foregroundStyle(markerColor(marker.color))
                         .lineLimit(1)
                         .frame(width: 76, alignment: .leading)
                     // color swatch: click cycles the palette (a menu on a

@@ -3,8 +3,9 @@ import CaptureCore
 import SwiftUI
 
 /// TC readout that updates every frame — isolated so only this text
-/// re-renders at frame rate (see LiveSignal).
-private struct LiveTimecodeText: View {
+/// re-renders at frame rate (see LiveSignal). Internal, not private: the badge
+/// that hosts it lives in `PlayerBadgeMenus.swift`.
+struct LiveTimecodeText: View {
     @ObservedObject var live: LiveSignal
     let tint: Color
 
@@ -18,7 +19,7 @@ private struct LiveTimecodeText: View {
 }
 
 /// Playback position as timecode: file start TC + player time, at the file's fps.
-private struct PlaybackTimecodeText: View {
+struct PlaybackTimecodeText: View {
     @EnvironmentObject private var controller: CaptureController
     @State private var now = Date()
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -39,13 +40,58 @@ private struct PlaybackTimecodeText: View {
     }
 }
 
+/// The one visual family the whole top chrome is built from.
+///
+/// It used to be two: the rec/playback switch and the compare bar were bare
+/// AppKit controls on a 55%-black slab, the TC/format/icon badges were 72%-black
+/// plates with a hairline and their own height. Side by side in one row that read
+/// as two unrelated toolbars. Every plate now comes from `playerChromePlate`, so
+/// a control added later cannot drift off the family by accident.
+enum PlayerChrome {
+    /// Outer height of every plate in the row. Driven by the tallest thing the
+    /// row must hold — a `.small` segmented control with its focus ring — so the
+    /// text badges and the icon buttons pad UP to it instead of each sitting at
+    /// whatever its content happens to measure.
+    static let height: CGFloat = 26
+    static let cornerRadius: CGFloat = 7
+    /// Room a plate leaves either side of its content.
+    static let horizontalPadding: CGFloat = 8
+    /// Opacity of the plate. Dark enough to keep white text legible over a blown
+    /// highlight, light enough to see the picture through it.
+    static let backgroundOpacity: Double = 0.72
+    static let borderOpacity: Double = 0.22
+    static let borderWidth: CGFloat = 0.5
+}
+
+extension View {
+    /// The plate every piece of top chrome sits on (see `PlayerChrome`).
+    ///
+    /// `horizontalPadding` is the one dimension a caller may tighten: the compare
+    /// bar is a row of controls that carry their own insets, and the shared 8pt
+    /// on top of those pushes it into the badge groups at the narrowest window.
+    /// Material, radius and height are not parameters — those are the family.
+    func playerChromePlate(
+        horizontalPadding: CGFloat = PlayerChrome.horizontalPadding
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: PlayerChrome.cornerRadius)
+        return foregroundStyle(.white) // readable on any player background
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: PlayerChrome.height)
+            .background(.black.opacity(PlayerChrome.backgroundOpacity), in: shape)
+            .overlay(shape.strokeBorder(.white.opacity(PlayerChrome.borderOpacity),
+                                       lineWidth: PlayerChrome.borderWidth))
+    }
+}
+
 /// Record/playback switch over the player.
 ///
 /// `minWidth` and not `width`: the two segment titles are localized, and a
 /// hard width clips whichever language needs more than English does — the
 /// switch keeps its 190pt look wherever it fits and grows where it has to.
 struct ViewerModeSwitch: View {
-    /// The width the switch has in English; wider languages get what they need.
+    /// The width the switch has in English, plate included; wider languages get
+    /// what they need. Outer, not inner: it is compared against the room the
+    /// centered slot has, and that room is measured on the plate.
     static let idealWidth: CGFloat = 190
 
     @EnvironmentObject private var controller: CaptureController
@@ -58,8 +104,9 @@ struct ViewerModeSwitch: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .controlSize(.small)
-        .frame(minWidth: Self.idealWidth)
+        .frame(minWidth: Self.idealWidth - 2 * PlayerChrome.horizontalPadding)
         .fixedSize()
+        .playerChromePlate()
     }
 }
 
@@ -146,62 +193,7 @@ struct PlayerTopBadgesModifier: ViewModifier {
         }
     }
 
-    private var timecodeBadge: some View {
-        playerOverlayBadge {
-            Menu {
-                detectionModePicker
-                Divider()
-                timecodeSourcePicker
-            } label: {
-                if controller.viewerMode == .playback {
-                    PlaybackTimecodeText()
-                } else {
-                    LiveTimecodeText(
-                        live: controller.live,
-                        tint: controller.isRecording ? Color.red : Color.white)
-                }
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(L("tc_menu_help"))
-        }
-    }
-
-    private var detectionModePicker: some View {
-        Picker(L("detection_mode"),
-               selection: $controller.settings.detectionMode) {
-            Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
-            Text(L("mode_auto")).tag(RecDetectionMode.auto)
-            Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
-            Text(L("mode_manual")).tag(RecDetectionMode.manual)
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
-    }
-
-    private var timecodeSourcePicker: some View {
-        Picker(L("tc_source"), selection: Binding(
-            get: {
-                controller.settings.timecodeSource == "ltc"
-                    ? 1 + (controller.settings.ltcChannel ?? 0)
-                    : 0
-            },
-            set: { value in
-                if value == 0 {
-                    controller.settings.timecodeSource = nil
-                } else {
-                    controller.settings.timecodeSource = "ltc"
-                    controller.settings.ltcChannel = value - 1
-                }
-            })) {
-            Text(L("tc_source_rp188")).tag(0)
-            ForEach(1...8, id: \.self) { channel in
-                Text(L("tc_source_ltc", channel)).tag(channel)
-            }
-        }
-        .pickerStyle(.menu)
-    }
+    private var timecodeBadge: some View { PlayerTimecodeBadge() }
 
     private var modeSwitch: some View {
         VStack(spacing: 4) {
@@ -267,54 +259,7 @@ struct PlayerTopBadgesModifier: ViewModifier {
         }
     }
 
-    private var formatBadge: some View {
-        playerOverlayBadge {
-            Menu {
-                inputModePicker
-                if controller.settings.forcedInputMode != nil {
-                    Toggle(L("input_mode_rgb"), isOn: Binding(
-                        get: { controller.settings.forcedInputRGB ?? false },
-                        set: { controller.settings.forcedInputRGB = $0 }))
-                }
-            } label: {
-                formatLabel
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(L("input_mode"))
-        }
-    }
-
-    private var inputModePicker: some View {
-        Picker(L("input_mode"), selection: Binding(
-            get: { controller.settings.forcedInputMode ?? "auto" },
-            set: { controller.settings.forcedInputMode =
-                $0 == "auto" ? nil : $0 })) {
-            Text(L("input_mode_auto")).tag("auto")
-            ForEach(controller.selectedDeviceInputModes,
-                    id: \.self) { name in
-                Text(name).tag(name)
-            }
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
-    }
-
-    private var formatLabel: some View {
-        Group {
-            if controller.viewerMode == .playback,
-               let info = controller.playbackFormatText {
-                Text(info).monospacedDigit()
-            } else if let format = controller.signalFormat {
-                Text(playerShortFormat(format)).monospacedDigit()
-            } else {
-                Text(L("no_signal_short"))
-            }
-        }
-        .font(.callout)
-        .foregroundStyle(.white.opacity(0.9))
-    }
+    private var formatBadge: some View { PlayerFormatBadge() }
 }
 
 extension View {
@@ -325,15 +270,10 @@ extension View {
     }
 }
 
-/// Badge chrome shared by the player overlays.
+/// Badge chrome shared by the player overlays — the same plate the mode switch
+/// and the compare bar sit on (see `PlayerChrome`).
 func playerOverlayBadge(@ViewBuilder content: () -> some View) -> some View {
-    content()
-        .foregroundStyle(.white) // readable on any player background (incl. black)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7)
-            .strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+    content().playerChromePlate()
 }
 
 func playerFPSText(_ fps: Double) -> String {

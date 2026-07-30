@@ -159,6 +159,114 @@ import Testing
         }
     }
 
+    // MARK: - the color a marker is born with (owner item 24)
+
+    /// Colors used to be reachable only after a marker existed. The swatch in
+    /// the marker controls sets the color of the NEXT one, in review and while a
+    /// take rolls alike.
+    @Test func newMarkersAreBornInTheChosenColor() async throws {
+        try await ControllerHarness.run { controller, root in
+            _ = try loadedTake(controller, in: root)
+            #expect(controller.newMarkerColor == TakeMarker.colors[0])
+
+            controller.cycleNewMarkerColor()
+            let chosen = controller.newMarkerColor
+            #expect(chosen == TakeMarker.colors[1])
+
+            controller.addMarker()
+            #expect(controller.takes[0].markers[0].color == chosen)
+
+            // and the same color while recording, where the marker is queued
+            controller.viewerMode = .record
+            controller.isRecording = true
+            controller.recordingStartDate = Date().addingTimeInterval(-3)
+            controller.addMarker()
+            #expect(controller.recordingMarkers.last?.color == chosen)
+        }
+    }
+
+    /// The swatch walks the palette and wraps, so seven clicks come back to the
+    /// start — the operator never has to know how long the list is.
+    @Test func theSwatchCyclesThePaletteAndWraps() async throws {
+        try await ControllerHarness.run { controller, _ in
+            var seen: [String] = []
+            for _ in TakeMarker.colors.indices {
+                seen.append(controller.newMarkerColor)
+                controller.cycleNewMarkerColor()
+            }
+            #expect(seen == TakeMarker.colors)
+            #expect(controller.newMarkerColor == TakeMarker.colors[0])
+        }
+    }
+
+    /// The convention is a unit's, not a session's: it has to survive a
+    /// relaunch, which for the controller means the settings blob.
+    @Test func theChosenColorIsPersistedAndSurvivesADecode() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.newMarkerColor = "cyan"
+            #expect(controller.settings.defaultMarkerColor == "cyan")
+
+            let reloaded = CaptureSettings.loaded(from: controller.defaults)
+            #expect(reloaded.defaultMarkerColor == "cyan")
+
+            // the default writes NO field, so an untouched install stays clean
+            controller.newMarkerColor = TakeMarker.colors[0]
+            #expect(controller.settings.defaultMarkerColor == nil)
+            #expect(controller.newMarkerColor == TakeMarker.colors[0])
+        }
+    }
+
+    /// A settings blob from a downgrade or a hand edit must not put a color the
+    /// palette has no swatch for onto every marker of the day.
+    @Test func aColorOutsideThePaletteFallsBackToTheDefault() async throws {
+        try await ControllerHarness.run(configure: {
+            $0.defaultMarkerColor = "chartreuse"
+        }, { controller, _ in
+            #expect(controller.newMarkerColor == TakeMarker.colors[0])
+            controller.cycleNewMarkerColor()
+            #expect(controller.newMarkerColor == TakeMarker.colors[1])
+        })
+    }
+
+    // MARK: - the marker's own color on its caption (owner item 23)
+
+    /// Every toast that names ONE marker is shown in that marker's color; the
+    /// blanket green said nothing about the marker just placed, and the color IS
+    /// the convention the crew reads.
+    @Test func markerToastsCarryTheMarkersOwnColor() async throws {
+        try await ControllerHarness.run { controller, root in
+            _ = try loadedTake(controller, in: root)
+            controller.newMarkerColor = "red"
+
+            controller.addMarker()
+            #expect(controller.lastNoticeTint == markerColor("red"))
+
+            controller.takes[0].markers = [
+                TakeMarker(seconds: 2, timecodeText: "10:00:02:00",
+                           color: "blue", note: "gate"),
+            ]
+            controller.jumpToMarker(forward: true)
+            #expect(controller.lastNoticeTint == markerColor("blue"))
+
+            controller.removeNearestMarker() // ±2 frames of the seek target
+            #expect(controller.lastNoticeTint == markerColor("blue"))
+        }
+    }
+
+    /// …and a marker's color must not outlive its toast: the next, unrelated
+    /// notice is the neutral green again.
+    @Test func theMarkerColorDoesNotLeakOntoTheNextNotice() async throws {
+        try await ControllerHarness.run { controller, root in
+            _ = try loadedTake(controller, in: root)
+            controller.newMarkerColor = "purple"
+            controller.addMarker()
+            #expect(controller.lastNoticeTint != nil)
+
+            controller.lastNotice = "something else entirely"
+            #expect(controller.lastNoticeTint == nil)
+        }
+    }
+
     /// Both exports bail before opening a save panel when there is nothing to
     /// write — the guard is what keeps them headless, and it is also the only
     /// feedback the operator gets.

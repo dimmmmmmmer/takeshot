@@ -83,7 +83,9 @@ struct PlayerArea: View {
                 } else if let notice = controller.lastNotice {
                     Text(notice)
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        // marker toasts carry the marker's own color; everything
+                        // else is the neutral confirmation green
+                        .foregroundStyle(controller.lastNoticeTint ?? .green)
                         .lineLimit(2)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
