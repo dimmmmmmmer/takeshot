@@ -79,6 +79,27 @@ enum ViewRender {
         return host.frame.size
     }
 
+    /// Mount a view at an exact size and keep the host alive for `body`.
+    ///
+    /// The measuring calls above ask a question about geometry and let the host
+    /// go the moment they answer it. The preview surfaces need the opposite: an
+    /// `NSViewRepresentable` registers its Metal layer with a frame producer in
+    /// `makeNSView`, and every sink registry holds its layers WEAKLY — so a host
+    /// released before the assertion runs takes the very mounts under test with
+    /// it, and "this window mounted no compare pane" and "this window's pane was
+    /// already collected" become the same green.
+    /// `body` is async because what a mounted surface is FED only arrives after
+    /// a decoder has run; the host outlives the wait.
+    static func mounted<T>(_ view: some View,
+                           in size: CGSize = CGSize(width: 1280, height: 720),
+                           _ body: () async throws -> T) async rethrows -> T {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        defer { withExtendedLifetime(host) {} }
+        return try await body()
+    }
+
     /// Measure the same view in both languages.
     ///
     /// The view is built inside the closure, once per language: `L()` is read
@@ -151,6 +172,14 @@ struct ViewProbe {
     func size(_ view: some View, proposedWidth width: CGFloat,
               proposedHeight height: CGFloat = looseHeight) -> CGSize {
         ViewRender.size(hosted(view), proposedWidth: width, proposedHeight: height)
+    }
+
+    /// Mount a view with the app's environment and hold it there for `body`
+    /// (see `ViewRender.mounted` for why the host has to stay alive).
+    func mounted<T>(_ view: some View,
+                    in size: CGSize = CGSize(width: 1280, height: 720),
+                    _ body: () async throws -> T) async rethrows -> T {
+        try await ViewRender.mounted(hosted(view), in: size, body)
     }
 
     /// Ideal size in English and in Russian.

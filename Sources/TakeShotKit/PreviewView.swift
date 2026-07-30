@@ -57,16 +57,10 @@ struct PreviewView: View {
                     if controller.viewerMode == .record, controller.multicamOn,
                        !controller.extraChannels.isEmpty {
                         MulticamGrid()
-                    } else if controller.viewerMode == .playback,
-                              controller.compareMode == .sideBySide,
-                              controller.playbackURL != nil {
-                        // A | B. A is the chosen compare source — the other clip
-                        // when there is one, the live signal otherwise; B is the
-                        // take under review.
-                        HStack(spacing: 2) {
-                            CompareSourceContent()
-                            PlaybackContent()
-                        }
+                    } else if controller.showsCompareSplit {
+                        // the same split the fullscreen player and the external
+                        // display mount, from the same view
+                        ComparePlaybackSplit()
                     } else {
                         // ONE NSView/layer for live, playback video and RAW: the
                         // mode switch re-routes frames into the same surface, so

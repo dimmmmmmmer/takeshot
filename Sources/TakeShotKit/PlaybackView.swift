@@ -58,6 +58,31 @@ struct CompareSourceContent: View {
     }
 }
 
+/// The A|B compare split: the chosen compare source beside the take under
+/// review.
+///
+/// One view, mounted by all three surfaces that draw the player — the main
+/// viewer, the fullscreen player and the external display. It used to be an
+/// HStack written inline in `PreviewView`, and the other two rendered
+/// `PlaybackContent()` alone: with A/B engaged the operator's window showed two
+/// pictures while the fullscreen and the director's monitor showed one, which
+/// reads as "the compare is off" on the surface the client is watching.
+///
+/// Each mount builds its OWN pair of layers (see `CompareSourceContent` and
+/// `PlaybackContent`, whose representables register per mount) — a CALayer
+/// lives in one NSView, so sharing would hand the picture to whichever window
+/// laid out last and black the others out.
+struct ComparePlaybackSplit: View {
+    var body: some View {
+        // A is the chosen compare source — the other clip when there is one,
+        // the live signal otherwise; B is the take under review.
+        HStack(spacing: 2) {
+            CompareSourceContent()
+            PlaybackContent()
+        }
+    }
+}
+
 /// Compare-source mount: its own layer, registered with the tap's compare
 /// registry (the B clip's frames, uncomposited).
 private struct CompareClipLayerView: NSViewRepresentable {
@@ -150,7 +175,12 @@ struct ExternalOutputView: View {
     var body: some View {
         ZStack {
             Color.black
-            if controller.viewerMode == .playback, controller.playbackURL != nil {
+            // A/B is a split of two surfaces; wipe and blend arrive already
+            // composited in the one picture PlaybackContent draws.
+            if controller.showsCompareSplit {
+                ComparePlaybackSplit()
+            } else if controller.viewerMode == .playback,
+                      controller.playbackURL != nil {
                 PlaybackContent()
             } else {
                 LivePreviewLayerView(pipeline: controller.pipeline)

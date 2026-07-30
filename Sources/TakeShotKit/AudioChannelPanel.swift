@@ -258,7 +258,13 @@ struct PlaybackFullscreenView: View {
         GeometryReader { geo in
             ZStack {
                 Color.black
-                PlaybackContent()
+                // A/B is a split of two surfaces; wipe and blend arrive already
+                // composited in the one picture PlaybackContent draws.
+                if controller.showsCompareSplit {
+                    ComparePlaybackSplit()
+                } else {
+                    PlaybackContent()
+                }
             }
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
             .overlay(alignment: .bottom) {

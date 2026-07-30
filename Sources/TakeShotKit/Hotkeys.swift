@@ -229,8 +229,8 @@ final class HotkeyManager: ObservableObject {
     /// field's letters; ⌃ combos are the field's own Emacs-style edit bindings
     /// (⌃A line start, ⌃D delete forward…), and a ⌃ hotkey family that stole
     /// them typed dim/mute into the operator's naming instead of editing it.
-    nonisolated static func typingKeepsTheKey(modifiers: NSEvent.ModifierFlags,
-                                  isTyping: Bool) -> Bool {
+    nonisolated static func typingKeepsTheKey(
+        modifiers: NSEvent.ModifierFlags, isTyping: Bool) -> Bool {
         isTyping && !modifiers.contains(.command)
     }
 
