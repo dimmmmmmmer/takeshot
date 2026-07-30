@@ -43,6 +43,21 @@ extension CaptureController {
         compareClipURL == nil ? .live : .clip
     }
 
+    /// Whether the viewer is showing the A|B split rather than one picture.
+    ///
+    /// Every surface that draws the player reads THIS — the main viewer, the
+    /// fullscreen player and the external display. It is one property because
+    /// the condition was written out once, in `PreviewView`, and the other two
+    /// windows simply did not have it: with A/B engaged they drew the B side
+    /// alone, so the operator's window showed two pictures and the director's
+    /// monitor showed one. Wipe and blend are absent on purpose — those are
+    /// composited into a single frame inside the tap (see `pushCompare`), and a
+    /// split of an already-composited picture would show the compare clip twice.
+    var showsCompareSplit: Bool {
+        viewerMode == .playback && compareMode == .sideBySide
+            && playbackURL != nil
+    }
+
     /// Hotkey punch-in: straight to 2x and back off. Reads the level the pinch
     /// gesture may have left on screen (see +Assist), so the key never toggles
     /// off a magnification it cannot see.
