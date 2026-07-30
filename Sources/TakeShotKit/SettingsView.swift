@@ -195,32 +195,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section(L("settings_output")) {
-                Picker(L("external_display"), selection: Binding(
-                    get: { controller.externalDisplayID },
-                    set: { controller.externalDisplayID = $0 })) {
-                    Text(L("external_off")).tag(CGDirectDisplayID?.none)
-                    ForEach(controller.availableScreens) { screen in
-                        Text(screen.name).tag(CGDirectDisplayID?.some(screen.id))
-                    }
-                }
-                Picker(L("monitor_device"), selection: Binding(
-                    get: { controller.settings.monitorDeviceID },
-                    set: { controller.settings.monitorDeviceID = $0 })) {
-                    Text(L("external_off")).tag(String?.none)
-                    ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
-                        Text(device.name).tag(String?.some(device.id))
-                    }
-                }
-                Picker(L("playback_output"), selection: Binding(
-                    get: { controller.playbackOutputUID },
-                    set: { controller.playbackOutputUID = $0 })) {
-                    Text(L("system_default")).tag(String?.none)
-                    ForEach(AudioOutputDevices.list()) { device in
-                        Text(device.name).tag(String?.some(device.uid))
-                    }
-                }
-            }
+            OutputSettingsSection()
             Section(L("settings_detection")) {
                 Picker(L("detection_mode"), selection: $controller.settings.detectionMode) {
                     Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
@@ -241,6 +216,7 @@ struct SettingsView: View {
                         controller.settings.preRollSeconds = nil
                     }), range: 0...100)
             }
+            RemoteSettingsSection()
             Section(L("settings_hotkeys")) {
                 ForEach(HotkeyAction.allCases) { action in
                     HStack {

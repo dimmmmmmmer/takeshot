@@ -25,15 +25,8 @@ extension CaptureController {
     /// Not shown while recording: the file being written naturally exists.
     func refreshNameCollision() {
         guard !isRecording else { nameCollision = nil; return }
-        let engine = NamingEngine(template: settings.namingTemplate,
-                                  clipPadding: settings.clipPadWidthEffective)
-        let context = NamingContext(
-            project: settings.projectName, date: Date(),
-            take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
-            postfix: settings.postfix ?? "",
-            timecode: currentTimecode)
         let url = destinationRoot
-            .appendingPathComponent(engine.fileName(for: context))
+            .appendingPathComponent(pendingTakeName)
             .appendingPathExtension("mov")
         nameCollision = FileManager.default.fileExists(atPath: url.path)
             ? url.lastPathComponent : nil

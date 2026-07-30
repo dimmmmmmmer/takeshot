@@ -1,0 +1,328 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover so the layout reaches under the notch; user-scalable=no
+     because a director stabbing at REC must not pinch-zoom the page instead. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d">
+<title>TakeShot</title>
+<style>
+:root {
+  --bg: #0b0b0d;
+  --panel: #17171b;
+  --line: #2a2a31;
+  --text: #f2f2f5;
+  --dim: #8b8b96;
+  --rec: #e0323c;
+  --good: #37b24d;
+  --bad: #c0392b;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  overscroll-behavior: none;
+}
+body {
+  display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button {
+  font: inherit; color: inherit; border: 1px solid var(--line);
+  background: var(--panel); border-radius: 14px;
+  touch-action: manipulation; cursor: pointer;
+}
+button:disabled { opacity: 0.35; }
+button:active:not(:disabled) { filter: brightness(1.35); }
+
+header { padding: 14px 16px 6px; text-align: center; }
+#tc {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: clamp(34px, 13vw, 64px); font-weight: 600;
+  letter-spacing: 0.02em; line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+#tc.stale { color: var(--dim); }
+#meta {
+  margin-top: 6px; display: flex; gap: 10px; justify-content: center;
+  flex-wrap: wrap; color: var(--dim); font-size: 14px;
+}
+#take { color: var(--text); font-weight: 600; }
+#rating { font-weight: 700; }
+#rating.good { color: var(--good); }
+#rating.bad { color: var(--bad); }
+
+main {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  gap: 14px; padding: 8px 16px 4px; min-height: 0;
+}
+#rec {
+  width: 100%; flex: 1; min-height: 140px; max-height: 46vh;
+  border-radius: 24px; border: 2px solid #43151a;
+  background: #2a1013; color: #ff6b73;
+  font-size: clamp(28px, 9vw, 44px); font-weight: 800; letter-spacing: 0.12em;
+}
+#rec.on {
+  background: var(--rec); border-color: #ff8a90; color: #fff;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(224, 50, 60, 0.55); }
+  50% { box-shadow: 0 0 0 16px rgba(224, 50, 60, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #rec.on { animation: none; }
+}
+#marker { width: 100%; height: 74px; font-size: 20px; font-weight: 700; }
+#rate { display: flex; gap: 12px; }
+#rate button { flex: 1; height: 74px; font-size: 20px; font-weight: 700; }
+#good.on { background: var(--good); border-color: var(--good); color: #06210c; }
+#bad.on { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+footer {
+  display: flex; gap: 12px; justify-content: space-between; align-items: center;
+  padding: 10px 16px 16px; color: var(--dim); font-size: 13px;
+  border-top: 1px solid var(--line); flex-wrap: wrap;
+}
+#conn::before {
+  content: ""; display: inline-block; width: 9px; height: 9px;
+  border-radius: 50%; margin-right: 7px; background: var(--dim);
+  vertical-align: baseline;
+}
+#conn.live::before { background: var(--good); }
+#conn.down::before { background: var(--rec); }
+
+#gate {
+  position: fixed; inset: 0; background: rgba(11, 11, 13, 0.97);
+  display: none; flex-direction: column; justify-content: center;
+  align-items: center; gap: 16px; padding: 24px; text-align: center;
+}
+#gate.show { display: flex; }
+#gate p { margin: 0; color: var(--dim); max-width: 22em; line-height: 1.4; }
+#pin {
+  width: 100%; max-width: 260px; padding: 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  font-family: ui-monospace, Menlo, monospace; font-size: 34px;
+  text-align: center; letter-spacing: 0.4em;
+}
+#connect { padding: 16px 28px; font-size: 18px; font-weight: 700; }
+#gateError { color: var(--rec); min-height: 1.2em; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div id="tc">--:--:--:--</div>
+  <div id="meta">
+    <span id="format"></span>
+    <span id="take"></span>
+    <span id="rating"></span>
+  </div>
+</header>
+
+<main>
+  <button id="rec" disabled></button>
+  <button id="marker" disabled></button>
+  <div id="rate">
+    <button id="good" disabled></button>
+    <button id="bad" disabled></button>
+  </div>
+</main>
+
+<footer>
+  <span id="conn"></span>
+  <span id="markers"></span>
+  <span id="disk"></span>
+</footer>
+
+<div id="gate">
+  <p id="gateHint"></p>
+  <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+         autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="connect"></button>
+  <div id="gateError"></div>
+</div>
+
+<script>
+// Everything is inside a function on purpose. A `var` at the top level of a
+// script becomes a property of `window`, and several of the names this page
+// wants are already there: `window.status` coerces whatever it is given to a
+// string, so a status object assigned to a global `status` came back as
+// "[object Object]" and `status.capturing` as undefined — which left the REC
+// button disabled through an entire take.
+(function () {
+"use strict";
+// Injected by RemotePage: the app's current language and its labels.
+var CFG = __TAKESHOT_CONFIG__;
+var S = CFG.strings;
+var PIN_KEY = "takeshot.remote.pin";
+
+document.documentElement.lang = CFG.lang;
+document.title = S.title;
+
+var el = function (id) { return document.getElementById(id); };
+var socket = null;
+var pin = "";
+var retry = null;
+var retryDelay = 700;
+var lastStatus = null;
+var watchdog = null;
+
+function text(id, value) { el(id).textContent = value; }
+
+function paintLabels() {
+  text("rec", S.rec);
+  text("marker", S.marker);
+  text("good", S.good);
+  text("bad", S.bad);
+  text("connect", S.connect);
+  text("gateHint", S.pinPrompt);
+  el("pin").placeholder = "····";
+}
+
+function setConnection(state) {
+  var node = el("conn");
+  node.className = state;
+  node.textContent = state === "live" ? S.connected
+    : (state === "down" ? S.disconnected : S.connecting);
+  // Nothing may be pressed while the socket is not up: a queued command that
+  // arrives after the take ends would fire on the wrong take.
+  var off = state !== "live";
+  ["rec", "marker", "good", "bad"].forEach(function (id) {
+    el(id).disabled = off
+      || (id === "rec" && !!lastStatus && !lastStatus.capturing);
+  });
+  if (off) { el("tc").classList.add("stale"); }
+}
+
+function render(next) {
+  lastStatus = next;
+  el("tc").textContent = next.tc || "--:--:--:--";
+  el("tc").classList.remove("stale");
+  text("format", next.format || S.noSignal);
+  text("take", next.take || S.idle);
+  var rating = el("rating");
+  rating.className = next.rating === "good" ? "good"
+    : (next.rating === "bad" ? "bad" : "");
+  rating.textContent = next.rating === "good" ? S.good
+    : (next.rating === "bad" ? S.bad : "");
+  var rec = el("rec");
+  rec.classList.toggle("on", !!next.recording);
+  rec.textContent = next.recording ? S.stop : S.rec;
+  rec.disabled = !next.capturing;
+  el("good").classList.toggle("on", next.rating === "good");
+  el("bad").classList.toggle("on", next.rating === "bad");
+  text("markers", S.markers + " " + next.markers);
+  text("disk", S.disk + " " + (next.diskGB < 0 ? "—" : next.diskGB + " GB"));
+}
+
+function showGate(message) {
+  el("gateError").textContent = message || "";
+  el("gate").classList.add("show");
+  el("pin").value = "";
+  el("pin").focus();
+}
+
+// The server's heartbeat is only worth sending if its absence is noticed. A
+// phone that loses the network is not always told: mobile Safari can leave the
+// socket open and simply stop delivering, with no onclose and no onerror, and a
+// page waiting for an event it will not get shows a timecode that stopped
+// minutes ago as if it were live — with a REC button that looks pressable.
+function armWatchdog() {
+  if (watchdog) { clearTimeout(watchdog); }
+  watchdog = setTimeout(function () {
+    watchdog = null;
+    var dead = socket;
+    socket = null;
+    if (dead) {
+      dead.onopen = dead.onmessage = dead.onclose = dead.onerror = null;
+      try { dead.close(); } catch (e) {}
+    }
+    // No backoff: this is a socket that went quiet, not a link the phone has
+    // given up on, and the operator wants the readout back.
+    retryDelay = 700;
+    dropped();
+  }, CFG.watchdogMs);
+}
+
+function send(action) {
+  if (!socket || socket.readyState !== 1) { return; }
+  socket.send(JSON.stringify({ action: action, pin: pin }));
+}
+
+function connect() {
+  if (retry) { clearTimeout(retry); retry = null; }
+  if (socket && (socket.readyState === 0 || socket.readyState === 1)) { return; }
+  if (!pin) { showGate(""); return; }
+  setConnection("wait");
+  socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://")
+    + location.host + "/ws");
+  armWatchdog();
+  socket.onopen = function () {
+    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+  };
+  socket.onmessage = function (event) {
+    armWatchdog();
+    var msg;
+    try { msg = JSON.parse(event.data); } catch (e) { return; }
+    if (msg.type === "status") { render(msg); setConnection("live"); }
+    else if (msg.type === "auth" && msg.ok) {
+      retryDelay = 700;
+      el("gate").classList.remove("show");
+      setConnection("live");
+    } else if (msg.type === "auth") {
+      pin = "";
+      try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+      showGate(S.pinBad);
+    }
+  };
+  socket.onclose = function () { dropped(); };
+  socket.onerror = function () { dropped(); };
+}
+
+// Mobile Safari drops the socket whenever the page goes to the background, and
+// gives no error when it does — without this the page comes back showing a
+// timecode that stopped minutes ago.
+function dropped() {
+  if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+  socket = null;
+  setConnection("down");
+  if (retry) { return; }
+  retry = setTimeout(function () { retry = null; connect(); }, retryDelay);
+  retryDelay = Math.min(5000, retryDelay * 2);
+}
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible") { retryDelay = 700; connect(); }
+});
+window.addEventListener("online", connect);
+window.addEventListener("pageshow", connect);
+
+el("rec").addEventListener("click", function () { send("rec"); });
+el("marker").addEventListener("click", function () { send("marker"); });
+el("good").addEventListener("click", function () { send("good"); });
+el("bad").addEventListener("click", function () { send("bad"); });
+el("connect").addEventListener("click", function () {
+  var value = el("pin").value.replace(/\D/g, "");
+  if (!value) { return; }
+  pin = value;
+  try { localStorage.setItem(PIN_KEY, pin); } catch (e) {}
+  el("gate").classList.remove("show");
+  connect();
+});
+el("pin").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") { el("connect").click(); }
+});
+
+paintLabels();
+setConnection("down");
+try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) { pin = ""; }
+if (pin) { connect(); } else { showGate(""); }
+}());
+</script>
+</body>
+</html>

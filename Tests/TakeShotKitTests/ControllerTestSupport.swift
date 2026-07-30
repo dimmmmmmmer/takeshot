@@ -110,6 +110,9 @@ enum ControllerHarness {
             // so it has to go before the folder does
             controller.folderWatcher?.cancel()
             controller.folderWatcher = nil
+            // A listener left behind holds a port and a status pump for the
+            // rest of the suite. Harmless when the remote was never started.
+            controller.stopRemoteServer()
             controller.stopCapture()
         }
         if !live { controller.stopCapture() }

@@ -298,6 +298,21 @@ final class CaptureController: ObservableObject {
     var recordingMarkers: [TakeMarker] = []
     var recordingStartDate: Date?
 
+    // MARK: - web remote (see +Remote)
+
+    /// The browser remote's server; nil — off, which is the default.
+    var remoteServer: RemoteServer?
+    /// The port the listener actually bound; 0 — not listening. Published
+    /// because it is the only honest answer to "is the remote up?" in
+    /// Settings: the configured port is a wish, this is what happened.
+    @Published var remoteBoundPort: Int = 0
+    /// Feeds the remote its status; cancelled with the server.
+    var remoteStatusTask: Task<Void, Never>?
+    /// Free space on the record volume, GB; -1 — unreadable. Sampled a few
+    /// times a minute rather than per push: the status goes out four times a
+    /// second and a volume query is a syscall on the MainActor.
+    var remoteDiskFreeGB: Double = -1
+
     /// Freshly recorded take / saved still — the list flashes a border on it.
     @Published var recentlyAddedURL: URL?
     var recentHighlightTask: Task<Void, Never>?

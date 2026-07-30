@@ -237,6 +237,27 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
     public var forcedInputRGB: Bool?
 
+    // MARK: - web remote (see RemoteServer and CaptureController+Remote)
+
+    /// The browser remote is listening; nil/false — off, which is the default.
+    /// A capture tool does not open a port on the set network until someone
+    /// asks it to.
+    public var remoteEnabled: Bool?
+    /// TCP port for the remote; nil — `remotePortEffective`.
+    public var remotePort: Int?
+    /// Four digits, generated on first enable and shown in Settings. Stored so
+    /// the same code keeps working after a relaunch — a PIN that changed every
+    /// launch would have to be re-read off the laptop mid-take.
+    public var remotePIN: String?
+
+    /// Port the remote actually binds. 8765 is unassigned by IANA and outside
+    /// the range macOS hands out as an ephemeral port, so it does not collide
+    /// with a client socket the machine opened first.
+    public var remotePortEffective: Int {
+        guard let remotePort, (1024...65535).contains(remotePort) else { return 8765 }
+        return remotePort
+    }
+
     // MARK: - assist tools and zoom (see ViewAssist and the assist popover)
 
     /// Exposure-legend size: "s" / "m" / "l"; nil — medium. The legend is read

@@ -290,6 +290,10 @@ extension CaptureController {
     /// without its moov atom), and waits on a detached task: a MainActor task
     /// can never run while the main thread is parked in semaphore.wait.
     func flushOnTerminate() {
+        // Before anything blocks: the remote's listener and its clients have to
+        // go, or a phone holds a socket open against a process that is parked in
+        // a semaphore waiting for the writer.
+        stopRemoteServer()
         pipeline.captureStopped() // finishes the in-flight take, if any
         for channel in extraChannels { channel.stopStreams() }
         let sem = DispatchSemaphore(value: 0)
