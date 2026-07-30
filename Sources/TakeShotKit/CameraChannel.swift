@@ -110,18 +110,7 @@ final class CameraChannel: ObservableObject, Identifiable {
     }
 }
 
-extension CameraChannel: CaptureBackendDelegate {
-    nonisolated func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat) {
-        pipeline.handleFormat(format)
-    }
-    nonisolated func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
-        pipeline.handleFrame(frame)
-    }
-    nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {
-        pipeline.handleAudio(sampleBuffer)
-    }
-    nonisolated func backend(_ backend: CaptureBackend, signalPresent: Bool) {
-        pipeline.handleSignal(present: signalPresent)
-    }
-    nonisolated func backendDeviceListChanged(_ backend: CaptureBackend) {}
-}
+/// Straight through to this channel's own pipeline — see
+/// `PipelineBackendDelegate` for the five bodies and for why they are shared
+/// with the main camera.
+extension CameraChannel: PipelineBackendDelegate {}

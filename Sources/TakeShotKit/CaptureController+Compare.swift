@@ -98,23 +98,8 @@ extension CaptureController {
         }
         // raw code values, like every other surface in the app
         let image = CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
-        let attrs: [CFString: Any] = [
-            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-        ]
-        var buffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, cg.width, cg.height,
-                            kCVPixelFormatType_32BGRA,
-                            attrs as CFDictionary, &buffer)
-        guard let buffer else {
-            lastError = L("reference_pin_failed")
-            return
-        }
-        let destination = CIRenderDestination(pixelBuffer: buffer)
-        destination.colorSpace = nil
-        let context = CIContext(options: [.cacheIntermediates: false])
-        guard let task = try? context.startTask(toRender: image, to: destination),
-              (try? task.waitUntilCompleted()) != nil else {
+        guard let buffer = CIBufferRender.render(
+            image, width: cg.width, height: cg.height, into: nil) else {
             lastError = L("reference_pin_failed")
             return
         }
@@ -138,31 +123,30 @@ extension CaptureController {
         case .diagonal: return .diagonal
         }
     }
+
+    /// The wipe/blend the operator has dialled in, as the compositor's mode.
+    ///
+    /// `.sideBySide` composites nothing: the A|B split is two surfaces, not one
+    /// blended frame (see `showsCompareSplit`).
+    private func compareComposite() -> CompareCompositor.Mode {
+        switch compareMode {
+        case .off, .sideBySide: return .off
+        case .blend: return .blend(opacity: blendOpacity)
+        case .wipe: return .wipe(axis: Self.compareAxis(wipeOrientation),
+                                 position: wipePosition)
+        }
+    }
+
     /// Wipe/blend are composited inside the playback render (SwiftUI masking of
     /// video layers drops the colorspace) — push the parameters to the tap,
     /// and to the pipeline when a reference is pinned for live compare.
+    ///
+    /// One mode, pushed to both. The mapping used to be written out twice, once
+    /// per consumer, so the two could disagree about what a mode meant — which
+    /// is the same class of bug `comparePaneSource` exists to prevent.
     func pushCompare() {
-        switch compareMode {
-        case .off, .sideBySide:
-            playbackTap.setCompare(.off)
-        case .blend:
-            playbackTap.setCompare(.blend(opacity: blendOpacity))
-        case .wipe:
-            playbackTap.setCompare(.wipe(
-                axis: Self.compareAxis(wipeOrientation), position: wipePosition))
-        }
-        guard referencePinned else {
-            pipeline.setPreviewCompare(.off)
-            return
-        }
-        switch compareMode {
-        case .off, .sideBySide:
-            pipeline.setPreviewCompare(.off)
-        case .blend:
-            pipeline.setPreviewCompare(.blend(opacity: blendOpacity))
-        case .wipe:
-            pipeline.setPreviewCompare(.wipe(
-                axis: Self.compareAxis(wipeOrientation), position: wipePosition))
-        }
+        let mode = compareComposite()
+        playbackTap.setCompare(mode)
+        pipeline.setPreviewCompare(referencePinned ? mode : .off)
     }
 }

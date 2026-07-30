@@ -94,19 +94,23 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var scopeReanalysisPending = false
     /// The part of the frame the scopes read (punch-in crop; tap-queue confined).
     var scopeRegion = ScopeRegion.full
-    private var output: AVPlayerItemVideoOutput?
-    private weak var item: AVPlayerItem?
-    private var timer: DispatchSourceTimer?
-    private var running = false
+    /// The poll's own state (`+Tick`): the output being asked for frames, the
+    /// item it belongs to, the timer doing the asking, and whether the viewer
+    /// wants any of it. Module-internal rather than private for that reason —
+    /// nothing outside this type touches them.
+    var output: AVPlayerItemVideoOutput?
+    weak var item: AVPlayerItem?
+    var timer: DispatchSourceTimer?
+    var running = false
     var scopesEnabled = false
-    private var tickCount = 0
+    var tickCount = 0
 
     /// Scope data from playback frames (~15 Hz while enabled), on the main queue.
     var onScopeData: ((ScopeData) -> Void)?
 
     var lastBuffer: CVPixelBuffer?
     /// Static source (a still in the player): composited/analyzed like video.
-    private var stillBuffer: CVPixelBuffer?
+    var stillBuffer: CVPixelBuffer?
     /// Idle output already delivered — with compare off, a paused/still frame
     /// is re-rendered only when the LUT/compare/scopes inputs change.
     var idleDelivered = false
@@ -115,11 +119,11 @@ final class PlaybackFrameTap: @unchecked Sendable {
     // Metal layer: SwiftUI masks/opacity over video layers drop the colorspace
     // and shift colors)
 
-    enum Compare {
-        case off
-        case blend(opacity: Double)
-        case wipe(axis: CompareCompositor.Axis, position: Double)
-    }
+    /// The compositor's own mode, not a copy of it. The tap used to declare an
+    /// identical three-case enum and translate case by case into
+    /// `CompareCompositor.Mode` in the render — two spellings of one thing, and
+    /// the translation was the only place a fourth mode could be forgotten.
+    typealias Compare = CompareCompositor.Mode
 
     var compare: Compare = .off
     /// Pulls the latest live preview frame (assigned via setLiveBufferProvider).
@@ -221,9 +225,14 @@ final class PlaybackFrameTap: @unchecked Sendable {
         queue.async { self.detachLocked() }
     }
 
+    /// Ticks between scope passes while playing. The timer polls at ~60 Hz, so
+    /// 4 is ~15 updates a second — the analyzer does a 1080p pass in ~14 ms and
+    /// the busy gate skips anything it cannot keep up with.
+    static let scopeTickStride = 4
+
     // MARK: - on queue
 
-    private func detachLocked() {
+    func detachLocked() {
         timer?.cancel()
         timer = nil
         if let output, let item {
@@ -232,80 +241,5 @@ final class PlaybackFrameTap: @unchecked Sendable {
         output = nil
         item = nil
         stillBuffer = nil
-    }
-
-    private func startTimerIfNeeded() {
-        timer?.cancel()
-        timer = nil
-        guard running, output != nil || stillBuffer != nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz polling
-        timer.setEventHandler { [weak self] in
-            self?.tick()
-        }
-        timer.resume()
-        self.timer = timer
-    }
-
-    private func tick() {
-        if comparePlayer != nil {
-            syncCompareClip()
-            idleDelivered = false // the B half advances even when A is paused
-        }
-        guard let output else {
-            tickStill()
-            return
-        }
-        let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
-        tickCount += 1
-        if !output.hasNewPixelBuffer(forItemTime: itemTime) {
-            tickPaused(output, at: itemTime)
-            return
-        }
-        idleDelivered = false // playing again: idle state re-arms
-        guard let pixelBuffer = output.copyPixelBuffer(
-            forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
-        deliver(pixelBuffer,
-                analyzed: scopesEnabled && tickCount % Self.scopeTickStride == 0)
-    }
-
-    /// Ticks between scope passes while playing. The timer polls at ~60 Hz, so
-    /// 4 is ~15 updates a second — the analyzer does a 1080p pass in ~14 ms and
-    /// the busy gate skips anything it cannot keep up with.
-    static let scopeTickStride = 4
-
-    /// Still: recomposite at the paused cadence so the live half of a compare
-    /// keeps moving (and LUT changes land immediately).
-    private func tickStill() {
-        guard let still = stillBuffer else { return }
-        tickCount += 1
-        if case .off = compare {
-            // static output: one delivery until an input changes
-            if !idleDelivered {
-                idleDelivered = true
-                deliver(still, analyzed: scopesEnabled)
-            }
-        } else if tickCount % 4 == 0 {
-            // the live half of the compare keeps moving
-            deliver(still, analyzed: scopesEnabled && tickCount % 16 == 0)
-        }
-    }
-
-    /// Paused player: static output — deliver once, then only keep the live
-    /// half of an active compare moving (~15 Hz).
-    private func tickPaused(_ output: AVPlayerItemVideoOutput, at itemTime: CMTime) {
-        if case .off = compare {
-            if !idleDelivered,
-               let pixelBuffer = output.copyPixelBuffer(
-                   forItemTime: itemTime, itemTimeForDisplay: nil) {
-                idleDelivered = true
-                deliver(pixelBuffer, analyzed: scopesEnabled)
-            }
-        } else if tickCount % 4 == 0,
-                  let pixelBuffer = output.copyPixelBuffer(
-                      forItemTime: itemTime, itemTimeForDisplay: nil) {
-            deliver(pixelBuffer,
-                    analyzed: scopesEnabled && tickCount % 16 == 0)
-        }
     }
 }

@@ -22,10 +22,7 @@ final class CaptureController: ObservableObject {
     @Published var devices: [CaptureDeviceInfo] = []
     /// Capture starts automatically when a device is selected — there's no separate button.
     @Published var selectedDeviceID: String? {
-        didSet {
-            guard oldValue != selectedDeviceID else { return }
-            restartCapture()
-        }
+        didSet { applySelectedDevice(from: oldValue) }
     }
     @Published var isCapturing = false
     @Published var isRecording = false
@@ -41,12 +38,7 @@ final class CaptureController: ObservableObject {
     @Published var vancStats: [VancPacketStat] = []
     /// Roll (reel/media). Changing the roll resets the clip number.
     @Published var roll: String = "001" {
-        didSet {
-            guard oldValue != roll else { return }
-            continueClipNumbering()
-            pushConfig()
-            refreshNameCollision()
-        }
+        didSet { applyRollChange(from: oldValue) }
     }
     @Published var nextTakeNumber: Int = 1 {
         didSet {
@@ -69,52 +61,24 @@ final class CaptureController: ObservableObject {
     /// by the operator or by the next successful take start.
     @Published var persistentAlert: String?
 
-    /// Error toast: pops up over the footer and dismisses itself after a few seconds.
+    /// Error toast: pops up over the footer and dismisses itself after a few
+    /// seconds (see `+Toasts` for the timers).
     @Published var lastError: String? {
-        didSet {
-            errorDismissTask?.cancel()
-            guard lastError != nil else { return }
-            errorDismissTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { return }
-                self?.lastError = nil
-            }
-        }
+        didSet { scheduleErrorDismiss() }
     }
-    private var errorDismissTask: Task<Void, Never>?
+    var errorDismissTask: Task<Void, Never>?
     /// Neutral info toast (grab saved etc.) — green, self-dismissing.
     @Published var lastNotice: String? {
-        didSet {
-            // Every notice starts neutral; a marker toast paints itself right
-            // after assigning the text (see `noticeAboutMarker`). Resetting here
-            // is what keeps one marker's color off the next, unrelated notice.
-            lastNoticeTint = nil
-            noticeDismissTask?.cancel()
-            guard lastNotice != nil else { return }
-            noticeDismissTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(4))
-                guard !Task.isCancelled else { return }
-                self?.lastNotice = nil
-            }
-        }
+        didSet { scheduleNoticeDismiss() }
     }
     /// Color of the notice on screen; nil — the neutral green. Carries the color
     /// of the thing it is ABOUT: a crew's marker convention IS the color, so an
     /// always-green toast said nothing about the marker it had just placed.
     @Published var lastNoticeTint: Color?
-    private var noticeDismissTask: Task<Void, Never>?
+    var noticeDismissTask: Task<Void, Never>?
     /// View mode: live signal or playback of a recording.
     @Published var viewerMode: ViewerMode = .record {
-        didSet {
-            if viewerMode == .record {
-                player.pause()
-                rawPlayer?.pause() // a looping BRAW decode must not fight capture
-            }
-            updateAudioMonitorRouting()
-            updateTapRunning()
-            updateScopesRunning()
-            wirePlayoutRouting()
-        }
+        didSet { applyViewerModeChange() }
     }
     /// What's currently loaded in the player (for highlighting in the list).
     @Published var playbackURL: URL?
@@ -221,16 +185,11 @@ final class CaptureController: ObservableObject {
     /// the same picture cover it completely, and the second one to open hid the
     /// first one's controls.
     @Published var showAudioPanel = false {
-        didSet {
-            if showAudioPanel { closeOtherPlayerOverlays(except: .audio) }
-        }
+        didSet { applyAudioPanelChange() }
     }
     /// Scopes overlay over the player (like the audio panel).
     @Published var showScopesOverlay = false {
-        didSet {
-            if showScopesOverlay { closeOtherPlayerOverlays(except: .scopes) }
-            updateScopesRunning()
-        }
+        didSet { applyScopesOverlayChange() }
     }
     /// The separate scopes window is open.
     @Published var scopesWindowOpen = false {
@@ -282,10 +241,7 @@ final class CaptureController: ObservableObject {
 
     /// The selected external display (by displayID); nil — off.
     @Published var externalDisplayID: CGDirectDisplayID? {
-        didSet {
-            guard oldValue != externalDisplayID else { return }
-            updateExternalWindow()
-        }
+        didSet { applyExternalDisplayChange(from: oldValue) }
     }
     var externalWindow: NSWindow?
 

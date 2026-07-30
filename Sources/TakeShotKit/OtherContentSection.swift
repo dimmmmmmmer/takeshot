@@ -16,13 +16,7 @@ struct OtherContentSection: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                if viewMode == "grid" {
-                    Slider(value: $tileSize, in: TakeTileBadges.tileWidthRange)
-                        .frame(width: 70)
-                        .controlSize(.mini)
-                        .help(L("tile_size"))
-                }
-                ViewModePicker(mode: $viewMode)
+                PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

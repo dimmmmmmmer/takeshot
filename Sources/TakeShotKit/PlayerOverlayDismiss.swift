@@ -37,6 +37,19 @@ extension CaptureController {
         if kept != .scopes, showScopesOverlay { showScopesOverlay = false }
     }
 
+    /// The audio panel was opened or closed. Called from the flag's observer,
+    /// so badge, footer button and hotkey all get it.
+    func applyAudioPanelChange() {
+        if showAudioPanel { closeOtherPlayerOverlays(except: .audio) }
+    }
+
+    /// The scopes overlay was opened or closed. It also re-routes the
+    /// analyzers: they only run for a surface that is actually on screen.
+    func applyScopesOverlayChange() {
+        if showScopesOverlay { closeOtherPlayerOverlays(except: .scopes) }
+        updateScopesRunning()
+    }
+
     /// A panel is covering the picture.
     var anyPlayerOverlayOpen: Bool { showAudioPanel || showScopesOverlay }
 

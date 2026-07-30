@@ -100,36 +100,6 @@ struct RemoteWebSocketFrame: Equatable {
             return (short, 2)
         }
     }
-
-    /// A server frame: final, unmasked, one frame per message.
-    static func encode(opcode: Opcode, payload: Data) -> Data {
-        var out = Data([0x80 | opcode.rawValue])
-        let count = payload.count
-        if count < 126 {
-            out.append(UInt8(count))
-        } else if count <= 0xFFFF {
-            out.append(126)
-            out.append(UInt8(count >> 8))
-            out.append(UInt8(count & 0xFF))
-        } else {
-            out.append(127)
-            for shift in stride(from: 56, through: 0, by: -8) {
-                out.append(UInt8((count >> shift) & 0xFF))
-            }
-        }
-        out.append(payload)
-        return out
-    }
-
-    static func text(_ message: String) -> Data {
-        encode(opcode: .text, payload: Data(message.utf8))
-    }
-
-    /// A close frame carrying a status code (1000 normal, 1008 policy).
-    static func close(code: UInt16) -> Data {
-        encode(opcode: .close,
-               payload: Data([UInt8(code >> 8), UInt8(code & 0xFF)]))
-    }
 }
 
 /// Why a frame was refused. Every case ends the connection.

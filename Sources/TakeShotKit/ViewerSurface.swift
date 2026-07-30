@@ -74,33 +74,3 @@ struct ViewerSurface: NSViewRepresentable {
         coordinator.detach()
     }
 }
-
-/// Live preview mount: creates its OWN layer and registers it as a pipeline
-/// sink (a CALayer can live in one view only — the pipeline mirrors frames to
-/// every registered sink, so compare/multicam mounts don't fight over one).
-struct LivePreviewLayerView: NSViewRepresentable {
-    let pipeline: CapturePipeline
-
-    final class Coordinator {
-        var pipeline: CapturePipeline?
-        var layer: MetalPreviewLayer?
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let layer = MetalPreviewLayer()
-        pipeline.addDisplaySink(layer)
-        context.coordinator.pipeline = pipeline
-        context.coordinator.layer = layer
-        return MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        if let layer = coordinator.layer {
-            coordinator.pipeline?.removeDisplaySink(layer)
-        }
-    }
-}

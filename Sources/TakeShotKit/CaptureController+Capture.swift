@@ -1,18 +1,13 @@
-import AVFoundation
-import AppKit
 import CaptureCore
-import CoreImage
-import CoreMedia
-import CoreVideo
 import Foundation
-import SwiftUI
-import os.log
 
-/// Running the capture: devices, start/stop, the pipeline bindings, the disk
-/// watchdog and the multicam channels.
+/// Running the capture: which device, starting it, stopping it, and getting the
+/// files closed on the way out.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
-/// size at which nobody reads it top to bottom any more.
+/// size at which nobody reads it top to bottom any more. What the pipeline
+/// reports back — and the disk watchdog that reports on its own — is
+/// `+CaptureEvents`; the extra boards are `+Multicam`.
 extension CaptureController {
     var backendAvailable: Bool { backend.isAvailable }
 
@@ -28,159 +23,13 @@ extension CaptureController {
             deviceID: String(id.dropFirst("decklink:".count)))
     }
 
-    /// All cameras for the preview grid: main (nil channel) + extras.
-    var allCameraLabels: [String] {
-        [settings.cameraLabel] + extraChannels.map(\.camLabel)
+    /// The operator picked a different board. Capture restarts itself from the
+    /// observer rather than from a button — there is no separate start control.
+    func applySelectedDevice(from oldValue: String?) {
+        guard oldValue != selectedDeviceID else { return }
+        restartCapture()
     }
 
-    /// Free-space watch on the record volume: warn early, stop the take
-    /// before the writer hits a hard wall (nothing watched disk space at all).
-    func startDiskWatch() {
-        Task { [weak self] in
-            while let self, !Task.isCancelled {
-                self.checkDiskSpace()
-                try? await Task.sleep(for: .seconds(10))
-            }
-        }
-    }
-    private func checkDiskSpace() {
-        guard isCapturing else { return }
-        let values = try? destinationRoot.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        guard let free = values?.volumeAvailableCapacityForImportantUsage
-        else {
-            // Asking a volume that is no longer mounted is exactly how this
-            // query fails, so returning quietly meant the watchdog went silent
-            // in the one case it exists for. A take still "recording" onto a
-            // vanished destination writes nothing at all.
-            // A merely absent folder is recoverable and normal (a fresh
-            // destination path), so try that first and only alarm if the
-            // volume itself is unreachable.
-            try? FileManager.default.createDirectory(
-                at: destinationRoot, withIntermediateDirectories: true)
-            guard !FileManager.default.fileExists(atPath: destinationRoot.path)
-            else { return }
-            if isRecording {
-                pipeline.toggleManualRecord()
-                persistentAlert = "RECORD VOLUME UNREACHABLE — recording stopped"
-            } else {
-                persistentAlert = "Record folder unreachable: "
-                    + destinationRoot.path
-            }
-            return
-        }
-        let freeGB = Double(free) / 1_000_000_000
-        if freeGB < 0.5, isRecording {
-            pipeline.toggleManualRecord() // close the take while it can finalize
-            persistentAlert = String(format:
-                "DISK FULL (%.1f GB) — recording stopped", freeGB)
-        } else if freeGB < 5 {
-            persistentAlert = String(format:
-                "Record disk low: %.1f GB free", freeGB)
-        }
-    }
-    func bindPipeline() {
-        pipeline.onFormatChanged = { [weak self] format in
-            guard let self else { return }
-            let changed = self.signalFormat != format
-            self.signalFormat = format
-            if changed, format != nil, self.playoutFeeder != nil {
-                self.rebuildPlayout()
-            }
-        }
-        pipeline.onTimecode = { [weak self] timecode in
-            guard let self, self.live.currentTimecode != timecode else { return }
-            self.live.currentTimecode = timecode
-        }
-        pipeline.onRecStateChanged = { [weak self] recording in
-            self?.handleRecState(recording)
-        }
-        pipeline.onTakeFinished = { [weak self] take in
-            self?.adoptFinishedTake(take)
-        }
-        pipeline.onSignal = { [weak self] present in
-            self?.signalPresent = present
-        }
-        pipeline.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
-        }
-        playbackTap.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
-        }
-        // capture the monitor object itself: this fires on the pipeline queue
-        // and must not touch the MainActor-isolated controller
-        let monitor = audioMonitor
-        pipeline.onMonitorAudio = { monitor.enqueue($0) }
-        pipeline.onError = { [weak self] message in
-            self?.reportPipelineError(message)
-        }
-        pipeline.onVancStats = { [weak self] stats in
-            self?.vancStats = stats
-        }
-        pipeline.onAudioLevels = { [weak self] levels in
-            self?.live.audioLevels = levels
-        }
-    }
-    private func handleRecState(_ recording: Bool) {
-        isRecording = recording
-        if recording {
-            recordingStartDate = Date()
-            recordingMarkers = []
-            persistentAlert = nil // a clean start clears the alarm
-        }
-        refreshNameCollision() // start hides it, stop recomputes
-        // multicam: the other cameras in sync with the main one
-        for channel in extraChannels { channel.setRecording(recording) }
-    }
-    /// A finalized take joins the list, the log and the thumbnail queue.
-    private func adoptFinishedTake(_ take: Take) {
-        var take = take
-        take.markers = anchoredMarkers(for: take)
-        recordingMarkers = []
-        takes.append(take)
-        nextTakeNumber += 1
-        exportTakeLog()
-        requestThumbnail(for: take) // deduped against a cell's request
-        flashNewItem(take.url)
-    }
-    /// Re-anchor marker positions on the take's actual start TC: the wall
-    /// clock measured from the REC press is off by the pre-roll.
-    private func anchoredMarkers(for take: Take) -> [TakeMarker] {
-        recordingMarkers.map { marker in
-            var fixed = marker
-            // Same conversion the markers sidecar reads back with — one
-            // implementation, so a marker cannot land on a different frame
-            // depending on whether the app was restarted since.
-            //
-            // Without a start TC there is nothing to anchor against and the
-            // marker's timecode text is the camera's, not an offset: the wall
-            // clock measured from the REC press stays.
-            if take.startTimecode != nil,
-               let seconds = TakeLogExporter.markerSeconds(
-                   timecodeText: marker.timecodeText,
-                   start: take.startTimecode) {
-                fixed.seconds = seconds
-            }
-            return fixed
-        }
-    }
-    /// Recording-integrity failures stick in the alarm banner; everything else
-    /// toasts for five seconds.
-    ///
-    /// "Failed to start recording" and a take truncated by a format change used
-    /// to toast: the two cases where footage is missing outright, announced more
-    /// quietly than a dropped frame. An operator watching the slate rather than
-    /// the screen had no way to learn about them.
-    private func reportPipelineError(_ message: String) {
-        let sticky = ["TAKE LOST", "Dropped", "ingress",
-                      "Failed to start recording", "Take closed:",
-                      "Pre-roll incomplete"]
-        if sticky.contains(where: message.contains) {
-            persistentAlert = message
-        } else {
-            lastError = message
-        }
-    }
     func pushConfig() {
         pipeline.update(config: .init(
             settings: settings, roll: roll, takeNumber: nextTakeNumber))
@@ -188,58 +37,6 @@ extension CaptureController {
         for channel in extraChannels {
             channel.update(settings: settings, roll: roll, takeNumber: nextTakeNumber)
         }
-    }
-    func toggleMulticam() {
-        setMulticam(!multicamOn)
-    }
-    func setMulticam(_ on: Bool) {
-        for channel in extraChannels { channel.stop() }
-        extraChannels.removeAll()
-        multicamOn = on
-        guard on else { return }
-
-        let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)
-        if isMockSelected {
-            // demo: a second mock camera
-            let mock = MockCaptureBackend()
-            let channel = CameraChannel(
-                camLabel: nextLetter, backend: mock,
-                deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
-            channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-            channel.onError = { [weak self] message in self?.reportPipelineError(message) }
-            try? channel.start() // the mock cannot fail
-            extraChannels = [channel]
-        } else {
-            // hardware: each OTHER DeckLink board is its own channel
-            let others = devices.filter {
-                $0.id.hasPrefix("decklink:") && $0.id != selectedDeviceID
-            }
-            var channels: [CameraChannel] = []
-            var letter = nextLetter
-            for device in others {
-                let rawID = String(device.id.dropFirst("decklink:".count))
-                let channel = CameraChannel(
-                    camLabel: letter,
-                    backend: DeckLinkBackendAdapter(watchesDevices: false),
-                    deviceID: rawID, settings: settings, roll: roll)
-                channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-                channel.onError = { [weak self] message in self?.reportPipelineError(message) }
-                do {
-                    try channel.start()
-                    channels.append(channel)
-                } catch {
-                    lastError = "\(device.name): \(error.localizedDescription)"
-                }
-                letter = FieldStepper.stepLetter(letter, by: 1)
-            }
-            extraChannels = channels
-        }
-    }
-    private func appendChannelTake(_ take: Take) {
-        takes.append(take)
-        takes.sort { $0.recordedAt < $1.recordedAt }
-        exportTakeLog()
-        requestThumbnail(for: take)
     }
     func refreshDevices() {
         devices = backend.devices()
@@ -285,6 +82,15 @@ extension CaptureController {
         // await finishing the files in the background (without blocking the UI)
         Task { await pipeline.finishPendingWrites() }
     }
+    func restartCapture() {
+        if isCapturing {
+            stopCapture()
+        }
+        startCapture()
+    }
+    func toggleManualRecord() {
+        pipeline.toggleManualRecord()
+    }
     /// A blocking flush on app exit — so the file isn't truncated.
     /// Closes the ACTIVE take too (quitting mid-record used to leave a .mov
     /// without its moov atom), and waits on a detached task: a MainActor task
@@ -310,36 +116,13 @@ extension CaptureController {
         }
         _ = sem.wait(timeout: .now() + 15)
     }
-    func restartCapture() {
-        if isCapturing {
-            stopCapture()
-        }
-        startCapture()
-    }
-    func toggleManualRecord() {
-        pipeline.toggleManualRecord()
-    }
 }
 
 // MARK: - CaptureBackendDelegate (callbacks from capture threads — straight into the pipeline)
 
-extension CaptureController: CaptureBackendDelegate {
-    nonisolated func backend(_ backend: CaptureBackend, didDetectFormat format: CaptureFormat) {
-        pipeline.handleFormat(format)
-    }
-
-    nonisolated func backend(_ backend: CaptureBackend, didReceive frame: CapturedFrame) {
-        pipeline.handleFrame(frame)
-    }
-
-    nonisolated func backend(_ backend: CaptureBackend, didReceiveAudio sampleBuffer: CMSampleBuffer) {
-        pipeline.handleAudio(sampleBuffer)
-    }
-
-    nonisolated func backend(_ backend: CaptureBackend, signalPresent: Bool) {
-        pipeline.handleSignal(present: signalPresent)
-    }
-
+/// The four per-frame callbacks are the shared ones (see
+/// `PipelineBackendDelegate`); only the main camera acts on the device list.
+extension CaptureController: PipelineBackendDelegate {
     nonisolated func backendDeviceListChanged(_ backend: CaptureBackend) {
         Task { @MainActor in
             self.refreshDevices()

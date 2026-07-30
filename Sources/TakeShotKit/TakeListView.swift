@@ -134,13 +134,7 @@ private struct TakesSection: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                if viewMode == "grid" {
-                    Slider(value: $tileSize, in: TakeTileBadges.tileWidthRange)
-                        .frame(width: 70)
-                        .controlSize(.mini)
-                        .help(L("tile_size"))
-                }
-                ViewModePicker(mode: $viewMode)
+                PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }
             .padding(.horizontal, 12)
             .padding(.top, 4)

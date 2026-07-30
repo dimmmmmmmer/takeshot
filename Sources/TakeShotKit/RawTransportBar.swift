@@ -2,39 +2,24 @@ import CaptureCore
 import SwiftUI
 
 /// Transport for the RAW engine: play/pause, frame scrubber, loop.
+///
+/// A thin configuration of the controls in `TransportControls.swift`. What is
+/// only here is the frame-domain scrubber — this engine counts frames, not
+/// seconds — and the codec badge.
 struct RawTransportBar: View {
     @ObservedObject var model: RawPlayerModel
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
         HStack(spacing: 10) {
-            Button {
-                model.seek(to: model.currentFrame - Int(model.frameRate * 5))
-            } label: {
-                Image(systemName: "gobackward.5")
-            }
-            .buttonStyle(.plain)
+            TransportPlayGroup(
+                isPlaying: model.isPlaying,
+                glyph: .system(size: 15), glyphWidth: 18,
+                skipBack: { model.skip(seconds: -5) },
+                togglePlay: { model.togglePlay() },
+                skipForward: { model.skip(seconds: 5) })
 
-            Button {
-                model.togglePlay()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 15))
-                    .frame(width: 18)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.space, modifiers: [])
-
-            Button {
-                model.seek(to: model.currentFrame + Int(model.frameRate * 5))
-            } label: {
-                Image(systemName: "goforward.5")
-            }
-            .buttonStyle(.plain)
-
-            Text(model.timecodeText)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+            TransportTimeText(model.timecodeText)
 
             Slider(value: Binding(
                 get: { Double(model.currentFrame) },
@@ -47,44 +32,9 @@ struct RawTransportBar: View {
                                     / max(1, model.frameRate))
                 }
 
-            Text(model.endTimecodeText)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+            TransportTimeText(model.endTimecodeText)
 
-            Button {
-                model.toggleRangePoint(out: false)
-            } label: {
-                Image(systemName: TransportModel.inPointSymbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(model.inPoint != nil
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("loop_in_help"))
-
-            Button {
-                model.isLooping.toggle()
-            } label: {
-                Image(systemName: "repeat")
-                    .foregroundStyle(model.isLooping
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("playback_loop"))
-
-            Button {
-                model.toggleRangePoint(out: true)
-            } label: {
-                Image(systemName: TransportModel.outPointSymbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(model.outPoint != nil
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("loop_out_help"))
+            TransportRangeControls(engine: model)
 
             MarkerButton()
 
@@ -94,18 +44,8 @@ struct RawTransportBar: View {
                 .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
                 .foregroundStyle(.secondary)
 
-            Button {
-                controller.togglePlaybackFullscreen()
-            } label: {
-                Image(systemName: controller.isPlaybackFullscreen
-                      ? "arrow.down.right.and.arrow.up.left"
-                      : "arrow.up.left.and.arrow.down.right")
-            }
-            .buttonStyle(.plain)
-            .help(L("fullscreen_playback"))
+            TransportFullscreenButton()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial)
+        .transportBarChrome()
     }
 }

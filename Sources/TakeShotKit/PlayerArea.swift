@@ -70,29 +70,14 @@ struct PlayerArea: View {
                     controller.viewerMode == .playback
                     && controller.playbackURL != nil ? 52 : 10
                 if let error = controller.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .lineLimit(2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, transportInset)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    PlayerToast(text: error, tint: .orange,
+                                bottomInset: transportInset)
                 } else if let notice = controller.lastNotice {
-                    Text(notice)
-                        .font(.caption)
-                        // marker toasts carry the marker's own color; everything
-                        // else is the neutral confirmation green
-                        .foregroundStyle(controller.lastNoticeTint ?? .green)
-                        .lineLimit(2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, transportInset)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // marker toasts carry the marker's own color; everything
+                    // else is the neutral confirmation green
+                    PlayerToast(text: notice,
+                                tint: controller.lastNoticeTint ?? .green,
+                                bottomInset: transportInset)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: controller.lastError)
@@ -104,5 +89,30 @@ struct PlayerArea: View {
 
     static func shortFormat(_ format: CaptureFormat) -> String {
         playerShortFormat(format)
+    }
+}
+
+/// A toast over the bottom of the player.
+///
+/// The error and the notice are the same strip with a different tint, and they
+/// were written out twice — including the `bottomInset`, which is what keeps a
+/// toast from landing under the transport bar. A drifted copy of that number is
+/// the take-failed message hidden behind the play button.
+private struct PlayerToast: View {
+    let text: String
+    let tint: Color
+    let bottomInset: CGFloat
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(tint)
+            .lineLimit(2)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.6),
+                        in: RoundedRectangle(cornerRadius: 8))
+            .padding(.bottom, bottomInset)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
