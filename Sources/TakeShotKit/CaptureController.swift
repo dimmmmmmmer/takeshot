@@ -126,10 +126,18 @@ final class CaptureController: ObservableObject {
         didSet { pushCompare() }
     }
 
-    /// Verified offload of an ARBITRARY folder (camera cards, sound, etc.):
-    /// recursive copy with SHA-256 on both sides and a CSV manifest.
-    /// TakeShot's own takes don't need this — they aren't the originals.
+    /// One-line offload status for the takes panel ("Offload 41/128"); nil when
+    /// nothing is running. The detail lives in the sheet.
     @Published var offloadStatus: String?
+
+    // MARK: - DIT offload (see +Offload)
+
+    /// The offload sheet is up.
+    @Published var offloadSheetPresented = false
+    /// Source, destination list and the running offload itself. Owned here
+    /// rather than by the sheet: the run outlives any render of it, and the
+    /// takes panel reads its status line.
+    let offload = OffloadSheetModel()
 
     /// Hardware playout: mirrors the viewer to the DeckLink output chosen in
     /// settings. Rebuilt on device/format changes; routed by viewer mode.
@@ -358,6 +366,10 @@ final class CaptureController: ObservableObject {
         rebuildLUT()
         rebuildPlayout()
         startDiskWatch()
+        // The offload model reports back through the controller (status line,
+        // toast, sticky alarm), so it is wired for the controller's lifetime and
+        // not at the moment the sheet happens to open.
+        offload.attach(to: self)
     }
 
     // MARK: - multicam

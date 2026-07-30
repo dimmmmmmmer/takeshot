@@ -229,7 +229,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var safeTitlePercentEffective: Double {
         min(100, max(50, safeTitlePercent ?? 90))
     }
-
+    /// DIT offload: the destination folders of the last run, in order. The same
+    /// two or three SSDs come back every shooting day, and re-picking them
+    /// through a file panel per card is the part of the old flow that hurt.
+    public var offloadDestinationPaths: [String]?
+    /// Checksum for the offload: "xxh64" (nil — the same) or "sha256".
+    public var offloadHashAlgorithm: String?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy
