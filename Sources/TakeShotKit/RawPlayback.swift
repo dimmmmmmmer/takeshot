@@ -30,6 +30,9 @@ final class RawPlayerModel: ObservableObject {
 
     /// Scope data from decoded frames while playing (main queue).
     var onScopeData: ((ScopeData) -> Void)?
+    /// Told when the loop range moved, so the controller can file it for this clip
+    /// and persist it. Only fired for a real change.
+    var onRangeChanged: (() -> Void)?
     var scopesEnabled = false
 
     private let clip: RawClipSource
@@ -125,6 +128,7 @@ extension RawPlayerModel {
     /// Set/clear the in or out point at the playhead (same semantics as the
     /// AVPlayer transport: clicking near an existing point clears it).
     func toggleRangePoint(out: Bool) {
+        let before = (inFrame, outFrame)
         let now = currentFrame
         if out {
             if let existing = outFrame, abs(existing - now) < 2 {
@@ -141,6 +145,11 @@ extension RawPlayerModel {
                 if let outF = outFrame, outF <= now { outFrame = nil }
             }
         }
+        // This engine is thrown away and rebuilt for every clip, so its range is
+        // normally filed with the controller only on the way out. That is too late
+        // to survive a quit with the clip still open — hence a report on the spot.
+        guard (inFrame, outFrame) != before else { return }
+        onRangeChanged?()
     }
 
     func togglePlay() {

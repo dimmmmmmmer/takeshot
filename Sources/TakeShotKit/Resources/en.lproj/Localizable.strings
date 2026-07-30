@@ -357,3 +357,12 @@
 
 /* i18n layout pass */
 "playback_volume" = "Playback volume";
+
+/* takes panel: selection, multi-select, Trash (items 9/22/32) */
+"item_count_one" = "%d item";
+"item_count_few" = "%d items";
+"item_count_many" = "%d items";
+"trash_confirm" = "Move %@ to the Trash?";
+"trash_done" = "Moved %@ to the Trash";
+"trash_selection" = "Move %@ to Trash";
+"reveal_selection" = "Show %@ in Finder";

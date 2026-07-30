@@ -54,7 +54,7 @@ struct RawTransportBar: View {
             Button {
                 model.toggleRangePoint(out: false)
             } label: {
-                Image(systemName: "arrow.right.to.line.compact")
+                Image(systemName: TransportModel.inPointSymbol)
                     .font(.system(size: 11))
                     .foregroundStyle(model.inPoint != nil
                                      ? AnyShapeStyle(controller.accentColor)
@@ -77,7 +77,7 @@ struct RawTransportBar: View {
             Button {
                 model.toggleRangePoint(out: true)
             } label: {
-                Image(systemName: "arrow.left.to.line.compact")
+                Image(systemName: TransportModel.outPointSymbol)
                     .font(.system(size: 11))
                     .foregroundStyle(model.outPoint != nil
                                      ? AnyShapeStyle(controller.accentColor)

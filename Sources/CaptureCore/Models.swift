@@ -43,6 +43,25 @@ public enum TakeRating: String, Equatable, Sendable {
     case bad
 }
 
+/// The loop range marked on one clip, in seconds. Either end may be unset.
+///
+/// Lives here rather than beside the transport that owns it because the range is
+/// operator work that outlives the session: it goes to the `takeshot-ranges.csv`
+/// sidecar and comes back from it, and the exporter cannot see the app layer.
+public struct ClipRange: Equatable, Sendable {
+    public var inPoint: Double?
+    public var outPoint: Double?
+
+    public static let unset = ClipRange(inPoint: nil, outPoint: nil)
+
+    public var isEmpty: Bool { inPoint == nil && outPoint == nil }
+
+    public init(inPoint: Double? = nil, outPoint: Double? = nil) {
+        self.inPoint = inPoint
+        self.outPoint = outPoint
+    }
+}
+
 /// A take — one continuous camera recording segment, one file on disk.
 /// A flagged moment inside a take (hotkey during recording or review).
 public struct TakeMarker: Equatable, Sendable {

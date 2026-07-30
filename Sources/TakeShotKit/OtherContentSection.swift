@@ -17,7 +17,7 @@ struct OtherContentSection: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if viewMode == "grid" {
-                    Slider(value: $tileSize, in: 70...260)
+                    Slider(value: $tileSize, in: TakeTileBadges.tileWidthRange)
                         .frame(width: 70)
                         .controlSize(.mini)
                         .help(L("tile_size"))
@@ -38,25 +38,8 @@ struct OtherContentSection: View {
                 }
             } else {
                 List(controller.otherFiles, id: \.self) { url in
-                    HStack {
-                        Image(systemName: iconName(for: url))
-                            .foregroundStyle(.secondary)
-                        Text(url.lastPathComponent)
-                            .font(.callout)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        if let duration = controller.otherDurations[url] {
-                            Text(durationText(duration))
-                                .font(.caption)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .listRowBackground(Color.clear)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { controller.play(url: url) }
-                    .contextMenu { OtherContextMenu(url: url) }
+                    OtherRow(url: url)
+                        .listRowBackground(Color.clear)
                 }
                 .listStyle(.inset)
                 .scrollContentBackground(.hidden)
@@ -65,7 +48,35 @@ struct OtherContentSection: View {
     }
 }
 
-private struct OtherCell: View {
+/// One row in the Other content list.
+struct OtherRow: View {
+    @EnvironmentObject private var controller: CaptureController
+    let url: URL
+
+    var body: some View {
+        HStack {
+            Image(systemName: iconName(for: url))
+                .foregroundStyle(.secondary)
+            Text(url.lastPathComponent)
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+            if let duration = controller.otherDurations[url] {
+                Text(durationText(duration))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .panelItemClicks(url, in: controller) { controller.play(url: url) }
+        .contextMenu { OtherContextMenu(url: url) }
+        .panelSelectionOutline(controller.selectedItems.contains(url),
+                               tint: controller.accentColor)
+    }
+}
+
+struct OtherCell: View {
     @EnvironmentObject private var controller: CaptureController
     let url: URL
 
@@ -83,16 +94,17 @@ private struct OtherCell: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .aspectRatio(16 / 9, contentMode: .fit)
+            .aspectRatio(TakeTileBadges.aspect, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             Text(url.lastPathComponent)
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { controller.play(url: url) }
+        .panelItemClicks(url, in: controller) { controller.play(url: url) }
         .contextMenu { OtherContextMenu(url: url) }
+        .panelSelectionOutline(controller.selectedItems.contains(url),
+                               tint: controller.accentColor)
         .newItemHighlight(controller.recentlyAddedURL == url,
                           tint: controller.accentColor)
         .onAppear { controller.requestOtherThumbnail(for: url) }
@@ -108,21 +120,15 @@ private struct OtherContextMenu: View {
         if PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased()) {
             Button(L("pin_reference")) { controller.pinReference(imageURL: url) }
         }
-        Button(L("delete_item"), role: .destructive) {
-            controller.deleteOtherFile(url)
-        }
-        Button(L("show_in_finder")) {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        }
+        Divider()
+        PanelItemActions(url: url) { controller.deleteOtherFile(url) }
     }
 }
 
-private func isImage(_ url: URL) -> Bool {
-    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
-        .contains(url.pathExtension.lowercased())
-}
-
+/// The list is the scanner's own (`CaptureController.imageExtensions`) rather
+/// than a copy: a still whose extension the scan accepts but the icon table does
+/// not comes up looking like a video clip.
 private func iconName(for url: URL) -> String {
-    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
+    CaptureController.imageExtensions
         .contains(url.pathExtension.lowercased()) ? "photo" : "film"
 }

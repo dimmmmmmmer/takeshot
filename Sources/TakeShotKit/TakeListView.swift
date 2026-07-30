@@ -17,8 +17,42 @@ extension View {
 /// The boundary between sections is draggable (VSplitView).
 struct TakeListView: View {
     @EnvironmentObject private var controller: CaptureController
+    /// The panel takes keyboard focus so Delete reaches it, and gives it up to
+    /// anything else that wants it — the naming fields in the footer must keep
+    /// their own Delete key.
+    @FocusState private var focused: Bool
 
     var body: some View {
+        sections
+            .focusable()
+            .focused($focused)
+            // clicking a tile is the operator saying "I am working in the panel
+            // now"; Delete has to land here without a second click somewhere
+            .onChange(of: controller.selectedItems) { _, _ in focused = true }
+            .onDeleteCommand {
+                guard !controller.selectedInOrder.isEmpty else { return }
+                controller.trashPromptOpen = true
+            }
+            // .visible, not .automatic: the count IS the dialog — an operator
+            // has to see whether Delete is about to take one clip or fifty.
+            // Counted off `selectedInOrder`, which is also what `trashSelection`
+            // walks: between a file leaving the folder and the scan that prunes
+            // the selection, the raw set can name an item that is no longer
+            // there, and a dialog that promises three and moves two is worse
+            // than no dialog.
+            .confirmationDialog(
+                L("trash_confirm",
+                  localizedItemCount(controller.selectedInOrder.count)),
+                isPresented: $controller.trashPromptOpen,
+                titleVisibility: .visible) {
+                Button(L("delete_item"), role: .destructive) {
+                    controller.trashSelection()
+                }
+                Button(L("cancel"), role: .cancel) {}
+            }
+    }
+
+    @ViewBuilder private var sections: some View {
         if controller.otherFiles.isEmpty {
             TakesSection()
         } else {
@@ -97,7 +131,7 @@ private struct TakesSection: View {
                 }
                 Spacer()
                 if viewMode == "grid" {
-                    Slider(value: $tileSize, in: 70...260)
+                    Slider(value: $tileSize, in: TakeTileBadges.tileWidthRange)
                         .frame(width: 70)
                         .controlSize(.mini)
                         .help(L("tile_size"))
@@ -118,7 +152,7 @@ private struct TakesSection: View {
                 ScrollView {
                     LazyVGrid(columns: gridColumns(size: tileSize), spacing: 10) {
                         ForEach(controller.takes.reversed()) { take in
-                            TakeCell(take: take)
+                            TakeCell(take: take, tileWidth: tileSize)
                         }
                     }
                     .padding(10)
@@ -158,14 +192,14 @@ struct ViewModePicker: View {
     }
 }
 
-private struct TakeRow: View {
+struct TakeRow: View {
     @EnvironmentObject private var controller: CaptureController
     let take: Take
 
     var body: some View {
         HStack {
-            // double-tap lives on the info area only: a gesture on the whole
-            // row delays every tap on the buttons (double-tap disambiguation)
+            // clicks live on the info area only: a gesture on the whole row
+            // delays every tap on the buttons (double-tap disambiguation)
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(take.displayName)
@@ -189,20 +223,33 @@ private struct TakeRow: View {
                 }
                 Spacer(minLength: 8)
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { controller.play(url: take.url) }
+            .panelItemClicks(take.url, in: controller) {
+                controller.play(url: take.url)
+            }
             CommentButton(take: take)
             RatingToggle(take: take)
         }
         .contextMenu { TakeContextMenu(take: take) }
+        .panelSelectionOutline(controller.selectedItems.contains(take.url),
+                               tint: controller.accentColor)
         .newItemHighlight(controller.recentlyAddedURL == take.url,
                           tint: controller.accentColor)
     }
 }
 
-private struct TakeCell: View {
+/// One tile in the thumbnail grid. `tileWidth` is the slider's value, which is
+/// also the tile's exact width (see `gridColumns`) — the badge layout is chosen
+/// from it, so no size is guessed at render time.
+struct TakeCell: View {
     @EnvironmentObject private var controller: CaptureController
     let take: Take
+    let tileWidth: Double
+
+    /// Small tiles are not tall enough for both badges (see TakeTileBadges).
+    private var durationOnImage: Bool {
+        TakeTileBadges.bothFitOnImage(
+            thumbnailHeight: TakeTileBadges.thumbnailHeight(tileWidth: tileWidth))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -218,35 +265,37 @@ private struct TakeCell: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .aspectRatio(16 / 9, contentMode: .fit)
+            .aspectRatio(TakeTileBadges.aspect, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
             .onAppear { controller.requestThumbnail(for: take) }
-            .onTapGesture(count: 2) { controller.play(url: take.url) }
+            .panelItemClicks(take.url, in: controller) {
+                controller.play(url: take.url)
+            }
             .overlay(alignment: .topTrailing) {
-                HStack(spacing: 4) {
-                    CommentButton(take: take)
-                    RatingToggle(take: take)
-                }
-                .padding(4)
-                .background(.black.opacity(0.45), in: Capsule())
-                .padding(4)
+                TakeTileControls(take: take)
+                    .padding(TakeTileBadges.inset)
             }
             .overlay(alignment: .bottomLeading) {
-                Text(durationText(take.durationSeconds))
-                    .font(.caption2.monospacedDigit())
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
-                    .foregroundStyle(.white)
-                    .padding(4)
+                if durationOnImage {
+                    TakeDurationBadge(seconds: take.durationSeconds)
+                        .padding(TakeTileBadges.inset)
+                }
             }
-            Text(take.displayName)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(spacing: 4) {
+                Text(take.displayName)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if !durationOnImage {
+                    Spacer(minLength: 2)
+                    TakeDurationBadge(seconds: take.durationSeconds,
+                                      onImage: false)
+                }
+            }
         }
         .contextMenu { TakeContextMenu(take: take) }
+        .panelSelectionOutline(controller.selectedItems.contains(take.url),
+                               tint: controller.accentColor)
     }
 }
 
