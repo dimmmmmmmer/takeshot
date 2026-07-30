@@ -3,7 +3,8 @@ import Foundation
 
 /// One frame's worth of scope data: per-channel waveform density maps, RGB/luma
 /// histograms and a vectorscope density map. Computed on the CPU from a fixed
-/// sampling grid — cheap enough to run at ~8 Hz on the pipeline queue.
+/// sampling grid, on the scope queue — ~14 ms per 1080p frame, whatever the
+/// content, which is what makes a ~15 Hz update rate affordable.
 ///
 /// Colorimetry: gamma-encoded R'G'B' code values (the standard scope domain),
 /// BT.709 luma Y' = 0.2126 R' + 0.7152 G' + 0.0722 B', full-range chroma
@@ -59,17 +60,26 @@ public enum ScopeAnalyzer {
         return sequenceCounter
     }
 
-    public static func analyze(_ pixelBuffer: CVPixelBuffer) -> ScopeData? {
+    /// `region` is the part of the frame to analyze — the punched-in crop the
+    /// viewer is showing, or `.full` for the whole frame.
+    public static func analyze(_ pixelBuffer: CVPixelBuffer,
+                               region: ScopeRegion = .full) -> ScopeData? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
         switch CVPixelBufferGetPixelFormatType(pixelBuffer) {
         case kCVPixelFormatType_32BGRA:
-            return PackedPlane(pixelBuffer).flatMap { analyzed(BGRAReader(plane: $0)) }
+            return PackedPlane(pixelBuffer).flatMap {
+                analyzed(BGRAReader(plane: $0), region: region)
+            }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
-            return PackedPlane(pixelBuffer).flatMap { analyzed(TwoVUYReader(plane: $0)) }
+            return PackedPlane(pixelBuffer).flatMap {
+                analyzed(TwoVUYReader(plane: $0), region: region)
+            }
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: // '420v'
-            return BiPlanar420Reader(pixelBuffer).flatMap { analyzed($0) }
+            return BiPlanar420Reader(pixelBuffer).flatMap {
+                analyzed($0, region: region)
+            }
         default:
             return nil
         }
@@ -104,13 +114,20 @@ public enum ScopeAnalyzer {
 
     /// Walk the grid once, accumulating every sample. The three formats differ
     /// only in how a pixel is fetched, so this is the whole per-frame pass.
-    private static func analyzed<Reader: FrameReader>(_ reader: Reader) -> ScopeData? {
+    ///
+    /// The grid always has the same shape — only the window it is stretched
+    /// over changes with `region`, so a punched-in scope has exactly the same
+    /// trace density as a full-frame one.
+    private static func analyzed<Reader: FrameReader>(
+        _ reader: Reader, region: ScopeRegion) -> ScopeData? {
         guard reader.width > 1, reader.height > 0 else { return nil }
-        var acc = Accumulator()
+        let window = region.pixels(width: reader.width, height: reader.height)
+        let acc = Accumulator()
         for gy in 0..<gridRows {
-            let y = gy * reader.height / gridRows
+            let y = window.y + gy * window.height / gridRows
             for gx in 0..<gridCols {
-                let sample = reader.sample(x: gx * reader.width / gridCols, y: y)
+                let sample = reader.sample(
+                    x: window.x + gx * window.width / gridCols, y: y)
                 acc.add(col: gx, r: sample.r, g: sample.g, b: sample.b,
                         nativeChroma: sample.nativeChroma,
                         nativeLuma: sample.nativeLuma)

@@ -363,3 +363,7 @@
 
 /* i18n layout pass */
 "playback_volume" = "Громкость плейбека";
+
+/* scopes group: skin-tone line */
+"scope_skin_tone_short" = "Кожа";
+"scope_skin_tone" = "Линия телесных оттенков";

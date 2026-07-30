@@ -107,12 +107,23 @@ extension CapturePipeline {
     /// scopes: analyzed OFF the pipeline queue (content-dependent cost —
     /// noisy frames measured two orders slower than flat ones); if the
     /// previous pass is still running the frame is simply skipped
+    ///
+    /// The cadence is a target RATE, not a frame count: a pass costs ~14 ms at
+    /// 1080p now (it was 123 on noisy content), so a fixed "every third frame"
+    /// throttled the scopes to a quarter of what the analyzer can do at every
+    /// frame rate. `scopeBusy` remains the real regulator — latest-wins, and
+    /// expensive content simply lands fewer passes.
     private func analyzeScopes(of displayBuffer: CVPixelBuffer) {
-        guard scopesEnabled, frameIndex % 3 == 0, !scopeBusy else { return }
+        guard scopesEnabled, !scopeBusy else { return }
+        let stride = max(1, Int(((format?.frameRate ?? 25)
+                                 / Self.scopeUpdatesPerSecond).rounded()))
+        guard frameIndex - lastScopeFrame >= stride else { return }
+        lastScopeFrame = frameIndex
         scopeBusy = true
         let frame = displayBuffer // retained: the pool won't recycle it
+        let region = scopeRegion
         scopeQueue.async { [weak self] in
-            let data = ScopeAnalyzer.analyze(frame)
+            let data = ScopeAnalyzer.analyze(frame, region: region)
             guard let pipeline = self else { return }
             pipeline.queue.async { pipeline.scopeBusy = false }
             if let data {

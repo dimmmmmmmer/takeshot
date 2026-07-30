@@ -151,6 +151,9 @@ final class CaptureController: ObservableObject {
             pipeline.setViewAssist(assist)
             playbackTap.setViewAssist(assist)
             rawPlayer?.setViewAssist(assist)
+            // the scopes measure what the viewer SHOWS, so a punch-in or a pan
+            // moves the region they sample (see updateScopeRegion)
+            updateScopeRegion()
             if oldValue.desqueeze != assist.desqueeze {
                 settings.desqueezeFactor = assist.desqueeze == 1
                     ? nil : assist.desqueeze
@@ -186,15 +189,30 @@ final class CaptureController: ObservableObject {
     var cubeCache: (fileName: String, cube: CubeLUT)?
 
     /// Large audio-channel panel over the player.
-    @Published var showAudioPanel = false
+    ///
+    /// One overlay at a time (see `closeOtherPlayerOverlays`): two panels over
+    /// the same picture cover it completely, and the second one to open hid the
+    /// first one's controls.
+    @Published var showAudioPanel = false {
+        didSet {
+            if showAudioPanel { closeOtherPlayerOverlays(except: .audio) }
+        }
+    }
     /// Scopes overlay over the player (like the audio panel).
     @Published var showScopesOverlay = false {
-        didSet { updateScopesRunning() }
+        didSet {
+            if showScopesOverlay { closeOtherPlayerOverlays(except: .scopes) }
+            updateScopesRunning()
+        }
     }
     /// The separate scopes window is open.
     @Published var scopesWindowOpen = false {
         didSet { updateScopesRunning() }
     }
+    /// Move/resize observers on the scopes window (see +Windows). Held so a
+    /// window that is closed and reopened replaces them instead of stacking
+    /// another pair on the same window.
+    var scopesFrameObservers: [NSObjectProtocol] = []
     /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
     var playbackFullscreenWindow: NSWindow?

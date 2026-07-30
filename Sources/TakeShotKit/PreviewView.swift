@@ -86,6 +86,9 @@ struct PreviewView: View {
                         // rec и playback land on identical pixels by construction
                         ViewerSurface(controller: controller, source: surfaceSource)
                             .gesture(punchPanGesture)
+                            // a click on the picture closes a panel floating
+                            // over it; the pan drag above still works
+                            .dismissesPlayerOverlays(controller)
                         if controller.viewerMode == .record {
                             LiveStatusOverlay()
                         } else if controller.playbackURL == nil {

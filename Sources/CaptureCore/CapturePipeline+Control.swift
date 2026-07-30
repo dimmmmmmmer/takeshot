@@ -49,9 +49,27 @@ extension CapturePipeline {
             // analyze the current frame right away — the scopes window should
             // open with data, not "waiting for signal"
             if on, let buffer = self.currentPreviewBuffer(),
-               let scopeData = ScopeAnalyzer.analyze(buffer) {
+               let scopeData = ScopeAnalyzer.analyze(buffer,
+                                                    region: self.scopeRegion) {
                 DispatchQueue.main.async { self.onScopeData?(scopeData) }
             }
+        }
+    }
+
+    /// The part of the frame the scopes read: the crop the viewer displays
+    /// while punched in, `.full` otherwise. The operator judges the exposure of
+    /// what is on the glass, so the analysis follows the punch-in.
+    ///
+    /// The new region takes effect on the next frame rather than being analyzed
+    /// here: a pan drag calls this ~60 times a second and this runs on the
+    /// capture queue, which owns per-frame work and may not be handed a
+    /// content-dependent 14 ms pass. The live signal is never more than a frame
+    /// away anyway.
+    public func setScopeRegion(_ region: ScopeRegion) {
+        queue.async {
+            guard region != self.scopeRegion else { return }
+            self.scopeRegion = region
+            self.lastScopeFrame = 0 // analyze the next frame, don't wait out the stride
         }
     }
 

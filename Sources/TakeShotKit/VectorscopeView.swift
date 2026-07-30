@@ -3,12 +3,13 @@ import CoreGraphics
 import SwiftUI
 
 /// Vectorscope: chroma density colored by its own hue, rings at 25/50/75%,
-/// 75% primary/secondary targets and the skin-tone line.
+/// 75% primary/secondary targets and — when the operator wants it — the
+/// skin-tone line.
 struct VectorscopeView: View {
     let data: ScopeData
-    // rebuilding the colored map is a 65k-cell loop — cache it per frame so a
-    // window resize doesn't recompute it on every layout pass
-    @State private var cached: (sequence: Int, image: CGImage)?
+    /// The ~33° skin-tone reference line. On for faces, off for anything the
+    /// line would just cross (charts, bars, a graphic).
+    var skinToneLine = true
 
     /// Hue for every (Cb, Cr) cell — computed once. Saturation follows the
     /// radius, so near-neutral chroma reads near-white instead of screaming.
@@ -64,7 +65,7 @@ struct VectorscopeView: View {
             let side = min(geo.size.width, geo.size.height)
             let cx = geo.size.width / 2, cy = geo.size.height / 2
             ZStack {
-                if let image = cachedVector() {
+                if let image = ScopeImageCache.vector(from: data) {
                     Image(decorative: image, scale: 1)
                         .resizable()
                         .interpolation(.medium)
@@ -84,9 +85,12 @@ struct VectorscopeView: View {
                     p.addLine(to: CGPoint(x: cx + side / 2, y: cy))
                     p.move(to: CGPoint(x: cx, y: cy - side / 2))
                     p.addLine(to: CGPoint(x: cx, y: cy + side / 2))
-                    // skin-tone line (~33° up-left of the +Cr axis)
-                    p.move(to: CGPoint(x: cx, y: cy))
-                    p.addLine(to: CGPoint(x: cx - side * 0.26, y: cy - side * 0.40))
+                    if skinToneLine {
+                        // skin-tone line (~33° up-left of the +Cr axis)
+                        p.move(to: CGPoint(x: cx, y: cy))
+                        p.addLine(to: CGPoint(x: cx - side * 0.26,
+                                              y: cy - side * 0.40))
+                    }
                 }
                 .stroke(.white.opacity(0.22), lineWidth: 0.5)
                 ForEach(Self.targets) { target in
@@ -107,16 +111,10 @@ struct VectorscopeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func cachedVector() -> CGImage? {
-        if let cached, cached.sequence == data.sequence { return cached.image }
-        guard let image = coloredVector() else { return nil }
-        // @State mutation during body is deferred by SwiftUI; this is a cache
-        DispatchQueue.main.async { cached = (data.sequence, image) }
-        return image
-    }
-
-    /// Density map × hue LUT → RGBA image.
-    private func coloredVector() -> CGImage? {
+    /// Density map × hue LUT → RGBA image. Called once per analyzed frame by
+    /// `ScopeImageCache` — a resize, a slider tick or a re-render of anything
+    /// else in the panel reuses the image instead of walking 65 k cells again.
+    static func coloredVector(_ data: ScopeData) -> CGImage? {
         let size = ScopeData.vectorSize
         var rgba = [UInt8](repeating: 0, count: size * size * 4)
         let lut = Self.hueLUT

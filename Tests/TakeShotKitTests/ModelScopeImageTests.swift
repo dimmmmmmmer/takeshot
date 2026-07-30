@@ -46,6 +46,26 @@ struct ModelScopeImageTests {
         #expect(rgbaImage(from: bytes(expected * 4 - 1)) == nil)
     }
 
+    /// The panel's views are rebuilt by any state change around them (a
+    /// brightness slider, a resize, a hover), and building these images means
+    /// copying every density map and re-colouring 65 k vectorscope cells. The
+    /// cache is keyed on the analyzer's frame counter: same frame, same image
+    /// object; new frame, new one.
+    @MainActor
+    @Test func theImageCacheIsReusedWithinAFrameAndDroppedAfterIt() throws {
+        let frame = MediaFixtures.pixelBuffer(level: 128)
+        let first = try #require(ScopeAnalyzer.analyze(frame))
+        let again = try #require(ScopeAnalyzer.analyze(frame))
+        #expect(first.sequence != again.sequence, "the counter did not advance")
+
+        let cached = try #require(ScopeImageCache.image(.red, from: first))
+        #expect(ScopeImageCache.image(.red, from: first) === cached)
+        // a different map of the same frame is its own image
+        #expect(ScopeImageCache.image(.green, from: first) !== cached)
+        // …and the next analyzed frame invalidates all of it
+        #expect(ScopeImageCache.image(.red, from: again) !== cached)
+    }
+
     /// The vectorscope is square and smaller than the waveform, so the explicit
     /// size arguments have to be honoured rather than the defaults reused.
     @Test func explicitGeometryOverridesTheWaveformDefaults() throws {

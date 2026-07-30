@@ -357,3 +357,7 @@
 
 /* i18n layout pass */
 "playback_volume" = "Playback volume";
+
+/* scopes group: skin-tone line */
+"scope_skin_tone_short" = "Skin";
+"scope_skin_tone" = "Skin-tone reference line";
