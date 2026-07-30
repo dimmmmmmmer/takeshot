@@ -105,7 +105,7 @@ private struct OtherContextMenu: View {
 
     var body: some View {
         Button(L("play")) { controller.play(url: url) }
-        if PlaybackContent.imageExtensions.contains(url.pathExtension.lowercased()) {
+        if CaptureController.imageExtensions.contains(url.pathExtension.lowercased()) {
             Button(L("pin_reference")) { controller.pinReference(imageURL: url) }
         }
         Button(L("delete_item"), role: .destructive) {
@@ -117,12 +117,10 @@ private struct OtherContextMenu: View {
     }
 }
 
-private func isImage(_ url: URL) -> Bool {
-    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
-        .contains(url.pathExtension.lowercased())
-}
-
+// The list is the scanner's own (`CaptureController.imageExtensions`) rather
+// than a copy: a copy drifts, and a still on the drifted side gets listed by
+// the panel while the player treats it as video.
 private func iconName(for url: URL) -> String {
-    ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
+    CaptureController.imageExtensions
         .contains(url.pathExtension.lowercased()) ? "photo" : "film"
 }

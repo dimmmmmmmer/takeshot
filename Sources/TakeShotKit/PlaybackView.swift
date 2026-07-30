@@ -6,9 +6,6 @@ import SwiftUI
 struct PlaybackContent: View {
     @EnvironmentObject private var controller: CaptureController
 
-    static let imageExtensions: Set<String> =
-        ["jpg", "jpeg", "png", "heic", "tif", "tiff", "dng", "arw", "cr2", "webp"]
-
     var body: some View {
         if let url = controller.playbackURL {
             let ext = url.pathExtension.lowercased()

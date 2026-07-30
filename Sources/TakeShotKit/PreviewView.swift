@@ -32,11 +32,14 @@ struct PreviewView: View {
     }
 
     /// Whether to show the AVPlayer transport (video, not photo/RAW).
+    /// The still-image list is the folder scanner's own — a second copy here
+    /// would eventually drift, and a still on the drifted side gets a video
+    /// transport drawn over a photo.
     private var showsTransport: Bool {
         guard controller.viewerMode == .playback, let url = controller.playbackURL
         else { return false }
         let ext = url.pathExtension.lowercased()
-        return !PlaybackContent.imageExtensions.contains(ext)
+        return !CaptureController.imageExtensions.contains(ext)
             && !CaptureController.rawExtensions.contains(ext)
             && controller.rawPlayer?.url != url
     }
