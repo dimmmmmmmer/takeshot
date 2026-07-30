@@ -81,7 +81,7 @@ private struct FileCommands: View {
 
         Divider()
 
-        Button(L("offload_menu")) { controller.offloadFolder() }
+        Button(L("offload_menu")) { controller.showOffloadSheet() }
     }
 }
 

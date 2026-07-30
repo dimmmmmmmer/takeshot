@@ -32,8 +32,11 @@ struct TakesPanelUtilityStrip: View {
 
             Button {
                 // showOffloadSheet() does not exist in this worktree; the folder
-                // offload is reached through its own two dialogs (see +Offload).
-                controller.offloadFolder()
+                // the multi-destination offload sheet (see +Offload); this
+                // strip is offload's only home — the export menu next to the
+                // takes dropped its copy because that menu is disabled while
+                // there are no takes, and a card offload precedes any take
+                controller.showOffloadSheet()
             } label: {
                 Image(systemName: "externaldrive.badge.plus")
                     .font(.system(size: 14))

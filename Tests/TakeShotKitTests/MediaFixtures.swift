@@ -33,21 +33,27 @@ enum MediaFixtures {
     static let startTimecode = Timecode(hours: 10, minutes: 0, seconds: 0,
                                         frames: 0, fps: 25)
 
+    /// The signal every fixture clip pretends to be unless a test says
+    /// otherwise. Size/rate travel as ONE CaptureFormat — four loose numbers
+    /// here were four parameters every caller had to not-care about.
+    static func format(width: Int = 320, height: Int = 180,
+                       frameRate: Double = 25,
+                       timecodeFPS: Int = 25) -> CaptureFormat {
+        CaptureFormat(width: width, height: height, frameRate: frameRate,
+                      timecodeFPS: timecodeFPS, name: "\(height)p")
+    }
+
     /// A real .mov: video track, timecode track, and an audio track when
     /// `audioChannels > 0`. `bakedLUTName` writes the com.takeshot.lut tag the
     /// player uses to decide the look is already in the file.
     @discardableResult
     static func writeClip(at url: URL,
-                          width: Int = 320, height: Int = 180,
-                          frameRate: Double = 25, timecodeFPS: Int = 25,
+                          format: CaptureFormat = MediaFixtures.format(),
                           frames: Int = 25,
                           startTimecode: Timecode? = MediaFixtures.startTimecode,
                           audioChannels: Int = 0,
                           bakedLUTName: String? = nil,
                           level: UInt8 = 128) async throws -> URL {
-        let format = CaptureFormat(width: width, height: height,
-                                   frameRate: frameRate,
-                                   timecodeFPS: timecodeFPS, name: "\(height)p")
         var metadata: [String: String] = [:]
         if let bakedLUTName { metadata[TakeWriter.lutKey] = bakedLUTName }
         let writer = try TakeWriter(url: url, format: format,
@@ -55,11 +61,12 @@ enum MediaFixtures {
                                    startTimecode: startTimecode,
                                    markerMetadata: metadata,
                                    audioChannelCount: audioChannels)
-        let picture = pixelBuffer(level: level, width: width, height: height)
+        let picture = pixelBuffer(level: level, width: format.width,
+                                  height: format.height)
         var audioCache: CMAudioFormatDescription?
         for frame in 0..<frames {
             let pts = CMTime(value: CMTimeValue(frame * 1000),
-                             timescale: CMTimeScale(frameRate * 1000))
+                             timescale: CMTimeScale(format.frameRate * 1000))
             try await appendWhenReady(picture, pts: pts, to: writer)
             guard audioChannels > 0 else { continue }
             appendSilence(channels: audioChannels, frame: frame,

@@ -50,3 +50,13 @@ extension CaptureController {
         settings.cameraLabel = FieldStepper.stepLetter(settings.cameraLabel, by: delta)
     }
 }
+
+extension CaptureController {
+    /// The next clip number — after the max in the current roll. Lives with
+    /// the naming logic: the clip number is a naming input, the library scan
+    /// merely triggers the recount.
+    func continueClipNumbering() {
+        let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
+        nextTakeNumber = maxClip + 1
+    }
+}

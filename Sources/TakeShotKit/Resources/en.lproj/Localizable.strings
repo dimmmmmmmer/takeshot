@@ -352,7 +352,6 @@
 "offload_scanning" = "Scanning...";
 "offload_progress" = "Offload %d/%d";
 "offload_done" = "Offload verified: %d files";
-"offload_failed" = "Offload: %d file(s) FAILED (%@)";
 "close" = "Close";
 
 /* i18n layout pass */

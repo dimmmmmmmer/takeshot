@@ -235,7 +235,7 @@ import Testing
     /// opening the sheet until the footer reorg lands.
     @Test func theLegacyMenuEntryOpensTheSheet() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.offloadFolder()
+            controller.showOffloadSheet()
 
             #expect(controller.offloadSheetPresented)
         }

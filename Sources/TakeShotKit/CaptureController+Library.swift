@@ -340,11 +340,6 @@ extension CaptureController {
         otherThumbnails = otherThumbnails.filter { current.contains($0.key) }
         otherDurations = otherDurations.filter { current.contains($0.key) }
     }
-    /// The next clip number — after the max in the current roll.
-    func continueClipNumbering() {
-        let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
-        nextTakeNumber = maxClip + 1
-    }
     /// What one entry in the record folder turned out to be.
     private enum ScanEntry {
         case clip          // playable, list it

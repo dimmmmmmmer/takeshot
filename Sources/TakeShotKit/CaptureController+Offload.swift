@@ -24,13 +24,6 @@ extension CaptureController {
         offloadSheetPresented = true
     }
 
-    /// The takes panel's export menu still calls this name; the footer reorg
-    /// moves to `showOffloadSheet`. Kept as a forwarder so neither has to land
-    /// at the same moment as the other.
-    func offloadFolder() {
-        showOffloadSheet()
-    }
-
     /// What goes into the MHL manifest's `creatorinfo`. `Bundle.main` is the app
     /// bundle in the app and the test runner in the suite — hence a word rather
     /// than an invented version number as the fallback.

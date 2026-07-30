@@ -113,10 +113,11 @@ private struct TakesSection: View {
                         Button(L("export_report_csv")) {
                             controller.exportShiftReport(pdf: false)
                         }
-                        Divider()
-                        Button(L("offload_menu")) {
-                            controller.offloadFolder()
-                        }
+                        // Offload is NOT here: it copies an arbitrary card and
+                        // has nothing to do with takes, so a menu disabled by
+                        // "no takes yet" made card offload unreachable exactly
+                        // when it is most needed — before anything was shot.
+                        // Its home is the utility strip below Other content.
                     } label: {
                         Color.clear
                     }

@@ -358,7 +358,6 @@
 "offload_scanning" = "Сканирую...";
 "offload_progress" = "Офлоад %d/%d";
 "offload_done" = "Офлоад сверен: %d файлов";
-"offload_failed" = "Офлоад: %d файл(ов) с ОШИБКОЙ (%@)";
 "close" = "Закрыть";
 
 /* i18n layout pass */

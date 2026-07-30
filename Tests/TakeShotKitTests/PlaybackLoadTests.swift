@@ -49,14 +49,9 @@ import Testing
     /// The file's start timecode is the anchor every playback readout and every
     /// playback marker is measured from. The media is fine — `TimecodeReader`
     /// reads the very same track — so this is purely about the controller
-    /// getting it out of the file.
-    ///
-    /// Known issue: `firstTimecodeSample` in `CaptureController+Playback` takes
-    /// the first sample buffer of the timecode track and gives up when it has no
-    /// data. The first buffer of a tc32 track IS an empty marker (proven below),
-    /// so the anchor is never set and playback counts from 00:00:00:00 instead
-    /// of the camera's timecode. `TimecodeReader.startTimecode(of:)` in
-    /// CaptureCore is the same read, done correctly.
+    /// getting it out of the file. Regression guard: `firstTimecodeSample` used
+    /// to give up on the tc32 track's first sample, which IS an empty marker,
+    /// leaving every playback counting from 00:00:00:00.
     @Test func theClipsOwnStartTimecodeBecomesThePlaybackAnchor() async throws {
         let media = try MediaFixtures.makeDirectory("playback-anchor")
         defer { try? FileManager.default.removeItem(at: media) }
@@ -96,7 +91,9 @@ import Testing
                                fps: 30, isDropFrame: true)
         let clip = try await MediaFixtures.writeClip(
             at: media.appendingPathComponent("df.mov"),
-            frameRate: 30_000.0 / 1001.0, timecodeFPS: 30, frames: 30,
+            format: MediaFixtures.format(frameRate: 30_000.0 / 1001.0,
+                                         timecodeFPS: 30),
+            frames: 30,
             startTimecode: startTC)
 
         try await ControllerHarness.run { controller, _ in
