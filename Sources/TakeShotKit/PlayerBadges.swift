@@ -78,8 +78,11 @@ struct PlayerTopBadgesModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onContinuousHover { phase in hoverChanged(phase) }
-            .overlay { framelines }
-            .overlay(alignment: .bottom) { assistLegend }
+            // punch-in pan/zoom lives on this mount because it is the ONE the
+            // main player and both fullscreen windows share (see AssistZoom)
+            .punchInZoom()
+            .overlay { AssistFramelines() }
+            .overlay { AssistLegendOverlay(fullscreen: autoHide) }
             .overlay(alignment: .bottomLeading) { scopesOverlay }
             .overlay(alignment: .top) { topChrome }
     }
@@ -128,28 +131,6 @@ struct PlayerTopBadgesModifier: ViewModifier {
             withAnimation(.easeOut(duration: 0.15)) {
                 topVisible = false
             }
-        }
-    }
-
-    @ViewBuilder private var framelines: some View {
-        if controller.settings.framelineRatio != nil
-            || controller.settings.safeAreasOn == true {
-            Color.clear
-                .aspectRatio(controller.displayAspect, contentMode: .fit)
-                .overlay {
-                    FramelinesOverlay(
-                        ratio: controller.settings.framelineRatio,
-                        safeAreas: controller.settings.safeAreasOn == true)
-                }
-                .allowsHitTesting(false)
-        }
-    }
-
-    @ViewBuilder private var assistLegend: some View {
-        if controller.assist.colorTool != .off {
-            AssistLegend(tool: controller.assist.colorTool)
-                .padding(.bottom, 56)
-                .allowsHitTesting(false)
         }
     }
 

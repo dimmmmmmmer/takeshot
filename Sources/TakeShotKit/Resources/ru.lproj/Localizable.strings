@@ -328,12 +328,12 @@
 "assist_tool" = "Контроль экспозиции";
 "assist_off" = "Выкл";
 "assist_false_color" = "False color";
-"assist_zebra" = "Зебра (95%)";
+"assist_zebra" = "Зебра";
 "assist_peaking" = "Focus peaking";
 "framelines" = "Framelines";
 "safe_areas" = "Безопасные зоны";
 "desqueeze" = "Десквиз";
-"punch_in" = "Punch-in 2x";
+"punch_in" = "Punch-in";
 "hotkey_punch_in" = "Punch-in зум";
 
 "loop_in_help" = "Поставить/снять точку входа лупа";
@@ -349,7 +349,7 @@
 "compare_b_live" = "vs Live";
 "compare_b_help" = "Вторая сторона сравнения: живой сигнал или другой тейк (синхронный транспорт)";
 
-"punch_pan_hint" = "Перетаскивай изображение для панорамирования";
+"punch_pan_hint" = "Перетаскивание или прокрутка — сдвиг, щипок — масштаб";
 "offload_menu" = "Проверяемая копия папки...";
 "offload_pick_source" = "Папка для копирования (карта камеры, звук и т.п.)";
 "offload_source_prompt" = "Копировать это";
@@ -363,3 +363,16 @@
 
 /* i18n layout pass */
 "playback_volume" = "Громкость плейбека";
+
+/* assist tools + zoom (legend size/corner, safe-area margins) */
+"legend_size" = "Размер легенды";
+"legend_size_s" = "Маленькая";
+"legend_size_m" = "Средняя";
+"legend_size_l" = "Большая";
+"legend_corner" = "Угол легенды";
+"corner_top_left" = "Сверху слева";
+"corner_top_right" = "Сверху справа";
+"corner_bottom_left" = "Снизу слева";
+"corner_bottom_right" = "Снизу справа";
+"safe_action" = "Зона действия";
+"safe_title" = "Зона титров";

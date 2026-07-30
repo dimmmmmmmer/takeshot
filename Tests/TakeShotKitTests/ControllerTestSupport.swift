@@ -102,6 +102,7 @@ enum ControllerHarness {
             // through the next one.
             controller.volumePersistTask?.cancel()
             controller.lutPersistTask?.cancel()
+            controller.assistPersistTask?.cancel()
             // the watcher re-creates the record folder when it sees it vanish,
             // so it has to go before the folder does
             controller.folderWatcher?.cancel()

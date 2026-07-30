@@ -151,12 +151,23 @@ final class CaptureController: ObservableObject {
             pipeline.setViewAssist(assist)
             playbackTap.setViewAssist(assist)
             rawPlayer?.setViewAssist(assist)
+            // a write from anywhere else supersedes a draft the debounce has not
+            // folded in yet: the pending timer must not put the old slider value
+            // back over the change that just arrived
+            assistPersistTask?.cancel()
+            assistPersistTask = nil
+            assistLive.settle(assist)
             if oldValue.desqueeze != assist.desqueeze {
                 settings.desqueezeFactor = assist.desqueeze == 1
                     ? nil : assist.desqueeze
             }
         }
     }
+    /// The aids as the preview surfaces are showing them right now, sliders and
+    /// zoom gestures included (see `applyAssistPreview` in +Assist).
+    let assistLive = AssistLiveState()
+    /// Debounced fold of a dragged aid value into `assist`.
+    var assistPersistTask: Task<Void, Never>?
 
     /// A reference frame is pinned for live compare (rec mode wipe/blend).
     @Published var referencePinned = false

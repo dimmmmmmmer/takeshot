@@ -29,11 +29,17 @@ extension CaptureController {
         case diagonal    // 45°
     }
 
+    /// Hotkey punch-in: straight to 2x and back off. Reads the level the pinch
+    /// gesture may have left on screen (see +Assist), so the key never toggles
+    /// off a magnification it cannot see.
     func togglePunchIn() {
-        assist.punchIn = assist.punchIn > 1 ? 1 : 2
-        if assist.punchIn == 1 {
-            assist.panX = 0
-            assist.panY = 0
+        let magnified = liveAssist.punchIn > 1
+        setAssist {
+            $0.setPunchIn(magnified ? 1 : 2)
+            if magnified {
+                $0.panX = 0
+                $0.panY = 0
+            }
         }
     }
     /// Pin the current frame (live preview or the paused player frame).
