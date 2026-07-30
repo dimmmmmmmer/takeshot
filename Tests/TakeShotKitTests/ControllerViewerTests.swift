@@ -63,6 +63,37 @@ import Testing
         }
     }
 
+    /// The rec/playback key drives the same property the segmented switch over
+    /// the player is bound to, and it has to work in BOTH directions — a toggle
+    /// that only goes one way strands the operator in playback with the camera
+    /// rolling, which is the one place they cannot afford to be.
+    @Test func theViewerModeKeySwitchesBothWays() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(controller.viewerMode == .record)
+
+            controller.toggleViewerMode()
+            #expect(controller.viewerMode == .playback)
+
+            controller.toggleViewerMode()
+            #expect(controller.viewerMode == .record)
+        }
+    }
+
+    /// Unguarded on purpose, exactly like the switch it stands in for: an empty
+    /// player is a state the viewer draws, and refusing the key with nothing
+    /// loaded would leave the operator pressing it at a picture that never
+    /// changes. What follows the switch is the routing its `didSet` does.
+    @Test func theViewerModeKeyWorksWithNoClipLoaded() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(controller.playbackURL == nil)
+
+            controller.toggleViewerMode()
+
+            #expect(controller.viewerMode == .playback)
+            #expect(!controller.isReviewingClip) // nothing to review, and it says so
+        }
+    }
+
     @Test func theScopesFlagFollowsEitherSurface() async throws {
         try await ControllerHarness.run { controller, _ in
             #expect(!controller.showScopes)

@@ -221,6 +221,7 @@ private struct ViewCommands: View {
         Toggle(L("menu_scopes_overlay"), isOn: Binding(
             get: { controller.showScopesOverlay },
             set: { controller.showScopesOverlay = $0 }))
+            .keyboardShortcut(hotkeys.combo(for: .toggleScopesOverlay).menuShortcut)
         Button(L("menu_scopes_window")) {
             openWindow(id: "scopes")
             // the overlay and the window show the same scopes; two at once is
@@ -230,7 +231,7 @@ private struct ViewCommands: View {
 
         Divider()
 
-        Menu(L("menu_lut")) { LUTCommands(controller: controller) }
+        Menu(L("menu_lut")) { LUTCommands(controller: controller, hotkeys: hotkeys) }
         Menu(L("menu_assists")) { AssistCommands(controller: controller) }
 
         Divider()
@@ -247,6 +248,7 @@ private struct ViewCommands: View {
 /// The LUT list from the badge popover, as a menu.
 private struct LUTCommands: View {
     @ObservedObject var controller: CaptureController
+    @ObservedObject var hotkeys: HotkeyManager
 
     var body: some View {
         Picker(L("menu_lut"), selection: Binding(
@@ -264,6 +266,7 @@ private struct LUTCommands: View {
         Toggle(L("lut_preview"), isOn: Binding(
             get: { controller.lutPreviewOn },
             set: { controller.lutPreviewOn = $0 }))
+            .keyboardShortcut(hotkeys.combo(for: .toggleLUTPreview).menuShortcut)
             .disabled(controller.settings.lutFileName == nil)
         Toggle(L("lut_record"), isOn: Binding(
             get: { controller.lutRecordOn },

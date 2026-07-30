@@ -137,6 +137,35 @@ struct ModelHotkeyTests {
         }
     }
 
+    /// The bindings the app hands AppKit as key equivalents are not all in
+    /// `HotkeyAction`: Settings, the folder, Help, the reveal item and the
+    /// transport's Space/Esc are fixed shortcuts on their own views. A default
+    /// that lands on one of those is a key the operator presses expecting one
+    /// thing and gets the other, and no test over `allCases` alone would see it.
+    @Test func noDefaultCollidesWithAFixedShortcut() {
+        let command = NSEvent.ModifierFlags.command.rawValue
+        let commandShift = NSEvent.ModifierFlags([.command, .shift]).rawValue
+        // key + modifiers only: what AppKit matches a key equivalent on
+        let fixed: [(String, UInt)] = [
+            (",", command),          // Settings (AppCommands)
+            ("o", commandShift),     // open the record folder (AppCommands)
+            ("?", command),          // Help (AppCommands)
+            ("return", command),     // rename a take (TakeRowControls)
+            ("space", 0),            // play/pause (TransportBar, RawTransportBar)
+            ("escape", 0),           // close an overlay (AudioChannelPanel)
+        ]
+        for action in HotkeyAction.allCases {
+            let combo = action.defaultCombo
+            for (key, modifiers) in fixed
+            where combo.key == key && combo.modifiers == modifiers {
+                Issue.record("""
+                    \(action) defaults to \(combo.display), which is already a \
+                    fixed shortcut
+                    """)
+            }
+        }
+    }
+
     /// Every action needs a label in the Settings list; a missing string shows
     /// the raw key to the operator.
     @Test func everyActionHasATitleInBothLanguages() throws {
@@ -161,7 +190,32 @@ struct ModelHotkeyTests {
         #expect(Set(HotkeyAction.allCases.map(\.rawValue)) == [
             "toggleRecord", "circleLastTake", "badTakeLast", "fullscreen",
             "grabFrame", "instantReplay", "addMarker", "removeMarker", "punchIn",
+            "toggleScopesOverlay", "toggleLUTPreview", "toggleMonitorMute",
+            "toggleMonitorDim", "toggleViewerMode", "toggleAudioChannelBank",
         ])
+    }
+
+    /// The viewer and monitoring toggles are one family on ⌃, and two of them
+    /// (the scopes overlay, the preview LUT) sit on menu items — a bare letter
+    /// there would show no shortcut at all in the menu bar.
+    @Test func theViewerAndMonitoringTogglesAreOneControlFamily() {
+        let control = NSEvent.ModifierFlags.control.rawValue
+        let expected: [HotkeyAction: String] = [
+            .toggleScopesOverlay: "s",
+            .toggleLUTPreview: "l",
+            .toggleMonitorMute: "a",
+            .toggleMonitorDim: "d",
+            .toggleViewerMode: "v",
+            .toggleAudioChannelBank: "i",
+        ]
+        for (action, key) in expected {
+            let combo = action.defaultCombo
+            #expect(combo.key == key, "\(action) defaults to \(combo.display)")
+            #expect(combo.modifiers == control,
+                    "\(action) is not on ⌃: \(combo.display)")
+            #expect(combo.keyCode != nil,
+                    "\(action) has no physical key, so a Cyrillic layout loses it")
+        }
     }
 }
 
@@ -208,6 +262,32 @@ struct ModelHotkeyStorageTests {
             // the untouched actions are still on their defaults
             #expect(reloaded.combo(for: .grabFrame)
                     == HotkeyAction.grabFrame.defaultCombo)
+        }
+    }
+
+    /// Every action in the Settings list is remappable, not just the ones a
+    /// test happened to name: the list is built from `allCases`, so an action
+    /// whose binding did not survive the round trip would show the operator a
+    /// combo the app no longer answers to.
+    @Test func everyActionCanBeReboundAndComesBack() throws {
+        try withSuite { defaults in
+            // ⌥ + a key nothing else uses, one per action: distinct combos, so a
+            // binding landing on the wrong action fails here rather than merging
+            // invisibly into the right answer
+            let option = NSEvent.ModifierFlags.option.rawValue
+            let custom = Dictionary(uniqueKeysWithValues:
+                HotkeyAction.allCases.enumerated().map { index, action in
+                    (action, KeyCombo(key: "\(index % 10)", modifiers: option,
+                                      keyCode: UInt16(100 + index)))
+                })
+            let manager = HotkeyManager(defaults: defaults)
+            for (action, combo) in custom { manager.set(combo, for: action) }
+
+            let reloaded = HotkeyManager(defaults: defaults)
+            for action in HotkeyAction.allCases {
+                #expect(reloaded.combo(for: action) == custom[action],
+                        "\(action.rawValue) did not survive the round trip")
+            }
         }
     }
 

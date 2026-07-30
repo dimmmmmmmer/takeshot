@@ -442,3 +442,10 @@
 "reveal_selection" = "Show %@ in Finder";
 /* player chrome, markers, windows, focus (owner items 10, 23, 24, 24b, 26, 28) */
 "marker_new_color_help" = "Color for new markers — click to cycle";
+/* hotkeys for the viewer and monitoring toggles (owner item 49) */
+"hotkey_scopes_overlay" = "Scopes overlay";
+"hotkey_lut_preview" = "Preview LUT on/off";
+"hotkey_monitor_mute" = "Mute monitoring";
+"hotkey_monitor_dim" = "DIM monitoring (half level)";
+"hotkey_viewer_mode" = "Switch record / playback";
+"hotkey_audio_bank" = "Audio: mix only (1-2) / all channels";

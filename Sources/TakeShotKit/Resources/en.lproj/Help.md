@@ -152,6 +152,13 @@ Every binding below can be changed in Settings → Hotkeys.
 - `⇧M` — remove the marker under the playhead
 - `F` — fullscreen player
 - `Z` — punch-in
+- `⌃S` — scopes overlay
+- `⌃L` — preview LUT on/off (with a LUT selected)
+- `⌃A` — mute/unmute monitoring
+- `⌃D` — DIM: monitoring at half level
+- `⌃V` — switch record/playback
+- `⌃I` — record the mix on 1-2 only, or every selected channel (not while a
+  take is recording)
 
 Menu items carry the shortcut only when the binding uses a modifier: a bare
 letter in a menu would fire while you are typing in the naming fields.

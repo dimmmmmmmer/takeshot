@@ -448,3 +448,10 @@
 "reveal_selection" = "Показать %@ в Finder";
 /* player chrome, markers, windows, focus (owner items 10, 23, 24, 24b, 26, 28) */
 "marker_new_color_help" = "Цвет новых маркеров — нажмите, чтобы сменить";
+/* hotkeys for the viewer and monitoring toggles (owner item 49) */
+"hotkey_scopes_overlay" = "Скопы поверх картинки";
+"hotkey_lut_preview" = "LUT на превью вкл/выкл";
+"hotkey_monitor_mute" = "Звук мониторинга вкл/выкл";
+"hotkey_monitor_dim" = "DIM мониторинга (вдвое тише)";
+"hotkey_viewer_mode" = "Переключить запись / плейбек";
+"hotkey_audio_bank" = "Звук: только микс (1-2) / все каналы";

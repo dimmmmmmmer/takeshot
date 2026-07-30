@@ -61,6 +61,16 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case addMarker
     case removeMarker
     case punchIn
+    // The viewer and monitoring toggles. Every one of them already had a
+    // button or a menu item; what they did not have was a key, and each is
+    // something the operator reaches for with one hand while looking at the
+    // picture rather than at the window.
+    case toggleScopesOverlay
+    case toggleLUTPreview
+    case toggleMonitorMute
+    case toggleMonitorDim
+    case toggleViewerMode
+    case toggleAudioChannelBank
 
     var id: String { rawValue }
 
@@ -75,6 +85,12 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .addMarker: return "hotkey_marker"
         case .removeMarker: return "hotkey_marker_delete"
         case .punchIn: return "hotkey_punch_in"
+        case .toggleScopesOverlay: return "hotkey_scopes_overlay"
+        case .toggleLUTPreview: return "hotkey_lut_preview"
+        case .toggleMonitorMute: return "hotkey_monitor_mute"
+        case .toggleMonitorDim: return "hotkey_monitor_dim"
+        case .toggleViewerMode: return "hotkey_viewer_mode"
+        case .toggleAudioChannelBank: return "hotkey_audio_bank"
         }
     }
 
@@ -109,6 +125,47 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .punchIn:
             // Z — 2x center magnification (focus check)
             return KeyCombo(key: "z", modifiers: 0, keyCode: 6)
+
+        // The viewer and monitoring toggles are one family on ⌃ + a mnemonic
+        // letter, for three reasons that point the same way: ⌘ + letter is
+        // largely spoken for (AppKit keeps ⌘W/⌘M/⌘H/⌘Q, Edit owns ⌘Z/X/C/V/A,
+        // and this app already took ⌘R/G/B/S/E); a binding reaches the menu bar
+        // only if it carries ⌘ or ⌃ (see `menuShortcut`), and two of the six sit
+        // on menu items that should show their key; and one modifier for one
+        // group is learned in a batch, where six unrelated bare letters is a
+        // list to memorize. ⌃M for mute is deliberately NOT among them — M is
+        // the marker key here, and a third meaning on it is how the wrong thing
+        // gets pressed in a hurry.
+        case .toggleScopesOverlay:
+            // ⌃S — Scopes (⌘S is the still)
+            return KeyCombo(key: "s",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 1)
+        case .toggleLUTPreview:
+            // ⌃L — the LUT on the preview
+            return KeyCombo(key: "l",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 37)
+        case .toggleMonitorMute:
+            // ⌃A — Audio, since M belongs to the markers
+            return KeyCombo(key: "a",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 0)
+        case .toggleMonitorDim:
+            // ⌃D — DIM, as the footer button is labelled
+            return KeyCombo(key: "d",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 2)
+        case .toggleViewerMode:
+            // ⌃V — the Viewer's rec/playback switch
+            return KeyCombo(key: "v",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 9)
+        case .toggleAudioChannelBank:
+            // ⌃I — the sound department's ISO tracks
+            return KeyCombo(key: "i",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 34)
         }
     }
 }
@@ -225,12 +282,16 @@ final class HotkeyManager: ObservableObject {
             controller.grabFrame()
         case .instantReplay:
             controller.instantReplay()
-        case .fullscreen, .addMarker, .removeMarker, .punchIn:
+        case .fullscreen, .addMarker, .removeMarker, .punchIn,
+             .toggleScopesOverlay, .toggleLUTPreview, .toggleViewerMode:
             performViewer(action, controller: controller)
+        case .toggleMonitorMute, .toggleMonitorDim, .toggleAudioChannelBank:
+            performMonitoring(action, controller: controller)
         }
     }
 
-    /// Actions on the viewer itself (fullscreen, markers, punch-in).
+    /// Actions on the viewer itself (fullscreen, markers, punch-in, the scopes
+    /// overlay, the preview LUT and the rec/playback switch).
     private func performViewer(_ action: HotkeyAction,
                                controller: CaptureController) {
         switch action {
@@ -243,6 +304,38 @@ final class HotkeyManager: ObservableObject {
             controller.removeNearestMarker()
         case .punchIn:
             controller.togglePunchIn()
+        case .toggleScopesOverlay:
+            // the flag the View menu's toggle writes; its didSet closes the
+            // other player overlay and re-routes the analyzers
+            controller.showScopesOverlay.toggle()
+        case .toggleLUTPreview:
+            // the condition the LUT menu's item is disabled by: with no LUT
+            // selected there is nothing to apply, and a state that shows as
+            // "LUT on" with no LUT reads as the LUT being broken
+            if controller.settings.lutFileName != nil {
+                controller.lutPreviewOn.toggle()
+            }
+        case .toggleViewerMode:
+            controller.toggleViewerMode()
+        default:
+            break // handled by perform(_:controller:)
+        }
+    }
+
+    /// Actions on what the operator hears and on what gets recorded of it.
+    private func performMonitoring(_ action: HotkeyAction,
+                                   controller: CaptureController) {
+        switch action {
+        case .toggleMonitorMute:
+            controller.toggleMonitorMute()
+        case .toggleMonitorDim:
+            // the condition the footer's DIM button is disabled by — a dim that
+            // is holding nothing down would lie about the level
+            if controller.canDimMonitoring { controller.toggleMonitorDim() }
+        case .toggleAudioChannelBank:
+            // the recording latch lives in the controller method, so the key and
+            // the panel's channel columns refuse mid-take for the same reason
+            controller.toggleAudioChannelBank()
         default:
             break // handled by perform(_:controller:)
         }

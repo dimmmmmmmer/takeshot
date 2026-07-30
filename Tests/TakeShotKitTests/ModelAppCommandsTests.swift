@@ -82,6 +82,24 @@ struct ModelAppCommandsTests {
         }
     }
 
+    /// The scopes overlay and the preview LUT are reachable from the View menu
+    /// AND from a key, and the menu item takes its shortcut from the binding
+    /// (`hotkeys.combo(for:).menuShortcut`) rather than repeating it. Their
+    /// defaults carry ⌃ precisely so the menu can show what the key is; a bare
+    /// letter there would leave the menu silent about it.
+    @Test func theMenuBackedTogglesShowTheirBinding() {
+        for action in [HotkeyAction.toggleScopesOverlay, .toggleLUTPreview] {
+            let shortcut = action.defaultCombo.menuShortcut
+            #expect(shortcut != nil,
+                    "\(action.rawValue) has a menu item but no menu shortcut")
+            #expect(shortcut?.modifiers == .control)
+        }
+        #expect(HotkeyAction.toggleScopesOverlay.defaultCombo
+            .menuShortcut?.key.character == "s")
+        #expect(HotkeyAction.toggleLUTPreview.defaultCombo
+            .menuShortcut?.key.character == "l")
+    }
+
     @Test func namedKeysMapToTheirEquivalents() {
         let command = NSEvent.ModifierFlags.command.rawValue
         #expect(KeyCombo(key: "space", modifiers: command, keyCode: 49)
