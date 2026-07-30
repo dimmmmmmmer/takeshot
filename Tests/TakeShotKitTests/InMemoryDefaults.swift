@@ -57,5 +57,4 @@ final class InMemoryDefaults: UserDefaults {
         set(value as Any?, forKey: defaultName)
     }
 
-    func removeAll() { storage.removeAll() }
 }

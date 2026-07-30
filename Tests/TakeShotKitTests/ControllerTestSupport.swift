@@ -20,14 +20,17 @@ import Testing
 
 @MainActor
 enum ControllerHarness {
-    /// Preferences for the controller under test: in memory, emptied per run.
-    private static let scratchDefaults = InMemoryDefaults()
-
-    /// Empty preferences holding exactly `settings`.
+    /// Fresh, empty preferences holding exactly `settings`. Per run, never
+    /// shared: a single store emptied around every test was fine while the
+    /// runs were strictly serial, but any parallel execution (the coverage job
+    /// invoking `swift test` without --no-parallel did exactly that) had one
+    /// test's cleanup erase the settings out from under another's controller —
+    /// which then fell back to a default CaptureSettings and the operator's
+    /// real record folder. An InMemoryDefaults costs nothing to make, so each
+    /// run simply gets its own.
     private static func preparedDefaults(
         _ settings: CaptureSettings) throws -> UserDefaults {
-        let defaults = scratchDefaults
-        defaults.removeAll()
+        let defaults = InMemoryDefaults()
         settings.save(to: defaults)
         try #require(CaptureSettings.loaded(from: defaults).destinationPath
                         == settings.destinationPath,
@@ -74,7 +77,6 @@ enum ControllerHarness {
             // the record folder as it goes: a write that lands after the
             // scratch folder is deleted puts it straight back.
             CaptureController.takeLogQueue.sync {}
-            Self.scratchDefaults.removeAll()
             try? FileManager.default.removeItem(at: root)
         }
 
