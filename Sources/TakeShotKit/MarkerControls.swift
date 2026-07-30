@@ -69,7 +69,9 @@ struct MarkerButton: View {
 }
 
 /// Popover list: jump to, recolor, annotate and delete markers.
-private struct MarkerListEditor: View {
+/// Internal rather than private so the render suites can size the popover body
+/// on its own — a popover never lays out while its trigger button is measured.
+struct MarkerListEditor: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {

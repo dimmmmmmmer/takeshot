@@ -15,9 +15,42 @@ final class AudioMonitor: @unchecked Sendable {
     private var offset: CMTime?
     private let deviceLock = NSLock()
     private var deviceUID: String?
+    /// Packets waiting for the renderer. A packet that arrives while the
+    /// renderer reports not-ready used to be DROPPED, and every dropped packet
+    /// is 40 ms of silence spliced into the tone — audible as steady crackle.
+    /// Now it queues here and drains when the renderer asks for more.
+    private var pending: [CMSampleBuffer] = []
+    /// Half a second of backlog is a stalled output, not jitter; beyond it the
+    /// oldest packets are the least useful thing in the room.
+    private static let pendingLimit = 12
+    /// A drain request is armed on the renderer.
+    private var draining = false
 
     init() {
         sync.addRenderer(renderer)
+    }
+
+    /// The renderer pulls the backlog itself — but the request is armed ONLY
+    /// while a backlog exists and is torn down the moment it empties.
+    /// `requestMediaDataWhenReady` fires its block again and again for as long
+    /// as the renderer is ready; installed permanently on an idle monitor it
+    /// is a busy loop pinning a core per instance.
+    private func armDrainIfNeeded() {
+        guard !pending.isEmpty, !draining else { return }
+        draining = true
+        renderer.requestMediaDataWhenReady(on: queue) { [weak self] in
+            self?.drainLocked()
+        }
+    }
+
+    private func drainLocked() {
+        while renderer.isReadyForMoreMediaData, !pending.isEmpty {
+            renderer.enqueue(pending.removeFirst())
+        }
+        if pending.isEmpty, draining {
+            renderer.stopRequestingMediaData()
+            draining = false
+        }
     }
 
     /// The renderer object itself is replaced on `queue` when the output device
@@ -70,11 +103,16 @@ final class AudioMonitor: @unchecked Sendable {
                     volumeLock.lock()
                     let level = storedVolume
                     volumeLock.unlock()
+                    if draining {
+                        renderer.stopRequestingMediaData()
+                        draining = false
+                    }
                     sync.removeRenderer(renderer, at: .zero)
                     renderer = AVSampleBufferAudioRenderer()
                     renderer.volume = level
                     sync.addRenderer(renderer)
                     offset = nil
+                    pending.removeAll()
                 }
             }
         }
@@ -85,6 +123,11 @@ final class AudioMonitor: @unchecked Sendable {
             self.sync.setRate(0, time: .zero)
             self.renderer.flush()
             self.offset = nil
+            self.pending.removeAll()
+            if self.draining {
+                self.renderer.stopRequestingMediaData()
+                self.draining = false
+            }
         }
     }
 
@@ -105,6 +148,7 @@ final class AudioMonitor: @unchecked Sendable {
             if drift < -0.05 || drift > 1.0 {
                 renderer.flush()
                 self.offset = nil
+                pending.removeAll()
             }
         }
         if offset == nil {
@@ -114,9 +158,13 @@ final class AudioMonitor: @unchecked Sendable {
             sync.setRate(1, time: .zero)
         }
         guard let offset,
-              let retimed = Self.retimed(sampleBuffer, by: offset),
-              renderer.isReadyForMoreMediaData else { return }
-        renderer.enqueue(retimed)
+              let retimed = Self.retimed(sampleBuffer, by: offset) else { return }
+        if pending.count >= Self.pendingLimit {
+            pending.removeFirst(pending.count - Self.pendingLimit + 1)
+        }
+        pending.append(retimed)
+        drainLocked()
+        armDrainIfNeeded()
     }
 
     private static func retimed(_ sampleBuffer: CMSampleBuffer,

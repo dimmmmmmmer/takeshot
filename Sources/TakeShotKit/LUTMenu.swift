@@ -27,11 +27,27 @@ struct LUTMenu: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
-            lutControls.padding(14).frame(width: 240)
+            LUTControlsPanel()
+                .padding(LUTControlsPanel.padding)
+                .frame(width: LUTControlsPanel.width)
         }
         .fixedSize()
         .help(L("lut_help"))
     }
+}
+
+/// Body of the LUT popover. Its own view rather than a property of the menu:
+/// a popover never renders while its trigger is measured, so this is the only
+/// way the localized rows inside it can be laid out and checked.
+struct LUTControlsPanel: View {
+    /// Popover geometry, shared with the tests that assert the Russian rows
+    /// still fit inside it.
+    static let width: CGFloat = 240
+    static let padding: CGFloat = 14
+    /// Width left for the rows themselves.
+    static var contentWidth: CGFloat { width - padding * 2 }
+
+    @EnvironmentObject private var controller: CaptureController
 
     /// Name of the selected LUT for the menu title (or "No LUT").
     private var currentLUTName: String {
@@ -40,7 +56,7 @@ struct LUTMenu: View {
             ?? L("lut_none")
     }
 
-    @ViewBuilder private var lutControls: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // choosing and adding .cube in one dropdown menu (the separate import
             // button is gone: "Add .cube…" right in the list, multi-select)

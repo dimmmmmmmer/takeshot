@@ -24,7 +24,7 @@ struct PreRollAudioTests {
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "1", takeNumber: 1))
-        var finished: [Take] = []
+        let finished = TakeCollector()
         pipeline.onTakeFinished = { finished.append($0) }
         pipeline.handleFormat(CaptureFormat(width: 320, height: 180, frameRate: 25,
                                             timecodeFPS: 25, name: "test"))

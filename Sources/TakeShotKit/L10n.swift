@@ -13,17 +13,30 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
 /// Localization with on-the-fly language switching: strings come from the
 /// selected language's .lproj bundle, bypassing the system setting.
 enum L10n {
+    private struct State {
+        var bundle: Bundle
+        var language: AppLanguage
+    }
+
     /// The bundle is swapped on the main thread when the operator changes the
     /// language, and read from any thread that formats a message — the offload
     /// worker reports its progress from its own queue, and error toasts are
     /// built wherever the failure happened. As a plain `static var` that is a
     /// data race: ThreadSanitizer flags it, and a torn read of the reference
     /// is a crash on a machine whose timing differs from the one it ran on.
-    private static let state = OSAllocatedUnfairLock(initialState: Bundle.module)
+    private static let state = OSAllocatedUnfairLock(
+        initialState: State(bundle: .module, language: .system))
 
     /// Copied out under the lock; the string lookup itself runs outside it.
     private static var bundle: Bundle {
-        state.withLock { $0 }
+        state.withLock { $0.bundle }
+    }
+
+    /// The language currently in force. Stored alongside the bundle because a
+    /// Bundle cannot be mapped back to the choice that selected it, and callers
+    /// that switch the language temporarily need to know what to switch back to.
+    static var current: AppLanguage {
+        state.withLock { $0.language }
     }
 
     static func apply(_ language: AppLanguage) {
@@ -39,7 +52,7 @@ enum L10n {
                 selected = .module
             }
         }
-        state.withLock { $0 = selected }
+        state.withLock { $0 = State(bundle: selected, language: language) }
     }
 
     static func string(_ key: String) -> String {

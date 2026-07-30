@@ -14,20 +14,31 @@ import Testing
 // folder included); selecting a device in `init` adopts whatever board the
 // machine has and starts capturing on it; and the demo source it falls back to
 // draws with AppKit off the main thread and plays audible tones.
-// `ControllerHarness.run` hands every suite a controller wired to a throwaway
-// preferences suite, a throwaway record folder and a silent synthetic signal,
-// and tears all of it down afterwards.
+// `ControllerHarness.run` hands every suite a controller wired to throwaway
+// preferences (see InMemoryDefaults), a throwaway record folder and a silent
+// synthetic signal, and tears all of it down afterwards.
 
 @MainActor
 enum ControllerHarness {
-    /// The scratch preferences domain every controller under test reads and
-    /// writes. Never a key the app itself uses in production.
-    static let suiteName = "takeshot.controller-tests.scratch"
+    /// Preferences for the controller under test: in memory, emptied per run.
+    private static let scratchDefaults = InMemoryDefaults()
 
-    /// A controller on a scratch record folder and a scratch preferences
-    /// suite. `live` keeps the synthetic signal running (only the capture suite
-    /// needs it); everything else stops it immediately so a state test is not
-    /// racing a 1080p feed.
+    /// Empty preferences holding exactly `settings`.
+    private static func preparedDefaults(
+        _ settings: CaptureSettings) throws -> UserDefaults {
+        let defaults = scratchDefaults
+        defaults.removeAll()
+        settings.save(to: defaults)
+        try #require(CaptureSettings.loaded(from: defaults).destinationPath
+                        == settings.destinationPath,
+                     "the scratch preferences did not take the settings")
+        return defaults
+    }
+
+    /// A controller on a scratch record folder and scratch preferences. `live`
+    /// keeps the synthetic signal running (only the capture suite needs it);
+    /// everything else stops it immediately so a state test is not racing a
+    /// 1080p feed.
     static func run(
         live: Bool = false,
         extraBackends: [(String, CaptureBackend)] = [],
@@ -44,22 +55,6 @@ enum ControllerHarness {
         // ever compares equal to one the test built, and the scan's own
         // "this file is already one of ours" check would be defeated too.
         let root = ControllerFixtures.resolved(scratch)
-        // One fixed suite, emptied around every run rather than one suite per
-        // test: cfprefsd leaves a plist behind for every name it has ever
-        // seen, and a suite per test buried the user's Preferences folder.
-        // The suites run serially (scripts/test.sh passes --no-parallel), so a
-        // shared name is still one controller's worth of state at a time.
-        let suiteName = Self.suiteName
-        UserDefaults.standard.removePersistentDomain(forName: suiteName)
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defer {
-            // The metadata CSV is written on its own serial queue and creates
-            // the record folder as it goes: a write that lands after the
-            // scratch folder is deleted puts it straight back.
-            CaptureController.takeLogQueue.sync {}
-            UserDefaults.standard.removePersistentDomain(forName: suiteName)
-            try? FileManager.default.removeItem(at: root)
-        }
 
         var settings = CaptureSettings()
         settings.schemaVersion = CaptureSettings.currentSchemaVersion
@@ -73,7 +68,15 @@ enum ControllerHarness {
         // signal.
         settings.monitorEnabled = false
         configure(&settings)
-        settings.save(to: defaults)
+        let defaults = try Self.preparedDefaults(settings)
+        defer {
+            // The metadata CSV is written on its own serial queue and creates
+            // the record folder as it goes: a write that lands after the
+            // scratch folder is deleted puts it straight back.
+            CaptureController.takeLogQueue.sync {}
+            Self.scratchDefaults.removeAll()
+            try? FileManager.default.removeItem(at: root)
+        }
 
         // One backend only: no DeckLink adapter, so the tests neither touch the
         // machine's hardware nor depend on whether any is attached. It stands
@@ -82,6 +85,10 @@ enum ControllerHarness {
         let controller = CaptureController(
             backends: [("mock", SyntheticSignalBackend())] + extraBackends,
             defaults: defaults)
+        // Belt and braces: a controller that did not get the fixture's folder
+        // has to fail here rather than quietly work on the operator's.
+        try #require(controller.settings.destinationPath == root.path,
+                     "the controller adopted a folder that is not the fixture's")
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false
@@ -91,7 +98,7 @@ enum ControllerHarness {
             controller.audioMonitor.stop()
             // The volume and LUT sliders persist on a 400 ms debounce. A task
             // still pending when a test ends would write this controller's
-            // whole settings blob into the shared scratch domain part-way
+            // whole settings blob into the shared scratch preferences part-way
             // through the next one.
             controller.volumePersistTask?.cancel()
             controller.lutPersistTask?.cancel()

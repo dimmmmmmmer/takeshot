@@ -100,16 +100,13 @@ public final class RecDetector {
         case .advancing:
             return accumulateAdvance(at: sample.index)
 
-        case .stalled:
+        // no timecode on the wire at all shares the stalled row: both mean
+        // "the camera is not laying down frames"
+        case .stalled, .noData:
             return accumulateStall(at: sample.index)
 
         case .discontinuity:
             return handleDiscontinuity(at: sample.index)
-
-        case .noData:
-            // no timecode on the wire at all — same stop accumulation as a
-            // stalled one: both mean "the camera is not laying down frames"
-            return accumulateStall(at: sample.index)
         }
     }
 
@@ -120,13 +117,13 @@ public final class RecDetector {
     /// we are already in (start while recording, stop while idle) is ignored,
     /// and the timecode machine below still gets the frame.
     private func vancEvent(for sample: FrameSample) -> RecEvent? {
-        guard let trigger = sample.vancTrigger else { return nil }
-        switch trigger {
-        case .recordStart where !isRecording:
-            beginRecording()
+        // no trigger, or a repeat of the current state, falls to the default row
+        switch (sample.vancTrigger, isRecording) {
+        case (.recordStart, false):
+            setRecording(true)
             return .started(atIndex: sample.index, timecode: sample.timecode)
-        case .recordStop where isRecording:
-            endRecording()
+        case (.recordStop, true):
+            setRecording(false)
             return .stopped(atIndex: sample.index)
         default:
             return nil
@@ -146,7 +143,7 @@ public final class RecDetector {
         }
         advanceRunLength += 1
         guard advanceRunLength >= config.startDebounceFrames else { return nil }
-        beginRecording()
+        setRecording(true)
         return .started(atIndex: runStartIndex, timecode: runStartTimecode)
     }
 
@@ -158,7 +155,7 @@ public final class RecDetector {
         if stallRunLength == 0 { stallStartIndex = index }
         stallRunLength += 1
         guard stallRunLength >= config.stopDebounceFrames else { return nil }
-        endRecording()
+        setRecording(false)
         return .stopped(atIndex: max(0, stallStartIndex - 1))
     }
 
@@ -167,7 +164,7 @@ public final class RecDetector {
     private func handleDiscontinuity(at index: Int) -> RecEvent? {
         advanceRunLength = 0
         guard isRecording else { return nil }
-        endRecording()
+        setRecording(false)
         return .stopped(atIndex: max(0, index - 1))
     }
 
@@ -180,16 +177,14 @@ public final class RecDetector {
 
     private func movement(of sample: FrameSample) -> Movement {
         guard let tc = sample.timecode else { return .noData }
-        guard let last = lastTimecode else {
-            // first TC — the reference point, no movement yet
-            return .stalled
-        }
         // capture may report one TC per pair of frames (PsF) — treat a repeat as
         // stall, and a step of exactly 1 frame as movement. A 24h wrap
         // (23:59:59:MM → 00:00:00:00) is one frame too, not a discontinuity.
         let dayFrames = Timecode.dayFrames(fps: tc.fps,
                                            isDropFrame: tc.isDropFrame)
-        let delta = tc.frameNumber - last.frameNumber
+        // the first TC is the reference point and nothing more: measured
+        // against itself it reads as the stall it is
+        let delta = tc.frameNumber - (lastTimecode?.frameNumber ?? tc.frameNumber)
         switch delta {
         case 0: return .stalled
         case 1, 1 - dayFrames: return .advancing
@@ -197,14 +192,10 @@ public final class RecDetector {
         }
     }
 
-    private func beginRecording() {
-        isRecording = true
-        advanceRunLength = 0
-        stallRunLength = 0
-    }
-
-    private func endRecording() {
-        isRecording = false
+    /// Latch the state and clear both debounce runs: the one that just fired is
+    /// spent, and the other must not carry into the new state.
+    private func setRecording(_ recording: Bool) {
+        isRecording = recording
         advanceRunLength = 0
         stallRunLength = 0
     }

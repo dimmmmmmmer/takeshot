@@ -118,6 +118,32 @@ struct SignalDriver {
     }
 }
 
+/// Collects pipeline events behind a lock. The callbacks fire on the main
+/// queue while the test polls from a Swift-concurrency worker thread — a plain
+/// `var finishedTakes: [Take]` there is a data race, and TSan aborts the suite
+/// on it.
+final class EventCollector<Element>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [Element] = []
+
+    func append(_ element: Element) {
+        lock.withLock { stored.append(element) }
+    }
+
+    var all: [Element] { lock.withLock { stored } }
+    var isEmpty: Bool { lock.withLock { stored.isEmpty } }
+    var first: Element? { lock.withLock { stored.first } }
+    var last: Element? { lock.withLock { stored.last } }
+}
+
+extension EventCollector where Element: Equatable {
+    func contains(_ element: Element) -> Bool {
+        lock.withLock { stored.contains(element) }
+    }
+}
+
+typealias TakeCollector = EventCollector<Take>
+
 enum TestWait {
     /// Poll until `condition` holds or the budget runs out. The pipeline
     /// finishes takes asynchronously, so every assertion about a file waits.

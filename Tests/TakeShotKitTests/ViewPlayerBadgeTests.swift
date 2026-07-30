@@ -1,0 +1,198 @@
+import AppKit
+import CaptureCore
+import SwiftUI
+import Testing
+
+@testable import TakeShotKit
+
+/// Guards the chrome laid over the player: the timecode badge, the centered
+/// mode/compare group, the badge row on the right, and the two popovers that
+/// hang off it.
+///
+/// This is where the Russian UI hurt most. The compare bar is a mini segmented
+/// control whose four labels are all translated; it is centered between two
+/// badge groups that are NOT going to move, and the space between them is about
+/// 340pt at the narrowest window. Anything wider used to slide underneath them,
+/// because the three groups were three independent corner overlays.
+@MainActor
+struct ViewPlayerBadgeTests {
+    /// The record/playback switch keeps a 190pt look and grows instead of
+    /// clipping — and today's translations do not need the growth.
+    @Test func modeSwitchFitsItsIdealWidthInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let ideal = probe.fittingSizes { ViewerModeSwitch() }
+            #expect(ideal.ru.width == ViewerModeSwitch.idealWidth,
+                    "the Russian mode switch grew to \(ideal.ru.width)pt")
+            #expect(ideal.ru == ideal.en)
+            #expect(ideal.ru.width <= ViewBudget.playerCenterWidth)
+        }
+    }
+
+    /// The compare bar shares the centered slot with the mode switch, and in its
+    /// resting state — compare off, which is where the player sits for all but a
+    /// few seconds of a shoot — it has to fit between the badges at the
+    /// narrowest window the app allows.
+    ///
+    /// Only that state is held to the budget. Engage a compare mode and the bar
+    /// grows past it (309pt for wipe, 386 for wipe in playback, 460 for blend)
+    /// in ENGLISH as much as in Russian — it is over budget by construction, and
+    /// what stops that from covering the format badge is the chrome being one
+    /// row that compresses. See `badgeOverlayNeverStretchesThePlayer`.
+    @Test func compareBarFitsTheCenteredSlotWhileCompareIsOff() async throws {
+        try await ViewProbe.run { probe in
+            let center = ViewBudget.playerCenterWidth
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.referencePinned = true
+
+            for viewer in [CaptureController.ViewerMode.record, .playback] {
+                probe.controller.viewerMode = viewer
+                let ideal = probe.fittingSizes { CompareControls() }
+                #expect(ideal.ru.width <= center,
+                        "\(viewer) bar wants \(ideal.ru.width)pt of \(center)")
+                #expect(ideal.en.width <= center)
+            }
+        }
+    }
+
+    /// In playback the widest segment is "Playback"/"Плейбек" and the bar comes
+    /// out byte-for-byte the same size in both languages — which is what a slot
+    /// centered between two fixed badge groups needs. "Микс" instead of
+    /// "Наложение" for blend is what buys that: a segmented control gives every
+    /// segment the width of the LONGEST label, so one long word is charged four
+    /// times over.
+    @Test func playbackCompareBarIsLocaleIndependent() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.viewerMode = .playback
+
+            for mode in [CaptureController.CompareMode.off, .wipe,
+                         .blend, .sideBySide] {
+                probe.controller.compareMode = mode
+                let ideal = probe.fittingSizes { CompareControls() }
+                #expect(ideal.ru == ideal.en,
+                        "\(mode) compare bar differs by language: \(ideal)")
+            }
+        }
+    }
+
+    /// Record mode swaps the first segment for "Source"/"Сигнал" and Cyrillic
+    /// costs ~5pt per segment there — 20 across the control. That is inside the
+    /// slot, and this pins how much room is left before it is not.
+    @Test func recordCompareBarStaysCloseToTheEnglishWidth() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.referencePinned = true
+            let ideal = probe.fittingSizes { CompareControls() }
+            let surcharge = ideal.ru.width - ideal.en.width
+            #expect(surcharge >= 0)
+            #expect(surcharge <= 24,
+                    "Russian costs \(surcharge)pt on the record compare bar")
+        }
+    }
+
+    /// The badges are an overlay: whatever they contain, they must not change
+    /// the size of the player underneath them. A modifier that stretches its
+    /// host is how the image starts moving when the language changes.
+    @Test func badgeOverlayNeverStretchesThePlayer() async throws {
+        try await ViewProbe.run { probe in
+            let base = CGSize(width: ViewBudget.playerWidth, height: 380)
+            for language in [AppLanguage.english, .russian] {
+                let plain = ViewRender.withLanguage(language) {
+                    ViewRender.laidOutSize(
+                        probe.hosted(Color.clear.playerTopBadges()), in: base)
+                }
+                #expect(plain == base, "badges stretched the player in \(language)")
+            }
+
+            // and again with everything the chrome can show at once
+            probe.controller.referencePinned = true
+            probe.controller.compareMode = .blend
+            probe.controller.assist.colorTool = .falseColor
+            probe.controller.settings.framelineRatio = 2.39
+            for language in [AppLanguage.english, .russian] {
+                let loaded = ViewRender.withLanguage(language) {
+                    ViewRender.laidOutSize(
+                        probe.hosted(Color.clear.playerTopBadges()), in: base)
+                }
+                #expect(loaded == base,
+                        "loaded badges stretched the player in \(language)")
+            }
+        }
+    }
+
+    /// The fullscreen windows use the same modifier without the mode switch.
+    @Test func fullscreenBadgeVariantRenders() async throws {
+        try await ViewProbe.run { probe in
+            let base = CGSize(width: 1280, height: 720)
+            for language in [AppLanguage.english, .russian] {
+                let size = ViewRender.withLanguage(language) {
+                    ViewRender.laidOutSize(
+                        probe.hosted(Color.clear.playerTopBadges(
+                            showsModeSwitch: false, autoHide: true)),
+                        in: base)
+                }
+                #expect(size == base)
+            }
+        }
+    }
+
+    /// The LUT popover is a fixed 240pt box. Its rows are two localized toggles,
+    /// a localized intensity label and a menu — they have to fit without being
+    /// squeezed, i.e. the ideal width has to be inside the box.
+    @Test func lutPopoverRowsFitTheirFixedWidth() async throws {
+        try await ViewProbe.run { probe in
+            let box = LUTControlsPanel.contentWidth
+            let ideal = probe.fittingSizes { LUTControlsPanel() }
+            #expect(ideal.ru.width <= box,
+                    "the Russian LUT rows want \(ideal.ru.width)pt of \(box)")
+            #expect(ideal.en.width <= box)
+            #expect(ideal.ru.height > 0)
+        }
+    }
+
+    /// The assist popover cannot fit its ideal width (the exposure segmented
+    /// control alone wants ~245pt in English and 262 in Russian), so what
+    /// matters is that it can be SQUEEZED into the popover: a minimum wider than
+    /// the box is a clipped first row, which is what a 260pt popover was doing
+    /// in both languages.
+    @Test func assistPopoverSqueezesIntoItsFixedWidth() async throws {
+        try await ViewProbe.run { probe in
+            let box = AssistControlsPanel.contentWidth
+            let minimum = probe.minimumWidths { AssistControlsPanel() }
+            #expect(minimum.ru <= box,
+                    "the Russian assist rows stop at \(minimum.ru)pt, box is \(box)")
+            #expect(minimum.en <= box)
+        }
+    }
+
+    /// Every assist tool switched on at once: the zebra and peaking sliders and
+    /// the punch-in pan hint all appear, and the popover still has to hold them.
+    @Test func assistPopoverFitsWithEveryToolOn() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.assist.zebraOn = true
+            probe.controller.assist.peakingOn = true
+            probe.controller.assist.punchIn = 2
+            probe.controller.settings.safeAreasOn = true
+
+            let box = AssistControlsPanel.contentWidth
+            let minimum = probe.minimumWidths { AssistControlsPanel() }
+            #expect(minimum.ru <= box,
+                    "the expanded Russian assist panel needs \(minimum.ru)pt")
+
+            let ideal = probe.fittingSizes { AssistControlsPanel() }
+            #expect(ideal.ru.height > ideal.en.height - 1,
+                    "a row went missing in Russian: \(ideal)")
+        }
+    }
+
+    /// The exposure legend under the image is a fixed strip of color swatches
+    /// with English stop labels; no translation may resize it.
+    @Test func assistLegendIsLocaleIndependent() async throws {
+        try await ViewProbe.run { probe in
+            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
+                let ideal = probe.fittingSizes { AssistLegend(tool: tool) }
+                #expect(ideal.ru == ideal.en, "\(tool) legend: \(ideal)")
+                #expect(ideal.ru.width > 0)
+            }
+        }
+    }
+}

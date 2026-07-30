@@ -39,6 +39,30 @@ private struct PlaybackTimecodeText: View {
     }
 }
 
+/// Record/playback switch over the player.
+///
+/// `minWidth` and not `width`: the two segment titles are localized, and a
+/// hard width clips whichever language needs more than English does — the
+/// switch keeps its 190pt look wherever it fits and grows where it has to.
+struct ViewerModeSwitch: View {
+    /// The width the switch has in English; wider languages get what they need.
+    static let idealWidth: CGFloat = 190
+
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Picker("", selection: $controller.viewerMode) {
+            Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
+            Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .frame(minWidth: Self.idealWidth)
+        .fixedSize()
+    }
+}
+
 /// Top badges over the player: TC menu (left), mode switch + compare (center),
 /// scopes/LUT/format (right). Shared by the main window and the fullscreen
 /// windows (which hide the mode switch).
@@ -57,9 +81,39 @@ struct PlayerTopBadgesModifier: ViewModifier {
             .overlay { framelines }
             .overlay(alignment: .bottom) { assistLegend }
             .overlay(alignment: .bottomLeading) { scopesOverlay }
-            .overlay(alignment: .topLeading) { timecodeBadge }
-            .overlay(alignment: .top) { modeSwitch }
-            .overlay(alignment: .topTrailing) { rightBadges }
+            .overlay(alignment: .top) { topChrome }
+    }
+
+    /// The timecode badge, the centered mode/compare group and the right-hand
+    /// badges in ONE row.
+    ///
+    /// They used to be three independent corner overlays, and overlays do not
+    /// know about each other: the centered group slid straight under the badges
+    /// on either side as soon as it grew. It grows a lot — 306pt for the compare
+    /// bar in playback, 386 with the wipe picker, 460 in blend mode, against the
+    /// ~340pt the badge groups leave at the narrowest window. One HStack with two
+    /// equally flexible side zones keeps the group exactly centered (both zones
+    /// always get the same width) and makes overlap impossible: a group too wide
+    /// for the row compresses instead of covering the format badge.
+    @ViewBuilder private var topChrome: some View {
+        if chromeVisible {
+            HStack(alignment: .top, spacing: 8) {
+                sideZone(alignment: .leading) { timecodeBadge }
+                modeSwitch
+                sideZone(alignment: .trailing) { rightBadges }
+            }
+            // vertical inset under the window buttons is already reserved by the
+            // windowTopInset strip above the player
+            .padding(8)
+        }
+    }
+
+    /// One of the two flexible edge zones. Equal width by construction, which
+    /// is what keeps the middle group centered.
+    private func sideZone(alignment: Alignment,
+                          @ViewBuilder content: () -> some View) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: alignment)
     }
 
     /// Auto-hide: the chrome comes back while the pointer visits the top edge.
@@ -111,31 +165,25 @@ struct PlayerTopBadgesModifier: ViewModifier {
         }
     }
 
-    @ViewBuilder private var timecodeBadge: some View {
-        if chromeVisible {
-            playerOverlayBadge {
-                Menu {
-                    detectionModePicker
-                    Divider()
-                    timecodeSourcePicker
-                } label: {
-                    if controller.viewerMode == .playback {
-                        PlaybackTimecodeText()
-                    } else {
-                        LiveTimecodeText(
-                            live: controller.live,
-                            tint: controller.isRecording ? Color.red : Color.white)
-                    }
+    private var timecodeBadge: some View {
+        playerOverlayBadge {
+            Menu {
+                detectionModePicker
+                Divider()
+                timecodeSourcePicker
+            } label: {
+                if controller.viewerMode == .playback {
+                    PlaybackTimecodeText()
+                } else {
+                    LiveTimecodeText(
+                        live: controller.live,
+                        tint: controller.isRecording ? Color.red : Color.white)
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help(L("tc_menu_help"))
             }
-            // always in the left corner; vertical inset under the window buttons
-            // is already reserved by the windowTopInset strip above the player
-            .padding(.leading, 8)
-            .padding(.top, 8)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(L("tc_menu_help"))
         }
     }
 
@@ -174,45 +222,32 @@ struct PlayerTopBadgesModifier: ViewModifier {
         .pickerStyle(.menu)
     }
 
-    @ViewBuilder private var modeSwitch: some View {
-        if chromeVisible {
-            VStack(spacing: 4) {
-                if showsModeSwitch {
-                    Picker("", selection: $controller.viewerMode) {
-                        Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
-                        Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 190)
-                    .labelsHidden()
-                    .controlSize(.small)
-                }
-
-                if (controller.viewerMode == .playback
-                    && controller.playbackURL != nil)
-                    || (controller.viewerMode == .record
-                        && controller.referencePinned) {
-                    CompareControls()
-                }
+    private var modeSwitch: some View {
+        VStack(spacing: 4) {
+            if showsModeSwitch {
+                ViewerModeSwitch()
             }
-            .padding(.top, 8)
+
+            if (controller.viewerMode == .playback
+                && controller.playbackURL != nil)
+                || (controller.viewerMode == .record
+                    && controller.referencePinned) {
+                CompareControls()
+            }
         }
     }
 
-    @ViewBuilder private var rightBadges: some View {
-        if chromeVisible {
-            HStack(spacing: 6) {
-                scopesBadge
-                multicamBadge
-                playerOverlayBadge {
-                    AssistMenu()
-                }
-                playerOverlayBadge {
-                    LUTMenu()
-                }
-                formatBadge
+    private var rightBadges: some View {
+        HStack(spacing: 6) {
+            scopesBadge
+            multicamBadge
+            playerOverlayBadge {
+                AssistMenu()
             }
-            .padding(8)
+            playerOverlayBadge {
+                LUTMenu()
+            }
+            formatBadge
         }
     }
 

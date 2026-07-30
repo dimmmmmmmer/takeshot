@@ -228,12 +228,19 @@ extension CaptureController {
         reader.add(output)
         reader.startReading()
         defer { reader.cancelReading() }
-        guard let sample = output.copyNextSampleBuffer(),
-              let block = CMSampleBufferGetDataBuffer(sample) else { return nil }
-        var raw: UInt32 = 0
-        CMBlockBufferCopyDataBytes(block, atOffset: 0,
-                                   dataLength: 4, destination: &raw)
-        return (UInt32(bigEndian: raw), fdesc)
+        // Walk to the first sample that carries data. The first buffer of a
+        // timecode track is routinely an EMPTY marker — bailing out on it left
+        // playbackStartTC nil for every file TakeShot itself records, so the
+        // playback readout counted from 00:00:00:00 instead of the take's TC.
+        while let sample = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample),
+                  CMBlockBufferGetDataLength(block) >= 4 else { continue }
+            var raw: UInt32 = 0
+            CMBlockBufferCopyDataBytes(block, atOffset: 0,
+                                       dataLength: 4, destination: &raw)
+            return (UInt32(bigEndian: raw), fdesc)
+        }
+        return nil
     }
     /// Grab the current frame as a PNG next to the takes. In playback it grabs the
     /// current player frame (with the LUT); otherwise the live processed frame.

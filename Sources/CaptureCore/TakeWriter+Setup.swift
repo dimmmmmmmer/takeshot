@@ -2,9 +2,10 @@
 import Foundation
 
 /// Everything the writer has to have in place BEFORE `startWriting()`: the
-/// file metadata, the three inputs' settings, and the timecode format
-/// description. Static factories rather than methods, because the initializer
-/// needs these values before the instance exists.
+/// file metadata and the two track settings dictionaries. Static factories
+/// rather than methods, because the initializer needs these values before the
+/// instance exists. (The timecode track's own setup is in `+Timecode`, with the
+/// rest of that track.)
 ///
 /// Split out of TakeWriter, whose initializer had grown past 90 lines.
 extension TakeWriter {
@@ -66,66 +67,5 @@ extension TakeWriter {
                 Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
         }
         return audioSettings
-    }
-
-    /// The tc32 format description for the take's timecode track, or nil when
-    /// the take has no start timecode and gets no track at all.
-    static func makeTimecodeFormatDescription(
-        startTimecode: Timecode?,
-        format: CaptureFormat) throws -> CMTimeCodeFormatDescription? {
-        guard let tc = startTimecode else { return nil }
-        var fdesc: CMTimeCodeFormatDescription?
-        let frameDuration = CMTime(value: 1000, timescale: CMTimeScale(format.frameRate * 1000))
-        let status = CMTimeCodeFormatDescriptionCreate(
-            allocator: kCFAllocatorDefault,
-            timeCodeFormatType: kCMTimeCodeFormatType_TimeCode32,
-            frameDuration: frameDuration,
-            frameQuanta: UInt32(tc.fps),
-            flags: tc.isDropFrame ? kCMTimeCodeFlag_DropFrame | kCMTimeCodeFlag_24HourMax
-                                  : kCMTimeCodeFlag_24HourMax,
-            extensions: nil,
-            formatDescriptionOut: &fdesc)
-        guard status == noErr, let fdesc else { throw WriterError.timecodeTrackFailed }
-        return fdesc
-    }
-
-    /// One tc32 sample covering [from, until). Internal rather than private:
-    /// `finish()` calls it from the other file.
-    func appendTimecodeSample(input: AVAssetWriterInput,
-                              formatDescription: CMTimeCodeFormatDescription,
-                              timecode: Timecode,
-                              from: CMTime, until: CMTime) {
-        // tc32: one big-endian UInt32 with the start frame number
-        var frameNumber = UInt32(clamping: timecode.frameNumber).bigEndian
-        var blockBuffer: CMBlockBuffer?
-        guard CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: 4,
-            blockAllocator: kCFAllocatorDefault, customBlockSource: nil, offsetToData: 0,
-            dataLength: 4, flags: 0, blockBufferOut: &blockBuffer) == noErr,
-            let blockBuffer else { return }
-        withUnsafeBytes(of: &frameNumber) { bytes in
-            _ = CMBlockBufferReplaceDataBytes(
-                with: bytes.baseAddress!, blockBuffer: blockBuffer,
-                offsetIntoDestination: 0, dataLength: 4)
-        }
-
-        var timing = CMSampleTimingInfo(
-            duration: CMTimeSubtract(until, from),
-            presentationTimeStamp: from,
-            decodeTimeStamp: .invalid)
-        var sampleSize = 4
-        var sampleBuffer: CMSampleBuffer?
-        guard CMSampleBufferCreate(
-            allocator: kCFAllocatorDefault, dataBuffer: blockBuffer, dataReady: true,
-            makeDataReadyCallback: nil, refcon: nil, formatDescription: formatDescription,
-            sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
-            sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sampleBuffer) == noErr, let sampleBuffer else { return }
-        // several anchors append back to back — wait out the input queue
-        let deadline = Date().addingTimeInterval(0.5)
-        while !input.isReadyForMoreMediaData, Date() < deadline {
-            usleep(1000)
-        }
-        input.append(sampleBuffer)
     }
 }

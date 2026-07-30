@@ -59,7 +59,7 @@ public enum PCMAudio {
                                       formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
         guard let asbd = interleavedPCM16(of: sampleBuffer) else { return sampleBuffer }
         let sourceChannels = Int(asbd.mChannelsPerFrame)
-        let selected = indices.filter { $0 >= 0 && $0 < sourceChannels }.sorted()
+        let selected = indices.filter { (0..<sourceChannels).contains($0) }.sorted()
         guard !selected.isEmpty else { return nil }
         // everything selected, or nothing to read: the original already is the answer
         guard selected != Array(0..<sourceChannels),
@@ -80,7 +80,8 @@ public enum PCMAudio {
     }
 
     /// The stream description, if this really is interleaved 16-bit PCM.
-    private static func interleavedPCM16(
+    /// Internal rather than private: the meters in `+Peaks` read it too.
+    static func interleavedPCM16(
         of sampleBuffer: CMSampleBuffer) -> AudioStreamBasicDescription? {
         guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
@@ -91,7 +92,7 @@ public enum PCMAudio {
     /// A copy of the buffer's samples. Copying costs one packet's worth of
     /// memory and buys a lifetime the caller can reason about — the block
     /// buffer's pointer is only valid while the sample buffer is retained.
-    private static func interleavedSamples(
+    static func interleavedSamples(
         of sampleBuffer: CMSampleBuffer) -> [Int16]? {
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
         else { return nil }
@@ -119,35 +120,5 @@ public enum PCMAudio {
             }
         }
         return packed
-    }
-
-    /// Per-channel peak levels in dBFS (-∞ → -100) from an interleaved PCM16 sample buffer.
-    public static func peakLevels(of sampleBuffer: CMSampleBuffer) -> [Float] {
-        guard let asbd = interleavedPCM16(of: sampleBuffer),
-              asbd.mFormatID == kAudioFormatLinearPCM else { return [] }
-        let channels = Int(asbd.mChannelsPerFrame)
-        guard channels > 0,
-              let samples = interleavedSamples(of: sampleBuffer),
-              samples.count >= channels else { return [] }
-        return peaks(of: samples, channels: channels).map(Self.dBFS)
-    }
-
-    /// Largest magnitude per channel.
-    private static func peaks(of samples: [Int16], channels: Int) -> [Int16] {
-        var peaks = [Int16](repeating: 0, count: channels)
-        for frame in 0..<(samples.count / channels) {
-            for channel in 0..<channels {
-                let value = samples[frame * channels + channel]
-                // Int16.min has no positive counterpart — clamp to max
-                let magnitude = value == Int16.min ? Int16.max : abs(value)
-                if magnitude > peaks[channel] { peaks[channel] = magnitude }
-            }
-        }
-        return peaks
-    }
-
-    /// Sample magnitude as dBFS, with silence pinned at the meter floor.
-    private static func dBFS(_ peak: Int16) -> Float {
-        peak == 0 ? -100 : max(-100, 20 * log10(Float(peak) / Float(Int16.max)))
     }
 }

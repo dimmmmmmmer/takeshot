@@ -128,7 +128,10 @@
 /* Round 5 */
 "compare_off" = "Плейбек";
 "compare_wipe" = "Шторка";
-"compare_blend" = "Наложение";
+/* "Микс" and not "Наложение": four segments in a mini segmented control over
+   the player, where the long form is the widest label of the row and pushes
+   the whole compare bar into the badges beside it. */
+"compare_blend" = "Микс";
 "compare_side" = "A|B";
 "playback_speed" = "Скорость воспроизведения";
 "playback_loop" = "Зациклить";
@@ -166,7 +169,7 @@
 "hotkey_fullscreen" = "Фулскрин (в просмотре — фулскрин плейбека)";
 "hotkey_grab" = "Стоп-кадр";
 
-"monitor_device" = "Hardware monitor device";
+"monitor_device" = "Устройство мониторинга";
 "monitor_device_hint" = "Вывод мониторинга по SDI/HDMI через плату Blackmagic — включится с первой сборкой на живом железе";
 
 "wipe_vertical" = "Вертикальная шторка";
@@ -314,7 +317,10 @@
 "marker_removed" = "Маркер удалён %@";
 
 "delete_item" = "В корзину";
-"compare_source" = "Источник";
+/* "Сигнал" and not "Источник": a segmented control gives every segment the
+   width of its LONGEST label, so the widest word in this picker is multiplied
+   by four — eight characters here cost the compare bar 52pt. */
+"compare_source" = "Сигнал";
 
 "marker_color_help" = "Клик — сменить цвет маркера";
 
@@ -354,3 +360,6 @@
 "offload_done" = "Офлоад сверен: %d файлов";
 "offload_failed" = "Офлоад: %d файл(ов) с ОШИБКОЙ (%@)";
 "close" = "Закрыть";
+
+/* i18n layout pass */
+"playback_volume" = "Громкость плейбека";

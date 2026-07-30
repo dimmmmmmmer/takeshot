@@ -85,11 +85,20 @@ extension CaptureController {
                         self?.otherDurations[url] = duration
                     }
                 }
+                // The in-flight mark comes off whether or not a preview was
+                // decoded. Removing it only on success left a file that failed
+                // once — half-copied onto the card, say — marked in flight for
+                // the rest of the session, so it could never be retried even
+                // after the copy finished.
                 if let image {
                     let boxed = UncheckedSendable(image) // NSImage predates Sendable
                     await MainActor.run { [weak self] in
                         self?.otherThumbnails[url] = boxed.value
                         self?.otherThumbsInFlight.remove(url)
+                    }
+                } else {
+                    await MainActor.run { [weak self] in
+                        _ = self?.otherThumbsInFlight.remove(url)
                     }
                 }
             }

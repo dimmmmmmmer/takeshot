@@ -1,8 +1,4 @@
-@preconcurrency import Accelerate
-@preconcurrency import AVFoundation
-@preconcurrency import CoreImage
 @preconcurrency import CoreMedia
-@preconcurrency import CoreVideo
 import Foundation
 import os.log
 
@@ -83,34 +79,9 @@ extension CapturePipeline {
         DispatchQueue.main.async { self.onAudioLevels?(levels) }
     }
 
-    /// Channel indices set in a bit mask (bit i = channel i).
-    private static func channels(in mask: Int) -> [Int] {
+    /// Channel indices set in a bit mask (bit i = channel i). Internal rather
+    /// than private: the pre-roll drain applies the same mask from `+PreRoll`.
+    static func channels(in mask: Int) -> [Int] {
         (0..<32).filter { mask & (1 << $0) != 0 }
-    }
-    private func decodeLTC(from sampleBuffer: CMSampleBuffer, channels: Int) {
-        guard channels > 0, let format else { return }
-        let channel = min(max(0, config.settings.ltcChannel ?? 0), channels - 1)
-        guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
-        var length = 0
-        var pointer: UnsafeMutablePointer<CChar>?
-        guard CMBlockBufferGetDataPointer(
-            block, atOffset: 0, lengthAtOffsetOut: nil,
-            totalLengthOut: &length, dataPointerOut: &pointer) == noErr,
-            let pointer, length >= 2 else { return }
-        let fps = format.timecodeFPS
-        pointer.withMemoryRebound(to: Int16.self, capacity: length / 2) { samples in
-            let frames = (length / 2) / channels
-            guard frames > 0 else { return }
-            // extract the selected channel from the interleaved stream
-            var mono = [Int16](repeating: 0, count: frames)
-            for i in 0..<frames {
-                mono[i] = samples[i * channels + channel]
-            }
-            mono.withUnsafeBufferPointer { buffer in
-                if let tc = ltcDecoder.process(samples: buffer, fps: fps) {
-                    latestLTC = tc
-                }
-            }
-        }
     }
 }

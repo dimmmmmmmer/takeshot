@@ -60,116 +60,167 @@ public enum ScopeAnalyzer {
     }
 
     public static func analyze(_ pixelBuffer: CVPixelBuffer) -> ScopeData? {
-        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
-        switch format {
+        switch CVPixelBufferGetPixelFormatType(pixelBuffer) {
         case kCVPixelFormatType_32BGRA:
-            guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
-            return analyzeBGRA(base: base,
-                               width: CVPixelBufferGetWidth(pixelBuffer),
-                               height: CVPixelBufferGetHeight(pixelBuffer),
-                               rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
+            return PackedPlane(pixelBuffer).flatMap { analyzed(BGRAReader(plane: $0)) }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
-            guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
-            return analyze2vuy(base: base,
-                               width: CVPixelBufferGetWidth(pixelBuffer),
-                               height: CVPixelBufferGetHeight(pixelBuffer),
-                               rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
+            return PackedPlane(pixelBuffer).flatMap { analyzed(TwoVUYReader(plane: $0)) }
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: // '420v'
-            return analyze420v(pixelBuffer)
+            return BiPlanar420Reader(pixelBuffer).flatMap { analyzed($0) }
         default:
             return nil
         }
     }
 
-    // MARK: - private
+    // MARK: - the sampling grid
 
     /// Fixed sampling grid: identical column population for any frame size
     /// (resolution-dependent striding caused vertical banding).
     static let gridCols = ScopeData.waveWidth
     static let gridRows = 270
 
-    private static func analyzeBGRA(base: UnsafeRawPointer, width: Int,
-                                    height: Int, rowBytes: Int) -> ScopeData? {
-        guard width > 1, height > 0 else { return nil }
+    /// One sample as the accumulator takes it: full-range gamma-encoded R'G'B',
+    /// plus the wire chroma/luma for YUV sources (nil for RGB ones — see
+    /// `Accumulator.add`).
+    struct Sample {
+        let r: Int
+        let g: Int
+        let b: Int
+        var nativeChroma: (cb: Double, cr: Double)?
+        var nativeLuma: Int?
+    }
+
+    /// How one source format hands over a pixel. A protocol rather than a
+    /// closure so the walk below specializes per format: it runs
+    /// `gridCols * gridRows` times per frame and every sample goes through here.
+    protocol FrameReader {
+        var width: Int { get }
+        var height: Int { get }
+        func sample(x: Int, y: Int) -> Sample
+    }
+
+    /// Walk the grid once, accumulating every sample. The three formats differ
+    /// only in how a pixel is fetched, so this is the whole per-frame pass.
+    private static func analyzed<Reader: FrameReader>(_ reader: Reader) -> ScopeData? {
+        guard reader.width > 1, reader.height > 0 else { return nil }
         var acc = Accumulator()
-        let bytes = base.assumingMemoryBound(to: UInt8.self)
-        for gy in 0..<Self.gridRows {
-            let y = gy * height / Self.gridRows
-            let row = bytes + y * rowBytes
-            for gx in 0..<Self.gridCols {
-                let x = gx * width / Self.gridCols
-                let p = row + x * 4 // B G R A
-                acc.add(col: gx, r: Int(p[2]), g: Int(p[1]), b: Int(p[0]))
+        for gy in 0..<gridRows {
+            let y = gy * reader.height / gridRows
+            for gx in 0..<gridCols {
+                let sample = reader.sample(x: gx * reader.width / gridCols, y: y)
+                acc.add(col: gx, r: sample.r, g: sample.g, b: sample.b,
+                        nativeChroma: sample.nativeChroma,
+                        nativeLuma: sample.nativeLuma)
             }
         }
         return acc.finish()
     }
 
-    private static func analyze2vuy(base: UnsafeRawPointer, width: Int,
-                                    height: Int, rowBytes: Int) -> ScopeData? {
-        guard width > 1, height > 0 else { return nil }
-        var acc = Accumulator()
-        let bytes = base.assumingMemoryBound(to: UInt8.self)
-        for gy in 0..<Self.gridRows {
-            let y = gy * height / Self.gridRows
-            let row = bytes + y * rowBytes
-            for gx in 0..<Self.gridCols {
-                let x = (gx * width / Self.gridCols) & ~1 // whole Cb Y0 Cr Y1 macropixel
-                let p = row + (x / 2) * 4
-                let cb = Int(p[0]) - 128
-                let luma0 = Int(p[1])
-                let cr = Int(p[2]) - 128
-                // BT.709 video-range YCbCr → full-range R'G'B'
-                let yv = (luma0 - 16) * 298
-                let r = clamp((yv + 459 * cr) >> 8)
-                let g = clamp((yv - 137 * cr - 55 * cb) >> 8)
-                let b = clamp((yv + 541 * cb) >> 8)
-                acc.add(col: gx, r: r, g: g, b: b,
-                        nativeChroma: (Double(cb) * 255 / 224,
-                                       Double(cr) * 255 / 224),
-                        nativeLuma: clamp(yv >> 8))
-            }
+    // MARK: - the source formats
+
+    /// The one interleaved plane 32BGRA and 2vuy are both stored in: same
+    /// lookup, same frame size, only the bytes under (x, y) differ.
+    struct PackedPlane {
+        let base: UnsafePointer<UInt8>
+        let rowBytes: Int
+        let width: Int
+        let height: Int
+
+        init?(_ pixelBuffer: CVPixelBuffer) {
+            guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+            self.base = UnsafePointer(base.assumingMemoryBound(to: UInt8.self))
+            rowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
+            width = CVPixelBufferGetWidth(pixelBuffer)
+            height = CVPixelBufferGetHeight(pixelBuffer)
         }
-        return acc.finish()
+
+        func row(_ y: Int) -> UnsafePointer<UInt8> { base + y * rowBytes }
+    }
+
+    /// A reader over such a plane: the plane states the frame size, the
+    /// conforming type only says how to unpack one pixel.
+    protocol PackedPlaneReader: FrameReader {
+        var plane: PackedPlane { get }
+    }
+
+    /// 32BGRA — already full-range R'G'B', byte order B G R A.
+    private struct BGRAReader: PackedPlaneReader {
+        let plane: PackedPlane
+
+        func sample(x: Int, y: Int) -> Sample {
+            let p = plane.row(y) + x * 4
+            return Sample(r: Int(p[2]), g: Int(p[1]), b: Int(p[0]))
+        }
+    }
+
+    /// '2vuy' — one Cb Y0 Cr Y1 macropixel covers two columns.
+    private struct TwoVUYReader: PackedPlaneReader {
+        let plane: PackedPlane
+
+        func sample(x: Int, y: Int) -> Sample {
+            let macropixel = x & ~1 // whole Cb Y0 Cr Y1 group
+            let p = plane.row(y) + (macropixel / 2) * 4
+            return videoRangeSample(luma: Int(p[1]),
+                                    cb: Int(p[0]) - 128, cr: Int(p[2]) - 128)
+        }
     }
 
     /// Biplanar 4:2:0 video-range: luma plane + interleaved CbCr plane.
-    private static func analyze420v(_ pixelBuffer: CVPixelBuffer) -> ScopeData? {
-        guard let yBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
-              let cBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)
-        else { return nil }
-        let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
-        let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
-        let yRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        let cRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-        guard width > 1, height > 0 else { return nil }
-        var acc = Accumulator()
-        let yp = yBase.assumingMemoryBound(to: UInt8.self)
-        let cp = cBase.assumingMemoryBound(to: UInt8.self)
-        for gy in 0..<Self.gridRows {
-            let y = (gy * height / Self.gridRows) & ~1
-            let lumaRow = yp + y * yRow
-            let chromaRow = cp + (y / 2) * cRow
-            for gx in 0..<Self.gridCols {
-                let x = (gx * width / Self.gridCols) & ~1
-                let luma0 = Int(lumaRow[x])
-                let cb = Int(chromaRow[(x / 2) * 2]) - 128
-                let cr = Int(chromaRow[(x / 2) * 2 + 1]) - 128
-                let yv = (luma0 - 16) * 298
-                let r = clamp((yv + 459 * cr) >> 8)
-                let g = clamp((yv - 137 * cr - 55 * cb) >> 8)
-                let b = clamp((yv + 541 * cb) >> 8)
-                acc.add(col: gx, r: r, g: g, b: b,
-                        nativeChroma: (Double(cb) * 255 / 224,
-                                       Double(cr) * 255 / 224),
-                        nativeLuma: clamp(yv >> 8))
-            }
+    private struct BiPlanar420Reader: FrameReader {
+        let luma: UnsafePointer<UInt8>
+        let chroma: UnsafePointer<UInt8>
+        let lumaRowBytes: Int
+        let chromaRowBytes: Int
+        let width: Int
+        let height: Int
+
+        init?(_ pixelBuffer: CVPixelBuffer) {
+            guard let yBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
+                  let cBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)
+            else { return nil }
+            luma = UnsafePointer(yBase.assumingMemoryBound(to: UInt8.self))
+            chroma = UnsafePointer(cBase.assumingMemoryBound(to: UInt8.self))
+            lumaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+            chromaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
+            width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
+            height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
         }
-        return acc.finish()
+
+        func sample(x: Int, y: Int) -> Sample {
+            // both axes land on the even pixel the chroma pair belongs to
+            let pixelX = x & ~1
+            let pixelY = y & ~1
+            let chromaRow = chroma + (pixelY / 2) * chromaRowBytes
+            return videoRangeSample(
+                luma: Int((luma + pixelY * lumaRowBytes)[pixelX]),
+                cb: Int(chromaRow[(pixelX / 2) * 2]) - 128,
+                cr: Int(chromaRow[(pixelX / 2) * 2 + 1]) - 128)
+        }
+    }
+
+    /// BT.709 video-range YCbCr → full-range R'G'B', shared by both YUV
+    /// readers. The wire chroma/luma ride along as `native*` values so illegal
+    /// excursions are plotted as-is instead of being folded into the RGB gamut
+    /// by the clamp.
+    fileprivate static func videoRangeSample(luma: Int, cb: Int, cr: Int) -> Sample {
+        let yv = (luma - 16) * 298
+        return Sample(r: clamp((yv + 459 * cr) >> 8),
+                      g: clamp((yv - 137 * cr - 55 * cb) >> 8),
+                      b: clamp((yv + 541 * cb) >> 8),
+                      nativeChroma: (Double(cb) * 255 / 224,
+                                     Double(cr) * 255 / 224),
+                      nativeLuma: clamp(yv >> 8))
     }
 
     private static func clamp(_ v: Int) -> Int { min(255, max(0, v)) }
+}
+
+/// The frame size of a packed-plane reader is the plane's — stated once so the
+/// readers themselves are nothing but their pixel unpacking.
+extension ScopeAnalyzer.PackedPlaneReader {
+    var width: Int { plane.width }
+    var height: Int { plane.height }
 }

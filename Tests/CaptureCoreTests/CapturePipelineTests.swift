@@ -24,8 +24,8 @@ struct CapturePipelineTests {
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "7", takeNumber: 2))
 
-        var finishedTakes: [Take] = []
-        var recStates: [Bool] = []
+        let finishedTakes = TakeCollector()
+        let recStates = EventCollector<Bool>()
         // Deliberately NOT a `confirmation`: its token is only valid inside the
         // body, the pipeline holds onTakeFinished past it, and the take is
         // published from a detached finalize task. On a slow machine that call
@@ -100,7 +100,7 @@ struct CapturePipelineTests {
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "1", takeNumber: 1))
-        var finishedTakes: [Take] = []
+        let finishedTakes = TakeCollector()
         pipeline.onTakeFinished = { finishedTakes.append($0) }
 
         pipeline.handleFormat(CaptureFormat(

@@ -34,20 +34,31 @@ public final class TakeWriter {
     private let videoInput: AVAssetWriterInput
     private let pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor
     private var audioInput: AVAssetWriterInput?
-    private let timecodeInput: AVAssetWriterInput?
-    private let timecodeFormatDescription: CMTimeCodeFormatDescription?
-
     private let format: CaptureFormat
-    private let startTimecode: Timecode?
-    private var sessionStarted = false
-    private var firstPTS = CMTime.invalid
-    private var lastPTS = CMTime.invalid
     private var appendedFrames = 0
+
+    /// The timecode track's state. Internal rather than private because the
+    /// track itself lives in `+Timecode` — never wider than the module.
+    let timecodeInput: AVAssetWriterInput?
+    let timecodeFormatDescription: CMTimeCodeFormatDescription?
+    let startTimecode: Timecode?
+    var tcResyncs: [(pts: CMTime, timecode: Timecode)] = []
+    /// The session's span, which the timecode samples are placed against.
+    var sessionStarted = false
+    var firstPTS = CMTime.invalid
+    var lastPTS = CMTime.invalid
 
     public var durationSeconds: Double {
         guard firstPTS.isValid, lastPTS.isValid else { return 0 }
-        let frameDuration = 1.0 / format.frameRate
-        return CMTimeSubtract(lastPTS, firstPTS).seconds + frameDuration
+        return CMTimeSubtract(lastPTS, firstPTS).seconds + 1.0 / format.frameRate
+    }
+
+    /// One frame at the take's rate. The 1000/1000 scaling keeps a fractional
+    /// rate (23.976, 29.97) exact in the timescale instead of rounding it.
+    var frameDuration: CMTime { Self.frameDuration(at: format.frameRate) }
+
+    static func frameDuration(at frameRate: Double) -> CMTime {
+        CMTime(value: 1000, timescale: CMTimeScale(frameRate * 1000))
     }
 
     /// QuickTime metadata key TakeShot uses to tag its own files
@@ -104,20 +115,6 @@ public final class TakeWriter {
         guard writer.startWriting() else {
             throw WriterError.notWritable(writer.status, writer.error)
         }
-    }
-
-    /// The take's timecode track, or nil when the source gave us no timecode to
-    /// anchor it to. One tc32 sample covers the whole take; a second anchor is
-    /// appended in `finish()` if the camera's Rec Run started mid-take.
-    private static func addTimecodeInput(
-        formatDescription: CMTimeCodeFormatDescription?,
-        to writer: AVAssetWriter) -> AVAssetWriterInput? {
-        guard let formatDescription else { return nil }
-        let input = AVAssetWriterInput(mediaType: .timecode, outputSettings: nil,
-                                       sourceFormatHint: formatDescription)
-        input.expectsMediaDataInRealTime = false
-        writer.add(input)
-        return input
     }
 
     /// The take's audio track, or nil when the source has no channels or the
@@ -192,18 +189,6 @@ public final class TakeWriter {
         audioInput.append(audioSampleBuffer)
     }
 
-    /// A timecode re-anchor mid-take: the camera's Rec Run TC stood still when
-    /// the take started and began running at `timecode` on the frame at `pts` —
-    /// an extra tc32 sample from that frame keeps the file frame-accurate
-    /// against the camera original in the overlapping region.
-    public func addTimecodeResync(timecode: Timecode, at pts: CMTime) {
-        guard startTimecode != nil, sessionStarted, pts > firstPTS,
-              tcResyncs.count < 32 else { return }
-        tcResyncs.append((pts: pts, timecode: timecode))
-    }
-
-    private var tcResyncs: [(pts: CMTime, timecode: Timecode)] = []
-
     /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
         // finishing with zero samples fails inside AVAssetWriter (-11800) and
@@ -212,27 +197,11 @@ public final class TakeWriter {
             cancel()
             throw WriterError.emptyTake
         }
-        if let timecodeInput, let fdesc = timecodeFormatDescription,
-           let tc = startTimecode, sessionStarted {
-            let frameDuration = CMTime(value: 1000,
-                                       timescale: CMTimeScale(format.frameRate * 1000))
-            let end = CMTimeAdd(lastPTS, frameDuration)
-            var anchors: [(pts: CMTime, timecode: Timecode)] = [(firstPTS, tc)]
-            anchors.append(contentsOf: tcResyncs.filter {
-                $0.pts > firstPTS && $0.pts < end
-            })
-            for (index, anchor) in anchors.enumerated() {
-                let next = index + 1 < anchors.count ? anchors[index + 1].pts : end
-                appendTimecodeSample(input: timecodeInput, formatDescription: fdesc,
-                                     timecode: anchor.timecode,
-                                     from: anchor.pts, until: next)
-            }
-        }
+        appendTimecodeTrack()
         videoInput.markAsFinished()
         audioInput?.markAsFinished()
         timecodeInput?.markAsFinished()
         if lastPTS.isValid {
-            let frameDuration = CMTime(value: 1000, timescale: CMTimeScale(format.frameRate * 1000))
             writer.endSession(atSourceTime: CMTimeAdd(lastPTS, frameDuration))
         }
         await writer.finishWriting()

@@ -112,6 +112,14 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
     case auto           // VANC trigger if recognized + running timecode
     case timecodeRun    // running TC only (camera in Rec Run)
     case manual         // in-app button only
+
+    /// The modes a recognized VANC trigger reaches the detector in. Stated here
+    /// as data, next to the cases it is about: the frame path used to spell the
+    /// same set out as a condition, which is one more place to forget when a
+    /// mode is added.
+    public static let vancTriggerModes: Set<RecDetectionMode> = [.vanc, .auto]
+
+    public var actsOnVancTrigger: Bool { Self.vancTriggerModes.contains(self) }
 }
 
 /// App settings (persisted in UserDefaults as JSON).

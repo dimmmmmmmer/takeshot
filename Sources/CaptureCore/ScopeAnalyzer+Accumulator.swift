@@ -56,29 +56,28 @@ extension ScopeAnalyzer {
             func rowFor(_ value: Int) -> Int {
                 height - 1 - min(height - 1, value * height / 256)
             }
-            // vertical segment from the previous sample's value to this one.
-            // The span is CAPPED: on noisy content |value − prev| averages
-            // ~85 codes and an unbounded fill measured 340 ms/pass at UHD —
-            // 8+ frame budgets. 32 rows looks identical on real traces.
+            // The rows a sample covers: the vertical segment from the previous
+            // sample's value to this one. The span is CAPPED: on noisy content
+            // |value − prev| averages ~85 codes and an unbounded fill measured
+            // 340 ms/pass at UHD — 8+ frame budgets. 32 rows looks identical on
+            // real traces.
             let maxSpan = 32
-            func fillSpan(_ counts: inout [Int], value: Int, prev: Int) {
+            func span(value: Int, prev: Int) -> ClosedRange<Int> {
                 let from = prev < 0 ? value
                     : min(max(prev, value - maxSpan), value + maxSpan)
-                let lo = rowFor(max(value, from))
-                let hi = rowFor(min(value, from))
-                for row in lo...hi {
+                return rowFor(max(value, from))...rowFor(min(value, from))
+            }
+            func fillSpan(_ counts: inout [Int], value: Int, prev: Int) {
+                for row in span(value: value, prev: prev) {
                     counts[row * width + col] += 1
                 }
             }
             fillSpan(&countsR, value: r, prev: prevR)
             fillSpan(&countsG, value: g, prev: prevG)
             fillSpan(&countsB, value: b, prev: prevB)
-            // luma span carries the pixel color for the colored trace
-            let from = prevLuma < 0 ? luma
-                : min(max(prevLuma, luma - maxSpan), luma + maxSpan)
-            let lo = rowFor(max(luma, from))
-            let hi = rowFor(min(luma, from))
-            for row in lo...hi {
+            // the luma span is filled by hand rather than through fillSpan:
+            // it also carries the pixel color for the colored trace
+            for row in span(value: luma, prev: prevLuma) {
                 let idx = row * width + col
                 countsY[idx] += 1
                 sumR[idx] += r
@@ -99,33 +98,39 @@ extension ScopeAnalyzer {
         /// Separable 1-2-1 blur over the density map: CRT-like soft traces
         /// instead of hard single-pixel lines (the "noisy" look).
         static func blurred(_ counts: [Int]) -> [Int] {
-            let width = ScopeData.waveWidth
-            let height = ScopeData.waveHeight
-            var tmp = [Int](repeating: 0, count: counts.count)
-            for row in 0..<height {
-                let base = row * width
-                for col in 0..<width {
-                    let left = col > 0 ? counts[base + col - 1] : 0
-                    let right = col < width - 1 ? counts[base + col + 1] : 0
-                    tmp[base + col] = counts[base + col] * 2 + left + right
-                }
-            }
+            let row = (step: 1, count: ScopeData.waveWidth)
+            let column = (step: ScopeData.waveWidth, count: ScopeData.waveHeight)
+            // across every row, then down every column
+            return blurPass(blurPass(counts, along: row, across: column),
+                            along: column, across: row)
+        }
+
+        /// One pass of the separable blur. `along` is the direction being
+        /// blurred (step between neighbours, samples per line), `across` walks
+        /// the line starts — so the two passes are the same code with the two
+        /// descriptions swapped, and neither borrows across a line end.
+        private static func blurPass(_ counts: [Int],
+                                     along: (step: Int, count: Int),
+                                     across: (step: Int, count: Int)) -> [Int] {
             var out = [Int](repeating: 0, count: counts.count)
-            for row in 0..<height {
-                let base = row * width
-                for col in 0..<width {
-                    let up = row > 0 ? tmp[base - width + col] : 0
-                    let down = row < height - 1 ? tmp[base + width + col] : 0
-                    out[base + col] = tmp[base + col] * 2 + up + down
+            for line in 0..<across.count {
+                let start = line * across.step
+                for position in 0..<along.count {
+                    let index = start + position * along.step
+                    let before = position > 0 ? counts[index - along.step] : 0
+                    let after = position < along.count - 1
+                        ? counts[index + along.step] : 0
+                    out[index] = counts[index] * 2 + before + after
                 }
             }
             return out
         }
 
         func finish() -> ScopeData {
-            // adaptive log curve — the same treatment as the vectorscope:
-            // single hits stay visible, dense areas keep gradation instead
-            // of clipping into a binary trace
+            // adaptive log curve, for the waveforms and the vectorscope alike:
+            // single hits stay visible and dense areas keep their gradation,
+            // where a fixed gain either clips into a flat blob or hides the low
+            // densities
             func toBytesLog(_ counts: [Int]) -> [UInt8] {
                 let peak = max(1, counts.max() ?? 1)
                 let scale = 255.0 / Foundation.log(Double(peak) + 1)
@@ -163,14 +168,6 @@ extension ScopeAnalyzer {
                 colored[i * 4 + 2] = UInt8(min(255, avgB * scale))
                 colored[i * 4 + 3] = 255
             }
-            // vector: adaptive log curve — a fixed gain either clips into a
-            // flat blob or hides low densities
-            let vPeak = max(1, countsV.max() ?? 1)
-            let vScale = 255.0 / Foundation.log(Double(vPeak) + 1)
-            let vectorBytes = countsV.map {
-                $0 == 0 ? UInt8(0)
-                    : UInt8(min(255.0, vScale * Foundation.log(Double($0) + 1)))
-            }
             return ScopeData(waveformY: toBytesLog(softY),
                              waveformR: toBytesLog(softR),
                              waveformG: toBytesLog(softG),
@@ -178,7 +175,7 @@ extension ScopeAnalyzer {
                              waveformYColor: colored,
                              histR: histR, histG: histG,
                              histB: histB, histY: histY,
-                             vector: vectorBytes,
+                             vector: toBytesLog(countsV),
                              sequence: ScopeAnalyzer.nextSequence())
         }
     }

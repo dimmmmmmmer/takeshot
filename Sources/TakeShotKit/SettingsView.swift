@@ -24,14 +24,21 @@ struct FrameCountField: View {
     }
 }
 
+extension SettingsView {
+    /// Vendor naming presets (see NamingPreset.all; kept as an alias so both
+    /// Settings and the footer menu read the same list).
+    static var namingPresets: [NamingPreset] { NamingPreset.all }
+
+    /// The width of the settings window. Every row is a localized label beside a
+    /// control, so `ViewSettingsTests` measures the rows against this rather
+    /// than trusting them to fit.
+    static var width: CGFloat { 500 }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var confirmClearLUTs = false
-
-    /// Vendor naming presets (see NamingPreset.all; kept as an alias so both
-    /// Settings and the footer menu read the same list).
-    static let namingPresets = NamingPreset.all
 
     var body: some View {
         Form {
@@ -274,7 +281,13 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)
-        .frame(width: 500)
+        // A fixed width, deliberately: `minWidth` here hands the window the
+        // Form's own ideal width (776pt, the same in every language — it is a
+        // Form default, not a content measurement) and the settings window
+        // balloons. The rows fit 500 in both languages; ViewSettingsTests
+        // measures them so a longer translation fails a test instead of
+        // silently truncating a label.
+        .frame(width: Self.width)
         .padding(.top, 16) // under the window buttons: title bar hidden
         .padding([.horizontal, .bottom])
         .background(controller.appBackground.ignoresSafeArea())

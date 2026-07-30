@@ -2,7 +2,6 @@
 @preconcurrency import CoreVideo
 import Metal
 @preconcurrency import QuartzCore
-import os.log
 
 /// The draw path: what the producer queues hand in, and what reaches the
 /// drawable. Everything here runs on `redrawQueue` and holds `renderLock`
@@ -106,9 +105,11 @@ extension MetalPreviewLayer {
         logProbeIfTagged(pixelBuffer)
         applyPendingDrawableSize()
         let size = drawableSize
-        guard size.width > 1, size.height > 1 else { return }
-        guard let drawable = nextDrawable() else { return }
-        guard let image = placedImage(from: pixelBuffer, in: size) else { return }
+        // one chain: no drawable yet, or nothing to place in it, and the frame
+        // is skipped — `lastBuffer` above means a redraw picks it up later
+        guard size.width > 1, size.height > 1,
+              let drawable = nextDrawable(),
+              let image = placedImage(from: pixelBuffer, in: size) else { return }
         let bounds = CGRect(origin: .zero, size: size)
         stateLock.lock()
         let letterbox = storedLetterboxColor
@@ -143,15 +144,16 @@ extension MetalPreviewLayer {
         }
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return nil }
-        var scale = min(size.width / extent.width, size.height / extent.height)
-        if currentAssist.punchIn > 1 {
-            scale *= currentAssist.punchIn // magnification with pan below
-        }
+        // punch-in magnifies and then pans; at or below 1 it is off, and
+        // clamping here keeps the two halves from disagreeing about that
+        let punchIn = max(1, currentAssist.punchIn)
+        let scale = min(size.width / extent.width,
+                        size.height / extent.height) * punchIn
         // integral-pixel placement: fractional offsets shift live vs playback
         // by a visible pixel in the compare modes (wipe/blend/side-by-side)
         var tx = ((size.width - extent.width * scale) / 2).rounded(.down)
         var ty = ((size.height - extent.height * scale) / 2).rounded(.down)
-        if currentAssist.punchIn > 1 {
+        if punchIn > 1 {
             // pan in image fractions; SwiftUI's y grows down, CI's grows up
             tx -= (currentAssist.panX * extent.width * scale).rounded(.down)
             ty += (currentAssist.panY * extent.height * scale).rounded(.down)
@@ -159,38 +161,5 @@ extension MetalPreviewLayer {
         return image
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
                 .concatenating(CGAffineTransform(translationX: tx, y: ty)))
-    }
-
-    /// Parity debugging between surfaces (rec vs playback): with `debugTag`
-    /// set, the center pixel of every ~50th presented frame goes to the
-    /// unified log. Call under renderLock — `presentCount` is bumped here.
-    private func logProbeIfTagged(_ pixelBuffer: CVPixelBuffer) {
-        guard let debugTag else { return }
-        presentCount += 1
-        guard presentCount % 50 == 1,
-              CVPixelBufferGetPixelFormatType(pixelBuffer)
-                  == kCVPixelFormatType_32BGRA else { return }
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
-        let w = CVPixelBufferGetWidth(pixelBuffer)
-        let h = CVPixelBufferGetHeight(pixelBuffer)
-        let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        let bytes = base.assumingMemoryBound(to: UInt8.self)
-        let p = bytes + (h / 2) * bpr + (w / 2) * 4
-        // 16x16 grid mean: catches a global shift in any tonal
-        // zone, not just whatever sits under the center pixel
-        var sumR = 0, sumG = 0, sumB = 0
-        for gy in 0..<16 {
-            let row = bytes + ((gy * 2 + 1) * h / 32) * bpr
-            for gx in 0..<16 {
-                let q = row + ((gx * 2 + 1) * w / 32) * 4
-                sumB += Int(q[0]); sumG += Int(q[1]); sumR += Int(q[2])
-            }
-        }
-        os_log("probe %{public}s %dx%d center=(%d,%d,%d) mean=(%d,%d,%d)",
-               log: CapturePipeline.levelsLog, type: .default,
-               debugTag, w, h, p[2], p[1], p[0],
-               sumR / 256, sumG / 256, sumB / 256)
     }
 }

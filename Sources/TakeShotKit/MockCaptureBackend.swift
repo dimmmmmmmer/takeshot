@@ -74,12 +74,15 @@ final class MockCaptureBackend: CaptureBackend {
         let channels = 16
         let sampleFrames = 1920 // 40 ms at 48 kHz
         var samples = [Int16](repeating: 0, count: sampleFrames * channels)
-        let t = Double(frameCounter) * 0.04
-        let ampL = 0.28 + 0.22 * sin(t * 0.9)
-        let ampR = 0.22 + 0.18 * sin(t * 0.6 + 1.3)
         let stepL = 2.0 * Double.pi * 440.0 / 48_000.0
         let stepR = 2.0 * Double.pi * 330.0 / 48_000.0
         for frame in 0..<sampleFrames {
+            // The breathing envelope is evaluated per sample. Evaluated once
+            // per buffer it stair-steps at every 40 ms boundary — a 25 Hz
+            // click track riding on the tone, audible as steady crackle.
+            let t = ptsSeconds + Double(frame) / 48_000.0
+            let ampL = 0.28 + 0.22 * sin(t * 0.9)
+            let ampR = 0.22 + 0.18 * sin(t * 0.6 + 1.3)
             audioPhaseL += stepL
             audioPhaseR += stepR
             let left = sin(audioPhaseL) * ampL

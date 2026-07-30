@@ -2,6 +2,11 @@ import Foundation
 
 /// Exports the take log to a DaVinci Resolve-compatible CSV
 /// (Media Pool → Import Metadata: matched by File Name, "Good Take" is Resolve's checkbox).
+///
+/// This file is the Resolve metadata CSV and its round trip. The other three
+/// jobs the exporter used to do in one file live next to it: `+Report` (the
+/// shift report table), `+Markers` (the markers sidecar) and `+CSV` (the RFC
+/// 4180 codec all three write through).
 public enum TakeLogExporter {
     public static let fileName = "takeshot-log.csv"
 
@@ -48,121 +53,15 @@ public enum TakeLogExporter {
         return url
     }
 
-    // MARK: - shift report (full data table, for production paperwork)
-
-    /// End TC of a take: start TC advanced by the recorded frames.
-    public static func endTimecode(of take: Take) -> Timecode? {
-        guard let start = take.startTimecode else { return nil }
-        let realRate = Double(start.fps)
-            * (start.isDropFrame ? 1000.0 / 1001.0 : 1)
-        let frames = Int((take.durationSeconds * realRate).rounded())
-        return Timecode(frameNumber: start.frameNumber + frames,
-                        fps: start.fps, isDropFrame: start.isDropFrame)
-    }
-
-    /// Take length as timecode at the take's own rate ("00:00:12:07").
-    public static func durationTimecode(of take: Take) -> String {
-        let fps = take.startTimecode?.fps ?? 25
-        let dropFrame = take.startTimecode?.isDropFrame ?? false
-        let realRate = Double(fps) * (dropFrame ? 1000.0 / 1001.0 : 1)
-        let frames = Int((take.durationSeconds * realRate).rounded())
-        return Timecode(frameNumber: frames, fps: max(1, fps),
-                        isDropFrame: dropFrame).description
-    }
-
-    public static func reportCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Roll,Clip,Start TC,End TC,Duration,Rating,Comments,Markers,Recorded At"]
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        for take in takes {
-            let rating: String
-            switch take.rating {
-            case .good: rating = "GOOD"
-            case .bad: rating = "NG"
-            case .none: rating = ""
-            }
-            lines.append([
-                escape(take.url.lastPathComponent),
-                escape(take.roll),
-                String(take.takeNumber),
-                take.startTimecode?.description ?? "",
-                endTimecode(of: take)?.description ?? "",
-                durationTimecode(of: take),
-                rating,
-                escape(flattened(take.comment)),
-                escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
-                formatter.string(from: take.recordedAt),
-            ].joined(separator: ","))
-        }
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    // MARK: - markers sidecar (not part of the Resolve metadata CSV)
-
-    public static let markersFileName = "takeshot-markers.csv"
-
-    public static func markersCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Seconds,Timecode,Color,Note"]
-        for take in takes {
-            for marker in take.markers {
-                lines.append([
-                    escape(take.url.lastPathComponent),
-                    String(format: "%.3f", marker.seconds),
-                    escape(marker.timecodeText),
-                    escape(marker.color),
-                    escape(flattened(marker.note)),
-                ].joined(separator: ","))
-            }
-        }
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    /// Write markers to `directory/takeshot-markers.csv` (removed when empty).
-    @discardableResult
-    public static func writeMarkers(takes: [Take], toDirectory directory: URL) throws -> URL {
-        let url = directory.appendingPathComponent(markersFileName)
-        if takes.allSatisfy({ $0.markers.isEmpty }) {
-            try? FileManager.default.removeItem(at: url)
-            return url
-        }
-        try FileManager.default.createDirectory(at: directory,
-                                                withIntermediateDirectories: true)
-        try markersCSV(takes: takes).write(to: url, atomically: true, encoding: .utf8)
-        return url
-    }
-
-    /// Markers from a previously written sidecar, keyed by filename.
-    public static func parseMarkers(csv: String) -> [String: [TakeMarker]] {
-        var result: [String: [TakeMarker]] = [:]
-        for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
-            let fields = parseCSVLine(String(line))
-            guard fields.count >= 3, !fields[0].isEmpty,
-                  let seconds = Double(fields[1]) else { continue }
-            result[fields[0], default: []].append(TakeMarker(
-                seconds: seconds, timecodeText: fields[2],
-                color: fields.count > 3 && !fields[3].isEmpty
-                    ? fields[3] : "orange",
-                note: fields.count > 4 ? fields[4] : ""))
-        }
-        for key in result.keys {
-            result[key]?.sort { $0.seconds < $1.seconds }
-        }
-        return result
-    }
-
     /// Rating + comment from a previously written CSV, keyed by filename.
     /// Used when restoring takes after an app restart.
     public static func parseMetadata(csv: String) -> [String: TakeMeta] {
         var result: [String: TakeMeta] = [:]
         for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
             let fields = parseCSVLine(String(line))
-            guard fields.count >= 5 else { continue }
-            let name = fields[0]
-            guard !name.isEmpty else { continue }
-            let goodFlag = fields[3] == "true"
-            let (rating, comment) = parseComments(fields[4], good: goodFlag)
-            result[name] = TakeMeta(rating: rating, comment: comment)
+            guard fields.count >= 5, !fields[0].isEmpty else { continue }
+            let (rating, comment) = parseComments(fields[4], good: fields[3] == "true")
+            result[fields[0]] = TakeMeta(rating: rating, comment: comment)
         }
         return result
     }
@@ -185,73 +84,5 @@ public enum TakeLogExporter {
             return (.bad, comment)
         }
         return (good ? .good : .none, trimmed)
-    }
-
-    /// The parsers split records on newlines BEFORE unquoting, so multi-line
-    /// text must be flattened at the source or the file breaks on restart.
-    static func flattened(_ value: String) -> String {
-        value.contains(where: \.isNewline)
-            ? value.replacingOccurrences(of: "\r\n", with: " ")
-                .replacingOccurrences(of: "\n", with: " ")
-                .replacingOccurrences(of: "\r", with: " ")
-            : value
-    }
-
-    /// Public variant for other writers (offload manifest).
-    public static func escapedField(_ value: String) -> String {
-        escape(flattened(value))
-    }
-
-    /// RFC 4180 escaping: quote values that contain commas/quotes/newlines.
-    /// Values starting with =, +, - or @ are prefixed with an apostrophe —
-    /// production opens these CSVs in Excel, where such cells execute as
-    /// formulas (a comment like =HYPERLINK(...) is an injection).
-    static func escape(_ rawValue: String) -> String {
-        var value = rawValue
-        if let first = value.first, "=+-@".contains(first) {
-            value = "'" + value
-        }
-        return escapeQuoting(value)
-    }
-
-    private static func escapeQuoting(_ value: String) -> String {
-        if value.contains(",") || value.contains("\"") || value.contains("\n") {
-            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        }
-        return value
-    }
-
-    /// RFC 4180 line parser: handles quoted fields with embedded commas/quotes.
-    static func parseCSVLine(_ line: String) -> [String] {
-        var fields: [String] = []
-        var current = ""
-        var inQuotes = false
-        let chars = Array(line)
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
-            if inQuotes {
-                if c == "\"" {
-                    if i + 1 < chars.count, chars[i + 1] == "\"" {
-                        current.append("\"") // escaped quote
-                        i += 1
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    current.append(c)
-                }
-            } else if c == "\"" {
-                inQuotes = true
-            } else if c == "," {
-                fields.append(current)
-                current = ""
-            } else {
-                current.append(c)
-            }
-            i += 1
-        }
-        fields.append(current)
-        return fields
     }
 }

@@ -59,9 +59,13 @@ struct AudioChannelPanel: View {
                     set: { controller.monitorVolume = $0 }), in: 0...1)
             }
             .frame(maxWidth: panelWidth)
+            // the panel is exactly as wide as the channel count makes it, so a
+            // two-channel signal leaves less room than any translation of the
+            // hint needs: wrap it instead of truncating a sentence to "Click a…"
             Text(L("audio_panel_hint"))
                 .font(.caption)
-                .lineLimit(1)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: panelWidth)
         }

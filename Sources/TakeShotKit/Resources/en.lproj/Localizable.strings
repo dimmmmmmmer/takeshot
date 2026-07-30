@@ -354,3 +354,6 @@
 "offload_done" = "Offload verified: %d files";
 "offload_failed" = "Offload: %d file(s) FAILED (%@)";
 "close" = "Close";
+
+/* i18n layout pass */
+"playback_volume" = "Playback volume";

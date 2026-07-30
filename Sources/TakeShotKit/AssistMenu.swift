@@ -23,13 +23,35 @@ struct AssistMenu: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
-            controls.padding(14).frame(width: 260)
+            AssistControlsPanel()
+                .padding(AssistControlsPanel.padding)
+                .frame(width: AssistControlsPanel.width)
         }
         .fixedSize()
         .help(L("assist_help"))
     }
+}
 
-    @ViewBuilder private var controls: some View {
+/// Body of the assist popover. Its own view rather than a property of the menu:
+/// a popover never renders while its trigger is measured, so this is the only
+/// way the localized pickers inside it can be laid out and checked.
+struct AssistControlsPanel: View {
+    /// Popover geometry, shared with the tests that assert the Russian rows
+    /// still fit inside it.
+    ///
+    /// 310 and not the original 260: the exposure segmented control alone
+    /// cannot be squeezed below 245pt in English or 262 in Russian ("Off /
+    /// False color / EL Zone (stops)"), so a 260pt popover clipped its own
+    /// first row in both languages.
+    static let width: CGFloat = 310
+    static let padding: CGFloat = 14
+    /// Width left for the rows themselves.
+    static var contentWidth: CGFloat { width - padding * 2 }
+
+    @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Picker(L("assist_tool"), selection: Binding(
                 get: { controller.assist.colorTool },

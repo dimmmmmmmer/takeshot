@@ -1,84 +1,12 @@
-@preconcurrency import Accelerate
-@preconcurrency import AVFoundation
-@preconcurrency import CoreImage
-@preconcurrency import CoreMedia
-@preconcurrency import CoreVideo
 import Foundation
-import os.log
 
-/// Take lifecycle: starting one (with its pre-roll), closing it, and the
-/// name reservation that keeps two pipelines off the same file.
+/// Take lifecycle: starting one (with its pre-roll and its latched audio mask),
+/// and closing it — where "closed" means finalized, published to the list, and
+/// its drop counts reported. The file's name and the reservation behind it are
+/// in `+TakeFiles`; the pre-roll it starts with is in `+PreRoll`.
 ///
 /// Split out of CapturePipeline, which had grown past 1300 lines.
 extension CapturePipeline {
-    /// Keep the pre-roll window's audio, trimmed to a little more than the
-    /// window itself. Raw packets: the channel mask is latched when the take
-    /// starts, so the trim happens at drain time. ~60 KB per 40 ms packet at
-    /// 16 channels, so even a long lead costs single-digit megabytes.
-    /// Write the buffered pre-roll audio into a take that has just started,
-    /// trimmed with the mask latched for this take. Packets older than the
-    /// take's first video frame have nowhere to go and are discarded.
-    private func drainPreRollAudio(into writer: TakeWriter, from start: CMTime?) {
-        defer { preRollAudio.removeAll() }
-        guard let start else { return }
-        for buffered in preRollAudio where buffered.pts >= start {
-            var toWrite: CMSampleBuffer? = buffered.buffer
-            if let mask = recordingMask {
-                let indices = (0..<32).filter { mask & (1 << $0) != 0 }
-                toWrite = PCMAudio.selectChannels(buffered.buffer, indices: indices,
-                                                  formatCache: &trimFormatCache)
-            }
-            if let toWrite { writer.append(audioSampleBuffer: toWrite) }
-        }
-    }
-    func bufferPreRollAudio(_ sampleBuffer: CMSampleBuffer) {
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        guard pts.isValid else { return }
-        preRollAudio.append((pts: pts, buffer: sampleBuffer))
-        let fps = format?.frameRate ?? 25
-        let window = Double(preRollFrames) / max(1, fps) + 1.0 // slack for jitter
-        while let first = preRollAudio.first,
-              (pts - first.pts).seconds > window {
-            preRollAudio.removeFirst()
-        }
-    }
-    public static func uniqueURL(for url: URL) -> URL {
-        reservationLock.lock()
-        defer { reservationLock.unlock() }
-
-        func taken(_ candidate: URL) -> Bool {
-            FileManager.default.fileExists(atPath: candidate.path)
-                || reservedPaths.contains(candidate.path)
-        }
-
-        if !taken(url) {
-            reservedPaths.insert(url.path)
-            return url
-        }
-        let base = url.deletingPathExtension()
-        let ext = url.pathExtension
-        var attempt = 2
-        while attempt < 1000 {
-            let candidate = URL(fileURLWithPath: base.path + "_\(attempt)")
-                .appendingPathExtension(ext)
-            if !taken(candidate) {
-                reservedPaths.insert(candidate.path)
-                return candidate
-            }
-            attempt += 1
-        }
-        let fallback = URL(fileURLWithPath: base.path + "_\(UUID().uuidString)")
-            .appendingPathExtension(ext)
-        reservedPaths.insert(fallback.path)
-        return fallback
-    }
-    /// Drop a reservation once the file exists on disk (or the take failed to
-    /// start) — from then on the filesystem itself is the authority.
-    public static func releaseReservation(for url: URL) {
-        reservationLock.lock()
-        reservedPaths.remove(url.path)
-        reservationLock.unlock()
-    }
     func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
         recordingMask = config.settings.audioChannelMask // latched for the take
@@ -109,51 +37,6 @@ extension CapturePipeline {
                 self.onError?("Failed to start recording: \(error.localizedDescription)")
             }
         }
-    }
-
-    /// The file's TC track counts from its FIRST frame — which is pre-roll,
-    /// shot before the camera's TC started running. Shift the start TC back
-    /// by the pre-roll frames actually written, so the camera-start frame
-    /// carries exactly the camera's TC and the take stays sync-accurate
-    /// against the camera original.
-    private func preRollShiftedTimecode(_ rawTimecode: Timecode?,
-                                        startIndex: Int) -> Timecode? {
-        let cutoffPreview = max(0, startIndex - preRollFrames)
-        // only the frames written BEFORE the camera-start frame shift the TC —
-        // counting the detection-latency frames too made every take a few
-        // frames early against the camera original
-        let preStartCount = preRollBuffer.filter {
-            $0.index >= cutoffPreview && $0.index < startIndex
-        }.count
-        guard let tc = rawTimecode, preStartCount > 0 else { return rawTimecode }
-        let dayFrames = Timecode.dayFrames(fps: tc.fps,
-                                           isDropFrame: tc.isDropFrame)
-        var shifted = tc.frameNumber - preStartCount
-        if shifted < 0 { shifted += dayFrames } // wrap across midnight
-        return Timecode(frameNumber: shifted,
-                        fps: tc.fps, isDropFrame: tc.isDropFrame)
-    }
-
-    /// The take's path from the naming template, before the collision suffix.
-    private func takeFileURL(timecode: Timecode?) -> URL {
-        let engine = NamingEngine(template: config.settings.namingTemplate,
-                                  clipPadding: config.settings.clipPadWidthEffective)
-        let context = NamingContext(
-            project: config.settings.projectName,
-            date: Date(),
-            scene: config.scene,
-            take: config.takeNumber,
-            reel: config.roll,
-            camera: config.settings.cameraLabel,
-            postfix: config.settings.postfix ?? "",
-            timecode: timecode)
-        let root = URL(fileURLWithPath:
-            (config.settings.destinationPath as NSString).expandingTildeInPath)
-        // write STRAIGHT into the chosen folder — no auto subfolders by date/project:
-        // the DIT picks the card/roll folder themselves; app nesting surprises them.
-        return root
-            .appendingPathComponent(engine.fileName(for: context))
-            .appendingPathExtension("mov")
     }
 
     private func makeTakeWriter(url: URL, format: CaptureFormat,
@@ -192,58 +75,6 @@ extension CapturePipeline {
         }
     }
 
-    /// pull frames from the buffer from (camera start - pre-roll) to current;
-    /// in Rec Run their timecode is frozen at the start value, so the take's
-    /// timecode track stays correct
-    private func drainPreRoll(into writer: TakeWriter, startIndex: Int) {
-        let cutoff = max(0, startIndex - preRollFrames)
-        // the burst outruns the encoder queue — wait, but within a total
-        // budget: unbounded waits stall the pipeline queue while capture
-        // callbacks pile up retained 4K frames behind it
-        let drainDeadline = Date().addingTimeInterval(1.5)
-        var lostPreRoll = 0
-        var firstPreRollPTS: CMTime?
-        for buffered in preRollBuffer where buffered.index >= cutoff {
-            let frame = lutRecord
-                ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
-                : buffered.pixelBuffer
-            if writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
-                                     deadline: drainDeadline) {
-                if firstPreRollPTS == nil { firstPreRollPTS = buffered.pts }
-            } else {
-                lostPreRoll += 1
-            }
-        }
-        preRollBuffer.removeAll()
-        // ...and the sound that goes under those frames. The writer's session
-        // starts at the first video PTS above, so anything older than that
-        // cannot be placed and is dropped.
-        drainPreRollAudio(into: writer, from: firstPreRollPTS)
-        // once the drain budget is spent the rest of the burst is dropped —
-        // and those are the frames closest to the camera's REC press, the
-        // whole point of pre-roll. Silence here reads as a clean head.
-        if lostPreRoll > 0 {
-            let count = lostPreRoll
-            DispatchQueue.main.async {
-                self.onError?("Pre-roll incomplete: \(count) frame(s) "
-                    + "before the REC point were not written")
-            }
-        }
-    }
-    static func markFailed(_ url: URL) -> URL {
-        let name = url.deletingPathExtension().lastPathComponent
-        guard !name.hasSuffix(failedTakeSuffix) else { return url }
-        let renamed = url.deletingLastPathComponent()
-            .appendingPathComponent(name + failedTakeSuffix)
-            .appendingPathExtension(url.pathExtension)
-        let target = uniqueURL(for: renamed)
-        do {
-            try FileManager.default.moveItem(at: url, to: target)
-            return target
-        } catch {
-            return url
-        }
-    }
     func finishTake() {
         guard let writer else { return }
         self.writer = nil
