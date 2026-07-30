@@ -440,3 +440,5 @@
 "trash_done" = "Moved %@ to the Trash";
 "trash_selection" = "Move %@ to Trash";
 "reveal_selection" = "Show %@ in Finder";
+/* player chrome, markers, windows, focus (owner items 10, 23, 24, 24b, 26, 28) */
+"marker_new_color_help" = "Color for new markers — click to cycle";

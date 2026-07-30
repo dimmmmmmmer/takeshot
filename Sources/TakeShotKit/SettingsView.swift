@@ -291,5 +291,9 @@ struct SettingsView: View {
         .padding(.top, 16) // under the window buttons: title bar hidden
         .padding([.horizontal, .bottom])
         .background(controller.appBackground.ignoresSafeArea())
+        // Open with nothing focused: the project name is the first text field in
+        // the Form, so AppKit handed it the keyboard and the first stray key
+        // renamed the show. Tab order is untouched.
+        .releasesInitialFocus()
     }
 }

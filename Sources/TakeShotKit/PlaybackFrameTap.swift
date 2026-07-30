@@ -22,6 +22,11 @@ import QuartzCore
 /// rather than private for that reason.
 final class PlaybackFrameTap: @unchecked Sendable {
     let sinks = PreviewSinkRegistry()
+    /// Mounts showing the COMPARE SOURCE on its own surface — the A pane of the
+    /// A/B split. Its own registry rather than a second `sinks` member: the two
+    /// carry different pictures at the same time (A is the B clip, `sinks` is the
+    /// clip under review), and one registry would mirror both into every layer.
+    let compareSinks = PreviewSinkRegistry()
     /// Every delivered frame (tap queue) — hardware playout mirror. Set from the
     /// main actor while the tap queue reads it, so it goes through a lock (see
     /// the same pattern in CapturePipeline and RawPlayerModel).
@@ -48,12 +53,29 @@ final class PlaybackFrameTap: @unchecked Sendable {
         sinks.remove(layer)
     }
 
+    /// Register a mount for the A/B compare source (see `compareSinks`).
+    func addCompareSink(_ layer: MetalPreviewLayer) {
+        compareSinks.add(layer)
+        // a paused pair pushes nothing — show whatever the B clip is parked on
+        queue.async {
+            if let buffer = self.lastCompareBuffer {
+                self.compareSinks.present(buffer)
+            }
+        }
+    }
+
+    func removeCompareSink(_ layer: MetalPreviewLayer) {
+        compareSinks.remove(layer)
+    }
+
     func setViewAssist(_ assist: ViewAssist) {
         sinks.setAssist(assist)
+        compareSinks.setAssist(assist)
     }
 
     func setLetterbox(_ color: CIColor) {
         sinks.setLetterbox(color)
+        compareSinks.setLetterbox(color)
     }
 
     let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
@@ -144,6 +166,15 @@ final class PlaybackFrameTap: @unchecked Sendable {
     func currentBuffer() -> CVPixelBuffer? {
         var result: CVPixelBuffer?
         queue.sync { result = self.lastBuffer }
+        return result
+    }
+
+    /// The frame the compare source is on — the B clip's own picture, exactly as
+    /// it is handed to `compareSinks` (the A pane) and to the wipe/blend back
+    /// half. Queue-synchronous, like `currentBuffer()`.
+    func compareSideBuffer() -> CVPixelBuffer? {
+        var result: CVPixelBuffer?
+        queue.sync { result = self.lastCompareBuffer }
         return result
     }
 

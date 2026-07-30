@@ -92,6 +92,26 @@ import Testing
         }
     }
 
+    /// Owner item 24b. The A pane of the A/B split follows the compare SOURCE,
+    /// not the viewer mode: picking another clip and switching to A/B used to
+    /// leave the left half on the camera, i.e. showing the operator the one
+    /// comparison they had just turned off. `PreviewView` reads this property, so
+    /// the decision is asserted where it is made.
+    @Test func theABPaneFollowsTheChosenCompareSource() async throws {
+        try await ControllerHarness.run { controller, root in
+            controller.viewerMode = .playback
+            #expect(controller.comparePaneSource == .live)
+
+            controller.compareClipURL = root.appendingPathComponent("b.mov")
+            controller.compareMode = .sideBySide
+            #expect(controller.comparePaneSource == .clip,
+                    "A/B against a clip is still showing live")
+
+            controller.compareClipURL = nil
+            #expect(controller.comparePaneSource == .live)
+        }
+    }
+
     @Test func pinningAStillAsTheReferenceSwitchesToCompare() async throws {
         try await ControllerHarness.run { controller, root in
             let still = try ControllerFixtures.writePNG(

@@ -29,6 +29,10 @@ struct ContentView: View {
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
+        // …and the window opens with nothing focused at all: Cam is the first
+        // text field in the tree, so AppKit was aiming the keyboard at a
+        // filename field before the operator had touched anything.
+        .releasesInitialFocus()
     }
 
     private var mainColumn: some View {

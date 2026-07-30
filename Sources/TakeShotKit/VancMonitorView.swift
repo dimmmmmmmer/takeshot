@@ -48,7 +48,13 @@ struct VancMonitorView: View {
             }
         }
         .frame(minWidth: 560, minHeight: 240)
-        .navigationTitle(L("vanc_monitor_title"))
+        // No `navigationTitle`: on a `Window` scene it writes NSWindow.title and
+        // SwiftUI puts titleVisibility back to .visible when it does, which is
+        // how this window kept showing a title strip the scopes window does not.
+        // The scene carries the localized name instead (see TakeShotApp), so the
+        // Window menu still lists it, and `hidesWindowTitle` re-asserts the
+        // monolithic chrome without depending on when the key notification lands.
+        .hidesWindowTitle()
     }
 
     static func describe(did: UInt8, sdid: UInt8) -> String {

@@ -223,6 +223,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// the same shape of bug as persisting the mute's zero, which made every
     /// launch start silent.
     public var monitorDimmed: Bool?
+    /// Color new markers are born with (one of `TakeMarker.colors`); nil — the
+    /// palette's first entry.
+    ///
+    /// Persisted because it is a crew convention, not a per-clip choice: one
+    /// unit flags focus in red and continuity in cyan all day, and re-picking it
+    /// after every relaunch is how markers end up all the same color. Optional,
+    /// like every other added field, so settings written by an older build still
+    /// decode.
+    public var defaultMarkerColor: String?
     /// Forced input display mode ("1080p25"…); nil — autodetect.
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.

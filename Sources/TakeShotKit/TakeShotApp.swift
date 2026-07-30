@@ -60,8 +60,12 @@ public struct TakeShotApp: App {
         }
         .defaultSize(width: 980, height: 380)
 
-        // VANC packet diagnostics window (opened by a button from the main window)
-        Window("VANC Monitor", id: "vanc-monitor") {
+        // VANC packet diagnostics window (opened by a button from the main
+        // window). The localized name lives on the SCENE, not in a
+        // `navigationTitle` inside the view: the scene title is what the Window
+        // menu lists, and setting it from the view made SwiftUI show the title
+        // strip as well (see VancMonitorView.hidesWindowTitle).
+        Window(L("vanc_monitor_title"), id: "vanc-monitor") {
             VancMonitorView()
                 .environmentObject(controller)
                 .tint(controller.accentColor)

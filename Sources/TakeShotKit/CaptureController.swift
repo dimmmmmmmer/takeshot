@@ -85,6 +85,10 @@ final class CaptureController: ObservableObject {
     /// Neutral info toast (grab saved etc.) — green, self-dismissing.
     @Published var lastNotice: String? {
         didSet {
+            // Every notice starts neutral; a marker toast paints itself right
+            // after assigning the text (see `noticeAboutMarker`). Resetting here
+            // is what keeps one marker's color off the next, unrelated notice.
+            lastNoticeTint = nil
             noticeDismissTask?.cancel()
             guard lastNotice != nil else { return }
             noticeDismissTask = Task { [weak self] in
@@ -94,6 +98,10 @@ final class CaptureController: ObservableObject {
             }
         }
     }
+    /// Color of the notice on screen; nil — the neutral green. Carries the color
+    /// of the thing it is ABOUT: a crew's marker convention IS the color, so an
+    /// always-green toast said nothing about the marker it had just placed.
+    @Published var lastNoticeTint: Color?
     private var noticeDismissTask: Task<Void, Never>?
     /// View mode: live signal or playback of a recording.
     @Published var viewerMode: ViewerMode = .record {

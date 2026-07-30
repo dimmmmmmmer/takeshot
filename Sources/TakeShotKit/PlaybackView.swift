@@ -39,6 +39,54 @@ struct PlaybackContent: View {
     }
 }
 
+/// The A pane of the A/B split: what the operator picked as the compare source.
+///
+/// It is NOT always the live signal. Choosing another clip as the B source and
+/// switching to A/B used to leave this pane on the camera, so the operator was
+/// handed live-vs-clip while the picker said clip-vs-clip — the one comparison
+/// they had explicitly turned off.
+struct CompareSourceContent: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        switch controller.comparePaneSource {
+        case .live:
+            LivePreviewContent()
+        case .clip:
+            CompareClipLayerView(tap: controller.playbackTap)
+        }
+    }
+}
+
+/// Compare-source mount: its own layer, registered with the tap's compare
+/// registry (the B clip's frames, uncomposited).
+private struct CompareClipLayerView: NSViewRepresentable {
+    let tap: PlaybackFrameTap
+
+    final class Coordinator {
+        var tap: PlaybackFrameTap?
+        var layer: MetalPreviewLayer?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let layer = MetalPreviewLayer()
+        tap.addCompareSink(layer)
+        context.coordinator.tap = tap
+        context.coordinator.layer = layer
+        return MetalPreviewHostView(layer: layer)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        if let layer = coordinator.layer {
+            coordinator.tap?.removeCompareSink(layer)
+        }
+    }
+}
+
 /// Playback mount: its own layer, registered as a tap sink for its lifetime.
 private struct TapLayerView: NSViewRepresentable {
     let tap: PlaybackFrameTap

@@ -29,6 +29,20 @@ extension CaptureController {
         case diagonal    // 45°
     }
 
+    /// What the A pane of the A/B split shows.
+    enum ComparePaneSource: Equatable {
+        case live
+        case clip
+    }
+
+    /// Which picture belongs in the A pane. One property, read by the pane and
+    /// asserted by the tests, because the wipe/blend composite and the split
+    /// have to agree on what "the compare source" means — they disagreed, and
+    /// A/B against another clip showed live on the left.
+    var comparePaneSource: ComparePaneSource {
+        compareClipURL == nil ? .live : .clip
+    }
+
     /// Hotkey punch-in: straight to 2x and back off. Reads the level the pinch
     /// gesture may have left on screen (see +Assist), so the key never toggles
     /// off a magnification it cannot see.

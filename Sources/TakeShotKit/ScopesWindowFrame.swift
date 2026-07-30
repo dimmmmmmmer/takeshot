@@ -7,36 +7,15 @@ import SwiftUI
 /// A backing view is the only way a SwiftUI `Window` scene hands out its
 /// `NSWindow`: the scene has no API for the placement, and an operator who
 /// dragged the scopes onto the second monitor expects to find them there the
-/// next time the app opens.
-struct ScopesWindowFrameKeeper: NSViewRepresentable {
+/// next time the app opens. The view itself is `WindowReporter` in
+/// `WindowChrome.swift` — the VANC title and the focus release need the same
+/// hand-off.
+struct ScopesWindowFrameKeeper: View {
     let controller: CaptureController
 
-    func makeNSView(context: Context) -> NSView {
+    var body: some View {
         WindowReporter { [controller] window in
             controller.keepScopesWindowFrame(window)
-        }
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    /// Calls back once, as soon as it has a window to report.
-    final class WindowReporter: NSView {
-        private let report: (NSWindow) -> Void
-        private var reported = false
-
-        init(report: @escaping (NSWindow) -> Void) {
-            self.report = report
-            super.init(frame: .zero)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError("not created from a nib") }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            guard !reported, let window else { return }
-            reported = true
-            report(window)
         }
     }
 }

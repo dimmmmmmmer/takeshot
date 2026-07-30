@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CaptureCore
 import SwiftUI
 import Testing
 
@@ -90,6 +91,24 @@ struct ViewTransportTests {
             let ideal = probe.fittingSizes { HStack { MarkerButton() } }
             #expect(ideal.ru == ideal.en)
             #expect(ideal.ru.width > 0)
+        }
+    }
+
+    /// The current-color swatch (owner item 24) is a fixed circle, so walking
+    /// the palette must not resize the bar around it — the same reflow the mute
+    /// icon caused, and the same reason it matters: everything to the right of
+    /// it jumps while the operator is reaching for it.
+    @Test func theNewMarkerColorSwatchDoesNotReflowTheTransport() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedPlaybackWithMarkers(probe.controller,
+                                                     in: probe.root)
+            var widths: Set<CGFloat> = []
+            for _ in TakeMarker.colors.indices {
+                widths.insert(probe.fittingSize(HStack { MarkerButton() }).width)
+                probe.controller.cycleNewMarkerColor()
+            }
+            #expect(widths.count == 1,
+                    "the marker group resized with the color: \(widths.sorted())")
         }
     }
 

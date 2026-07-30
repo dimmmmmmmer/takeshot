@@ -135,6 +135,56 @@ struct ViewPlayerBadgeTests {
         }
     }
 
+    // MARK: - one visual family (owner item 10)
+
+    /// The row used to be two design languages side by side: native segmented
+    /// controls on a 55%-black slab next to 72%-black plates with a hairline and
+    /// their own height. One height is the part a reader sees first, and it is
+    /// the part a control added later silently breaks — so every plate in the
+    /// chrome is measured against `PlayerChrome.height`, in both languages.
+    @Test func everyTopChromePlateSharesOneHeight() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.referencePinned = true
+
+            let plates: [(String, () -> AnyView)] = [
+                ("timecode badge", { AnyView(PlayerTimecodeBadge()) }),
+                ("mode switch", { AnyView(ViewerModeSwitch()) }),
+                ("compare bar", { AnyView(CompareControls()) }),
+                ("format badge", { AnyView(PlayerFormatBadge()) }),
+                ("icon badge", { AnyView(playerOverlayBadge { AssistMenu() }) }),
+            ]
+            for (name, make) in plates {
+                let ideal = probe.fittingSizes(make)
+                #expect(ideal.en.height == PlayerChrome.height,
+                        "\(name) is \(ideal.en.height)pt in English")
+                #expect(ideal.ru.height == PlayerChrome.height,
+                        "\(name) is \(ideal.ru.height)pt in Russian")
+            }
+        }
+    }
+
+    /// The compare bar changes shape as modes are engaged (the wipe picker, the
+    /// blend slider and its per-cent field). None of that may push it off the
+    /// family's height — a bar that grows mid-shoot moves the mode switch above
+    /// it and the whole chrome jumps.
+    @Test func theCompareBarKeepsItsHeightInEveryMode() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.viewerMode = .playback
+            probe.controller.referencePinned = true
+
+            for mode in [CaptureController.CompareMode.off, .wipe,
+                         .blend, .sideBySide] {
+                probe.controller.compareMode = mode
+                let ideal = probe.fittingSizes { CompareControls() }
+                #expect(ideal.en.height == PlayerChrome.height,
+                        "\(mode) bar is \(ideal.en.height)pt")
+                #expect(ideal.ru.height == ideal.en.height)
+            }
+        }
+    }
+
     /// The LUT popover is a fixed 240pt box. Its rows are two localized toggles,
     /// a localized intensity label and a menu — they have to fit without being
     /// squeezed, i.e. the ideal width has to be inside the box.

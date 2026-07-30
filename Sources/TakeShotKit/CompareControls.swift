@@ -2,6 +2,11 @@ import SwiftUI
 
 /// Live/playback compare controls.
 struct CompareControls: View {
+    /// Tighter than the shared plate inset: this is a row of six controls that
+    /// carry their own margins, and the full 8pt a side pushed it into the badge
+    /// groups it is centered between at the narrowest window.
+    static let platePadding: CGFloat = 5
+
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
@@ -111,7 +116,7 @@ struct CompareControls: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(4)
-        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+        // same plate as the badges and the mode switch above it (see PlayerChrome)
+        .playerChromePlate(horizontalPadding: Self.platePadding)
     }
 }

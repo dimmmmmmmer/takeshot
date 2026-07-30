@@ -19,6 +19,35 @@ extension CaptureController {
         return takes.first { $0.url == url }?.markers ?? []
     }
 
+    /// The color the NEXT marker will be born with — the swatch in the marker
+    /// controls. Colors used to be reachable only after a marker existed, so the
+    /// convention had to be re-applied marker by marker.
+    ///
+    /// Reads through the palette rather than trusting the stored string: a
+    /// hand-edited or downgraded settings blob must not put a color the palette
+    /// has no swatch for onto every marker of the day.
+    var newMarkerColor: String {
+        get {
+            let stored = settings.defaultMarkerColor
+            return TakeMarker.colors.contains(stored ?? "")
+                ? (stored ?? TakeMarker.colors[0]) : TakeMarker.colors[0]
+        }
+        set {
+            // the default stays nil, so an untouched install writes no field
+            settings.defaultMarkerColor =
+                newValue == TakeMarker.colors[0] ? nil : newValue
+        }
+    }
+
+    /// Advance the new-marker color by one — the swatch is a click-to-cycle
+    /// control, the same as the per-marker swatch in the list (a menu on a 10pt
+    /// label is unopenable).
+    func cycleNewMarkerColor() {
+        let palette = TakeMarker.colors
+        let index = palette.firstIndex(of: newMarkerColor) ?? 0
+        newMarkerColor = palette[(index + 1) % palette.count]
+    }
+
     /// Current playback position in seconds (marker navigation).
     var playbackPositionSeconds: Double {
         if let raw = rawPlayer {
@@ -48,10 +77,11 @@ extension CaptureController {
                 where: { abs($0.seconds - seconds) < frameStep * 0.6 })
             else { return }
             takes[index].markers.append(
-                TakeMarker(seconds: seconds, timecodeText: tcText))
+                TakeMarker(seconds: seconds, timecodeText: tcText,
+                           color: newMarkerColor))
             takes[index].markers.sort { $0.seconds < $1.seconds }
             exportTakeLog()
-            lastNotice = L("marker_added", tcText)
+            noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
         } else if isRecording {
             let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
             let fps = Double(max(1, live.currentTimecode?.fps ?? 25))
@@ -59,9 +89,20 @@ extension CaptureController {
                 where: { abs($0.seconds - seconds) < 0.6 / fps }) else { return }
             let tcText = live.currentTimecode?.description ?? ""
             recordingMarkers.append(
-                TakeMarker(seconds: seconds, timecodeText: tcText))
-            lastNotice = L("marker_added", tcText)
+                TakeMarker(seconds: seconds, timecodeText: tcText,
+                           color: newMarkerColor))
+            noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
         }
+    }
+
+    /// A toast that names ONE marker, shown in that marker's own color.
+    ///
+    /// The tint is assigned AFTER the text on purpose: `lastNotice`'s observer
+    /// clears it, which is what stops a red marker's color from leaking onto the
+    /// next, unrelated notice. Everything else keeps the neutral green.
+    func noticeAboutMarker(_ text: String, color: String) {
+        lastNotice = text
+        lastNoticeTint = markerColor(color)
     }
     /// Mutate a marker of the current playback clip (list editor).
     func updatePlaybackMarker(at index: Int,
@@ -90,12 +131,14 @@ extension CaptureController {
                     < abs($1.element.seconds - now) })?.offset,
                 abs(playbackMarkers[index].seconds - now) <= tolerance
             else { return }
-            let tc = playbackMarkers[index].timecodeText
+            let marker = playbackMarkers[index]
             removePlaybackMarker(at: index)
-            lastNotice = L("marker_removed", tc)
+            noticeAboutMarker(L("marker_removed", marker.timecodeText),
+                              color: marker.color)
         } else if isRecording, let last = recordingMarkers.last {
             recordingMarkers.removeLast()
-            lastNotice = L("marker_removed", last.timecodeText)
+            noticeAboutMarker(L("marker_removed", last.timecodeText),
+                              color: last.color)
         }
     }
     func clearPlaybackMarkers() {
@@ -117,7 +160,8 @@ extension CaptureController {
         let marker = markers[index]
         seekPlayback(to: marker.seconds)
         let name = marker.note.isEmpty ? L("marker_n", index + 1) : marker.note
-        lastNotice = "⚑ \(name) — \(marker.timecodeText)"
+        noticeAboutMarker("⚑ \(name) — \(marker.timecodeText)",
+                          color: marker.color)
     }
     /// Jump the player (AVPlayer or RAW) to a position in seconds.
     func seekPlayback(to seconds: Double) {

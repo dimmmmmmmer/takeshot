@@ -127,6 +127,106 @@ import Testing
         #expect(left.r < 0x60, "the front half is not clip A: \(left.r)")
     }
 
+    /// A/B side by side against ANOTHER CLIP: the pane showing the compare
+    /// source has to be fed the B clip, not the camera (owner item 24b).
+    ///
+    /// The split turns the composite OFF — each pane is its own surface — which
+    /// is exactly why this broke: with nothing composited, nothing pulled the B
+    /// clip at all and the A pane stayed on the live signal. Asserted on the
+    /// pixels of the buffer the pane's sinks are handed, on both sides at once:
+    /// three distinct levels, so "the wrong picture" cannot pass as "the right
+    /// one, rounded".
+    @Test func theABPaneIsFedTheCompareClipAndNotTheLiveSignal() async throws {
+        let media = try MediaFixtures.makeDirectory("tap-ab-split")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let underReview = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("a.mov"), frames: 50, level: 0x20)
+        let compareSource = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("b.mov"), frames: 50, level: 0xE0)
+
+        let tap = PlaybackFrameTap()
+        let collector = MediaFixtures.FrameCollector()
+        tap.setOnDisplayFrame { collector.record($0) }
+        // mid-grey live signal: an A pane still on the camera reads as 0x80
+        let live = MediaFixtures.pixelBuffer(level: 0x80)
+        tap.setLiveBufferProvider { live }
+        // what CaptureController.pushCompare does for .sideBySide
+        tap.setCompare(.off)
+        // a mounted A pane is what asks the tap for the compare source at all
+        let pane = MetalPreviewLayer()
+        tap.addCompareSink(pane)
+        let player = startPlayback(of: underReview, through: tap)
+        defer {
+            tap.removeCompareSink(pane)
+            stop(player, tap)
+        }
+        tap.setCompareClip(url: compareSource, syncTo: player)
+
+        let arrived = await ControllerWait.untilWritten {
+            guard let side = tap.compareSideBuffer() else { return false }
+            return MediaFixtures.sample(side, atFractionX: 0.5).r > 0xB0
+        }
+        let side = try #require(tap.compareSideBuffer(),
+                                "the A pane was never fed anything")
+        let sidePixel = MediaFixtures.sample(side, atFractionX: 0.5)
+        #expect(arrived,
+                "the A pane is not showing the compare clip: \(sidePixel.description)")
+        #expect(sidePixel.r > 0xB0, "A pane: \(sidePixel.description)")
+
+        // …and the B pane still shows the take under review, ungraded
+        let front = try #require(collector.last)
+        let frontPixel = MediaFixtures.sample(front, atFractionX: 0.5)
+        #expect(frontPixel.r < 0x60,
+                "the reviewed clip left the main surface: \(frontPixel.description)")
+    }
+
+    /// With no compare clip chosen the A pane is the live signal, so the tap must
+    /// not be holding a stale B frame from a source that was switched back to
+    /// Live — that frame would freeze on screen next to a running clip.
+    @Test func clearingTheCompareClipDropsTheSideBuffer() async throws {
+        let media = try MediaFixtures.makeDirectory("tap-ab-clear")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let front = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("a.mov"), frames: 40, level: 0x20)
+        let back = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("b.mov"), frames: 40, level: 0xE0)
+
+        let tap = PlaybackFrameTap()
+        let pane = MetalPreviewLayer()
+        tap.addCompareSink(pane)
+        let player = startPlayback(of: front, through: tap)
+        defer {
+            tap.removeCompareSink(pane)
+            stop(player, tap)
+        }
+        tap.setCompareClip(url: back, syncTo: player)
+        let fed = await ControllerWait.untilWritten {
+            tap.compareSideBuffer() != nil
+        }
+        #expect(fed, "the compare source never reached the pane")
+
+        tap.setCompareClip(url: nil, syncTo: player)
+        tap.queue.sync {}
+        #expect(tap.compareSideBuffer() == nil,
+                "a frame of the old compare clip is still on the A pane")
+    }
+
+    /// Registration is per mount, like the main sinks — the A pane appears and
+    /// disappears with the compare mode.
+    @Test func compareSinksJoinAndLeaveTheTap() {
+        let tap = PlaybackFrameTap()
+        let layer = MetalPreviewLayer()
+        #expect(tap.compareSinks.all().isEmpty)
+
+        tap.addCompareSink(layer)
+        #expect(tap.compareSinks.all().count == 1)
+        // …and they are not the same registry as the reviewed clip's
+        #expect(tap.sinks.all().isEmpty)
+
+        tap.removeCompareSink(layer)
+        #expect(tap.compareSinks.all().isEmpty)
+    }
+
     /// The preview LUT, built from a real .cube on disk and applied to decoded
     /// frames. A LUT that parses but does not reach the player is the failure
     /// mode an operator reads as "the show LUT does nothing in playback".
