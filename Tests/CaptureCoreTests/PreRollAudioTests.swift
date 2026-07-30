@@ -38,7 +38,7 @@ struct PreRollAudioTests {
                                                   pixelBuffer: frame)
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: frame)
 
-        await TestWait.until { !finished.isEmpty }
+        await TestWait.untilWritten { !finished.isEmpty }
         await pipeline.finishPendingWrites()
         let take = try #require(finished.first)
         await TestWait.fileExists(at: take.url)

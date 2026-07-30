@@ -49,7 +49,7 @@ struct CapturePipelineTests {
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
         // the pipeline processes asynchronously — wait for the take-finished event
-        await TestWait.until { !finishedTakes.isEmpty }
+        await TestWait.untilWritten { !finishedTakes.isEmpty }
         // and let every finalize task complete before the defer above removes
         // the folder out from under a writer that is still finishing
         await pipeline.finishPendingWrites()
@@ -116,7 +116,7 @@ struct CapturePipelineTests {
                                                   pixelBuffer: pixelBuffer)
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
-        await TestWait.until { !finishedTakes.isEmpty }
+        await TestWait.untilWritten { !finishedTakes.isEmpty }
         await pipeline.finishPendingWrites()
         let take = try #require(finishedTakes.first)
 

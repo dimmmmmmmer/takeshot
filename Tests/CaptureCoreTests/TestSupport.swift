@@ -155,7 +155,19 @@ enum TestWait {
         }
     }
 
-    static func fileExists(at url: URL, timeout: Duration = .seconds(5)) async {
+    /// For a condition that waits on encoding, finalizing and writing a file.
+    /// The interactive budget above fails on the CI runner under coverage
+    /// instrumentation — the take-finalize path there legitimately takes
+    /// longer than five seconds, and the tests that wait on it went red in
+    /// exactly and only that configuration. Mirrors ControllerWait.untilWritten.
+    static func untilWritten(_ condition: () -> Bool) async {
+        await until(condition, timeout: .seconds(45))
+    }
+
+    static func fileExists(at url: URL, timeout: Duration = .seconds(45)) async {
+        // The generous default is the same I/O budget as untilWritten: this is
+        // only ever awaited for files the pipeline is finalizing, and it costs
+        // nothing when the file is already there.
         await until({ FileManager.default.fileExists(atPath: url.path) },
                     timeout: timeout)
     }
