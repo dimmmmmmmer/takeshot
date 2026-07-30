@@ -65,8 +65,12 @@ instead of a double-click; macOS then remembers the choice.
 
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
   locators, shift report as PDF and CSV.
-- Verified offload of a camera card: recursive copy with SHA-256 on both sides
-  and a manifest.
+- DIT offload of a camera card to several SSDs at once: the card is read once
+  and written to every destination in the same pass, each copy is verified by
+  re-reading it off the disk, and every destination gets an ASC MHL manifest
+  plus a human-readable summary. xxHash64 by default (what Silverstack,
+  OffShoot and Hedge verify against), SHA-256 when a delivery spec asks for it.
+  A destination that fails does so alone; the others finish.
 
 ## Requirements
 

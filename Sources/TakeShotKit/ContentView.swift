@@ -19,6 +19,12 @@ struct ContentView: View {
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
         .id(controller.settings.appLanguage)
+        // The DIT offload runs as a sheet over the main window: it needs a
+        // destination LIST, live per-destination progress and a verdict card
+        // each, none of which a chain of modal file panels can show.
+        .sheet(isPresented: $controller.offloadSheetPresented) {
+            OffloadSheet(model: controller.offload)
+        }
         // clicking empty space clears focus from text fields
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)

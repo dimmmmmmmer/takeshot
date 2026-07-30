@@ -199,6 +199,12 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
     public var forcedInputRGB: Bool?
+    /// DIT offload: the destination folders of the last run, in order. The same
+    /// two or three SSDs come back every shooting day, and re-picking them
+    /// through a file panel per card is the part of the old flow that hurt.
+    public var offloadDestinationPaths: [String]?
+    /// Checksum for the offload: "xxh64" (nil — the same) or "sha256".
+    public var offloadHashAlgorithm: String?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy
