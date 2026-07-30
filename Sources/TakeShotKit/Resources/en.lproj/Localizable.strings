@@ -322,12 +322,12 @@
 "assist_tool" = "Exposure assist";
 "assist_off" = "Off";
 "assist_false_color" = "False color";
-"assist_zebra" = "Zebra (95%)";
+"assist_zebra" = "Zebra";
 "assist_peaking" = "Focus peaking";
 "framelines" = "Framelines";
 "safe_areas" = "Safe areas";
 "desqueeze" = "Desqueeze";
-"punch_in" = "Punch-in 2x";
+"punch_in" = "Punch-in";
 "hotkey_punch_in" = "Punch-in zoom";
 
 "loop_in_help" = "Set/clear the loop IN point";
@@ -343,7 +343,7 @@
 "compare_b_live" = "vs Live";
 "compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
 
-"punch_pan_hint" = "Drag the image to pan while punched in";
+"punch_pan_hint" = "Drag or two-finger scroll to pan, pinch to zoom";
 "offload_menu" = "Verified copy of a folder...";
 "offload_pick_source" = "Folder to copy (camera card, sound, etc.)";
 "offload_source_prompt" = "Copy this";
@@ -357,3 +357,16 @@
 
 /* i18n layout pass */
 "playback_volume" = "Playback volume";
+
+/* assist tools + zoom (legend size/corner, safe-area margins) */
+"legend_size" = "Legend size";
+"legend_size_s" = "Small";
+"legend_size_m" = "Medium";
+"legend_size_l" = "Large";
+"legend_corner" = "Legend corner";
+"corner_top_left" = "Top left";
+"corner_top_right" = "Top right";
+"corner_bottom_left" = "Bottom left";
+"corner_bottom_right" = "Bottom right";
+"safe_action" = "Action safe";
+"safe_title" = "Title safe";

@@ -199,6 +199,37 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
     public var forcedInputRGB: Bool?
+
+    // MARK: - assist tools and zoom (see ViewAssist and the assist popover)
+
+    /// Exposure-legend size: "s" / "m" / "l"; nil — medium. The legend is read
+    /// from behind the camera, so its size is the operator's call, not ours.
+    public var legendSize: String?
+    /// Which corner of the player the legend sits in
+    /// (`AssistLegendCorner`); nil — bottom trailing.
+    public var legendCorner: String?
+    /// Action-safe area as a percentage of the frame; nil — 93.
+    ///
+    /// 93/90 and in that order, per SMPTE RP 218 (EBU R 95 states the same two
+    /// as 3.5% and 5% insets): TITLE safe is the tighter box and lives INSIDE
+    /// action safe. Assigning the pair the other way round draws the title
+    /// guide outside the action guide, which is not a safe-area diagram at all —
+    /// it just tells the operator two contradictory things about the same frame.
+    public var safeActionPercent: Double?
+    /// Title-safe area as a percentage of the frame; nil — 90 (see above).
+    public var safeTitlePercent: Double?
+
+    /// Safe-area percentages, clamped to a range that can still be drawn.
+    /// Read through these rather than the raw fields: a stored 0 (or a 400 from
+    /// a hand-edited blob) would otherwise put the guides outside the picture.
+    public var safeActionPercentEffective: Double {
+        min(100, max(50, safeActionPercent ?? 93))
+    }
+
+    public var safeTitlePercentEffective: Double {
+        min(100, max(50, safeTitlePercent ?? 90))
+    }
+
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy

@@ -142,24 +142,18 @@ extension MetalPreviewLayer {
             image = image.transformed(by: CGAffineTransform(
                 scaleX: currentAssist.desqueeze, y: 1))
         }
-        let extent = image.extent
-        guard extent.width > 0, extent.height > 0 else { return nil }
-        // punch-in magnifies and then pans; at or below 1 it is off, and
-        // clamping here keeps the two halves from disagreeing about that
-        let punchIn = max(1, currentAssist.punchIn)
-        let scale = min(size.width / extent.width,
-                        size.height / extent.height) * punchIn
+        // aspect-fit, punch-in and pan in one place (ViewAssist.placement): the
+        // framelines/safe-area overlays transform through the same call, which
+        // is what keeps them on the signal's geometry instead of the window's
+        guard let placed = currentAssist.placement(sourceSize: image.extent.size,
+                                                   in: size) else { return nil }
         // integral-pixel placement: fractional offsets shift live vs playback
         // by a visible pixel in the compare modes (wipe/blend/side-by-side)
-        var tx = ((size.width - extent.width * scale) / 2).rounded(.down)
-        var ty = ((size.height - extent.height * scale) / 2).rounded(.down)
-        if punchIn > 1 {
-            // pan in image fractions; SwiftUI's y grows down, CI's grows up
-            tx -= (currentAssist.panX * extent.width * scale).rounded(.down)
-            ty += (currentAssist.panY * extent.height * scale).rounded(.down)
-        }
+        let tx = placed.rect.minX.rounded(.down)
+        // the placement is stated in view coordinates (y down); CI's y grows up
+        let ty = (size.height - placed.rect.maxY).rounded(.down)
         return image
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
+            .transformed(by: CGAffineTransform(scaleX: placed.scale, y: placed.scale)
                 .concatenating(CGAffineTransform(translationX: tx, y: ty)))
     }
 }

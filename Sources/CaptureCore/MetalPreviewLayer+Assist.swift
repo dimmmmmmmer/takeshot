@@ -112,9 +112,19 @@ extension MetalPreviewLayer {
     }
 
     /// Red focus-peaking edges screened over whatever is already there.
+    ///
+    /// The edge detector is a convolution, and CoreImage answers samples taken
+    /// past a finite image with transparent black — which reads as the
+    /// strongest edge in the frame and painted a bright line right along the
+    /// picture's border. On a letterboxed player that line sits against the
+    /// black bar and looks exactly like peaking highlighting the letterbox.
+    /// `clampedToExtent` repeats the border pixels outward instead (no edge
+    /// where the frame simply ends), and the pass is cropped back to the video
+    /// rect so it cannot reach outside the picture at all.
     private static func peakingEdges(over image: CIImage, source: CIImage,
                                      intensity: Double) -> CIImage {
         let edges = grayscale(source)
+            .clampedToExtent()
             .applyingFilter("CIEdges", parameters: [
                 "inputIntensity": intensity,
             ])
@@ -123,6 +133,7 @@ extension MetalPreviewLayer {
                 "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                 "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             ])
+            .cropped(to: source.extent)
         return edges.applyingFilter("CIScreenBlendMode", parameters: [
             kCIInputBackgroundImageKey: image,
         ])

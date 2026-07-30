@@ -12,25 +12,6 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
-    /// Drag to pan while punched in (image-fraction units, clamped).
-    @State private var lastPan: CGSize = .zero
-
-    private var punchPanGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard controller.assist.punchIn > 1 else { return }
-                let scale = 600.0 * controller.assist.punchIn
-                let newX = controller.assist.panX
-                    - Double(value.translation.width - lastPan.width) / scale * 2
-                let newY = controller.assist.panY
-                    - Double(value.translation.height - lastPan.height) / scale * 2
-                controller.assist.panX = min(0.5, max(-0.5, newX))
-                controller.assist.panY = min(0.5, max(-0.5, newY))
-                lastPan = value.translation
-            }
-            .onEnded { _ in lastPan = .zero }
-    }
-
     /// Whether to show the AVPlayer transport (video, not photo/RAW).
     /// The still-image list is the folder scanner's own — a second copy here
     /// would eventually drift, and a still on the drifted side gets a video
@@ -86,9 +67,12 @@ struct PreviewView: View {
                     } else {
                         // ONE NSView/layer for live, playback video and RAW: the
                         // mode switch re-routes frames into the same surface, so
-                        // rec и playback land on identical pixels by construction
+                        // rec и playback land on identical pixels by construction.
+                        // The punch-in pan gesture used to hang off this surface,
+                        // which is why it did nothing in the fullscreen windows —
+                        // it lives on the shared mount now (playerTopBadges →
+                        // punchInZoom).
                         ViewerSurface(controller: controller, source: surfaceSource)
-                            .gesture(punchPanGesture)
                         if controller.viewerMode == .record {
                             LiveStatusOverlay()
                         } else if controller.playbackURL == nil {
