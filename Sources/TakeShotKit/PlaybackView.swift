@@ -12,20 +12,12 @@ struct PlaybackContent: View {
             let rawOwned = controller.rawPlayer?.url == url
             if rawOwned || CaptureController.rawExtensions.contains(ext) {
                 if let model = controller.rawPlayer {
-                    RawTapLayerView(model: model)
+                    PreviewMount.raw(model)
                 } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 32))
-                        Text(controller.rawPlayerError ?? L("raw_open_failed"))
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(20)
+                    RawOpenFailedNotice()
                 }
             } else {
-                TapLayerView(tap: controller.playbackTap)
+                PreviewMount.playback(controller.playbackTap)
             }
         } else {
             VStack(spacing: 8) {
@@ -53,7 +45,7 @@ struct CompareSourceContent: View {
         case .live:
             LivePreviewContent()
         case .clip:
-            CompareClipLayerView(tap: controller.playbackTap)
+            PreviewMount.compareSource(controller.playbackTap)
         }
     }
 }
@@ -83,91 +75,6 @@ struct ComparePlaybackSplit: View {
     }
 }
 
-/// Compare-source mount: its own layer, registered with the tap's compare
-/// registry (the B clip's frames, uncomposited).
-private struct CompareClipLayerView: NSViewRepresentable {
-    let tap: PlaybackFrameTap
-
-    final class Coordinator {
-        var tap: PlaybackFrameTap?
-        var layer: MetalPreviewLayer?
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let layer = MetalPreviewLayer()
-        tap.addCompareSink(layer)
-        context.coordinator.tap = tap
-        context.coordinator.layer = layer
-        return MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        if let layer = coordinator.layer {
-            coordinator.tap?.removeCompareSink(layer)
-        }
-    }
-}
-
-/// Playback mount: its own layer, registered as a tap sink for its lifetime.
-private struct TapLayerView: NSViewRepresentable {
-    let tap: PlaybackFrameTap
-
-    final class Coordinator {
-        var tap: PlaybackFrameTap?
-        var layer: MetalPreviewLayer?
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let layer = MetalPreviewLayer()
-        tap.addSink(layer)
-        context.coordinator.tap = tap
-        context.coordinator.layer = layer
-        return MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        if let layer = coordinator.layer {
-            coordinator.tap?.removeSink(layer)
-        }
-    }
-}
-
-/// RAW playback mount: its own layer, registered with the engine.
-private struct RawTapLayerView: NSViewRepresentable {
-    let model: RawPlayerModel
-
-    final class Coordinator {
-        var model: RawPlayerModel?
-        var layer: MetalPreviewLayer?
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let layer = MetalPreviewLayer()
-        model.addSink(layer)
-        context.coordinator.model = model
-        context.coordinator.layer = layer
-        return MetalPreviewHostView(layer: layer)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        if let layer = coordinator.layer {
-            coordinator.model?.removeSink(layer)
-        }
-    }
-}
-
 /// External-monitor window content: a mirror of the current mode.
 struct ExternalOutputView: View {
     @EnvironmentObject private var controller: CaptureController
@@ -183,9 +90,31 @@ struct ExternalOutputView: View {
                       controller.playbackURL != nil {
                 PlaybackContent()
             } else {
-                LivePreviewLayerView(pipeline: controller.pipeline)
+                PreviewMount.live(controller.pipeline)
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+/// A RAW clip the engine could not open — the SDK is missing, or the file is
+/// not one it reads.
+///
+/// Both surfaces that can be pointed at a RAW clip draw this: the main viewer
+/// and the playback pane. Written out twice, they had already started to differ
+/// in padding, and this is the one thing on screen when nothing else is.
+struct RawOpenFailedNotice: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 32))
+            Text(controller.rawPlayerError ?? L("raw_open_failed"))
+                .font(.headline)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.secondary)
+        .padding(20)
     }
 }

@@ -38,6 +38,21 @@ struct WaveformView: View {
     @ViewBuilder
     private func channelImage(_ map: ScopeImageCache.Map,
                               tint: Color) -> some View {
+        ScopeChannelImage(map: map, data: data, tint: tint)
+    }
+}
+
+/// One tinted channel trace, decoded from the analyzer's cache.
+///
+/// The waveform's per-channel mode and the parade draw exactly this, and each
+/// had its own copy — including `.interpolation(.medium)`, which is the
+/// difference between a readable trace and a stair-stepped one.
+private struct ScopeChannelImage: View {
+    let map: ScopeImageCache.Map
+    let data: ScopeData
+    let tint: Color
+
+    var body: some View {
         if let image = ScopeImageCache.image(map, from: data) {
             Image(decorative: image, scale: 1)
                 .resizable()
@@ -73,12 +88,7 @@ struct ParadeView: View {
     @ViewBuilder
     private func paradeChannel(_ map: ScopeImageCache.Map,
                                tint: Color) -> some View {
-        if let image = ScopeImageCache.image(map, from: data) {
-            Image(decorative: image, scale: 1)
-                .resizable()
-                .interpolation(.medium)
-                .colorMultiply(tint)
-        }
+        ScopeChannelImage(map: map, data: data, tint: tint)
     }
 }
 
@@ -89,23 +99,25 @@ private struct WaveformGraticule: View {
 
     var body: some View {
         GeometryReader { geo in
-            Path { p in
-                for i in stride(from: 0.0, through: 1.0, by: 0.1) {
-                    let y = geo.size.height * i
-                    p.move(to: CGPoint(x: 0, y: y))
-                    p.addLine(to: CGPoint(x: geo.size.width, y: y))
-                }
-            }
-            .stroke(.white.opacity(0.24 * brightness), lineWidth: 0.5)
-            Path { p in
-                for i in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                    let y = geo.size.height * i
-                    p.move(to: CGPoint(x: 0, y: y))
-                    p.addLine(to: CGPoint(x: geo.size.width, y: y))
-                }
-            }
-            .stroke(.white.opacity(0.55 * brightness), lineWidth: 0.5)
+            // every 10%, faint; then the quarters over the top of them
+            lines(at: Array(stride(from: 0.0, through: 1.0, by: 0.1)),
+                  in: geo.size, opacity: 0.24)
+            lines(at: [0, 0.25, 0.5, 0.75, 1], in: geo.size, opacity: 0.55)
         }
+    }
+
+    /// Horizontal rules at the given fractions of the height. Both passes drew
+    /// their own copy of the same loop, differing only in where and how bright.
+    private func lines(at fractions: [Double], in size: CGSize,
+                       opacity: Double) -> some View {
+        Path { path in
+            for fraction in fractions {
+                let y = size.height * fraction
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+        }
+        .stroke(.white.opacity(opacity * brightness), lineWidth: 0.5)
     }
 }
 

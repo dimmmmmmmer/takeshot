@@ -53,20 +53,22 @@ final class RemoteServer: @unchecked Sendable {
 
     static let log = Logger(subsystem: "com.takeshot.app", category: "remote")
 
-    private let handlers: Handlers
-    private let queue = DispatchQueue(label: "com.takeshot.remote")
+    /// Read by `RemoteServer+Listener` as well as here, so module-internal
+    /// rather than private — never wider than the module.
+    let handlers: Handlers
+    let queue = DispatchQueue(label: "com.takeshot.remote")
     private let shared: OSAllocatedUnfairLock<Shared>
 
     // MARK: - queue-confined state
 
-    private var listener: NWListener?
-    private var clients: [ObjectIdentifier: RemoteClient] = [:]
+    var listener: NWListener?
+    var clients: [ObjectIdentifier: RemoteClient] = [:]
     /// The port `start` was asked for, kept for a retried bind.
-    private var requestedPort: UInt16 = 0
-    private var bindAttempts = 0
+    var requestedPort: UInt16 = 0
+    var bindAttempts = 0
     /// `stop()` has been called. A retry scheduled before it must not bring a
     /// listener back up behind the operator's switch.
-    private var isStopped = false
+    var isStopped = false
     /// The last status pushed, replayed to a client the moment it authenticates
     /// so a phone picked up mid-take shows the take rather than a blank readout.
     private var lastStatus: String?
@@ -135,96 +137,6 @@ final class RemoteServer: @unchecked Sendable {
     /// code has to mean.
     func setPIN(_ pin: String) {
         shared.withLock { $0.pin = pin }
-    }
-
-    // MARK: - internals (queue only)
-
-    private func bind() {
-        do {
-            let listener = try NWListener(using: Self.parameters(),
-                                          on: Self.endpointPort(requestedPort))
-            listener.stateUpdateHandler = { [weak self] state in
-                self?.handle(state: state)
-            }
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.accept(connection)
-            }
-            self.listener = listener
-            listener.start(queue: queue)
-        } catch {
-            handlers.failed(error.localizedDescription)
-        }
-    }
-
-    private func dropListener() {
-        listener?.stateUpdateHandler = nil
-        listener?.newConnectionHandler = nil
-        listener?.cancel()
-        listener = nil
-    }
-
-    /// The port was taken a moment ago. Drop this listener and try once more —
-    /// see `bindRetries` for whose port it usually is.
-    private func retryBind() {
-        bindAttempts += 1
-        dropListener()
-        queue.asyncAfter(deadline: .now() + Self.bindRetryDelay) { [weak self] in
-            guard let self, !self.isStopped, self.listener == nil else { return }
-            self.bind()
-        }
-    }
-
-    private static func parameters() -> NWParameters {
-        let tcp = NWProtocolTCP.Options()
-        // A REC press is 40 bytes and must not sit in a Nagle buffer waiting
-        // for company.
-        tcp.noDelay = true
-        let parameters = NWParameters(tls: nil, tcp: tcp)
-        // Restarting the server after a port change must not fail for two
-        // minutes of TIME_WAIT on the sockets the phones just closed.
-        parameters.allowLocalEndpointReuse = true
-        return parameters
-    }
-
-    private static func endpointPort(_ port: UInt16) -> NWEndpoint.Port {
-        port == 0 ? .any : (NWEndpoint.Port(rawValue: port) ?? .any)
-    }
-
-    private func handle(state: NWListener.State) {
-        switch state {
-        case .ready:
-            bindAttempts = 0
-            let bound = listener?.port?.rawValue ?? 0
-            Self.log.info("remote listening on port \(bound, privacy: .public)")
-            handlers.ready(bound)
-        case .failed(let error), .waiting(let error):
-            // `waiting` is where "address already in use" surfaces: the
-            // listener does not fail, it parks and retries forever, so an
-            // operator who never sees it just believes the remote is broken.
-            //
-            // Detached before reporting, not in `stop()`: that hops back onto
-            // this queue, and a listener that retries in the meantime would
-            // report the same failure again — one toast per retry, forever.
-            listener?.stateUpdateHandler = nil
-            if case .posix(.EADDRINUSE) = error, bindAttempts < Self.bindRetries {
-                retryBind()
-                return
-            }
-            handlers.failed(error.localizedDescription)
-            stop()
-        default:
-            break
-        }
-    }
-
-    private func accept(_ connection: NWConnection) {
-        guard clients.count < Self.maximumClients else {
-            connection.cancel()
-            return
-        }
-        let client = RemoteClient(connection: connection, server: self)
-        clients[ObjectIdentifier(client)] = client
-        client.start(on: queue)
     }
 
     // MARK: - called by RemoteClient, on the same queue

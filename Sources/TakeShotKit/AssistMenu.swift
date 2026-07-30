@@ -85,15 +85,11 @@ private struct AssistControlRows: View {
     // MARK: - exposure
 
     @ViewBuilder private var exposureRows: some View {
-        Picker(L("assist_tool"), selection: Binding(
+        ColorToolPicker(selection: Binding(
             get: { controller.liveAssist.colorTool },
-            set: { tool in controller.setAssist { $0.colorTool = tool } })) {
-            Text(L("assist_off")).tag(ViewAssist.ColorTool.off)
-            Text(L("assist_false_color")).tag(ViewAssist.ColorTool.falseColor)
-            Text(L("assist_el_zone")).tag(ViewAssist.ColorTool.elZone)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+            set: { tool in controller.setAssist { $0.colorTool = tool } }))
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
         if controller.liveAssist.colorTool != .off {
             legendRows

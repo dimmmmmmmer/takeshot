@@ -77,4 +77,14 @@ extension CaptureController {
         let maxClip = takes.filter { $0.roll == roll }.map(\.takeNumber).max() ?? 0
         nextTakeNumber = maxClip + 1
     }
+
+    /// A new roll is a new set of clips: the number restarts and every reader
+    /// of the filename has to be told. Called from the `roll` observer — the
+    /// controller's state file holds the property, not what it sets in motion.
+    func applyRollChange(from oldValue: String) {
+        guard oldValue != roll else { return }
+        continueClipNumbering()
+        pushConfig()
+        refreshNameCollision()
+    }
 }

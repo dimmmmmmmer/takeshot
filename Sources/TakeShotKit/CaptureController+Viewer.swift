@@ -28,6 +28,20 @@ extension CaptureController {
         viewerMode = viewerMode == .record ? .playback : .record
     }
 
+    /// The viewer switched source. Everything that is fed per-frame has to be
+    /// re-pointed at once — including the playout mirror, which is what the
+    /// director is watching.
+    func applyViewerModeChange() {
+        if viewerMode == .record {
+            player.pause()
+            rawPlayer?.pause() // a looping BRAW decode must not fight capture
+        }
+        updateAudioMonitorRouting()
+        updateTapRunning()
+        updateScopesRunning()
+        wirePlayoutRouting()
+    }
+
     /// Polling playback frames is only needed when the view is actually visible.
     func updateTapRunning() {
         // stills tick through the tap too (compare keeps the live half moving)

@@ -60,7 +60,7 @@ private struct CameraTile: View {
     var body: some View {
         ZStack {
             Rectangle().fill(background)
-            LivePreviewLayerView(pipeline: pipeline)
+            PreviewMount.live(pipeline)
         }
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 8))

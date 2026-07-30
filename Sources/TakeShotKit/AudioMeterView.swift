@@ -33,8 +33,7 @@ struct AudioMeterView: View {
     }
 
     private func fraction(of level: Float) -> CGFloat {
-        let clamped = min(max(level, range.lowerBound), range.upperBound)
-        return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
+        AudioMeterScale.fraction(of: level, in: range)
     }
 }
 

@@ -52,20 +52,11 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(controller.isRecording)
-                Picker(L("input_mode"), selection: Binding(
-                    get: { controller.settings.forcedInputMode ?? "auto" },
-                    set: { controller.settings.forcedInputMode = $0 == "auto" ? nil : $0 })) {
-                    Text(L("input_mode_auto")).tag("auto")
-                    ForEach(controller.selectedDeviceInputModes, id: \.self) { name in
-                        Text(name).tag(name)
-                    }
-                }
-                .disabled(controller.isRecording)
-                if controller.settings.forcedInputMode != nil {
-                    Toggle(L("input_mode_rgb"), isOn: Binding(
-                        get: { controller.settings.forcedInputRGB ?? false },
-                        set: { controller.settings.forcedInputRGB = $0 }))
-                }
+                // shared with the badge menu over the player — see
+                // `SignalControls`; both restart capture
+                InputModePicker()
+                    .disabled(controller.isRecording)
+                ForcedInputRGBToggle()
             }
             Section(L("settings_interface")) {
                 Picker(L("language"), selection: Binding(
@@ -197,12 +188,7 @@ struct SettingsView: View {
             }
             OutputSettingsSection()
             Section(L("settings_detection")) {
-                Picker(L("detection_mode"), selection: $controller.settings.detectionMode) {
-                    Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
-                    Text(L("mode_auto")).tag(RecDetectionMode.auto)
-                    Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
-                    Text(L("mode_manual")).tag(RecDetectionMode.manual)
-                }
+                DetectionModePicker()
                 FrameCountField(label: L("start_frames"),
                                 value: $controller.settings.startDebounceFrames,
                                 range: 0...60)

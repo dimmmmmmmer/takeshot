@@ -285,14 +285,10 @@ private struct AssistCommands: View {
     @ObservedObject var controller: CaptureController
 
     var body: some View {
-        Picker(L("assist_tool"), selection: Binding(
+        ColorToolPicker(selection: Binding(
             get: { controller.assist.colorTool },
-            set: { controller.assist.colorTool = $0 })) {
-            Text(L("assist_off")).tag(ViewAssist.ColorTool.off)
-            Text(L("assist_false_color")).tag(ViewAssist.ColorTool.falseColor)
-            Text(L("assist_el_zone")).tag(ViewAssist.ColorTool.elZone)
-        }
-        .pickerStyle(.inline)
+            set: { controller.assist.colorTool = $0 }))
+            .pickerStyle(.inline)
 
         Divider()
 

@@ -86,16 +86,7 @@ struct PreviewView: View {
                             }
                             .foregroundStyle(.secondary)
                         } else if case .none = surfaceSource {
-                            // RAW that failed to open
-                            VStack(spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 32))
-                                Text(controller.rawPlayerError ?? L("raw_open_failed"))
-                                    .font(.headline)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .foregroundStyle(.secondary)
-                            .padding(20)
+                            RawOpenFailedNotice() // RAW that failed to open
                         }
                         // the wipe seam/handle rides the same centered aspect-fit
                         // box the layer letterboxes the composite into
@@ -199,7 +190,7 @@ struct LivePreviewContent: View {
 
     var body: some View {
         ZStack {
-            LivePreviewLayerView(pipeline: controller.pipeline)
+            PreviewMount.live(controller.pipeline)
             LiveStatusOverlay()
         }
     }

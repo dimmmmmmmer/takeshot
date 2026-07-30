@@ -109,14 +109,21 @@ struct NamingFieldsView: View {
         controller.settings.namingTemplate.contains(placeholder)
     }
 
+    /// The caption over a naming field. Both field shapes below carry it, and
+    /// both had their own copy — a drifted font size there shows up as two
+    /// rows of fields at two different heights.
+    private func fieldLabel(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .padding(.leading, 2)
+    }
+
     private func labeledField(_ label: String, width: CGFloat,
                               @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .fixedSize()
-                .padding(.leading, 2)
+            fieldLabel(label)
             content()
                 .textFieldStyle(.roundedBorder)
                 .frame(width: width)
@@ -128,11 +135,7 @@ struct NamingFieldsView: View {
                               text: Binding<String>,
                               onStep: @escaping (Int) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .fixedSize()
-                .padding(.leading, 2)
+            fieldLabel(label)
             HStack(spacing: 1) {
                 TextField("", text: text)
                     .textFieldStyle(.roundedBorder)

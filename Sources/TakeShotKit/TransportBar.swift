@@ -3,6 +3,10 @@ import CaptureCore
 import SwiftUI
 
 /// Transport: play/pause, ±5 s, scrubber, time, speed, loop, fullscreen.
+///
+/// The pieces it shares with `RawTransportBar` live in `TransportControls.swift`;
+/// what is left here is what only the AVPlayer engine has — the speed menu, the
+/// per-clip LUT switch and the volume slider.
 struct TransportBar: View {
     let player: AVPlayer
     @EnvironmentObject private var controller: CaptureController
@@ -12,35 +16,16 @@ struct TransportBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Button {
-                model.skip(-5)
-            } label: {
-                Image(systemName: "gobackward.5")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.togglePlay()
-            } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 20)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.space, modifiers: [])
-
-            Button {
-                model.skip(5)
-            } label: {
-                Image(systemName: "goforward.5")
-            }
-            .buttonStyle(.plain)
+            TransportPlayGroup(
+                isPlaying: model.isPlaying,
+                glyph: .system(size: 14, weight: .bold), glyphWidth: 20,
+                skipBack: { model.skip(-5) },
+                togglePlay: { model.togglePlay() },
+                skipForward: { model.skip(5) })
 
             TransportPositionControls(model: model, position: model.position)
 
-            Text(controller.playbackTC(atSeconds: model.duration))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+            TransportTimeText(controller.playbackTC(atSeconds: model.duration))
 
             Menu {
                 ForEach([0.25, 0.5, 1.0, 1.5, 2.0], id: \.self) { rate in
@@ -55,40 +40,7 @@ struct TransportBar: View {
             .fixedSize()
             .help(L("playback_speed"))
 
-            Button {
-                model.toggleRangePoint(out: false)
-            } label: {
-                Image(systemName: TransportModel.inPointSymbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(model.inPoint != nil
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("loop_in_help"))
-
-            Button {
-                model.isLooping.toggle()
-            } label: {
-                Image(systemName: "repeat")
-                    .foregroundStyle(model.isLooping
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("playback_loop"))
-
-            Button {
-                model.toggleRangePoint(out: true)
-            } label: {
-                Image(systemName: TransportModel.outPointSymbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(model.outPoint != nil
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.plain)
-            .help(L("loop_out_help"))
+            TransportRangeControls(engine: model)
 
             MarkerButton()
 
@@ -114,19 +66,9 @@ struct TransportBar: View {
             TransportVolume(live: controller.live)
                 .help(L("playback_volume"))
 
-            Button {
-                controller.togglePlaybackFullscreen()
-            } label: {
-                Image(systemName: controller.isPlaybackFullscreen
-                      ? "arrow.down.right.and.arrow.up.left"
-                      : "arrow.up.left.and.arrow.down.right")
-            }
-            .buttonStyle(.plain)
-            .help(L("fullscreen_playback"))
+            TransportFullscreenButton()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial)
+        .transportBarChrome()
         // the transport is attached once, by the controller: this bar can be on
         // screen twice, and a disappearing copy must not tear down the
         // observers the other one is still using
@@ -157,9 +99,7 @@ private struct TransportPositionControls: View {
     @ObservedObject var position: TransportPosition
 
     var body: some View {
-        Text(controller.playbackTC(atSeconds: position.currentTime))
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
+        TransportTimeText(controller.playbackTC(atSeconds: position.currentTime))
 
         Slider(value: Binding(
             get: { position.currentTime },

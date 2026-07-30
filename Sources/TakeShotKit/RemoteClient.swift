@@ -9,6 +9,12 @@ import Network
 /// title, a cast name in a project prefix — and a page that shows them to
 /// anyone who can reach the port is a leak that no amount of command checking
 /// fixes. The cost of asking is one four-digit code per phone per shoot.
+///
+/// The socket is read in `RemoteClient+Reading` (bytes in, HTTP out) and its
+/// frames are decoded in `RemoteClient+Frames`; this file is the connection
+/// itself, what goes out on it, and the app protocol it carries. The state
+/// below is module-internal rather than private for that reason — the two
+/// extensions are the only readers, and it goes no wider than the module.
 final class RemoteClient {
     /// Wrong codes tolerated before the socket is dropped.
     ///
@@ -43,29 +49,29 @@ final class RemoteClient {
     /// report itself done.
     static let closeFlushDeadline = DispatchTimeInterval.milliseconds(250)
 
-    private let connection: NWConnection
-    private weak var server: RemoteServer?
+    let connection: NWConnection
+    weak var server: RemoteServer?
     /// The server's queue, kept for the close-frame deadline. Everything in this
     /// class already runs on it.
     private var queue: DispatchQueue?
 
-    private var buffer = Data()
-    private var upgraded = false
+    var buffer = Data()
+    var upgraded = false
     private var authenticated = false
     private var badPINs = 0
     /// No more protocol traffic goes out on this connection.
-    private var closed = false
+    var closed = false
     /// The server has been told this client is gone. Tracked apart from
     /// `closed`: a response whose send never completes leaves the client
     /// closed but still in the registry, holding a slot for good.
     private var unregistered = false
     /// Payload of a message split across frames. A browser will not fragment
     /// forty bytes, but a proxy between the phone and the laptop may.
-    private var fragment = Data()
+    var fragment = Data()
     /// A fragmented message is open — the last data frame was not final, so the
     /// next one must be a continuation. Tracked rather than inferred from
     /// `fragment.isEmpty`: an empty first fragment is legal.
-    private var fragmentOpen = false
+    var fragmentOpen = false
     /// Bytes sent but not yet processed by the transport. Queue-confined like
     /// everything else here: the send completion runs on the connection's queue,
     /// which is the server's.
@@ -146,150 +152,9 @@ final class RemoteClient {
         }
     }
 
-    // MARK: - reading
-
-    private func receive() {
-        connection.receive(minimumIncompleteLength: 1,
-                           maximumLength: 16 * 1024) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
-            if let data, !data.isEmpty { self.ingest(data) }
-            // A connection already on its way out owns its own cancel, and for a
-            // response it is `writeAndClose` that owns it — once the bytes are on
-            // the wire. Cancelling from here instead discards them, and `ingest`
-            // above is exactly what leaves this closure looking at a closed
-            // client: routing `GET /` sets the flag in the same turn. That is a
-            // page request answered with a dropped connection.
-            guard !self.closed else { return }
-            guard !isComplete, error == nil else {
-                self.close(code: nil)
-                return
-            }
-            self.receive()
-        }
-    }
-
-    private func ingest(_ data: Data) {
-        buffer.append(data)
-        guard buffer.count <= Self.maximumBuffer else {
-            close(code: 1009)
-            return
-        }
-        if upgraded {
-            drainFrames()
-        } else {
-            drainRequest()
-        }
-    }
-
-    private func drainRequest() {
-        guard let end = RemoteRequest.headEnd(in: buffer) else { return }
-        let head = Data(buffer[buffer.startIndex..<end])
-        // Whatever followed the blank line stays: a browser can put its first
-        // frame in the same packet as the upgrade request, and dropping it
-        // loses the hello that carries the PIN.
-        buffer = Data(buffer[end...])
-        guard let request = RemoteRequest.parse(head) else {
-            writeAndClose(RemoteResponse.badRequest())
-            return
-        }
-        route(request)
-    }
-
-    private func route(_ request: RemoteRequest) {
-        // RFC 6455 §4.1: the handshake is a GET. Upgrading anything else would
-        // let a method nothing sends reach the socket path.
-        if request.method == "GET", request.path == "/ws", request.isWebSocketUpgrade,
-           let key = request.headers["sec-websocket-key"] {
-            write(RemoteResponse.upgrade(key: key))
-            upgraded = true
-            drainFrames()
-            return
-        }
-        guard request.method == "GET" else {
-            writeAndClose(RemoteResponse.badRequest())
-            return
-        }
-        switch request.path {
-        case "/", "/index.html":
-            writeAndClose(RemoteResponse.page(server?.currentPage ?? Data()))
-        default:
-            writeAndClose(RemoteResponse.notFound())
-        }
-    }
-
-    private func drainFrames() {
-        while !closed {
-            let decoded: (frame: RemoteWebSocketFrame, consumed: Int)?
-            do {
-                decoded = try RemoteWebSocketFrame.decode(from: buffer)
-            } catch {
-                // A stream that cannot be parsed cannot be resynchronized —
-                // there is no way to find the next frame boundary in it.
-                close(code: 1002)
-                return
-            }
-            guard let decoded else { return }
-            // `consumed` is a count, not an index: Data slices keep the
-            // indices of the buffer they came from.
-            let next = buffer.index(buffer.startIndex, offsetBy: decoded.consumed)
-            buffer = Data(buffer[next...])
-            handle(decoded.frame)
-        }
-    }
-
-    private func handle(_ frame: RemoteWebSocketFrame) {
-        switch frame.opcode {
-        case .close:
-            close(code: 1000)
-        case .ping:
-            write(RemoteWebSocketFrame.encode(opcode: .pong,
-                                              payload: frame.payload))
-        case .pong:
-            break
-        case .binary:
-            // The protocol here is JSON text in both directions.
-            close(code: 1003)
-        case .text, .continuation:
-            accumulate(frame)
-        }
-    }
-
-    private func accumulate(_ frame: RemoteWebSocketFrame) {
-        // RFC 6455 §5.4: a continuation with no message open, and a new message
-        // arriving while one is still open, are both protocol errors. Appending
-        // them regardless is worse than refusing them — it builds one "command"
-        // out of two unrelated halves, and the halves come from the network.
-        guard (frame.opcode == .continuation) == fragmentOpen else {
-            resetFragment()
-            close(code: 1002)
-            return
-        }
-        fragment.append(frame.payload)
-        fragmentOpen = !frame.isFinal
-        guard fragment.count <= Self.maximumBuffer else {
-            close(code: 1009)
-            return
-        }
-        guard frame.isFinal else { return }
-        // RFC 6455 §5.6: a text frame that is not valid UTF-8 is a protocol
-        // error (1007), not something to repair into a command.
-        guard let text = String(bytes: fragment, encoding: .utf8) else {
-            resetFragment()
-            close(code: 1007)
-            return
-        }
-        resetFragment()
-        handle(text: text)
-    }
-
-    private func resetFragment() {
-        fragment = Data()
-        fragmentOpen = false
-    }
-
     // MARK: - the protocol itself
 
-    private func handle(text: String) {
+    func handle(text: String) {
         guard let message = RemoteMessage.parse(text) else {
             write(RemoteWebSocketFrame.text(
                 #"{"type":"error","reason":"bad_message"}"#))
@@ -324,7 +189,7 @@ final class RemoteClient {
 
     // MARK: - writing
 
-    private func write(_ data: Data) {
+    func write(_ data: Data) {
         // `contentProcessed` is Network.framework's backpressure signal: it fires
         // when the transport has room for more, which for a peer that stopped
         // reading is never. Counting the bytes between the send and that callback
@@ -335,7 +200,7 @@ final class RemoteClient {
         })
     }
 
-    private func writeAndClose(_ data: Data) {
+    func writeAndClose(_ data: Data) {
         closed = true
         // Cancelled only once the bytes are on the wire: cancelling straight
         // after `send` loses the response the browser is waiting for.

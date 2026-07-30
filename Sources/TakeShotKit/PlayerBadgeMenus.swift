@@ -40,16 +40,12 @@ struct PlayerTimecodeBadge: View {
         }
     }
 
+    /// Shared with the Settings pane — see `SignalControls`. Inline and
+    /// unlabelled here because the menu's own title says what it is.
     private var detectionModePicker: some View {
-        Picker(L("detection_mode"),
-               selection: $controller.settings.detectionMode) {
-            Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
-            Text(L("mode_auto")).tag(RecDetectionMode.auto)
-            Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
-            Text(L("mode_manual")).tag(RecDetectionMode.manual)
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
+        DetectionModePicker()
+            .pickerStyle(.inline)
+            .labelsHidden()
     }
 
     private var timecodeSourcePicker: some View {
@@ -85,11 +81,7 @@ struct PlayerFormatBadge: View {
         playerOverlayBadge {
             Menu {
                 inputModePicker
-                if controller.settings.forcedInputMode != nil {
-                    Toggle(L("input_mode_rgb"), isOn: Binding(
-                        get: { controller.settings.forcedInputRGB ?? false },
-                        set: { controller.settings.forcedInputRGB = $0 }))
-                }
+                ForcedInputRGBToggle()
             } label: {
                 formatLabel
             }
@@ -100,19 +92,11 @@ struct PlayerFormatBadge: View {
         }
     }
 
+    /// Shared with the Settings pane — see `SignalControls`.
     private var inputModePicker: some View {
-        Picker(L("input_mode"), selection: Binding(
-            get: { controller.settings.forcedInputMode ?? "auto" },
-            set: { controller.settings.forcedInputMode =
-                $0 == "auto" ? nil : $0 })) {
-            Text(L("input_mode_auto")).tag("auto")
-            ForEach(controller.selectedDeviceInputModes,
-                    id: \.self) { name in
-                Text(name).tag(name)
-            }
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
+        InputModePicker()
+            .pickerStyle(.inline)
+            .labelsHidden()
     }
 
     private var formatLabel: some View {

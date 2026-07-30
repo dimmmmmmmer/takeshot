@@ -1,24 +1,14 @@
-import AVFoundation
-import AppKit
 import CaptureCore
-import CoreImage
-import CoreMedia
-import CoreVideo
 import Foundation
-import SwiftUI
-import os.log
 
-/// Take markers and the reports built from them (selects EDL, shift report).
+/// Flagging the moment: the color the next marker is born with, dropping one at
+/// the playhead, and taking one back.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
-/// size at which nobody reads it top to bottom any more.
+/// size at which nobody reads it top to bottom any more. Editing and navigating
+/// the markers of the clip in the player is `+MarkerList`; the reports built
+/// from them are `+Reports`.
 extension CaptureController {
-    /// Markers of the clip in the player (transport ticks).
-    var playbackMarkers: [TakeMarker] {
-        guard let url = playbackURL else { return [] }
-        return takes.first { $0.url == url }?.markers ?? []
-    }
-
     /// The color the NEXT marker will be born with — the swatch in the marker
     /// controls. Colors used to be reachable only after a marker existed, so the
     /// convention had to be re-applied marker by marker.
@@ -48,24 +38,13 @@ extension CaptureController {
         newMarkerColor = palette[(index + 1) % palette.count]
     }
 
-    /// Current playback position in seconds (marker navigation).
-    var playbackPositionSeconds: Double {
-        if let raw = rawPlayer {
-            return Double(raw.currentFrame) / max(1, raw.frameRate)
-        }
-        return max(0, player.currentTime().seconds)
-    }
-
     /// Flag the current moment: recording TC while recording, player position
     /// in playback. Lands in the takeshot-markers.csv sidecar (and EDL export).
     func addMarker() {
         if viewerMode == .playback, let url = playbackURL {
-            let seconds: Double
-            if let raw = rawPlayer {
-                seconds = Double(raw.currentFrame) / max(1, raw.frameRate)
-            } else {
-                seconds = max(0, player.currentTime().seconds)
-            }
+            // the same reading marker navigation and removal use — the engine
+            // the position comes from is decided in one place
+            let seconds = playbackPositionSeconds
             let tcText = playbackTimecodeText
             guard let index = takes.firstIndex(where: { $0.url == url }) else {
                 lastError = L("marker_only_takes")
@@ -95,31 +74,6 @@ extension CaptureController {
         }
     }
 
-    /// A toast that names ONE marker, shown in that marker's own color.
-    ///
-    /// The tint is assigned AFTER the text on purpose: `lastNotice`'s observer
-    /// clears it, which is what stops a red marker's color from leaking onto the
-    /// next, unrelated notice. Everything else keeps the neutral green.
-    func noticeAboutMarker(_ text: String, color: String) {
-        lastNotice = text
-        lastNoticeTint = markerColor(color)
-    }
-    /// Mutate a marker of the current playback clip (list editor).
-    func updatePlaybackMarker(at index: Int,
-                              _ change: (inout TakeMarker) -> Void) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        change(&takes[takeIndex].markers[index])
-        exportTakeLog()
-    }
-    func removePlaybackMarker(at index: Int) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        takes[takeIndex].markers.remove(at: index)
-        exportTakeLog()
-    }
     /// ⇧M: drop the marker under the playhead (±2 frames); while recording —
     /// the most recent one.
     func removeNearestMarker() {
@@ -141,91 +95,14 @@ extension CaptureController {
                               color: last.color)
         }
     }
-    func clearPlaybackMarkers() {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url })
-        else { return }
-        takes[takeIndex].markers.removeAll()
-        exportTakeLog()
-    }
-    /// Jump to the next/previous marker of the current clip.
-    func jumpToMarker(forward: Bool) {
-        let markers = playbackMarkers
-        guard !markers.isEmpty else { return }
-        let now = playbackPositionSeconds
-        let index = forward
-            ? markers.firstIndex { $0.seconds > now + 0.05 }
-            : markers.lastIndex { $0.seconds < now - 0.05 }
-        guard let index else { return }
-        let marker = markers[index]
-        seekPlayback(to: marker.seconds)
-        let name = marker.note.isEmpty ? L("marker_n", index + 1) : marker.note
-        noticeAboutMarker("⚑ \(name) — \(marker.timecodeText)",
-                          color: marker.color)
-    }
-    /// Jump the player (AVPlayer or RAW) to a position in seconds.
-    func seekPlayback(to seconds: Double) {
-        if let raw = rawPlayer {
-            raw.seek(to: Int((seconds * raw.frameRate).rounded()))
-        } else {
-            player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
-                        toleranceBefore: .zero, toleranceAfter: .zero)
-        }
-    }
-    /// Selects EDL: good takes back to back, markers as Resolve locators.
-    func exportSelectsEDL() {
-        let good = takes.filter { $0.rating == .good }
-        guard let edl = EDLExporter.selectsEDL(
-            takes: good, title: "\(settings.projectName) selects",
-            fps: Int(max(1, playbackFPS).rounded()))
-        else {
-            lastError = L("edl_no_good_takes")
-            return
-        }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_selects") + ".edl"
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try edl.write(to: url, atomically: true, encoding: .utf8)
-            lastNotice = L("edl_saved", url.lastPathComponent)
-        } catch {
-            lastError = "EDL: \(error.localizedDescription)"
-        }
-    }
-    /// Shift report: A4 PDF with thumbnails or a full CSV table.
-    func exportShiftReport(pdf: Bool) {
-        guard !takes.isEmpty else {
-            lastError = L("report_no_takes")
-            return
-        }
-        let panel = NSSavePanel()
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyMMdd"
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_report_\(stamp.string(from: Date()))")
-            + (pdf ? ".pdf" : ".csv")
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            if pdf {
-                guard let data = ShiftReport.pdfData(
-                    takes: takes, thumbnails: thumbnails,
-                    project: settings.projectName,
-                    camera: settings.cameraLabel) else {
-                    lastError = "PDF render failed"
-                    return
-                }
-                try data.write(to: url)
-            } else {
-                try TakeLogExporter.reportCSV(takes: takes)
-                    .write(to: url, atomically: true, encoding: .utf8)
-            }
-            lastNotice = L("report_saved", url.lastPathComponent)
-        } catch {
-            lastError = "Report: \(error.localizedDescription)"
-        }
+
+    /// A toast that names ONE marker, shown in that marker's own color.
+    ///
+    /// The tint is assigned AFTER the text on purpose: `lastNotice`'s observer
+    /// clears it, which is what stops a red marker's color from leaking onto the
+    /// next, unrelated notice. Everything else keeps the neutral green.
+    func noticeAboutMarker(_ text: String, color: String) {
+        lastNotice = text
+        lastNoticeTint = markerColor(color)
     }
 }

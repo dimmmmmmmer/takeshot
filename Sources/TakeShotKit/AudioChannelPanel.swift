@@ -129,8 +129,7 @@ struct AudioChannelPanel: View {
     }
 
     private func fraction(of level: Float) -> CGFloat {
-        let clamped = min(max(level, range.lowerBound), range.upperBound)
-        return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
+        AudioMeterScale.fraction(of: level, in: range)
     }
 }
 
@@ -197,16 +196,57 @@ struct AudioOutputMenu: View {
     }
 }
 
+/// A strip that appears when the pointer nears the bottom of a fullscreen
+/// window, and slides away again.
+///
+/// Both fullscreen surfaces carry one — the live window reveals the footer, the
+/// playback window reveals the transport — and both had written out the
+/// overlay, the hover test and the animation. The reveal HEIGHT is the part
+/// that must not drift: it is how far up the operator has to move the mouse
+/// before the controls appear, and two different answers on two windows reads
+/// as one of them being broken.
+private struct BottomHoverReveal<Strip: View>: ViewModifier {
+    let height: CGFloat
+    @Binding var shown: Bool
+    @ViewBuilder let strip: () -> Strip
+
+    func body(content: Content) -> some View {
+        GeometryReader { geo in
+            content
+                .overlay(alignment: .bottom) {
+                    if shown {
+                        strip()
+                            .padding(.horizontal, 60)
+                            .padding(.bottom, 18)
+                            .transition(.move(edge: .bottom)
+                                .combined(with: .opacity))
+                    }
+                }
+                .onContinuousHover { phase in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        switch phase {
+                        case .active(let point):
+                            shown = point.y > geo.size.height - height
+                        case .ended:
+                            shown = false
+                        }
+                    }
+                }
+        }
+        .ignoresSafeArea()
+    }
+}
+
 /// Live-signal fullscreen window: image + a control footer revealed on hover at the bottom.
 struct LiveFullscreenView: View {
     @EnvironmentObject private var controller: CaptureController
     @State private var footerHover = false
 
     var body: some View {
-        GeometryReader { geo in
+        Group {
             ZStack {
                 Color.black
-                LivePreviewLayerView(pipeline: controller.pipeline)
+                PreviewMount.live(controller.pipeline)
             }
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
             // exit — bottom-right, same place as the player's enter-fullscreen button
@@ -223,28 +263,12 @@ struct LiveFullscreenView: View {
                 .buttonStyle(.plain)
                 .padding(14)
             }
-            .overlay(alignment: .bottom) {
-                if footerHover {
-                    BottomBarView()
-                        .background(.ultraThinMaterial,
-                                    in: RoundedRectangle(cornerRadius: 18))
-                        .padding(.horizontal, 60)
-                        .padding(.bottom, 18)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let point):
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        footerHover = point.y > geo.size.height - 150
-                    }
-                case .ended:
-                    withAnimation(.easeOut(duration: 0.15)) { footerHover = false }
-                }
-            }
         }
-        .ignoresSafeArea()
+        .modifier(BottomHoverReveal(height: 150, shown: $footerHover) {
+            BottomBarView()
+                .background(.ultraThinMaterial,
+                            in: RoundedRectangle(cornerRadius: 18))
+        })
     }
 }
 
@@ -255,7 +279,7 @@ struct PlaybackFullscreenView: View {
     @State private var transportHover = false
 
     var body: some View {
-        GeometryReader { geo in
+        Group {
             ZStack {
                 Color.black
                 // A/B is a split of two surfaces; wipe and blend arrive already
@@ -267,26 +291,10 @@ struct PlaybackFullscreenView: View {
                 }
             }
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
-            .overlay(alignment: .bottom) {
-                if transportHover {
-                    TransportBar(player: controller.player, model: controller.transport)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal, 60)
-                        .padding(.bottom, 18)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let point):
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        transportHover = point.y > geo.size.height - 130
-                    }
-                case .ended:
-                    withAnimation(.easeOut(duration: 0.15)) { transportHover = false }
-                }
-            }
         }
-        .ignoresSafeArea()
+        .modifier(BottomHoverReveal(height: 130, shown: $transportHover) {
+            TransportBar(player: controller.player, model: controller.transport)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        })
     }
 }

@@ -9,13 +9,20 @@ import QuartzCore
 /// them to registered MetalPreviewLayer sinks — the same display path as
 /// live and AVPlayer playback, so color and geometry match.
 ///
-/// The clip decoders themselves live in `RawClipSource.swift`; the transport
-/// and the timecode readouts are extensions at the bottom of this file.
+/// The clip decoders themselves live in `RawClipSource.swift`. What this type
+/// DOES is split by job: the operator's controls in `RawPlayback+Transport`,
+/// the decode/present loop in `RawPlayback+PlayLoop`, scope analysis in
+/// `RawPlayback+Scopes`. Members those reach are module-internal rather than
+/// private for that reason, and never wider than the module.
 @MainActor
 final class RawPlayerModel: ObservableObject {
-    @Published private(set) var isPlaying = false
+    /// Written by the transport and the play loop only — module-internal rather
+    /// than `private(set)` because those live in the extensions above, and Swift
+    /// has no setter access level between "this file" and "this module". Nothing
+    /// outside this type assigns them.
+    @Published var isPlaying = false
     @Published var isLooping = false
-    @Published private(set) var currentFrame = 0
+    @Published var currentFrame = 0
     /// Loop range in frames.
     @Published var inFrame: Int?
     @Published var outFrame: Int?
@@ -44,11 +51,11 @@ final class RawPlayerModel: ObservableObject {
     /// next frame to make up for a dropped one, so it is run afterwards.
     var scopeRefreshPending = false
 
-    private let clip: RawClipSource
-    private var playTask: Task<Void, Never>?
+    let clip: RawClipSource
+    var playTask: Task<Void, Never>?
     /// Bumped on every play/pause/seek: a cancelled loop parked in a blocking
     /// decode wakes up later — its writes must not clobber the new session.
-    private var playGeneration = 0
+    var playGeneration = 0
 
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
     private let sinks = PreviewSinkRegistry()
@@ -124,220 +131,12 @@ final class RawPlayerModel: ObservableObject {
         sinks.setLetterbox(color)
     }
 
-    nonisolated private func present(_ buffer: CVPixelBuffer) {
+    nonisolated func present(_ buffer: CVPixelBuffer) {
         sinks.present(buffer)
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
         handler?(buffer)
-    }
-}
-
-// MARK: - transport
-
-extension RawPlayerModel {
-    /// Set/clear the in or out point at the playhead (same semantics as the
-    /// AVPlayer transport: clicking near an existing point clears it).
-    func toggleRangePoint(out: Bool) {
-        let before = (inFrame, outFrame)
-        let now = currentFrame
-        if out {
-            if let existing = outFrame, abs(existing - now) < 2 {
-                outFrame = nil
-            } else {
-                outFrame = now
-                if let inF = inFrame, inF >= now { inFrame = nil }
-            }
-        } else {
-            if let existing = inFrame, abs(existing - now) < 2 {
-                inFrame = nil
-            } else {
-                inFrame = now
-                if let outF = outFrame, outF <= now { outFrame = nil }
-            }
-        }
-        // This engine is thrown away and rebuilt for every clip, so its range is
-        // normally filed with the controller only on the way out. That is too late
-        // to survive a quit with the clip still open — hence a report on the spot.
-        guard (inFrame, outFrame) != before else { return }
-        onRangeChanged?()
-    }
-
-    func togglePlay() {
-        if isPlaying { pause() } else { play() }
-    }
-
-    func play() {
-        guard !isPlaying, frameCount > 0 else { return }
-        isPlaying = true
-        playGeneration += 1
-        let generation = playGeneration
-        // restart from the top (or the in point) when play is hit at the end
-        let floorFrame = inFrame ?? 0
-        let startFrame = currentFrame >= frameCount - 1
-            ? floorFrame : max(currentFrame, 0)
-        currentFrame = startFrame
-        playTask = makePlayTask(startFrame: startFrame, generation: generation)
-    }
-
-    /// The decode/present loop. It carries `generation`: a loop that was
-    /// cancelled while parked in a blocking decode wakes up later, and every
-    /// write it could make is gated on the generation still being current.
-    private func makePlayTask(startFrame: Int,
-                              generation: Int) -> Task<Void, Never> {
-        let clip = clip
-        let fps = frameRate
-        let total = frameCount
-        return Task.detached(priority: .userInitiated) { [weak self] in
-            let startHost = CACurrentMediaTime()
-            var scopeCounter = 0
-            var index = startFrame
-            while !Task.isCancelled {
-                guard let buffer = clip.copyFrame(at: index) else {
-                    break
-                }
-                guard let self else { return }
-                scopeCounter += 1
-                guard await self.presentPlayed(buffer, at: index,
-                                               generation: generation,
-                                               scopeCounter: scopeCounter)
-                else { return }
-                let next = await Self.nextIndex(after: index,
-                                                startFrame: startFrame,
-                                                startHost: startHost, fps: fps)
-                let outLimit = await MainActor.run { [weak self] in
-                    self?.outFrame
-                }
-                if let outLimit, next > outLimit {
-                    let looping = await MainActor.run { [weak self] in
-                        self?.isLooping ?? false
-                    }
-                    if looping {
-                        return await self.restartLoop(fromInPoint: true,
-                                                      generation: generation)
-                    }
-                    break
-                }
-                if next >= total {
-                    let looping = await MainActor.run { [weak self] in
-                        self?.isLooping ?? false
-                    }
-                    if !looping { break }
-                    // loop restarts the time base at frame 0
-                    return await self.restartLoop(fromInPoint: false,
-                                                  generation: generation)
-                }
-                index = next
-            }
-            await self?.finishLoop(generation: generation)
-        }
-    }
-
-    /// Present one decoded frame and publish the transport state. Returns
-    /// false when the loop is stale — pause/seek happened mid-decode, and
-    /// neither the picture nor the transport state may be touched.
-    nonisolated private func presentPlayed(_ buffer: CVPixelBuffer, at index: Int,
-                                           generation: Int,
-                                           scopeCounter: Int) async -> Bool {
-        let state = await MainActor.run {
-            (live: self.playGeneration == generation && self.isPlaying,
-             scopes: self.scopesEnabled, region: self.scopeRegion,
-             stride: self.scopeFrameStride)
-        }
-        guard state.live else { return false }
-        self.present(buffer)
-        // analysis stays OFF the MainActor: noisy frames are expensive
-        let scopeData = state.scopes && scopeCounter % state.stride == 0
-            ? ScopeAnalyzer.analyze(buffer, region: state.region) : nil
-        let boxed = UncheckedSendable(buffer)
-        await MainActor.run {
-            self.lastBuffer = boxed.value
-            self.currentFrame = index
-            if let scopeData {
-                self.onScopeData?(scopeData)
-            }
-        }
-        return true
-    }
-
-    /// Real-time mapping: skip frames if decode is slower than fps, and wait
-    /// out the slot if it is faster.
-    nonisolated private static func nextIndex(
-        after index: Int, startFrame: Int,
-        startHost: CFTimeInterval, fps: Double) async -> Int {
-        let elapsed = CACurrentMediaTime() - startHost
-        var next = startFrame + Int(elapsed * fps) + 1
-        if next <= index { // decode faster than fps: wait for the slot
-            next = index + 1
-            let slotTime = startHost + Double(next - startFrame) / fps
-            let wait = slotTime - CACurrentMediaTime()
-            if wait > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(wait * 1e9))
-            }
-        }
-        return next
-    }
-
-    /// Loop point reached: hand the session to a NEW generation. A loop that
-    /// is no longer the current one must not restart playback behind its back.
-    private func restartLoop(fromInPoint: Bool, generation: Int) {
-        guard isPlaying, playGeneration == generation else { return }
-        isPlaying = false
-        currentFrame = fromInPoint ? (inFrame ?? 0) : 0
-        play()
-    }
-
-    /// The loop ran out (clip end, failed decode, cancellation): only the
-    /// generation that is still current may clear the playing flag.
-    private func finishLoop(generation: Int) {
-        guard playGeneration == generation else { return }
-        isPlaying = false
-    }
-
-    func pause() {
-        playGeneration += 1 // orphan any loop parked in a blocking decode
-        playTask?.cancel()
-        playTask = nil
-        isPlaying = false
-    }
-
-    /// Show one frame (paused seek / poster). Decode runs off the main thread.
-    func seek(to frame: Int) {
-        let clamped = min(max(0, frame), max(0, frameCount - 1))
-        let wasPlaying = isPlaying
-        pause()
-        currentFrame = clamped
-        showFrame(clamped)
-        if wasPlaying {
-            play()
-        }
-    }
-
-    private func showFrame(_ index: Int) {
-        let clip = clip
-        let generation = playGeneration
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let buffer = clip.copyFrame(at: index) else { return }
-            guard let self else { return }
-            // the scope state is read BEFORE the pass, not after it: every
-            // paused seek and every poster frame used to run a full analysis
-            // and throw it away when the scopes turned out to be closed
-            let state = await MainActor.run {
-                (live: self.playGeneration == generation,
-                 scopes: self.scopesEnabled, region: self.scopeRegion)
-            }
-            guard state.live else { return }
-            self.present(buffer)
-            let data = state.scopes // off-main, like the loop
-                ? ScopeAnalyzer.analyze(buffer, region: state.region) : nil
-            let boxed = UncheckedSendable(buffer)
-            await MainActor.run {
-                self.lastBuffer = boxed.value
-                if let data {
-                    self.onScopeData?(data)
-                }
-            }
-        }
     }
 }
 
@@ -348,7 +147,7 @@ extension RawPlayerModel {
     var inPoint: Double? { inFrame.map { Double($0) / max(1, frameRate) } }
     var outPoint: Double? { outFrame.map { Double($0) / max(1, frameRate) } }
 
-    private static func parseTimecode(_ text: String?, fps: Int) -> Timecode? {
+    fileprivate static func parseTimecode(_ text: String?, fps: Int) -> Timecode? {
         guard let text else { return nil }
         let dropFrame = text.contains(";")
         let parts = text.split(whereSeparator: { $0 == ":" || $0 == ";" })
