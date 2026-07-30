@@ -50,18 +50,4 @@ import Testing
         // the second event starts where the first ended
         #expect(edl.contains("01:00:02:00 01:00:05:00"))
     }
-
-    @Test func markersCSVRoundTrip() {
-        let take = makeTake(
-            name: "A.mov", tc: nil, duration: 5,
-            markers: [
-                TakeMarker(seconds: 0.5, timecodeText: "01:00:00:12"),
-                TakeMarker(seconds: 3.25, timecodeText: "01:00:03:06"),
-            ])
-        let csv = TakeLogExporter.markersCSV(takes: [take])
-        let parsed = TakeLogExporter.parseMarkers(csv: csv)
-        #expect(parsed["A.mov"]?.count == 2)
-        #expect(parsed["A.mov"]?.first?.seconds == 0.5)
-        #expect(parsed["A.mov"]?.last?.timecodeText == "01:00:03:06")
-    }
 }

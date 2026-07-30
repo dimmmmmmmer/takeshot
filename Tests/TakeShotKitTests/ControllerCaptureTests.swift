@@ -183,7 +183,10 @@ import Testing
             // instead of throwing a bare "no such file"
             try #require(logged, "the take never reached \(log.lastPathComponent)")
             let csv = try String(contentsOf: log, encoding: .utf8)
-            #expect(csv.contains("A001C01.mov,001,1,false"))
+            // a fresh take is unrated, and Resolve's Good Take column is a
+            // checkbox: unrated is an EMPTY field, not "false" (which reads as
+            // "the operator rejected it")
+            #expect(csv.contains("A001C01.mov,001,1,,"))
 
             await ControllerWait.untilWritten { controller.thumbnails[take.id] != nil }
             #expect(controller.thumbnails[take.id] != nil)

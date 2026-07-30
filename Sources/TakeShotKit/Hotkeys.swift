@@ -235,11 +235,8 @@ final class HotkeyManager: ObservableObject {
                                controller: CaptureController) {
         switch action {
         case .fullscreen:
-            if controller.viewerMode == .playback, controller.playbackURL != nil {
-                controller.togglePlaybackFullscreen()
-            } else {
-                controller.toggleLiveFullscreen()
-            }
+            // one implementation, shared with the View menu's item
+            controller.toggleViewerFullscreen()
         case .addMarker:
             controller.addMarker()
         case .removeMarker:

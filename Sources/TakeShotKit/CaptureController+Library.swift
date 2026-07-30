@@ -193,9 +193,12 @@ extension CaptureController {
         case known       // already in the takes list; nothing to do
     }
     /// Ratings, comments and markers of the day, as saved next to the takes.
+    /// The markers stay unresolved rows here: their position is a timecode in
+    /// the sidecar, and turning it into an offset needs the take's own start TC,
+    /// which is only read further down in `classify`.
     private func loadStoredMetadata()
         -> (meta: [String: TakeLogExporter.TakeMeta],
-            markers: [String: [TakeMarker]]) {
+            markers: [String: [TakeLogExporter.MarkerRow]]) {
         // Lossy decode on purpose: one bad byte must not wipe the day's
         // ratings. The failable String(bytes:encoding:) the linter prefers
         // would return nil for the whole file, which is exactly the outcome
@@ -207,7 +210,7 @@ extension CaptureController {
         let markersURL = destinationRoot
             .appendingPathComponent(TakeLogExporter.markersFileName)
         let markers = (try? Data(contentsOf: markersURL))
-            .map { TakeLogExporter.parseMarkers(
+            .map { TakeLogExporter.parseMarkerRows(
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         // swiftlint:enable optional_data_string_conversion
         return (meta, markers)
@@ -216,7 +219,7 @@ extension CaptureController {
     private func classify(
         _ url: URL,
         stored: (meta: [String: TakeLogExporter.TakeMeta],
-                 markers: [String: [TakeMarker]])) async -> ScanOutcome {
+                 markers: [String: [TakeLogExporter.MarkerRow]])) async -> ScanOutcome {
         if scannedPaths.contains(url.path) {
             return takes.contains(where: { $0.url.path == url.path })
                 ? .known : .foreign
@@ -255,7 +258,8 @@ extension CaptureController {
         // off the file
         take.rating = stored.meta[name]?.rating ?? .none
         take.comment = stored.meta[name]?.comment ?? ""
-        take.markers = stored.markers[name] ?? []
+        take.markers = TakeLogExporter.markers(stored.markers[name] ?? [],
+                                               of: take)
         return .take(take)
     }
     /// Files removed from the folder leave the panel, but NOT the shift log:
