@@ -34,6 +34,22 @@ public struct TakeShotApp: App {
         }
         // window buttons over the content, no separate title-bar strip
         .windowStyle(.hiddenTitleBar)
+        // The menu bar. Attached to the main window group so the items are
+        // present for the whole app, not just while a particular window is key.
+        .commands {
+            TakeShotCommands(controller: controller, hotkeys: hotkeys)
+        }
+
+        // Operator guide (Help menu). A window, because it is read while the app
+        // is being used — on set that means dragging it onto the second screen.
+        Window(L("menu_help"), id: "help") {
+            HelpView()
+                .environmentObject(controller)
+                .frame(minWidth: 420, minHeight: 320)
+                .tint(controller.accentColor)
+                .preferredColorScheme(controller.colorScheme)
+        }
+        .defaultSize(width: HelpView.width, height: 720)
 
         // Scopes window: movable/resizable, opened from the player badge
         Window("Scopes", id: "scopes") {

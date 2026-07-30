@@ -374,3 +374,23 @@
 /* scopes group: skin-tone line */
 "scope_skin_tone_short" = "Skin";
 "scope_skin_tone" = "Skin-tone reference line";
+
+/* Menu bar and help page (items 33-35) */
+"menu_playback" = "Playback";
+"menu_change_folder" = "Change record folder…";
+"menu_play_pause" = "Play / Pause";
+"menu_step_back" = "Back one frame";
+"menu_step_forward" = "Forward one frame";
+"menu_skip_back" = "Back 5 seconds";
+"menu_skip_forward" = "Forward 5 seconds";
+"menu_in_point" = "Loop in point";
+"menu_out_point" = "Loop out point";
+"menu_rating" = "Rating of the last take";
+"menu_scopes_overlay" = "Scopes over the player";
+"menu_scopes_window" = "Scopes in a window";
+"menu_lut" = "LUT";
+"menu_assists" = "Operator aids";
+"menu_fullscreen_player" = "Player fullscreen";
+"menu_vanc" = "VANC monitor";
+"menu_help" = "TakeShot Help";
+"help_unavailable" = "The help page is missing from this build.";

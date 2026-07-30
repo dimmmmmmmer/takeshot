@@ -18,19 +18,16 @@ extension TakeLogExporter {
     public static func durationTimecode(of take: Take) -> String {
         // no start TC (manual take on a source without one): count at 25 fps,
         // which is what the field showed before the take could carry a rate
-        let rate = take.startTimecode
-            ?? Timecode(frameNumber: 0, fps: 25, isDropFrame: false)
+        let rate = take.startTimecode ?? fallbackRate
         return Timecode(frameNumber: durationFrames(of: take, at: rate),
                         fps: max(1, rate.fps),
                         isDropFrame: rate.isDropFrame).description
     }
 
-    /// The recorded length in frames, counted on `rate`'s own timebase: a
-    /// drop-frame rate runs at 1000/1001 of its nominal value, so the real rate
-    /// is what converts seconds to frames.
+    /// The recorded length in frames, counted on `rate`'s own timebase (see
+    /// `realRate(of:)` — a drop-frame rate is not its nominal value).
     private static func durationFrames(of take: Take, at rate: Timecode) -> Int {
-        let realRate = Double(rate.fps) * (rate.isDropFrame ? 1000.0 / 1001.0 : 1)
-        return Int((take.durationSeconds * realRate).rounded())
+        frameOffset(seconds: take.durationSeconds, at: rate)
     }
 
     public static func reportCSV(takes: [Take]) -> String {

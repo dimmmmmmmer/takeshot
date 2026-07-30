@@ -380,3 +380,23 @@
 /* scopes group: skin-tone line */
 "scope_skin_tone_short" = "Кожа";
 "scope_skin_tone" = "Линия телесных оттенков";
+
+/* Menu bar and help page (items 33-35) */
+"menu_playback" = "Плейбек";
+"menu_change_folder" = "Сменить папку записи…";
+"menu_play_pause" = "Воспроизвести / Пауза";
+"menu_step_back" = "На кадр назад";
+"menu_step_forward" = "На кадр вперёд";
+"menu_skip_back" = "На 5 секунд назад";
+"menu_skip_forward" = "На 5 секунд вперёд";
+"menu_in_point" = "Точка входа цикла";
+"menu_out_point" = "Точка выхода цикла";
+"menu_rating" = "Отметка последнего дубля";
+"menu_scopes_overlay" = "Скопы поверх плеера";
+"menu_scopes_window" = "Скопы в отдельном окне";
+"menu_lut" = "LUT";
+"menu_assists" = "Инструменты оператора";
+"menu_fullscreen_player" = "Плеер на весь экран";
+"menu_vanc" = "Монитор VANC";
+"menu_help" = "Справка TakeShot";
+"help_unavailable" = "В этой сборке нет файла справки.";

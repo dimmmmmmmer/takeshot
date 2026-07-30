@@ -24,11 +24,15 @@ backend possible. `Sendability.swift` states the cross-thread contracts in one
 place rather than boxing at a hundred call sites.
 
 `TakeShotKit` holds `CaptureController` and its domain extensions (`+Capture`,
-`+Playback`, `+Compare`, `+LUT`, `+Markers`, `+Library`, `+Offload`,
-`+Windows`, `+Settings`, `+Takes`, `+Thumbnails`, `+Audio`, `+Naming`,
-`+Viewer`), the two playback engines (`PlaybackFrameTap` for AVPlayer video and
-stills, `RawPlayerModel` for BRAW and CinemaDNG), `PlayoutFeeder`, and the
-SwiftUI views.
+`+Playback`, `+Transport`, `+Compare`, `+LUT`, `+Markers`, `+Library`,
+`+Offload`, `+Windows`, `+Settings`, `+Takes`, `+Thumbnails`, `+Audio`,
+`+Naming`, `+Viewer`), the two playback engines (`PlaybackFrameTap` for AVPlayer
+video and stills, `RawPlayerModel` for BRAW and CinemaDNG), `PlayoutFeeder`, and
+the SwiftUI views.
+
+`+Transport` exists because there are two playback engines and one menu bar:
+each engine has a transport bar wired straight to it, and `AppCommands` needs
+one set of items for whichever is loaded.
 
 `CaptureController` and `CapturePipeline` were 2615 and 1315 lines before they
 were split — the size at which nobody reads a type top to bottom any more. New
@@ -151,6 +155,32 @@ The takes panel has an "open folder" button and an Other content block for
 files that arrive in the record folder from outside the app. The metadata CSV
 uses a Reel Name column, which is the roll.
 
+The menu bar is built in `AppCommands.swift` from SwiftUI command groups (File,
+View, a Playback menu, Help; Edit is left alone because the naming fields are
+typed with it). Every item calls the controller method the on-screen button
+calls. A binding becomes a menu key equivalent only if it carries ⌘ or ⌃: AppKit
+offers the main menu a key before the first responder sees it, so a bare "M"
+would drop a marker while a roll name is being typed.
+
+## Sidecars in the record folder
+
+- `takeshot-log.csv` — the Resolve metadata table (File Name, Reel Name, Take,
+  Good Take, Comments). Good Take is a checkbox, and the rating is ternary, so
+  the third state is the absence of a value: `true` for good, `false` plus an
+  `NG` marker in Comments for a rejected take, and EMPTY for one nobody has
+  rated. Writing `false` for unrated told Resolve the whole day was rejected.
+- `takeshot-markers.csv` — File Name, Timecode, Color, Note. The timecode is the
+  position; there is no seconds column (there was, and the two records of one
+  value drifted apart). Reading is two steps — `parseMarkerRows` for the file,
+  then `markers(_:of:)` once the take's own start timecode is known. A take with
+  NO start timecode stores offsets from zero instead, on both sides of the file:
+  there is nothing to subtract an absolute camera timecode from, so writing one
+  out would place the marker hours past the end of the take. The conversion
+  itself lives in `+MarkerTime`, shared with the shift report's duration
+  counting and with the controller's anchoring of a recording's markers.
+- `offload-manifest.csv` — written beside a verified copy, not in the record
+  folder.
+
 ## Localization
 
 The base language is English. UI strings go through `L("key")`
@@ -162,6 +192,12 @@ switch swaps the `.lproj` bundle and is stored in `CaptureSettings.appLanguage`
 Make new settings fields **Optional** — otherwise saved JSON from an older
 build will not decode. Core errors (`CaptureCore`, `CDeckLink`) are English and
 not localized. Add every new string to both tables.
+
+The help page is the exception: it is prose, several pages of it, so it lives as
+`Help.md` in each `.lproj` rather than as escaped one-line strings. `HelpDocument`
+reads it from the bundle L10n currently holds — `Bundle.module` would give the
+system language and ignore the in-app switch — and parses the small Markdown
+subset it is written in.
 
 ## CI
 

@@ -32,6 +32,12 @@ enum L10n {
         state.withLock { $0.bundle }
     }
 
+    /// The bundle the current language's resources live in. Not everything
+    /// localized is a string: the help page is a Markdown document per language,
+    /// and it has to follow the in-app language switch like the strings do —
+    /// reading it from `.module` would give whatever the SYSTEM language is.
+    static var resources: Bundle { bundle }
+
     /// The language currently in force. Stored alongside the bundle because a
     /// Bundle cannot be mapped back to the choice that selected it, and callers
     /// that switch the language temporarily need to know what to switch back to.

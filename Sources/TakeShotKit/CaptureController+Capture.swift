@@ -148,14 +148,18 @@ extension CaptureController {
     private func anchoredMarkers(for take: Take) -> [TakeMarker] {
         recordingMarkers.map { marker in
             var fixed = marker
-            if let start = take.startTimecode,
-               let tc = Timecode(text: marker.timecodeText, fps: start.fps) {
-                var frames = tc.frameNumber - start.frameNumber
-                if frames < 0 {
-                    frames += Timecode.dayFrames(fps: start.fps,
-                                                 isDropFrame: start.isDropFrame)
-                }
-                fixed.seconds = Double(frames) / Double(max(1, start.fps))
+            // Same conversion the markers sidecar reads back with — one
+            // implementation, so a marker cannot land on a different frame
+            // depending on whether the app was restarted since.
+            //
+            // Without a start TC there is nothing to anchor against and the
+            // marker's timecode text is the camera's, not an offset: the wall
+            // clock measured from the REC press stays.
+            if take.startTimecode != nil,
+               let seconds = TakeLogExporter.markerSeconds(
+                   timecodeText: marker.timecodeText,
+                   start: take.startTimecode) {
+                fixed.seconds = seconds
             }
             return fixed
         }

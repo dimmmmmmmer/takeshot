@@ -27,11 +27,27 @@ public enum TakeLogExporter {
                 escape(take.url.lastPathComponent),
                 escape(take.roll.isEmpty ? take.scene : take.roll),
                 String(take.takeNumber),
-                take.rating == .good ? "true" : "false",
+                goodTakeField(rating: take.rating),
                 escape(commentsField(rating: take.rating, comment: take.comment)),
             ].joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Resolve's "Good Take" checkbox column. The rating is ternary and the
+    /// column is a checkbox, so the third state has to be the ABSENCE of a
+    /// value: "false" means the operator marked the take NG, and writing it for
+    /// every unmarked take told Resolve the whole day had been rejected —
+    /// including the takes nobody had got round to watching yet.
+    ///
+    /// Spelled out rather than looked up in a table, like the report's rating
+    /// column: a rating added later must break this switch.
+    static func goodTakeField(rating: TakeRating) -> String {
+        switch rating {
+        case .good: return "true"
+        case .bad: return "false"
+        case .none: return ""
+        }
     }
 
     /// The Comments column value: an "NG" marker for bad takes plus the free-text
@@ -73,9 +89,18 @@ public enum TakeLogExporter {
     }
 
     /// Split the Comments column into a rating and a free-text comment.
-    /// "NG" / "NG: text" → .bad; a "true" Good Take flag → .good; else .none.
+    /// A ticked Good Take → .good; "NG" / "NG: text" → .bad; else .none — an
+    /// EMPTY checkbox and a written "false" both mean "not a good take", and
+    /// only the NG marker says the operator actively rejected it.
+    ///
+    /// The checkbox is read FIRST: NG is written for bad takes only, so a good
+    /// take whose comment happens to start with "NG" (a note about a shot that
+    /// was NG on the previous camera, say) keeps both its rating and its text.
     static func parseComments(_ value: String, good: Bool) -> (TakeRating, String) {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if good {
+            return (.good, trimmed)
+        }
         if trimmed == "NG" {
             return (.bad, "")
         }
@@ -83,6 +108,6 @@ public enum TakeLogExporter {
             let comment = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
             return (.bad, comment)
         }
-        return (good ? .good : .none, trimmed)
+        return (.none, trimmed)
     }
 }
