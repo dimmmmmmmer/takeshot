@@ -93,6 +93,54 @@ struct ViewSettingsTests {
         }
     }
 
+    /// The Remote section grows a port field, the PIN, the addresses and a QR
+    /// code when it is switched on. All of it has to render in both languages,
+    /// and the QR has to be an image rather than a missing one.
+    ///
+    /// The listener is started explicitly on an ephemeral port first: switching
+    /// the setting on is what brings the server up in the app, and a view test
+    /// must not claim the configured port on the machine running the suite.
+    @Test func theRemoteSectionRendersExpandedInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let collapsed = probe.fittingSizes {
+                Form { RemoteSettingsSection() }.formStyle(.grouped)
+            }
+            probe.controller.startRemoteServer(overridePort: 0)
+            await ControllerWait.until { probe.controller.remoteBoundPort > 0 }
+            probe.controller.settings.remoteEnabled = true
+
+            let expanded = probe.fittingSizes {
+                Form { RemoteSettingsSection() }.formStyle(.grouped)
+            }
+            #expect(expanded.en.height > collapsed.en.height,
+                    "the switched-on section did not grow: \(expanded)")
+            // Height, not width: measured on its own a grouped Form reports an
+            // ideal width its content does not have to live within (the app
+            // gives this section SettingsView.width, and the row labels are
+            // checked against that budget in the test below). The height is the
+            // number that catches the real failures — a row that wrapped in
+            // Russian, or a row that never rendered at all.
+            #expect(abs(expanded.ru.height - expanded.en.height) <= 8,
+                    "the Russian remote section is a different height: \(expanded)")
+            #expect(RemoteAddress.qrImage(for: "http://192.168.1.5:8765/") != nil)
+        }
+    }
+
+    /// The section's own labels sit beside controls in a window of fixed width,
+    /// and a grouped Form truncates rather than wraps.
+    @Test func remoteRowLabelsFitTheSettingsForm() async throws {
+        try await ViewProbe.run { probe in
+            let form = ViewBudget.settingsFormWidth
+            for key in ["remote_enable", "remote_port", "remote_pin",
+                        "remote_address", "remote_pin_new", "remote_offline",
+                        "remote_no_network"] {
+                let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
+                #expect(ideal.ru.width <= form,
+                        "\(key) is \(ideal.ru.width)pt of \(form)")
+            }
+        }
+    }
+
     /// Recording in progress disables the device pickers and hides nothing; the
     /// form must still measure the same.
     @Test func settingsFormWhileRecordingKeepsItsSize() async throws {

@@ -230,7 +230,7 @@ final class HotkeyManager: ObservableObject {
     /// (⌃A line start, ⌃D delete forward…), and a ⌃ hotkey family that stole
     /// them typed dim/mute into the operator's naming instead of editing it.
     nonisolated static func typingKeepsTheKey(modifiers: NSEvent.ModifierFlags,
-                                  isTyping: Bool) -> Bool {
+                                              isTyping: Bool) -> Bool {
         isTyping && !modifiers.contains(.command)
     }
 

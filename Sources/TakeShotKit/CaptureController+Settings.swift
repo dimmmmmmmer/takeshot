@@ -25,6 +25,7 @@ extension CaptureController {
         applyPipelineChange(from: oldValue)
         applyDeviceChange(from: oldValue)
         applyNamingChange(from: oldValue)
+        applyRemoteChange(from: oldValue)
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.
@@ -34,13 +35,17 @@ extension CaptureController {
     }
 
     /// The pipeline only needs a push when something it reads has changed; the
-    /// monitoring level and the DIM hold are the fields it does not read — both
-    /// are applied straight to the monitor, and pushing a config per dim click
-    /// would rebuild the capture config for nothing.
+    /// monitoring level, the DIM hold and the web remote are the fields it does
+    /// not read — the first two are applied straight to the monitor and the
+    /// third is a socket, and rebuilding the capture config per dim click (or
+    /// per remote toggle) would make the sliders lag for nothing.
     private func applyPipelineChange(from oldValue: CaptureSettings) {
         var pipelineRelevant = oldValue
         pipelineRelevant.monitorVolume = settings.monitorVolume
         pipelineRelevant.monitorDimmed = settings.monitorDimmed
+        pipelineRelevant.remoteEnabled = settings.remoteEnabled
+        pipelineRelevant.remotePort = settings.remotePort
+        pipelineRelevant.remotePIN = settings.remotePIN
         guard pipelineRelevant != settings else { return }
         pushConfig()
     }

@@ -20,6 +20,24 @@ extension CaptureController {
         String(format: "%0\(settings.clipPadWidthEffective)d", nextTakeNumber)
     }
 
+    /// The name the next take would be written under, without its extension.
+    ///
+    /// One implementation, because two readers need the same answer: the
+    /// collision warning asks whether that file is already there, and the web
+    /// remote shows it as the take in progress. Built from the same inputs the
+    /// pipeline is configured with, so the phone cannot show a name the writer
+    /// is not using.
+    var pendingTakeName: String {
+        let engine = NamingEngine(template: settings.namingTemplate,
+                                  clipPadding: settings.clipPadWidthEffective)
+        let context = NamingContext(
+            project: settings.projectName, date: Date(),
+            take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
+            postfix: settings.postfix ?? "",
+            timecode: currentTimecode)
+        return engine.fileName(for: context)
+    }
+
     /// Apply the clip text typed into the field: digits → number,
     /// the count of typed digits (with leading zeros) → filename padding.
     func commitClipText(_ text: String) {
