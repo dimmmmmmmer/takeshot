@@ -440,3 +440,10 @@
 "trash_done" = "Moved %@ to the Trash";
 "trash_selection" = "Move %@ to Trash";
 "reveal_selection" = "Show %@ in Finder";
+/* hotkeys for the viewer and monitoring toggles (owner item 49) */
+"hotkey_scopes_overlay" = "Scopes overlay";
+"hotkey_lut_preview" = "Preview LUT on/off";
+"hotkey_monitor_mute" = "Mute monitoring";
+"hotkey_monitor_dim" = "DIM monitoring (half level)";
+"hotkey_viewer_mode" = "Switch record / playback";
+"hotkey_audio_bank" = "Audio: mix only (1-2) / all channels";

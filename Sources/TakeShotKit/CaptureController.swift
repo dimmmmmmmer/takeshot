@@ -253,6 +253,10 @@ final class CaptureController: ObservableObject {
     let audioMonitor = AudioMonitor()
     /// Level to restore when the speaker button un-mutes (see +Audio).
     var monitorVolumeBeforeMute: Double = 1
+    /// Channel selection to come back to when the bank key leaves mix-only (see
+    /// `toggleAudioChannelBank`). Session state, like the level above: the mask
+    /// itself is what gets persisted, and 0xFFFF is how "all channels" is spelled.
+    var audioMaskBeforeMixOnly: Int = 0xFFFF
 
     /// Live audio monitoring on/off; persisted — a 100% volume slider with a
     /// crossed-out speaker at every launch read as a bug, not caution.

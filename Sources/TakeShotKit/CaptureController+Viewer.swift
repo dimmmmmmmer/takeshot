@@ -17,6 +17,17 @@ extension CaptureController {
 
     var currentTimecode: Timecode? { live.currentTimecode }
 
+    /// Flip between the live signal and the clip in the player — what the
+    /// segmented switch over the player does, as a key.
+    ///
+    /// Unguarded, like that switch: going to playback with nothing loaded is a
+    /// legal state the viewer already draws (an empty player with the takes
+    /// panel to pick from), and refusing the key there would leave the operator
+    /// pressing it at a picture that never changes.
+    func toggleViewerMode() {
+        viewerMode = viewerMode == .record ? .playback : .record
+    }
+
     /// Polling playback frames is only needed when the view is actually visible.
     func updateTapRunning() {
         // stills tick through the tap too (compare keeps the live half moving)

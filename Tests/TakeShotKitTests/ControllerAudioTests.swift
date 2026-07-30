@@ -315,3 +315,79 @@ import Testing
         }
     }
 }
+
+/// The record channel mask — which channels reach the file, as opposed to what
+/// the operator hears. Its own suite: the two share a controller but nothing
+/// else, and the mask is the one of the pair that a mistake in ends up baked
+/// into the footage.
+@Suite @MainActor struct ControllerAudioChannelTests {
+    /// One key for the channel decision that gets made in a hurry: the mix on
+    /// 1-2, or everything that was selected before it.
+    @Test func theChannelBankKeyGoesToTheMixAndBack() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(controller.settings.audioChannelMask == nil) // all channels
+            #expect(controller.isChannelEnabled(0))
+            #expect(controller.isChannelEnabled(7))
+
+            controller.toggleAudioChannelBank()
+
+            #expect(controller.isRecordingMixOnly)
+            #expect(controller.isChannelEnabled(0))
+            #expect(controller.isChannelEnabled(1))
+            #expect(!controller.isChannelEnabled(2))
+            #expect(!controller.isChannelEnabled(15))
+
+            controller.toggleAudioChannelBank()
+
+            // back to "all", which is stored as no mask at all rather than as
+            // 0xFFFF — otherwise a board with more channels would arrive with
+            // the extra ones already off
+            #expect(controller.settings.audioChannelMask == nil)
+            #expect(controller.isChannelEnabled(7))
+        }
+    }
+
+    /// Coming back from the mix restores the operator's own selection, not a
+    /// blanket "everything". A range flipped by XOR cannot do this: with 1-4
+    /// selected it would turn channels 5-16 ON and put twelve silent tracks in
+    /// the take.
+    @Test func theChannelBankRestoresTheSelectionItReplaced() async throws {
+        try await ControllerHarness.run { controller, _ in
+            // the sound department is sending four channels today: mix + two ISOs
+            for index in 4..<16 { controller.toggleAudioChannel(index) }
+            #expect(controller.settings.audioChannelMask == 0b1111)
+
+            controller.toggleAudioChannelBank()
+            #expect(controller.isRecordingMixOnly)
+
+            controller.toggleAudioChannelBank()
+            #expect(controller.settings.audioChannelMask == 0b1111,
+                    "the operator's channel selection did not come back")
+            #expect(controller.isChannelEnabled(3))
+            #expect(!controller.isChannelEnabled(4))
+        }
+    }
+
+    /// The mask is latched per take and the writer's channel count is fixed with
+    /// it, so the key does nothing mid-take — the same refusal the panel's
+    /// channel columns make, and for the same reason.
+    @Test func theChannelBankKeyIsANoOpWhileRecording() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.toggleAudioChannelBank() // mix only, before the take
+            #expect(controller.isRecordingMixOnly)
+
+            controller.isRecording = true
+            controller.toggleAudioChannelBank()
+
+            #expect(controller.isRecordingMixOnly,
+                    "the channel mask changed under a running take")
+            #expect(controller.settings.audioChannelMask
+                == CaptureController.mixChannelMask)
+
+            // …and it works again the moment the take is closed
+            controller.isRecording = false
+            controller.toggleAudioChannelBank()
+            #expect(controller.settings.audioChannelMask == nil)
+        }
+    }
+}

@@ -446,3 +446,10 @@
 "trash_done" = "В Корзину перемещено: %@";
 "trash_selection" = "Переместить %@ в Корзину";
 "reveal_selection" = "Показать %@ в Finder";
+/* hotkeys for the viewer and monitoring toggles (owner item 49) */
+"hotkey_scopes_overlay" = "Скопы поверх картинки";
+"hotkey_lut_preview" = "LUT на превью вкл/выкл";
+"hotkey_monitor_mute" = "Звук мониторинга вкл/выкл";
+"hotkey_monitor_dim" = "DIM мониторинга (вдвое тише)";
+"hotkey_viewer_mode" = "Переключить запись / плейбек";
+"hotkey_audio_bank" = "Звук: только микс (1-2) / все каналы";
