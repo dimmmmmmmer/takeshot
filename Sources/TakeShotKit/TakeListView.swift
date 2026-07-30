@@ -19,6 +19,12 @@ struct TakeListView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
+        // MOUNT LINE (owner item 48): the footer's settings/VANC/offload buttons
+        // live in a strip at the bottom of this panel now.
+        sections.takesPanelUtilityStrip()
+    }
+
+    @ViewBuilder private var sections: some View {
         if controller.otherFiles.isEmpty {
             TakesSection()
         } else {

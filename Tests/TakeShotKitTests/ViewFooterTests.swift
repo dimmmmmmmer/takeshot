@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 import SwiftUI
 import Testing
 
@@ -125,6 +126,149 @@ struct ViewFooterTests {
             let ideal = probe.fittingSizes { RecordButton() }
             #expect(ideal.en == CGSize(width: 48, height: 48))
             #expect(ideal.ru == ideal.en)
+        }
+    }
+
+    // MARK: - the reorganized footer (owner item 48)
+
+    /// The footer must not overflow the narrowest main column in ANY state it can
+    /// be in on a shoot: idle, capturing with all 16 channels metering, and
+    /// recording — when the codec picker and the folder button go disabled, which
+    /// is a colour change and must not be a layout change.
+    @Test func footerFitsTheNarrowestColumnInEveryShootingState() async throws {
+        try await ViewProbe.run { probe in
+            @MainActor func laidOut() -> (en: CGSize, ru: CGSize) {
+                probe.sizes(proposedWidth: ViewBudget.footerWidth) { BottomBarView() }
+            }
+            let idle = laidOut()
+            probe.controller.isCapturing = true
+            ViewFixtures.seedAudioLevels(probe.controller)
+            let metered = laidOut()
+            probe.controller.isRecording = true
+            let recording = laidOut()
+
+            for (state, size) in [("idle", idle), ("metering", metered),
+                                  ("recording", recording)] {
+                #expect(size.ru.width == ViewBudget.footerWidth,
+                        "the \(state) footer overflowed to \(size.ru.width)pt")
+                #expect(size.ru == size.en, "\(state) footer differs by language: \(size)")
+            }
+            #expect(recording.ru.height == metered.ru.height,
+                    "locking the codec changed the footer's height")
+        }
+    }
+
+    /// The left-hand group and the record button are stacked, not laid out in a
+    /// row: a group that grows just slides underneath the button. What stops it is
+    /// the gap `BottomBarView` reserves, and the reserve has to be at least half
+    /// the centered group — measured here rather than trusted.
+    @Test func theReservedGapCoversHalfTheRecordGroup() async throws {
+        try await ViewProbe.run { probe in
+            let center = probe.fittingSizes { FooterCenterControls() }
+            #expect(center.ru == center.en)
+            #expect(BottomBarView.centerReserve >= center.ru.width / 2,
+                    "record group \(center.ru.width)pt, reserve \(BottomBarView.centerReserve)pt")
+        }
+    }
+
+    /// Everything on the left of the record button — folder, codec, naming style,
+    /// volume, DIM and the meters — has to fit the zone beside it when squeezed:
+    /// the folder name drops out and the codec falls back to its short flavour
+    /// name rather than the row reaching the button. Worst case: capturing with
+    /// 16 embedded channels at the app's minimum window width.
+    @Test func theShootingControlsFitBesideTheRecordButton() async throws {
+        try await ViewProbe.run { probe in
+            let zone = ViewBudget.footerSideZoneWidth
+            let idle = probe.minimumWidths { FooterShootingControls() }
+            #expect(idle.ru <= zone,
+                    "the idle controls need \(idle.ru)pt of \(zone)")
+
+            probe.controller.isCapturing = true
+            ViewFixtures.seedAudioLevels(probe.controller)
+            let metered = probe.minimumWidths { FooterShootingControls() }
+            #expect(metered.ru <= zone,
+                    "16 channels metering needs \(metered.ru)pt of \(zone)")
+            #expect(metered.ru == metered.en,
+                    "the shooting controls differ by language: \(metered)")
+            // and they really do compress instead of overflowing the zone
+            let laid = probe.sizes(proposedWidth: zone) { FooterShootingControls() }
+            #expect(laid.ru.width <= zone + 4,
+                    "the controls overflowed their zone by \(laid.ru.width - zone)pt")
+        }
+    }
+
+    /// The record folder's name is operator data — it can be anything, and the
+    /// fixture's own is a long scratch path. It must not be able to resize the
+    /// footer: the name is capped and truncates, and disappears entirely before
+    /// the row would push into the record button.
+    @Test func aLongRecordFolderNameCannotWidenTheFooter() async throws {
+        try await ViewProbe.run { probe in
+            // the footer's own button style, or the measurement is of AppKit's
+            // bordered chrome rather than of the label inside it
+            let ideal = probe.fittingSizes {
+                FooterFolderButton().buttonStyle(.borderless)
+            }
+            #expect(ideal.en.width <= FooterFolderButton.nameWidth + 30,
+                    "the folder button wants \(ideal.en.width)pt for its name")
+            #expect(ideal.ru == ideal.en)
+            // squeezed past the name it keeps the icon and nothing else
+            let squeezed = probe.minimumWidths {
+                FooterFolderButton().buttonStyle(.borderless)
+            }
+            #expect(squeezed.en < FooterFolderButton.nameWidth,
+                    "the name did not give up its width: \(squeezed.en)pt")
+        }
+    }
+
+    /// The codec picker is the one control in the footer whose label changes with
+    /// a setting. Every codec name has to leave the row the same size — the
+    /// picker keeps its short flavour name as a fallback for exactly that.
+    @Test func theCodecPickerStaysTheSameSizeForEveryCodec() async throws {
+        try await ViewProbe.run { probe in
+            var widths: [CaptureCodec: CGFloat] = [:]
+            for codec in CaptureCodec.allCases {
+                probe.controller.settings.codec = codec
+                let ideal = probe.fittingSizes { FooterCodecMenu() }
+                #expect(ideal.ru == ideal.en, "\(codec.rawValue): \(ideal)")
+                widths[codec] = ideal.en.width
+                let squeezed = probe.minimumWidths { FooterCodecMenu() }
+                #expect(squeezed.en <= 60,
+                        "\(codec.rawValue) will not compress: \(squeezed.en)pt")
+            }
+            // the longest name is the one the zone budget above was measured with
+            #expect(widths[.proResProxy] == widths.values.max())
+        }
+    }
+
+    /// Locking the codec and the folder while a take records is a colour change.
+    /// If it were a size change the whole footer would reflow the moment the
+    /// camera rolled — which is the one moment nothing may move.
+    @Test func lockingTheRecordingFormatDoesNotReflowTheFooter() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.isCapturing = true
+            let unlocked = probe.fittingSizes { FooterShootingControls() }
+            probe.controller.isRecording = true
+            #expect(!probe.controller.canChangeRecordingFormat)
+            let locked = probe.fittingSizes { FooterShootingControls() }
+            #expect(locked.en == unlocked.en, "the locked footer resized: \(locked)")
+            #expect(locked.ru == unlocked.ru)
+        }
+    }
+
+    /// DIM is a fixed badge next to the volume. Its highlight must not move the
+    /// controls around it, and its label is the same three latin letters in both
+    /// languages (DaVinci's DIM, which is what an operator is looking for).
+    @Test func dimButtonKeepsItsSizeWhenEngaged() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.isCapturing = true
+            let off = probe.fittingSizes { FooterDimButton(live: probe.controller.live) }
+            probe.controller.toggleMonitorDim()
+            #expect(probe.controller.live.dimmed, "DIM did not engage")
+            let on = probe.fittingSizes { FooterDimButton(live: probe.controller.live) }
+
+            #expect(off.en == CGSize(width: 26, height: 18))
+            #expect(on.en == off.en, "the DIM highlight resized the button: \(on)")
+            #expect(on.ru == on.en, "the DIM label became localized: \(on)")
         }
     }
 }

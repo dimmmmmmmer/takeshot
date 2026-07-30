@@ -363,3 +363,14 @@
 
 /* i18n layout pass */
 "playback_volume" = "Громкость плейбека";
+
+/* audio UX + footer reorg (owner items 7, 8, 25, 48) */
+"record_folder_help" = "Папка записи: %@ — нажмите, чтобы выбрать другую";
+"record_folder_locked_help" = "Пока пишется дубль, папку записи менять нельзя";
+"codec_footer_help" = "Кодек записи: %@";
+"codec_locked_help" = "Пока пишется дубль, кодек зафиксирован — файл уже пишется в нём";
+"monitor_dim_label" = "DIM";
+"monitor_dim_help" = "DIM — приглушить мониторинг вдвое";
+"monitor_dim_on_help" = "DIM включён — нажмите, чтобы вернуть уровень";
+"audio_output_help" = "Куда идут мониторинг и плейбек (то же устройство, что в настройках)";
+"audio_output_missing" = "Устройство не подключено";

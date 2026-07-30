@@ -206,9 +206,20 @@ private struct RangeTicks: View {
 
 /// Volume control observing only LiveSignal — dragging must not re-render
 /// the whole transport/window (that read as slider lag).
-private struct TransportVolume: View {
+///
+/// Internal rather than private so a render test can pin its width across the
+/// mute state; see `iconWidth`.
+struct TransportVolume: View {
     @EnvironmentObject private var controller: CaptureController
     @ObservedObject var live: LiveSignal
+
+    /// Reserved for the speaker icon. `speaker.slash.fill` and
+    /// `speaker.wave.2.fill` are neither the same width nor the same height, so
+    /// without a fixed frame every mute/unmute re-laid the whole transport bar
+    /// out around it — the controls to the right of it visibly jumped. Both
+    /// dimensions take the larger variant, so neither overflows the frame.
+    static let iconWidth: CGFloat = 16
+    static let iconHeight: CGFloat = 14
 
     var body: some View {
         HStack(spacing: 4) {
@@ -216,6 +227,7 @@ private struct TransportVolume: View {
                   ? "speaker.slash.fill" : "speaker.wave.2.fill")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+                .frame(width: Self.iconWidth, height: Self.iconHeight)
             Slider(value: Binding(
                 get: { controller.playbackVolume },
                 set: { controller.playbackVolume = $0 }), in: 0...1)

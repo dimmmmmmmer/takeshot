@@ -19,7 +19,12 @@ struct AudioMeterView: View {
                             .animation(.linear(duration: 0.07), value: level)
                     }
                 }
-                .frame(width: 5)
+                // 5pt is the width the meters want; they can be squeezed to 3.
+                // A 16-channel embed is 118pt of the footer's left-hand group at
+                // the ideal width, and at the app's minimum window that is more
+                // than the group has — a bar that gives up 2pt keeps the codec
+                // and the folder beside it readable instead of ellipsized.
+                .frame(minWidth: 3, maxWidth: 5)
                 .opacity((enabled?.indices.contains(index) == true && enabled![index] == false) ? 0.25 : 1)
             }
         }

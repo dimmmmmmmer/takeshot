@@ -209,6 +209,12 @@ enum ViewBudget {
     /// The footer's outer HStack splits into two equally flexible halves: the
     /// utilities on the left, the naming fields on the right.
     static let footerHalfWidth: CGFloat = footerWidth / 2
+    /// What the footer's left-hand shooting controls actually get: the half,
+    /// minus the bar's own 14pt padding a side and the 8pt between the halves,
+    /// minus the gap `BottomBarView` reserves for the centered record group.
+    static var footerSideZoneWidth: CGFloat {
+        (footerWidth - 28 - 8) / 2 - BottomBarView.centerReserve
+    }
     /// `PlayerArea` pads the player by 12 on each side.
     static let playerWidth: CGFloat = mainColumnWidth - 24
     /// `PlayerBadges.topChrome` insets the badge row by 8 on each side.
