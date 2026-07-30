@@ -18,6 +18,27 @@ struct ModelHotkeyTests {
             isARepeat: false, keyCode: keyCode))
     }
 
+    // MARK: - typing guard
+
+    /// While a text field owns the keyboard, only ⌘ combos reach the hotkeys.
+    /// The ⌃ family used to fire mid-typing, stealing the field's own
+    /// Emacs-style bindings — ⌃D deleted forward in every Mac text field until
+    /// a dim hotkey took it.
+    @Test func typingKeepsBareAndControlKeysAndYieldsCommand() {
+        // typing: the field keeps letters and ⌃ combos
+        #expect(HotkeyManager.typingKeepsTheKey(modifiers: [], isTyping: true))
+        #expect(HotkeyManager.typingKeepsTheKey(modifiers: [.control], isTyping: true))
+        #expect(HotkeyManager.typingKeepsTheKey(modifiers: [.control, .shift],
+                                                isTyping: true))
+        // typing: ⌘ combos still reach the hotkeys (macOS menu convention)
+        #expect(!HotkeyManager.typingKeepsTheKey(modifiers: [.command], isTyping: true))
+        #expect(!HotkeyManager.typingKeepsTheKey(modifiers: [.command, .control],
+                                                 isTyping: true))
+        // not typing: everything reaches the hotkeys
+        #expect(!HotkeyManager.typingKeepsTheKey(modifiers: [], isTyping: false))
+        #expect(!HotkeyManager.typingKeepsTheKey(modifiers: [.control], isTyping: false))
+    }
+
     // MARK: - matching
 
     /// keyCode 15 is the physical R key; on a Russian layout it produces "к".

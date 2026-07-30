@@ -224,6 +224,16 @@ final class HotkeyManager: ObservableObject {
         }
     }
 
+    /// While a text field owns the keyboard, only ⌘ combos reach the hotkeys —
+    /// the macOS convention (menu shortcuts work mid-typing). Bare keys are the
+    /// field's letters; ⌃ combos are the field's own Emacs-style edit bindings
+    /// (⌃A line start, ⌃D delete forward…), and a ⌃ hotkey family that stole
+    /// them typed dim/mute into the operator's naming instead of editing it.
+    nonisolated static func typingKeepsTheKey(modifiers: NSEvent.ModifierFlags,
+                                  isTyping: Bool) -> Bool {
+        isTyping && !modifiers.contains(.command)
+    }
+
     /// Intercept keys in all app windows (not system-global).
     func install(controller: CaptureController) {
         controller.hotkeysRef = self
@@ -254,10 +264,9 @@ final class HotkeyManager: ObservableObject {
                 return nil
             }
 
-            // don't intercept text-field typing if the combo has no ⌘/⌃
-            let flags = event.modifierFlags.intersection([.command, .control])
             let isTyping = event.window?.firstResponder is NSTextView
-            if isTyping && flags.isEmpty {
+            if Self.typingKeepsTheKey(modifiers: event.modifierFlags,
+                                      isTyping: isTyping) {
                 return event
             }
 
