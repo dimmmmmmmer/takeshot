@@ -370,3 +370,7 @@
 "corner_bottom_right" = "Bottom right";
 "safe_action" = "Action safe";
 "safe_title" = "Title safe";
+
+/* scopes group: skin-tone line */
+"scope_skin_tone_short" = "Skin";
+"scope_skin_tone" = "Skin-tone reference line";

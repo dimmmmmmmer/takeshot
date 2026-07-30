@@ -31,6 +31,15 @@ final class RawPlayerModel: ObservableObject {
     /// Scope data from decoded frames while playing (main queue).
     var onScopeData: ((ScopeData) -> Void)?
     var scopesEnabled = false
+    /// The part of the frame the scopes read — the punched-in crop the viewer
+    /// shows, `.full` otherwise.
+    var scopeRegion = ScopeRegion.full
+
+    /// A `refreshScopes` pass is in flight (see `RawPlayback+Scopes`).
+    var scopeRefreshing = false
+    /// Another refresh was asked for while that pass ran — a paused clip has no
+    /// next frame to make up for a dropped one, so it is run afterwards.
+    var scopeRefreshPending = false
 
     private let clip: RawClipSource
     private var playTask: Task<Void, Never>?
@@ -52,8 +61,10 @@ final class RawPlayerModel: ObservableObject {
         displayFrameHandler = handler
         displayFrameLock.unlock()
     }
-    /// Last decoded frame — re-presented to newly registered sinks.
-    private var lastBuffer: CVPixelBuffer?
+    /// Last decoded frame — re-presented to newly registered sinks, and
+    /// re-analyzed by `+Scopes` when a paused clip's crop moves (which is why
+    /// it is not private).
+    var lastBuffer: CVPixelBuffer?
 
     init?(url: URL, error errorText: inout String?) {
         let clip: RawClipSource
@@ -221,13 +232,14 @@ extension RawPlayerModel {
                                            scopeCounter: Int) async -> Bool {
         let state = await MainActor.run {
             (live: self.playGeneration == generation && self.isPlaying,
-             scopes: self.scopesEnabled)
+             scopes: self.scopesEnabled, region: self.scopeRegion,
+             stride: self.scopeFrameStride)
         }
         guard state.live else { return false }
         self.present(buffer)
         // analysis stays OFF the MainActor: noisy frames are expensive
-        let scopeData = scopeCounter % 6 == 0 && state.scopes
-            ? ScopeAnalyzer.analyze(buffer) : nil
+        let scopeData = state.scopes && scopeCounter % state.stride == 0
+            ? ScopeAnalyzer.analyze(buffer, region: state.region) : nil
         let boxed = UncheckedSendable(buffer)
         await MainActor.run {
             self.lastBuffer = boxed.value
@@ -298,14 +310,21 @@ extension RawPlayerModel {
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let buffer = clip.copyFrame(at: index) else { return }
             guard let self else { return }
-            let live = await MainActor.run { self.playGeneration == generation }
-            guard live else { return }
+            // the scope state is read BEFORE the pass, not after it: every
+            // paused seek and every poster frame used to run a full analysis
+            // and throw it away when the scopes turned out to be closed
+            let state = await MainActor.run {
+                (live: self.playGeneration == generation,
+                 scopes: self.scopesEnabled, region: self.scopeRegion)
+            }
+            guard state.live else { return }
             self.present(buffer)
-            let data = ScopeAnalyzer.analyze(buffer) // off-main, like the loop
+            let data = state.scopes // off-main, like the loop
+                ? ScopeAnalyzer.analyze(buffer, region: state.region) : nil
             let boxed = UncheckedSendable(buffer)
             await MainActor.run {
                 self.lastBuffer = boxed.value
-                if self.scopesEnabled, let data {
+                if let data {
                     self.onScopeData?(data)
                 }
             }

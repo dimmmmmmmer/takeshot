@@ -376,3 +376,7 @@
 "corner_bottom_right" = "Снизу справа";
 "safe_action" = "Зона действия";
 "safe_title" = "Зона титров";
+
+/* scopes group: skin-tone line */
+"scope_skin_tone_short" = "Кожа";
+"scope_skin_tone" = "Линия телесных оттенков";

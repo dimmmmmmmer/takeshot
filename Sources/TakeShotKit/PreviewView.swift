@@ -73,6 +73,11 @@ struct PreviewView: View {
                         // it lives on the shared mount now (playerTopBadges →
                         // punchInZoom).
                         ViewerSurface(controller: controller, source: surfaceSource)
+                            // a click on the picture closes a panel floating
+                            // over it; the punch-in pan lives on the shared
+                            // mount (playerTopBadges → punchInZoom) and is a
+                            // drag, so it never reads as this tap
+                            .dismissesPlayerOverlays(controller)
                         if controller.viewerMode == .record {
                             LiveStatusOverlay()
                         } else if controller.playbackURL == nil {

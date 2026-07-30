@@ -57,6 +57,21 @@ final class PlaybackFrameTap: @unchecked Sendable {
     }
 
     let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)
+    /// Scope analysis runs here, never on the render queue: a pass costs ~14 ms
+    /// and the tap polls at 60 Hz, so analyzing inline stuttered the very
+    /// picture it was measuring.
+    let scopeQueue = DispatchQueue(label: "takeshot.playback-scopes",
+                                   qos: .utility)
+    /// A pass is in flight (tap-queue confined) — latest-wins, frames offered
+    /// while it runs are skipped rather than queued up.
+    var scopeBusy = false
+    /// A re-analysis of the frame already on screen was asked for while a pass
+    /// was in flight (tap-queue confined). Skipping a FRAME is right — a newer
+    /// one is 16 ms away — but skipping this request loses it for good, and a
+    /// paused clip has no next frame to recover on. See `reanalyzeCurrentFrame`.
+    var scopeReanalysisPending = false
+    /// The part of the frame the scopes read (punch-in crop; tap-queue confined).
+    var scopeRegion = ScopeRegion.full
     private var output: AVPlayerItemVideoOutput?
     private weak var item: AVPlayerItem?
     private var timer: DispatchSourceTimer?
@@ -64,7 +79,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var scopesEnabled = false
     private var tickCount = 0
 
-    /// Scope data from playback frames (~8 Hz while enabled), on the main queue.
+    /// Scope data from playback frames (~15 Hz while enabled), on the main queue.
     var onScopeData: ((ScopeData) -> Void)?
 
     var lastBuffer: CVPixelBuffer?
@@ -111,9 +126,17 @@ final class PlaybackFrameTap: @unchecked Sendable {
             self.scopesEnabled = on
             // paused player delivers no new frames — analyze right away (via
             // deliver, so scopes see the same composed output as the screen)
-            if on, let buffer = self.lastBuffer {
-                self.deliver(buffer, analyzed: true)
-            }
+            if on { self.reanalyzeCurrentFrame() }
+        }
+    }
+
+    /// Punch-in crop the scopes read. A paused clip delivers no new frames, so
+    /// the change is re-analyzed at once.
+    func setScopeRegion(_ region: ScopeRegion) {
+        queue.async {
+            guard region != self.scopeRegion else { return }
+            self.scopeRegion = region
+            self.reanalyzeCurrentFrame()
         }
     }
 
@@ -211,8 +234,14 @@ final class PlaybackFrameTap: @unchecked Sendable {
         idleDelivered = false // playing again: idle state re-arms
         guard let pixelBuffer = output.copyPixelBuffer(
             forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
-        deliver(pixelBuffer, analyzed: scopesEnabled && tickCount % 8 == 0)
+        deliver(pixelBuffer,
+                analyzed: scopesEnabled && tickCount % Self.scopeTickStride == 0)
     }
+
+    /// Ticks between scope passes while playing. The timer polls at ~60 Hz, so
+    /// 4 is ~15 updates a second — the analyzer does a 1080p pass in ~14 ms and
+    /// the busy gate skips anything it cannot keep up with.
+    static let scopeTickStride = 4
 
     /// Still: recomposite at the paused cadence so the live half of a compare
     /// keeps moving (and LUT changes land immediately).

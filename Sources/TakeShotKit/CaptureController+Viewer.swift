@@ -32,8 +32,33 @@ extension CaptureController {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
         playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
         rawPlayer?.scopesEnabled = showScopes && viewerMode == .playback
+        updateScopeRegion()
+        rawPlayer?.refreshScopes()
         // scopeData is kept on close — reopening shows the last picture
         // immediately instead of flashing "waiting for signal"
+    }
+
+    /// What the scopes analyze: the crop the viewer is showing.
+    ///
+    /// Punched in, the operator is judging the exposure of the magnified part
+    /// of the frame — a full-frame waveform then answers a question nobody
+    /// asked. Not punched in, this is the whole frame and costs nothing.
+    var scopeRegion: ScopeRegion {
+        ScopeRegion(assist: assist)
+    }
+
+    /// Push the punch-in crop to every analyzer. Called whenever the assists
+    /// change (punch-in, pan) and when a scope surface opens.
+    func updateScopeRegion() {
+        let region = scopeRegion
+        pipeline.setScopeRegion(region)
+        playbackTap.setScopeRegion(region)
+        // the RAW engine has no producer to piggyback on while paused, so a
+        // moved crop is re-analyzed here — but only when it really moved
+        if let raw = rawPlayer, raw.scopeRegion != region {
+            raw.scopeRegion = region
+            raw.refreshScopes()
+        }
     }
 
     /// Aspect of the picture currently in the viewer, desqueeze included —

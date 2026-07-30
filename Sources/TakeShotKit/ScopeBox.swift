@@ -66,32 +66,77 @@ struct ChannelPicker: View {
     }
 }
 
-/// Titled container for a single scope with an optional channel picker and scale.
-struct ScopeBox<Content: View, Scale: View>: View {
+/// On/off chip in a scope's header, styled like the channel options beside it
+/// (the vectorscope's skin-tone line).
+struct ScopeChipToggle: View {
     let title: String
-    let channel: ChannelPicker?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(isOn
+                            ? AnyShapeStyle(.white.opacity(0.25))
+                            : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 3))
+                .foregroundStyle(isOn ? .white : .white.opacity(0.5))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Container for a single scope: a header row (name, per-scope controls) over
+/// the trace canvas, with an optional value scale beside it.
+///
+/// `title` is empty when the panel shows ONE scope: the toggle row above
+/// already names it, and repeating the name under it was one label too many for
+/// a scope the size of the in-player overlay. `showsDragHandle` follows the same
+/// logic — the grip means "drag to reorder", which is a lie when there is
+/// nothing to reorder.
+struct ScopeBox<Header: View, Content: View, Scale: View>: View {
+    let title: String
+    var showsDragHandle = false
+    /// Trace canvas opacity: the in-player overlay lets the picture ghost
+    /// through, the window is a window.
+    var canvasOpacity: Double = 1
+    @ViewBuilder let header: Header
     @ViewBuilder let content: Content
     @ViewBuilder let scale: Scale
 
+    /// Nothing to put in it — a scope with no name, no grip and no controls of
+    /// its own gets its full height for the trace.
+    private var showsHeaderRow: Bool {
+        showsDragHandle || !title.isEmpty || Header.self != EmptyView.self
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.3))
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.6))
-                Spacer(minLength: 6)
-                if let channel {
-                    channel
+            if showsHeaderRow {
+                HStack {
+                    if showsDragHandle {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    if !title.isEmpty {
+                        Text(title)
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    Spacer(minLength: 6)
+                    header
                 }
             }
             HStack(spacing: 2) {
                 content
                     .frame(minWidth: 260, maxWidth: .infinity,
                            minHeight: 150, maxHeight: .infinity)
-                    .background(Color.black)
+                    .background(Color.black.opacity(canvasOpacity))
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 scale
             }

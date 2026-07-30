@@ -69,8 +69,9 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onVancStats: (([VancPacketStat]) -> Void)?
     /// Per-channel audio peak levels, dBFS. Arrive at the audio-packet rate (~25 Hz).
     public var onAudioLevels: (([Float]) -> Void)?
-    /// Scope data (waveform + histograms) from the displayed frame, ~8 Hz while
-    /// enabled via setScopesEnabled. Delivered on the main queue.
+    /// Scope data (waveform + histograms) from the displayed frame, up to
+    /// `scopeUpdatesPerSecond` while enabled via setScopesEnabled. Delivered on
+    /// the main queue.
     public var onScopeData: ((ScopeData) -> Void)?
     /// Stereo monitor feed (first two enabled channels) while audio monitoring
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
@@ -120,6 +121,11 @@ public final class CapturePipeline: @unchecked Sendable {
     let scopeQueue = DispatchQueue(label: "takeshot.scopes", qos: .utility)
     var scopeBusy = false // pipeline-queue confined
     var scopesEnabled = false
+    /// The part of the frame the scopes read — the punched-in crop the viewer
+    /// shows (queue-confined, set from the main actor via `setScopeRegion`).
+    var scopeRegion = ScopeRegion.full
+    /// Frame index of the last pass offered to the analyzer (queue-confined).
+    var lastScopeFrame = 0
 
     // Pinned reference compare (all access on queue): the reference frame is
     // composited over the live preview with the shared wipe/blend math.
@@ -250,6 +256,12 @@ public final class CapturePipeline: @unchecked Sendable {
     /// isolated drop at take start is normal encoder back-pressure; sustained
     /// loss is not.
     static let droppedFrameAlarmThreshold = 5
+
+    /// Scope passes per second the frame path aims for while a scope surface is
+    /// open. A waveform is read as a moving picture — below ~10 Hz it reads as
+    /// stepping — and above ~15 the operator cannot tell, so this is where the
+    /// CPU stops being spent. The busy gate keeps the real rate at or under it.
+    static let scopeUpdatesPerSecond = 15.0
 
     /// Suffix that marks a take whose finalize failed. Renaming is best-effort:
     /// if it does not work the original path is returned and the operator still

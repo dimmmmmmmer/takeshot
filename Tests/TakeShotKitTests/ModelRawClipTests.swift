@@ -107,4 +107,24 @@ struct ModelRawClipTests {
         // in range but not real image data — nil, not a garbage buffer
         #expect(source.copyFrame(at: 0) == nil)
     }
+
+    /// The scopes' cadence over a RAW clip is a target RATE, not a frame count.
+    /// The analysis rides on the decode task, so a 24 fps clip and a 60 fps one
+    /// have to land about the same number of passes a second; the fixed "every
+    /// 6th decoded frame" it replaced gave 4 Hz at 24 fps and 10 at 60.
+    ///
+    /// `RawPlayerModel` itself needs the Blackmagic RAW SDK to exist, so the
+    /// derivation is checked through the static it delegates to.
+    @MainActor
+    @Test func theRawScopeCadenceIsARateNotAFrameCount() {
+        for fps in [23.976, 24, 25, 30, 48, 50, 60, 120] as [Double] {
+            let stride = RawPlayerModel.scopeFrameStride(atFrameRate: fps)
+            let rate = fps / Double(stride)
+            #expect(rate >= 6 && rate <= 12,
+                    "\(fps) fps lands \(rate) scope passes a second")
+        }
+        // a clip whose header lied about its rate must not divide by zero
+        #expect(RawPlayerModel.scopeFrameStride(atFrameRate: 0) == 1)
+        #expect(RawPlayerModel.scopeFrameStride(atFrameRate: 1) == 1)
+    }
 }

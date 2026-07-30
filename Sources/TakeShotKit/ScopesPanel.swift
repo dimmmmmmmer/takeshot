@@ -1,15 +1,18 @@
+import AppKit
 import CaptureCore
 import CoreGraphics
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Scopes window content: enables analysis while the window is on screen.
+/// Scopes window content: enables analysis while the window is on screen, and
+/// remembers where the operator put the window.
 struct ScopesWindowView: View {
     @EnvironmentObject private var controller: CaptureController
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScopesPanel(live: controller.live, onCloseWindow: { dismiss() })
+            .background(ScopesWindowFrameKeeper(controller: controller))
             .onAppear { controller.scopesWindowOpen = true }
             .onDisappear { controller.scopesWindowOpen = false }
     }
@@ -31,23 +34,32 @@ enum ScopeKind: String, CaseIterable, Identifiable {
 }
 
 /// Scopes: waveform (image-colored luma or per-channel), RGB parade, histogram
-/// and vectorscope. Toggle each on/off, drag boxes to reorder; the grid wraps
-/// to the window width.
+/// and vectorscope.
+///
+/// Two surfaces, one panel: the separate window holds a grid that wraps to its
+/// width and whose boxes drag to reorder, and the in-player overlay holds
+/// exactly one scope. Each keeps its own persisted selection.
 struct ScopesPanel: View {
     @EnvironmentObject private var controller: CaptureController
     @Environment(\.openWindow) private var openWindow
-    // scope data updates ~8/s — observed separately from the controller
+    // scope data updates ~12-15/s — observed separately from the controller
     @ObservedObject var live: LiveSignal
-    /// The in-player overlay fits one scope — enabling one disables the rest
-    /// (the separate window keeps the free grid).
+    /// The in-player overlay: one scope, its own selection, no reordering.
     var singleScope = false
     /// Close button for the separate window (nil in the overlay).
     var onCloseWindow: (() -> Void)?
 
+    // The window's grid and the overlay's single scope keep SEPARATE
+    // selections. They used to share these four flags, and opening the overlay
+    // collapsed the selection to one scope — which is why the window "never
+    // remembered" what the operator had enabled: the overlay had switched the
+    // rest off behind its back.
     @AppStorage("scopeWaveformOn") private var waveformOn = true
     @AppStorage("scopeParadeOn") private var paradeOn = false
     @AppStorage("scopeHistogramOn") private var histogramOn = false
     @AppStorage("scopeVectorOn") private var vectorOn = false
+    /// The overlay's own choice — one `ScopeKind` raw value, "" for none.
+    @AppStorage("scopeOverlayKind") private var overlayKind = ScopeKind.waveform.rawValue
     @AppStorage("scopeWaveformChannel") private var waveformChannel = "y"
     @AppStorage("scopeHistogramChannel") private var histogramChannel = "rgb"
     @AppStorage("scopeOrder") private var orderRaw = "waveform,parade,histogram,vector"
@@ -56,6 +68,10 @@ struct ScopesPanel: View {
     /// Graticule and trace brightness (0.2…1).
     @AppStorage("scopeGridBrightness") private var gridBrightness = 0.5
     @AppStorage("scopeTraceBrightness") private var traceBrightness = 1.0
+    /// Skin-tone line on the vectorscope. On by default — it is why most
+    /// operators look at a vectorscope at all — but a chart or a colour-bar
+    /// check does not want a line across it.
+    @AppStorage("scopeSkinTone") private var skinToneOn = true
     @State private var dragged: ScopeKind?
 
     private var order: [ScopeKind] {
@@ -68,7 +84,7 @@ struct ScopesPanel: View {
         return kinds
     }
 
-    private func rawIsOn(_ kind: ScopeKind) -> Binding<Bool> {
+    private func windowIsOn(_ kind: ScopeKind) -> Binding<Bool> {
         switch kind {
         case .waveform: return $waveformOn
         case .parade: return $paradeOn
@@ -77,38 +93,28 @@ struct ScopesPanel: View {
         }
     }
 
+    /// One switch per scope. In the overlay the switches are exclusive (it fits
+    /// one scope) and write the overlay's own key; in the window each scope has
+    /// its own flag and the grid holds however many are on.
     private func isOn(_ kind: ScopeKind) -> Binding<Bool> {
-        Binding(
-            get: { rawIsOn(kind).wrappedValue },
-            set: { on in
-                if on, singleScope {
-                    for other in ScopeKind.allCases where other != kind {
-                        rawIsOn(other).wrappedValue = false
-                    }
-                }
-                rawIsOn(kind).wrappedValue = on
-            })
+        guard singleScope else { return windowIsOn(kind) }
+        return Binding(
+            get: { overlayKind == kind.rawValue },
+            set: { on in overlayKind = on ? kind.rawValue : "" })
     }
 
-    /// Overlay mode shows at most one scope: collapse a multi-selection
-    /// left over from the window to the first enabled in the order.
-    private func collapseToSingle() {
-        guard singleScope else { return }
-        var found = false
-        for kind in order where rawIsOn(kind).wrappedValue {
-            if found {
-                rawIsOn(kind).wrappedValue = false
-            } else {
-                found = true
-            }
-        }
+    /// The scopes actually drawn, in the operator's order.
+    private var visibleScopes: [ScopeKind] {
+        singleScope
+            ? [ScopeKind(rawValue: overlayKind)].compactMap { $0 }
+            : order.filter { windowIsOn($0).wrappedValue }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             toolbar
             if let data = live.scopeData {
-                let visible = order.filter { isOn($0).wrappedValue }
+                let visible = visibleScopes
                 if visible.isEmpty {
                     Text(L("scope_none_hint"))
                         .font(.caption)
@@ -125,7 +131,8 @@ struct ScopesPanel: View {
                                     ForEach(0..<columns, id: \.self) { col in
                                         let index = row * columns + col
                                         if index < visible.count {
-                                            scopeBox(visible[index], data: data)
+                                            scopeBox(visible[index], data: data,
+                                                     of: visible.count)
                                         } else {
                                             Color.clear
                                         }
@@ -144,12 +151,43 @@ struct ScopesPanel: View {
         }
         .padding(12)
         .frame(minWidth: 420, minHeight: 260)
-        .background(.black.opacity(0.92))
+        .background(background)
+        // Esc closes the overlay — it has no close button (see
+        // PlayerOverlayDismiss for the three mechanisms). The window has its
+        // own button and the system's Cmd-W.
+        .overlay {
+            if singleScope {
+                EscapeKeyCatcher { controller.showScopesOverlay = false }
+            }
+        }
+        // scope chrome is white-on-dark whatever the app's appearance is: a
+        // light material under it would render the labels invisible
+        .environment(\.colorScheme, .dark)
+    }
+
+    /// Over the player the panel is translucent so the picture reads through:
+    /// one step thinner than the audio panel's `.regularMaterial`, because this
+    /// one sits over the part of the frame the operator is still watching while
+    /// they read the trace. As a window it is a window — opaque.
+    @ViewBuilder private var background: some View {
+        if singleScope {
+            Rectangle().fill(.ultraThinMaterial)
+        } else {
+            Color.black.opacity(0.92)
+        }
     }
 
     @ViewBuilder
-    private func scopeBox(_ kind: ScopeKind, data: ScopeData) -> some View {
-        ScopeBox(title: L(kind.titleKey), channel: channelPicker(for: kind)) {
+    private func scopeBox(_ kind: ScopeKind, data: ScopeData,
+                          of count: Int) -> some View {
+        // one scope on screen needs no name and no reorder grip: the toggle
+        // above it is the name, and there is nothing to reorder
+        let reorderable = !singleScope && count > 1
+        let box = ScopeBox(title: count > 1 ? L(kind.titleKey) : "",
+                           showsDragHandle: reorderable,
+                           canvasOpacity: singleScope ? 0.85 : 1) {
+            boxHeader(for: kind)
+        } content: {
             Group {
                 switch kind {
                 case .waveform:
@@ -162,7 +200,7 @@ struct ScopesPanel: View {
                     HistogramView(data: data, channel: histogramChannel)
                         .opacity(max(0.6, traceBrightness))
                 case .vector:
-                    VectorscopeView(data: data)
+                    VectorscopeView(data: data, skinToneLine: skinToneOn)
                         .opacity(max(0.6, traceBrightness))
                 }
             }
@@ -172,24 +210,39 @@ struct ScopesPanel: View {
                 percentScale
             }
         }
-        .onDrag {
-            dragged = kind
-            return NSItemProvider(object: kind.rawValue as NSString)
+        // the drag is installed only where it leads somewhere: one box in the
+        // overlay used to accept a drag that could not reorder anything, which
+        // is the same lie the "drag to reorder" caption told
+        if reorderable {
+            box
+                .onDrag {
+                    dragged = kind
+                    return NSItemProvider(object: kind.rawValue as NSString)
+                }
+                .onDrop(of: [UTType.plainText], delegate: ScopeDropDelegate(
+                    target: kind, dragged: $dragged, orderRaw: $orderRaw,
+                    order: order))
+        } else {
+            box
         }
-        .onDrop(of: [UTType.plainText], delegate: ScopeDropDelegate(
-            target: kind, dragged: $dragged, orderRaw: $orderRaw, order: order))
     }
 
-    private func channelPicker(for kind: ScopeKind) -> ChannelPicker? {
+    /// The per-scope controls in a box header: channel choice where a scope has
+    /// channels, the skin-tone line where it has one.
+    @ViewBuilder
+    private func boxHeader(for kind: ScopeKind) -> some View {
         switch kind {
         case .waveform:
-            return ChannelPicker(selection: $waveformChannel,
-                                 options: ["y", "rgb", "r", "g", "b"])
+            ChannelPicker(selection: $waveformChannel,
+                          options: ["y", "rgb", "r", "g", "b"])
         case .histogram:
-            return ChannelPicker(selection: $histogramChannel,
-                                 options: ["rgb", "y", "r", "g", "b"])
-        default:
-            return nil
+            ChannelPicker(selection: $histogramChannel,
+                          options: ["rgb", "y", "r", "g", "b"])
+        case .vector:
+            ScopeChipToggle(title: L("scope_skin_tone_short"), isOn: $skinToneOn)
+                .help(L("scope_skin_tone"))
+        case .parade:
+            EmptyView()
         }
     }
 }
@@ -232,7 +285,6 @@ private extension ScopesPanel {
         ForEach(order) { kind in
             scopeToggle(L(kind.titleKey), isOn: isOn(kind))
         }
-        .onAppear { collapseToSingle() }
     }
 
     /// Value scale, graticule/trace brightness, and the reorder hint.
@@ -256,12 +308,19 @@ private extension ScopesPanel {
                 .controlSize(.mini)
         }
         .help(L("scope_trace_brightness"))
-        // decorative: it truncates rather than wrapping the row onto a
-        // second line when the translation is long
-        Text(L("scope_drag_hint"))
-            .font(.caption2)
-            .lineLimit(1)
-            .foregroundStyle(.white.opacity(0.3))
+        // Only where dragging actually does something: the boxes reorder in the
+        // separate window, and only when there are at least two of them. The
+        // in-player overlay showed this hint while holding exactly one scope
+        // that cannot be dragged anywhere — the caption promised a feature the
+        // surface does not have.
+        if !singleScope, visibleScopes.count > 1 {
+            // decorative: it truncates rather than wrapping the row onto a
+            // second line when the translation is long
+            Text(L("scope_drag_hint"))
+                .font(.caption2)
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.3))
+        }
     }
 
     @ViewBuilder var windowButtons: some View {

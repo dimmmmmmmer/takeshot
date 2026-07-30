@@ -12,20 +12,20 @@ struct WaveformView: View {
         ZStack {
             switch channel {
             case "r":
-                channelImage(data.waveformR, tint: Color(red: 1, green: 0.28, blue: 0.28))
+                channelImage(.red, tint: ScopeTint.red)
             case "g":
-                channelImage(data.waveformG, tint: Color(red: 0.3, green: 1, blue: 0.35))
+                channelImage(.green, tint: ScopeTint.green)
             case "b":
-                channelImage(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
+                channelImage(.blue, tint: ScopeTint.blue)
             case "rgb":
-                channelImage(data.waveformR, tint: Color(red: 1, green: 0.28, blue: 0.28))
+                channelImage(.red, tint: ScopeTint.red)
                     .blendMode(.screen)
-                channelImage(data.waveformG, tint: Color(red: 0.3, green: 1, blue: 0.35))
+                channelImage(.green, tint: ScopeTint.green)
                     .blendMode(.screen)
-                channelImage(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
+                channelImage(.blue, tint: ScopeTint.blue)
                     .blendMode(.screen)
             default: // "y" — luma trace carrying the image's color
-                if let image = rgbaImage(from: data.waveformYColor) {
+                if let image = ScopeImageCache.image(.lumaColor, from: data) {
                     Image(decorative: image, scale: 1)
                         .resizable()
                         .interpolation(.medium)
@@ -36,14 +36,23 @@ struct WaveformView: View {
     }
 
     @ViewBuilder
-    private func channelImage(_ bytes: [UInt8], tint: Color) -> some View {
-        if let image = grayscaleImage(from: bytes) {
+    private func channelImage(_ map: ScopeImageCache.Map,
+                              tint: Color) -> some View {
+        if let image = ScopeImageCache.image(map, from: data) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .interpolation(.medium)
                 .colorMultiply(tint)
         }
     }
+}
+
+/// Channel colors, stated once: the waveform and the parade draw the same three
+/// traces and drifted apart by hand-copied literals.
+enum ScopeTint {
+    static let red = Color(red: 1, green: 0.28, blue: 0.28)
+    static let green = Color(red: 0.3, green: 1, blue: 0.35)
+    static let blue = Color(red: 0.35, green: 0.55, blue: 1)
 }
 
 /// RGB parade: three channel waveforms side by side.
@@ -53,17 +62,18 @@ struct ParadeView: View {
     var body: some View {
         ZStack {
             HStack(spacing: 1) {
-                paradeChannel(data.waveformR, tint: Color(red: 1, green: 0.28, blue: 0.28))
-                paradeChannel(data.waveformG, tint: Color(red: 0.3, green: 1, blue: 0.35))
-                paradeChannel(data.waveformB, tint: Color(red: 0.35, green: 0.55, blue: 1))
+                paradeChannel(.red, tint: ScopeTint.red)
+                paradeChannel(.green, tint: ScopeTint.green)
+                paradeChannel(.blue, tint: ScopeTint.blue)
             }
             WaveformGraticule()
         }
     }
 
     @ViewBuilder
-    private func paradeChannel(_ bytes: [UInt8], tint: Color) -> some View {
-        if let image = grayscaleImage(from: bytes) {
+    private func paradeChannel(_ map: ScopeImageCache.Map,
+                               tint: Color) -> some View {
+        if let image = ScopeImageCache.image(map, from: data) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .interpolation(.medium)
