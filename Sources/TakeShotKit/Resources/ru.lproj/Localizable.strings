@@ -439,3 +439,11 @@
 "monitor_dim_on_help" = "DIM включён — нажмите, чтобы вернуть уровень";
 "audio_output_help" = "Куда идут мониторинг и плейбек (то же устройство, что в настройках)";
 "audio_output_missing" = "Устройство не подключено";
+/* takes panel: selection, multi-select, Trash (items 9/22/32) */
+"item_count_one" = "%d объект";
+"item_count_few" = "%d объекта";
+"item_count_many" = "%d объектов";
+"trash_confirm" = "Переместить %@ в Корзину?";
+"trash_done" = "В Корзину перемещено: %@";
+"trash_selection" = "Переместить %@ в Корзину";
+"reveal_selection" = "Показать %@ в Finder";

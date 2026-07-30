@@ -290,6 +290,20 @@ final class CaptureController: ObservableObject {
     @Published var recentlyAddedURL: URL?
     var recentHighlightTask: Task<Void, Never>?
 
+    // MARK: - takes-panel selection
+
+    /// What the operator has clicked in the takes panel, by URL — takes and
+    /// Other content in one set. The two sections are one list to click through
+    /// (sweeping up the day's rejects, nobody cares which section a file landed
+    /// in) and Delete has to mean the same thing in both. See `+Takes`.
+    @Published var selectedItems: Set<URL> = []
+    /// Where a shift-click measures its range from: the last plain click.
+    var selectionAnchor: URL?
+    /// The Trash confirmation is asked for in two places (the Delete key on the
+    /// panel, the context menu) and answered in one, so the flag lives with the
+    /// selection rather than in either view.
+    @Published var trashPromptOpen = false
+
     /// One-shot flag: the transport enables looping when the replayed clip loads.
     var replayLoopRequested = false
 
@@ -368,6 +382,9 @@ final class CaptureController: ObservableObject {
             player.volume = Float(held)
         }
         transport.attach(player) // one attachment for the app's lifetime
+        // in/out survives a relaunch: the transport says when a range moved, the
+        // sidecar in the record folder is where it goes (see exportClipRanges)
+        transport.onRangesChanged = { [weak self] in self?.exportClipRanges() }
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in
             pipeline.currentPreviewBuffer()

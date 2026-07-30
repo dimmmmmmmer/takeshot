@@ -48,6 +48,9 @@ extension CaptureController {
         otherThumbnails.removeAll()
         otherDurations.removeAll()
         scannedPaths.removeAll()
+        selectedItems.removeAll()
+        selectionAnchor = nil
+        transport.forgetAllClips() // a new folder is a different set of clips
         nextTakeNumber = 1
         scanDestinationFolder()
     }
@@ -183,6 +186,18 @@ extension CaptureController {
         }
         adopt(restored)
         publish(foreign: foreign)
+        // In/out marked on a clip in an earlier session comes back with the clip.
+        // This is the restart path: on launch the first scan is what discovers the
+        // day's clips, and it is the only moment at which their ranges are known
+        // to belong to files that are really there.
+        if !candidates.isEmpty {
+            transport.restoreRanges(
+                loadStoredRanges(),
+                forFilesNamed: Set(candidates.map(\.lastPathComponent)))
+        }
+        // the DIT moving footage to the archive is the normal way an item leaves
+        // the panel mid-shift; Delete must not then act on a stale selection
+        pruneSelection()
         // a file may have appeared in the folder externally — refresh the taken-name warning
         refreshNameCollision()
     }
@@ -214,6 +229,23 @@ extension CaptureController {
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         // swiftlint:enable optional_data_string_conversion
         return (meta, markers)
+    }
+    /// Loop ranges of the day, as saved next to the takes. Read separately from
+    /// the ratings and markers above because the consumer is different — these go
+    /// to the transport, not onto a `Take`.
+    private func loadStoredRanges() -> [String: ClipRange] {
+        let url = destinationRoot
+            .appendingPathComponent(TakeLogExporter.rangesFileName)
+        // Lossy for the same reason as the metadata CSV: one bad byte in a file
+        // the DIT may have opened in Excel must not cost every range in it. The
+        // failable initializer the linter prefers returns nil for the whole file,
+        // which is the outcome this guards against.
+        // swiftlint:disable optional_data_string_conversion
+        let ranges = (try? Data(contentsOf: url))
+            .map { TakeLogExporter.parseRanges(
+                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+        // swiftlint:enable optional_data_string_conversion
+        return ranges
     }
     /// Identify one candidate, restoring its take metadata when it is ours.
     private func classify(

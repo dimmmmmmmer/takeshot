@@ -69,6 +69,14 @@ extension CaptureController {
     /// Open a file in the player and switch to playback mode.
     /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
+        // In/out belong to the clip they were marked on. The outgoing RAW
+        // engine is about to be thrown away, so its range is filed here while
+        // it still exists; the AVPlayer transport files its own in `loadClip`.
+        if let raw = rawPlayer, let previous = playbackURL {
+            transport.storeRange(
+                ClipRange(inPoint: raw.inPoint, outPoint: raw.outPoint),
+                for: previous)
+        }
         playbackURL = url
         playbackFormatText = nil
         playbackStartTC = nil
@@ -79,7 +87,10 @@ extension CaptureController {
         rawPlayerError = nil
         let ext = url.pathExtension.lowercased()
         let isRaw = Self.rawExtensions.contains(ext) || Self.isCinemaDNGFolder(url)
-        if Self.imageExtensions.contains(ext), !isRaw {
+        let isStill = Self.imageExtensions.contains(ext) && !isRaw
+        // only real video is driven by this transport (see TransportModel.loadClip)
+        transport.loadClip(url, driving: !isRaw && !isStill)
+        if isStill {
             player.pause()
             player.replaceCurrentItem(with: nil)
             playbackTap.detach()
@@ -114,6 +125,21 @@ extension CaptureController {
         }
         model.onScopeData = { [weak self] data in
             self?.live.scopeData = data
+        }
+        // A RAW engine is built from scratch per clip, so it starts with no
+        // range at all; what was marked on THIS clip earlier in the session is
+        // handed back here, in the engine's own units.
+        let range = transport.storedRange(for: url)
+        model.inFrame = range.inPoint.map { Int(($0 * model.frameRate).rounded()) }
+        model.outFrame = range.outPoint.map { Int(($0 * model.frameRate).rounded()) }
+        // File it as it is marked, not only when the clip is closed: a quit with a
+        // RAW clip still open would otherwise lose the mark. Seconds is the unit
+        // the store and the sidecar speak; the engine converts from its frames.
+        model.onRangeChanged = { [weak self, weak model] in
+            guard let self, let model else { return }
+            self.transport.storeRange(
+                ClipRange(inPoint: model.inPoint, outPoint: model.outPoint),
+                for: url)
         }
         rawPlayer = model
         model.setViewAssist(assist)

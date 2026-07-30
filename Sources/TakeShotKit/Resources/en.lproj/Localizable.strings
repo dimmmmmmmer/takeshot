@@ -433,3 +433,11 @@
 "monitor_dim_on_help" = "DIM is on — click to restore the level";
 "audio_output_help" = "Where monitoring and playback go (the same device as in Settings)";
 "audio_output_missing" = "Device not connected";
+/* takes panel: selection, multi-select, Trash (items 9/22/32) */
+"item_count_one" = "%d item";
+"item_count_few" = "%d items";
+"item_count_many" = "%d items";
+"trash_confirm" = "Move %@ to the Trash?";
+"trash_done" = "Moved %@ to the Trash";
+"trash_selection" = "Move %@ to Trash";
+"reveal_selection" = "Show %@ in Finder";
