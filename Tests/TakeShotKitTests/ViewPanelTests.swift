@@ -214,6 +214,63 @@ struct ViewPanelTests {
         }
     }
 
+    /// The output-device picker now sits under the volume slider in the channels
+    /// panel (owner item 7). Device names come from the machine the suite runs on
+    /// and can be any length, so the picker has to live inside the panel's
+    /// channel-count width rather than set it — the test above pins the width, this
+    /// one pins that the picker itself compresses instead of pushing.
+    @Test func theOutputPickerFitsTheNarrowestAudioPanel() async throws {
+        try await ViewProbe.run { probe in
+            // two channels is the narrowest the panel ever gets: 2 * 30 + 56
+            let panelContentWidth: CGFloat = 116
+            let laid = probe.sizes(proposedWidth: panelContentWidth) {
+                AudioOutputMenu()
+            }
+            #expect(laid.ru.width <= panelContentWidth,
+                    "the output picker wants \(laid.ru.width)pt of \(panelContentWidth)")
+            #expect(laid.ru.height == laid.en.height,
+                    "the picker took a second line in one language: \(laid)")
+            // the fixture has no device selected, so both languages render the
+            // "System default" label — which IS localized and must still fit
+            #expect(probe.minimumWidths { AudioOutputMenu() }.ru <= panelContentWidth)
+        }
+    }
+
+    /// The utility strip at the bottom of the takes panel (owner item 48) is three
+    /// icon buttons with localized tooltips only: it must measure the same in both
+    /// languages and fit the narrowest panel with room to spare.
+    @Test func utilityStripFitsTheNarrowestSidePanel() async throws {
+        try await ViewProbe.run { probe in
+            let ideal = probe.fittingSizes { TakesPanelUtilityStrip() }
+            #expect(ideal.ru == ideal.en,
+                    "a localized label reached the utility strip: \(ideal)")
+            #expect(ideal.ru.width <= ViewBudget.panelMinWidth,
+                    "the strip wants \(ideal.ru.width)pt of \(ViewBudget.panelMinWidth)")
+            #expect(ideal.ru.height > 0 && ideal.ru.height <= 40,
+                    "the strip is \(ideal.ru.height)pt tall — it is meant to be compact")
+        }
+    }
+
+    /// The mount modifier puts the strip UNDER whatever it is applied to (the
+    /// takes list, or the Other content section when there is one) and takes its
+    /// width from the panel, not from the strip.
+    @Test func theStripMountsBelowThePanelWithoutWideningIt() async throws {
+        try await ViewProbe.run { probe in
+            let strip = probe.fittingSizes { TakesPanelUtilityStrip() }
+            let content = CGSize(width: ViewBudget.panelMinWidth, height: 120)
+            let mounted = probe.fittingSizes {
+                Color.clear
+                    .frame(width: content.width, height: content.height)
+                    .takesPanelUtilityStrip()
+            }
+            #expect(mounted.en.width == content.width,
+                    "the strip widened the panel to \(mounted.en.width)pt")
+            #expect(mounted.en.height >= content.height + strip.en.height,
+                    "the strip did not mount: \(mounted.en.height)pt")
+            #expect(mounted.ru == mounted.en)
+        }
+    }
+
     /// Take rows carry the comment and rating controls; both are icon buttons
     /// with localized tooltips only, so they must stay a fixed 18pt square.
     @Test func takeRowControlsAreLocaleIndependent() async throws {

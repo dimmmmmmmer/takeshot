@@ -423,3 +423,13 @@
 "offload_source_problems" = "%d file(s) could not be read from the card";
 "offload_done_multi" = "Offload verified: %d files, %d copies";
 "offload_alert_problem" = "Offload: %d destination(s) with problems — %@. Do not wipe the card.";
+/* audio UX + footer reorg (owner items 7, 8, 25, 48) */
+"record_folder_help" = "Record folder: %@ — click to choose another";
+"record_folder_locked_help" = "The record folder stays put while a take is recording";
+"codec_footer_help" = "Recording codec: %@";
+"codec_locked_help" = "The codec is fixed while a take is recording — the file is already being written with it";
+"monitor_dim_label" = "DIM";
+"monitor_dim_help" = "DIM — drop monitoring to half level";
+"monitor_dim_on_help" = "DIM is on — click to restore the level";
+"audio_output_help" = "Where monitoring and playback go (the same device as in Settings)";
+"audio_output_missing" = "Device not connected";

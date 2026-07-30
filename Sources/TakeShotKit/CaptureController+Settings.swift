@@ -33,11 +33,14 @@ extension CaptureController {
         L10n.apply(appLanguage)
     }
 
-    /// The pipeline only needs a push when something it reads has changed;
-    /// monitor volume is the one field it does not read.
+    /// The pipeline only needs a push when something it reads has changed; the
+    /// monitoring level and the DIM hold are the fields it does not read — both
+    /// are applied straight to the monitor, and pushing a config per dim click
+    /// would rebuild the capture config for nothing.
     private func applyPipelineChange(from oldValue: CaptureSettings) {
         var pipelineRelevant = oldValue
         pipelineRelevant.monitorVolume = settings.monitorVolume
+        pipelineRelevant.monitorDimmed = settings.monitorDimmed
         guard pipelineRelevant != settings else { return }
         pushConfig()
     }

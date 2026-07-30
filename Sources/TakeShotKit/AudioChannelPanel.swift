@@ -59,6 +59,12 @@ struct AudioChannelPanel: View {
                     set: { controller.monitorVolume = $0 }), in: 0...1)
             }
             .frame(maxWidth: panelWidth)
+            // The output device belongs where the volume is: plugging in
+            // headphones between takes should not mean a trip into Settings.
+            // Same device list and the same setting as the Settings pane.
+            AudioOutputMenu()
+                // leading, so the headphones line up under the speaker above
+                .frame(maxWidth: panelWidth, alignment: .leading)
             // the panel is exactly as wide as the channel count makes it, so a
             // two-channel signal leaves less room than any translation of the
             // hint needs: wrap it instead of truncating a sentence to "Click a…"
@@ -125,6 +131,69 @@ struct AudioChannelPanel: View {
     private func fraction(of level: Float) -> CGFloat {
         let clamped = min(max(level, range.lowerBound), range.upperBound)
         return CGFloat((clamped - range.lowerBound) / (range.upperBound - range.lowerBound))
+    }
+}
+
+/// Audio output picker for the channels panel — where the volume is adjusted, so
+/// the device it comes out of is adjustable in the same place. Writes the same
+/// setting as the Settings pane (`playbackOutputUID`: player and live monitor).
+struct AudioOutputMenu: View {
+    @EnvironmentObject private var controller: CaptureController
+    /// Enumerated once when the panel appears, not in `body`: this panel
+    /// re-renders with the meters (~25/s) and a CoreAudio device walk per frame
+    /// is not free. A device plugged in while the panel is open shows up the
+    /// next time it is opened.
+    @State private var devices: [AudioOutputDevices.Device] = []
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "headphones")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Menu {
+                Button {
+                    controller.playbackOutputUID = nil
+                } label: {
+                    checked(L("system_default"),
+                            on: controller.playbackOutputUID == nil)
+                }
+                ForEach(devices) { device in
+                    Button {
+                        controller.playbackOutputUID = device.uid
+                    } label: {
+                        checked(device.name,
+                                on: controller.playbackOutputUID == device.uid)
+                    }
+                }
+            } label: {
+                Text(currentName)
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .menuStyle(.borderlessButton)
+        }
+        .help(L("audio_output_help"))
+        .onAppear { devices = AudioOutputDevices.list() }
+    }
+
+    /// What the selected device is called. A UID with no device behind it is
+    /// worth saying out loud: monitoring is coming out of the system default
+    /// instead, and silence from the wrong output is a call to the sound
+    /// department that nobody needs.
+    private var currentName: String {
+        guard let uid = controller.playbackOutputUID else {
+            return L("system_default")
+        }
+        return devices.first { $0.uid == uid }?.name ?? L("audio_output_missing")
+    }
+
+    @ViewBuilder private func checked(_ title: String, on: Bool) -> some View {
+        if on {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
     }
 }
 

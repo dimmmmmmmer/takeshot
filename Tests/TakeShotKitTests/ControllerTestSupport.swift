@@ -96,13 +96,14 @@ enum ControllerHarness {
         defer {
             controller.monitorOn = false
             controller.audioMonitor.stop()
-            // The volume and LUT sliders persist on a 400 ms debounce. A task
-            // still pending when a test ends would write this controller's
-            // whole settings blob into the shared scratch preferences part-way
-            // through the next one.
+            // The volume and LUT sliders and the DIM hold persist on a 400 ms
+            // debounce. A task still pending when a test ends would write this
+            // controller's whole settings blob into the shared scratch
+            // preferences part-way through the next one.
             controller.volumePersistTask?.cancel()
             controller.lutPersistTask?.cancel()
             controller.assistPersistTask?.cancel()
+            controller.dimPersistTask?.cancel()
             // the watcher re-creates the record folder when it sees it vanish,
             // so it has to go before the folder does
             controller.folderWatcher?.cancel()

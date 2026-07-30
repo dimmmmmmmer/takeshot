@@ -264,6 +264,9 @@ final class CaptureController: ObservableObject {
     }
     /// Debounced persist of the volume slider (see `setVolume` in +Audio).
     var volumePersistTask: Task<Void, Never>?
+    /// Debounced persist of the DIM hold — same debounce as the slider beside it
+    /// (see `persistDimState` in +Audio).
+    var dimPersistTask: Task<Void, Never>?
 
     /// The selected external display (by displayID); nil — off.
     @Published var externalDisplayID: CGDirectDisplayID? {
@@ -351,6 +354,19 @@ final class CaptureController: ObservableObject {
         monitorOn = stored.monitorEnabled ?? true
         assist.desqueeze = stored.desqueezeFactor ?? 1
         player.volume = Float(storedVolume)
+        // A DIM left engaged comes back engaged: the stored level is the one the
+        // operator set, so the hold is re-applied on top of it and the restore
+        // point is that level exactly. Quiet, but never unexplained — the DIM
+        // badge in the footer is lit (this is why the state is persisted and the
+        // halved level is not; see CaptureSettings.monitorDimmed).
+        if stored.monitorDimmed == true {
+            live.dimmed = true
+            live.volumeBeforeDim = storedVolume
+            let held = storedVolume * Self.dimAttenuation
+            live.volume = held
+            audioMonitor.volume = Float(held)
+            player.volume = Float(held)
+        }
         transport.attach(player) // one attachment for the app's lifetime
         bindPipeline()
         playbackTap.setLiveBufferProvider { [pipeline] in

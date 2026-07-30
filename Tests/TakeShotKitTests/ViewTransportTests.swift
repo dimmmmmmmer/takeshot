@@ -93,6 +93,48 @@ struct ViewTransportTests {
         }
     }
 
+    /// The speaker icon in the transport has two variants and they are neither
+    /// the same width nor the same height. Without a reserved frame the bar
+    /// re-laid itself out around the icon and every control to the right of it
+    /// jumped a couple of points on each mute — owner item 25.
+    @Test func mutingDoesNotReflowTheTransportBar() async throws {
+        try await ViewProbe.run { probe in
+            @MainActor func bar() -> (en: CGSize, ru: CGSize) {
+                probe.fittingSizes {
+                    TransportBar(player: ViewFixtures.idlePlayer(),
+                                 model: probe.controller.transport)
+                }
+            }
+            probe.controller.live.volume = 0.5
+            let loud = bar()
+            let loudVolume = probe.fittingSizes {
+                TransportVolume(live: probe.controller.live)
+            }
+            probe.controller.live.volume = 0
+            let muted = bar()
+            let mutedVolume = probe.fittingSizes {
+                TransportVolume(live: probe.controller.live)
+            }
+
+            #expect(muted.en == loud.en,
+                    "the transport bar reflowed on mute: \(loud.en) → \(muted.en)")
+            #expect(mutedVolume.en == loudVolume.en,
+                    "the volume control resized on mute: \(mutedVolume.en)")
+            #expect(muted.ru == muted.en)
+
+            // the reserved frame has to actually cover the wider variant, or the
+            // symbol draws outside its own slot
+            for symbol in ["speaker.slash.fill", "speaker.wave.2.fill"] {
+                let natural = ViewRender.fittingSize(
+                    Image(systemName: symbol).font(.system(size: 11)))
+                #expect(natural.width <= TransportVolume.iconWidth,
+                        "\(symbol) is \(natural.width)pt wide")
+                #expect(natural.height <= TransportVolume.iconHeight,
+                        "\(symbol) is \(natural.height)pt tall")
+            }
+        }
+    }
+
     /// The marker editor popover is a grid of fixed columns — a 76pt name, a
     /// swatch, a timecode button, a 180pt note field. Its localized parts are
     /// the header, "Clear all" and the "Marker %d" fallback, none of which may

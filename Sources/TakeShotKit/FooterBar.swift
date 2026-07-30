@@ -1,76 +1,99 @@
 import SwiftUI
 
-/// Footer: utilities on the left, meters centered in the left half, REC in the
-/// center, naming fields on the right.
+/// Footer: only what an operator touches or reads while the camera is rolling —
+/// record folder, codec, naming style, monitoring (volume + DIM) and the meters
+/// on the left, REC dead center, the naming fields on the right.
+///
+/// Settings, the VANC monitor and the offload copy used to sit here as well.
+/// They are setup, not shooting, and they moved to the takes panel's utility
+/// strip (`TakesPanelUtilityStrip`): at the app's minimum window width the
+/// footer has around 290pt on each side of the record button, and the codec and
+/// the destination folder — the two things a whole day can be shot wrong on —
+/// need that space more than a gear icon does.
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
-    @EnvironmentObject private var hotkeys: HotkeyManager
-    @Environment(\.openWindow) private var openWindow
+
+    /// Half of the centered REC group, plus a little air. The left-hand group is
+    /// in the same ZStack as the record button and knows nothing about it, so
+    /// without a reserved gap a wide left group slides UNDER the button instead
+    /// of compressing. Pinned against the real group width in ViewFooterTests.
+    static let centerReserve: CGFloat = 60
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
                 HStack(spacing: 8) {
                     HStack(spacing: 0) {
-                        HStack(spacing: 10) {
-                            Button {
-                                openWindow(id: "settings")
-                            } label: {
-                                Image(systemName: "gearshape")
-                                    .font(.system(size: 15))
-                            }
-                            .help(L("open_settings"))
-
-                            Button {
-                                openWindow(id: "vanc-monitor")
-                            } label: {
-                                Image(systemName: "waveform.badge.magnifyingglass")
-                                    .font(.system(size: 15))
-                            }
-                            .help(L("vanc_open_help"))
-
-                            NamingPresetMenu()
-
-                            FooterMonitorButton(live: controller.live)
-
-                            if controller.isCapturing {
-                                FooterAudioMeters(live: controller.live)
-                            }
-                        }
-                        .buttonStyle(.borderless)
-
-                        Spacer(minLength: 8)
+                        FooterShootingControls()
+                        Spacer(minLength: Self.centerReserve)
                     }
                     .frame(maxWidth: .infinity)
 
                     NamingFieldsView()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                HStack(spacing: 12) {
-                    Button {
-                        controller.instantReplay()
-                    } label: {
-                        Image(systemName: "memories")
-                            .font(.system(size: 15))
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(controller.takes.isEmpty)
-                    .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
-                    RecordButton()
-                    Button {
-                        controller.grabFrame()
-                    } label: {
-                        Image(systemName: "camera")
-                            .font(.system(size: 15))
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(!controller.isCapturing && controller.playbackURL == nil)
-                    .help(L("grab_frame"))
-                }
+                FooterCenterControls()
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+/// The footer's left-hand group. Its own view so the render tests can ask
+/// whether it still fits beside the record button — the whole footer's width
+/// says nothing about that, because the two are stacked, not laid out in a row.
+struct FooterShootingControls: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        HStack(spacing: 6) {
+            FooterFolderButton()
+            // Who gives up width first when the window is narrow, in order: the
+            // folder name (icon and tooltip still answer it), then the meter bars
+            // (5pt → 3pt), and the codec last — it is the readout a whole day can
+            // be shot wrong on, and it must never come out as an ellipsis.
+            FooterCodecMenu()
+                .layoutPriority(2)
+            NamingPresetMenu()
+            FooterMonitorButton(live: controller.live)
+            FooterDimButton(live: controller.live)
+            if controller.isCapturing {
+                FooterAudioMeters(live: controller.live)
+                    .layoutPriority(1)
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+}
+
+/// Instant replay, REC, grab — dead center, as in the brief.
+struct FooterCenterControls: View {
+    @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                controller.instantReplay()
+            } label: {
+                Image(systemName: "memories")
+                    .font(.system(size: 15))
+            }
+            .buttonStyle(.borderless)
+            .disabled(controller.takes.isEmpty)
+            .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
+            RecordButton()
+            Button {
+                controller.grabFrame()
+            } label: {
+                Image(systemName: "camera")
+                    .font(.system(size: 15))
+            }
+            .buttonStyle(.borderless)
+            .disabled(!controller.isCapturing && controller.playbackURL == nil)
+            .help(L("grab_frame"))
+        }
     }
 }
 

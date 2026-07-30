@@ -195,6 +195,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
     /// OFF on launch (no surprise audio on set).
     public var monitorVolume: Double?
+    /// DIM is holding monitoring down (nil/false — full level).
+    ///
+    /// The STATE is stored, never the halved level: `monitorVolume` stays the
+    /// level the operator set, so a restored dim gives it back exactly and the
+    /// lit DIM badge says why the room is quiet. Storing the halved level
+    /// instead would silently make it the new base level on the next launch —
+    /// the same shape of bug as persisting the mute's zero, which made every
+    /// launch start silent.
+    public var monitorDimmed: Bool?
     /// Forced input display mode ("1080p25"…); nil — autodetect.
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
