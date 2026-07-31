@@ -174,9 +174,28 @@ final class CaptureController: ObservableObject {
     /// Actual height of the window-button area (title bar hidden, buttons over content).
     @Published var windowTopInset: CGFloat = 26
 
-    /// Imported LUT files (the Application Support/TakeShot/LUTs folder).
+    /// Where imported looks are kept, and where they are mirrored for Resolve.
+    ///
+    /// Instance properties over the static paths they are seeded from, for the
+    /// same reason the record folder and `UserDefaults` are injected: a suite
+    /// that exercises the import flow would otherwise copy its fixtures into
+    /// the operator's real Application Support and their real Resolve LUT
+    /// folder, and `clearLUTs` would delete the looks they went on set with.
+    var lutsDirectory = CaptureController.defaultLUTsDirectory
+    var resolveLUTDirectory = CaptureController.defaultResolveLUTDirectory
+
+    /// Imported look files (the Application Support/TakeShot/LUTs folder):
+    /// .cube lattices and ASC CDL grades side by side.
     @Published var availableLUTs: [LUTInfo] = []
     var currentCube: CubeLUT?
+    /// The active look's ASC CDL parameters, when it came from a .cc/.ccc/.cdl.
+    ///
+    /// Kept ALONGSIDE the cube it was rasterized into, not instead of it: the
+    /// cube is what every render path takes, and the nine numbers are what the
+    /// selects EDL writes back out as *ASC_SOP/*ASC_SAT. A cube cannot be
+    /// reduced to nine numbers again, so throwing them away at import would
+    /// silently cost the colourist the grade.
+    var currentCDL: CDLLook?
     /// The current playback file already has the look baked in (com.takeshot.lut tag).
     @Published var playbackFileHasBakedLUT = false
     /// Manual LUT off for the current clip (the look came from the camera, etc.).
@@ -185,7 +204,16 @@ final class CaptureController: ObservableObject {
     }
     /// Debounced persist of the LUT mix (see `lutIntensity` in +LUT).
     var lutPersistTask: Task<Void, Never>?
-    var cubeCache: (fileName: String, cube: CubeLUT)?
+    /// The last look read off disk. A named type rather than a triple: three
+    /// positional members read the same whatever order they are in.
+    struct LoadedLook {
+        var fileName: String
+        var cube: CubeLUT
+        var cdl: CDLLook?
+    }
+    /// The last look read off disk, keyed by file name. Carries the CDL as well
+    /// as the cube, so a checkbox flip does not re-parse (or re-rasterize) it.
+    var cubeCache: LoadedLook?
 
     /// Large audio-channel panel over the player.
     ///

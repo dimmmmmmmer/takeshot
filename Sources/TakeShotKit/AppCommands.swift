@@ -86,13 +86,18 @@ private struct FileCommands: View {
     }
 }
 
-/// The same three exports the takes panel's share menu offers.
+/// The same four exports the takes panel's share menu offers.
 private struct ExportCommands: View {
     @ObservedObject var controller: CaptureController
 
     var body: some View {
         Button(L("export_edl")) { controller.exportSelectsEDL() }
             .disabled(!controller.takes.contains { $0.rating == .good })
+        // next to the EDL, and gated the same way: greyed exactly when the set
+        // it exports is empty. That set is every take, not the circled ones —
+        // the ALE is the log an assistant builds a bin from.
+        Button(L("export_ale")) { controller.exportALE() }
+            .disabled(controller.takes.isEmpty)
         Button(L("export_report_pdf")) { controller.exportShiftReport(pdf: true) }
             .disabled(controller.takes.isEmpty)
         Button(L("export_report_csv")) { controller.exportShiftReport(pdf: false) }

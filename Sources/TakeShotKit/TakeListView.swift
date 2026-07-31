@@ -107,6 +107,8 @@ private struct TakesSection: View {
                     Menu {
                         Button(L("export_edl")) { controller.exportSelectsEDL() }
                             .disabled(!controller.takes.contains { $0.rating == .good })
+                        Button(L("export_ale")) { controller.exportALE() }
+                            .disabled(controller.takes.isEmpty)
                         Button(L("export_report_pdf")) {
                             controller.exportShiftReport(pdf: true)
                         }

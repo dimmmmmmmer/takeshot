@@ -22,7 +22,8 @@ struct ModelAppCommandsTests {
         // reused from elsewhere in the UI, because the menu item and the button
         // are the same action and should read the same
         "record", "stop", "grab_frame", "open_folder", "open_settings",
-        "export_edl", "export_report_pdf", "export_report_csv", "offload_menu",
+        "export_edl", "export_ale", "export_report_pdf", "export_report_csv",
+        "offload_menu",
         "markers_title", "hotkey_marker", "hotkey_marker_delete",
         "marker_prev_help", "marker_next_help", "markers_clear_all",
         "good_take", "bad_take", "clear_rating", "playback_loop",

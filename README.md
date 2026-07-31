@@ -50,8 +50,10 @@ instead of a double-click; macOS then remembers the choice.
   with wipe, blend and A/B.
 - Waveform, RGB parade, histogram and vectorscope, as an overlay or in their
   own window.
-- Viewing LUTs (.cube) for preview and/or baked into the recording, mirrored
-  into the DaVinci Resolve LUT folder on import.
+- Viewing looks for preview and/or baked into the recording: `.cube` lattices,
+  mirrored into the DaVinci Resolve LUT folder on import, and ASC CDL grades
+  (`.cdl`, `.ccc`, `.cc`), which take the same path and keep their slope,
+  offset, power and saturation for the selects EDL.
 
 ### Operator tools
 
@@ -64,7 +66,8 @@ instead of a double-click; macOS then remembers the choice.
 ### Handover
 
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
-  locators, shift report as PDF and CSV.
+  locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`, an Avid log (ALE)
+  of every take for a Media Composer bin, shift report as PDF and CSV.
 - DIT offload of a camera card to several SSDs at once: the card is read once
   and written to every destination in the same pass, each copy is verified by
   re-reading it off the disk, and every destination gets an ASC MHL manifest

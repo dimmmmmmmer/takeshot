@@ -3,11 +3,11 @@ import CaptureCore
 import Foundation
 import os.log
 
-/// Applying a look-up table: to the preview, to playback and to the recording.
+/// Applying a look: to the preview, to playback and to the recording.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
-/// size at which nobody reads it top to bottom any more. Getting .cube files
-/// onto the machine in the first place is `+LUTLibrary`.
+/// size at which nobody reads it top to bottom any more. Getting look files
+/// onto the machine, and off it into a cube, is `+LUTLibrary`.
 extension CaptureController {
     var lutPreviewOn: Bool {
         get { settings.lutPreviewEnabled ?? false }
@@ -59,19 +59,13 @@ extension CaptureController {
     /// Rebuild the filter and hand it to the pipeline and playback.
     func rebuildLUT() {
         currentCube = nil
+        currentCDL = nil
         if let fileName = settings.lutFileName {
             if let cache = cubeCache, cache.fileName == fileName {
                 currentCube = cache.cube // checkbox flips must not re-read disk
+                currentCDL = cache.cdl
             } else {
-                let url = Self.lutsDirectory.appendingPathComponent(fileName)
-                do {
-                    let cube = try CubeLUT.load(url: url)
-                    currentCube = cube
-                    cubeCache = (fileName, cube)
-                } catch {
-                    lastError = "LUT: \(error.localizedDescription)"
-                    settings.lutFileName = nil
-                }
+                loadLook(named: fileName)
             }
         }
         pipeline.setLUT(currentCube,
