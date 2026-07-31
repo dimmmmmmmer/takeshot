@@ -11,55 +11,29 @@ import Foundation
 /// English, like the rest of CaptureCore: the file leaves the building with the
 /// drive and is read by whoever receives it, not in the operator's UI language.
 public enum OffloadSummary {
-    /// The run-level facts. Everything here is the same for every destination;
-    /// what differs is the `OffloadDestinationResult` beside it.
-    public struct Context: Sendable {
-        public var source: URL
-        public var algorithm: OffloadHashAlgorithm
-        public var creator: OffloadCreatorInfo
-        public var started: Date
-        public var finished: Date
-        public var filesTotal: Int
-        public var bytesTotal: Int64
-        /// Entries the scan could not take: a folder it could not walk, or
-        /// something that is not a regular file.
-        public var scanFailures: [String]
-        /// Files the card would not give up cleanly.
-        public var sourceFailures: [String]
-
-        public init(source: URL, algorithm: OffloadHashAlgorithm,
-                    creator: OffloadCreatorInfo, started: Date, finished: Date,
-                    filesTotal: Int, bytesTotal: Int64,
-                    scanFailures: [String], sourceFailures: [String]) {
-            self.source = source
-            self.algorithm = algorithm
-            self.creator = creator
-            self.started = started
-            self.finished = finished
-            self.filesTotal = filesTotal
-            self.bytesTotal = bytesTotal
-            self.scanFailures = scanFailures
-            self.sourceFailures = sourceFailures
-        }
-    }
+    /// What every summary's name starts with. A constant because the verify
+    /// tool has to recognize the file it is looking at — a summary reported as
+    /// a stray on the disk it was written to is the report accusing itself.
+    public static let filePrefix = "offload-summary_"
 
     @discardableResult
-    public static func write(result: OffloadDestinationResult, context: Context,
+    public static func write(result: OffloadDestinationResult,
+                             run: OffloadRunFacts,
                              into destination: URL, date: Date) throws -> URL {
-        let name = "offload-summary_\(OffloadFormat.fileStamp(date)).txt"
+        let name = "\(filePrefix)\(OffloadFormat.fileStamp(date)).txt"
         let url = CapturePipeline.uniqueURL(
             for: destination.appendingPathComponent(name))
         defer { CapturePipeline.releaseReservation(for: url) }
-        try Data(text(result: result, context: context).utf8)
+        try Data(text(result: result, run: run).utf8)
             .write(to: url, options: .atomic)
         return url
     }
 
     public static func text(result: OffloadDestinationResult,
-                            context: Context) -> String {
+                            run: OffloadRunFacts) -> String {
         var lines = ["TakeShot verified offload",
                      "=========================", ""]
-        lines += facts(result: result, context: context)
+        lines += facts(result: result, run: run)
         lines += ["",
                   "Every file listed in the manifest was written to this disk, "
                     + "flushed to the",
@@ -67,27 +41,28 @@ public enum OffloadSummary {
                     + "A file whose",
                   "hash did not match is NOT in the manifest and is named below.",
                   ""]
-        lines += problems(result: result, context: context)
-        lines.append("VERDICT: \(verdict(result: result, context: context))")
+        lines += problems(result: result, run: run)
+        lines.append("VERDICT: \(verdict(result: result, run: run))")
         return lines.joined(separator: "\n") + "\n"
     }
 
     // MARK: - the numbers
 
     private static func facts(result: OffloadDestinationResult,
-                              context: Context) -> [String] {
+                              run: OffloadRunFacts) -> [String] {
         var rows = [
-            ("Source", context.source.path),
+            ("Source", run.source.path),
             ("Destination", result.url.path),
-            ("Hash", "\(context.algorithm.displayName) "
-                + "(\(context.algorithm.manifestElement))"),
-            ("Files", "\(result.filesVerified) of \(context.filesTotal) verified"),
-            ("Card size", OffloadFormat.bytes(context.bytesTotal)),
-            ("Copied", OffloadFormat.bytes(result.bytesWritten)),
-            ("Started", OffloadFormat.timestamp(context.started)),
-            ("Finished", OffloadFormat.timestamp(context.finished)),
-            ("Elapsed", OffloadFormat.duration(result.elapsed)),
-            ("Average", OffloadFormat.rate(result.megabytesPerSecond)),
+            ("Hash", "\(run.algorithm.displayName) "
+                + "(\(run.algorithm.manifestElement))"),
+            ("Files", "\(result.totals.filesVerified) of \(run.card.files) "
+                + "verified"),
+            ("Card size", OffloadFormat.bytes(run.card.bytes)),
+            ("Copied", OffloadFormat.bytes(result.totals.bytesWritten)),
+            ("Started", OffloadFormat.timestamp(run.span.started)),
+            ("Finished", OffloadFormat.timestamp(run.span.finished)),
+            ("Elapsed", OffloadFormat.duration(result.totals.elapsed)),
+            ("Average", OffloadFormat.rate(result.totals.megabytesPerSecond)),
         ]
         if let manifest = result.manifestURL {
             rows.append(("Manifest",
@@ -95,8 +70,8 @@ public enum OffloadSummary {
         } else {
             rows.append(("Manifest", "NOT WRITTEN"))
         }
-        rows.append(("Written by", "\(context.creator.toolName) "
-            + "\(context.creator.toolVersion) on \(context.creator.hostname)"))
+        rows.append(("Written by", "\(run.creator.toolName) "
+            + "\(run.creator.toolVersion) on \(run.creator.hostname)"))
         let width = rows.map(\.0.count).max() ?? 0
         return rows.map { label, value in
             label + ":" + String(repeating: " ", count: width - label.count + 2)
@@ -107,18 +82,18 @@ public enum OffloadSummary {
     // MARK: - what went wrong
 
     private static func problems(result: OffloadDestinationResult,
-                                 context: Context) -> [String] {
+                                 run: OffloadRunFacts) -> [String] {
         var lines: [String] = []
         if let failure = result.failure {
             lines += ["DESTINATION FAILED", "  \(failure)", ""]
         }
         lines += section("CHECKSUM MISMATCHES", result.mismatches)
-        lines += section("SOURCE PROBLEMS", context.sourceFailures)
+        lines += section("SOURCE PROBLEMS", run.problems.source)
         // Not "folders": the scan also lands a symlink or a device node here,
         // which cannot be copied as a byte stream. The heading has to cover both
         // or the report says something untrue about what was skipped.
         lines += section("CARD ENTRIES THAT COULD NOT BE COPIED",
-                         context.scanFailures)
+                         run.problems.scan)
         return lines
     }
 
@@ -131,8 +106,9 @@ public enum OffloadSummary {
     /// card. Precedence is worst-first: a dead destination is a bigger fact than
     /// a mismatch, and both are bigger than a clean cancel.
     static func verdict(result: OffloadDestinationResult,
-                        context: Context) -> String {
-        let done = "\(result.filesVerified) of \(context.filesTotal) files verified"
+                        run: OffloadRunFacts) -> String {
+        let verified = result.totals.filesVerified
+        let done = "\(verified) of \(run.card.files) files verified"
         if let failure = result.failure {
             return "FAILED — \(failure) (\(done) before it stopped)"
         }
@@ -143,11 +119,10 @@ public enum OffloadSummary {
         if result.wasCancelled {
             return "CANCELLED — \(done); do NOT wipe the card"
         }
-        if result.filesVerified != context.filesTotal
-            || !context.sourceFailures.isEmpty || !context.scanFailures.isEmpty {
+        if verified != run.card.files || !run.problems.isEmpty {
             return "INCOMPLETE — \(done); do NOT wipe the card"
         }
-        return "all \(result.filesVerified) files verified"
+        return "all \(verified) files verified"
     }
 }
 

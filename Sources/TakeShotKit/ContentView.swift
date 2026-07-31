@@ -25,6 +25,11 @@ struct ContentView: View {
         .sheet(isPresented: $controller.offloadSheetPresented) {
             OffloadSheet(model: controller.offload)
         }
+        // …and the other half of the same job: re-reading a disk that was
+        // offloaded weeks ago against the manifest left on it.
+        .sheet(isPresented: $controller.verifySheetPresented) {
+            OffloadVerifySheet(model: controller.verify)
+        }
         // clicking empty space clears focus from text fields
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)

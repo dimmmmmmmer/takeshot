@@ -41,6 +41,97 @@ public struct OffloadPlan: Sendable {
     }
 }
 
+// MARK: - the small values a run is described in
+//
+// Four fields of an offload report were "files and bytes", four more were
+// "started and finished", and two were "what went wrong". Spelled out one at a
+// time they made initializers nobody can call without counting commas, and they
+// let the two halves of a pair drift apart. Each pair is one value here, with
+// whatever it derives on it.
+
+/// How much there is of something: files and bytes together.
+///
+/// The two answer one question — how big is this card — and every place that
+/// states one states the other.
+public struct OffloadVolume: Sendable, Equatable {
+    public var files: Int
+    public var bytes: Int64
+
+    public init(files: Int = 0, bytes: Int64 = 0) {
+        self.files = files
+        self.bytes = bytes
+    }
+}
+
+/// When something started and when it stopped.
+///
+/// `elapsed` is derived rather than stored. A stored duration next to a start
+/// and a finish is a third number that can disagree with the other two, and the
+/// summary prints all three on adjacent lines where the disagreement is
+/// obvious to the reader and to nobody else.
+public struct OffloadSpan: Sendable, Equatable {
+    public var started: Date
+    public var finished: Date
+
+    public init(started: Date, finished: Date) {
+        self.started = started
+        self.finished = finished
+    }
+
+    public var elapsed: TimeInterval { finished.timeIntervalSince(started) }
+}
+
+/// What a run could not do. The two lists together are the answer to "is this
+/// card safe to wipe", so they travel together — a verdict that consulted one
+/// of them and not the other is exactly the bug worth preventing.
+public struct OffloadProblems: Sendable, Equatable {
+    /// Entries the scan could not take: a directory the card would not let us
+    /// walk, or something that is not a regular file (a symlink, a device node).
+    public var scan: [String]
+    /// Files the card would not give us cleanly — an unreadable file, or one
+    /// whose length changed while it was being copied (a camera still writing).
+    /// These are what make a card unsafe to wipe, so they are reported at run
+    /// level and repeated in every destination's summary.
+    public var source: [String]
+
+    public init(scan: [String] = [], source: [String] = []) {
+        self.scan = scan
+        self.source = source
+    }
+
+    public var isEmpty: Bool { scan.isEmpty && source.isEmpty }
+}
+
+/// Everything about a run that is the same for every destination: what was
+/// copied, with which checksum, by whom, when, how much of it, and what the
+/// card would not give up.
+///
+/// One value because it is exactly what a summary needs. The engine used to
+/// copy these eight fields one at a time out of the report and into a second
+/// struct holding the same thing, which is two places to forget a field.
+public struct OffloadRunFacts: Sendable, Equatable {
+    /// The card (or sound folder) that was read.
+    public var source: URL
+    public var algorithm: OffloadHashAlgorithm
+    public var creator: OffloadCreatorInfo
+    public var span: OffloadSpan
+    /// Everything the scan found on the card.
+    public var card: OffloadVolume
+    public var problems: OffloadProblems
+
+    public init(source: URL, algorithm: OffloadHashAlgorithm,
+                creator: OffloadCreatorInfo, span: OffloadSpan,
+                card: OffloadVolume,
+                problems: OffloadProblems = OffloadProblems()) {
+        self.source = source
+        self.algorithm = algorithm
+        self.creator = creator
+        self.span = span
+        self.card = card
+        self.problems = problems
+    }
+}
+
 /// Who made the manifest — the `creatorinfo` block in ASC MHL, and the line in
 /// the summary that says which build to blame.
 public struct OffloadCreatorInfo: Sendable, Equatable {
@@ -171,96 +262,96 @@ public enum OffloadOutcome: Sendable, Equatable {
     case cancelled
 }
 
-/// The result for one destination — also everything its summary .txt says.
-public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
-    public let id: Int
-    public let url: URL
+/// What one destination ended up with.
+///
+/// The four numbers are one value because they are read as one: the rate comes
+/// from two of them, the verdict from the other two, and "126 verified" without
+/// the total it is out of says nothing at all.
+public struct OffloadDestinationTotals: Sendable, Equatable {
     /// Files re-read from this disk and matched.
     public var filesVerified: Int
     /// Files on the card. Anything less than this verified is a problem, and
     /// saying so needs both numbers in the same place.
     public var filesTotal: Int
     public var bytesWritten: Int64
-    /// Files that did not match on re-read, with the reason.
-    public var mismatches: [String]
-    /// Why this destination stopped, if it did.
-    public var failure: String?
-    public var manifestURL: URL?
-    public var summaryURL: URL?
+    /// This destination's own clock, which stops when the destination does —
+    /// a disk that died in the first minute of an hour-long run would otherwise
+    /// report a rate of 0.4 MB/s and nobody can read that number.
     public var elapsed: TimeInterval
-    public var wasCancelled: Bool
 
-    public init(id: Int, url: URL, filesVerified: Int, filesTotal: Int,
-                bytesWritten: Int64, mismatches: [String], failure: String?,
-                manifestURL: URL?, summaryURL: URL?, elapsed: TimeInterval,
-                wasCancelled: Bool) {
-        self.id = id
-        self.url = url
+    public init(filesVerified: Int = 0, filesTotal: Int = 0,
+                bytesWritten: Int64 = 0, elapsed: TimeInterval = 0) {
         self.filesVerified = filesVerified
         self.filesTotal = filesTotal
         self.bytesWritten = bytesWritten
-        self.mismatches = mismatches
-        self.failure = failure
-        self.manifestURL = manifestURL
-        self.summaryURL = summaryURL
         self.elapsed = elapsed
-        self.wasCancelled = wasCancelled
     }
 
     public var megabytesPerSecond: Double {
         OffloadMetrics.megabytesPerSecond(bytes: bytesWritten, seconds: elapsed)
+    }
+}
+
+/// The result for one destination — also everything its summary .txt says.
+public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
+    public let id: Int
+    public let url: URL
+    public var totals: OffloadDestinationTotals
+    /// Files that did not match on re-read, with the reason.
+    public var mismatches: [String]
+    /// Why this destination stopped, if it did.
+    public var failure: String?
+    public var wasCancelled: Bool
+
+    // The two report files, filled in afterwards rather than passed in. They
+    // cannot be initializer parameters: the engine writes the manifest, folds
+    // whether that succeeded into the result, and only then writes the summary
+    // FROM that result — so neither URL exists at the moment the result is
+    // built. (`Take` keeps its review state out of its initializer for the same
+    // reason: none of it is known when the value is made.)
+    public var manifestURL: URL?
+    public var summaryURL: URL?
+
+    public init(id: Int, url: URL, totals: OffloadDestinationTotals,
+                mismatches: [String] = [], failure: String? = nil,
+                wasCancelled: Bool = false) {
+        self.id = id
+        self.url = url
+        self.totals = totals
+        self.mismatches = mismatches
+        self.failure = failure
+        self.wasCancelled = wasCancelled
     }
 
     public var outcome: OffloadOutcome {
         if failure != nil { return .failed }
         if !mismatches.isEmpty { return .mismatched }
         if wasCancelled { return .cancelled }
-        return filesVerified == filesTotal ? .verified : .mismatched
+        return totals.filesVerified == totals.filesTotal ? .verified : .mismatched
     }
 }
 
 /// The run as a whole.
 public struct OffloadReport: Sendable {
-    public let source: URL
-    public let algorithm: OffloadHashAlgorithm
-    public let started: Date
-    public let finished: Date
-    public let filesTotal: Int
-    public let bytesTotal: Int64
+    /// What the run was and what it found — the facts every destination's
+    /// summary states, and the ones the summary writer is handed.
+    public let run: OffloadRunFacts
     /// Files the run reached before it ended (cancel stops between files).
     public let filesProcessed: Int
-    /// Entries the scan could not take: a directory the card would not let us
-    /// walk, or something that is not a regular file (a symlink, a device node).
-    public let scanFailures: [String]
-    /// Files the card would not give us cleanly — an unreadable file, or one
-    /// whose length changed while it was being copied (a camera still writing).
-    /// These are what make a card unsafe to wipe, so they are reported at run
-    /// level and repeated in every destination's summary.
-    public let sourceFailures: [String]
     public let wasCancelled: Bool
     public let destinations: [OffloadDestinationResult]
 
-    public init(source: URL, algorithm: OffloadHashAlgorithm, started: Date,
-                finished: Date, filesTotal: Int, bytesTotal: Int64,
-                filesProcessed: Int, scanFailures: [String],
-                sourceFailures: [String], wasCancelled: Bool,
+    public init(run: OffloadRunFacts, filesProcessed: Int, wasCancelled: Bool,
                 destinations: [OffloadDestinationResult]) {
-        self.source = source
-        self.algorithm = algorithm
-        self.started = started
-        self.finished = finished
-        self.filesTotal = filesTotal
-        self.bytesTotal = bytesTotal
+        self.run = run
         self.filesProcessed = filesProcessed
-        self.scanFailures = scanFailures
-        self.sourceFailures = sourceFailures
         self.wasCancelled = wasCancelled
         self.destinations = destinations
     }
 
     /// Nothing to explain to the operator: every destination has every file.
     public var isFullyVerified: Bool {
-        !destinations.isEmpty && scanFailures.isEmpty && sourceFailures.isEmpty
+        !destinations.isEmpty && run.problems.isEmpty
             && destinations.allSatisfy { $0.outcome == .verified }
     }
 

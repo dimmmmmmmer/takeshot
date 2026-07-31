@@ -236,9 +236,12 @@ struct ViewPanelTests {
         }
     }
 
-    /// The utility strip at the bottom of the takes panel (owner item 48) is three
-    /// icon buttons with localized tooltips only: it must measure the same in both
-    /// languages and fit the narrowest panel with room to spare.
+    /// The utility strip at the bottom of the takes panel (owner item 48) is
+    /// three icons — two buttons and the offload/verify menu — carrying localized
+    /// tooltips and, in the menu's case, localized ITEMS. Neither may reach the
+    /// strip's own width: "Проверить диск..." is many times wider than the icon
+    /// it hangs off, and a menu that sized itself to its longest item would push
+    /// the whole strip out of the narrowest panel.
     @Test func utilityStripFitsTheNarrowestSidePanel() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes { TakesPanelUtilityStrip() }

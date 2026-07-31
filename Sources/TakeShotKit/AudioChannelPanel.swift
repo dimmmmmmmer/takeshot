@@ -289,6 +289,9 @@ struct PlaybackFullscreenView: View {
                 } else {
                     PlaybackContent()
                 }
+                // …but the seam the wipe composited in is only draggable where
+                // the handle is mounted, and this window had none.
+                CompareWipeOverlay()
             }
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
         }

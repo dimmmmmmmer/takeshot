@@ -217,7 +217,7 @@ import Testing
             let survivor = try #require(report.destinations
                 .first { $0.url.path.hasPrefix(good.path) })
             #expect(survivor.outcome == .verified)
-            #expect(survivor.filesVerified == 2)
+            #expect(survivor.totals.filesVerified == 2)
         }
     }
 

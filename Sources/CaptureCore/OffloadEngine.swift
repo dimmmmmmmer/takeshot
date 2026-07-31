@@ -133,19 +133,19 @@ private final class OffloadRun {
             filesProcessed += 1
             report(force: true)
         }
-        let finished = Date()
         // Cancel only counts if it actually cut the run short. Stop pressed
         // during the last file still leaves every file on the card copied and
         // verified, and "CANCELLED — do NOT wipe the card" over a complete
         // offload is a false alarm — which is how real alarms stop being read.
         stoppedShort = cancellation.isCancelled && filesProcessed < files.count
-        let results = targets.map { finalize($0) }
-        return OffloadReport(
-            source: plan.source, algorithm: plan.algorithm, started: started,
-            finished: finished, filesTotal: files.count, bytesTotal: bytesTotal,
-            filesProcessed: filesProcessed, scanFailures: scanFailures,
-            sourceFailures: sourceFailures,
-            wasCancelled: stoppedShort, destinations: results)
+        // Built once, and once the last file is in: every destination's summary
+        // now states the same finish time as the report does. Each used to take
+        // a fresh `Date()` as it was written, so three SSDs came away with three
+        // different answers to when the run ended.
+        let run = runFacts(finished: Date())
+        let results = targets.map { finalize($0, run: run) }
+        return OffloadReport(run: run, filesProcessed: filesProcessed,
+                             wasCancelled: stoppedShort, destinations: results)
     }
 
     // MARK: - one file, N destinations
@@ -232,14 +232,16 @@ private final class OffloadRun {
     /// Write the manifest and the summary, and fold what happened into the
     /// result. The manifest goes first so that a manifest that could not be
     /// written is already part of the verdict the summary states.
-    private func finalize(_ target: OffloadTarget) -> OffloadDestinationResult {
+    private func finalize(_ target: OffloadTarget,
+                          run: OffloadRunFacts) -> OffloadDestinationResult {
         let stamp = Date()
         var result = OffloadDestinationResult(
             id: target.index, url: target.root,
-            filesVerified: target.verifiedCount, filesTotal: files.count,
-            bytesWritten: target.bytesWritten, mismatches: target.mismatches,
-            failure: target.failure, manifestURL: nil, summaryURL: nil,
-            elapsed: target.elapsed, wasCancelled: stoppedShort)
+            totals: OffloadDestinationTotals(
+                filesVerified: target.verifiedCount, filesTotal: files.count,
+                bytesWritten: target.bytesWritten, elapsed: target.elapsed),
+            mismatches: target.mismatches, failure: target.failure,
+            wasCancelled: stoppedShort)
         do {
             result.manifestURL = try OffloadMHL.write(
                 entries: target.entries, into: target.root,
@@ -253,8 +255,7 @@ private final class OffloadRun {
         }
         do {
             result.summaryURL = try OffloadSummary.write(
-                result: result, context: runContext(), into: target.root,
-                date: stamp)
+                result: result, run: run, into: target.root, date: stamp)
         } catch {
             result.failure = result.failure
                 ?? "summary: \(error.localizedDescription)"
@@ -262,14 +263,17 @@ private final class OffloadRun {
         return result
     }
 
-    /// The run-level facts the summary writer needs, without the destinations
-    /// (which is what it is being written for).
-    private func runContext() -> OffloadSummary.Context {
-        OffloadSummary.Context(
-            source: plan.source, algorithm: plan.algorithm, creator: plan.creator,
-            started: started, finished: Date(), filesTotal: files.count,
-            bytesTotal: bytesTotal, scanFailures: scanFailures,
-            sourceFailures: sourceFailures)
+    /// The run-level facts, which are also everything the summary writer needs
+    /// — it is handed these rather than the report, because the report is a
+    /// list of the summaries it has not written yet.
+    private func runFacts(finished: Date) -> OffloadRunFacts {
+        OffloadRunFacts(
+            source: plan.source, algorithm: plan.algorithm,
+            creator: plan.creator,
+            span: OffloadSpan(started: started, finished: finished),
+            card: OffloadVolume(files: files.count, bytes: bytesTotal),
+            problems: OffloadProblems(scan: scanFailures,
+                                      source: sourceFailures))
     }
 }
 

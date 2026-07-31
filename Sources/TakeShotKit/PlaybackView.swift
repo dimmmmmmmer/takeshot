@@ -92,6 +92,9 @@ struct ExternalOutputView: View {
             } else {
                 PreviewMount.live(controller.pipeline)
             }
+            // The director's monitor is a surface people reach for the wipe on
+            // too — it showed the seam and nothing to drag it with.
+            CompareWipeOverlay()
         }
         .ignoresSafeArea()
     }

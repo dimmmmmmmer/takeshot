@@ -75,8 +75,9 @@ struct OffloadResultPanel: View {
             ForEach(report.destinations) { result in
                 card(result)
             }
-            if !report.sourceFailures.isEmpty {
-                Label(L("offload_source_problems", report.sourceFailures.count),
+            if !report.run.problems.source.isEmpty {
+                Label(L("offload_source_problems",
+                        report.run.problems.source.count),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
@@ -103,9 +104,9 @@ struct OffloadResultPanel: View {
                 .font(.callout)
                 .foregroundStyle(color(result.outcome))
                 .fixedSize(horizontal: false, vertical: true)
-            Text("\(OffloadFormat.bytes(result.bytesWritten)) · "
-                + "\(OffloadFormat.duration(result.elapsed)) · "
-                + OffloadFormat.rate(result.megabytesPerSecond))
+            Text("\(OffloadFormat.bytes(result.totals.bytesWritten)) · "
+                + "\(OffloadFormat.duration(result.totals.elapsed)) · "
+                + OffloadFormat.rate(result.totals.megabytesPerSecond))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let manifest = result.manifestURL {
@@ -124,17 +125,17 @@ struct OffloadResultPanel: View {
     private func verdict(_ result: OffloadDestinationResult) -> String {
         switch result.outcome {
         case .verified:
-            return L("offload_verified_all", result.filesVerified)
+            return L("offload_verified_all", result.totals.filesVerified)
         case .mismatched:
             return result.mismatches.isEmpty
-                ? L("offload_result_incomplete", result.filesVerified,
-                    result.filesTotal)
+                ? L("offload_result_incomplete", result.totals.filesVerified,
+                    result.totals.filesTotal)
                 : L("offload_result_mismatch", result.mismatches.count)
         case .failed:
             return L("offload_result_failed", result.failure ?? "")
         case .cancelled:
-            return L("offload_result_cancelled", result.filesVerified,
-                     result.filesTotal)
+            return L("offload_result_cancelled", result.totals.filesVerified,
+                     result.totals.filesTotal)
         }
     }
 

@@ -193,7 +193,7 @@ struct OffloadManifestTests {
         #expect(text.contains("\(OffloadFixtures.card.count) of \(OffloadFixtures.card.count) verified"))
         #expect(text.contains(OffloadFormat.grouped(Int64(total))))
         #expect(text.contains("MB/s"))
-        #expect(text.contains(OffloadFormat.timestamp(report.started)))
+        #expect(text.contains(OffloadFormat.timestamp(report.run.span.started)))
         #expect(text.contains("VERDICT: all \(OffloadFixtures.card.count) files verified"))
         // The manifest is named in the summary, so one file leads to the other.
         #expect(text.contains(try #require(result.manifestURL).lastPathComponent))

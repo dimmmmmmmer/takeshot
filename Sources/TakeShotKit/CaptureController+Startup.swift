@@ -70,6 +70,7 @@ extension CaptureController {
         // toast, sticky alarm), so it is wired for the controller's lifetime and
         // not at the moment the sheet happens to open.
         offload.attach(to: self)
+        verify.attach(to: self)
         // The web remote comes back up if the operator left it on — a director
         // holding the phone from yesterday should not have to be told to go and
         // find the laptop after a relaunch. Off by default; nothing binds a port

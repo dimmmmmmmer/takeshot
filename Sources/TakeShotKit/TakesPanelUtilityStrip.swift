@@ -30,18 +30,21 @@ struct TakesPanelUtilityStrip: View {
             }
             .help(L("vanc_open_help"))
 
-            Button {
-                // showOffloadSheet() does not exist in this worktree; the folder
-                // the multi-destination offload sheet (see +Offload); this
-                // strip is offload's only home — the export menu next to the
-                // takes dropped its copy because that menu is disabled while
-                // there are no takes, and a card offload precedes any take
-                controller.showOffloadSheet()
+            // A menu rather than a button since there are two halves of the same
+            // job: copying a card off, and re-checking a disk that was copied
+            // weeks ago. This strip is their only home — the export menu beside
+            // the takes cannot hold them, because it is disabled while there are
+            // no takes and both of these happen before there is one.
+            Menu {
+                Button(L("offload_menu_copy")) { controller.showOffloadSheet() }
+                Button(L("verify_menu")) { controller.chooseDiskToVerify() }
             } label: {
-                Image(systemName: "externaldrive.badge.plus")
+                Image(systemName: "externaldrive.badge.checkmark")
                     .font(.system(size: 14))
             }
-            .help(L("offload_menu"))
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(L("offload_menu_group"))
 
             Spacer(minLength: 0)
         }

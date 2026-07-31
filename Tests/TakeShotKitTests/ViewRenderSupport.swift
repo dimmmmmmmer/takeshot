@@ -100,6 +100,53 @@ enum ViewRender {
         return try await body()
     }
 
+    /// Rasterize a view offscreen and report, in points, which columns it drew
+    /// something bright in.
+    ///
+    /// Everything else here answers "how big is it". This answers "is it there,
+    /// and where" — the question a shared overlay raises, because nothing about
+    /// a window's size says whether that window mounted the overlay. The wipe
+    /// seam is a white line and a white dot over a dark picture, so a column
+    /// histogram is enough to say both that it is drawn and where the seam
+    /// landed.
+    ///
+    /// `rows` narrows the scan to a horizontal band, given as a fraction of the
+    /// height. A player surface has chrome — a transport strip along the
+    /// bottom, badges along the top — and every one of those is bright too, so
+    /// a scan of the whole frame answers "something is lit somewhere", which is
+    /// not a question worth asking.
+    static func brightColumns(_ view: some View, in size: CGSize,
+                              rows: ClosedRange<Double> = 0...1,
+                              threshold: Int = 200) -> [Int] {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { return [] }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        // The backing store is 2x on a Retina machine and 1x on a headless CI
+        // runner; the assertions are in points either way.
+        let scale = max(1, rep.pixelsWide / max(1, Int(size.width)))
+        let band = Int(Double(rep.pixelsHigh) * rows.lowerBound)
+            ..< max(1, Int(Double(rep.pixelsHigh) * rows.upperBound))
+        var columns: Set<Int> = []
+        for x in 0..<rep.pixelsWide {
+            for y in band {
+                // A bitmap cached from a hosting view comes back in the
+                // device's calibrated space, where -getRed:… raises rather than
+                // converting. Asking for the value in a known space is the only
+                // safe way to read a pixel out of one.
+                guard let color = rep.colorAt(x: x, y: y)?
+                    .usingColorSpace(.genericRGB) else { continue }
+                if Int(color.redComponent * 255) >= threshold {
+                    columns.insert(x / scale)
+                    break
+                }
+            }
+        }
+        return columns.sorted()
+    }
+
     /// Measure the same view in both languages.
     ///
     /// The view is built inside the closure, once per language: `L()` is read
@@ -172,6 +219,12 @@ struct ViewProbe {
     func size(_ view: some View, proposedWidth width: CGFloat,
               proposedHeight height: CGFloat = looseHeight) -> CGSize {
         ViewRender.size(hosted(view), proposedWidth: width, proposedHeight: height)
+    }
+
+    /// Which columns the view actually drew something bright in, in points.
+    func brightColumns(_ view: some View, in size: CGSize,
+                       rows: ClosedRange<Double> = 0...1) -> [Int] {
+        ViewRender.brightColumns(hosted(view), in: size, rows: rows)
     }
 
     /// Mount a view with the app's environment and hold it there for `body`

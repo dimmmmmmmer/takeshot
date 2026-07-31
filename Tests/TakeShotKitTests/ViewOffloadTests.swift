@@ -72,20 +72,27 @@ import Testing
             Ending(verified: 40, cancelled: true),
         ]
         let results = endings.enumerated().map { index, ending in
-            OffloadDestinationResult(
+            var result = OffloadDestinationResult(
                 id: index, url: card("DAILIES_SSD_\(index + 1)/CARD_A001"),
-                filesVerified: ending.verified, filesTotal: 128,
-                bytesWritten: 32_000_000_000, mismatches: ending.mismatches,
-                failure: ending.failure,
-                manifestURL: card("SSD/ascmhl/0001_CARD_A001_2026-07-30_143102.mhl"),
-                summaryURL: nil, elapsed: 620.4, wasCancelled: ending.cancelled)
+                totals: OffloadDestinationTotals(
+                    filesVerified: ending.verified, filesTotal: 128,
+                    bytesWritten: 32_000_000_000, elapsed: 620.4),
+                mismatches: ending.mismatches, failure: ending.failure,
+                wasCancelled: ending.cancelled)
+            result.manifestURL =
+                card("SSD/ascmhl/0001_CARD_A001_2026-07-30_143102.mhl")
+            return result
         }
         return OffloadReport(
-            source: card("CARD_A001"), algorithm: .xxh64, started: Date(),
-            finished: Date(), filesTotal: 128, bytesTotal: 64_000_000_000,
-            filesProcessed: 128, scanFailures: [],
-            sourceFailures: ["DCIM/100MEDIA/A001C099.mov (Input/output error)"],
-            wasCancelled: false, destinations: results)
+            run: OffloadRunFacts(
+                source: card("CARD_A001"), algorithm: .xxh64,
+                creator: .current(version: "0.1.0"),
+                span: OffloadSpan(started: Date(), finished: Date()),
+                card: OffloadVolume(files: 128, bytes: 64_000_000_000),
+                problems: OffloadProblems(source: [
+                    "DCIM/100MEDIA/A001C099.mov (Input/output error)",
+                ])),
+            filesProcessed: 128, wasCancelled: false, destinations: results)
     }
 
     // MARK: - the sheet

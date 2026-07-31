@@ -111,6 +111,14 @@ final class CaptureController: ObservableObject {
     /// takes panel reads its status line.
     let offload = OffloadSheetModel()
 
+    /// The verify-against-manifest sheet is up.
+    @Published var verifySheetPresented = false
+    /// Re-reading a disk that was offloaded earlier against the ASC MHL
+    /// manifest on it. Owned here for the same reasons the offload is, and it
+    /// shares `offloadStatus` and the offload queue — the two are the same job
+    /// at two different times and must never run at once on one disk.
+    let verify = OffloadVerifyModel()
+
     /// Hardware playout: mirrors the viewer to the DeckLink output chosen in
     /// settings. Rebuilt on device/format changes; routed by viewer mode.
     var playoutFeeder: PlayoutFeeder?

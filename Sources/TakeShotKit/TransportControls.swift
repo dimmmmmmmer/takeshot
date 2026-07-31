@@ -37,18 +37,24 @@ extension RawPlayerModel: TransportRangeEngine {}
 
 /// Skip back 5 s, play/pause, skip forward 5 s.
 ///
-/// The glyph metrics are passed in rather than fixed here: the two bars carry
-/// visibly different ones (14pt bold in a 20pt slot for the AVPlayer bar, 15pt
-/// in an 18pt slot for the RAW one). That difference is drift, not design, but
-/// it is on screen — unifying it is a look change and does not belong in a
-/// refactor, so both values survive the move.
+/// The glyph metrics used to be parameters, because the two bars carried
+/// visibly different ones — 14pt bold in a 20pt slot for the AVPlayer bar,
+/// 15pt regular in an 18pt slot for the RAW one. That was drift left over from
+/// the days when each bar was written out separately, not a decision anyone
+/// made, and it was on screen: the same button changed weight and jumped a
+/// point sideways when the operator opened a BRAW clip instead of a take. The
+/// main bar's metrics won because that is the bar people spend the day in.
 struct TransportPlayGroup: View {
     let isPlaying: Bool
-    let glyph: Font
-    let glyphWidth: CGFloat
     let skipBack: () -> Void
     let togglePlay: () -> Void
     let skipForward: () -> Void
+
+    /// One slot for both glyphs. `play.fill` and `pause.fill` are not the same
+    /// width, so without a fixed frame every play/pause re-laid the row out
+    /// around it — the same reflow the speaker icon caused (`TransportVolume`).
+    static let glyph = Font.system(size: 14, weight: .bold)
+    static let glyphWidth: CGFloat = 20
 
     var body: some View {
         Button {
@@ -62,8 +68,8 @@ struct TransportPlayGroup: View {
             togglePlay()
         } label: {
             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                .font(glyph)
-                .frame(width: glyphWidth)
+                .font(Self.glyph)
+                .frame(width: Self.glyphWidth)
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.space, modifiers: [])

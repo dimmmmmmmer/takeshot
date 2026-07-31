@@ -87,14 +87,15 @@ struct OffloadEngineTests {
             chunkBytes: OffloadFixtures.chunk))
 
         #expect(report.isFullyVerified)
-        #expect(report.filesTotal == OffloadFixtures.card.count)
+        #expect(report.run.card.files == OffloadFixtures.card.count)
         #expect(report.filesProcessed == OffloadFixtures.card.count)
-        #expect(report.bytesTotal == Int64(OffloadFixtures.card.map(\.bytes).reduce(0, +)))
+        #expect(report.run.card.bytes
+            == Int64(OffloadFixtures.card.map(\.bytes).reduce(0, +)))
         #expect(report.destinations.count == 2)
         for result in report.destinations {
             #expect(result.outcome == .verified)
-            #expect(result.filesVerified == OffloadFixtures.card.count)
-            #expect(result.bytesWritten == report.bytesTotal)
+            #expect(result.totals.filesVerified == OffloadFixtures.card.count)
+            #expect(result.totals.bytesWritten == report.run.card.bytes)
             for file in OffloadFixtures.card {
                 let copy = result.url.appendingPathComponent(file.path)
                 #expect(try Data(contentsOf: copy)
@@ -119,7 +120,8 @@ struct OffloadEngineTests {
                                                    destinations: [dest]))
 
         #expect(report.isFullyVerified)
-        #expect(report.destinations.first?.filesVerified == OffloadFixtures.card.count)
+        #expect(report.destinations.first?.totals.filesVerified
+            == OffloadFixtures.card.count)
     }
 
     /// A byte-for-byte copy is not the whole job: post sorts dailies by shoot
