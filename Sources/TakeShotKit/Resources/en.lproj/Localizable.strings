@@ -507,3 +507,6 @@
 "verify_error_no_manifest" = "No ASC MHL manifest in “%@”. Nothing was offloaded to this folder by TakeShot.";
 "verify_error" = "Verify failed: %@";
 "offload_busy" = "An offload or a disk check is already running.";
+/* the last-take card on the remote page: poster frame, name, rating */
+"remote_last_take" = "Last take";
+"remote_poster_wait" = "No frame yet";

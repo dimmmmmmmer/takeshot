@@ -54,6 +54,51 @@ enum RemoteHarness {
         try await client.send(action: "hello", pin: pin)
         return client
     }
+
+    /// One answer from the poster endpoint.
+    ///
+    /// `elapsed` is part of it because the endpoint is PIN-gated, and a
+    /// PIN-gated endpoint that answers instantly is an oracle the socket's
+    /// tarpit never sees — a suite has to be able to ask how long it took, not
+    /// only what it said.
+    struct PosterAnswer {
+        var elapsed: Duration
+        var http: HTTPURLResponse
+        var body: Data
+    }
+
+    /// One fetch of the take poster, timed.
+    static func poster(port: Int, pin: String) async throws -> PosterAnswer {
+        let url = try #require(URL(
+            string: "http://127.0.0.1:\(port)\(RemotePage.posterPath)?pin=\(pin)"))
+        let started = ContinuousClock.now
+        let (body, response) = try await session().data(from: url)
+        let elapsed = started.duration(to: .now)
+        return PosterAnswer(elapsed: elapsed,
+                            http: try #require(response as? HTTPURLResponse),
+                            body: body)
+    }
+
+    /// How long the server took to answer a PIN on a FRESH socket, and what it
+    /// answered. Fresh every time on purpose: reconnecting is the move a
+    /// per-socket cap cannot see, and the one the tarpit has to answer.
+    static func measureAuth(port: Int, pin: String) async throws
+        -> (elapsed: Duration, ok: Bool) {
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)/ws"))
+        let client = RemoteTestClient(
+            task: session().webSocketTask(with: url))
+        client.task.resume()
+        defer { client.close() }
+        let started = ContinuousClock.now
+        try await client.send(action: "hello", pin: pin)
+        let auth = try await client.next(type: "auth")
+        return (started.duration(to: .now), auth["ok"] as? Bool == true)
+    }
+
+    /// A PIN that is not this one. Four digits, so there is always another.
+    static func wrongPIN(besides pin: String) -> String {
+        pin == "0000" ? "1111" : "0000"
+    }
 }
 
 /// A WebSocket client for the tests. `URLSessionWebSocketTask` does the

@@ -513,3 +513,6 @@
 "verify_error_no_manifest" = "В папке «%@» нет манифеста ASC MHL. TakeShot ничего сюда не копировал.";
 "verify_error" = "Проверка не прошла: %@";
 "offload_busy" = "Офлоад или проверка диска уже идёт.";
+/* the last-take card on the remote page: poster frame, name, rating */
+"remote_last_take" = "Последний дубль";
+"remote_poster_wait" = "Кадра ещё нет";

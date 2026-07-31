@@ -15,6 +15,19 @@ struct RemoteStatus: Equatable, Sendable {
     var format: String = ""
     /// The take being written, or the last one that landed.
     var takeName: String = ""
+    /// The last take that LANDED — the one the poster shows, the one the rating
+    /// buttons act on. Kept apart from `takeName`, which mid-take is the name
+    /// being written: the header on the phone is about the take in progress and
+    /// the card under it is about the last take there is a frame of, and one
+    /// field cannot be both without the card labelling last take's poster with
+    /// this take's name.
+    var lastTakeName: String = ""
+    /// Identifies that take, so the page knows when to re-fetch the poster.
+    ///
+    /// The take's own id rather than a count of them: delete one and record
+    /// another and the count is back where it was, which leaves a phone showing
+    /// the poster of footage that is gone.
+    var lastTakeID: String = ""
     /// "none" / "good" / "bad" — the last take's rating.
     var rating: String = "none"
     /// Free space on the record volume, GB. -1 when it cannot be read (the
@@ -33,6 +46,8 @@ struct RemoteStatus: Equatable, Sendable {
             "\"capturing\":\(capturing)",
             "\"format\":\(RemoteJSON.quoted(format))",
             "\"take\":\(RemoteJSON.quoted(takeName))",
+            "\"lastTake\":\(RemoteJSON.quoted(lastTakeName))",
+            "\"lastTakeId\":\(RemoteJSON.quoted(lastTakeID))",
             "\"rating\":\(RemoteJSON.quoted(rating))",
             "\"diskGB\":\(RemoteJSON.number(diskFreeGB))",
             "\"markers\":\(markerCount)",
@@ -116,9 +131,11 @@ enum RemotePIN {
 
     /// Whether `candidate` matches, compared in constant time.
     ///
-    /// Four digits are brute-forceable by definition and the connection limit
-    /// in `RemoteServer` is the real defence; this only keeps the comparison
-    /// itself from being the cheaper attack.
+    /// Four digits are brute-forceable by definition; what costs an attacker is
+    /// `RemotePINTarpit` holding every answer back once the guessing starts.
+    /// This only keeps the comparison itself from being the cheaper attack —
+    /// an early-exit compare leaks the code a digit at a time, and no delay on
+    /// the answer helps with that.
     static func matches(_ candidate: String, expected: String) -> Bool {
         let lhs = Array(candidate.utf8)
         let rhs = Array(expected.utf8)
@@ -131,4 +148,66 @@ enum RemotePIN {
         }
         return difference == 0
     }
+}
+
+/// What makes a four-digit code cost something to guess: a server-wide delay on
+/// the ANSWER to every PIN check, once too many of them have failed lately.
+///
+/// The per-socket cap in `RemoteClient` never did this. Reconnecting is free, so
+/// it only makes every fifth guess cost a fresh TCP connection — ten thousand
+/// combinations against eight sockets at a time still fall in seconds on a set
+/// network. The count that matters is the SERVER's, because no reconnect resets
+/// it.
+///
+/// Two rules the delay lives or dies by:
+///
+/// - It is never a refusal. The unit holding the code is holding the phone that
+///   starts the take, and a remote that locks out the right PIN because someone
+///   else was guessing is a remote nobody switches on a second time. A correct
+///   code is always accepted, just later.
+/// - It is the same for a right code and a wrong one. A delay applied only to
+///   failures is an oracle with a two-second clock on it, which is a better
+///   oracle than the one it replaced.
+///
+/// A value type with the clock passed in: the decay is arithmetic, and testing
+/// arithmetic should not cost a minute of wall clock.
+struct RemotePINTarpit {
+    /// Failures inside the window before answers start being held. Small enough
+    /// to bite an enumeration in its first second; large enough that a unit
+    /// mistyping the code on two phones never meets it.
+    static let threshold = 6
+    /// How long a failure is remembered. Attempts further apart than this never
+    /// add up to anything, which is what "the delay decays" means here.
+    static let window: TimeInterval = 60
+    /// How long an answer waits while the tarpit is hot. Two seconds is barely
+    /// noticeable behind a button press and turns the four-digit space from
+    /// seconds of enumeration into most of an hour.
+    static let delay: TimeInterval = 2
+
+    /// Monotonic timestamps of recent failures, oldest first.
+    ///
+    /// Only the newest `threshold + 1` are kept: the question is ever only
+    /// "were there MORE than `threshold` inside the window", and holding an
+    /// unbounded list of them would let a flood the delay is meant to punish
+    /// allocate freely on a machine that is recording.
+    private var failures: [TimeInterval] = []
+
+    /// Register one PIN verification and say how long its answer must wait.
+    ///
+    /// The delay is read from the state BEFORE this attempt is counted, so a
+    /// right code and a wrong one presented at the same moment wait exactly as
+    /// long — count first and the attempt that crosses the threshold would be
+    /// delayed only if it happened to be the wrong one.
+    mutating func attempt(failed: Bool, now: TimeInterval) -> TimeInterval {
+        failures.removeAll { now - $0 >= Self.window }
+        let held = failures.count > Self.threshold ? Self.delay : 0
+        guard failed else { return held }
+        failures.append(now)
+        if failures.count > Self.threshold + 1 { failures.removeFirst() }
+        return held
+    }
+
+    /// Failures still inside the window, capped as `failures` is. Read by the
+    /// tests to know the burst landed; nothing branches on it.
+    var pressure: Int { failures.count }
 }

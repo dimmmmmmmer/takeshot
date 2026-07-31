@@ -71,8 +71,68 @@ extension RemoteClient {
         switch request.path {
         case "/", "/index.html":
             writeAndClose(RemoteResponse.page(server?.currentPage ?? Data()))
+        case RemotePage.posterPath:
+            servePoster(request)
         default:
             writeAndClose(RemoteResponse.notFound())
+        }
+    }
+
+    /// `GET /take-poster?pin=…` — a JPEG of the last take that landed.
+    ///
+    /// The code travels in the query string because the page fetches this with
+    /// an `<img>`, and an `<img>` carries no headers. That is the one place in
+    /// this app where a PIN is in a URL, and it is exactly why the answer goes
+    /// through the same tarpit the socket handshake does: an endpoint that says
+    /// yes or no to a code for free is the same four digits with the delay
+    /// switched off, and being the cheaper of the two is all an enumeration
+    /// needs. Nothing logs the target, and the server hands out no referrer.
+    private func servePoster(_ request: RemoteRequest) {
+        guard let server else {
+            writeAndClose(RemoteResponse.notFound())
+            return
+        }
+        let candidate = RemoteRequest.queryValue("pin", in: request.query) ?? ""
+        let accepted = RemotePIN.matches(candidate, expected: server.currentPIN)
+        holdForTarpit(server.notePINAttempt(failed: !accepted)) { [weak self] in
+            self?.answerPoster(accepted: accepted)
+        }
+    }
+
+    private func answerPoster(accepted: Bool) {
+        guard accepted else {
+            writeAndClose(RemoteResponse.forbidden())
+            return
+        }
+        guard let server, let queue else {
+            writeAndClose(RemoteResponse.notFound())
+            return
+        }
+        // Nothing that is not Sendable crosses: the app is handed an identity,
+        // and the connection is looked up again on the server's queue once the
+        // answer comes back. A client dropped in the meantime is simply no
+        // longer in the registry, which is the honest answer to "who asked for
+        // this" — and it is cheaper than a box asserting that a queue-confined
+        // object may be carried through another thread untouched.
+        let id = ObjectIdentifier(self)
+        server.handlers.poster { [weak server] jpeg in
+            // The app builds the image where it keeps it, which is not this
+            // queue. Everything in this class is queue-confined, so the reply
+            // hops back before it touches any of it.
+            queue.async {
+                guard let client = server?.clients[id], !client.closed else {
+                    return
+                }
+                guard let jpeg else {
+                    // A take finalizes asynchronously and its frame is decoded
+                    // off the main actor: "not yet" is an honest answer, and
+                    // asking for it is what starts the decode. The page tries
+                    // again while the status still names the same take.
+                    client.writeAndClose(RemoteResponse.notFound())
+                    return
+                }
+                client.writeAndClose(RemoteResponse.jpeg(jpeg))
+            }
         }
     }
 }

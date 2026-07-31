@@ -42,7 +42,14 @@ enum RemotePage {
         ("disk", "remote_disk"),
         ("noSignal", "remote_no_signal"),
         ("idle", "remote_idle"),
+        ("lastTake", "remote_last_take"),
+        ("posterWait", "remote_poster_wait"),
     ]
+
+    /// Where the page fetches the last take's frame. Stated once, here, so the
+    /// route the server answers and the URL the page builds cannot drift apart
+    /// — a mismatch shows up as a card that is permanently "no frame yet".
+    static let posterPath = "/take-poster"
 
     /// The page with the current language's labels baked in.
     ///
@@ -61,14 +68,15 @@ enum RemotePage {
                                                   with: config()).utf8)
     }
 
-    /// `{"lang":"en","watchdogMs":12000,"strings":{…}}` — a JSON object literal
-    /// spliced straight into the script.
+    /// `{"lang":"en","watchdogMs":12000,"posterPath":"…","strings":{…}}` — a
+    /// JSON object literal spliced straight into the script.
     static func config() -> String {
         let strings = labels
             .map { "\($0.field):\(RemoteJSON.quoted(L($0.key)))" }
             .joined(separator: ",")
         return "{lang:\(RemoteJSON.quoted(L10n.current.pageCode)),"
             + "watchdogMs:\(watchdogMilliseconds),"
+            + "posterPath:\(RemoteJSON.quoted(posterPath)),"
             + "strings:{\(strings)}}"
     }
 }

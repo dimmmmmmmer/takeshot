@@ -51,6 +51,13 @@ extension CaptureController {
                 },
                 failed: { [weak self] message in
                     Task { @MainActor in self?.remoteFailed(message) }
+                },
+                poster: { [weak self] reply in
+                    // The thumbnails belong to the takes panel and live on the
+                    // MainActor. The server's queue asks for one; it never
+                    // reads controller state itself, here no more than anywhere
+                    // else.
+                    Task { @MainActor in reply(self?.remoteTakePoster()) }
                 }))
         remoteServer = server
         server.start(port: UInt16(clamping: overridePort
