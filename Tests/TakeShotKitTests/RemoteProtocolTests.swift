@@ -40,11 +40,33 @@ import Testing
         let request = try #require(RemoteRequest.parse(Data(head[..<end])))
 
         #expect(request.method == "GET")
-        // The query string is not part of the route — the PIN never travels in
-        // a URL, but a client that puts something there must still be routed.
+        // The query string is never part of the route, so nothing can be
+        // reached through it; it is kept beside the path because the poster
+        // endpoint has no other way to be handed a PIN (an <img> sends no
+        // headers).
         #expect(request.path == "/ws")
+        #expect(request.query == "pin=1234")
         #expect(request.headers["host"] == "192.168.1.5:8765")
         #expect(request.isWebSocketUpgrade)
+    }
+
+    @Test func aQueryParameterIsReadByNameAndDecoded() {
+        #expect(RemoteRequest.queryValue("pin", in: "pin=0417&take=a.1") == "0417")
+        #expect(RemoteRequest.queryValue("take", in: "pin=0417&take=a.1") == "a.1")
+        #expect(RemoteRequest.queryValue("pin", in: "p=1&pinned=0417") == nil,
+                "a parameter whose name merely starts the same was read as it")
+        #expect(RemoteRequest.queryValue("pin", in: "") == nil)
+        #expect(RemoteRequest.queryValue("pin", in: "pin") == nil)
+        #expect(RemoteRequest.queryValue("pin", in: "pin=04%3117") == "04117")
+    }
+
+    /// A target with no "?" in it has an empty query rather than a nil one, and
+    /// still routes.
+    @Test func aTargetWithoutAQueryStillRoutes() throws {
+        let head = Data("GET /take-poster HTTP/1.1\r\nHost: x\r\n\r\n".utf8)
+        let request = try #require(RemoteRequest.parse(head))
+        #expect(request.path == "/take-poster")
+        #expect(request.query.isEmpty)
     }
 
     @Test func anIncompleteHeadIsNotParsedYet() {
@@ -66,8 +88,39 @@ import Testing
         #expect(text.hasPrefix("HTTP/1.1 200 OK\r\n"))
         #expect(text.contains("Content-Length: 2\r\n"))
         #expect(text.contains("default-src 'none'"))
+        // The take poster is fetched from this same origin and nowhere else.
+        // Without the allowance the browser blocks the <img> and says so only
+        // to a console on a phone, which looks exactly like a 404 from the app.
+        #expect(text.contains("img-src 'self'"))
+        #expect(!text.contains("img-src *"))
         #expect(text.contains("X-Content-Type-Options: nosniff"))
         #expect(text.hasSuffix("hi"))
+    }
+
+    /// The poster is an image and is labelled as one, on a response that says
+    /// not to keep it: the URL is the same for every take, and a phone showing
+    /// a cached frame is a director looking at the wrong take with no way to
+    /// tell.
+    @Test func thePosterResponseIsAnImageThatIsNotKept() throws {
+        // Head and body read apart: the body is JPEG, which is not text at
+        // all, and every other response in this file is.
+        let response = RemoteResponse.jpeg(Data([0xFF, 0xD8, 0xFF]))
+        let end = try #require(RemoteRequest.headEnd(in: response))
+        let head = try utf8(Data(response[..<end]))
+        #expect(head.contains("Content-Type: image/jpeg\r\n"))
+        #expect(head.contains("Cache-Control: no-store\r\n"))
+        #expect(head.contains("Content-Length: 3\r\n"))
+        #expect(Array(response[end...]) == [0xFF, 0xD8, 0xFF],
+                "the bytes were not passed through as they arrived")
+    }
+
+    /// A code that no longer matches has to read as a refusal, not as a take
+    /// without a frame: one sends the operator back to the gate, the other has
+    /// the page quietly try again forever.
+    @Test func aRefusedPosterSaysSoRatherThanPretendingItIsMissing() throws {
+        let text = try utf8(RemoteResponse.forbidden())
+        #expect(text.hasPrefix("HTTP/1.1 403 Forbidden\r\n"))
+        #expect(!text.contains("image/jpeg"))
     }
 
     // MARK: - framing

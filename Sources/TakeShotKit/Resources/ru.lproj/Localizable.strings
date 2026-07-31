@@ -482,3 +482,6 @@
 "remote_disk" = "Свободно";
 "remote_no_signal" = "Нет сигнала";
 "remote_idle" = "Ожидание";
+/* the last-take card on the remote page: poster frame, name, rating */
+"remote_last_take" = "Последний дубль";
+"remote_poster_wait" = "Кадра ещё нет";

@@ -23,6 +23,11 @@ extension CaptureController {
         // that just landed, which is also the one the ratings apply to.
         status.takeName = isRecording
             ? pendingTakeName : (takes.last?.displayName ?? "")
+        // The card on the phone is about the last take that LANDED, whatever
+        // the header above it says: it carries that take's frame, and the two
+        // rating buttons already act on that take through `toggleLastRating`.
+        status.lastTakeName = takes.last?.displayName ?? ""
+        status.lastTakeID = takes.last.map { $0.id.uuidString } ?? ""
         status.rating = (takes.last?.rating ?? .none).rawValue
         status.diskFreeGB = remoteDiskFreeGB
         status.markerCount = isRecording
@@ -34,6 +39,27 @@ extension CaptureController {
     /// up a quarter of a second late reads as a dropped press.
     func pushRemoteStatus() {
         remoteServer?.broadcast(remoteStatus())
+    }
+
+    // MARK: - the poster
+
+    /// The last take's frame as JPEG bytes, or nil while there is none.
+    ///
+    /// The takes panel's own thumbnail, re-encoded. A second decoder for the
+    /// same frame would be a second thing to keep in step with a file that
+    /// finalizes asynchronously, and it would decode a take the operator is
+    /// already looking at twice.
+    ///
+    /// Asking also STARTS the decode when the cache has nothing: the phone's
+    /// 404 is what sets up the answer to its next attempt, so a take recorded
+    /// while nobody has the takes panel in thumbnail mode still gets a poster.
+    func remoteTakePoster() -> Data? {
+        guard let take = takes.last else { return nil }
+        guard let image = thumbnails[take.id] else {
+            requestThumbnail(for: take)
+            return nil
+        }
+        return RemotePoster.jpeg(from: image)
     }
 
     func startRemoteStatusPump() {

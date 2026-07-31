@@ -476,3 +476,6 @@
 "remote_disk" = "Free";
 "remote_no_signal" = "No signal";
 "remote_idle" = "Standby";
+/* the last-take card on the remote page: poster frame, name, rating */
+"remote_last_take" = "Last take";
+"remote_poster_wait" = "No frame yet";

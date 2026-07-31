@@ -53,9 +53,6 @@ header { padding: 14px 16px 6px; text-align: center; }
   flex-wrap: wrap; color: var(--dim); font-size: 14px;
 }
 #take { color: var(--text); font-weight: 600; }
-#rating { font-weight: 700; }
-#rating.good { color: var(--good); }
-#rating.bad { color: var(--bad); }
 
 main {
   flex: 1; display: flex; flex-direction: column; justify-content: center;
@@ -83,6 +80,54 @@ main {
 #rate button { flex: 1; height: 74px; font-size: 20px; font-weight: 700; }
 #good.on { background: var(--good); border-color: var(--good); color: #06210c; }
 #bad.on { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+/* The last take: its frame, its name, its rating. Laid out sideways rather
+   than as a poster with a caption under it — vertical space on a phone belongs
+   to the REC button, and a 16:9 frame 124px wide is still large enough to tell
+   two setups apart at arm's length. */
+#card {
+  display: flex; align-items: center; gap: 12px; padding: 10px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+}
+#card[hidden] { display: none; }
+#posterBox {
+  position: relative; flex: none; width: 124px; height: 70px;
+  border-radius: 8px; overflow: hidden; background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+#poster { width: 100%; height: 100%; object-fit: cover; display: block; }
+#poster[hidden] { display: none; }
+#posterNote {
+  color: var(--dim); font-size: 11px; line-height: 1.2; text-align: center;
+  padding: 0 6px;
+}
+/* min-width: 0 or a long take name refuses to ellipsize and pushes the frame
+   off the side of the phone instead. */
+#cardMeta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+#cardLabel {
+  color: var(--dim); font-size: 11px; letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+#cardName {
+  font-weight: 700; font-size: 17px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#cardRating { font-size: 13px; font-weight: 700; min-height: 1.2em; }
+#cardRating.good { color: var(--good); }
+#cardRating.bad { color: var(--bad); }
+
+/* A phone laid on its side, or one whose browser chrome has eaten a third of
+   the screen. `main` centres its children and does not scroll — deliberately,
+   because a REC button that can be scrolled out of reach is worse than a small
+   one — so when the card no longer fits, everything gives up a little rather
+   than the last thing added being clipped off the bottom. */
+@media (max-height: 620px) {
+  #rec { min-height: 96px; }
+  #marker, #rate button { height: 58px; font-size: 18px; }
+  #posterBox { width: 104px; height: 58px; }
+  #cardName { font-size: 15px; }
+  header { padding: 8px 16px 4px; }
+}
 
 footer {
   display: flex; gap: 12px; justify-content: space-between; align-items: center;
@@ -120,7 +165,6 @@ footer {
   <div id="meta">
     <span id="format"></span>
     <span id="take"></span>
-    <span id="rating"></span>
   </div>
 </header>
 
@@ -131,6 +175,17 @@ footer {
     <button id="good" disabled></button>
     <button id="bad" disabled></button>
   </div>
+  <section id="card" hidden>
+    <div id="posterBox">
+      <img id="poster" alt="" hidden>
+      <span id="posterNote"></span>
+    </div>
+    <div id="cardMeta">
+      <span id="cardLabel"></span>
+      <span id="cardName"></span>
+      <span id="cardRating"></span>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -171,6 +226,18 @@ var retry = null;
 var retryDelay = 700;
 var lastStatus = null;
 var watchdog = null;
+// The take the <img> currently belongs to, whether that fetch has landed, when
+// it was last asked for, and how many times. See refreshPoster.
+var posterTake = "";
+var posterLoaded = false;
+var posterAskedAt = 0;
+var posterTries = 0;
+// How long between poster attempts, and how many before the page stops asking.
+// Status pushes arrive four times a second and a take's frame is decoded off
+// the main thread after the file finalizes, so "not yet" is normal for a second
+// or two — and asking four times a second for a minute is not.
+var POSTER_RETRY_MS = 1500;
+var POSTER_TRIES = 20;
 
 function text(id, value) { el(id).textContent = value; }
 
@@ -181,6 +248,7 @@ function paintLabels() {
   text("bad", S.bad);
   text("connect", S.connect);
   text("gateHint", S.pinPrompt);
+  text("cardLabel", S.lastTake);
   el("pin").placeholder = "····";
 }
 
@@ -205,11 +273,6 @@ function render(next) {
   el("tc").classList.remove("stale");
   text("format", next.format || S.noSignal);
   text("take", next.take || S.idle);
-  var rating = el("rating");
-  rating.className = next.rating === "good" ? "good"
-    : (next.rating === "bad" ? "bad" : "");
-  rating.textContent = next.rating === "good" ? S.good
-    : (next.rating === "bad" ? S.bad : "");
   var rec = el("rec");
   rec.classList.toggle("on", !!next.recording);
   rec.textContent = next.recording ? S.stop : S.rec;
@@ -218,6 +281,44 @@ function render(next) {
   el("bad").classList.toggle("on", next.rating === "bad");
   text("markers", S.markers + " " + next.markers);
   text("disk", S.disk + " " + (next.diskGB < 0 ? "—" : next.diskGB + " GB"));
+  refreshPoster(next);
+}
+
+// The card under the buttons: the last take that landed, its frame, and the
+// rating the two buttons above it apply to. Deliberately NOT next.take — while
+// a take rolls, that is the name being written, and there is no frame of it
+// yet; the card would then caption the previous take's picture with this take's
+// name, which is exactly the mistake the card exists to prevent.
+function refreshPoster(next) {
+  var take = next.lastTakeId || "";
+  var card = el("card");
+  card.hidden = !take;
+  if (!take) { posterTake = ""; return; }
+  text("cardName", next.lastTake || S.idle);
+  var badge = el("cardRating");
+  badge.className = next.rating === "good" ? "good"
+    : (next.rating === "bad" ? "bad" : "");
+  badge.textContent = next.rating === "good" ? S.good
+    : (next.rating === "bad" ? S.bad : "");
+  if (take !== posterTake) {
+    posterTake = take;
+    posterLoaded = false;
+    posterAskedAt = 0;
+    posterTries = 0;
+    el("poster").hidden = true;
+    text("posterNote", S.posterWait);
+  }
+  if (posterLoaded || posterTries >= POSTER_TRIES) { return; }
+  var now = Date.now();
+  if (now - posterAskedAt < POSTER_RETRY_MS) { return; }
+  posterAskedAt = now;
+  posterTries += 1;
+  // The take id and the attempt are in the URL as much for the browser as for
+  // the server, which ignores both: a mobile Safari that decides to reuse the
+  // response it already has would otherwise show the previous take for the rest
+  // of the shoot, and the answer to attempt one is 404 far more often than not.
+  el("poster").src = CFG.posterPath + "?pin=" + encodeURIComponent(pin)
+    + "&take=" + encodeURIComponent(posterTake) + "." + posterTries;
 }
 
 function showGate(message) {
@@ -272,6 +373,11 @@ function connect() {
     if (msg.type === "status") { render(msg); setConnection("live"); }
     else if (msg.type === "auth" && msg.ok) {
       retryDelay = 700;
+      // A fresh socket is a fresh chance at the poster: the page may have run
+      // out of attempts against a code that has since been re-entered, or
+      // against a take whose frame had not finished decoding an hour ago.
+      posterTries = 0;
+      posterAskedAt = 0;
       el("gate").classList.remove("show");
       setConnection("live");
     } else if (msg.type === "auth") {
@@ -301,6 +407,22 @@ document.addEventListener("visibilitychange", function () {
 });
 window.addEventListener("online", connect);
 window.addEventListener("pageshow", connect);
+
+el("poster").addEventListener("load", function () {
+  posterLoaded = true;
+  posterTries = 0;
+  el("poster").hidden = false;
+  text("posterNote", "");
+});
+// An <img> cannot see a status code, so 404 (no frame decoded yet) and 403 (a
+// PIN that has been rotated) arrive here the same way. Both are answered by
+// trying again on the next status push and giving up after POSTER_TRIES: a
+// rotated code sends the page back to the gate through the socket anyway.
+el("poster").addEventListener("error", function () {
+  posterLoaded = false;
+  el("poster").hidden = true;
+  text("posterNote", S.posterWait);
+});
 
 el("rec").addEventListener("click", function () { send("rec"); });
 el("marker").addEventListener("click", function () { send("marker"); });

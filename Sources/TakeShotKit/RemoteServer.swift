@@ -23,6 +23,15 @@ final class RemoteServer: @unchecked Sendable {
         var ready: @Sendable (UInt16) -> Void
         /// The listener died. A port already in use arrives here.
         var failed: @Sendable (String) -> Void
+        /// The freshest take's poster, as JPEG bytes; nil while there is none
+        /// to hand over yet.
+        ///
+        /// Asked for on the server's queue and answered from wherever the app
+        /// keeps the image — the MainActor — so the reply is a closure the app
+        /// calls back rather than a return value. The default answers "none",
+        /// which is what a server driven without a controller has.
+        var poster: @Sendable (@escaping @Sendable (Data?) -> Void) -> Void
+            = { reply in reply(nil) }
     }
 
     /// The values the app pushes in while the server runs: the PIN and the
@@ -72,6 +81,10 @@ final class RemoteServer: @unchecked Sendable {
     /// The last status pushed, replayed to a client the moment it authenticates
     /// so a phone picked up mid-take shows the take rather than a blank readout.
     private var lastStatus: String?
+    /// The one piece of state that has to be the SERVER's rather than a
+    /// connection's, because a reconnect is what defeats every per-connection
+    /// count. See `RemotePINTarpit`.
+    private var tarpit = RemotePINTarpit()
 
     init(pin: String, page: Data, handlers: Handlers) {
         self.handlers = handlers
@@ -144,6 +157,32 @@ final class RemoteServer: @unchecked Sendable {
     var currentPIN: String { shared.withLock { $0.pin } }
     var currentPage: Data { shared.withLock { $0.page } }
     var currentStatus: String? { lastStatus }
+
+    /// Register one PIN verification and say how long its answer must be held
+    /// back. Queue-confined, like the tarpit it reads.
+    ///
+    /// Every path that answers a PIN comes through here — the socket's
+    /// handshake and the poster's query string alike. A second place that says
+    /// yes or no to a code without paying for it is the same four digits with
+    /// the delay switched off, and being the cheaper of the two is all an
+    /// enumeration needs. The single exception is a socket re-presenting a code
+    /// this server already accepted on it (see `RemoteClient.handle`), which
+    /// answers nothing an attacker could reach without the code already.
+    func notePINAttempt(failed: Bool) -> TimeInterval {
+        tarpit.attempt(failed: failed, now: Self.monotonicNow())
+    }
+
+    /// Failures still inside the tarpit's window. For the tests; nothing in the
+    /// server branches on it.
+    var pinPressure: Int { queue.sync { tarpit.pressure } }
+
+    /// Seconds off a clock that only ever moves forward. The tarpit's window is
+    /// measured against it rather than against `Date`, which an NTP correction
+    /// or an operator setting the clock can move backwards — and a window whose
+    /// clock jumps back is a window that never expires.
+    static func monotonicNow() -> TimeInterval {
+        Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+    }
 
     func dispatch(_ command: RemoteCommand) {
         handlers.command(command)

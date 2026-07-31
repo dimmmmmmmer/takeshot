@@ -16,15 +16,29 @@ import Network
 /// below is module-internal rather than private for that reason — the two
 /// extensions are the only readers, and it goes no wider than the module.
 final class RemoteClient {
-    /// Wrong codes tolerated before the socket is dropped.
+    /// Wrong codes tolerated on ONE socket before it is dropped.
     ///
-    /// Four digits are ten thousand guesses and this does not put them out of
-    /// reach — it makes every fifth one cost a fresh TCP connection, against a
-    /// cap of eight at a time, on a network the operator can see. What actually
-    /// defends the REC button is that the code is read out rather than published
-    /// and rotated between units; the port is not meant to face anything but the
-    /// set's own network.
+    /// This is the cheap half and never was the defence: reconnecting costs
+    /// nothing, so on its own the cap only makes every fifth guess buy a fresh
+    /// TCP connection, and ten thousand combinations against eight sockets at a
+    /// time still fall in seconds on a set network. What defends the REC button
+    /// is `RemotePINTarpit` — a count the SERVER keeps, so no reconnect resets
+    /// it, holding every PIN answer back by two seconds once a handful have
+    /// failed, for a right code exactly as long as for a wrong one.
+    ///
+    /// Dropping the socket still earns its place either side of that: it returns
+    /// the connection slot, and it tells a page carrying a code that has been
+    /// rotated to stop retrying and ask for the new one.
     static let maximumBadPINs = 5
+    /// Answers held back by the tarpit and not yet sent, per connection.
+    ///
+    /// The delay is on the answer, not on the reading — so a client can keep
+    /// sending while one is outstanding, and a script pointed at the port will.
+    /// The ceiling is what stops it from parking an unbounded number of timers
+    /// on the server's queue. Above `maximumBadPINs` on purpose, so the socket
+    /// still reaches its own cap; and the rule is the same for a right code and
+    /// a wrong one, so a dropped message says nothing about either.
+    static let maximumHeldAnswers = 8
     /// Ceiling on unparsed bytes. A request head that never ends, or frames
     /// that never complete, must not grow without limit on a machine that is
     /// recording.
@@ -51,9 +65,9 @@ final class RemoteClient {
 
     let connection: NWConnection
     weak var server: RemoteServer?
-    /// The server's queue, kept for the close-frame deadline. Everything in this
-    /// class already runs on it.
-    private var queue: DispatchQueue?
+    /// The server's queue, kept for the close-frame deadline and for the
+    /// tarpit's held answers. Everything in this class already runs on it.
+    var queue: DispatchQueue?
 
     var buffer = Data()
     var upgraded = false
@@ -76,6 +90,8 @@ final class RemoteClient {
     /// everything else here: the send completion runs on the connection's queue,
     /// which is the server's.
     private var inFlight = 0
+    /// Tarpit answers scheduled on this connection and not yet delivered.
+    private var heldAnswers = 0
 
     init(connection: NWConnection, server: RemoteServer) {
         self.connection = connection
@@ -160,8 +176,41 @@ final class RemoteClient {
                 #"{"type":"error","reason":"bad_message"}"#))
             return
         }
-        guard let server,
-              RemotePIN.matches(message.pin, expected: server.currentPIN) else {
+        guard let server else {
+            // The server is gone; nothing on this socket can be verified
+            // against anything, and it would otherwise sit here to its deadline.
+            close(code: nil)
+            return
+        }
+        let accepted = RemotePIN.matches(message.pin, expected: server.currentPIN)
+        // A socket that already showed this code is not being verified again,
+        // and holding its commands back would aim the tarpit at the one phone
+        // the tarpit exists for. The unit with the code in it is the unit that
+        // presses REC, and a REC button two seconds late loses the head of a
+        // take — for as long as somebody else keeps guessing, which is a
+        // lockout wearing a duration.
+        //
+        // Only a code that STILL matches takes this path. A rotated one falls
+        // through and pays, so a socket authenticated with yesterday's PIN
+        // cannot walk today's for free; and reaching the path at all costs a
+        // valid code, so the stopwatch tells apart only what its holder knows.
+        if authenticated, accepted {
+            settle(message, accepted: true)
+            return
+        }
+        // Verified now, answered when the tarpit says so. The whole answer goes
+        // behind the delay, the dispatch included: a command that ran two
+        // seconds before its own acknowledgement would put the status push in
+        // front of it and time the two apart for whoever was watching.
+        holdForTarpit(server.notePINAttempt(failed: !accepted)) { [weak self] in
+            self?.settle(message, accepted: accepted)
+        }
+    }
+
+    /// One verified message: the handshake answer, then the command it carried.
+    private func settle(_ message: RemoteMessage, accepted: Bool) {
+        guard let server else { return }
+        guard accepted else {
             refusePIN()
             return
         }
@@ -176,6 +225,28 @@ final class RemoteClient {
         }
         guard message.command != .hello else { return }
         server.dispatch(message.command)
+    }
+
+    /// Run `answer` now, or once the tarpit's delay has passed.
+    ///
+    /// The delay is on the answer and never on the queue. One serial queue
+    /// carries every client's traffic, so a two-second wait taken on it would
+    /// stop the timecode on every other phone on the set for as long as someone
+    /// is guessing — which is the denial of service the tarpit is supposed to
+    /// prevent, aimed the other way.
+    func holdForTarpit(_ delay: TimeInterval, _ answer: @escaping () -> Void) {
+        guard delay > 0, let queue else {
+            answer()
+            return
+        }
+        guard heldAnswers < Self.maximumHeldAnswers else { return }
+        heldAnswers += 1
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            self.heldAnswers -= 1
+            guard !self.closed else { return }
+            answer()
+        }
     }
 
     private func refusePIN() {
