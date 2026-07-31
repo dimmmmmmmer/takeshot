@@ -179,8 +179,8 @@
 "lut_none" = "No LUT";
 "lut_preview" = "Apply to preview";
 "lut_record" = "Bake into recording";
-"lut_import" = "Import .cube…";
-"lut_help" = "Preview/record LUTs (.cube). Preview LUT applies to live and playback; recording stays clean unless baking is enabled";
+"lut_import" = "Import look (.cube, .cdl)…";
+"lut_help" = "Preview/record looks (.cube lattices, ASC CDL). The preview look applies to live and playback; recording stays clean unless baking is enabled";
 
 "lut_baked_indicator" = "LUT is baked into this file — playback LUT is off automatically";
 "lut_playback_toggle" = "LUT on this clip: turn off if the look came baked from the camera";
@@ -217,7 +217,7 @@
 /* LUT folder + placeholders */
 "settings_luts" = "LUTs";
 "luts_folder" = "Imported LUTs";
-"luts_hint" = "Imported .cube files are copied here (Application Support/TakeShot/LUTs).";
+"luts_hint" = "Imported looks (.cube, .cdl, .ccc, .cc) are copied here (Application Support/TakeShot/LUTs).";
 "open_in_finder" = "Open in Finder";
 "clear_data" = "Clear";
 "cancel" = "Cancel";
@@ -282,11 +282,14 @@
 "reference_pin_failed" = "Couldn't pin the reference";
 
 "export_edl" = "Selects EDL (good takes)";
+"export_ale" = "Avid log (ALE)";
 "export_report_pdf" = "Shift report (PDF)";
 "export_report_csv" = "Shift report (CSV)";
-"export_menu_help" = "Export: EDL, shift report";
+"export_menu_help" = "Export: EDL, ALE, shift report";
 "report_no_takes" = "No takes to report";
 "report_saved" = "Report saved: %@";
+"ale_no_takes" = "No takes to export";
+"ale_saved" = "ALE saved: %@";
 
 "r3d_not_supported" = "R3D playback isn\u2019t integrated yet (REDCODE SDK required)";
 

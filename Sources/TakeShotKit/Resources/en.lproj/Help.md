@@ -90,11 +90,15 @@ Drag the seam to move a wipe.
 - Assists and LUTs are a display layer. Nothing they show reaches the recorded
   file unless "bake into recording" is on for the LUT.
 
-## LUT
+## LUT and looks
 
-Import a `.cube` and choose whether it applies to the preview, to the recorded
-file, or both, with an intensity mix. A file recorded with the look baked in is
-tagged, and the player recognizes the tag so the look is not applied twice.
+Import a `.cube` lattice or an ASC CDL (`.cdl`, `.ccc`, `.cc`) and choose whether
+it applies to the preview, to the recorded file, or both, with an intensity mix.
+A CDL is converted to a lattice on import, so it travels through exactly the same
+preview, bake and compare path a `.cube` does — and it keeps its slope, offset,
+power and saturation, which the selects EDL writes out for the colourist. A file
+recorded with the look baked in is tagged, and the player recognizes the tag so
+the look is not applied twice.
 
 ## Exports
 
@@ -111,7 +115,11 @@ Two sidecars are kept up to date in the record folder as you work:
 On demand, from the export menu in the takes panel or the File menu:
 
 - **Selects EDL** — the good takes, cut back to back, with the markers as
-  Resolve locators.
+  Resolve locators. When the active look is an ASC CDL, every event also carries
+  `*ASC_SOP` and `*ASC_SAT`, which is how the grade reaches the colourist.
+- **Avid log (ALE)** — every take, for a Media Composer bin: reel, start, end,
+  duration, rate, take, scene, the Good Take flag and the comments. The reel is
+  the same one the EDL writes, so the two join up.
 - **Shift report** — the full table for production paperwork, as a PDF with
   thumbnails or as a CSV.
 

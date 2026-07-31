@@ -267,7 +267,7 @@ import Testing
         }
     }
 
-    /// Both exports bail before opening a save panel when there is nothing to
+    /// Every export bails before opening a save panel when there is nothing to
     /// write — the guard is what keeps them headless, and it is also the only
     /// feedback the operator gets.
     @Test func exportsRefuseAnEmptyDay() async throws {
@@ -276,8 +276,38 @@ import Testing
             #expect(controller.lastError == L("edl_no_good_takes"))
 
             controller.lastError = nil
+            controller.exportALE()
+            #expect(controller.lastError == L("ale_no_takes"))
+
+            controller.lastError = nil
             controller.exportShiftReport(pdf: true)
             #expect(controller.lastError == L("report_no_takes"))
+        }
+    }
+
+    /// The ALE is the LOG, not the cut: it carries every take, including the
+    /// ones nobody circled and the ones marked NG. An assistant building a bin
+    /// needs the rejected takes in it — that a take was NG is metadata about
+    /// the day, not a reason to hide it from the Avid.
+    @Test func theALECarriesEveryTakeNotOnlyTheSelects() async throws {
+        try await ControllerHarness.run { controller, root in
+            var good = ControllerFixtures.take(named: "A", in: root, clip: 1)
+            good.rating = .good
+            var bad = ControllerFixtures.take(named: "B", in: root, clip: 2)
+            bad.rating = .bad
+            let unrated = ControllerFixtures.take(named: "C", in: root, clip: 3)
+            controller.takes = [good, bad, unrated]
+
+            let ale = try #require(
+                ALEExporter.ale(takes: controller.takes,
+                                format: controller.signalFormat))
+            #expect(ale.contains("A.mov"))
+            #expect(ale.contains("B.mov"))
+            #expect(ale.contains("C.mov"))
+            // and the EDL beside it still carries the circled take only
+            #expect(EDLExporter.selectsEDL(
+                takes: controller.takes.filter { $0.rating == .good },
+                title: "t")?.contains("B.mov") == false)
         }
     }
 }

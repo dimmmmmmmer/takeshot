@@ -148,7 +148,7 @@ import Testing
             let cube = try CubeLUT.load(url: MediaFixtures.writeRedCube(
                 at: media.appendingPathComponent("cached.cube")))
             let name = "cached-\(UUID().uuidString).cube"
-            controller.cubeCache = (name, cube)
+            controller.cubeCache = .init(fileName: name, cube: cube, cdl: nil)
             controller.settings.lutFileName = name
 
             controller.rebuildLUT()
@@ -197,11 +197,11 @@ import Testing
     /// in the colourist's hands, and it only works at the exact path Resolve
     /// scans.
     @Test func theLUTFoldersAreTheOnesTheOtherToolsLookIn() {
-        let ours = CaptureController.lutsDirectory
+        let ours = CaptureController.defaultLUTsDirectory
         #expect(ours.lastPathComponent == "LUTs")
         #expect(ours.deletingLastPathComponent().lastPathComponent == "TakeShot")
 
-        let resolve = CaptureController.resolveLUTDirectory
+        let resolve = CaptureController.defaultResolveLUTDirectory
         #expect(resolve.path.hasSuffix(
             "Application Support/Blackmagic Design/DaVinci Resolve/LUT/TakeShot"))
     }

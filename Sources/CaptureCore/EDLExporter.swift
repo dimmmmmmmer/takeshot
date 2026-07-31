@@ -18,8 +18,16 @@ public enum EDLExporter {
 
     /// Build the EDL text. `takes` are already filtered/ordered by the caller;
     /// nil when there is nothing to export.
+    ///
+    /// `cdl` is the session's active look when — and only when — that look is an
+    /// ASC CDL. It becomes an `*ASC_SOP`/`*ASC_SAT` pair on every event, which
+    /// is how a grade travels from the cart to the colourist inside a conform.
+    /// A .cube look passes nil: nine numbers cannot describe a 3D LUT, and
+    /// writing an identity SOP instead would tell the colourist the day was
+    /// graded flat when it was not.
     public static func selectsEDL(takes: [Take], title: String,
-                                  fps defaultFPS: Int = 25) -> String? {
+                                  fps defaultFPS: Int = 25,
+                                  cdl: CDLLook? = nil) -> String? {
         guard !takes.isEmpty else { return nil }
         let fps = takes.first?.startTimecode?.fps ?? defaultFPS
         let dropFrame = takes.first?.startTimecode?.isDropFrame ?? false
@@ -37,6 +45,7 @@ public enum EDLExporter {
             let frames = max(1, Int((take.durationSeconds * realRate).rounded()))
             lines += eventLines(for: take, index: index, recordFrame: recordFrame,
                                 frames: frames, timeline: timeline)
+            if let cdl { lines += ascLines(for: cdl) }
             lines += markerLines(for: take, recordFrame: recordFrame,
                                  timeline: timeline)
             lines.append("")
@@ -84,6 +93,25 @@ public enum EDLExporter {
         return lines
     }
 
+    /// The active ASC CDL as the two standard CMX comments.
+    ///
+    /// No space after the asterisk, unlike the `* FROM CLIP NAME:` line above
+    /// it: `*ASC_SOP` is what Resolve writes and what every CDL reader looks
+    /// for, and this pair is machine-read where the others are read by people.
+    ///
+    /// Four decimals, not more. The ASC's implementor note limits the values to
+    /// five digits of precision precisely so all nine fit in one 80-column CMX
+    /// comment — six decimals pushes the SOP line to 84 characters and out of
+    /// the format it is a comment in.
+    private static func ascLines(for cdl: CDLLook) -> [String] {
+        ["*ASC_SOP \(group(cdl.slope))\(group(cdl.offset))\(group(cdl.power))",
+         String(format: "*ASC_SAT %.4f", cdl.saturation)]
+    }
+
+    private static func group(_ rgb: CDLLook.RGB) -> String {
+        String(format: "(%.4f %.4f %.4f)", rgb.r, rgb.g, rgb.b)
+    }
+
     /// The take's markers as `* LOC:` locator lines, placed on the record
     /// timeline (Resolve imports these as timeline markers).
     private static func markerLines(for take: Take, recordFrame: Int,
@@ -105,7 +133,12 @@ public enum EDLExporter {
     }
 
     /// Reels are 8 chars in CMX: the roll when present, else a counter.
-    private static func reelName(for take: Take, index: Int) -> String {
+    ///
+    /// Not private: the ALE's Tape column is the same reel by definition, and
+    /// an assistant conforming this EDL while importing that log has to see one
+    /// name for one roll. Two implementations of "the reel of a take" is how
+    /// they would drift apart.
+    static func reelName(for take: Take, index: Int) -> String {
         let base = take.roll.isEmpty ? String(format: "TS%03d", index + 1)
                                      : take.roll
         let cleaned = base.replacingOccurrences(of: " ", with: "_")
