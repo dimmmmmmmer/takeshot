@@ -31,6 +31,30 @@ enum ScopeKind: String, CaseIterable, Identifiable {
         case .vector: return "scope_vector"
         }
     }
+
+    /// Whether the box draws a labelled value scale down its side. Only the two
+    /// scopes whose vertical axis IS a signal level have one — a histogram's
+    /// vertical axis is a population count and a vectorscope has no vertical
+    /// axis at all, so a percent scale beside either would be a lie.
+    var showsValueScale: Bool {
+        switch self {
+        case .waveform, .parade: return true
+        case .histogram, .vector: return false
+        }
+    }
+
+    /// How dim the trace-brightness slider is allowed to make this scope.
+    ///
+    /// The waveform and the parade are a spray of individual points and stay
+    /// legible all the way down. The histogram and the vectorscope are filled
+    /// shapes: below about 0.6 they stop reading as anything at all, so they
+    /// keep a floor the slider cannot go under.
+    var minimumTraceOpacity: Double {
+        switch self {
+        case .waveform, .parade: return 0
+        case .histogram, .vector: return 0.6
+        }
+    }
 }
 
 /// Scopes: waveform (image-colored luma or per-channel), RGB parade, histogram
@@ -181,44 +205,67 @@ struct ScopesPanel: View {
         }
     }
 
-    @ViewBuilder
+    /// One box: the chrome, whatever the kind draws inside it, and the drag that
+    /// reorders it.
+    ///
+    /// What varies between the four scopes is a table on `ScopeKind` (the value
+    /// scale, the brightness floor) and one factory below (`trace`); what varies
+    /// between the two surfaces is `singleScope`. Written out as one expression
+    /// this was four `case` arms, three ternaries and two conditions in a single
+    /// function, and adding a fifth scope meant editing it in four places.
     private func scopeBox(_ kind: ScopeKind, data: ScopeData,
                           of count: Int) -> some View {
         // one scope on screen needs no name and no reorder grip: the toggle
         // above it is the name, and there is nothing to reorder
         let reorderable = !singleScope && count > 1
-        let box = ScopeBox(title: count > 1 ? L(kind.titleKey) : "",
-                           showsDragHandle: reorderable,
-                           canvasOpacity: singleScope ? 0.85 : 1) {
+        return ScopeBox(title: count > 1 ? L(kind.titleKey) : "",
+                        showsDragHandle: reorderable,
+                        canvasOpacity: singleScope ? 0.85 : 1) {
             boxHeader(for: kind)
         } content: {
-            Group {
-                switch kind {
-                case .waveform:
-                    WaveformView(data: data, channel: waveformChannel)
-                        .opacity(traceBrightness)
-                case .parade:
-                    ParadeView(data: data)
-                        .opacity(traceBrightness)
-                case .histogram:
-                    HistogramView(data: data, channel: histogramChannel)
-                        .opacity(max(0.6, traceBrightness))
-                case .vector:
-                    VectorscopeView(data: data, skinToneLine: skinToneOn)
-                        .opacity(max(0.6, traceBrightness))
-                }
-            }
-            .environment(\.scopeGridBrightness, gridBrightness)
+            trace(kind, data: data)
+                .opacity(max(kind.minimumTraceOpacity, traceBrightness))
+                .environment(\.scopeGridBrightness, gridBrightness)
         } scale: {
-            if kind == .waveform || kind == .parade {
-                percentScale
-            }
+            if kind.showsValueScale { percentScale }
         }
-        // the drag is installed only where it leads somewhere: one box in the
-        // overlay used to accept a drag that could not reorder anything, which
-        // is the same lie the "drag to reorder" caption told
-        if reorderable {
-            box
+        .modifier(ScopeReorderDrag(kind: kind, enabled: reorderable,
+                                   dragged: $dragged, orderRaw: $orderRaw,
+                                   order: order))
+    }
+
+    /// The trace itself, and nothing about how it is framed.
+    @ViewBuilder
+    private func trace(_ kind: ScopeKind, data: ScopeData) -> some View {
+        switch kind {
+        case .waveform:
+            WaveformView(data: data, channel: waveformChannel)
+        case .parade:
+            ParadeView(data: data)
+        case .histogram:
+            HistogramView(data: data, channel: histogramChannel)
+        case .vector:
+            VectorscopeView(data: data, skinToneLine: skinToneOn)
+        }
+    }
+}
+
+/// Drag-to-reorder, installed only where it leads somewhere.
+///
+/// One box in the overlay used to accept a drag that could not reorder
+/// anything, which is the same lie the "drag to reorder" caption told — so the
+/// gesture is attached rather than disabled, and the decision lives here rather
+/// than as a branch inside the box builder.
+private struct ScopeReorderDrag: ViewModifier {
+    let kind: ScopeKind
+    let enabled: Bool
+    @Binding var dragged: ScopeKind?
+    @Binding var orderRaw: String
+    let order: [ScopeKind]
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
                 .onDrag {
                     dragged = kind
                     return NSItemProvider(object: kind.rawValue as NSString)
@@ -227,7 +274,7 @@ struct ScopesPanel: View {
                     target: kind, dragged: $dragged, orderRaw: $orderRaw,
                     order: order))
         } else {
-            box
+            content
         }
     }
 }

@@ -88,22 +88,9 @@ struct PreviewView: View {
                         } else if case .none = surfaceSource {
                             RawOpenFailedNotice() // RAW that failed to open
                         }
-                        // the wipe seam/handle rides the same centered aspect-fit
-                        // box the layer letterboxes the composite into
-                        if controller.compareMode == .wipe,
-                           (controller.viewerMode == .playback
-                            && controller.playbackURL != nil)
-                            || (controller.viewerMode == .record
-                                && controller.referencePinned) {
-                            Color.clear
-                                .aspectRatio(
-                                    controller.viewerMode == .playback
-                                        ? (controller.playbackAspect
-                                           ?? Self.liveAspect(controller.signalFormat))
-                                        : Self.liveAspect(controller.signalFormat),
-                                    contentMode: .fit)
-                                .overlay { WipeHandle() }
-                        }
+                        // the same overlay the fullscreen player and the
+                        // external display mount, from the same view
+                        CompareWipeOverlay()
                     }
                 }
             }
@@ -126,6 +113,31 @@ struct PreviewView: View {
                     .foregroundStyle(.red)
                     .padding(10)
             }
+        }
+    }
+}
+
+/// The draggable wipe seam, on whichever surface is drawing the player.
+///
+/// One view, mounted by all three of them — the main viewer, the fullscreen
+/// player and the external display. It used to be written inline in
+/// `PreviewView`, so the other two showed a seam nobody could move: the wipe is
+/// composited into the picture upstream and travels everywhere, the handle did
+/// not travel at all. The drag writes `controller.wipePosition`, which is what
+/// the compositor reads, so moving it on any surface moves it on all of them.
+///
+/// Draws nothing at all when there is no wipe — cheaper than each caller
+/// repeating the condition, and impossible for one of them to get wrong.
+struct CompareWipeOverlay: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        if controller.showsWipeHandle {
+            // the handle rides the same centered aspect-fit box the layer
+            // letterboxes the composite into
+            Color.clear
+                .aspectRatio(controller.compareAspect, contentMode: .fit)
+                .overlay { WipeHandle() }
         }
     }
 }

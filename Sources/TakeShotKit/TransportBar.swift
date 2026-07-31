@@ -18,7 +18,6 @@ struct TransportBar: View {
         HStack(spacing: 10) {
             TransportPlayGroup(
                 isPlaying: model.isPlaying,
-                glyph: .system(size: 14, weight: .bold), glyphWidth: 20,
                 skipBack: { model.skip(-5) },
                 togglePlay: { model.togglePlay() },
                 skipForward: { model.skip(5) })

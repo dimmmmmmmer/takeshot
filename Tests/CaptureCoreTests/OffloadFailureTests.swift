@@ -36,7 +36,7 @@ struct OffloadFailureTests {
         let result = try #require(report.destinations.first)
         #expect(result.outcome == .mismatched)
         #expect(result.mismatches == ["\(victim) (checksum mismatch)"])
-        #expect(result.filesVerified == OffloadFixtures.card.count - 1)
+        #expect(result.totals.filesVerified == OffloadFixtures.card.count - 1)
         // Renamed like a failed take, so nobody mistakes it for footage, and
         // absent from the manifest, so `mhl verify` cannot pass it either.
         #expect(!FileManager.default.fileExists(
@@ -78,7 +78,7 @@ struct OffloadFailureTests {
         #expect(!report.isFullyVerified)
         let goodResult = try #require(report.destinations.first { $0.url == good })
         #expect(goodResult.outcome == .verified)
-        #expect(goodResult.filesVerified == OffloadFixtures.card.count)
+        #expect(goodResult.totals.filesVerified == OffloadFixtures.card.count)
         let brokenResult = try #require(report.destinations.first { $0.url == broken })
         #expect(brokenResult.outcome == .failed)
         #expect(brokenResult.failure?.contains("CLIPS/index.xml") == true)
@@ -109,8 +109,8 @@ struct OffloadFailureTests {
 
         let result = try #require(report.destinations.first)
         #expect(result.outcome == .failed)
-        #expect(result.filesVerified == 0)
-        #expect(result.bytesWritten == 0)
+        #expect(result.totals.filesVerified == 0)
+        #expect(result.totals.bytesWritten == 0)
         #expect(result.failure?.isEmpty == false)
     }
 
@@ -142,7 +142,7 @@ struct OffloadFailureTests {
         #expect(report.filesProcessed == 1)
         let result = try #require(report.destinations.first)
         #expect(result.outcome == .cancelled)
-        #expect(result.filesVerified == 1)
+        #expect(result.totals.filesVerified == 1)
         let summary = try OffloadFixtures.summaryText(result)
         #expect(summary.contains("VERDICT: CANCELLED — 1 of "
             + "\(OffloadFixtures.card.count) files verified"))
@@ -216,14 +216,14 @@ struct OffloadFailureTests {
             chunkBytes: OffloadFixtures.chunk))
 
         #expect(!report.isFullyVerified)
-        #expect(report.sourceFailures.count == 1)
-        #expect(report.sourceFailures.first?.hasPrefix(victim) == true)
+        #expect(report.run.problems.source.count == 1)
+        #expect(report.run.problems.source.first?.hasPrefix(victim) == true)
         for result in report.destinations {
             // Nothing is wrong with the disk itself: every file it did get is
             // verified, and no half-copy of the unreadable one was left behind.
             #expect(result.failure == nil)
             #expect(result.mismatches.isEmpty)
-            #expect(result.filesVerified == OffloadFixtures.card.count - 1)
+            #expect(result.totals.filesVerified == OffloadFixtures.card.count - 1)
             #expect(!FileManager.default.fileExists(
                 atPath: result.url.appendingPathComponent(victim).path))
             let summary = try OffloadFixtures.summaryText(result)

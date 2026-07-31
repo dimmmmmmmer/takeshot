@@ -13,6 +13,10 @@ struct RemoteWebSocketFrame: Equatable {
         case close = 0x8
         case ping = 0x9
         case pong = 0xA
+
+        /// RFC 6455 §5.5: the high bit of the opcode marks a control frame,
+        /// which is short and never fragmented.
+        var isControl: Bool { rawValue & 0x8 != 0 }
     }
 
     var isFinal: Bool
@@ -34,10 +38,33 @@ struct RemoteWebSocketFrame: Equatable {
     /// more — which the caller answers by closing, never by resynchronizing:
     /// there is no way to find the next frame boundary in a stream you have
     /// lost track of.
+    ///
+    /// The three "still arriving" points and the four ways a frame is refused
+    /// used to be one function, and reading it meant holding all seven exits in
+    /// your head at once. It is the same four stages a frame actually has: the
+    /// two fixed bytes, the announced length, the rules that length has to
+    /// obey, and the masked body — each of which either has enough bytes to
+    /// decide or does not.
     static func decode(from buffer: Data) throws -> (frame: RemoteWebSocketFrame,
                                                      consumed: Int)? {
         let bytes = [UInt8](buffer)
         guard bytes.count >= 2 else { return nil }
+        let opcode = try opcode(in: bytes)
+        guard let (length, afterLength) = try payloadLength(in: bytes) else {
+            return nil
+        }
+        try checkRules(length: length, opcode: opcode, first: bytes[0])
+        let consumed = afterLength + 4 + length
+        guard bytes.count >= consumed else { return nil }
+        return (RemoteWebSocketFrame(
+                    isFinal: bytes[0] & 0x80 != 0, opcode: opcode,
+                    payload: unmasked(bytes, at: afterLength, length: length)),
+                consumed)
+    }
+
+    /// Stage 1 — the two fixed bytes: what kind of frame this is, and the two
+    /// rules that do not depend on how long it says it is.
+    private static func opcode(in bytes: [UInt8]) throws -> Opcode {
         guard bytes[0] & 0x70 == 0 else { throw RemoteFrameError.reservedBits }
         guard let opcode = Opcode(rawValue: bytes[0] & 0x0F) else {
             throw RemoteFrameError.unknownOpcode
@@ -46,28 +73,31 @@ struct RemoteWebSocketFrame: Equatable {
         // is either a broken client or someone speaking a different protocol
         // at the port.
         guard bytes[1] & 0x80 != 0 else { throw RemoteFrameError.notMasked }
+        return opcode
+    }
 
-        guard let measured = try payloadLength(in: bytes) else { return nil }
-        let (length, offsetAfterLength) = measured
-        var offset = offsetAfterLength
+    /// Stage 3 — what the announced length is allowed to be, now that both it
+    /// and the opcode are known.
+    private static func checkRules(length: Int, opcode: Opcode,
+                                   first: UInt8) throws {
         guard length <= maximumPayload else { throw RemoteFrameError.tooLarge }
+        guard opcode.isControl else { return }
         // A control frame carries at most 125 bytes and is never fragmented.
-        let isControl = opcode.rawValue & 0x8 != 0
-        if isControl, length > 125 || bytes[0] & 0x80 == 0 {
+        guard length <= 125, first & 0x80 != 0 else {
             throw RemoteFrameError.badControlFrame
         }
+    }
 
-        guard bytes.count >= offset + 4 + length else { return nil }
+    /// Stage 4 — the body, XORed back out from under its 4-byte mask.
+    private static func unmasked(_ bytes: [UInt8], at offset: Int,
+                                 length: Int) -> Data {
         let mask = Array(bytes[offset..<(offset + 4)])
-        offset += 4
-        var payload = Array(bytes[offset..<(offset + length)])
-        for index in 0..<payload.count {
+        let start = offset + 4
+        var payload = Array(bytes[start..<(start + length)])
+        for index in payload.indices {
             payload[index] ^= mask[index % 4]
         }
-        return (RemoteWebSocketFrame(isFinal: bytes[0] & 0x80 != 0,
-                                     opcode: opcode,
-                                     payload: Data(payload)),
-                offset + length)
+        return Data(payload)
     }
 
     /// The announced payload length and the offset just past it, or nil while

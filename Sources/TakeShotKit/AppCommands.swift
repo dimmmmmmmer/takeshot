@@ -82,6 +82,7 @@ private struct FileCommands: View {
         Divider()
 
         Button(L("offload_menu")) { controller.showOffloadSheet() }
+        Button(L("verify_menu")) { controller.chooseDiskToVerify() }
     }
 }
 

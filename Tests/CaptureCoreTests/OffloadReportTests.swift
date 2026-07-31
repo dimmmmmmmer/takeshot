@@ -14,28 +14,32 @@ struct OffloadReportTests {
                                              toolVersion: "0.1.0",
                                              hostname: "studio-mac.local")
 
-    private func context(files: Int = 3, bytes: Int64 = 4096,
-                         sourceFailures: [String] = [],
-                         scanFailures: [String] = []) -> OffloadSummary.Context {
-        OffloadSummary.Context(
+    private func run(files: Int = 3, bytes: Int64 = 4096,
+                     sourceFailures: [String] = [],
+                     scanFailures: [String] = []) -> OffloadRunFacts {
+        OffloadRunFacts(
             source: URL(fileURLWithPath: "/Volumes/CARD_A001"),
             algorithm: .xxh64, creator: creator,
-            started: Date(timeIntervalSince1970: 1_800_000_000),
-            finished: Date(timeIntervalSince1970: 1_800_000_930),
-            filesTotal: files, bytesTotal: bytes,
-            scanFailures: scanFailures, sourceFailures: sourceFailures)
+            span: OffloadSpan(
+                started: Date(timeIntervalSince1970: 1_800_000_000),
+                finished: Date(timeIntervalSince1970: 1_800_000_930)),
+            card: OffloadVolume(files: files, bytes: bytes),
+            problems: OffloadProblems(scan: scanFailures,
+                                      source: sourceFailures))
     }
 
     private func result(verified: Int = 3, mismatches: [String] = [],
                         failure: String? = nil,
                         cancelled: Bool = false) -> OffloadDestinationResult {
-        OffloadDestinationResult(
+        var result = OffloadDestinationResult(
             id: 0, url: URL(fileURLWithPath: "/Volumes/SSD1/CARD_A001"),
-            filesVerified: verified, filesTotal: 3, bytesWritten: 4096,
-            mismatches: mismatches, failure: failure,
-            manifestURL: URL(fileURLWithPath:
-                "/Volumes/SSD1/CARD_A001/ascmhl/0001_CARD_A001.mhl"),
-            summaryURL: nil, elapsed: 930, wasCancelled: cancelled)
+            totals: OffloadDestinationTotals(
+                filesVerified: verified, filesTotal: 3, bytesWritten: 4096,
+                elapsed: 930),
+            mismatches: mismatches, failure: failure, wasCancelled: cancelled)
+        result.manifestURL = URL(fileURLWithPath:
+            "/Volumes/SSD1/CARD_A001/ascmhl/0001_CARD_A001.mhl")
+        return result
     }
 
     // MARK: - the manifest
@@ -84,6 +88,43 @@ struct OffloadReportTests {
         _ = try XMLDocument(xmlString: xml)
     }
 
+    /// The whole document, to the byte.
+    ///
+    /// The assertions above check that the pieces are present; this one checks
+    /// that nothing moved. A manifest is re-parsed by somebody else's tool
+    /// months later, so indentation, element order and attribute spelling are
+    /// all part of the contract, and a refactor that "only" reorganised the
+    /// writer would otherwise pass every other test in this file.
+    @Test func theManifestIsByteIdentical() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let entries = [OffloadEntry(relativePath: "DCIM/A001C001.mov",
+                                    size: 200_000, hash: "ef46db3751d8e999")]
+
+        let xml = OffloadMHL.xml(entries: entries, algorithm: .xxh64,
+                                 creator: creator, date: date)
+
+        #expect(xml == """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <hashlist version="2.0" xmlns="urn:ASC:MHL:v2.0">
+          <creatorinfo>
+            <creationdate>\(OffloadFormat.iso8601(date))</creationdate>
+            <hostname>studio-mac.local</hostname>
+            <tool version="0.1.0">TakeShot</tool>
+          </creatorinfo>
+          <processinfo>
+            <process>transfer</process>
+          </processinfo>
+          <hashes>
+            <hash>
+              <path size="200000">DCIM/A001C001.mov</path>
+              <xxh64 action="original">ef46db3751d8e999</xxh64>
+            </hash>
+          </hashes>
+        </hashlist>
+
+        """)
+    }
+
     /// The manifest name carries its generation and the folder it describes, and
     /// nothing in it may be a path separator.
     @Test func theManifestNameIsSafeAndNumbered() throws {
@@ -105,25 +146,69 @@ struct OffloadReportTests {
 
     // MARK: - the summary
 
+    /// The whole report, to the byte.
+    ///
+    /// The label column is padded to the longest label, so renaming any one of
+    /// them silently re-indents every other line; the rest of this file checks
+    /// for substrings and would not notice. The two timestamps are composed
+    /// through `OffloadFormat` because they carry the machine's UTC offset —
+    /// everything else is literal.
+    @Test func theSummaryIsByteIdentical() {
+        let facts = run()
+
+        let text = OffloadSummary.text(result: result(), run: facts)
+
+        #expect(text == """
+        TakeShot verified offload
+        =========================
+
+        Source:       /Volumes/CARD_A001
+        Destination:  /Volumes/SSD1/CARD_A001
+        Hash:         xxHash64 (xxh64)
+        Files:        3 of 3 verified
+        Card size:    4.1 kB (4,096 bytes)
+        Copied:       4.1 kB (4,096 bytes)
+        Started:      \(OffloadFormat.timestamp(facts.span.started))
+        Finished:     \(OffloadFormat.timestamp(facts.span.finished))
+        Elapsed:      15 min 30 s
+        Average:      0.0 MB/s
+        Manifest:     ascmhl/0001_CARD_A001.mhl
+        Written by:   TakeShot 0.1.0 on studio-mac.local
+
+        Every file listed in the manifest was written to this disk, flushed to the
+        device, read back with the cache bypassed and hashed again. A file whose
+        hash did not match is NOT in the manifest and is named below.
+
+        VERDICT: all 3 files verified
+
+        """)
+    }
+
     @Test func theVerdictNamesTheWorstThingThatHappened() {
-        let full = context()
-        #expect(OffloadSummary.verdict(result: result(), context: full)
+        let full = run()
+        #expect(OffloadSummary.verdict(result: result(), run: full)
             == "all 3 files verified")
         #expect(OffloadSummary.verdict(
             result: result(verified: 2, mismatches: ["A001.mov (checksum mismatch)"]),
-            context: full).hasPrefix("1 FILE(S) DID NOT MATCH"))
+            run: full).hasPrefix("1 FILE(S) DID NOT MATCH"))
         #expect(OffloadSummary.verdict(
             result: result(verified: 1, failure: "no space left"),
-            context: full)
+            run: full)
             == "FAILED — no space left (1 of 3 files verified before it stopped)")
         #expect(OffloadSummary.verdict(result: result(verified: 1, cancelled: true),
-                                       context: full)
+                                       run: full)
             == "CANCELLED — 1 of 3 files verified; do NOT wipe the card")
         // A destination whose files all matched but where the card itself could
         // not be read completely is NOT a verified offload.
         #expect(OffloadSummary.verdict(
             result: result(),
-            context: context(sourceFailures: ["A001.mov (I/O error)"]))
+            run: run(sourceFailures: ["A001.mov (I/O error)"]))
+            .hasPrefix("INCOMPLETE"))
+        // …and the same for an entry the scan could not take at all: the two
+        // lists are one question, so neither may be consulted without the other.
+        #expect(OffloadSummary.verdict(
+            result: result(),
+            run: run(scanFailures: ["PRIVATE (Permission denied)"]))
             .hasPrefix("INCOMPLETE"))
     }
 
@@ -134,7 +219,7 @@ struct OffloadReportTests {
                             failure: "volume disappeared", cancelled: true)
 
         #expect(broken.outcome == .failed)
-        #expect(OffloadSummary.verdict(result: broken, context: context())
+        #expect(OffloadSummary.verdict(result: broken, run: run())
             .hasPrefix("FAILED — volume disappeared"))
     }
 
@@ -143,8 +228,8 @@ struct OffloadReportTests {
             result: result(verified: 1,
                            mismatches: ["DCIM/A001.mov (checksum mismatch)"],
                            failure: "the volume is read-only"),
-            context: context(sourceFailures: ["DCIM/A002.mov (I/O error)"],
-                             scanFailures: ["PRIVATE (Permission denied)"]))
+            run: run(sourceFailures: ["DCIM/A002.mov (I/O error)"],
+                     scanFailures: ["PRIVATE (Permission denied)"]))
 
         #expect(text.contains("DESTINATION FAILED\n  the volume is read-only"))
         #expect(text.contains("CHECKSUM MISMATCHES (1)"))
@@ -158,7 +243,7 @@ struct OffloadReportTests {
     /// The claim the DIT is relying on has to be in writing next to the numbers,
     /// because it is the difference between this file and a copy log.
     @Test func theSummaryStatesHowTheCopiesWereVerified() {
-        let text = OffloadSummary.text(result: result(), context: context())
+        let text = OffloadSummary.text(result: result(), run: run())
 
         #expect(text.contains("read back with the cache bypassed and hashed again"))
         #expect(text.contains("Written by:"))
@@ -171,7 +256,7 @@ struct OffloadReportTests {
         var orphan = result()
         orphan.manifestURL = nil
 
-        #expect(OffloadSummary.text(result: orphan, context: context())
+        #expect(OffloadSummary.text(result: orphan, run: run())
             .contains("NOT WRITTEN"))
     }
 

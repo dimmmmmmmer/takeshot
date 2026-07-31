@@ -58,6 +58,34 @@ extension CaptureController {
             && playbackURL != nil
     }
 
+    /// Whether the draggable wipe seam belongs on screen.
+    ///
+    /// The wipe arrives already composited in the picture, so the seam is
+    /// visible on every surface that draws the player — but the HANDLE that
+    /// moves it lived in `PreviewView` alone. On the fullscreen player and the
+    /// external display the operator could see the seam and had no way to touch
+    /// it, which reads as a broken control rather than as a missing one. Same
+    /// shape as `showsCompareSplit`, and for the same reason: one decision, read
+    /// by all three.
+    ///
+    /// In playback there has to be a clip; in record there has to be a pinned
+    /// reference, or there is no B side and the seam divides a picture from
+    /// itself.
+    var showsWipeHandle: Bool {
+        guard compareMode == .wipe else { return false }
+        return viewerMode == .playback ? playbackURL != nil : referencePinned
+    }
+
+    /// The aspect the wipe seam rides: the composite is letterboxed into a
+    /// centered aspect-fit box, and a handle that used the whole surface would
+    /// sit off the picture at the top and bottom of a 16:9 frame in a taller
+    /// window.
+    var compareAspect: CGFloat {
+        let live = PreviewView.liveAspect(signalFormat)
+        guard viewerMode == .playback else { return live }
+        return playbackAspect ?? live
+    }
+
     /// Hotkey punch-in: straight to 2x and back off. Reads the level the pinch
     /// gesture may have left on screen (see +Assist), so the key never toggles
     /// off a magnification it cannot see.
