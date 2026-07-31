@@ -26,10 +26,21 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 # Export CODESIGN_IDENTITY to a Developer ID ("Developer ID Application: Name
 # (TEAMID)") once you have one and the grants survive rebuilds.
 IDENTITY="${CODESIGN_IDENTITY:--}"
-codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP"
+# Library validation (part of the hardened runtime) refuses frameworks signed
+# by another team unless the app carries disable-library-validation — and
+# DeckLinkAPI/BlackmagicRAW ARE another team's frameworks. An ad-hoc identity
+# has no team at all, so a hardened ad-hoc build can never load them: the
+# bundled app was device-blind while every unbundled build saw the board
+# (reproduced by re-signing the CLI probe both ways). Ad-hoc builds therefore
+# sign WITHOUT the hardened runtime; a real Developer ID keeps it, with the
+# entitlement notarization allows.
 if [ "$IDENTITY" = "-" ]; then
-    echo "Signed ad-hoc. Set CODESIGN_IDENTITY for a stable signature."
+    codesign --force --timestamp=none --sign - "$APP"
+    echo "Signed ad-hoc (no hardened runtime: library validation would block"
+    echo "the Blackmagic frameworks). Set CODESIGN_IDENTITY for a stable signature."
 else
+    codesign --force --options runtime --timestamp=none \
+        --entitlements scripts/takeshot.entitlements --sign "$IDENTITY" "$APP"
     echo "Signed with: $IDENTITY"
 fi
 

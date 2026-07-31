@@ -244,10 +244,18 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     }
 }
 
++ (BOOL)isCompiledWithSDK {
+    return YES;
+}
+
 + (BOOL)isSDKAvailable {
     IDeckLinkIterator *iterator = CreateDeckLinkIteratorInstance();
     if (!iterator) {
-        return NO; // Desktop Video runtime not installed
+        // Desktop Video runtime not installed — or not loadable: a
+        // hardened-runtime binary without disable-library-validation refuses
+        // a framework signed by another team, and this is exactly how the
+        // bundled app went device-blind while unbundled builds saw the board.
+        return NO;
     }
     iterator->Release();
     return YES;
@@ -869,6 +877,10 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 #else // stub without SDK
 
 @implementation CDLDeviceManager
+
++ (BOOL)isCompiledWithSDK {
+    return NO;
+}
 
 + (BOOL)isSDKAvailable {
     return NO;

@@ -26,6 +26,11 @@ NS_ASSUME_NONNULL_BEGIN
 @interface CDLDeviceManager : NSObject
 /// Whether the bridge was compiled with the DeckLink SDK and the runtime framework is available.
 + (BOOL)isSDKAvailable;
+/// YES when the target was COMPILED against the DeckLink SDK headers. Distinct
+/// from isSDKAvailable, which also needs the Desktop Video runtime to load —
+/// and a hardened-runtime binary without the disable-library-validation
+/// entitlement blocks that load even with Desktop Video installed.
++ (BOOL)isCompiledWithSDK;
 /// List of connected devices (empty in stub mode).
 + (NSArray<CDLDeviceInfo *> *)devices;
 /// Subscribe to hot-plug: handler is called when any DeckLink device is
