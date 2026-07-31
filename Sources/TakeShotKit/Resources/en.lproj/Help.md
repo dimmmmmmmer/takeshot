@@ -129,10 +129,22 @@ day's ratings.
 
 ## Verified copy (offload)
 
-Copies an arbitrary folder — a camera card, a sound roll — recursively, hashing
-every file with SHA-256 on both sides and writing `offload-manifest.csv` next to
-the copy. The source's own folder name is preserved inside the destination. A
-file that does not verify is reported; it is never reported as done.
+Copies an arbitrary folder — a camera card, a sound roll — to one or several
+destinations in a single pass: every file is read once, hashed on the way
+(xxHash64 by default), and each copy is verified by re-reading it from the
+destination disk. The source's own folder name is preserved inside every
+destination. A file that does not verify is reported; a run is never reported
+as done with an error inside it.
+
+Each destination receives two records: an industry-standard **ASC MHL
+manifest** (`ascmhl/…mhl` — the receipt post-production tools verify against)
+and a plain-text **summary** with the numbers — files, bytes, times, speed and
+the one verdict line.
+
+**Verify disk…** (next to Offload in the takes-panel strip and in the File
+menu) is the reverse: point it at a copy made earlier and it re-reads every
+file against the newest manifest on that disk, reporting what verified, what
+mismatched, what is missing and what is a stray.
 
 This is for originals. TakeShot's own takes do not need it — they are not the
 original media. A separate **verified backup** folder can be set in Settings to

@@ -178,8 +178,11 @@ would drop a marker while a roll name is being typed.
   out would place the marker hours past the end of the take. The conversion
   itself lives in `+MarkerTime`, shared with the shift report's duration
   counting and with the controller's anchoring of a recording's markers.
-- `offload-manifest.csv` — written beside a verified copy, not in the record
-  folder.
+- Offload writes into each destination: `ascmhl/NNNN_<name>_<stamp>.mhl`
+  (an ASC MHL v2.0 hashlist outside tools can verify) and
+  `offload-summary_<stamp>.txt` (the human-readable verdict). The checksum is
+  per-run and defaults to xxHash64 (`OffloadHashAlgorithm`); "Verify disk…"
+  re-reads a copy against the newest manifest generation.
 
 ## Localization
 
