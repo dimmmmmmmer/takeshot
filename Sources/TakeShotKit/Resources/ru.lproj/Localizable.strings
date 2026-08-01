@@ -193,7 +193,7 @@
 "video_levels" = "Уровни входа";
 "levels_limited" = "Limited (16-235) — расширять";
 "levels_full" = "Full (0-255) — как есть";
-"levels_hint" = "Что источник шлёт по проводу. Limited (например, HDMI камеры) один раз расширяется для корректного контраста; Full (например, плейаут-устройство с выходом Full) проходит без изменений. В файлы всегда пишется стандартный legal-range.";
+"levels_hint" = "Что источник шлёт по проводу. Limited (например, HDMI камеры) один раз расширяется для корректного контраста, а коды вне 16-235 (64-940 в 10 битах) при этом срезаются — и на экране, и в файле. «С запасами» расширяет весь легальный размах камеры, поэтому подчёрные и сверхбелые сохраняются для цветокоррекции; картинка чуть менее контрастная. Full (например, плейаут-устройство с выходом Full) проходит без изменений. В файлы всегда пишется стандартный legal-range.";
 "color_tags_hint" = "Дефолт — Rec.709 nclc 1-1-1, limited: то, чего ждут 99% HD-пайплайнов. Настройка уровней полноценно заработает с форматами живого железа";
 
 "preset_arri35" = "ARRI Alexa 35";
@@ -516,3 +516,12 @@
 /* the last-take card on the remote page: poster frame, name, rating */
 "remote_last_take" = "Последний дубль";
 "remote_poster_wait" = "Кадра ещё нет";
+
+/* === scopes: 10-bit wire reading and the third input-levels mode === */
+"levels_excursions" = "Limited, с запасами (4-1019)";
+"scope_wire_badge" = "ПРОВОД";
+"scope_wire_hint" = "Измеряется 10-битный сигнал с провода, до расширения уровней: трасса может уходить ниже 0% и выше 100%, эти полосы затенены.";
+
+/* the scopes window's scene name — never drawn (the window wears the app's own
+   chrome), but it is what the Window menu and Mission Control list it under */
+"scopes_window_title" = "Скопы";

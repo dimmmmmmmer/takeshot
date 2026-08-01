@@ -41,19 +41,29 @@ struct WindowReporter: NSViewRepresentable {
 
 /// Window-level chrome the SwiftUI scene modifiers cannot express.
 enum WindowChrome {
-    /// Hide a window's title text while KEEPING the title string.
+    /// The app's window chrome: buttons over the content, no title strip, and
+    /// the title STRING kept.
     ///
-    /// The two are separate on purpose: the string is what the Window menu and
-    /// the Mission Control label read, and an auxiliary window with an empty
-    /// title is unfindable there. What the operator must not see is the title
-    /// STRIP over the content — the app draws its own chrome and a system title
-    /// row on one window out of five reads as a bug.
-    static func hideTitle(of window: NSWindow) {
+    /// Title text and title string are separate on purpose: the string is what
+    /// the Window menu and the Mission Control label read, and an auxiliary
+    /// window with an empty title is unfindable there. What the operator must
+    /// not see is the title STRIP over the content — the app draws its own
+    /// chrome and a system title row on one window out of five reads as a bug.
+    ///
+    /// One implementation, applied three ways: `AppDelegate` runs it over every
+    /// window at launch and again as each one becomes key, and the two windows
+    /// that must not wait for a key event — the VANC monitor and the scopes —
+    /// ask for it from their own view tree through `monolithicWindowChrome()`.
+    /// It used to exist twice, here and on the delegate, and the copies had
+    /// drifted: only the delegate's cleared the toolbar, which is why the
+    /// scopes window kept a system title bar the rest of the app does not have.
+    static func makeMonolithic(_ window: NSWindow) {
         guard window.styleMask.contains(.titled) else { return }
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.styleMask.insert(.fullSizeContentView)
+        window.toolbar = nil
     }
 
     /// Drop the focus AppKit handed the window when it opened.
@@ -84,10 +94,11 @@ enum WindowChrome {
 }
 
 extension View {
-    /// Keep the window's title out of its title bar (see `WindowChrome.hideTitle`).
-    func hidesWindowTitle() -> some View {
+    /// Give this scene's window the app's own chrome, without waiting for it to
+    /// become key (see `WindowChrome.makeMonolithic`).
+    func monolithicWindowChrome() -> some View {
         background(WindowReporter { window in
-            WindowChrome.hideTitle(of: window)
+            WindowChrome.makeMonolithic(window)
         })
     }
 

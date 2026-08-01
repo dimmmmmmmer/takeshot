@@ -225,10 +225,23 @@ final class PlaybackFrameTap: @unchecked Sendable {
         queue.async { self.detachLocked() }
     }
 
-    /// Ticks between scope passes while playing. The timer polls at ~60 Hz, so
-    /// 4 is ~15 updates a second — the analyzer does a 1080p pass in ~14 ms and
-    /// the busy gate skips anything it cannot keep up with.
+    /// How often the tap asks the player for a frame: ~60 Hz.
+    static let tickIntervalMilliseconds = 16
+
+    /// Ticks between scope passes while playing. At the interval above, 4 is
+    /// ~15 updates a second — the same rate the live path aims for — and the
+    /// busy gate skips anything the analyzer cannot keep up with.
+    ///
+    /// Named next to the interval it is a multiple of, rather than as a 16
+    /// inside the timer call: the delivered rate is the two of them together,
+    /// it is a number the brief for the scopes work is written against, and
+    /// `theScopeRateOffPlaybackIsFifteenHertz` asserts it from here.
     static let scopeTickStride = 4
+
+    /// Scope passes a second offered while a clip plays.
+    static var scopeUpdatesPerSecond: Double {
+        1000 / Double(tickIntervalMilliseconds * scopeTickStride)
+    }
 
     // MARK: - on queue
 

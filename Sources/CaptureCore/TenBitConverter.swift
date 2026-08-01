@@ -14,9 +14,16 @@ import Foundation
 ///   unbiased — versus the systematic +0.4 8-bit codes of the BGRA path that
 ///   steep viewing LUTs amplified into a visible lift.
 ///
-/// Levels follow the same policy as the 8-bit path: limited sources
-/// (64–940, the 10-bit equivalent of 16–235) are expanded to full range
-/// once, on wire code values; full-range sources pass through.
+/// Levels follow the same policy as the 8-bit path, and the SAME three-way
+/// choice: `full` passes wire codes through, `limited` expands 64–940 onto the
+/// full scale and clamps everything outside it, and
+/// `limitedPreservingExcursions` expands the camera's whole legal swing
+/// 4–1019 instead, so no code is destroyed on the way to either product.
+///
+/// The expansion is one table either way — the mode picks its two ends. That
+/// matters for the recorded file as much as for the screen: `precomp` is built
+/// FROM the expanded value, so a code the expansion clamps is gone from the
+/// file too, not just from the preview.
 public final class TenBitConverter {
     public static let r210 = OSType(0x7232_3130) // 'r210'
 
@@ -24,7 +31,7 @@ public final class TenBitConverter {
     private var expand = [UInt16](repeating: 0, count: 1024)
     /// wire code → VT-coded record value (precompensated).
     private var precomp = [UInt16](repeating: 0, count: 1024)
-    private var limitedRange = true
+    private var levels = InputLevels.limited
 
     private let displayPool = PixelBufferPool()
     private let recordPool = PixelBufferPool(format: TenBitConverter.r210)
@@ -34,21 +41,26 @@ public final class TenBitConverter {
     }
 
     /// `limited` mirrors the 8-bit levels setting (auto → limited for RGB444).
+    /// Kept because it says exactly what the two original modes were; the
+    /// three-way form below is what the pipeline calls.
     public func setLimitedRange(_ limited: Bool) {
-        guard limited != limitedRange else { return }
-        limitedRange = limited
+        setLevels(limited ? .limited : .full)
+    }
+
+    /// The resolved input-levels mode for the current source.
+    public func setLevels(_ newLevels: InputLevels) {
+        guard newLevels != levels else { return }
+        levels = newLevels
         rebuildTables()
     }
 
     private func rebuildTables() {
+        let window = levels.wireWindow
+        let span = Double(window.white - window.black)
         for code in 0..<1024 {
-            let full: Int
-            if limitedRange {
-                full = min(1023, max(0, Int((Double(code) - 64) * 1023 / 876
-                                            + 0.5)))
-            } else {
-                full = code
-            }
+            let full = levels == .full ? code
+                : min(1023, max(0, Int((Double(code - window.black)) * 1023
+                                       / span + 0.5)))
             expand[code] = UInt16(full)
             // VT window: video-range RGB 64–960 expands to 0–1023 in the codec
             precomp[code] = UInt16(64 + Int(Double(full) * 896 / 1023 + 0.5))

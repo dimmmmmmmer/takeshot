@@ -10,14 +10,28 @@ import Foundation
 /// BT.709 luma Y' = 0.2126 R' + 0.7152 G' + 0.0722 B', full-range chroma
 /// Cb = (B'−Y')/1.8556, Cr = (R'−Y')/1.5748 — the same math positions the
 /// vectorscope graticule targets, so a 75% bar lands exactly on its box.
+///
+/// The samples themselves are 10-bit (0…1023) whatever the source is. An 8-bit
+/// frame is bit-replicated up, which is exact at both ends and costs a table
+/// lookup; a 10-bit r210 wire frame keeps every code it arrived with. The trace
+/// maps are 512 rows for the same reason: quantizing a 10-bit signal onto 256
+/// rows puts it straight back where it started, and a near-flat gradient drawn
+/// on 256 rows is the "8-bit, undetailed" staircase the operator sees.
 public struct ScopeData: Sendable {
-    /// Waveform trace resolution.
+    /// Waveform trace resolution. 512 rows is retina for the box the scopes are
+    /// drawn in (~300 pt tall on a 2x display) — anything less is upscaled and
+    /// the trace gains stairs that are not in the signal.
     public static let waveWidth = 512
-    public static let waveHeight = 256
-    /// Vectorscope resolution (square).
+    public static let waveHeight = 512
+    /// Vectorscope resolution (square). Deliberately NOT raised with the
+    /// waveform: the grid puts ~138 k samples on this map and 256² already
+    /// gives it two per cell. At 384² most cells would hold less than one, and
+    /// a vectorscope drawn from a sparser map does not gain detail — it gains
+    /// gaps. What it needed was the 1-2-1 softening the traces already had,
+    /// which it now gets.
     public static let vectorSize = 256
     /// Grayscale density maps, row-major `waveWidth * waveHeight`;
-    /// row 0 is 100% (top of the scope).
+    /// row 0 is the highest code value (the top of the scope).
     public let waveformY: [UInt8]
     public let waveformR: [UInt8]
     public let waveformG: [UInt8]
@@ -25,14 +39,18 @@ public struct ScopeData: Sendable {
     /// Luma waveform colored by the image: RGBA `waveWidth * waveHeight * 4`,
     /// brightness = trace density, chroma = mean color of contributing pixels.
     public let waveformYColor: [UInt8]
-    /// 256-bin histograms.
+    /// 256-bin histograms, on the same vertical scale as the traces: bin `i`
+    /// covers 10-bit codes `4i…4i+3`.
     public let histR: [Int]
     public let histG: [Int]
     public let histB: [Int]
     public let histY: [Int]
     /// Vectorscope density: x = Cb (right = +), y = Cr (top = +), center at
-    /// (vectorSize/2, vectorSize/2), full-range chroma ±127 maps to ±half-size.
+    /// (vectorSize/2, vectorSize/2), full-range chroma ±511 maps to ±half-size.
     public let vector: [UInt8]
+    /// Where 0 % and 100 % sit on the trace maps. `.full` for an already
+    /// expanded frame; a wire frame leaves room for the excursions.
+    public let nominal: ScopeNominalRange
     /// Monotonic frame counter — views cache derived images against it so a
     /// window resize doesn't rebuild them.
     public let sequence: Int
@@ -40,10 +58,29 @@ public struct ScopeData: Sendable {
 }
 
 /// Computes scope data from capture/playback pixel buffers.
-/// Supports 32BGRA, 2vuy and 420v frames.
+/// Supports 32BGRA, r210, 2vuy and 420v frames.
 public enum ScopeAnalyzer {
+    /// The internal sample scale: everything the accumulator sees is a 10-bit
+    /// code, whatever the source carried.
+    static let sampleLevels = 1024
+
+    /// 8-bit code → 10-bit, by bit replication: 0 stays 0 and 255 becomes 1023,
+    /// so the scale is filled end to end with no gain error. It agrees with a
+    /// multiply by 1023/255 to within a code everywhere (16 → 64 exactly,
+    /// 235 → 943, which is what 235·1023/255 rounds to as well — nominal white
+    /// in 10 bits is 940, and the three codes between them are the price of a
+    /// signal that only ever had 8), but it is a shift and an or, and it runs
+    /// `gridCols * gridRows * 3` times a frame.
+    ///
+    /// The difference does not reach a graticule: a widened frame has already
+    /// been through the levels stage and is read as `.full`, where the nominal
+    /// pair is the top and bottom of the map rather than 64 and 940.
+    @inline(__always)
+    static func widened(_ code: Int) -> Int { (code << 2) | (code >> 6) }
+
     /// Full-range BT.709 chroma of gamma-encoded R'G'B' — shared by the
-    /// analysis and the vectorscope graticule so targets are exact.
+    /// analysis and the vectorscope graticule so targets are exact. Scale-free:
+    /// the caller's units come back out.
     public static func chroma(r: Double, g: Double, b: Double)
         -> (cb: Double, cr: Double) {
         let y = 0.2126 * r + 0.7152 * g + 0.0722 * b
@@ -62,23 +99,33 @@ public enum ScopeAnalyzer {
 
     /// `region` is the part of the frame to analyze — the punched-in crop the
     /// viewer is showing, or `.full` for the whole frame.
+    ///
+    /// `wireLevels` only means anything for an r210 frame, which is the one
+    /// format that reaches the analyzer before the levels stage has touched it.
+    /// Every other format arrives already expanded and is read as `.full`.
     public static func analyze(_ pixelBuffer: CVPixelBuffer,
-                               region: ScopeRegion = .full) -> ScopeData? {
+                               region: ScopeRegion = .full,
+                               wireLevels: ScopeWireLevels = .full) -> ScopeData? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
         switch CVPixelBufferGetPixelFormatType(pixelBuffer) {
         case kCVPixelFormatType_32BGRA:
             return PackedPlane(pixelBuffer).flatMap {
-                analyzed(BGRAReader(plane: $0), region: region)
+                analyzed(BGRAReader(plane: $0), region: region, levels: .full)
+            }
+        case TenBitConverter.r210:
+            return PackedPlane(pixelBuffer).flatMap {
+                analyzed(R210Reader(plane: $0), region: region,
+                         levels: wireLevels)
             }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
             return PackedPlane(pixelBuffer).flatMap {
-                analyzed(TwoVUYReader(plane: $0), region: region)
+                analyzed(TwoVUYReader(plane: $0), region: region, levels: .full)
             }
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: // '420v'
             return BiPlanar420Reader(pixelBuffer).flatMap {
-                analyzed($0, region: region)
+                analyzed($0, region: region, levels: .full)
             }
         default:
             return nil
@@ -92,7 +139,7 @@ public enum ScopeAnalyzer {
     static let gridCols = ScopeData.waveWidth
     static let gridRows = 270
 
-    /// One sample as the accumulator takes it: full-range gamma-encoded R'G'B',
+    /// One sample as the accumulator takes it: 10-bit gamma-encoded R'G'B',
     /// plus the wire chroma/luma for YUV sources (nil for RGB ones — see
     /// `Accumulator.add`).
     struct Sample {
@@ -112,17 +159,18 @@ public enum ScopeAnalyzer {
         func sample(x: Int, y: Int) -> Sample
     }
 
-    /// Walk the grid once, accumulating every sample. The three formats differ
-    /// only in how a pixel is fetched, so this is the whole per-frame pass.
+    /// Walk the grid once, accumulating every sample. The formats differ only
+    /// in how a pixel is fetched, so this is the whole per-frame pass.
     ///
     /// The grid always has the same shape — only the window it is stretched
     /// over changes with `region`, so a punched-in scope has exactly the same
     /// trace density as a full-frame one.
     private static func analyzed<Reader: FrameReader>(
-        _ reader: Reader, region: ScopeRegion) -> ScopeData? {
+        _ reader: Reader, region: ScopeRegion,
+        levels: ScopeWireLevels) -> ScopeData? {
         guard reader.width > 1, reader.height > 0 else { return nil }
         let window = region.pixels(width: reader.width, height: reader.height)
-        let acc = Accumulator()
+        let acc = Accumulator(levels: levels)
         for gy in 0..<gridRows {
             let y = window.y + gy * window.height / gridRows
             for gx in 0..<gridCols {
@@ -138,7 +186,7 @@ public enum ScopeAnalyzer {
 
     // MARK: - the source formats
 
-    /// The one interleaved plane 32BGRA and 2vuy are both stored in: same
+    /// The one interleaved plane 32BGRA, r210 and 2vuy are all stored in: same
     /// lookup, same frame size, only the bytes under (x, y) differ.
     struct PackedPlane {
         let base: UnsafePointer<UInt8>
@@ -163,13 +211,35 @@ public enum ScopeAnalyzer {
         var plane: PackedPlane { get }
     }
 
-    /// 32BGRA — already full-range R'G'B', byte order B G R A.
+    /// 32BGRA — already full-range R'G'B', byte order B G R A, widened to the
+    /// analyzer's 10-bit sample scale.
     private struct BGRAReader: PackedPlaneReader {
         let plane: PackedPlane
 
         func sample(x: Int, y: Int) -> Sample {
             let p = plane.row(y) + x * 4
-            return Sample(r: Int(p[2]), g: Int(p[1]), b: Int(p[0]))
+            return Sample(r: widened(Int(p[2])), g: widened(Int(p[1])),
+                          b: widened(Int(p[0])))
+        }
+    }
+
+    /// 'r210' — the 10-bit RGB the board actually delivers, big-endian
+    /// 2:10:10:10. This is the parallel reader the scopes exist for: it sees
+    /// the wire codes BEFORE `TenBitConverter` expands them into the 8-bit
+    /// display buffer, so nothing has been quantized to 256 levels and nothing
+    /// outside 64…940 has been clamped away yet.
+    private struct R210Reader: PackedPlaneReader {
+        let plane: PackedPlane
+
+        func sample(x: Int, y: Int) -> Sample {
+            // rows of an r210 buffer are 4-byte aligned by construction, but
+            // loadUnaligned costs nothing here and cannot trap on a stride the
+            // board picked
+            let word = UInt32(bigEndian: UnsafeRawPointer(plane.row(y) + x * 4)
+                .loadUnaligned(as: UInt32.self))
+            return Sample(r: Int((word >> 20) & 0x3FF),
+                          g: Int((word >> 10) & 0x3FF),
+                          b: Int(word & 0x3FF))
         }
     }
 
@@ -218,21 +288,23 @@ public enum ScopeAnalyzer {
         }
     }
 
-    /// BT.709 video-range YCbCr → full-range R'G'B', shared by both YUV
-    /// readers. The wire chroma/luma ride along as `native*` values so illegal
+    /// BT.709 video-range YCbCr → full-range R'G'B' on the 10-bit sample scale,
+    /// shared by both YUV readers. The `>> 6` is the usual `>> 8` of the 8-bit
+    /// conversion followed by the `<< 2` onto this scale, folded into one shift.
+    /// The wire chroma/luma ride along as `native*` values so illegal
     /// excursions are plotted as-is instead of being folded into the RGB gamut
     /// by the clamp.
     fileprivate static func videoRangeSample(luma: Int, cb: Int, cr: Int) -> Sample {
         let yv = (luma - 16) * 298
-        return Sample(r: clamp((yv + 459 * cr) >> 8),
-                      g: clamp((yv - 137 * cr - 55 * cb) >> 8),
-                      b: clamp((yv + 541 * cb) >> 8),
-                      nativeChroma: (Double(cb) * 255 / 224,
-                                     Double(cr) * 255 / 224),
-                      nativeLuma: clamp(yv >> 8))
+        return Sample(r: clamp((yv + 459 * cr) >> 6),
+                      g: clamp((yv - 137 * cr - 55 * cb) >> 6),
+                      b: clamp((yv + 541 * cb) >> 6),
+                      nativeChroma: (Double(cb) * 1023 / 224,
+                                     Double(cr) * 1023 / 224),
+                      nativeLuma: clamp(yv >> 6))
     }
 
-    private static func clamp(_ v: Int) -> Int { min(255, max(0, v)) }
+    private static func clamp(_ v: Int) -> Int { min(sampleLevels - 1, max(0, v)) }
 }
 
 /// The frame size of a packed-plane reader is the plane's — stated once so the

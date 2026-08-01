@@ -26,6 +26,23 @@ struct ViewSettingsTests {
         }
     }
 
+    /// The input-levels picker gained a third option, and it is the longest
+    /// string in the row by some way ("Limited, preserving excursions
+    /// (4-1019)"). A menu picker is as wide as its widest option, so this is
+    /// exactly the shape of row that silently truncates.
+    @Test func theInputLevelsRowFitsTheSettingsForm() async throws {
+        try await ViewProbe.run { probe in
+            let form = ViewBudget.settingsFormWidth
+            let ideal = probe.fittingSizes { InputLevelsPicker() }
+            #expect(ideal.ru.width <= form,
+                    "the levels row wants \(ideal.ru.width)pt of \(form)")
+            #expect(ideal.en.width <= form,
+                    "the levels row wants \(ideal.en.width)pt of \(form)")
+            #expect(ideal.ru.height == ideal.en.height,
+                    "the levels row wrapped in one language: \(ideal)")
+        }
+    }
+
     /// The three frame-count rows carry the longest labels in the detection
     /// section ("REC start confirm (frames)" / "Подтверждение старта (кадры)")
     /// next to a 56pt field and a stepper. Each has to fit the form.

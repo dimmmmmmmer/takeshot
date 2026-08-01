@@ -13,6 +13,11 @@ review layer on top.
 - **Input levels** state what the SOURCE sends. Limited (16–235) is expanded
   once; Full passes through untouched. Auto assumes limited for RGB 4:4:4 HDMI,
   which is what cameras send.
+- Limited also CLIPS: codes below 16 and above 235 (64 and 940 in 10-bit) —
+  the sub-blacks and super-whites a camera legally sends — stop existing, on
+  screen and in the recorded file. Choose **Limited, preserving excursions** if
+  the grade needs them; it expands the camera's whole legal swing instead, at
+  the cost of a very slightly flatter picture. The default does not change.
 - RGB 4:4:4 sources are captured as 10-bit by default. Turn that off in Settings
   if the board or the disk cannot keep up.
 - **Forced input mode** overrides autodetection for a source whose format the
@@ -82,6 +87,11 @@ Drag the seam to move a wipe.
 
 - Waveform, RGB parade, histogram and vectorscope, as an overlay over the player
   or in a window of their own.
+- On a 10-bit RGB source the scopes measure the signal ON THE WIRE, before the
+  levels stage touches it — a WIRE badge in the toolbar says so. That is why the
+  trace can sit below 0 % and above 100 %: those shaded bands are the camera's
+  excursions, and seeing them is the point. Everything else is measured on the
+  frame you are looking at, preview LUT included.
 - Exposure assists: false color and EL Zone, zebra with a threshold, focus
   peaking.
 - Framing: framelines with a chosen aspect, action and title safe areas,

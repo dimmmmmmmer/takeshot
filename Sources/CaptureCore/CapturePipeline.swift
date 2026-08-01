@@ -263,17 +263,49 @@ public final class CapturePipeline: @unchecked Sendable {
     /// CPU stops being spent. The busy gate keeps the real rate at or under it.
     static let scopeUpdatesPerSecond = 15.0
 
+    /// Frames between the passes the frame path OFFERS the analyzer, at a given
+    /// signal rate. The delivered rate is `frameRate / stride` — 12.5 Hz at
+    /// 25 fps, 15 at 30 and 60 — as long as a pass finishes inside one stride
+    /// interval; past that the busy gate starts dropping and the operator sees
+    /// the trace step. Extracted so the arithmetic can be asserted without a
+    /// stopwatch: the wall-clock half of the measurement belongs on a machine
+    /// that is not also building something.
+    static func scopeStride(atFrameRate frameRate: Double) -> Int {
+        max(1, Int((frameRate / scopeUpdatesPerSecond).rounded()))
+    }
+
     /// Suffix that marks a take whose finalize failed. Renaming is best-effort:
     /// if it does not work the original path is returned and the operator still
     /// gets the alarm.
     static let failedTakeSuffix = "_FAILED"
 
-    /// Expansion table 16-235 → 0-255 for limited-range RGB inputs. Defined on
-    /// gamma-encoded code values, so it must run on raw bytes — a CIColorMatrix
-    /// in CI's linear working space crushes shadows and dulls highlights.
-    static let levelsExpandTable: [UInt8] = (0...255).map {
-        UInt8(min(255, max(0, Int((Double($0) - 16) * 255 / 219 + 0.5))))
+    /// Expansion table for limited-range RGB inputs — 16-235 → 0-255 normally,
+    /// 1-254 → 0-255 when the operator asked for the excursions to survive.
+    /// Defined on gamma-encoded code values, so it must run on raw bytes — a
+    /// CIColorMatrix in CI's linear working space crushes shadows and dulls
+    /// highlights.
+    ///
+    /// Both are built once at first use: a table per frame would be 256
+    /// divisions on the capture queue for a value that only changes when the
+    /// operator opens Settings.
+    static func levelsExpandTable(for levels: InputLevels) -> [UInt8] {
+        levels == .limitedPreservingExcursions ? levelsExcursionTable
+            : levelsLimitedTable
     }
+
+    static let levelsLimitedTable = expansionTable(for: .limited)
+    static let levelsExcursionTable =
+        expansionTable(for: .limitedPreservingExcursions)
+
+    private static func expansionTable(for levels: InputLevels) -> [UInt8] {
+        let window = levels.eightBitWindow
+        let span = Double(window.white - window.black)
+        return (0...255).map {
+            UInt8(min(255, max(0, Int(Double($0 - window.black) * 255 / span
+                                      + 0.5))))
+        }
+    }
+
     static let levelsTableIdentity: [UInt8] = (0...255).map { UInt8($0) }
 
     let latestPreviewLock = NSLock()

@@ -3,8 +3,8 @@ import CaptureCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The panel's chrome: the toolbar above the scope boxes, the per-scope
-/// controls inside each box header, and the value scale beside the trace.
+/// The panel's chrome: the toolbar above the scope boxes and the per-scope
+/// controls inside each box header.
 ///
 /// In a file of its own because the panel body was the longest type in the app
 /// and this half of it is a separate concern: what the operator switches on,
@@ -58,6 +58,22 @@ extension ScopesPanel {
         }
     }
 
+    /// Shown only while the analyzer is reading the 10-bit wire instead of the
+    /// display buffer. It is the answer to the question the new picture raises:
+    /// "why is my trace above 100 now?" — because this is the signal the camera
+    /// is sending, not the one the levels stage has already clipped.
+    @ViewBuilder var wireBadge: some View {
+        if live.scopeData?.nominal.showsExcursions == true {
+            Text(L("scope_wire_badge"))
+                .font(.system(size: 8, weight: .semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(controller.accentColor.opacity(0.35), in: Capsule())
+                .foregroundStyle(.white.opacity(0.9))
+                .help(L("scope_wire_hint"))
+        }
+    }
+
     @ViewBuilder var toggleRow: some View {
         ForEach(order) { kind in
             scopeToggle(L(kind.titleKey), isOn: isOn(kind))
@@ -66,6 +82,7 @@ extension ScopesPanel {
 
     /// Value scale, graticule/trace brightness, and the reorder hint.
     @ViewBuilder var displayControls: some View {
+        wireBadge
         ChannelPicker(selection: $scaleMode, options: ["100", "1023"])
         HStack(spacing: 3) {
             Image(systemName: "grid")
@@ -100,10 +117,18 @@ extension ScopesPanel {
         }
     }
 
+    /// The two chrome buttons — and which surface gets which.
+    ///
+    /// The OVERLAY gets the close button. It floats over the picture with no
+    /// frame of its own, so the only ways out of it were Esc and a click on the
+    /// image: both real, neither visible. The WINDOW does not — it has a title
+    /// bar with the system's own close button in it, and the X that used to sit
+    /// in its content was a second control doing the same job two centimetres
+    /// away from the first.
     @ViewBuilder var windowButtons: some View {
-        if let onCloseWindow {
+        if singleScope {
             Button {
-                onCloseWindow()
+                controller.showScopesOverlay = false
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 11))
@@ -146,24 +171,5 @@ extension ScopesPanel {
             .foregroundStyle(isOn.wrappedValue ? .white : .white.opacity(0.55))
         }
         .buttonStyle(.plain)
-    }
-
-    /// Value marks for waveform/parade: percent or 10-bit code values.
-    var percentScale: some View {
-        let marks: [Int] = scaleMode == "1023"
-            ? [1023, 896, 768, 640, 512, 384, 256, 128, 0]
-            : [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
-        return VStack(alignment: .trailing, spacing: 0) {
-            ForEach(marks, id: \.self) { mark in
-                Text("\(mark)")
-                    .font(.system(size: 8, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.35 + gridBrightness * 0.45))
-                    .frame(maxHeight: .infinity,
-                           alignment: mark == marks.first ? .top
-                               : (mark == 0 ? .bottom : .center))
-            }
-        }
-        .frame(width: 26)
-        .frame(maxHeight: .infinity)
     }
 }

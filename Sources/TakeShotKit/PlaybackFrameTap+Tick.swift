@@ -19,7 +19,8 @@ extension PlaybackFrameTap {
         timer = nil
         guard running, output != nil || stillBuffer != nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(16)) // ~60 Hz polling
+        timer.schedule(deadline: .now(),
+                       repeating: .milliseconds(Self.tickIntervalMilliseconds))
         timer.setEventHandler { [weak self] in
             self?.tick()
         }

@@ -31,7 +31,7 @@ struct WaveformView: View {
                         .interpolation(.medium)
                 }
             }
-            WaveformGraticule()
+            ScopeLevelGraticule(nominal: data.nominal)
         }
     }
 
@@ -46,7 +46,10 @@ struct WaveformView: View {
 ///
 /// The waveform's per-channel mode and the parade draw exactly this, and each
 /// had its own copy — including `.interpolation(.medium)`, which is the
-/// difference between a readable trace and a stair-stepped one.
+/// difference between a readable trace and a stair-stepped one. The density map
+/// is 512x512 and the box it is drawn in is at most a few hundred points, so on
+/// a retina display this is a mild DOWNscale: nothing about the trace is
+/// invented by the interpolator.
 private struct ScopeChannelImage: View {
     let map: ScopeImageCache.Map
     let data: ScopeData
@@ -81,7 +84,9 @@ struct ParadeView: View {
                 paradeChannel(.green, tint: ScopeTint.green)
                 paradeChannel(.blue, tint: ScopeTint.blue)
             }
-            WaveformGraticule()
+            // one set of numbers across all three columns: the axis is shared,
+            // and three copies of it is three chances to read the wrong one
+            ScopeLevelGraticule(nominal: data.nominal)
         }
     }
 
@@ -92,37 +97,14 @@ struct ParadeView: View {
     }
 }
 
-/// Dense waveform graticule: a line every 10%, stronger at 0/25/50/75/100,
-/// brightness user-adjustable.
-private struct WaveformGraticule: View {
-    @Environment(\.scopeGridBrightness) private var brightness
-
-    var body: some View {
-        GeometryReader { geo in
-            // every 10%, faint; then the quarters over the top of them
-            lines(at: Array(stride(from: 0.0, through: 1.0, by: 0.1)),
-                  in: geo.size, opacity: 0.24)
-            lines(at: [0, 0.25, 0.5, 0.75, 1], in: geo.size, opacity: 0.55)
-        }
-    }
-
-    /// Horizontal rules at the given fractions of the height. Both passes drew
-    /// their own copy of the same loop, differing only in where and how bright.
-    private func lines(at fractions: [Double], in size: CGSize,
-                       opacity: Double) -> some View {
-        Path { path in
-            for fraction in fractions {
-                let y = size.height * fraction
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
-            }
-        }
-        .stroke(.white.opacity(opacity * brightness), lineWidth: 0.5)
-    }
-}
-
-/// Histogram of the selected channel(s), 2-code bins (single-code gaps from
-/// level remaps would show as a comb), vertical marks at 0/64/128/192/255.
+/// Histogram of the selected channel(s): the analyzer's 256 bins drawn as 256
+/// points, smoothed rather than paired (single-code gaps from level remaps
+/// would otherwise show as a comb), with marks on the same code axis as the
+/// waveform's.
+///
+/// A bin is one 8-bit code off a display buffer and four 10-bit codes off the
+/// wire — the analyzer bins on the 10-bit scale either way, and an 8-bit code
+/// widened and re-binned comes back to itself.
 struct HistogramView: View {
     let data: ScopeData
     let channel: String
@@ -143,31 +125,11 @@ struct HistogramView: View {
                                 startPoint: .top, endPoint: .bottom))
                         channelPath(item.bins, peak: peak, in: geo.size)
                             .stroke(item.color, lineWidth: 1)
-                        Path { p in
-                            for mark in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                                let x = geo.size.width * mark
-                                p.move(to: CGPoint(x: x, y: 0))
-                                p.addLine(to: CGPoint(x: x, y: geo.size.height))
-                            }
-                        }
-                        .stroke(.white.opacity(0.14), lineWidth: 0.5)
-                        if index == series.count - 1 {
-                            HStack {
-                                Text("0")
-                                Spacer()
-                                Text("64")
-                                Spacer()
-                                Text("128")
-                                Spacer()
-                                Text("192")
-                                Spacer()
-                                Text("255")
-                            }
-                            .font(.system(size: 8).monospacedDigit())
-                            .foregroundStyle(.white.opacity(0.5))
-                            .padding(.horizontal, 2)
-                            .frame(maxHeight: .infinity, alignment: .bottom)
-                        }
+                        // the graticule and its numbers now come from the same
+                        // ScopeAxis the traces are drawn through, so the
+                        // brightness slider reaches them like everything else
+                        ScopeCodeAxisMarks(nominal: data.nominal,
+                                           showsNumbers: index == series.count - 1)
                     }
                 }
             }
@@ -187,16 +149,25 @@ struct HistogramView: View {
         }
     }
 
+    /// Two 1-2-1 passes over all 256 bins.
+    ///
+    /// It used to PAIR the bins first and smooth the 128 that were left, which
+    /// drew a 256-code histogram as 128 points across a box several hundred
+    /// points wide — half the detail the analyzer had, thrown away in the view.
+    /// The pairing was there to kill the comb a level-remapped source leaves
+    /// (16-235 expanded to 0-255 fills only 220 of the bins), and two 1-2-1
+    /// passes are a 1-4-6-4-1 binomial: it fills a single-code gap to ~85 % of
+    /// its neighbours, which reads as continuous, and it does it without
+    /// halving the resolution.
     private func smoothed(_ bins: [Int]) -> [Int] {
-        // pair bins, then a 1-2-1 pass — kills comb artifacts from quantized
-        // sources without washing out the shape
-        let paired = stride(from: 0, to: bins.count - 1, by: 2).map {
-            bins[$0] + bins[$0 + 1]
-        }
-        return paired.indices.map { i in
-            let left = i > 0 ? paired[i - 1] : paired[i]
-            let right = i < paired.count - 1 ? paired[i + 1] : paired[i]
-            return (left + paired[i] * 2 + right) / 4
+        onePass(onePass(bins))
+    }
+
+    private func onePass(_ bins: [Int]) -> [Int] {
+        bins.indices.map { i in
+            let left = i > 0 ? bins[i - 1] : bins[i]
+            let right = i < bins.count - 1 ? bins[i + 1] : bins[i]
+            return (left + bins[i] * 2 + right) / 4
         }
     }
 

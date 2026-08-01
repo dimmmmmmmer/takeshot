@@ -190,7 +190,7 @@
 "video_levels" = "Input levels";
 "levels_limited" = "Limited (16-235) — expand";
 "levels_full" = "Full (0-255) — as is";
-"levels_hint" = "What the source sends on the wire. Limited (e.g. camera HDMI) is expanded once for correct contrast; Full (e.g. a playout device set to Full output) passes through untouched. Files always get standard legal-range encoding.";
+"levels_hint" = "What the source sends on the wire. Limited (e.g. camera HDMI) is expanded once for correct contrast, and codes outside 16-235 (64-940 in 10-bit) are clipped away — on screen AND in the file. “Preserving excursions” expands the camera's whole legal swing instead, so sub-blacks and super-whites survive for the grade; the picture is slightly flatter. Full (e.g. a playout device set to Full output) passes through untouched. Files always get standard legal-range encoding.";
 "color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
 
 "preset_arri35" = "ARRI Alexa 35";
@@ -510,3 +510,12 @@
 /* the last-take card on the remote page: poster frame, name, rating */
 "remote_last_take" = "Last take";
 "remote_poster_wait" = "No frame yet";
+
+/* === scopes: 10-bit wire reading and the third input-levels mode === */
+"levels_excursions" = "Limited, preserving excursions (4-1019)";
+"scope_wire_badge" = "WIRE";
+"scope_wire_hint" = "Measuring the 10-bit signal on the wire, before levels expansion: the trace can go below 0% and above 100%, and those bands are shaded.";
+
+/* the scopes window's scene name — never drawn (the window wears the app's own
+   chrome), but it is what the Window menu and Mission Control list it under */
+"scopes_window_title" = "Scopes";

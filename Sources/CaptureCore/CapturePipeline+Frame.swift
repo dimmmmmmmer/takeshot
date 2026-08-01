@@ -41,7 +41,7 @@ extension CapturePipeline {
         if !startedThisFrame {
             appendToTake(products.record, pts: pts)
         }
-        analyzeScopes(of: products.display)
+        analyzeScopes(wire: leveled.scopeSource, display: products.display)
         serveFrameGrab(record: products.record, leveled: leveled.display)
         presentProcessedFrame(products.display)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
@@ -113,17 +113,27 @@ extension CapturePipeline {
     /// throttled the scopes to a quarter of what the analyzer can do at every
     /// frame rate. `scopeBusy` remains the real regulator — latest-wins, and
     /// expensive content simply lands fewer passes.
-    private func analyzeScopes(of displayBuffer: CVPixelBuffer) {
+    ///
+    /// `wire` is the untouched 10-bit frame when the source has one (see
+    /// `LevelledFrame.scopeSource`), and it is what the scopes read: the
+    /// display buffer is 8-bit and has already had the excursions clipped out
+    /// of it. Chosen INSIDE the guards on purpose — with no scope surface open
+    /// this function still costs nothing at all, which is the property
+    /// `closedScopesAnalyzeNothing` pins, and the only thing it ever adds to
+    /// the capture queue is one buffer retain.
+    private func analyzeScopes(wire: ScopeSourceFrame?,
+                               display: CVPixelBuffer) {
         guard scopesEnabled, !scopeBusy else { return }
-        let stride = max(1, Int(((format?.frameRate ?? 25)
-                                 / Self.scopeUpdatesPerSecond).rounded()))
+        let stride = Self.scopeStride(atFrameRate: format?.frameRate ?? 25)
         guard frameIndex - lastScopeFrame >= stride else { return }
         lastScopeFrame = frameIndex
         scopeBusy = true
-        let frame = displayBuffer // retained: the pool won't recycle it
+        let frame = wire?.buffer ?? display // retained: the pool won't recycle it
+        let levels = wire?.levels ?? .full
         let region = scopeRegion
         scopeQueue.async { [weak self] in
-            let data = ScopeAnalyzer.analyze(frame, region: region)
+            let data = ScopeAnalyzer.analyze(frame, region: region,
+                                             wireLevels: levels)
             guard let pipeline = self else { return }
             pipeline.queue.async { pipeline.scopeBusy = false }
             if let data {
