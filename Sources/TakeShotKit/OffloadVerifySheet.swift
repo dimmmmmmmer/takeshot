@@ -171,8 +171,9 @@ struct OffloadVerifyResultPanel: View {
             Text(verdict)
                 .offloadText(.body, tint: tint)
                 .fixedSize(horizontal: false, vertical: true)
+            // the duration's unit WORDS follow the UI language, like the report
             Text("\(OffloadFormat.bytes(report.bytesRead)) · "
-                + "\(OffloadFormat.duration(report.span.elapsed)) · "
+                + "\(OffloadFormat.duration(report.span.elapsed, labels: .current())) · "
                 + OffloadFormat.rate(report.megabytesPerSecond))
                 .offloadText(.caption)
             // What it was checked against, stated as that rather than led with

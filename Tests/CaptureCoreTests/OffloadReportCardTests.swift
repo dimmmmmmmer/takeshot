@@ -115,6 +115,12 @@ struct OffloadReportCardTests {
         #expect(shown.last?.contains(".txt") == true)
         // …and a short list is left exactly as it is
         #expect(OffloadReportCard.shown(["one", "two"]) == ["one", "two"])
+        // the counting line is an injected label — the app hands it in in the
+        // UI language (owner item 21), and the cap has to use what it is given
+        var labels = OffloadReportLabels()
+        labels.moreProblemsFormat = "…и ещё %d — см. сводку .txt"
+        #expect(OffloadReportCard.shown(many, labels: labels).last
+            == "…и ещё 34 — см. сводку .txt")
     }
 
     /// The worst thing first, the same order the .txt verdict uses.

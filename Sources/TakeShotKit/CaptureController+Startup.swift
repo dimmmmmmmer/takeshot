@@ -48,6 +48,18 @@ extension CaptureController {
             audioMonitor.volume = Float(held)
             player.volume = Float(held)
         }
+        // A mute left engaged comes back engaged, on top of whatever level is
+        // in force by now (the dimmed one if DIM is also being restored), and
+        // that level is exactly what the un-mute puts back. Quiet, but never
+        // unexplained — the footer speaker shows the slash. Same reasoning as
+        // DIM above; see CaptureSettings.monitorMuted.
+        if stored.monitorMuted == true {
+            live.muted = true
+            monitorVolumeBeforeMute = live.volume
+            live.volume = 0
+            audioMonitor.volume = 0
+            player.volume = 0
+        }
         transport.attach(player) // one attachment for the app's lifetime
         // in/out survives a relaunch: the transport says when a range moved, the
         // sidecar in the record folder is where it goes (see exportClipRanges)

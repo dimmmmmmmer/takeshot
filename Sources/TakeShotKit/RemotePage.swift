@@ -44,6 +44,7 @@ enum RemotePage {
         ("idle", "remote_idle"),
         ("lastTake", "remote_last_take"),
         ("posterWait", "remote_poster_wait"),
+        ("modePlayback", "remote_mode_playback"),
     ]
 
     /// Where the page fetches the last take's frame. Stated once, here, so the

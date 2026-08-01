@@ -85,7 +85,9 @@ extension CaptureController {
                 }
                 try data.write(to: url)
             } else {
-                try TakeLogExporter.reportCSV(takes: takes)
+                // labelled in the app language, like the PDF beside it — the
+                // frozen Resolve sidecar is a different writer and stays as is
+                try TakeLogExporter.reportCSV(takes: takes, labels: .current())
                     .write(to: url, atomically: true, encoding: .utf8)
             }
             lastNotice = L("report_saved", url.lastPathComponent)

@@ -8,8 +8,11 @@ import Foundation
 /// ends with a single verdict line that either says every file is verified or
 /// names what is not.
 ///
-/// English, like the rest of CaptureCore: the file leaves the building with the
-/// drive and is read by whoever receives it, not in the operator's UI language.
+/// The labels come in from the app in the operator's language (owner item 21 —
+/// the report used to be English whatever language the app was set to);
+/// CaptureCore itself stays localization-free, so the default is the English
+/// the file has always used. The DATA between the labels — paths, mismatch
+/// reasons, engine errors — stays English; see `OffloadReportLabels`.
 public enum OffloadSummary {
     /// What every summary's name starts with. A constant because the verify
     /// tool has to recognize the file it is looking at — a summary reported as
@@ -19,59 +22,65 @@ public enum OffloadSummary {
     @discardableResult
     public static func write(result: OffloadDestinationResult,
                              run: OffloadRunFacts,
-                             into destination: URL, date: Date) throws -> URL {
+                             into destination: URL, date: Date,
+                             labels: OffloadReportLabels = .english) throws -> URL {
         let name = "\(filePrefix)\(OffloadFormat.fileStamp(date)).txt"
         let url = CapturePipeline.uniqueURL(
             for: destination.appendingPathComponent(name))
         defer { CapturePipeline.releaseReservation(for: url) }
-        try Data(text(result: result, run: run).utf8)
+        try Data(text(result: result, run: run, labels: labels).utf8)
             .write(to: url, options: .atomic)
         return url
     }
 
     public static func text(result: OffloadDestinationResult,
-                            run: OffloadRunFacts) -> String {
-        var lines = ["TakeShot verified offload",
-                     "=========================", ""]
-        lines += facts(result: result, run: run)
-        lines += ["",
-                  "Every file listed in the manifest was written to this disk, "
-                    + "flushed to the",
-                  "device, read back with the cache bypassed and hashed again. "
-                    + "A file whose",
-                  "hash did not match is NOT in the manifest and is named below.",
-                  ""]
-        lines += problems(result: result, run: run)
-        lines.append("VERDICT: \(verdict(result: result, run: run))")
+                            run: OffloadRunFacts,
+                            labels: OffloadReportLabels = .english) -> String {
+        // the rule is derived from the title, so a longer translation of it
+        // stays underlined edge to edge
+        var lines = [labels.title,
+                     String(repeating: "=", count: labels.title.count), ""]
+        lines += facts(result: result, run: run, labels: labels)
+        lines += [""]
+        lines += labels.explanation.components(separatedBy: "\n")
+        lines += [""]
+        lines += problems(result: result, run: run, labels: labels)
+        lines.append("\(labels.verdictLabel): "
+            + verdict(result: result, run: run, labels: labels))
         return lines.joined(separator: "\n") + "\n"
     }
 
     // MARK: - the numbers
 
     private static func facts(result: OffloadDestinationResult,
-                              run: OffloadRunFacts) -> [String] {
+                              run: OffloadRunFacts,
+                              labels: OffloadReportLabels) -> [String] {
         var rows = [
-            ("Source", run.source.path),
-            ("Destination", result.url.path),
-            ("Hash", "\(run.algorithm.displayName) "
+            (labels.source, run.source.path),
+            (labels.destination, result.url.path),
+            (labels.hash, "\(run.algorithm.displayName) "
                 + "(\(run.algorithm.manifestElement))"),
-            ("Files", "\(result.totals.filesVerified) of \(run.card.files) "
-                + "verified"),
-            ("Card size", OffloadFormat.bytes(run.card.bytes)),
-            ("Copied", OffloadFormat.bytes(result.totals.bytesWritten)),
-            ("Started", OffloadFormat.timestamp(run.span.started)),
-            ("Finished", OffloadFormat.timestamp(run.span.finished)),
-            ("Elapsed", OffloadFormat.duration(result.totals.elapsed)),
-            ("Average", OffloadFormat.rate(result.totals.megabytesPerSecond)),
+            (labels.files, String(format: labels.filesVerifiedFormat,
+                                  result.totals.filesVerified, run.card.files)),
+            (labels.cardSize, OffloadFormat.bytes(run.card.bytes)),
+            (labels.copied, OffloadFormat.bytes(result.totals.bytesWritten)),
+            (labels.started, OffloadFormat.timestamp(run.span.started)),
+            (labels.finished, OffloadFormat.timestamp(run.span.finished)),
+            (labels.elapsed, OffloadFormat.duration(result.totals.elapsed,
+                                                    labels: labels)),
+            (labels.average, OffloadFormat.rate(result.totals.megabytesPerSecond)),
         ]
         if let manifest = result.manifestURL {
-            rows.append(("Manifest",
+            rows.append((labels.manifest,
                          OffloadEngine.relativePath(of: manifest, under: result.url)))
         } else {
-            rows.append(("Manifest", "NOT WRITTEN"))
+            rows.append((labels.manifest, labels.manifestMissing))
         }
-        rows.append(("Written by", "\(run.creator.toolName) "
-            + "\(run.creator.toolVersion) on \(run.creator.hostname)"))
+        rows.append((labels.writtenBy,
+                     String(format: labels.writtenByFormat, run.creator.toolName,
+                            run.creator.toolVersion, run.creator.hostname)))
+        // padded to the longest label of THIS language, so the value column
+        // stays a column whatever the translations measure
         let width = rows.map(\.0.count).max() ?? 0
         return rows.map { label, value in
             label + ":" + String(repeating: " ", count: width - label.count + 2)
@@ -82,18 +91,18 @@ public enum OffloadSummary {
     // MARK: - what went wrong
 
     private static func problems(result: OffloadDestinationResult,
-                                 run: OffloadRunFacts) -> [String] {
+                                 run: OffloadRunFacts,
+                                 labels: OffloadReportLabels) -> [String] {
         var lines: [String] = []
         if let failure = result.failure {
-            lines += ["DESTINATION FAILED", "  \(failure)", ""]
+            lines += [labels.destinationFailedHeading, "  \(failure)", ""]
         }
-        lines += section("CHECKSUM MISMATCHES", result.mismatches)
-        lines += section("SOURCE PROBLEMS", run.problems.source)
+        lines += section(labels.mismatchesHeading, result.mismatches)
+        lines += section(labels.sourceProblemsHeading, run.problems.source)
         // Not "folders": the scan also lands a symlink or a device node here,
         // which cannot be copied as a byte stream. The heading has to cover both
         // or the report says something untrue about what was skipped.
-        lines += section("CARD ENTRIES THAT COULD NOT BE COPIED",
-                         run.problems.scan)
+        lines += section(labels.scanProblemsHeading, run.problems.scan)
         return lines
     }
 
@@ -106,23 +115,25 @@ public enum OffloadSummary {
     /// card. Precedence is worst-first: a dead destination is a bigger fact than
     /// a mismatch, and both are bigger than a clean cancel.
     static func verdict(result: OffloadDestinationResult,
-                        run: OffloadRunFacts) -> String {
+                        run: OffloadRunFacts,
+                        labels: OffloadReportLabels = .english) -> String {
         let verified = result.totals.filesVerified
-        let done = "\(verified) of \(run.card.files) files verified"
+        let done = String(format: labels.filesOfTotalFormat, verified,
+                          run.card.files)
         if let failure = result.failure {
-            return "FAILED — \(failure) (\(done) before it stopped)"
+            return String(format: labels.verdictFailedFormat, failure, done)
         }
         if !result.mismatches.isEmpty {
-            return "\(result.mismatches.count) FILE(S) DID NOT MATCH — \(done); "
-                + "do NOT wipe the card"
+            return String(format: labels.verdictMismatchFormat,
+                          result.mismatches.count, done)
         }
         if result.wasCancelled {
-            return "CANCELLED — \(done); do NOT wipe the card"
+            return String(format: labels.verdictCancelledFormat, done)
         }
         if verified != run.card.files || !run.problems.isEmpty {
-            return "INCOMPLETE — \(done); do NOT wipe the card"
+            return String(format: labels.verdictIncompleteFormat, done)
         }
-        return "all \(verified) files verified"
+        return String(format: labels.verdictAllVerifiedFormat, verified)
     }
 }
 
@@ -130,7 +141,9 @@ public enum OffloadSummary {
 ///
 /// Deliberately locale-independent: this text is read by post houses and parsed
 /// by eye months later, and a summary whose numbers change shape with the
-/// operator's regional settings is not comparable with the last one.
+/// operator's regional settings is not comparable with the last one. The one
+/// language-dependent part — the worded duration units — comes in through the
+/// report labels; the SI unit symbols (kB/MB/GB, MB/s) stay Latin everywhere.
 public enum OffloadFormat {
     /// Decimal units, as drives and offload tools quote them.
     public static func bytes(_ count: Int64) -> String {
@@ -159,14 +172,22 @@ public enum OffloadFormat {
         String(format: "%.1f MB/s", megabytesPerSecond)
     }
 
-    public static func duration(_ seconds: TimeInterval) -> String {
-        guard seconds >= 60 else { return String(format: "%.1f s", seconds) }
+    /// "15 min 30 s" — the unit WORDS follow the report's language, because
+    /// they are words; everything numeric about the shape stays fixed.
+    public static func duration(_ seconds: TimeInterval,
+                                labels: OffloadReportLabels = .english) -> String {
+        guard seconds >= 60 else {
+            return String(format: "%.1f %@", seconds, labels.secondsUnit)
+        }
         let total = Int(seconds.rounded())
         let hours = total / 3600
         let minutes = (total % 3600) / 60
-        guard hours > 0 else { return String(format: "%d min %02d s", minutes,
-                                             total % 60) }
-        return String(format: "%d h %02d min %02d s", hours, minutes, total % 60)
+        guard hours > 0 else {
+            return String(format: "%d %@ %02d %@", minutes, labels.minutesUnit,
+                          total % 60, labels.secondsUnit)
+        }
+        return String(format: "%d %@ %02d %@ %02d %@", hours, labels.hoursUnit,
+                      minutes, labels.minutesUnit, total % 60, labels.secondsUnit)
     }
 
     public static func timestamp(_ date: Date) -> String {

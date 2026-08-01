@@ -5,8 +5,9 @@ import Testing
 @testable import TakeShotKit
 
 /// One volume drives both the live monitor and the player, because switching
-/// rec↔playback must not change loudness — and the mute button is transient by
-/// design: persisting its zero is what made every launch start silent.
+/// rec↔playback must not change loudness — and the mute is a HOLD with a
+/// restore point, persisted as STATE like DIM (owner item 5): what must never
+/// be persisted is its zero, which is what once made every launch start silent.
 ///
 /// The fixture starts every controller with the live monitor switched off (the
 /// demo source makes real sound); the tests below that need it on say so, and
@@ -312,6 +313,93 @@ import Testing
 
             controller.viewerMode = .playback // reviewing a take: the player has sound
             #expect(controller.canDimMonitoring)
+        }
+    }
+}
+
+/// The one-click full mute (owner item 5): a HOLD on the output with a restore
+/// point, shared by the speaker icons and the ⌃A hotkey, persisted as STATE
+/// like DIM. Its own suite — the volume/DIM suite above is at the type-length
+/// ceiling, and the mute is a control of its own.
+@Suite @MainActor struct ControllerMuteTests {
+    /// The click and the ⌃A hotkey land on the same `toggleMonitorMute`, so the
+    /// icon and the key can never disagree about whether the room is silent.
+    @Test func theHotkeyAndTheClickShareOneMute() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.monitorOn = true // no signal is running: nothing to hear
+            controller.monitorVolume = 0.6
+            let hotkeys = HotkeyManager(defaults: InMemoryDefaults())
+
+            hotkeys.perform(.toggleMonitorMute, controller: controller)
+            #expect(controller.live.muted)
+            #expect(controller.monitorVolume == 0)
+
+            controller.toggleMonitorMute() // the icon's click, same path back
+            #expect(!controller.live.muted)
+            #expect(controller.monitorVolume == 0.6)
+        }
+    }
+
+    /// Like DIM: what is remembered is the mute STATE and the level the
+    /// operator set — never the zero, which is the bug that once made every
+    /// launch start silent.
+    @Test func mutePersistsItsStateAndNotTheZero() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.monitorOn = true // no signal is running: nothing to hear
+            controller.monitorVolume = 0.7
+            await ControllerWait.until { controller.settings.monitorVolume == 0.7 }
+
+            controller.toggleMonitorMute()
+            #expect(controller.live.muted)
+            // the state is written on the slider's own 400 ms debounce
+            await ControllerWait.until { controller.settings.monitorMuted == true }
+            #expect(controller.settings.monitorMuted == true)
+            #expect(CaptureSettings.loaded(from: controller.defaults)
+                .monitorMuted == true)
+            // and the stored level is still the one the operator set
+            #expect(controller.settings.monitorVolume == 0.7)
+
+            controller.toggleMonitorMute()
+            await ControllerWait.until { controller.settings.monitorMuted == nil }
+            #expect(controller.settings.monitorMuted == nil,
+                    "the mute outlived itself in settings")
+        }
+    }
+
+    /// A mute left engaged comes back engaged, holding silence over the stored
+    /// level — and the un-mute gives that level back exactly. The slashed
+    /// speaker is lit, so a silent launch is explained rather than mysterious.
+    @Test func aStoredMuteComesBackSilentAndExplained() async throws {
+        try await ControllerHarness.run(configure: { settings in
+            settings.monitorVolume = 0.6
+            settings.monitorMuted = true
+        }, { controller, _ in
+            #expect(controller.live.muted)
+            #expect(controller.monitorVolume == 0)
+            #expect(controller.player.volume == 0)
+
+            controller.toggleMonitorMute()
+            #expect(!controller.live.muted)
+            #expect(controller.monitorVolume == 0.6)
+        })
+    }
+
+    /// Moving the level by hand takes the mute with it: a slashed speaker over
+    /// a live level would be claiming a hold the output is not under.
+    @Test func movingTheLevelClearsTheMuteState() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.monitorOn = true // no signal is running: nothing to hear
+            controller.monitorVolume = 0.8
+            controller.toggleMonitorMute()
+            #expect(controller.live.muted)
+            await ControllerWait.until { controller.settings.monitorMuted == true }
+
+            controller.monitorVolume = 0.55 // the operator drags the slider
+
+            #expect(!controller.live.muted)
+            #expect(controller.monitorVolume == 0.55)
+            await ControllerWait.until { controller.settings.monitorMuted == nil }
+            #expect(controller.settings.monitorMuted == nil)
         }
     }
 }

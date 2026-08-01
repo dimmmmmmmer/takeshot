@@ -290,6 +290,10 @@ final class CaptureController: ObservableObject {
     /// Debounced persist of the DIM hold — same debounce as the slider beside it
     /// (see `persistDimState` in +Audio).
     var dimPersistTask: Task<Void, Never>?
+    /// Debounced persist of the full mute — same debounce again (see
+    /// `persistMuteState` in +Audio): the speaker sits beside the meters and is
+    /// on a hotkey, so a click must not write settings synchronously.
+    var mutePersistTask: Task<Void, Never>?
 
     /// The selected external display (by displayID); nil — off.
     @Published var externalDisplayID: CGDirectDisplayID? {

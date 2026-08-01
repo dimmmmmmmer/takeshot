@@ -14,21 +14,46 @@ extension CaptureController {
     /// Per-channel audio peak levels, dBFS (for the meters; see `live`).
     var audioLevels: [Float] { live.audioLevels }
 
-    /// Speaker click in the audio panel: mute/unmute the volume with restore.
-    /// It never disables the output path — the slider always stays live.
+    /// The one full mute: the speaker icon's click, the audio panel's speaker
+    /// button and the ⌃A hotkey all land here, so the icon and the key can
+    /// never disagree about whether the room is silent.
+    ///
+    /// Mute is a HOLD, not a level: the level it took away comes back exactly
+    /// on un-mute, and the state itself is what persists (like DIM — see
+    /// `CaptureSettings.monitorMuted` for why never the zero). It never
+    /// disables the output path — the slider always stays live.
     func toggleMonitorMute() {
-        if !monitorOn {
-            monitorOn = true
-            if monitorVolume == 0 { setVolume(monitorVolumeBeforeMute, persist: false) }
-            return
-        }
-        if monitorVolume > 0 {
-            monitorVolumeBeforeMute = monitorVolume
-            // mute is transient: persisting 0 made every launch start silent
-            setVolume(0, persist: false)
-        } else {
+        if live.muted {
+            live.muted = false
+            // un-muting means "I want to hear it": a live monitor switched off
+            // underneath the mute comes back on with it, as the speaker button
+            // always did
+            if !monitorOn { monitorOn = true }
             setVolume(monitorVolumeBeforeMute > 0 ? monitorVolumeBeforeMute : 1,
                       persist: false)
+        } else {
+            // the level in force right now — the dimmed one if DIM is holding —
+            // is what the un-mute puts back; DIM itself stays engaged across
+            // the mute (see dimAndMuteCompose in the audio tests)
+            monitorVolumeBeforeMute = live.volume
+            live.muted = true
+            setVolume(0, persist: false)
+        }
+        persistMuteState()
+    }
+
+    /// The mute state is persisted on the same debounce as the volume slider
+    /// and the DIM hold, for the same reason: a settings write fans out through
+    /// `applySettingsChange` and re-renders the window, and this control sits
+    /// among the meters and on a hotkey. What is stored is the state alone —
+    /// see `CaptureSettings.monitorMuted` for why never the zero.
+    private func persistMuteState() {
+        mutePersistTask?.cancel()
+        let muted = live.muted
+        mutePersistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            self.settings.monitorMuted = muted ? true : nil
         }
     }
 
@@ -110,12 +135,17 @@ extension CaptureController {
 
     private func setVolume(_ newValue: Double, persist: Bool = true) {
         // `persist` is also what separates the operator setting the level (the
-        // slider, the number field) from the transient holds — mute and DIM.
-        // Once the level has been set by hand, DIM's restore point is stale and
-        // its highlight would be claiming a state the level no longer has.
+        // slider, the number field) from the holds — mute and DIM. Once the
+        // level has been set by hand, either hold's restore point is stale and
+        // its highlight (or slashed speaker) would be claiming a state the
+        // level no longer has.
         if persist, live.dimmed {
             live.dimmed = false
             persistDimState()
+        }
+        if persist, live.muted {
+            live.muted = false
+            persistMuteState()
         }
         live.volume = newValue
         audioMonitor.volume = Float(newValue)

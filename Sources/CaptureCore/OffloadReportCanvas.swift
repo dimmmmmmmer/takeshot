@@ -12,14 +12,19 @@ import Foundation
 final class OffloadReportCanvas {
     private let context: CGContext
     private let height: CGFloat
+    /// The card's labels in the operator's language (see `OffloadReportLabels`)
+    /// — the same set the .txt beside it was written with.
+    private let labels: OffloadReportLabels
     /// Distance from the top of the card. CG's origin is bottom-left; every
     /// draw converts once, in `draw(_:_:x:maxWidth:)`, rather than at each of
     /// the two dozen call sites.
     private var y = CardMetrics.margin
 
-    init(context: CGContext, height: CGFloat) {
+    init(context: CGContext, height: CGFloat,
+         labels: OffloadReportLabels = .english) {
         self.context = context
         self.height = height
+        self.labels = labels
     }
 
     func draw(result: OffloadDestinationResult, run: OffloadRunFacts,
@@ -43,7 +48,7 @@ final class OffloadReportCanvas {
     }
 
     private func drawBrand() {
-        draw("TAKESHOT — VERIFIED OFFLOAD",
+        draw(labels.brand,
              CardTextStyle(size: CardMetrics.brandSize, bold: true,
                            color: CardInk.secondary))
         y += CardMetrics.brandBlock
@@ -75,7 +80,8 @@ final class OffloadReportCanvas {
                     height: plate.height), color: tint, radius: 2)
         y += 19
         let inset = CardMetrics.bannerTextInset
-        draw(OffloadSummary.verdict(result: result, run: run).uppercased(),
+        draw(OffloadSummary.verdict(result: result, run: run,
+                                    labels: labels).uppercased(),
              CardTextStyle(size: CardMetrics.verdictSize, bold: true,
                            color: tint),
              x: CardMetrics.margin + inset,
@@ -88,10 +94,15 @@ final class OffloadReportCanvas {
     private func drawStats(result: OffloadDestinationResult,
                            run: OffloadRunFacts) {
         let cells = [
-            ("FILES", "\(result.totals.filesVerified) of \(run.card.files)"),
-            ("COPIED", OffloadReportCard.shortBytes(result.totals.bytesWritten)),
-            ("TIME", OffloadFormat.duration(result.totals.elapsed)),
-            ("SPEED", OffloadFormat.rate(result.totals.megabytesPerSecond)),
+            (labels.statFiles, String(format: labels.statFilesFormat,
+                                      result.totals.filesVerified,
+                                      run.card.files)),
+            (labels.statCopied,
+             OffloadReportCard.shortBytes(result.totals.bytesWritten)),
+            (labels.statTime, OffloadFormat.duration(result.totals.elapsed,
+                                                     labels: labels)),
+            (labels.statSpeed,
+             OffloadFormat.rate(result.totals.megabytesPerSecond)),
         ]
         drawColumns(cells.map(\.0),
                     CardTextStyle(size: CardMetrics.labelSize, bold: true,
@@ -112,9 +123,9 @@ final class OffloadReportCanvas {
     }
 
     private func drawFacts(run: OffloadRunFacts) {
-        let rows = [("Source", run.source.path),
-                    ("Started", OffloadFormat.timestamp(run.span.started)),
-                    ("Finished", OffloadFormat.timestamp(run.span.finished))]
+        let rows = [(labels.source, run.source.path),
+                    (labels.started, OffloadFormat.timestamp(run.span.started)),
+                    (labels.finished, OffloadFormat.timestamp(run.span.finished))]
         let label = CardMetrics.factLabelWidth
         for row in rows {
             draw(row.0, CardTextStyle(size: CardMetrics.bodySize,
@@ -131,7 +142,7 @@ final class OffloadReportCanvas {
 
     private func drawProblems(_ problems: [String]) {
         guard !problems.isEmpty else { return }
-        draw("PROBLEMS (\(problems.count))",
+        draw("\(labels.problemsHeading) (\(problems.count))",
              CardTextStyle(size: CardMetrics.labelSize, bold: true,
                            color: CardInk.verdict(.mismatched)))
         y += CardMetrics.problemsHeadBlock
@@ -151,9 +162,10 @@ final class OffloadReportCanvas {
                             run: OffloadRunFacts) {
         rule()
         y += CardMetrics.footerRuleBlock
-        draw("\(run.creator.toolName) \(run.creator.toolVersion) on "
-            + "\(run.creator.hostname)   ·   \(run.algorithm.displayName) "
-            + "checksums   ·   receipt: \(OffloadReportCard.receipt(result))",
+        draw(String(format: labels.footerFormat, run.creator.toolName,
+                    run.creator.toolVersion, run.creator.hostname,
+                    run.algorithm.displayName,
+                    OffloadReportCard.receipt(result, labels: labels)),
              CardTextStyle(size: CardMetrics.labelSize,
                            color: CardInk.secondary))
     }

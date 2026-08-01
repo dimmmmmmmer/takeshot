@@ -35,14 +35,15 @@ extension CaptureController {
     }
 
     /// The pipeline only needs a push when something it reads has changed; the
-    /// monitoring level, the DIM hold and the web remote are the fields it does
-    /// not read — the first two are applied straight to the monitor and the
-    /// third is a socket, and rebuilding the capture config per dim click (or
-    /// per remote toggle) would make the sliders lag for nothing.
+    /// monitoring level, the DIM and mute holds and the web remote are the
+    /// fields it does not read — the holds are applied straight to the monitor
+    /// and the remote is a socket, and rebuilding the capture config per dim or
+    /// mute click (or per remote toggle) would make the sliders lag for nothing.
     private func applyPipelineChange(from oldValue: CaptureSettings) {
         var pipelineRelevant = oldValue
         pipelineRelevant.monitorVolume = settings.monitorVolume
         pipelineRelevant.monitorDimmed = settings.monitorDimmed
+        pipelineRelevant.monitorMuted = settings.monitorMuted
         pipelineRelevant.remoteEnabled = settings.remoteEnabled
         pipelineRelevant.remotePort = settings.remotePort
         pipelineRelevant.remotePIN = settings.remotePIN

@@ -162,11 +162,22 @@ struct TransportVolume: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: live.volume == 0
-                  ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .frame(width: Self.iconWidth, height: Self.iconHeight)
+            // The icon is the mute (owner item 5): the same one-click
+            // `toggleMonitorMute` as the footer speaker and the ⌃A hotkey,
+            // level restored on the next click. The slider stays inline.
+            Button {
+                controller.toggleMonitorMute()
+            } label: {
+                Image(systemName: live.muted || live.volume == 0
+                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(live.muted
+                                     ? AnyShapeStyle(.red)
+                                     : AnyShapeStyle(.secondary))
+                    .frame(width: Self.iconWidth, height: Self.iconHeight)
+            }
+            .buttonStyle(.plain)
+            .help(L("monitor_mute_help"))
             Slider(value: Binding(
                 get: { controller.playbackVolume },
                 set: { controller.playbackVolume = $0 }), in: 0...1)

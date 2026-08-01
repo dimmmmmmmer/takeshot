@@ -97,10 +97,15 @@ struct FooterCenterControls: View {
     }
 }
 
-/// Footer speaker: volume popover. In record mode it drives the live monitor,
-/// in playback — the player volume (the transport has no volume of its own).
+/// Footer speaker, split in two (owner item 5). ONE click on the icon is the
+/// full mute — the same `toggleMonitorMute` the ⌃A hotkey and the audio panel's
+/// speaker call, level restored exactly on the next click — because "kill the
+/// sound NOW" must not be behind a popover. The volume popover the click used
+/// to open lives on the chevron beside the icon. In record mode the control
+/// drives the live monitor, in playback — the player volume (one shared level).
 private struct FooterMonitorButton: View {
     @EnvironmentObject private var controller: CaptureController
+    @EnvironmentObject private var hotkeys: HotkeyManager
     @ObservedObject private var live: LiveSignal
     @State private var showPopover = false
 
@@ -115,42 +120,64 @@ private struct FooterMonitorButton: View {
                 set: { controller.monitorVolume = $0 })
     }
 
+    /// The slashed FILL is silence of any kind (muted, or the slider parked at
+    /// zero); the hollow slash stays what it always was — the live monitor path
+    /// switched off in record mode.
+    private var speakerSymbol: String {
+        if live.muted || live.volume == 0 { return "speaker.slash.fill" }
+        if !isPlayback, !controller.monitorOn { return "speaker.slash" }
+        return "speaker.wave.2.fill"
+    }
+
+    /// The engaged mute is red — a hold on the output is the one state here an
+    /// operator must be able to spot across the room, and the accent already
+    /// means "active" on the neighbouring controls.
+    private var speakerTint: AnyShapeStyle {
+        if live.muted { return AnyShapeStyle(.red) }
+        return (isPlayback ? live.volume > 0 : controller.monitorOn)
+            ? AnyShapeStyle(controller.accentColor) : AnyShapeStyle(.primary)
+    }
+
     var body: some View {
-        Button {
-            showPopover.toggle()
-        } label: {
-            Image(systemName: isPlayback
-                  ? (live.volume == 0
-                     ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                  : (controller.monitorOn
-                     ? (live.volume == 0
-                        ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                     : "speaker.slash"))
-                .font(.system(size: 15))
-                .foregroundStyle((isPlayback ? live.volume > 0
-                                             : controller.monitorOn)
-                                 ? controller.accentColor : .primary)
-                // fixed BOTH dimensions: the symbol variants differ in size and
-                // a changing anchor makes the volume popover jump around
-                .frame(width: 24, height: 20)
-        }
-        .disabled(!isPlayback && !controller.isCapturing)
-        .help(L("monitor_toggle"))
-        .popover(isPresented: $showPopover, arrowEdge: .top) {
-            VStack(spacing: 10) {
-                TextField("", value: Binding(
-                    get: { Int((volume.wrappedValue * 100).rounded()) },
-                    set: { volume.wrappedValue = Double(min(100, max(0, $0))) / 100 }),
-                    format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 44)
-                Slider(value: volume, in: 0...1)
-                    .frame(width: 100)
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 28, height: 108)
+        HStack(spacing: 0) {
+            Button {
+                controller.toggleMonitorMute()
+            } label: {
+                Image(systemName: speakerSymbol)
+                    .font(.system(size: 15))
+                    .foregroundStyle(speakerTint)
+                    // fixed BOTH dimensions: the symbol variants differ in size
+                    // and a changing anchor would shuffle the row per mute
+                    .frame(width: 24, height: 20)
             }
-            .padding(12)
+            .disabled(!isPlayback && !controller.isCapturing)
+            .help("\(L("monitor_mute_help")) — \(hotkeys.combo(for: .toggleMonitorMute).display)")
+
+            Button {
+                showPopover.toggle()
+            } label: {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 7, weight: .semibold))
+                    .frame(width: 11, height: 20)
+            }
+            .disabled(!isPlayback && !controller.isCapturing)
+            .help(L("monitor_volume_help"))
+            .popover(isPresented: $showPopover, arrowEdge: .top) {
+                VStack(spacing: 10) {
+                    TextField("", value: Binding(
+                        get: { Int((volume.wrappedValue * 100).rounded()) },
+                        set: { volume.wrappedValue = Double(min(100, max(0, $0))) / 100 }),
+                        format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 44)
+                    Slider(value: volume, in: 0...1)
+                        .frame(width: 100)
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 28, height: 108)
+                }
+                .padding(12)
+            }
         }
     }
 }

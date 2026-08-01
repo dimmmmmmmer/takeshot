@@ -237,7 +237,6 @@
 "scope_waiting" = "Waiting for signal…";
 
 /* Audio monitor */
-"monitor_toggle" = "Monitor live audio (first two enabled channels; always off at launch)";
 "monitor_mute_help" = "Mute/unmute monitoring";
 "tc_menu_help" = "Click: take detection mode";
 "start_frames" = "REC start confirm (frames)";
@@ -536,3 +535,85 @@
 /* the scopes window's scene name — never drawn (the window wears the app's own
    chrome), but it is what the Window menu and Mission Control list it under */
 "scopes_window_title" = "Scopes";
+
+/* === owner item 5: one-click full mute ===
+   the speaker icon itself is the mute now; the volume popover moved to the
+   chevron beside it */
+"monitor_volume_help" = "Monitoring volume";
+
+/* === owner item 21: the shift report speaks the app language === */
+"report_title" = "shift report";
+"report_camera" = "Cam %@";
+"report_takes_summary" = "%d takes (%d good, %d bad)";
+"report_footage" = "footage %@";
+"report_col_clip" = "CLIP";
+"report_col_tc_in" = "TC IN";
+"report_col_tc_out" = "TC OUT";
+"report_col_dur" = "DUR";
+"report_col_ok" = "OK";
+"report_col_notes" = "NOTES";
+"report_duration_fmt" = "%.1fs";
+"report_rating_good" = "GOOD";
+"report_rating_bad" = "BAD";
+/* the report CSV's column headers (human paperwork — the frozen Resolve
+   sidecar takeshot-log.csv is a different writer and is never translated) */
+"report_csv_file" = "File Name";
+"report_csv_roll" = "Roll";
+"report_csv_clip" = "Clip";
+"report_csv_start" = "Start TC";
+"report_csv_end" = "End TC";
+"report_csv_duration" = "Duration";
+"report_csv_rating" = "Rating";
+"report_csv_comments" = "Comments";
+"report_csv_markers" = "Markers";
+"report_csv_recorded" = "Recorded At";
+
+/* === owner item 21: the offload summary .txt and report-card PNG ===
+   these values are injected into CaptureCore (OffloadReportLabels) and the
+   English ones MUST stay byte-identical to its built-in defaults — the pinned
+   summary test compares the whole file */
+"offload_report_title" = "TakeShot verified offload";
+"offload_report_source" = "Source";
+"offload_report_destination" = "Destination";
+"offload_report_hash" = "Hash";
+"offload_report_files" = "Files";
+"offload_report_card_size" = "Card size";
+"offload_report_copied" = "Copied";
+"offload_report_started" = "Started";
+"offload_report_finished" = "Finished";
+"offload_report_elapsed" = "Elapsed";
+"offload_report_average" = "Average";
+"offload_report_manifest" = "Manifest";
+"offload_report_manifest_missing" = "NOT WRITTEN";
+"offload_report_written_by" = "Written by";
+"offload_report_written_by_fmt" = "%@ %@ on %@";
+"offload_report_files_verified_fmt" = "%d of %d verified";
+"offload_report_explanation" = "Every file listed in the manifest was written to this disk, flushed to the\ndevice, read back with the cache bypassed and hashed again. A file whose\nhash did not match is NOT in the manifest and is named below.";
+"offload_report_dest_failed" = "DESTINATION FAILED";
+"offload_report_mismatches" = "CHECKSUM MISMATCHES";
+"offload_report_source_problems" = "SOURCE PROBLEMS";
+"offload_report_scan_problems" = "CARD ENTRIES THAT COULD NOT BE COPIED";
+"offload_report_verdict" = "VERDICT";
+"offload_report_files_of_total_fmt" = "%d of %d files verified";
+"offload_report_verdict_failed_fmt" = "FAILED — %@ (%@ before it stopped)";
+"offload_report_verdict_mismatch_fmt" = "%d FILE(S) DID NOT MATCH — %@; do NOT wipe the card";
+"offload_report_verdict_cancelled_fmt" = "CANCELLED — %@; do NOT wipe the card";
+"offload_report_verdict_incomplete_fmt" = "INCOMPLETE — %@; do NOT wipe the card";
+"offload_report_verdict_verified_fmt" = "all %d files verified";
+"offload_report_brand" = "TAKESHOT — VERIFIED OFFLOAD";
+"offload_report_stat_files" = "FILES";
+"offload_report_stat_copied" = "COPIED";
+"offload_report_stat_time" = "TIME";
+"offload_report_stat_speed" = "SPEED";
+"offload_report_stat_files_fmt" = "%d of %d";
+"offload_report_problems" = "PROBLEMS";
+"offload_report_footer_fmt" = "%@ %@ on %@   ·   %@ checksums   ·   receipt: %@";
+"offload_report_receipt_missing" = "not written";
+"offload_report_dest_failed_fmt" = "Destination failed — %@";
+"offload_report_more_problems_fmt" = "…and %d more — see the .txt summary";
+"offload_report_hours_unit" = "h";
+"offload_report_minutes_unit" = "min";
+"offload_report_seconds_unit" = "s";
+
+/* === owner item 28: the remote page adapts to the viewer mode === */
+"remote_mode_playback" = "Playback";

@@ -43,12 +43,18 @@ struct AudioChannelPanel: View {
                 Button {
                     controller.toggleMonitorMute()
                 } label: {
-                    Image(systemName: !controller.monitorOn
-                          ? "speaker.slash"
-                          : (controller.monitorVolume == 0
-                             ? "speaker.slash.fill" : "speaker.wave.2.fill"))
-                        .foregroundStyle(controller.monitorOn
-                                         ? controller.accentColor : .secondary)
+                    // same reading as the footer speaker: slashed FILL is
+                    // silence (mute engaged, or the slider at zero), hollow
+                    // slash is the live monitor path switched off
+                    Image(systemName: live.muted || live.volume == 0
+                          ? "speaker.slash.fill"
+                          : (controller.monitorOn
+                             ? "speaker.wave.2.fill" : "speaker.slash"))
+                        .foregroundStyle(live.muted
+                                         ? AnyShapeStyle(.red)
+                                         : (controller.monitorOn
+                                            ? AnyShapeStyle(controller.accentColor)
+                                            : AnyShapeStyle(.secondary)))
                         .frame(width: 24, height: 20)
                 }
                 .buttonStyle(.plain)
@@ -63,8 +69,10 @@ struct AudioChannelPanel: View {
             // headphones between takes should not mean a trip into Settings.
             // Same device list and the same setting as the Settings pane.
             AudioOutputMenu()
-                // leading, so the headphones line up under the speaker above
-                .frame(maxWidth: panelWidth, alignment: .leading)
+                // centered on the panel, which is centered on the channel grid
+                // (the dB scales flank it symmetrically) — owner item 6: the
+                // device row sat flush left under a centered block of meters
+                .frame(maxWidth: panelWidth, alignment: .center)
             // the panel is exactly as wide as the channel count makes it, so a
             // two-channel signal leaves less room than any translation of the
             // hint needs: wrap it instead of truncating a sentence to "Click a…"

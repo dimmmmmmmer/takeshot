@@ -240,7 +240,6 @@
 "scope_waiting" = "Ожидание сигнала…";
 
 /* Audio monitor */
-"monitor_toggle" = "Мониторинг живого звука (первые два включённых канала; при запуске всегда выключен)";
 "monitor_mute_help" = "Мьют/анмьют прослушивания";
 "tc_menu_help" = "Клик: режим детекции тейков";
 "start_frames" = "Подтверждение старта (кадры)";
@@ -542,3 +541,82 @@
 /* the scopes window's scene name — never drawn (the window wears the app's own
    chrome), but it is what the Window menu and Mission Control list it under */
 "scopes_window_title" = "Скопы";
+
+/* === owner item 5: one-click full mute ===
+   the speaker icon itself is the mute now; the volume popover moved to the
+   chevron beside it */
+"monitor_volume_help" = "Громкость мониторинга";
+
+/* === owner item 21: the shift report speaks the app language === */
+"report_title" = "отчёт смены";
+"report_camera" = "Камера %@";
+"report_takes_summary" = "%d дублей (%d годных, %d брак)";
+"report_footage" = "материал %@";
+"report_col_clip" = "КЛИП";
+"report_col_tc_in" = "TC НАЧ";
+"report_col_tc_out" = "TC КОН";
+"report_col_dur" = "ДЛИТ";
+"report_col_ok" = "ОЦЕНКА";
+"report_col_notes" = "ЗАМЕТКИ";
+"report_duration_fmt" = "%.1f с";
+"report_rating_good" = "ГОДЕН";
+"report_rating_bad" = "БРАК";
+/* the report CSV's column headers (human paperwork — the frozen Resolve
+   sidecar takeshot-log.csv is a different writer and is never translated) */
+"report_csv_file" = "Имя файла";
+"report_csv_roll" = "Ролл";
+"report_csv_clip" = "Клип";
+"report_csv_start" = "TC начала";
+"report_csv_end" = "TC конца";
+"report_csv_duration" = "Длительность";
+"report_csv_rating" = "Оценка";
+"report_csv_comments" = "Комментарии";
+"report_csv_markers" = "Маркеры";
+"report_csv_recorded" = "Записан";
+
+/* === owner item 21: the offload summary .txt and report-card PNG === */
+"offload_report_title" = "TakeShot — проверенный офлоуд";
+"offload_report_source" = "Источник";
+"offload_report_destination" = "Назначение";
+"offload_report_hash" = "Хеш";
+"offload_report_files" = "Файлы";
+"offload_report_card_size" = "Объём карты";
+"offload_report_copied" = "Скопировано";
+"offload_report_started" = "Начало";
+"offload_report_finished" = "Окончание";
+"offload_report_elapsed" = "Затрачено";
+"offload_report_average" = "Средняя";
+"offload_report_manifest" = "Манифест";
+"offload_report_manifest_missing" = "НЕ ЗАПИСАН";
+"offload_report_written_by" = "Записано";
+"offload_report_written_by_fmt" = "%@ %@ на %@";
+"offload_report_files_verified_fmt" = "%d из %d проверено";
+"offload_report_explanation" = "Каждый файл из манифеста записан на этот диск, сброшен на устройство,\nпрочитан заново в обход кэша и захеширован ещё раз. Файл, чей хеш не\nсовпал, НЕ включён в манифест и назван ниже.";
+"offload_report_dest_failed" = "ОТКАЗ НАЗНАЧЕНИЯ";
+"offload_report_mismatches" = "НЕСОВПАДЕНИЯ КОНТРОЛЬНЫХ СУММ";
+"offload_report_source_problems" = "ПРОБЛЕМЫ ИСТОЧНИКА";
+"offload_report_scan_problems" = "ЭЛЕМЕНТЫ КАРТЫ, КОТОРЫЕ НЕ УДАЛОСЬ СКОПИРОВАТЬ";
+"offload_report_verdict" = "ВЕРДИКТ";
+"offload_report_files_of_total_fmt" = "проверено файлов: %d из %d";
+"offload_report_verdict_failed_fmt" = "СБОЙ — %@ (%@ до остановки)";
+"offload_report_verdict_mismatch_fmt" = "НЕ СОВПАЛО ФАЙЛОВ: %d — %@; НЕ стирайте карту";
+"offload_report_verdict_cancelled_fmt" = "ОТМЕНЕНО — %@; НЕ стирайте карту";
+"offload_report_verdict_incomplete_fmt" = "НЕПОЛНО — %@; НЕ стирайте карту";
+"offload_report_verdict_verified_fmt" = "все файлы проверены: %d";
+"offload_report_brand" = "TAKESHOT — ПРОВЕРЕННЫЙ ОФЛОУД";
+"offload_report_stat_files" = "ФАЙЛЫ";
+"offload_report_stat_copied" = "СКОПИРОВАНО";
+"offload_report_stat_time" = "ВРЕМЯ";
+"offload_report_stat_speed" = "СКОРОСТЬ";
+"offload_report_stat_files_fmt" = "%d из %d";
+"offload_report_problems" = "ПРОБЛЕМЫ";
+"offload_report_footer_fmt" = "%@ %@ на %@   ·   контрольные суммы %@   ·   квитанция: %@";
+"offload_report_receipt_missing" = "не записана";
+"offload_report_dest_failed_fmt" = "Назначение отказало — %@";
+"offload_report_more_problems_fmt" = "…и ещё %d — см. сводку .txt";
+"offload_report_hours_unit" = "ч";
+"offload_report_minutes_unit" = "мин";
+"offload_report_seconds_unit" = "с";
+
+/* === owner item 28: the remote page adapts to the viewer mode === */
+"remote_mode_playback" = "Просмотр";

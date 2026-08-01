@@ -30,9 +30,21 @@ extension TakeLogExporter {
         frameOffset(seconds: take.durationSeconds, at: rate)
     }
 
-    public static func reportCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Roll,Clip,Start TC,End TC,Duration,Rating,Comments,Markers,Recorded At"]
+    /// The report table, labelled in `labels`' language.
+    ///
+    /// This CSV is production paperwork for HUMANS and has no round trip, so
+    /// its headers and rating words follow the app language (owner item 21).
+    /// The Resolve sidecar next door (`takeshot-log.csv`, `+CSV`) is the exact
+    /// opposite — a frozen machine schema — and is deliberately not touched.
+    /// The labels are injected because CaptureCore is localization-free; the
+    /// default keeps every existing caller's output English.
+    public static func reportCSV(takes: [Take],
+                                 labels: ShiftReportCSVLabels = .english)
+        -> String {
+        var lines = [labels.header.map(escape).joined(separator: ",")]
         let formatter = DateFormatter()
+        // numeric and language-neutral on purpose — a date that changes shape
+        // with the language is not comparable across two days' reports
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         for take in takes {
@@ -40,8 +52,8 @@ extension TakeLogExporter {
             // later must break this switch, not silently export blank
             let rating: String
             switch take.rating {
-            case .good: rating = "GOOD"
-            case .bad: rating = "BAD"
+            case .good: rating = labels.good
+            case .bad: rating = labels.bad
             case .none: rating = ""
             }
             lines.append([
@@ -51,7 +63,7 @@ extension TakeLogExporter {
                 take.startTimecode?.description ?? "",
                 endTimecode(of: take)?.description ?? "",
                 durationTimecode(of: take),
-                rating,
+                escape(rating),
                 escape(flattened(take.comment)),
                 escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
                 formatter.string(from: take.recordedAt),
@@ -59,4 +71,20 @@ extension TakeLogExporter {
         }
         return lines.joined(separator: "\n") + "\n"
     }
+}
+
+/// The shift-report CSV's translatable words: the ten column headers, in
+/// column order, and the two rating values. Injected by the app in its UI
+/// language; the English default is exactly what the file always said.
+public struct ShiftReportCSVLabels: Sendable, Equatable {
+    /// One label per column — the writer above defines the order.
+    public var header = ["File Name", "Roll", "Clip", "Start TC", "End TC",
+                         "Duration", "Rating", "Comments", "Markers",
+                         "Recorded At"]
+    public var good = "GOOD"
+    public var bad = "BAD"
+
+    public init() {}
+
+    public static let english = ShiftReportCSVLabels()
 }

@@ -31,8 +31,9 @@ import UniformTypeIdentifiers
 /// the approach — a small drawing class over a CGContext with a y cursor
 /// counted from the top of the page (see `OffloadReportCanvas`).
 ///
-/// English, like everything else that leaves the building with the drive (see
-/// `OffloadSummary`).
+/// Labels are injected in the app's language, defaulting to English, exactly
+/// like the .txt beside it (see `OffloadReportLabels`) — the two are renderings
+/// of one report and must speak one language.
 public enum OffloadReportCard {
     /// Point width of the card. Wide enough for a destination path at 13pt
     /// without truncation on any sane volume layout.
@@ -50,13 +51,14 @@ public enum OffloadReportCard {
     @discardableResult
     public static func write(result: OffloadDestinationResult,
                              run: OffloadRunFacts,
-                             into destination: URL, date: Date) throws -> URL {
+                             into destination: URL, date: Date,
+                             labels: OffloadReportLabels = .english) throws -> URL {
         let name = "\(OffloadSummary.filePrefix)"
             + "\(OffloadFormat.fileStamp(date)).\(fileExtension)"
         let url = CapturePipeline.uniqueURL(
             for: destination.appendingPathComponent(name))
         defer { CapturePipeline.releaseReservation(for: url) }
-        guard let data = png(result: result, run: run) else {
+        guard let data = png(result: result, run: run, labels: labels) else {
             throw OffloadError.cannotRenderReport
         }
         try data.write(to: url, options: .atomic)
@@ -66,11 +68,13 @@ public enum OffloadReportCard {
     /// The card as PNG bytes. nil only if CoreGraphics refused a context, which
     /// on this path means the process is out of memory.
     public static func png(result: OffloadDestinationResult,
-                           run: OffloadRunFacts) -> Data? {
-        let problems = shown(problems(result: result, run: run))
+                           run: OffloadRunFacts,
+                           labels: OffloadReportLabels = .english) -> Data? {
+        let problems = shown(problems(result: result, run: run, labels: labels),
+                             labels: labels)
         let height = CardMetrics.height(problemLines: problems.count)
         guard let context = makeContext(height: height) else { return nil }
-        OffloadReportCanvas(context: context, height: height)
+        OffloadReportCanvas(context: context, height: height, labels: labels)
             .draw(result: result, run: run, problems: problems)
         guard let image = context.makeImage() else { return nil }
         return encodePNG(image)
@@ -82,10 +86,12 @@ public enum OffloadReportCard {
     /// destination, then files that did not match, then what the card would not
     /// give up at all.
     static func problems(result: OffloadDestinationResult,
-                         run: OffloadRunFacts) -> [String] {
+                         run: OffloadRunFacts,
+                         labels: OffloadReportLabels = .english) -> [String] {
         var lines: [String] = []
         if let failure = result.failure {
-            lines.append("Destination failed — \(failure)")
+            lines.append(String(format: labels.destinationFailedLineFormat,
+                                failure))
         }
         lines += result.mismatches
         lines += run.problems.source
@@ -97,17 +103,21 @@ public enum OffloadReportCard {
     /// four screens tall is one nobody scrolls to the verdict on. The count is
     /// the fact, the first few names are the lead, and the .txt beside it has
     /// the rest — the same rule the verify sheet's lists follow.
-    static func shown(_ all: [String]) -> [String] {
+    static func shown(_ all: [String],
+                      labels: OffloadReportLabels = .english) -> [String] {
         guard all.count > CardMetrics.maxProblemLines else { return all }
         return Array(all.prefix(CardMetrics.maxProblemLines))
-            + ["…and \(all.count - CardMetrics.maxProblemLines) more "
-                + "— see the .txt summary"]
+            + [String(format: labels.moreProblemsFormat,
+                      all.count - CardMetrics.maxProblemLines)]
     }
 
     /// Where the machine-readable receipt is, relative to the copy — or that it
     /// is not there, which the card has to state rather than leave blank.
-    static func receipt(_ result: OffloadDestinationResult) -> String {
-        guard let manifest = result.manifestURL else { return "not written" }
+    static func receipt(_ result: OffloadDestinationResult,
+                        labels: OffloadReportLabels = .english) -> String {
+        guard let manifest = result.manifestURL else {
+            return labels.receiptMissing
+        }
         return OffloadEngine.relativePath(of: manifest, under: result.url)
     }
 
