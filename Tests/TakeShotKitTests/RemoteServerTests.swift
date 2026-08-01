@@ -244,6 +244,26 @@ import Testing
             defer { healthy.close() }
             _ = try await healthy.next(type: "auth")
 
+            // The healthy client has to actually read for the whole flood:
+            // URLSessionWebSocketTask only drains the wire while a receive is
+            // pending, and a "healthy" client nobody reads from fills its own
+            // window a few pushes after the stalled one — on a loaded run both
+            // then cross the in-flight ceiling between two polls, the count
+            // skips from 2 to 0, and this test was the suite's flake. The
+            // drain also remembers whether the post-drop status got through,
+            // which is the "keeps their pushes" being claimed.
+            let received = HitCounter()
+            let sawBadRating = HitCounter()
+            let drain = Task { @MainActor in
+                while true {
+                    guard case .string(let text) = try await healthy.task
+                        .receive() else { continue }
+                    received.bump()
+                    if text.contains(#""rating":"bad""#) { sawBadRating.bump() }
+                }
+            }
+            defer { drain.cancel() }
+
             let stalled = try RemoteRawSocket(port: port)
             defer { stalled.close() }
             try stalled.handshake()
@@ -251,33 +271,29 @@ import Testing
             let joined = await ControllerWait.until { server.clientCount == 2 }
             try #require(joined, "the raw socket never authenticated")
 
-            // Push until the stalled socket's window shuts and the bytes queued
-            // behind it pass the ceiling. Long take names rather than more
-            // pushes: the kernel and Network.framework absorb megabytes between
-            // them before a send stops completing, and a status is 180 bytes —
-            // reaching that with real ones takes tens of thousands of them and
-            // most of a minute.
-            var padded = controller.remoteStatus()
-            padded.takeName = String(repeating: "A", count: 16 * 1024)
-            var dropped = false
-            for _ in 0..<64 where !dropped {
-                for _ in 0..<16 { server.broadcast(padded) }
-                dropped = await ControllerWait.until({ server.clientCount == 1 },
-                                                     timeout: .milliseconds(200))
-            }
+            let dropped = await Self.floodUntilOneDrops(
+                server, status: controller.remoteStatus(), received: received)
             #expect(dropped,
                     "a client that stopped reading was buffered without limit")
 
-            // One went, and it was the stalled one: the client that kept reading
-            // is the slot still held. Asserted through the count rather than by
-            // reading from it, because everything pushed above is queued in front
-            // of anything sent from here.
+            // One went, and it was the stalled one: the client that kept
+            // reading is the slot still held.
             #expect(server.clientCount == 1)
 
-            // And the server is still serving — a phone picking up now is handed
-            // the current state, not the flood.
+            // And its pushes still flow: the status sent AFTER the drop
+            // reaches it. First the send ledger has to drain — the reader has
+            // the flood's bytes, but a completion still in flight counts
+            // against the drop ceiling, and a push behind an unsettled
+            // half-megabyte message drops the very client being asserted
+            // alive (that race, at sixteen unpolled sends a round, was this
+            // suite's flake).
+            await ControllerWait.until { server.maxClientInFlight == 0 }
             controller.takes[0].rating = .bad
             controller.pushRemoteStatus()
+            let heard = await ControllerWait.until { sawBadRating.value > 0 }
+            #expect(heard, "the reading client lost its status stream")
+
+            // A phone picking up now is handed the current state, not the flood.
             let fresh = try await RemoteHarness.connect(
                 port: port, pin: pin, session: RemoteHarness.session())
             defer { fresh.close() }
@@ -286,6 +302,38 @@ import Testing
             #expect(status["rating"] as? String == "bad",
                     "a stalled client cost the server its status stream")
         }
+    }
+
+    /// Push until the stalled socket's window shuts and the bytes queued
+    /// behind it pass the ceiling. Half-megabyte take names rather than more
+    /// pushes: loopback socket buffers autotune into the megabytes, so a send
+    /// on the stalled socket keeps completing until several MB have gone
+    /// nowhere — with a status of 180 bytes that is most of a minute. One
+    /// push per RECEIPT: waiting for the reading client to take each message
+    /// before the next goes out means its completion is already queued ahead
+    /// of the next broadcast, so its own in-flight bytes never see two
+    /// messages — only the socket that stopped draining can accumulate to the
+    /// ceiling. (The old shape — bursts of sixteen, unpolled — relied on
+    /// outracing the send completions, and under load it dropped the reading
+    /// client too: that was this suite's flake.)
+    @MainActor
+    private static func floodUntilOneDrops(_ server: RemoteServer,
+                                           status: RemoteStatus,
+                                           received: HitCounter) async -> Bool {
+        var padded = status
+        padded.takeName = String(repeating: "A", count: 512 * 1024)
+        var dropped = false
+        var rounds = 0
+        while !dropped, rounds < 64 {
+            rounds += 1
+            server.broadcast(padded)
+            let sent = rounds
+            await ControllerWait.until {
+                received.value >= sent || server.clientCount < 2
+            }
+            dropped = server.clientCount < 2
+        }
+        return dropped
     }
 
     /// RFC 6455 §5.4: a continuation frame with no message open is a protocol

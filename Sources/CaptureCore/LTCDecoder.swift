@@ -15,7 +15,7 @@ public final class LTCDecoder {
     private var lastSign = false
     private var samplesSinceTransition = 0.0
     /// Adaptive half-bit period in samples (init for 25 fps @ 48 kHz).
-    private var halfPeriod = 12.0
+    private var halfPeriod = LTCDecoder.defaultHalfPeriod
     private var pendingHalf = false
     /// 80-bit shift register: bits flow through `sync` (newest 16) into
     /// `data`, so right after a full frame `data` holds bits 0…63 (bit 0 at
@@ -26,6 +26,18 @@ public final class LTCDecoder {
     private static let syncPattern: UInt16 = 0xBFFC
     /// Noise deadband for the zero-crossing detector (16-bit full scale).
     private let deadband: Int16 = 400
+    /// The half-bit period the decoder starts from (25 fps @ 48 kHz), and what
+    /// `garbageStreak` puts back — see below.
+    private static let defaultHalfPeriod = 12.0
+    /// Consecutive intervals the classifier could not place. A run of them
+    /// means the adaptive period has been dragged somewhere no real LTC rate
+    /// lives: a noise burst's one-sample intervals walk `halfPeriod` down
+    /// toward 1, where every LEGITIMATE interval then reads as garbage — a
+    /// branch that never adapts — so without this the decoder stayed deaf
+    /// until something called `reset()`. Thirty-two garbage intervals is a
+    /// fifth of one LTC frame: locked signal never produces that many in a
+    /// row, and after a burst the period snaps back within a frame.
+    private var garbageStreak = 0
 
     public init() {}
 
@@ -35,6 +47,7 @@ public final class LTCDecoder {
         samplesSinceTransition = 0
         data = 0
         sync = 0
+        garbageStreak = 0
     }
 
     /// Feed interleaved-extracted mono samples; returns the newest timecode
@@ -64,6 +77,7 @@ public final class LTCDecoder {
                     pendingHalf = true
                 }
                 halfPeriod = halfPeriod * 0.95 + interval * 0.05
+                garbageStreak = 0
             } else if interval < halfPeriod * 3.5 {
                 // full-bit interval: a "0"
                 pendingHalf = false // a lone half before a full bit is a slip
@@ -73,9 +87,18 @@ public final class LTCDecoder {
                     lastTimecode = tc
                 }
                 halfPeriod = halfPeriod * 0.95 + (interval / 2) * 0.05
+                garbageStreak = 0
             } else {
-                // silence or garbage — drop the phase, keep the period
+                // silence or garbage — drop the phase, keep the period. Unless
+                // NOTHING has fitted for a while: then the period itself is
+                // what the garbage left behind, and it goes back to default so
+                // a clean signal can lock again (see garbageStreak).
                 pendingHalf = false
+                garbageStreak += 1
+                if garbageStreak >= 32 {
+                    garbageStreak = 0
+                    halfPeriod = Self.defaultHalfPeriod
+                }
             }
         }
         return newest
