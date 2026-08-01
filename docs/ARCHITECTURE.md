@@ -155,6 +155,15 @@ The takes panel has an "open folder" button and an Other content block for
 files that arrive in the record folder from outside the app. The metadata CSV
 uses a Reel Name column, which is the roll.
 
+The offload and verify sheets are set in one type family — three sizes and two
+weights in `OffloadChrome`, applied by the single `offloadText(_:)` modifier, so
+a label added later cannot drift off it. Neither sheet holds its run hostage:
+both close over a live job, and while one is going the takes-panel utility strip
+carries it (`OffloadStatusStrip` — percent, the file in flight, a bar and Stop),
+with the strip itself the way back into the sheet. That is why the models and
+the history store are owned by `CaptureController` and not by a view: the run
+outlives every render of the sheet it was started from.
+
 The menu bar is built in `AppCommands.swift` from SwiftUI command groups (File,
 View, a Playback menu, Help; Edit is left alone because the naming fields are
 typed with it). Every item calls the controller method the on-screen button
@@ -185,11 +194,21 @@ would drop a marker while a roll name is being typed.
   out would place the marker hours past the end of the take. The conversion
   itself lives in `+MarkerTime`, shared with the shift report's duration
   counting and with the controller's anchoring of a recording's markers.
-- Offload writes into each destination: `ascmhl/NNNN_<name>_<stamp>.mhl`
-  (an ASC MHL v2.0 hashlist outside tools can verify) and
-  `offload-summary_<stamp>.txt` (the human-readable verdict). The checksum is
-  per-run and defaults to xxHash64 (`OffloadHashAlgorithm`); "Verify disk…"
-  re-reads a copy against the newest manifest generation.
+- Offload writes three files into each destination:
+  `ascmhl/NNNN_<name>_<stamp>.mhl` (an ASC MHL v2.0 hashlist outside tools can
+  verify), `offload-summary_<stamp>.txt` (the human-readable verdict) and
+  `offload-summary_<stamp>.png` (the same verdict as a picture to hand over —
+  see `OffloadReportCard` for why an image and not a PDF). All three are
+  recognized by `OffloadVerify.isReportFile`, or every one of them would be
+  reported as a stray by the pass that reads the disk back.
+  `OffloadHashAlgorithm` still carries both hashes and the verify pass reads a
+  manifest of either, but the UI no longer asks: a run is xxHash64, which is
+  what the DIT tools re-verify against. "Check a disk copy…" re-reads a copy
+  against the newest manifest generation.
+- The log of past offloads is NOT a sidecar: it is
+  `Application Support/TakeShot/offload-history.json` (`OffloadHistoryStore`,
+  capped at 20). The record folder is emptied and re-pointed between shooting
+  days, and the card being copied has nothing to do with it.
 
 ## Localization
 

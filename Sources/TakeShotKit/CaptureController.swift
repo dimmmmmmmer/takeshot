@@ -122,6 +122,11 @@ final class CaptureController: ObservableObject {
     /// takes panel reads its status line.
     let offload = OffloadSheetModel()
 
+    /// What has already been offloaded, kept between launches. Owned here so
+    /// the sheet can show it the moment it opens and a finished run can append
+    /// to it without the sheet being on screen at all.
+    let offloadHistory = OffloadHistoryStore()
+
     /// The verify-against-manifest sheet is up.
     @Published var verifySheetPresented = false
     /// Re-reading a disk that was offloaded earlier against the ASC MHL

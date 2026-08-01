@@ -137,20 +137,28 @@ day's ratings.
 
 Copies an arbitrary folder — a camera card, a sound roll — to one or several
 destinations in a single pass: every file is read once, hashed on the way
-(xxHash64 by default), and each copy is verified by re-reading it from the
-destination disk. The source's own folder name is preserved inside every
-destination. A file that does not verify is reported; a run is never reported
-as done with an error inside it.
+(xxHash64, the checksum every DIT tool re-verifies against), and each copy is
+verified by re-reading it from the destination disk. The source's own folder
+name is preserved inside every destination. A file that does not verify is
+reported; a run is never reported as done with an error inside it.
 
-Each destination receives two records: an industry-standard **ASC MHL
-manifest** (`ascmhl/…mhl` — the receipt post-production tools verify against)
-and a plain-text **summary** with the numbers — files, bytes, times, speed and
-the one verdict line.
+Every copy gets its own **report**: a picture to hand over and the same thing
+as plain text to search, both stating the files, bytes, times, speed and the
+one verdict line. Beside it goes the **checksum list** (`ascmhl/…mhl`, an ASC
+MHL manifest) — the receipt Silverstack, OffShoot and `ascmhl` re-verify the
+disk against months later.
 
-**Verify disk…** (next to Offload in the takes-panel strip and in the File
-menu) is the reverse: point it at a copy made earlier and it re-reads every
-file against the newest manifest on that disk, reporting what verified, what
-mismatched, what is missing and what is a stray.
+The sheet can be closed while a copy runs. The job carries on and reports
+itself in the takes-panel strip — percentage, the file in flight and Stop —
+and clicking that strip brings the sheet back. The sheet also opens showing the
+last twenty offloads made from this Mac, so "have I already copied this card?"
+has an answer before anything is picked; clicking a row shows that copy in the
+Finder.
+
+**Check a disk copy…** (next to Offload in the takes-panel strip and in the
+File menu) is the reverse: point it at a copy made earlier and it re-reads
+every file against the newest checksum list on that disk, reporting what
+verified, what mismatched, what is missing and what is a stray.
 
 This is for originals. TakeShot's own takes do not need it — they are not the
 original media. A separate **verified backup** folder can be set in Settings to

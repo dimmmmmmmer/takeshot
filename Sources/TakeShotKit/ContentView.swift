@@ -23,7 +23,8 @@ struct ContentView: View {
         // destination LIST, live per-destination progress and a verdict card
         // each, none of which a chain of modal file panels can show.
         .sheet(isPresented: $controller.offloadSheetPresented) {
-            OffloadSheet(model: controller.offload)
+            OffloadSheet(model: controller.offload,
+                         history: controller.offloadHistory)
         }
         // …and the other half of the same job: re-reading a disk that was
         // offloaded weeks ago against the manifest left on it.

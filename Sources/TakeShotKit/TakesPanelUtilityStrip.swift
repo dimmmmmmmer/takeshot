@@ -1,18 +1,38 @@
 import SwiftUI
 
 /// Compact utility strip along the bottom of the takes panel: Settings, the VANC
-/// monitor and a verified offload copy.
+/// monitor and a verified offload copy — and, while one is running, the offload
+/// itself.
 ///
-/// All three used to be in the footer's bottom-left corner. They are setup, not
-/// shooting — nobody opens Settings between takes — and the footer needs the
-/// space for the codec and the record folder, which an operator does have to read
-/// while the camera is rolling. Here they sit under the Other content block,
-/// where the only thing they compete with is the panel's own width.
+/// The first three used to be in the footer's bottom-left corner. They are
+/// setup, not shooting — nobody opens Settings between takes — and the footer
+/// needs the space for the codec and the record folder, which an operator does
+/// have to read while the camera is rolling. Here they sit under the Other
+/// content block, where the only thing they compete with is the panel's own
+/// width.
 struct TakesPanelUtilityStrip: View {
     @EnvironmentObject private var controller: CaptureController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            buttons
+            // The live run, when there is one (see OffloadStatusStrip). Under
+            // the buttons rather than beside them: it is three lines of text
+            // and a bar, and the row above is icons. Conditional HERE rather
+            // than inside the strip so that an idle app pays nothing for it,
+            // not even this VStack's spacing.
+            if let status = controller.offloadStatus {
+                OffloadStatusStrip(status: status, offload: controller.offload,
+                                   verify: controller.verify)
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+    }
+
+    private var buttons: some View {
         HStack(spacing: 14) {
             Button {
                 openWindow(id: "settings")
@@ -48,9 +68,6 @@ struct TakesPanelUtilityStrip: View {
 
             Spacer(minLength: 0)
         }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
     }
 }
 

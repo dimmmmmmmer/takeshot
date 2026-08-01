@@ -36,6 +36,12 @@ import Testing
 
     /// The same two or three SSDs come back every shooting day; re-picking them
     /// through a file panel per card is the part of the old flow that hurt.
+    ///
+    /// The saved `sha256` is there on purpose: the checksum picker is gone
+    /// (owner item 19) and a build that once wrote SHA-256 into the settings
+    /// must not quietly bring the slow path back for the rest of that Mac's
+    /// life. The engine still supports both, and a manifest written in either
+    /// still verifies — what went is the question.
     @Test func theSheetSeedsItselfFromTheSavedRig() async throws {
         let rig: (inout CaptureSettings) -> Void = {
             $0.offloadDestinationPaths = ["/Volumes/SSD1", "/Volumes/SSD2"]
@@ -47,7 +53,7 @@ import Testing
             #expect(controller.offloadSheetPresented)
             #expect(controller.offload.destinations.map(\.path)
                 == ["/Volumes/SSD1", "/Volumes/SSD2"])
-            #expect(controller.offload.algorithm == .sha256)
+            #expect(OffloadSheetModel.algorithm == .xxh64)
         }
     }
 
@@ -61,8 +67,6 @@ import Testing
             controller.showOffloadSheet()
 
             #expect(controller.offload.destinations.map(\.path) == ["/Volumes/OLD"])
-            // xxHash64 is the DIT default and what an absent setting means
-            #expect(controller.offload.algorithm == .xxh64)
         }
     }
 
@@ -238,6 +242,70 @@ import Testing
             controller.showOffloadSheet()
 
             #expect(controller.offloadSheetPresented)
+        }
+    }
+
+    // MARK: - the sheet closes over a live run (owner item 16)
+
+    /// The sheet is dismissible now, and the run does not care: it is owned by
+    /// the controller, and closing the window it was started from must not stop
+    /// it, clear its progress or hide its status line.
+    @Test func closingTheSheetLeavesTheRunGoing() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let model = controller.offload
+            model.isRunning = true
+            model.progress = OffloadProgress(
+                filesTotal: 128, bytesTotal: 1000, currentFile: "A001C001.mov",
+                destinations: [], elapsed: 1, isCancelling: false)
+            controller.offloadStatus = "Offload 41/128"
+
+            // what the sheet's Close button does, and nothing else
+            controller.offloadSheetPresented = false
+
+            #expect(model.isRunning)
+            #expect(model.progress != nil)
+            #expect(controller.offloadStatus != nil)
+        }
+    }
+
+    /// …and the way back in is the same menu item that opened it. Answering
+    /// "an offload is already running" to somebody trying to WATCH that offload
+    /// is the reason this needed saying twice.
+    @Test func theMenuReopensARunningOffloadRatherThanRefusing() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let model = controller.offload
+            model.source = URL(fileURLWithPath: "/Volumes/CARD")
+            model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
+            model.isRunning = true
+            model.report = nil
+            controller.offloadSheetPresented = false
+
+            controller.showOffloadSheet()
+
+            #expect(controller.offloadSheetPresented)
+            #expect(controller.lastError == nil, "it claimed to be busy")
+            // and the sheet the operator gets back is the one still running,
+            // not a form reset over the top of it
+            #expect(controller.offload.destinations.count == 1)
+        }
+    }
+
+    /// The strip's own button reaches whichever job is up, and Stop from the
+    /// strip means the same thing as Stop in the sheet.
+    @Test func theStripReachesAndStopsTheRunningJob() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let model = controller.offload
+            model.isRunning = true
+            controller.offloadSheetPresented = false
+            controller.verifySheetPresented = true
+
+            controller.showRunningDiskJob()
+            #expect(controller.offloadSheetPresented)
+            #expect(!controller.verifySheetPresented)
+
+            controller.cancelRunningDiskJob()
+            #expect(model.isCancelling)
+            #expect(!controller.verify.isCancelling, "it stopped the wrong job")
         }
     }
 }

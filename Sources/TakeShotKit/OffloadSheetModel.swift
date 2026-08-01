@@ -17,9 +17,18 @@ final class OffloadSheetModel: ObservableObject {
         var url: URL
     }
 
+    /// The checksum every run uses.
+    ///
+    /// A constant, not a setting. The picker that used to be on the sheet asked
+    /// the operator a question they cannot answer on set — xxHash64 is what
+    /// every DIT tool (Silverstack, OffShoot, ascmhl) verifies against, and
+    /// SHA-256 is several times slower for a guarantee nobody downstream asked
+    /// for. The ENGINE stays capable of both, and a manifest written in either
+    /// still verifies (see `OffloadManifestReader`); what went is the question.
+    static let algorithm: OffloadHashAlgorithm = .xxh64
+
     @Published var source: URL?
     @Published var rows: [Row] = []
-    @Published var algorithm: OffloadHashAlgorithm = .xxh64
     /// Live state of the run; nil when nothing is running.
     @Published var progress: OffloadProgress?
     /// The last finished run. Set by the run, and by the view-render tests,
@@ -53,10 +62,6 @@ final class OffloadSheetModel: ObservableObject {
             progress = nil
             report = nil
             isCancelling = false
-        }
-        if let stored = settings.offloadHashAlgorithm,
-           let known = OffloadHashAlgorithm(rawValue: stored) {
-            algorithm = known
         }
         guard rows.isEmpty else { return }
         // The operator's saved destination list; failing that, the folder the
@@ -122,15 +127,14 @@ final class OffloadSheetModel: ObservableObject {
     func start() {
         guard let source, canStart else { return }
         let plan = OffloadPlan(source: source, destinations: destinationFolders,
-                               algorithm: algorithm, creator: creator)
+                               algorithm: Self.algorithm, creator: creator)
         let token = OffloadCancellation()
         cancellation = token
         isRunning = true
         isCancelling = false
         progress = nil
         report = nil
-        controller?.rememberOffloadChoices(destinations: destinations,
-                                           algorithm: algorithm)
+        controller?.rememberOffloadChoices(destinations: destinations)
         controller?.offloadStatus = L("offload_scanning")
         CaptureController.offloadQueue.async { [weak self] in
             let result = OffloadEngine.run(plan, cancellation: token) { snapshot in

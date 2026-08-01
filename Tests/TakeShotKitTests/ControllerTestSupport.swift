@@ -91,6 +91,12 @@ enum ControllerHarness {
         // has to fail here rather than quietly work on the operator's.
         try #require(controller.settings.destinationPath == root.path,
                      "the controller adopted a folder that is not the fixture's")
+        // The offload log lives in Application Support, which is the
+        // operator's. Pointed at the scratch folder before anything can record
+        // a run into it — a suite that appended to the real file would rewrite
+        // the list somebody uses to decide whether a card has been copied.
+        controller.offloadHistory.fileURL =
+            root.appendingPathComponent("offload-history.json")
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false

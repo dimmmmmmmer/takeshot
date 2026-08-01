@@ -96,6 +96,14 @@ struct OffloadEngineTests {
             #expect(result.outcome == .verified)
             #expect(result.totals.filesVerified == OffloadFixtures.card.count)
             #expect(result.totals.bytesWritten == report.run.card.bytes)
+            // All three report files land in every copy, the picture included
+            // — that is the artifact somebody is handed, and a run that wrote
+            // it nowhere would look identical from the sheet.
+            let image = try #require(result.imageURL)
+            #expect(FileManager.default.fileExists(atPath: image.path))
+            #expect(image.pathExtension == "png")
+            #expect(result.summaryURL != nil)
+            #expect(result.manifestURL != nil)
             for file in OffloadFixtures.card {
                 let copy = result.url.appendingPathComponent(file.path)
                 #expect(try Data(contentsOf: copy)
