@@ -12,7 +12,11 @@ import Foundation
 extension CapturePipeline {
     /// Input levels of the source signal: nil/"auto" — guess from the signal
     /// (RGB 4:4:4 → limited), "limited" (16-235) — expand once to full,
-    /// "full" (0-255) — pass through (legacy "off" means the same).
+    /// "limited_excursions" — expand the whole legal swing (4-1019 in 10-bit)
+    /// so the sub-blacks and super-whites `limited` clamps away survive, and
+    /// "full" (0-255) — pass through (legacy "off" means the same). The strings
+    /// are `InputLevels` raw values; this is the one place the legacy spelling
+    /// is normalized, which is why `InputLevels.resolved` never sees it.
     public func setVideoLevels(_ mode: String?) {
         queue.async {
             switch mode {

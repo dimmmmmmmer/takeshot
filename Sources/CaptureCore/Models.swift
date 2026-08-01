@@ -207,9 +207,13 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020".
     public var colorTagPreset: String?
     /// Input levels of the source signal: nil/"auto" — RGB 4:4:4 assumed
-    /// limited; "limited" (16-235) — expanded once to full-range BGRA;
-    /// "full" (0-255) — passed through (a playout device already set to Full
-    /// output levels). Legacy "off" is treated as "full".
+    /// limited; "limited" (16-235) — expanded once to full-range BGRA, and the
+    /// codes outside that window clamped away; "limited_excursions" — the whole
+    /// legal swing expanded instead, so a camera's sub-blacks and super-whites
+    /// survive into the file; "full" (0-255) — passed through (a playout device
+    /// already set to Full output levels). Legacy "off" is treated as "full".
+    /// The values are `InputLevels` raw values, and the property stays a
+    /// `String?` so settings JSON written by an older build still decodes.
     public var videoLevels: String?
     /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
     /// OFF on launch (no surprise audio on set).

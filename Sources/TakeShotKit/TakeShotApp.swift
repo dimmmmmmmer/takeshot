@@ -52,7 +52,12 @@ public struct TakeShotApp: App {
         .defaultSize(width: HelpView.width, height: 720)
 
         // Scopes window: movable/resizable, opened from the player badge
-        Window("Scopes", id: "scopes") {
+        // Same rule as the VANC monitor below: the scene carries the localized
+        // name, because that string is what the Window menu and Mission Control
+        // label read. It is not drawn anywhere — the window wears the app's own
+        // chrome, and `ScopesWindowView` hides the title strip the moment the
+        // window exists rather than waiting for it to become key.
+        Window(L("scopes_window_title"), id: "scopes") {
             ScopesWindowView()
                 .environmentObject(controller)
                 .tint(controller.accentColor)
@@ -64,7 +69,7 @@ public struct TakeShotApp: App {
         // window). The localized name lives on the SCENE, not in a
         // `navigationTitle` inside the view: the scene title is what the Window
         // menu lists, and setting it from the view made SwiftUI show the title
-        // strip as well (see VancMonitorView.hidesWindowTitle).
+        // strip as well (see VancMonitorView.monolithicWindowChrome).
         Window(L("vanc_monitor_title"), id: "vanc-monitor") {
             VancMonitorView()
                 .environmentObject(controller)
@@ -120,13 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A monolithic window with no title-bar strip (buttons over the content).
+    /// The chrome itself lives in `WindowChrome` — this used to be a second
+    /// copy of it, and the two had already drifted apart.
     static func makeMonolithic(_ window: NSWindow) {
-        guard window.styleMask.contains(.titled) else { return }
-        window.styleMask.insert(.fullSizeContentView)
-        window.titlebarAppearsTransparent = true
-        window.titlebarSeparatorStyle = .none
-        window.titleVisibility = .hidden
-        window.toolbar = nil
+        WindowChrome.makeMonolithic(window)
     }
 
     /// Actual height of the window-button area: window height minus contentLayoutRect.

@@ -159,16 +159,9 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Picker(L("video_levels"), selection: Binding(
-                    get: {
-                        let v = controller.settings.videoLevels
-                        return v == nil ? "auto" : (v == "off" ? "full" : v!)
-                    },
-                    set: { controller.settings.videoLevels = $0 == "auto" ? nil : $0 })) {
-                    Text(L("levels_auto")).tag("auto")
-                    Text(L("levels_limited")).tag("limited")
-                    Text(L("levels_full")).tag("full")
-                }
+                // shared with the badge menu over the player — see
+                // `SignalControls`
+                InputLevelsPicker()
             }
             Section(L("settings_luts")) {
                 LabeledContent(L("luts_folder")) {

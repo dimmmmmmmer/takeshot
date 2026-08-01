@@ -8,11 +8,18 @@ import UniformTypeIdentifiers
 /// remembers where the operator put the window.
 struct ScopesWindowView: View {
     @EnvironmentObject private var controller: CaptureController
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScopesPanel(live: controller.live, onCloseWindow: { dismiss() })
+        // `topInset` is the strip the window buttons live over: with the app's
+        // own chrome the content runs to the top of the window, and without it
+        // the traffic lights sit on top of the first scope toggle. Same
+        // measured value the main window reserves.
+        ScopesPanel(live: controller.live, topInset: controller.windowTopInset)
+            .ignoresSafeArea(.container, edges: .top)
             .background(ScopesWindowFrameKeeper(controller: controller))
+            // The window's own chrome, styled like the main window's and the
+            // VANC monitor's — buttons over the content, no title strip.
+            .monolithicWindowChrome()
             .onAppear { controller.scopesWindowOpen = true }
             .onDisappear { controller.scopesWindowOpen = false }
     }
@@ -29,17 +36,6 @@ enum ScopeKind: String, CaseIterable, Identifiable {
         case .parade: return "scope_parade"
         case .histogram: return "scope_histogram"
         case .vector: return "scope_vector"
-        }
-    }
-
-    /// Whether the box draws a labelled value scale down its side. Only the two
-    /// scopes whose vertical axis IS a signal level have one — a histogram's
-    /// vertical axis is a population count and a vectorscope has no vertical
-    /// axis at all, so a percent scale beside either would be a lie.
-    var showsValueScale: Bool {
-        switch self {
-        case .waveform, .parade: return true
-        case .histogram, .vector: return false
         }
     }
 
@@ -70,8 +66,8 @@ struct ScopesPanel: View {
     @ObservedObject var live: LiveSignal
     /// The in-player overlay: one scope, its own selection, no reordering.
     var singleScope = false
-    /// Close button for the separate window (nil in the overlay).
-    var onCloseWindow: (() -> Void)?
+    /// Room reserved above the toolbar for the window buttons (window only).
+    var topInset: CGFloat = 0
 
     // The window's grid and the overlay's single scope keep SEPARATE
     // selections. They used to share these four flags, and opening the overlay
@@ -178,11 +174,14 @@ struct ScopesPanel: View {
             }
         }
         .padding(12)
+        .padding(.top, topInset)
         .frame(minWidth: 420, minHeight: 260)
         .background(background)
-        // Esc closes the overlay — it has no close button (see
-        // PlayerOverlayDismiss for the three mechanisms). The window has its
-        // own button and the system's Cmd-W.
+        // Esc and a click on the picture also close the overlay (see
+        // PlayerOverlayDismiss); the button in the toolbar is the visible one.
+        // The WINDOW has no button of its own — it has a real title bar with a
+        // real close button, and a second X inside the content was one close
+        // control too many.
         .overlay {
             if singleScope {
                 EscapeKeyCatcher { controller.showScopesOverlay = false }
@@ -226,8 +225,7 @@ struct ScopesPanel: View {
             trace(kind, data: data)
                 .opacity(max(kind.minimumTraceOpacity, traceBrightness))
                 .environment(\.scopeGridBrightness, gridBrightness)
-        } scale: {
-            if kind.showsValueScale { percentScale }
+                .environment(\.scopeScaleMode, ScopeScaleMode(setting: scaleMode))
         }
         .modifier(ScopeReorderDrag(kind: kind, enabled: reorderable,
                                    dragged: $dragged, orderRaw: $orderRaw,

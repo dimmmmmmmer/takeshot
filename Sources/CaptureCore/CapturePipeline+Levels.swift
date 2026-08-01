@@ -12,12 +12,36 @@ import os.log
 /// sat in the display file while the record path went through it. Getting levels
 /// applied twice is the failure mode this file exists to keep visible.
 extension CapturePipeline {
+    /// The frame the scopes measure, and what its code values mean.
+    ///
+    /// Not always the display buffer: see `LevelledFrame.scopeSource`.
+    struct ScopeSourceFrame {
+        let buffer: CVPixelBuffer
+        let levels: ScopeWireLevels
+    }
+
     /// One frame after the levels stage: the 8-bit BGRA buffer everything
     /// downstream reads, plus the precompensated 10-bit record buffer when the
     /// wire carried r210 (nil for every other format).
     struct LevelledFrame {
         let display: CVPixelBuffer
         let tenBitRecord: CVPixelBuffer?
+        /// The frame the scopes should read INSTEAD of the display buffer, when
+        /// the wire carries a signal the display buffer cannot represent.
+        ///
+        /// A 10-bit RGB wire is exactly that case, twice over: the display
+        /// buffer is 8-bit, so a scope reading it is quantized to 256 levels
+        /// however good the source was, and the limited→full expansion clamps
+        /// everything below code 64 and above 940 — the sub-blacks and
+        /// super-whites a camera legally sends, which is what the operator
+        /// opens a scope to look for. The retained wire buffer is the ONLY work
+        /// this adds to the capture queue: the analysis itself already runs on
+        /// its own queue.
+        ///
+        /// nil for every other format, where the display buffer already is the
+        /// best reading available — and where the scopes keep showing the
+        /// preview LUT, as they always have.
+        let scopeSource: ScopeSourceFrame?
     }
 
     /// Levels and, for a 10-bit wire, the split into display + record buffers.
@@ -30,15 +54,31 @@ extension CapturePipeline {
         // BGRA AND the precompensated 10-bit record buffer; levels are applied
         // inside the converter, so the 8-bit stage below must not run again
         if CVPixelBufferGetPixelFormatType(pixelBuffer) == TenBitConverter.r210 {
-            tenBitConverter.setLimitedRange(inputLevels != "full")
+            let mode = InputLevels.resolved(inputLevels)
+            tenBitConverter.setLevels(mode)
             guard let split = tenBitConverter.convert(pixelBuffer) else { return nil }
             tagColorIfUntagged(split.display)
-            return LevelledFrame(display: split.display, tenBitRecord: split.record)
+            // The graticule marks where NOMINAL black and white are, which is
+            // 64/940 whatever the expansion then does with the codes outside
+            // them — that is what makes the excursion visible as an excursion.
+            return LevelledFrame(
+                display: split.display, tenBitRecord: split.record,
+                scopeSource: ScopeSourceFrame(
+                    buffer: pixelBuffer,
+                    levels: mode == .full ? .full : .limited))
         }
-        let leveled = inputLevels == "limited"
-            ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
+        // nil is auto on a signal that is not RGB 4:4:4 — nothing is expanded,
+        // and the mode enum has no case for "the question was never asked".
+        guard let inputLevels else {
+            return LevelledFrame(display: pixelBuffer, tenBitRecord: nil,
+                                 scopeSource: nil)
+        }
+        let mode = InputLevels.resolved(inputLevels)
+        let leveled = mode.expandsEightBit
+            ? (expandLimitedRGB(pixelBuffer, mode: mode) ?? pixelBuffer)
             : pixelBuffer
-        return LevelledFrame(display: leveled, tenBitRecord: nil)
+        return LevelledFrame(display: leveled, tenBitRecord: nil,
+                             scopeSource: nil)
     }
 
     /// The levels decision for this frame, logged whenever it changes.
@@ -64,11 +104,15 @@ extension CapturePipeline {
         return inputLevels
     }
 
-    /// Expand limited-range (16-235) RGB to full range, in place (vImage byte
+    /// Expand a limited-range RGB frame to full range, in place (vImage byte
     /// lookup — no CoreImage pass, no extra buffer). BGRA only: this is the
     /// single levels operation in the pipeline; the encoder handles full-RGB →
     /// legal-YUV for the file, and YUV sources are legal-range by definition.
-    private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+    ///
+    /// `mode` picks the window: 16–235 for the normal reading, 1–254 when the
+    /// operator asked for the excursions to survive.
+    private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer,
+                                  mode: InputLevels) -> CVPixelBuffer? {
         guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA
         else { return nil }
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
@@ -80,7 +124,7 @@ extension CapturePipeline {
             width: vImagePixelCount(CVPixelBufferGetWidth(pixelBuffer)),
             rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
         // byte order is B G R A: remap the three color channels, keep alpha
-        let error = Self.levelsExpandTable.withUnsafeBufferPointer { lut in
+        let error = Self.levelsExpandTable(for: mode).withUnsafeBufferPointer { lut in
             Self.levelsTableIdentity.withUnsafeBufferPointer { identity in
                 vImageTableLookUp_ARGB8888(&image, &image,
                                            lut.baseAddress!, lut.baseAddress!,

@@ -50,7 +50,7 @@ struct ViewWindowChromeTests {
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
 
-        WindowChrome.hideTitle(of: window)
+        WindowChrome.makeMonolithic(window)
 
         #expect(window.titleVisibility == .hidden)
         #expect(window.titlebarAppearsTransparent)
@@ -60,6 +60,35 @@ struct ViewWindowChromeTests {
                 "the window lost the name the Window menu lists it under")
     }
 
+    /// Item 14: every auxiliary window gets the SAME chrome, from one
+    /// implementation.
+    ///
+    /// The delegate and `WindowChrome` used to carry a copy each and the copies
+    /// had drifted — only the delegate's cleared the toolbar — which is how the
+    /// scopes window ended up wearing a system title bar the rest of the app
+    /// does not have. Asserted against a window that has a toolbar, because
+    /// that is the field the two disagreed on.
+    @Test func theDelegateAndTheChromeAgreeOnWhatMonolithicMeans() {
+        func styled(_ apply: (NSWindow) -> Void) -> NSWindow {
+            let window = windowWithFields().window
+            window.toolbar = NSToolbar(identifier: "test")
+            window.titleVisibility = .visible
+            window.titlebarAppearsTransparent = false
+            apply(window)
+            return window
+        }
+        let viaChrome = styled { WindowChrome.makeMonolithic($0) }
+        let viaDelegate = styled { AppDelegate.makeMonolithic($0) }
+        for window in [viaChrome, viaDelegate] {
+            #expect(window.titleVisibility == .hidden)
+            #expect(window.titlebarAppearsTransparent)
+            #expect(window.titlebarSeparatorStyle == .none)
+            #expect(window.styleMask.contains(.fullSizeContentView))
+            #expect(window.toolbar == nil,
+                    "a toolbar strip is exactly the row this removes")
+        }
+    }
+
     /// The borderless full-screen mirrors have no title bar to hide; forcing a
     /// style mask onto one is how a borderless window grows chrome.
     @Test func aBorderlessWindowIsLeftAlone() {
@@ -67,7 +96,7 @@ struct ViewWindowChromeTests {
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
             styleMask: [.borderless], backing: .buffered, defer: false)
 
-        WindowChrome.hideTitle(of: window)
+        WindowChrome.makeMonolithic(window)
 
         #expect(!window.styleMask.contains(.fullSizeContentView))
         #expect(!window.styleMask.contains(.titled))

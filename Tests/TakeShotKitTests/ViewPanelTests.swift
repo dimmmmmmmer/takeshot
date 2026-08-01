@@ -159,13 +159,14 @@ struct ViewPanelTests {
         }
     }
 
-    /// The separate scopes window opens at 980pt wide; the same chrome plus the
-    /// window's close button has to fit that too.
+    /// The separate scopes window opens at 980pt wide; the same chrome has to
+    /// fit that too. It carries no close button of its own — the window's title
+    /// bar has one — so this is the chrome minus the overlay's X.
     @Test func scopesWindowChromeFitsItsDefaultSize() async throws {
         try await ViewProbe.run { probe in
             probe.controller.scopesWindowOpen = true
             let ideal = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live, onCloseWindow: {})
+                ScopesPanel(live: probe.controller.live)
             }
             #expect(ideal.ru.width <= 980,
                     "the scopes window chrome wants \(ideal.ru.width)pt of 980")

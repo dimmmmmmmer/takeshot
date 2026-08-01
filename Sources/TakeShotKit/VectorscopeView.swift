@@ -2,9 +2,17 @@ import CaptureCore
 import CoreGraphics
 import SwiftUI
 
-/// Vectorscope: chroma density colored by its own hue, rings at 25/50/75%,
-/// 75% primary/secondary targets and — when the operator wants it — the
-/// skin-tone line.
+/// Vectorscope: chroma density colored by its own hue, under a graticule built
+/// from the same chroma math the analyzer plots with.
+///
+/// Scale: the density map covers full-range chroma ±511 across ±half the box.
+/// The six hues do NOT sit at one radius on that map and no graticule should
+/// pretend they do — the Cb/Cr plane is not isotropic, and measured in units of
+/// the half-width the 75 % bars land at 0.752 (B, Yl), 0.768 (R, Cy) and 0.892
+/// (G, Mg), with the 100 % set at 1.004, 1.026 and 1.191. Every mark here is
+/// placed by `ScopeAnalyzer.chroma` for that reason rather than by a fraction
+/// chosen to look right: a bar lands on its own box because both ends of the
+/// scope compute the same number, and `ModelVectorscopeTests` measures it.
 struct VectorscopeView: View {
     let data: ScopeData
     /// The ~33° skin-tone reference line. On for faces, off for anything the
@@ -37,74 +45,49 @@ struct VectorscopeView: View {
         return lut
     }()
 
-    /// One 75% color-bar target box on the vectorscope.
+    /// One colour-bar target on the vectorscope, in unit coordinates inside the
+    /// scope square.
     struct VectorTarget: Identifiable {
         let id: String       // "R", "Cy", …
-        let x: CGFloat       // unit position inside the scope square
+        let x: CGFloat
         let y: CGFloat
     }
 
-    /// 75% color-bar targets — positioned by the exact same chroma math the
-    /// analyzer plots with, so bars land on their boxes.
-    private static let targets: [VectorTarget] = {
-        func target(_ name: String, _ r: Int, _ g: Int, _ b: Int) -> VectorTarget {
-            let (cb, cr) = ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
-                                                b: Double(b))
-            return VectorTarget(id: name,
-                                x: CGFloat(0.5 + cb / 255),
-                                y: CGFloat(0.5 - cr / 255))
-        }
-        let v = 191 // 75%
-        return [target("R", v, 0, 0), target("G", 0, v, 0), target("B", 0, 0, v),
-                target("Cy", 0, v, v), target("Mg", v, 0, v),
-                target("Yl", v, v, 0)]
-    }()
+    /// A target's unit position, from the exact same chroma math the analyzer
+    /// plots with — which is why a bar lands on its box instead of near it.
+    static func target(_ name: String, _ r: Int, _ g: Int, _ b: Int) -> VectorTarget {
+        let (cb, cr) = ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
+                                            b: Double(b))
+        return VectorTarget(id: name, x: CGFloat(0.5 + cb / 255),
+                            y: CGFloat(0.5 - cr / 255))
+    }
+
+    /// The six colour-bar hues, at a given bar amplitude in 8-bit units.
+    private static func targets(atAmplitude v: Int) -> [VectorTarget] {
+        [target("R", v, 0, 0), target("G", 0, v, 0), target("B", 0, 0, v),
+         target("Cy", 0, v, v), target("Mg", v, 0, v), target("Yl", v, v, 0)]
+    }
+
+    /// 75 % bars — the boxes an operator actually lines a chart up on.
+    static let targets75 = targets(atAmplitude: 191)
+    /// 100 % bars — marked, not boxed: they sit on the outer circle, and a full
+    /// box there would be half outside the scope.
+    static let targets100 = targets(atAmplitude: 255)
 
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
-            let cx = geo.size.width / 2, cy = geo.size.height / 2
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             ZStack {
                 if let image = ScopeImageCache.vector(from: data) {
                     Image(decorative: image, scale: 1)
                         .resizable()
                         .interpolation(.medium)
                         .frame(width: side, height: side)
-                        .position(x: cx, y: cy)
+                        .position(x: center.x, y: center.y)
                 }
-                // rings + cross + skin-tone line
-                ForEach([0.25, 0.5, 0.75], id: \.self) { ring in
-                    Circle()
-                        .strokeBorder(.white.opacity(ring == 0.75 ? 0.3 : 0.15),
-                                      lineWidth: 0.5)
-                        .frame(width: side * ring, height: side * ring)
-                        .position(x: cx, y: cy)
-                }
-                Path { p in
-                    p.move(to: CGPoint(x: cx - side / 2, y: cy))
-                    p.addLine(to: CGPoint(x: cx + side / 2, y: cy))
-                    p.move(to: CGPoint(x: cx, y: cy - side / 2))
-                    p.addLine(to: CGPoint(x: cx, y: cy + side / 2))
-                    if skinToneLine {
-                        // skin-tone line (~33° up-left of the +Cr axis)
-                        p.move(to: CGPoint(x: cx, y: cy))
-                        p.addLine(to: CGPoint(x: cx - side * 0.26,
-                                              y: cy - side * 0.40))
-                    }
-                }
-                .stroke(.white.opacity(0.22), lineWidth: 0.5)
-                ForEach(Self.targets) { target in
-                    let px = cx - side / 2 + target.x * side
-                    let py = cy - side / 2 + target.y * side
-                    Rectangle()
-                        .strokeBorder(.white.opacity(0.5), lineWidth: 0.7)
-                        .frame(width: 7, height: 7)
-                        .position(x: px, y: py)
-                    Text(target.id)
-                        .font(.system(size: 7, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .position(x: px + 9, y: py - 7)
-                }
+                VectorscopeGraticule(side: side, center: center,
+                                     skinToneLine: skinToneLine)
             }
         }
         .aspectRatio(1, contentMode: .fit)

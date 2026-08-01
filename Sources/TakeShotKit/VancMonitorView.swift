@@ -52,9 +52,9 @@ struct VancMonitorView: View {
         // SwiftUI puts titleVisibility back to .visible when it does, which is
         // how this window kept showing a title strip the scopes window does not.
         // The scene carries the localized name instead (see TakeShotApp), so the
-        // Window menu still lists it, and `hidesWindowTitle` re-asserts the
-        // monolithic chrome without depending on when the key notification lands.
-        .hidesWindowTitle()
+        // Window menu still lists it, and `monolithicWindowChrome` re-asserts
+        // the chrome without depending on when the key notification lands.
+        .monolithicWindowChrome()
     }
 
     static func describe(did: UInt8, sdid: UInt8) -> String {

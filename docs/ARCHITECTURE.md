@@ -86,6 +86,45 @@ Measured result: decoded files return to the intended values within ±1 in
 lift, which steep viewing LUTs amplified into a visible mismatch between what
 the operator saw live and what came back on playback.
 
+### Input levels, and what the expansion costs
+
+`InputLevels` resolves the `videoLevels` setting into the three readings the
+pipeline and `TenBitConverter` branch on:
+
+| Mode | Wire window mapped onto 0–1023 | Excursions |
+| --- | --- | --- |
+| `full` | 0–1023 (identity) | n/a |
+| `limited` (default) | 64–940 | **clamped away** |
+| `limited_excursions` | 4–1019 | preserved |
+
+The default clamps, and because the record buffer is built from the expanded
+value the clamp reaches the file as well as the screen: a camera riding its
+blacks to code 4 or its highlights to 1019 loses those codes in the
+deliverable. That is the industry-normal reading and it stays the default —
+`limited_excursions` is the operator's explicit choice, and it costs a slightly
+flatter picture (reference white lands at 1017 of 1023) in exchange for
+destroying nothing. `LevelsExcursionTests` pins both, numerically and through a
+real encode/decode round trip.
+
+### What the scopes measure
+
+For a 10-bit RGB wire the analyzer reads the **wire frame**, not the display
+buffer (`CapturePipeline.LevelledFrame.scopeSource`; the only cost on the
+capture queue is retaining the buffer). Two reasons, and the operator reported
+both as symptoms:
+
+- the display buffer is 8-bit, so a scope reading it is quantized to 256 levels
+  however good the source is — the "8-bit, undetailed" parade;
+- the expansion has already clipped everything outside 64–940, so the
+  sub-blacks and super-whites a scope exists to reveal are gone before it looks.
+
+`ScopeData.nominal` says where 0% and 100% sit on the trace map, and every
+graticule, value number and histogram mark is placed through it — so on a wire
+frame the trace legitimately runs past the nominal lines and the bands beyond
+them are shaded, the way Resolve draws below-0 / above-100. Every other format
+still reaches the analyzer already expanded, and reads as `.full`, which is the
+geometry the scopes always had.
+
 ## Recording integrity
 
 These are load-bearing. A change that touches one belongs in its own commit

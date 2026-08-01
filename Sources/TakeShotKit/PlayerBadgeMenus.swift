@@ -82,6 +82,8 @@ struct PlayerFormatBadge: View {
             Menu {
                 inputModePicker
                 ForcedInputRGBToggle()
+                Divider()
+                inputLevelsPicker
             } label: {
                 formatLabel
             }
@@ -97,6 +99,15 @@ struct PlayerFormatBadge: View {
         InputModePicker()
             .pickerStyle(.inline)
             .labelsHidden()
+    }
+
+    /// Also shared with Settings. It belongs over the player as well as in the
+    /// pane: how the wire is read is a decision the operator makes WHILE
+    /// looking at the scopes, and walking to Settings to make it means losing
+    /// sight of the thing being judged.
+    private var inputLevelsPicker: some View {
+        InputLevelsPicker()
+            .pickerStyle(.menu)
     }
 
     private var formatLabel: some View {

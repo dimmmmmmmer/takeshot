@@ -140,4 +140,32 @@ struct ModelPlaybackTapScopeTests {
         let data = try #require(settled, "the scopes never caught up with the crop")
         #expect(data.histY[0..<100].reduce(0, +) == 0)
     }
+
+    /// The rate the tap OFFERS the analyzer while a clip plays: 15 Hz, the same
+    /// number the live path targets.
+    ///
+    /// Arithmetic rather than a stopwatch, for the reason `ScopePerformance`
+    /// gives at length: the pass runs at utility QoS and this suite shares a
+    /// machine. What can be pinned anywhere is that the cadence is still the
+    /// one the scopes were budgeted against — the analyzer got a 512-row map in
+    /// the same batch that wrote this, and a poll interval quietly retuned to
+    /// pay for it would be a regression nobody could see.
+    ///
+    /// `@MainActor` because `RawPlayerModel` is: its rate constant is isolated
+    /// to the actor the model lives on, and reading it from a nonisolated test
+    /// is a warning today and an error under Swift 6. The constant is not the
+    /// thing to relax — the model is MainActor for real reasons — so the test
+    /// goes where the value already is.
+    @MainActor
+    @Test func theScopeRateOffPlaybackIsFifteenHertz() {
+        #expect(PlaybackFrameTap.tickIntervalMilliseconds == 16)
+        #expect(PlaybackFrameTap.scopeTickStride == 4)
+        // 15.625, which is the live path's 15 within a rounding of the poll
+        #expect(PlaybackFrameTap.scopeUpdatesPerSecond == 15.625)
+        #expect((14.0...16.0).contains(PlaybackFrameTap.scopeUpdatesPerSecond))
+        // the RAW engine is deliberately slower — the analysis rides on the
+        // decode task there, so this is a difference, not a drift
+        #expect(RawPlayerModel.scopeUpdatesPerSecond
+                < PlaybackFrameTap.scopeUpdatesPerSecond)
+    }
 }

@@ -122,7 +122,7 @@ struct ViewScopesTests {
             probe.controller.scopesWindowOpen = true
             window(probe, scopes: [.waveform, .vector])
             let laid = probe.sizes(proposedWidth: 980, proposedHeight: 380) {
-                ScopesPanel(live: probe.controller.live, onCloseWindow: {})
+                ScopesPanel(live: probe.controller.live)
             }
             #expect(laid.ru.width == 980, "the window grid overflowed: \(laid)")
             #expect(laid.ru == laid.en, "window grid: \(laid)")
@@ -189,6 +189,108 @@ struct ViewScopesTests {
         }
     }
 
+    // MARK: - the metric numbers (owner items 7 and 8)
+
+    /// The value numbers sit INSIDE the trace canvas, in its left-hand gutter,
+    /// on the lines they name.
+    ///
+    /// They used to be a column of their own beside the box — which is what the
+    /// owner saw as "outside the scope area", and which is also a second,
+    /// independently positioned copy of the axis. Rendered on its own over
+    /// black, the graticule's only pixels bright enough to clear the threshold
+    /// are the glyphs: the rules top out at 0.7 white.
+    @Test func theValueNumbersAreDrawnInsideTheScopeOnItsLeft() async throws {
+        try await ViewProbe.run { probe in
+            let size = CGSize(width: 300, height: 200)
+            let columns = ViewRender.brightColumns(probe.hosted(
+                ScopeLevelGraticule(nominal: .full)
+                    .environment(\.scopeGridBrightness, 1)
+                    .background(Color.black)), in: size, threshold: 200)
+            #expect(!columns.isEmpty, "no numbers were drawn at all")
+            #expect(columns.max() ?? 999 < 40,
+                    "the numbers are not in the left gutter: \(columns)")
+            #expect(columns.min() ?? -1 >= 0)
+        }
+    }
+
+    /// The wire scale draws the same numbers — they move onto the nominal
+    /// lines, they do not leave the box.
+    @Test func theNumbersStayInsideOnTheWireScale() async throws {
+        try await ViewProbe.run { probe in
+            let wire = ScopeNominalRange(white: 0.082, black: 0.937)
+            let size = CGSize(width: 300, height: 200)
+            let columns = ViewRender.brightColumns(probe.hosted(
+                ScopeLevelGraticule(nominal: wire)
+                    .environment(\.scopeGridBrightness, 1)
+                    .background(Color.black)), in: size, threshold: 200)
+            #expect(!columns.isEmpty)
+            #expect(columns.max() ?? 999 < 40, "\(columns)")
+        }
+    }
+
+    /// Item 7: the histogram's graticule and numbers obey the same brightness
+    /// control as the other three scopes. They used to carry hard-coded
+    /// opacities, so the slider moved every scope but that one.
+    @Test func theHistogramMetricFollowsTheGraticuleBrightness() async throws {
+        let data = try Self.scopeData()
+        try await ViewProbe.run { probe in
+            let size = CGSize(width: 320, height: 200)
+            @MainActor func brightness(_ level: Double) -> Double {
+                ViewRender.meanBrightness(probe.hosted(
+                    HistogramView(data: data, channel: "y")
+                        .environment(\.scopeGridBrightness, level)
+                        .background(Color.black)), in: size)
+            }
+            let dim = brightness(0.15)
+            let bright = brightness(1.0)
+            #expect(bright > dim,
+                    "the histogram ignored the graticule slider: \(dim) vs \(bright)")
+        }
+    }
+
+    /// The same for the vectorscope, whose graticule was also hard-coded.
+    @Test func theVectorscopeGraticuleFollowsTheBrightness() async throws {
+        let data = try Self.scopeData()
+        try await ViewProbe.run { probe in
+            let size = CGSize(width: 240, height: 240)
+            @MainActor func brightness(_ level: Double) -> Double {
+                ViewRender.meanBrightness(probe.hosted(
+                    VectorscopeView(data: data)
+                        .environment(\.scopeGridBrightness, level)
+                        .background(Color.black)), in: size)
+            }
+            let dim = brightness(0.15)
+            let bright = brightness(1.0)
+            #expect(bright > dim,
+                    "the vectorscope ignored the slider: \(dim) vs \(bright)")
+        }
+    }
+
+    /// Item 13: the overlay grew a close button; the window lost the one it
+    /// had. The window has a real title bar with a real close button in it, and
+    /// the overlay has no frame at all — before this, the surface with a way
+    /// out was the one that did not need it.
+    @Test func onlyTheOverlayCarriesACloseButton() async throws {
+        try await ViewProbe.run { probe in
+            // with the window open, neither surface offers "open in a window",
+            // so the only chrome that differs between them is the X
+            probe.controller.scopesWindowOpen = true
+            window(probe, scopes: [.waveform])
+            let windowChrome = probe.fittingSizes {
+                ScopesPanel(live: probe.controller.live)
+            }
+            let overlayChrome = probe.fittingSizes {
+                ScopesPanel(live: probe.controller.live, singleScope: true)
+            }
+            let widths = "\(overlayChrome.en.width) vs \(windowChrome.en.width)"
+            #expect(overlayChrome.en.width > windowChrome.en.width,
+                    "the overlay has no close button: \(widths)")
+            #expect(overlayChrome.en.width - windowChrome.en.width < 40,
+                    "more than one button of difference: \(widths)")
+            #expect(overlayChrome.ru.width > windowChrome.ru.width)
+        }
+    }
+
     /// A single scope carries no name and no reorder grip, so its box has no
     /// header row at all — that row is what the operator saw as a caption
     /// repeating the name of the only scope on screen.
@@ -199,8 +301,6 @@ struct ViewScopesTests {
                     EmptyView()
                 } content: {
                     Color.black
-                } scale: {
-                    EmptyView()
                 }
             }
             // the ideal size, not a proposed one: the canvas stretches to fill

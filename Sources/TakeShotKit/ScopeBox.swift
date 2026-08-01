@@ -4,10 +4,24 @@ private struct ScopeGridBrightnessKey: EnvironmentKey {
     static let defaultValue: Double = 0.5
 }
 
+/// The value scale the panel's toolbar is set to. In the environment rather
+/// than passed down: every scope's metric numbers read it now — the histogram's
+/// used to be hard-coded 8-bit codes that no control could reach, which is the
+/// asymmetry the owner spotted — and threading it through four trace views and
+/// two graticules by hand is how the next one drifts out of step again.
+private struct ScopeScaleModeKey: EnvironmentKey {
+    static let defaultValue = ScopeScaleMode.percent
+}
+
 extension EnvironmentValues {
     var scopeGridBrightness: Double {
         get { self[ScopeGridBrightnessKey.self] }
         set { self[ScopeGridBrightnessKey.self] = newValue }
+    }
+
+    var scopeScaleMode: ScopeScaleMode {
+        get { self[ScopeScaleModeKey.self] }
+        set { self[ScopeScaleModeKey.self] = newValue }
     }
 }
 
@@ -91,14 +105,20 @@ struct ScopeChipToggle: View {
 }
 
 /// Container for a single scope: a header row (name, per-scope controls) over
-/// the trace canvas, with an optional value scale beside it.
+/// the trace canvas.
+///
+/// There is no longer a value-scale column beside the canvas. The numbers moved
+/// INSIDE it, onto the graticule lines they belong to (`ScopeLevelGraticule`):
+/// a column of numbers next to the box is a second, independently-positioned
+/// copy of the axis, and it drifted off the lines it was naming as soon as the
+/// map stopped putting 100 % on its top row.
 ///
 /// `title` is empty when the panel shows ONE scope: the toggle row above
 /// already names it, and repeating the name under it was one label too many for
 /// a scope the size of the in-player overlay. `showsDragHandle` follows the same
 /// logic — the grip means "drag to reorder", which is a lie when there is
 /// nothing to reorder.
-struct ScopeBox<Header: View, Content: View, Scale: View>: View {
+struct ScopeBox<Header: View, Content: View>: View {
     let title: String
     var showsDragHandle = false
     /// Trace canvas opacity: the in-player overlay lets the picture ghost
@@ -106,7 +126,6 @@ struct ScopeBox<Header: View, Content: View, Scale: View>: View {
     var canvasOpacity: Double = 1
     @ViewBuilder let header: Header
     @ViewBuilder let content: Content
-    @ViewBuilder let scale: Scale
 
     /// Nothing to put in it — a scope with no name, no grip and no controls of
     /// its own gets its full height for the trace.
@@ -132,14 +151,11 @@ struct ScopeBox<Header: View, Content: View, Scale: View>: View {
                     header
                 }
             }
-            HStack(spacing: 2) {
-                content
-                    .frame(minWidth: 260, maxWidth: .infinity,
-                           minHeight: 150, maxHeight: .infinity)
-                    .background(Color.black.opacity(canvasOpacity))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                scale
-            }
+            content
+                .frame(minWidth: 260, maxWidth: .infinity,
+                       minHeight: 150, maxHeight: .infinity)
+                .background(Color.black.opacity(canvasOpacity))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
         }
     }
 }

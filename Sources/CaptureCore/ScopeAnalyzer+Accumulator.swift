@@ -9,7 +9,16 @@ import Foundation
 /// Internal rather than private: the readers that feed it live in the other
 /// file.
 extension ScopeAnalyzer {
-    /// Shared accumulation: everything is derived from full-range gamma-encoded
+    /// A density map's shape. The trace maps and the vectorscope are both
+    /// blurred and they are not the same size, so the passes are told which one
+    /// they are walking instead of reading the waveform's constants.
+    struct Grid {
+        let width: Int
+        let height: Int
+        var cells: Int { width * height }
+    }
+
+    /// Shared accumulation: everything is derived from 10-bit gamma-encoded
     /// R'G'B' samples, so all sources land on the same scales.
     ///
     /// A class holding raw buffers rather than a struct of `[Int]`s, and the
@@ -28,7 +37,17 @@ extension ScopeAnalyzer {
         /// The difference maps carry one spare row: a segment ending on the
         /// last row marks `row + 1` and must not need a branch to do it.
         static let diffCells = width * (height + 1)
-        static let vectorCells = ScopeData.vectorSize * ScopeData.vectorSize
+        static let vectorSize = ScopeData.vectorSize
+        static let vectorCells = vectorSize * vectorSize
+        /// The trace maps' shape, and the vectorscope's — both are blurred, and
+        /// the blur has to be told which it is walking.
+        static let traceGrid = Grid(width: width, height: height)
+        static let vectorGrid = Grid(width: vectorSize, height: vectorSize)
+
+        /// What the wire codes mean, for the nominal range `finish()` publishes
+        /// and for the vectorscope's chroma gain.
+        private let levels: ScopeWireLevels
+        private let chromaGain: Double
 
         // Trace densities as difference maps (row-major, `height + 1` rows).
         private let diffY: UnsafeMutablePointer<Int32>
@@ -49,11 +68,16 @@ extension ScopeAnalyzer {
         // previous sample of the current scanline — traces are drawn as
         // connected vertical segments between neighbours (like a real waveform
         // monitor / Resolve), not scattered dots: this removes both the noise
-        // and the horizontal banding from quantization gaps
+        // and the horizontal banding from quantization gaps. It is also what
+        // makes a near-flat gradient read as a smooth span rather than a dotted
+        // staircase — every pair of adjacent columns is joined, so the only
+        // steps left in the trace are the ones the signal actually has.
         private var prevLuma = -1
         private var prevR = -1, prevG = -1, prevB = -1
 
-        init() {
+        init(levels: ScopeWireLevels = .full) {
+            self.levels = levels
+            chromaGain = levels.chromaGain
             func zeroed(_ count: Int) -> UnsafeMutablePointer<Int32> {
                 let buffer = UnsafeMutablePointer<Int32>.allocate(capacity: count)
                 buffer.initialize(repeating: 0, count: count)
@@ -77,18 +101,27 @@ extension ScopeAnalyzer {
             }
         }
 
-        /// Scope row for a code value: row 0 is 100% at the top of the trace.
+        /// Scope row for a 10-bit code value: row 0 is the top of the trace.
         @inline(__always)
-        private static func row(for value: Int) -> Int {
-            height - 1 - min(height - 1, value * height / 256)
+        static func row(for value: Int) -> Int {
+            height - 1
+                - min(height - 1, value * height / ScopeAnalyzer.sampleLevels)
+        }
+
+        /// Where a 10-bit code sits on the map, 0 = top row, 1 = bottom row.
+        /// The graticule is placed through this, so a nominal line lands on the
+        /// row the trace for that code actually occupies.
+        static func unit(of code: Int) -> Double {
+            Double(row(for: code)) / Double(height - 1)
         }
 
         /// The rows a sample covers: the vertical segment from the previous
         /// sample's value to this one. The span is CAPPED: on noisy content
-        /// |value − prev| averages ~85 codes and an unbounded fill measured
-        /// 340 ms/pass at UHD — 8+ frame budgets. 32 rows looks identical on
-        /// real traces.
-        private static let maxSpan = 32
+        /// |value − prev| averages a third of the scale and an unbounded fill
+        /// measured 340 ms/pass at UHD back when a segment was filled row by
+        /// row. An eighth of the scale looks identical on real traces, and the
+        /// cap still bounds how far one noisy sample can smear a column.
+        private static let maxSpan = ScopeAnalyzer.sampleLevels / 8
 
         /// Top and one-past-bottom row of the segment ending at `value`.
         @inline(__always)
@@ -114,12 +147,16 @@ extension ScopeAnalyzer {
                  nativeChroma: (cb: Double, cr: Double)? = nil,
                  nativeLuma: Int? = nil) {
             let luma = nativeLuma
-                ?? min(255, Int((0.2126 * Double(r) + 0.7152 * Double(g)
-                                 + 0.0722 * Double(b)).rounded()))
-            hist[r] += 1
-            hist[256 + g] += 1
-            hist[512 + b] += 1
-            hist[768 + luma] += 1
+                ?? min(ScopeAnalyzer.sampleLevels - 1,
+                       Int((0.2126 * Double(r) + 0.7152 * Double(g)
+                            + 0.0722 * Double(b)).rounded()))
+            // 256 bins over the 10-bit scale: a histogram with 1024 of them is
+            // a comb on any real signal, and 256 is already more points than
+            // the box it is drawn in has pixels across
+            hist[r >> 2] += 1
+            hist[256 + (g >> 2)] += 1
+            hist[512 + (b >> 2)] += 1
+            hist[768 + (luma >> 2)] += 1
 
             if col == 0 { prevLuma = -1; prevR = -1; prevG = -1; prevB = -1 }
 
@@ -138,40 +175,97 @@ extension ScopeAnalyzer {
             sumB[top] += Int32(b); sumB[end] -= Int32(b)
             prevLuma = luma; prevR = r; prevG = g; prevB = b
 
-            // vectorscope: full-range BT.709 chroma, ±127 → ±half-size
-            let (cb, cr) = nativeChroma
+            addToVector(r: r, g: g, b: b, nativeChroma: nativeChroma)
+        }
+
+        /// Vectorscope: full-range BT.709 chroma, ±(scale/2) → ±half-size.
+        /// `chromaGain` puts an unexpanded wire frame back on the full-range
+        /// scale the graticule targets are positioned on.
+        @inline(__always)
+        private func addToVector(r: Int, g: Int, b: Int,
+                                 nativeChroma: (cb: Double, cr: Double)?) {
+            let raw = nativeChroma
                 ?? ScopeAnalyzer.chroma(r: Double(r), g: Double(g), b: Double(b))
-            let size = ScopeData.vectorSize
-            let vx = min(size - 1, max(0, Int(Double(size) / 2 + cb * Double(size) / 255)))
-            let vy = min(size - 1, max(0, Int(Double(size) / 2 - cr * Double(size) / 255)))
+            let cb = raw.cb * chromaGain, cr = raw.cr * chromaGain
+            let size = Self.vectorSize
+            let span = Double(ScopeAnalyzer.sampleLevels - 1)
+            let vx = min(size - 1, max(0, Int(Double(size) / 2 + cb * Double(size) / span)))
+            let vy = min(size - 1, max(0, Int(Double(size) / 2 - cr * Double(size) / span)))
             vector[vy * size + vx] += 1
         }
 
-        /// Integrate a difference map down its columns — the running total IS
-        /// the density. Both reads walk the buffer front to back, so this is a
-        /// sequential sweep however tall the map is.
-        private static func integrated(
+        /// A difference map all the way to its softened density, in ONE sweep:
+        /// the column integration and both halves of the 1-2-1 blur together.
+        ///
+        /// This is the change that pays for the taller map. It used to be three
+        /// separate passes — integrate, blur across, blur down — each reading
+        /// and writing a megabyte, and doubling the map's height doubled all
+        /// three. Two of them fold away:
+        ///
+        /// - The VERTICAL blur of a prefix sum is expressible in terms of the
+        ///   sum and the two differences bracketing it,
+        ///   `J[y] = I[y−1] + 2·I[y] + I[y+1] = 4·I[y] − d[y] + d[y+1]`, and
+        ///   both differences are already being read to compute `I[y]`.
+        /// - The HORIZONTAL blur only needs the row's own neighbours, so it
+        ///   runs on the 2 KB scratch row while it is still in L1 rather than
+        ///   on a megabyte that has been evicted.
+        ///
+        /// The result is the same picture, exactly: a separable blur commutes
+        /// with itself across independent axes, and the zero padding is
+        /// per-axis. The map's spare row makes the bottom edge come out right
+        /// with no branch — every segment is closed by the time the walk ends,
+        /// so `d[height]` is exactly −I[height−1] and the formula degenerates
+        /// to the zero-padded `3·I[h−1] − d[h−1]` on its own. The top edge does
+        /// the same with `I[−1] = 0`.
+        private static func softened(
             _ diff: UnsafeMutablePointer<Int32>) -> [Int32] {
-            var out = [Int32](repeating: 0, count: cells)
-            out.withUnsafeMutableBufferPointer { dst in
-                for col in 0..<width { dst[col] = diff[col] }
-                var base = width
-                for _ in 1..<height {
-                    for col in 0..<width {
-                        dst[base + col] = dst[base - width + col] + diff[base + col]
+            // one running total per column and one scratch row: 4 KB between
+            // them, so both stay in L1 for the whole sweep. Walking columns
+            // instead would stride a megabyte per step.
+            var running = [Int32](repeating: 0, count: width)
+            var scratch = [Int32](repeating: 0, count: width)
+            return Array(unsafeUninitializedCapacity: cells) { dst, count in
+                count = cells
+                running.withUnsafeMutableBufferPointer { totals in
+                    scratch.withUnsafeMutableBufferPointer { row in
+                        for y in 0..<height {
+                            softenRow(y, diff: diff, totals: totals, row: row,
+                                      into: dst)
+                        }
                     }
-                    base += width
                 }
             }
-            return out
         }
 
-        /// Separable 1-2-1 blur over the density map: CRT-like soft traces
-        /// instead of hard single-pixel lines (the "noisy" look).
-        static func blurred(_ counts: [Int32]) -> [Int32] {
-            let row = (step: 1, count: width)
-            let column = (step: width, count: height)
-            // across every row, then down every column
+        /// One row of `softened`: integrate down into it, then blur along it.
+        @inline(__always)
+        private static func softenRow(
+            _ y: Int, diff: UnsafeMutablePointer<Int32>,
+            totals: UnsafeMutableBufferPointer<Int32>,
+            row: UnsafeMutableBufferPointer<Int32>,
+            into dst: UnsafeMutableBufferPointer<Int32>) {
+            let base = y * width
+            for col in 0..<width {
+                let here = diff[base + col]
+                totals[col] += here
+                row[col] = 4 * totals[col] - here + diff[base + width + col]
+            }
+            // the width is a compile-time 512, so the two ends are stated once
+            // rather than costing a bounds test on every one of the 512 columns
+            dst[base] = 2 * row[0] + row[1]
+            for col in 1..<(width - 1) {
+                dst[base + col] = 2 * row[col] + row[col - 1] + row[col + 1]
+            }
+            dst[base + width - 1] = 2 * row[width - 1] + row[width - 2]
+        }
+
+        /// Separable 1-2-1 blur over a density map that is NOT a difference
+        /// map — the vectorscope, which has one sample per cell and no
+        /// segments, so there is no integration sweep to fold it into.
+        static func blurred(_ counts: [Int32],
+                            grid: Grid = traceGrid) -> [Int32] {
+            let row = (step: 1, count: grid.width)
+            let column = (step: grid.width, count: grid.height)
             return blurPass(blurPass(counts, along: row, across: column),
                             along: column, across: row)
         }
@@ -183,9 +277,9 @@ extension ScopeAnalyzer {
         private static func blurPass(_ counts: [Int32],
                                      along: (step: Int, count: Int),
                                      across: (step: Int, count: Int)) -> [Int32] {
-            var out = [Int32](repeating: 0, count: counts.count)
             counts.withUnsafeBufferPointer { src in
-                out.withUnsafeMutableBufferPointer { dst in
+                Array(unsafeUninitializedCapacity: counts.count) { dst, written in
+                    written = counts.count
                     for line in 0..<across.count {
                         let start = line * across.step
                         for position in 0..<along.count {
@@ -198,7 +292,6 @@ extension ScopeAnalyzer {
                     }
                 }
             }
-            return out
         }
 
         /// log(count + 1) for the densities that actually occur, precomputed.
@@ -237,21 +330,29 @@ extension ScopeAnalyzer {
         }
 
         func finish() -> ScopeData {
-            let softY = Self.blurred(Self.integrated(diffY))
+            let softY = Self.softened(diffY)
             // colored luma trace: brightness from the softened density (log),
             // chroma from the blurred means so color follows the soft edge
             let colored = coloredTrace(density: softY)
+            let codes = levels.nominalCodes
             return ScopeData(
                 waveformY: Self.toBytesLog(softY),
-                waveformR: Self.toBytesLog(Self.blurred(Self.integrated(diffR))),
-                waveformG: Self.toBytesLog(Self.blurred(Self.integrated(diffG))),
-                waveformB: Self.toBytesLog(Self.blurred(Self.integrated(diffB))),
+                waveformR: Self.toBytesLog(Self.softened(diffR)),
+                waveformG: Self.toBytesLog(Self.softened(diffG)),
+                waveformB: Self.toBytesLog(Self.softened(diffB)),
                 waveformYColor: colored,
                 histR: histogram(0), histG: histogram(1),
                 histB: histogram(2), histY: histogram(3),
-                vector: Self.toBytesLog(
+                // the vectorscope gets the same 1-2-1 softening as the traces:
+                // one sample per cell and no segments to fill left it a field
+                // of hard dots that read as a low-resolution scope rather than
+                // as a density
+                vector: Self.toBytesLog(Self.blurred(
                     Array(UnsafeBufferPointer(start: vector,
-                                              count: Self.vectorCells))),
+                                              count: Self.vectorCells)),
+                    grid: Self.vectorGrid)),
+                nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
+                                           black: Self.unit(of: codes.black)),
                 sequence: ScopeAnalyzer.nextSequence())
         }
 
@@ -262,18 +363,21 @@ extension ScopeAnalyzer {
         /// RGBA luma trace: brightness from the density, hue and saturation
         /// from the mean color of the pixels that made it.
         private func coloredTrace(density: [Int32]) -> [UInt8] {
-            let colorR = Self.blurred(Self.integrated(sumR))
-            let colorG = Self.blurred(Self.integrated(sumG))
-            let colorB = Self.blurred(Self.integrated(sumB))
+            let colorR = Self.softened(sumR)
+            let colorG = Self.softened(sumG)
+            let colorB = Self.softened(sumB)
             var colored = [UInt8](repeating: 0, count: Self.cells * 4)
             let yScale = 255.0 / Self.logOf(max(1, density.max() ?? 1))
             for i in 0..<Self.cells {
                 let count = density[i]
                 guard count > 0 else { continue }
                 let brightness = min(255.0, yScale * Self.logOf(count))
-                let avgR = Double(colorR[i]) / Double(count)
-                let avgG = Double(colorG[i]) / Double(count)
-                let avgB = Double(colorB[i]) / Double(count)
+                // one reciprocal, not three divisions: this runs once per cell
+                // of a 512x512 map and a divide is twenty times a multiply
+                let inverse = 1 / Double(count)
+                let avgR = Double(colorR[i]) * inverse
+                let avgG = Double(colorG[i]) * inverse
+                let avgB = Double(colorB[i]) * inverse
                 // scale the mean color so its BT.709 luma equals the trace
                 // brightness: hue and saturation stay true to the image
                 let avgY = max(1, 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB)

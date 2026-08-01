@@ -1,0 +1,218 @@
+import CoreVideo
+import Foundation
+import Testing
+
+@testable import CaptureCore
+
+/// The scopes reading the 10-bit wire instead of the 8-bit display buffer.
+///
+/// Two separate complaints, one tap. The parades looked "8-bit and undetailed"
+/// because they WERE 8-bit — a 10-bit source quantized to 256 levels on its way
+/// into the display buffer, and then onto a 256-row trace map, which is a
+/// staircase however good the camera is. And the shadows and highlights looked
+/// slightly clipped because they were: the limited→full expansion clamps
+/// everything outside 64…940 before the scopes ever see it.
+struct ScopeWireTests {
+    private func r210(width: Int = 320, height: Int = 180,
+                      code: (_ x: Int) -> Int) throws -> CVPixelBuffer {
+        var out: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height,
+                            TenBitConverter.r210,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+                            &out)
+        let buffer = try #require(out)
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        let base = try #require(CVPixelBufferGetBaseAddress(buffer))
+        let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+        for y in 0..<height {
+            let row = base.advanced(by: y * rowBytes)
+                .assumingMemoryBound(to: UInt32.self)
+            for x in 0..<width {
+                let value = UInt32(code(x) & 0x3FF)
+                row[x] = ((value << 20) | (value << 10) | value).bigEndian
+            }
+        }
+        return buffer
+    }
+
+    /// The rows the luma trace occupies, top first.
+    private func traceRows(_ data: ScopeData) -> [Int] {
+        let width = ScopeData.waveWidth
+        return (0..<ScopeData.waveHeight).filter { row in
+            (0..<width).contains { data.waveformY[row * width + $0] > 0 }
+        }
+    }
+
+    /// Where the trace's centre of mass sits, 0 = top row, 1 = bottom.
+    private func traceUnit(_ data: ScopeData) -> Double {
+        let rows = traceRows(data)
+        guard !rows.isEmpty else { return .nan }
+        let mid = Double(rows.reduce(0, +)) / Double(rows.count)
+        return mid / Double(ScopeData.waveHeight - 1)
+    }
+
+    // MARK: - the excursions exist again
+
+    /// Nominal black and white land on the graticule's own 0 % and 100 %
+    /// lines — the scale is only honest if the reference codes sit on it.
+    @Test func nominalBlackAndWhiteLandOnTheNominalLines() throws {
+        let black = try #require(ScopeAnalyzer.analyze(
+            try r210 { _ in 64 }, wireLevels: .limited))
+        #expect(abs(traceUnit(black) - black.nominal.black) < 0.01,
+                "black at \(traceUnit(black)), line at \(black.nominal.black)")
+        let white = try #require(ScopeAnalyzer.analyze(
+            try r210 { _ in 940 }, wireLevels: .limited))
+        #expect(abs(traceUnit(white) - white.nominal.white) < 0.01,
+                "white at \(traceUnit(white)), line at \(white.nominal.white)")
+    }
+
+    /// The whole point: a camera riding its blacks to code 4 draws BELOW the
+    /// 0 % line, and a highlight at 1019 draws ABOVE 100 %.
+    @Test func theLegalExcursionsDrawOutsideTheNominalLines() throws {
+        let subBlack = try #require(ScopeAnalyzer.analyze(
+            try r210 { _ in 4 }, wireLevels: .limited))
+        let low = "\(traceUnit(subBlack)) vs line \(subBlack.nominal.black)"
+        #expect(traceUnit(subBlack) > subBlack.nominal.black + 0.02,
+                "the sub-black is not below the 0 % line: \(low)")
+        let superWhite = try #require(ScopeAnalyzer.analyze(
+            try r210 { _ in 1019 }, wireLevels: .limited))
+        let high = "\(traceUnit(superWhite)) vs line \(superWhite.nominal.white)"
+        #expect(traceUnit(superWhite) < superWhite.nominal.white - 0.02,
+                "the super-white is not above the 100 % line: \(high)")
+        #expect(subBlack.nominal.showsExcursions)
+    }
+
+    /// The display buffer cannot show either of them — which is the reason for
+    /// the tap, stated as a measurement rather than as a claim in a comment.
+    @Test func theDisplayBufferHasAlreadyThrownTheExcursionsAway() throws {
+        let converter = TenBitConverter() // limited is the default
+        let atFour = try #require(converter.convert(try r210 { _ in 4 }))
+        let atSixtyFour = try #require(converter.convert(try r210 { _ in 64 }))
+        let low = try #require(ScopeAnalyzer.analyze(atFour.display))
+        let black = try #require(ScopeAnalyzer.analyze(atSixtyFour.display))
+        #expect(traceRows(low) == traceRows(black),
+                "the 8-bit display buffer somehow told 4 from 64 apart")
+        #expect(!low.nominal.showsExcursions,
+                "a full-range buffer must not claim excursion room")
+    }
+
+    // MARK: - the detail that was quantized away
+
+    /// How many distinct heights the trace takes across the frame — the number
+    /// of steps in the staircase, which is what "undetailed" means when you are
+    /// looking at one.
+    ///
+    /// Not the number of occupied ROWS: the accumulator joins adjacent columns
+    /// with a segment, so a coarse trace and a fine one over the same signal
+    /// cover the same span. What separates them is how many times the trace
+    /// changes height on the way across.
+    private func traceSteps(_ data: ScopeData) -> Int {
+        let width = ScopeData.waveWidth
+        var heights: Set<Int> = []
+        for col in 0..<width {
+            let top = (0..<ScopeData.waveHeight).first {
+                data.waveformY[$0 * width + col] > 0
+            }
+            if let top { heights.insert(top) }
+        }
+        return heights.count
+    }
+
+    /// A shallow 10-bit gradient — the near-flat sky an operator judges banding
+    /// on. Read off the wire it draws twice as many steps as the same content
+    /// read off the 8-bit display buffer, and that is the ceiling: the map puts
+    /// two 10-bit codes on a row, and the display buffer's codes are four
+    /// apart. Both halves of the change are needed to get it — a 10-bit tap
+    /// into a 256-row map would quantize straight back to where it started.
+    @Test func aShallowGradientKeepsItsDetailOffTheWire() throws {
+        let width = 320
+        // 100 codes of 10-bit swing across the frame: 25 once the display
+        // buffer has divided by four
+        let ramp = { (x: Int) in 500 + x * 100 / (width - 1) }
+        let wire = try #require(ScopeAnalyzer.analyze(
+            try r210(width: width) { ramp($0) }, wireLevels: .limited))
+        let converter = TenBitConverter()
+        converter.setLimitedRange(false) // full: the display buffer is a plain >>2
+        let split = try #require(
+            converter.convert(try r210(width: width) { ramp($0) }))
+        let display = try #require(ScopeAnalyzer.analyze(split.display))
+
+        let wireSteps = traceSteps(wire)
+        let displaySteps = traceSteps(display)
+        print("SCOPEDETAIL shallow gradient: wire \(wireSteps) steps, "
+            + "display buffer \(displaySteps) steps")
+        let counts = "\(wireSteps) vs \(displaySteps)"
+        #expect(wireSteps > displaySteps * 3 / 2,
+                "the wire tap gained no vertical detail: \(counts)")
+        // the two cover the same range of values — this is about detail inside
+        // it, not about reaching further
+        let spanRatio = Double(traceRows(wire).count)
+            / Double(traceRows(display).count)
+        #expect(abs(spanRatio - 1) < 0.2, "the spans differ: \(spanRatio)")
+    }
+
+    /// The map is tall enough for the signal it now carries. A 256-row map
+    /// quantizes a 10-bit code straight back to 8 bits and the tap buys
+    /// nothing, so this is not a style preference.
+    @Test func theTraceMapIsTallEnoughForTenBits() {
+        #expect(ScopeData.waveHeight >= 512)
+        #expect(ScopeData.waveWidth == 512)
+    }
+
+    /// The 1-2-1 softening survived being folded into the integration sweep.
+    ///
+    /// The accumulator used to integrate each difference map and then blur it
+    /// twice — three passes over a megabyte, and doubling the map's height
+    /// doubled all three. It is one sweep now, on the algebra that the vertical
+    /// blur of a prefix sum is `4·I[y] − d[y] + d[y+1]` and that the horizontal
+    /// half only needs the row it is already holding. "Same picture, exactly"
+    /// is the claim that makes the fusion legitimate, so here it is as numbers:
+    /// a flat frame puts its whole trace on one row, and the map has to read
+    /// 1:2:1 down the three rows around it.
+    @Test func theSofteningIsStillOneTwoOne() throws {
+        let data = try #require(ScopeAnalyzer.analyze(try r210 { _ in 512 },
+                                                      wireLevels: .full))
+        let rows = traceRows(data)
+        #expect(rows.count == 3, "rows: \(rows)")
+        let width = ScopeData.waveWidth
+        let column = width / 2 // interior, so both horizontal taps are real
+        let values = rows.map { Int(data.waveformY[$0 * width + column]) }
+        #expect(values[1] == 255, "the centre row is the peak: \(values)")
+        // the log curve turns half the density into 0.91 of the peak byte:
+        // 255 * log(1081) / log(2161)
+        #expect(abs(values[0] - 232) <= 2, "\(values)")
+        #expect(values[0] == values[2], "the blur is not symmetric: \(values)")
+    }
+
+    // MARK: - the nominal range itself
+
+    @Test func aFullRangeFrameKeepsTheOldGeometryExactly() throws {
+        let data = try #require(ScopeAnalyzer.analyze(
+            try r210 { _ in 512 }, wireLevels: .full))
+        #expect(data.nominal == .full)
+        #expect(data.nominal.unit(ofLevel: 1) == 0)
+        #expect(data.nominal.unit(ofLevel: 0) == 1)
+        #expect(!data.nominal.showsExcursions)
+        #expect(data.nominal.excursionFreeVisibleLevels)
+    }
+
+    @Test func theNominalRangeMapsLevelsAndBack() {
+        let wire = ScopeNominalRange(white: 0.08, black: 0.94)
+        #expect(abs(wire.unit(ofLevel: 1) - 0.08) < 1e-9)
+        #expect(abs(wire.unit(ofLevel: 0) - 0.94) < 1e-9)
+        #expect(abs(wire.level(atUnit: 0.51) - 0.5) < 0.01)
+        // the map reaches past both ends, which is what the shaded bands mean
+        #expect(wire.visibleLevels.upperBound > 1)
+        #expect(wire.visibleLevels.lowerBound < 0)
+        #expect(wire.showsExcursions)
+    }
+}
+
+private extension ScopeNominalRange {
+    /// A full-range map shows exactly 0…1 and nothing outside it.
+    var excursionFreeVisibleLevels: Bool {
+        abs(visibleLevels.lowerBound) < 1e-9
+            && abs(visibleLevels.upperBound - 1) < 1e-9
+    }
+}

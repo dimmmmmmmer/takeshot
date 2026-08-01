@@ -147,6 +147,38 @@ enum ViewRender {
         return columns.sorted()
     }
 
+    /// Mean brightness of a rendered view, 0…1.
+    ///
+    /// The question `brightColumns` cannot answer: "does this control reach
+    /// this drawing AT ALL". A graticule that ignores the brightness slider
+    /// renders byte-identically at both ends of it, and the only way to see
+    /// that from a test is to rasterize it twice and compare. Every scope's
+    /// chrome used to have its own hard-coded opacities, which is exactly how
+    /// the histogram ended up deaf to a control the operator expected to work
+    /// on all four.
+    static func meanBrightness(_ view: some View, in size: CGSize) -> Double {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { return 0 }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        var total = 0.0
+        var counted = 0
+        // every fourth pixel each way: this is a comparison between two
+        // renders, and a quarter of a megapixel says the same thing as all
+        // of it for a quarter of the wall time
+        for x in stride(from: 0, to: rep.pixelsWide, by: 4) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 4) {
+                guard let color = rep.colorAt(x: x, y: y)?
+                    .usingColorSpace(.genericRGB) else { continue }
+                total += Double(color.brightnessComponent)
+                counted += 1
+            }
+        }
+        return counted > 0 ? total / Double(counted) : 0
+    }
+
     /// Measure the same view in both languages.
     ///
     /// The view is built inside the closure, once per language: `L()` is read
