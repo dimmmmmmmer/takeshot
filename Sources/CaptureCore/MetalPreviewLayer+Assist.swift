@@ -67,7 +67,8 @@ extension MetalPreviewLayer {
         }
         if assist.peakingOn {
             out = Self.peakingEdges(over: out, source: source,
-                                    intensity: assist.peakingIntensity)
+                                    intensity: assist.peakingIntensity,
+                                    color: assist.peakingColor)
         }
         return out.cropped(to: source.extent)
     }
@@ -111,7 +112,8 @@ extension MetalPreviewLayer {
             ])
     }
 
-    /// Red focus-peaking edges screened over whatever is already there.
+    /// Focus-peaking edges, tinted the operator's color, screened over whatever
+    /// is already there.
     ///
     /// The edge detector is a convolution, and CoreImage answers samples taken
     /// past a finite image with transparent black — which reads as the
@@ -122,16 +124,21 @@ extension MetalPreviewLayer {
     /// where the frame simply ends), and the pass is cropped back to the video
     /// rect so it cannot reach outside the picture at all.
     private static func peakingEdges(over image: CIImage, source: CIImage,
-                                     intensity: Double) -> CIImage {
+                                     intensity: Double,
+                                     color: ViewAssist.PeakingColor) -> CIImage {
+        // the matrix routes the grayscale edge response into the tint's
+        // channels; 2.4 is the gain the fixed red overlay shipped with
+        let tint = color.components
+        let gain = 2.4
         let edges = grayscale(source)
             .clampedToExtent()
             .applyingFilter("CIEdges", parameters: [
                 "inputIntensity": intensity,
             ])
             .applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: 2.4, y: 0, z: 0, w: 0),
-                "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputRVector": CIVector(x: gain * tint.red, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: gain * tint.green, y: 0, z: 0, w: 0),
+                "inputBVector": CIVector(x: gain * tint.blue, y: 0, z: 0, w: 0),
             ])
             .cropped(to: source.extent)
         return edges.applyingFilter("CIScreenBlendMode", parameters: [

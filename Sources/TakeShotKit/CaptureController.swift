@@ -168,6 +168,12 @@ final class CaptureController: ObservableObject {
                 settings.desqueezeFactor = assist.desqueeze == 1
                     ? nil : assist.desqueeze
             }
+            // the peaking color is a crew convention, like the marker color:
+            // stored as nil at the default so old builds still decode the blob
+            if oldValue.peakingColor != assist.peakingColor {
+                settings.peakingColor = assist.peakingColor == .red
+                    ? nil : assist.peakingColor.rawValue
+            }
         }
     }
     /// The aids as the preview surfaces are showing them right now, sliders and

@@ -34,6 +34,8 @@ extension CaptureController {
         live.lutIntensity = stored.lutIntensity ?? 1
         monitorOn = stored.monitorEnabled ?? true
         assist.desqueeze = stored.desqueezeFactor ?? 1
+        assist.peakingColor = stored.peakingColor
+            .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
         player.volume = Float(storedVolume)
         // A DIM left engaged comes back engaged: the stored level is the one the
         // operator set, so the hold is re-applied on top of it and the restore

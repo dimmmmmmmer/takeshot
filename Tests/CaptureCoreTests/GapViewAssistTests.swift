@@ -55,6 +55,22 @@ struct GapViewAssistTests {
         #expect(ViewAssist.ColorTool.allCases.map(\.rawValue)
                 == ["off", "falseColor", "elZone"])
     }
+
+    @Test func peakingColorsRoundTripThroughTheirRawValues() {
+        // persisted by raw value too (CaptureSettings.peakingColor) — same
+        // trap: a renamed case is a silently reset choice
+        for color in ViewAssist.PeakingColor.allCases {
+            #expect(ViewAssist.PeakingColor(rawValue: color.rawValue) == color)
+        }
+        #expect(ViewAssist.PeakingColor.allCases.map(\.rawValue)
+                == ["red", "green", "blue", "yellow", "white"])
+        // red is what every monitor defaults to, and what this app shipped as
+        #expect(ViewAssist().peakingColor == .red)
+        // five presets, five different tints — two rendering the same overlay
+        // would be a picker with a dead swatch
+        let tints = ViewAssist.PeakingColor.allCases.map(\.components)
+        #expect(Set(tints).count == tints.count, "duplicate tints: \(tints)")
+    }
 }
 
 /// `TimecodeReader` runs over whatever the folder scan finds. The happy path is

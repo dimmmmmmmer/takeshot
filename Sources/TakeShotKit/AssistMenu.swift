@@ -129,6 +129,38 @@ private struct AssistControlRows: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 34, alignment: .trailing)
             }
+            peakingColorRow
+        }
+    }
+
+    /// The peaking tint. Swatches rather than a menu of names: the choice is
+    /// "which color survives against THIS subject", which the eye answers from
+    /// the swatch itself — and the marker palette already set the click-a-swatch
+    /// idiom in this app. The name still comes along, as the tooltip.
+    private var peakingColorRow: some View {
+        HStack(spacing: 8) {
+            Text(L("peaking_color"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            ForEach(ViewAssist.PeakingColor.allCases, id: \.self) { color in
+                let selected = controller.liveAssist.peakingColor == color
+                Button {
+                    controller.setAssist { $0.peakingColor = color }
+                } label: {
+                    Circle()
+                        .fill(color.swatchColor)
+                        .frame(width: 14, height: 14)
+                        // the chosen swatch wears the heavier ring; the others
+                        // keep a hairline so white stays visible on a light popover
+                        .overlay(Circle().strokeBorder(
+                            Color.primary.opacity(selected ? 0.9 : 0.25),
+                            lineWidth: selected ? 2 : 1))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(L(color.labelKey))
+            }
         }
     }
 
@@ -233,5 +265,17 @@ private struct AssistControlRows: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// The UI face of the peaking palette: the localized name (the swatch tooltip)
+/// and the SwiftUI color the swatch wears. Lives here and not on the CaptureCore
+/// enum — that module has no L10n and no SwiftUI.
+extension ViewAssist.PeakingColor {
+    var labelKey: String { "peaking_color_" + rawValue }
+
+    var swatchColor: Color {
+        let tint = components
+        return Color(red: tint.red, green: tint.green, blue: tint.blue)
     }
 }

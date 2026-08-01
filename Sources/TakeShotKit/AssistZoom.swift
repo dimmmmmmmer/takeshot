@@ -2,9 +2,10 @@ import AppKit
 import CaptureCore
 import SwiftUI
 
-/// Punch-in zoom on a preview surface: trackpad pinch for the level, two-finger
-/// scroll (momentum included) and drag for the pan, and a grab-hand cursor while
-/// there is something to grab.
+/// Punch-in zoom on a preview surface: trackpad pinch and ⌘-scroll for the
+/// level (both anchored at the pointer, so the zoom lands on what it is over),
+/// two-finger scroll (momentum included) and drag for the pan, and a grab-hand
+/// cursor while there is something to grab.
 ///
 /// It hangs off `playerTopBadges`, which is the ONE mount the main player and
 /// both fullscreen windows share. The pan gesture used to sit on the windowed

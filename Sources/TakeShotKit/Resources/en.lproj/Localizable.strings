@@ -346,7 +346,7 @@
 "compare_b_live" = "vs Live";
 "compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
 
-"punch_pan_hint" = "Drag or two-finger scroll to pan, pinch to zoom";
+"punch_pan_hint" = "Drag or scroll to pan, pinch or ⌘-scroll to zoom";
 "offload_menu" = "Verified copy of a folder...";
 "offload_pick_source" = "Folder to copy (camera card, sound, etc.)";
 "offload_source_prompt" = "Copy this";
@@ -366,6 +366,12 @@
 "legend_size_m" = "Medium";
 "legend_size_l" = "Large";
 "legend_corner" = "Legend corner";
+"peaking_color" = "Peaking color";
+"peaking_color_red" = "Red";
+"peaking_color_green" = "Green";
+"peaking_color_blue" = "Blue";
+"peaking_color_yellow" = "Yellow";
+"peaking_color_white" = "White";
 "corner_top_left" = "Top left";
 "corner_top_right" = "Top right";
 "corner_bottom_left" = "Bottom left";
