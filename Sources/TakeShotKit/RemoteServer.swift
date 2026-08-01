@@ -34,12 +34,13 @@ final class RemoteServer: @unchecked Sendable {
             = { reply in reply(nil) }
     }
 
-    /// The values the app pushes in while the server runs: the PIN and the
-    /// localized page. Both change without a restart (the operator switches
+    /// The values the app pushes in while the server runs: the PIN and the two
+    /// localized pages. All change without a restart (the operator switches
     /// language, or regenerates the code).
     private struct Shared {
         var pin: String
         var page: Data
+        var scriptPage: Data
     }
 
     /// A handful of phones is the whole use case. The cap is what stops a
@@ -81,15 +82,20 @@ final class RemoteServer: @unchecked Sendable {
     /// The last status pushed, replayed to a client the moment it authenticates
     /// so a phone picked up mid-take shows the take rather than a blank readout.
     private var lastStatus: String?
+    /// The last take log pushed, replayed on authentication for the same
+    /// reason: a script page opened mid-shift shows the day so far, not an
+    /// empty table waiting for the next take to land.
+    private var lastTakeLog: String?
     /// The one piece of state that has to be the SERVER's rather than a
     /// connection's, because a reconnect is what defeats every per-connection
     /// count. See `RemotePINTarpit`.
     private var tarpit = RemotePINTarpit()
 
-    init(pin: String, page: Data, handlers: Handlers) {
+    init(pin: String, page: Data, scriptPage: Data = Data(),
+         handlers: Handlers) {
         self.handlers = handlers
         self.shared = OSAllocatedUnfairLock(
-            initialState: Shared(pin: pin, page: page))
+            initialState: Shared(pin: pin, page: page, scriptPage: scriptPage))
     }
 
     /// Start listening. `port` 0 binds an ephemeral one and reports it through
@@ -116,6 +122,7 @@ final class RemoteServer: @unchecked Sendable {
             for client in clients.values { client.close(code: 1001) }
             clients.removeAll()
             lastStatus = nil
+            lastTakeLog = nil
         }
     }
 
@@ -139,10 +146,28 @@ final class RemoteServer: @unchecked Sendable {
         }
     }
 
+    /// Push the take log to every authenticated client. It rides the same
+    /// sockets `broadcast(_:)` does — telling the two apart is a message
+    /// `type`, not a second channel — so both pages share the PIN gate, the
+    /// replay-on-auth and the stalled-client discipline without a second copy
+    /// of any of them.
+    func broadcastTakeLog(_ log: RemoteTakeLog) {
+        let json = log.json
+        queue.async { [self] in
+            lastTakeLog = json
+            for client in clients.values { client.send(text: json) }
+        }
+    }
+
     /// Replace the served page — the operator changed the UI language, and the
     /// labels on the phone follow the app.
     func setPage(_ page: Data) {
         shared.withLock { $0.page = page }
+    }
+
+    /// Replace the script supervisor's page, for the same language switch.
+    func setScriptPage(_ page: Data) {
+        shared.withLock { $0.scriptPage = page }
     }
 
     /// Replace the PIN. Sockets already authenticated stay open; their next
@@ -156,7 +181,9 @@ final class RemoteServer: @unchecked Sendable {
 
     var currentPIN: String { shared.withLock { $0.pin } }
     var currentPage: Data { shared.withLock { $0.page } }
+    var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
     var currentStatus: String? { lastStatus }
+    var currentTakeLog: String? { lastTakeLog }
 
     /// Register one PIN verification and say how long its answer must be held
     /// back. Queue-confined, like the tarpit it reads.

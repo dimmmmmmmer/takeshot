@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 
 /// What the phone in the director's hand is told, and what it may ask for.
@@ -65,14 +66,84 @@ struct RemoteStatus: Equatable, Sendable {
     }
 }
 
-/// A command from the page. `hello` is the PIN handshake; the rest are the
-/// four buttons.
-enum RemoteCommand: String, Sendable, CaseIterable {
+/// The script supervisor's take log: every take the panel lists, with the
+/// fields a scripty logs — pushed as one more message `type` on the same
+/// socket the status rides, never on a channel of its own.
+struct RemoteTakeLog: Equatable, Sendable {
+    struct Entry: Equatable, Sendable {
+        /// The take's own id, so an edit from the page lands on the row it was
+        /// typed against even after another take finalizes under it.
+        var id: String
+        var name: String
+        /// Start timecode as text; empty when the take carried none.
+        var timecode: String
+        var durationSeconds: Double
+        /// "none" / "good" / "bad" — the same three states as the panel.
+        var rating: String
+        var comment: String
+    }
+
+    /// Oldest first, matching the app's take list; the page renders newest on
+    /// top by walking it backwards.
+    var entries: [Entry] = []
+
+    /// The wire form. Hand-built like `RemoteStatus.json`, and through the same
+    /// escapes: names and comments are operator- and scripty-typed text.
+    var json: String {
+        let rows = entries.map { entry in
+            "{\"id\":\(RemoteJSON.quoted(entry.id))"
+                + ",\"name\":\(RemoteJSON.quoted(entry.name))"
+                + ",\"tc\":\(RemoteJSON.quoted(entry.timecode))"
+                + ",\"dur\":\(RemoteJSON.number(entry.durationSeconds))"
+                + ",\"rating\":\(RemoteJSON.quoted(entry.rating))"
+                + ",\"comment\":\(RemoteJSON.quoted(entry.comment))}"
+        }
+        return "{\"type\":\"takes\",\"takes\":["
+            + rows.joined(separator: ",") + "]}"
+    }
+}
+
+/// A command from the page. `hello` is the PIN handshake; `rec`/`marker`/
+/// `good`/`bad` are the operator page's four buttons; `rate` and `comment` are
+/// the script page's per-take edits.
+enum RemoteCommand: Equatable, Sendable {
     case hello
     case rec
     case marker
     case good
     case bad
+    /// Set one take's rating to an explicit state. The page sends the target
+    /// state rather than "toggle", so a tap raced against an edit made in the
+    /// app lands on a named rating instead of flipping whatever is newest.
+    case rate(takeID: String, rating: TakeRating)
+    /// Replace one take's free-text comment.
+    case comment(takeID: String, text: String)
+
+    /// The wire action plus whatever arguments it carries. nil for anything
+    /// malformed — an unknown rating word must not be read as "clear it".
+    static func parse(action: String,
+                      in dictionary: [String: Any]) -> RemoteCommand? {
+        switch action {
+        case "hello": return .hello
+        case "rec": return .rec
+        case "marker": return .marker
+        case "good": return .good
+        case "bad": return .bad
+        case "rate":
+            guard let id = dictionary["id"] as? String, !id.isEmpty,
+                  let rating = TakeRating(
+                      rawValue: dictionary["rating"] as? String ?? "")
+            else { return nil }
+            return .rate(takeID: id, rating: rating)
+        case "comment":
+            guard let id = dictionary["id"] as? String, !id.isEmpty,
+                  let text = dictionary["text"] as? String
+            else { return nil }
+            return .comment(takeID: id, text: text)
+        default:
+            return nil
+        }
+    }
 }
 
 /// The parsed form of one client message: an action plus the PIN that came
@@ -89,7 +160,7 @@ struct RemoteMessage: Equatable, Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
               let dictionary = object as? [String: Any],
               let action = dictionary["action"] as? String,
-              let command = RemoteCommand(rawValue: action)
+              let command = RemoteCommand.parse(action: action, in: dictionary)
         else { return nil }
         return RemoteMessage(command: command,
                              pin: dictionary["pin"] as? String ?? "")

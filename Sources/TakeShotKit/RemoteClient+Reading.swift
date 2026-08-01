@@ -71,6 +71,10 @@ extension RemoteClient {
         switch request.path {
         case "/", "/index.html":
             writeAndClose(RemoteResponse.page(server?.currentPage ?? Data()))
+        case RemotePage.scriptPath:
+            // The markup is as public as the operator page's — everything it
+            // shows arrives over the socket, behind the same PIN.
+            writeAndClose(RemoteResponse.page(server?.currentScriptPage ?? Data()))
         case RemotePage.posterPath:
             servePoster(request)
         default:

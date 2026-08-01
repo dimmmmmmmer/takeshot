@@ -117,6 +117,14 @@ final class RemoteTestClient {
             #"{"action":"\#(action)","pin":"\#(pin)"}"#))
     }
 
+    /// A message of any shape — the script page's edits carry arguments beyond
+    /// the action and the PIN.
+    func send(_ object: [String: Any]) async throws {
+        let data = try JSONSerialization.data(withJSONObject: object)
+        try await task.send(.string(
+            try #require(String(bytes: data, encoding: .utf8))))
+    }
+
     /// The next message of a given `type`, skipping anything else. Bounded, so
     /// a server that stops talking fails the test instead of hanging the suite.
     func next(type: String, within attempts: Int = 12) async throws -> [String: Any] {
