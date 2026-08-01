@@ -227,6 +227,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// the same shape of bug as persisting the mute's zero, which made every
     /// launch start silent.
     public var monitorDimmed: Bool?
+    /// The speaker's full mute is holding the output at silence (nil/false —
+    /// not muted).
+    ///
+    /// Same contract as `monitorDimmed` above: the STATE is stored, never the
+    /// zero. `monitorVolume` stays the level the operator set, so an un-mute —
+    /// this session or the next — gives it back exactly, and the slashed
+    /// speaker in the footer says why the room is quiet. Persisting the zero
+    /// itself is the bug that once made every launch start silent.
+    public var monitorMuted: Bool?
     /// Color new markers are born with (one of `TakeMarker.colors`); nil — the
     /// palette's first entry.
     ///

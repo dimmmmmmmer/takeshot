@@ -18,6 +18,11 @@ public struct OffloadPlan: Sendable {
     /// Read/write chunk size. Configurable for the tests, which need the
     /// multi-chunk path without writing gigabytes.
     public var chunkBytes: Int
+    /// The language the run's summary .txt and report-card PNG are labelled in.
+    /// Part of the plan because the reports are part of what a run is asked to
+    /// produce; the app fills it from the UI language, and the default keeps
+    /// CaptureCore's own output — and every existing caller — English.
+    public var reportLabels: OffloadReportLabels
     /// Fault injection for the verify pass: called with each destination copy
     /// after it has been flushed to the device and before it is read back.
     ///
@@ -31,12 +36,14 @@ public struct OffloadPlan: Sendable {
                 algorithm: OffloadHashAlgorithm = .xxh64,
                 creator: OffloadCreatorInfo = .current(),
                 chunkBytes: Int = OffloadIO.defaultChunkBytes,
+                reportLabels: OffloadReportLabels = .english,
                 didWriteCopy: (@Sendable (URL) -> Void)? = nil) {
         self.source = source
         self.destinations = destinations
         self.algorithm = algorithm
         self.creator = creator
         self.chunkBytes = max(4096, chunkBytes)
+        self.reportLabels = reportLabels
         self.didWriteCopy = didWriteCopy
     }
 }

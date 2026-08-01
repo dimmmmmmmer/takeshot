@@ -238,6 +238,7 @@ import Testing
         status.timecode = "10:00:00:00"
         status.diskFreeGB = 412.34
         status.markerCount = 3
+        status.mode = "playback"
 
         let object = try #require(try JSONSerialization.jsonObject(
             with: Data(status.json.utf8)) as? [String: Any])
@@ -245,6 +246,8 @@ import Testing
         #expect(object["tc"] as? String == "10:00:00:00")
         #expect(object["type"] as? String == "status")
         #expect(object["markers"] as? Int == 3)
+        // the page adapts its controls to this field — see remote.html
+        #expect(object["mode"] as? String == "playback")
         #expect((object["diskGB"] as? Double).map { abs($0 - 412.3) < 0.05 } == true)
     }
 
@@ -321,6 +324,18 @@ import Testing
             #expect(context.exception == nil,
                     "\(language.rawValue): \(context.exception?.toString() ?? "")")
         }
+    }
+
+    /// The page adapts to the app's mode (owner item 28): the script reads the
+    /// status' `mode` field and hides the marker button over playback — only
+    /// REC is static. The page is a bundle resource, so a rename on either
+    /// side of that contract would otherwise fail only on a phone.
+    @Test @MainActor func thePageHidesTheMarkerButtonOverPlayback() throws {
+        let html = try utf8(RemotePage.html())
+        #expect(html.contains(#"next.mode === "playback""#),
+                "the script no longer reads the mode the status carries")
+        #expect(html.contains(#"el("marker").hidden = playback"#),
+                "the marker button is not tied to the mode")
     }
 
     /// Every label the script reads has to exist in both tables, or the page

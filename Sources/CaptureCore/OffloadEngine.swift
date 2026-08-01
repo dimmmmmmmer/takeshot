@@ -257,7 +257,8 @@ private final class OffloadRun {
         }
         do {
             result.summaryURL = try OffloadSummary.write(
-                result: result, run: run, into: target.root, date: stamp)
+                result: result, run: run, into: target.root, date: stamp,
+                labels: plan.reportLabels)
         } catch {
             result.failure = result.failure
                 ?? "summary: \(error.localizedDescription)"
@@ -270,7 +271,8 @@ private final class OffloadRun {
         // allowed to be missing — which is why it is `try?` and the two above
         // are not.
         result.imageURL = try? OffloadReportCard.write(
-            result: result, run: run, into: target.root, date: stamp)
+            result: result, run: run, into: target.root, date: stamp,
+            labels: plan.reportLabels)
         return result
     }
 

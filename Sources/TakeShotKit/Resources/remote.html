@@ -76,6 +76,16 @@ main {
   #rec.on { animation: none; }
 }
 #marker { width: 100%; height: 74px; font-size: 20px; font-weight: 700; }
+/* Explicit, like #card below: relying on the UA's [hidden] rule breaks the
+   moment somebody gives #marker a display of its own. */
+#marker[hidden] { display: none; }
+/* The playback chip in the header: the reason the marker button is gone. */
+#mode {
+  color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 1px 8px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+#mode[hidden] { display: none; }
 #rate { display: flex; gap: 12px; }
 #rate button { flex: 1; height: 74px; font-size: 20px; font-weight: 700; }
 #good.on { background: var(--good); border-color: var(--good); color: #06210c; }
@@ -163,6 +173,7 @@ footer {
 <header>
   <div id="tc">--:--:--:--</div>
   <div id="meta">
+    <span id="mode" hidden></span>
     <span id="format"></span>
     <span id="take"></span>
   </div>
@@ -277,6 +288,16 @@ function render(next) {
   rec.classList.toggle("on", !!next.recording);
   rec.textContent = next.recording ? S.stop : S.rec;
   rec.disabled = !next.capturing;
+  // The page follows the app's viewer mode; only REC is a static control.
+  // In playback the marker button goes away entirely — a marker pressed there
+  // lands on whatever frame the laptop happens to be parked on, which is not
+  // what a director stabbing "flag that" during a take means — and a chip in
+  // the header says which mode the app is in, so the missing button reads as
+  // state rather than as a broken page.
+  var playback = next.mode === "playback";
+  el("marker").hidden = playback;
+  el("mode").hidden = !playback;
+  if (playback) { text("mode", S.modePlayback); }
   el("good").classList.toggle("on", next.rating === "good");
   el("bad").classList.toggle("on", next.rating === "bad");
   text("markers", S.markers + " " + next.markers);

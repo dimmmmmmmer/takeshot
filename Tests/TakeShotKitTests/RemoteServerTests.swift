@@ -310,3 +310,71 @@ import Testing
         }
     }
 }
+
+/// What the status payload says about the app's MODE, end to end through a
+/// real socket (owner item 28). Its own suite: `RemoteServerTests` above is
+/// about the server's plumbing, this is about the one payload the page adapts
+/// its controls to — and the two grew past the type-length ceiling together.
+@Suite @MainActor struct RemoteStatusPayloadTests {
+    /// The payload carries the viewer mode — the page shows and hides its
+    /// non-REC controls on it — and the marker count counts whatever a marker
+    /// press would land on right now. It used to count the LAST take whenever
+    /// nothing was recording, so a marker placed on the clip being reviewed
+    /// left the phone saying 0.
+    @Test func theStatusCarriesTheModeAndTheLiveMarkerCount() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take = try RemoteHarness.seedTake(
+                controller, in: root, named: "A001C14", clip: 14,
+                markers: [TakeMarker(seconds: 1)])
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let client = try await RemoteHarness.connect(
+                port: port, pin: pin, session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+
+            // idle in record mode: the last take's markers, and the mode says so
+            let idle = try await client.next(type: "status")
+            #expect(idle["mode"] as? String == "record")
+            #expect(idle["markers"] as? Int == 1)
+
+            // while recording, the count is the take in progress
+            controller.isRecording = true
+            controller.recordingMarkers = [TakeMarker(seconds: 1),
+                                           TakeMarker(seconds: 2)]
+            controller.pushRemoteStatus()
+            let recording = try await nextStatus(from: client) {
+                $0["mode"] as? String == "record" && $0["markers"] as? Int == 2
+            }
+            #expect(recording, "the take in progress never reached the payload")
+
+            // reviewing a clip: ITS markers are the count — the payload that
+            // used to say 0 however many the operator placed
+            controller.isRecording = false
+            controller.viewerMode = .playback
+            controller.playbackURL = take.url
+            controller.takes[0].markers = [TakeMarker(seconds: 1),
+                                           TakeMarker(seconds: 2),
+                                           TakeMarker(seconds: 3)]
+            controller.pushRemoteStatus()
+            let playback = try await nextStatus(from: client) {
+                $0["mode"] as? String == "playback"
+                    && $0["markers"] as? Int == 3
+            }
+            #expect(playback,
+                    "the playback clip's markers never reached the payload")
+        }
+    }
+
+    /// Read statuses until one matches. The stream keeps flowing (immediate
+    /// pushes, then the heartbeat), so this is a poll on the outcome with a
+    /// read budget — never a wall-clock wait.
+    private func nextStatus(from client: RemoteTestClient, reads: Int = 12,
+                            matching predicate: ([String: Any]) -> Bool)
+        async throws -> Bool {
+        for _ in 0..<reads {
+            let status = try await client.next(type: "status")
+            if predicate(status) { return true }
+        }
+        return false
+    }
+}

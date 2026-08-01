@@ -20,15 +20,20 @@ final class LiveSignal: ObservableObject {
     /// settings/re-render the window per tick).
     @Published var lutIntensity: Double = 1
 
-    // MARK: - monitor DIM (footer button; see CaptureController+Audio)
+    // MARK: - monitor DIM and mute (footer buttons; see CaptureController+Audio)
 
     /// The monitoring level is being held down by DIM. Here rather than in
-    /// settings for two reasons: the footer's DIM highlight is a per-frame
-    /// neighbour of the meters (same reason as `volume` above), and dim is
-    /// transient like the mute — persisting it would start a session quiet for
-    /// a reason nobody can see, which is exactly the bug persisting the mute's
-    /// zero once caused.
+    /// settings because the footer's DIM highlight is a per-frame neighbour of
+    /// the meters (same reason as `volume` above); what gets persisted is the
+    /// STATE alone, never the halved level (see `CaptureSettings.monitorDimmed`).
     @Published var dimmed = false
     /// The level DIM took away, put back exactly when it is switched off.
     var volumeBeforeDim: Double = 1
+
+    /// The speaker's full mute is holding the output at silence. A state of its
+    /// own rather than "volume == 0": a slider parked at zero is a level the
+    /// operator chose, a mute is a hold with a restore point — and the slashed
+    /// speaker icon has to be able to tell the two apart. Persisted like DIM —
+    /// state only, never the zero (see `CaptureSettings.monitorMuted`).
+    @Published var muted = false
 }

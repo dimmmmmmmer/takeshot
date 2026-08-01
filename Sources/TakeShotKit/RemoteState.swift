@@ -33,8 +33,16 @@ struct RemoteStatus: Equatable, Sendable {
     /// Free space on the record volume, GB. -1 when it cannot be read (the
     /// volume was pulled), which the page shows as a dash rather than as 0 GB.
     var diskFreeGB: Double = -1
-    /// Markers on the take in progress, or on the last one.
+    /// Markers where a marker press would land right now: the clip in the
+    /// player in playback, the take in progress while recording, the last take
+    /// otherwise — the same routing `addMarker()` itself uses. It used to count
+    /// only the last take, so a marker placed in playback left the phone
+    /// saying 0 (owner item 28).
     var markerCount: Int = 0
+    /// "record" / "playback" — the viewer mode, so the page can adapt: per the
+    /// owner, only REC is a static control, and a marker button offered over
+    /// playback marks something the person holding the phone cannot see.
+    var mode: String = "record"
 
     /// The wire form. Hand-built rather than Codable so the field names are
     /// visible next to the page that reads them.
@@ -44,6 +52,7 @@ struct RemoteStatus: Equatable, Sendable {
             "\"tc\":\(RemoteJSON.quoted(timecode))",
             "\"recording\":\(recording)",
             "\"capturing\":\(capturing)",
+            "\"mode\":\(RemoteJSON.quoted(mode))",
             "\"format\":\(RemoteJSON.quoted(format))",
             "\"take\":\(RemoteJSON.quoted(takeName))",
             "\"lastTake\":\(RemoteJSON.quoted(lastTakeName))",

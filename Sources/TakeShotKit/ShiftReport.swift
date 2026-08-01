@@ -49,7 +49,13 @@ private final class ReportPage {
     static let xTCOut = xTCIn + 66
     static let xDur = xTCOut + 66
     static let xRating = xDur + 38
-    static let xComment = xRating + 42
+    /// Wide enough for the RATING words in both languages: "● ГОДЕН" needs
+    /// more than the 42pt the English "● GOOD" was laid out for, and a rating
+    /// truncated to "ГОДЕ…" on the paper that leaves set is a wrong answer,
+    /// not a tight one. The notes column pays for it — it is the one that
+    /// truncates gracefully.
+    static let ratingWidth: CGFloat = 52
+    static let xComment = xRating + ratingWidth
     static let commentWidth = pageSize.width - margin - xComment
 
     private let titleFont = NSFont.boldSystemFont(ofSize: 16)
@@ -102,10 +108,13 @@ private final class ReportPage {
     }
 
     func drawHeader(takes: [Take], project: String, camera: String) {
+        // The report speaks the app language (owner item 21), dates included:
+        // a Russian shift report with an English date reads as half-translated.
         let formatter = DateFormatter()
         formatter.dateStyle = .long
         formatter.timeStyle = .none
-        draw("\(project.isEmpty ? "TakeShot" : project) — shift report",
+        formatter.locale = L10n.current.documentLocale
+        draw("\(project.isEmpty ? "TakeShot" : project) — \(L("report_title"))",
              x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
              font: titleFont, offset: 4)
         y += 24
@@ -114,24 +123,28 @@ private final class ReportPage {
         let total = takes.reduce(0.0) { $0 + $1.durationSeconds }
         let totalText = String(format: "%d:%02d:%02d", Int(total) / 3600,
                                (Int(total) / 60) % 60, Int(total) % 60)
-        let cameraPart = camera.isEmpty ? "" : "   Cam \(camera)"
+        let cameraPart = camera.isEmpty ? "" : "   \(L("report_camera", camera))"
         draw("\(formatter.string(from: Date()))\(cameraPart)   "
-             + "\(takes.count) takes (\(good) good, \(bad) bad)   "
-             + "footage \(totalText)",
+             + "\(L("report_takes_summary", takes.count, good, bad))   "
+             + "\(L("report_footage", totalText))",
              x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
              font: bodyFont, color: .darkGray)
         y += 24
     }
 
     func drawTableHead() {
-        draw("CLIP", x: Self.xClip, width: 158, font: headFont, color: .darkGray)
-        draw("TC IN", x: Self.xTCIn, width: 66, font: headFont, color: .darkGray)
-        draw("TC OUT", x: Self.xTCOut, width: 66, font: headFont,
+        draw(L("report_col_clip"), x: Self.xClip, width: 158, font: headFont,
              color: .darkGray)
-        draw("DUR", x: Self.xDur, width: 38, font: headFont, color: .darkGray)
-        draw("OK", x: Self.xRating, width: 42, font: headFont, color: .darkGray)
-        draw("NOTES", x: Self.xComment, width: Self.commentWidth, font: headFont,
+        draw(L("report_col_tc_in"), x: Self.xTCIn, width: 66, font: headFont,
              color: .darkGray)
+        draw(L("report_col_tc_out"), x: Self.xTCOut, width: 66, font: headFont,
+             color: .darkGray)
+        draw(L("report_col_dur"), x: Self.xDur, width: 38, font: headFont,
+             color: .darkGray)
+        draw(L("report_col_ok"), x: Self.xRating, width: Self.ratingWidth, font: headFont,
+             color: .darkGray)
+        draw(L("report_col_notes"), x: Self.xComment, width: Self.commentWidth,
+             font: headFont, color: .darkGray)
         y += 16
         context.setStrokeColor(NSColor.lightGray.cgColor)
         context.setLineWidth(0.5)
@@ -167,7 +180,7 @@ private final class ReportPage {
              font: monoFont, offset: 2)
         draw(TakeLogExporter.endTimecode(of: take)?.description ?? "—",
              x: Self.xTCOut, width: 66, font: monoFont, offset: 2)
-        draw(String(format: "%.1fs", take.durationSeconds), x: Self.xDur,
+        draw(L("report_duration_fmt", take.durationSeconds), x: Self.xDur,
              width: 38, font: monoFont, offset: 2)
         drawRating(take.rating)
         draw(take.comment, x: Self.xComment, width: Self.commentWidth,
@@ -178,15 +191,17 @@ private final class ReportPage {
     private func drawRating(_ rating: TakeRating) {
         switch rating {
         case .good:
-            draw("● GOOD", x: Self.xRating, width: 42, font: headFont,
+            draw("● \(L("report_rating_good"))", x: Self.xRating, width: Self.ratingWidth,
+                 font: headFont,
                  color: NSColor(calibratedRed: 0.1, green: 0.55, blue: 0.2,
                                 alpha: 1), offset: 2)
         case .bad:
-            draw("✕ BAD", x: Self.xRating, width: 42, font: headFont,
+            draw("✕ \(L("report_rating_bad"))", x: Self.xRating, width: Self.ratingWidth,
+                 font: headFont,
                  color: NSColor(calibratedRed: 0.75, green: 0.15, blue: 0.1,
                                 alpha: 1), offset: 2)
         case .none:
-            draw("—", x: Self.xRating, width: 42, font: bodyFont,
+            draw("—", x: Self.xRating, width: Self.ratingWidth, font: bodyFont,
                  color: .lightGray, offset: 2)
         }
     }

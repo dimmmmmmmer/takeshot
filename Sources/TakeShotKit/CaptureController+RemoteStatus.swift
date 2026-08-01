@@ -30,9 +30,26 @@ extension CaptureController {
         status.lastTakeID = takes.last.map { $0.id.uuidString } ?? ""
         status.rating = (takes.last?.rating ?? .none).rawValue
         status.diskFreeGB = remoteDiskFreeGB
-        status.markerCount = isRecording
-            ? recordingMarkers.count : (takes.last?.markers.count ?? 0)
+        status.markerCount = remoteMarkerCount
+        // the page shows/hides its non-REC controls on this — see remote.html
+        status.mode = viewerMode == .playback ? "playback" : "record"
         return status
+    }
+
+    /// The count the phone's footer shows — the markers of whatever a marker
+    /// press would land on, mirroring `addMarker()`'s own routing branch for
+    /// branch (playback clip first, then the take in progress).
+    ///
+    /// The old payload counted `takes.last` whenever nothing was recording, so
+    /// a marker placed on the clip being reviewed — including from the phone
+    /// itself — never changed the number, which is the "shows 0 even when I
+    /// place one" of owner item 28.
+    private var remoteMarkerCount: Int {
+        if viewerMode == .playback, playbackURL != nil {
+            return playbackMarkers.count
+        }
+        if isRecording { return recordingMarkers.count }
+        return takes.last?.markers.count ?? 0
     }
 
     /// Push the status now rather than at the next tick — a button that lights

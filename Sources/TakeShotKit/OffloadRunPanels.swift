@@ -106,8 +106,9 @@ struct OffloadResultPanel: View {
             Text(verdict(result))
                 .offloadText(.body, tint: color(result.outcome))
                 .fixedSize(horizontal: false, vertical: true)
+            // the duration's unit WORDS follow the UI language, like the report
             Text("\(OffloadFormat.bytes(result.totals.bytesWritten)) · "
-                + "\(OffloadFormat.duration(result.totals.elapsed)) · "
+                + "\(OffloadFormat.duration(result.totals.elapsed, labels: .current())) · "
                 + OffloadFormat.rate(result.totals.megabytesPerSecond))
                 .offloadText(.caption)
             // The REPORT, not the manifest. The manifest is still written and

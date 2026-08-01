@@ -126,8 +126,12 @@ final class OffloadSheetModel: ObservableObject {
 
     func start() {
         guard let source, canStart else { return }
+        // The report labels are read here, once, in the operator's current UI
+        // language: the summary and the card of THIS run speak one language
+        // even if the switch is flipped while it copies (owner item 21).
         let plan = OffloadPlan(source: source, destinations: destinationFolders,
-                               algorithm: Self.algorithm, creator: creator)
+                               algorithm: Self.algorithm, creator: creator,
+                               reportLabels: .current())
         let token = OffloadCancellation()
         cancellation = token
         isRunning = true
