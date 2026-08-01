@@ -440,9 +440,9 @@
 "offload_history_reveal" = "Show this copy in the Finder";
 /* audio UX + footer reorg (owner items 7, 8, 25, 48) */
 "record_folder_help" = "Record folder: %@ — click to choose another";
-"record_folder_locked_help" = "The record folder stays put while a take is recording";
+"record_folder_locked_help" = "Record folder: %@ — it stays put while a take is recording";
 "codec_footer_help" = "Recording codec: %@";
-"codec_locked_help" = "The codec is fixed while a take is recording — the file is already being written with it";
+"codec_locked_help" = "Recording codec: %@ — fixed while a take is recording, the file is already being written with it";
 "monitor_dim_label" = "DIM";
 "monitor_dim_help" = "DIM — drop monitoring to half level";
 "monitor_dim_on_help" = "DIM is on — click to restore the level";

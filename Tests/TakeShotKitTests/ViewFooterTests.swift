@@ -197,46 +197,43 @@ struct ViewFooterTests {
         }
     }
 
-    /// The record folder's name is operator data — it can be anything, and the
-    /// fixture's own is a long scratch path. It must not be able to resize the
-    /// footer: the name is capped and truncates, and disappears entirely before
-    /// the row would push into the record button.
-    @Test func aLongRecordFolderNameCannotWidenTheFooter() async throws {
+    /// The record folder is icon-only in the footer (owner item 3): its name is
+    /// operator data that can be anything — the fixture's own is a long scratch
+    /// path — and it lives in the tooltip now. The button must stay icon-sized
+    /// whatever the folder is called, in both languages.
+    @Test func theFolderButtonStaysIconSizedWhateverTheFolderIsCalled() async throws {
         try await ViewProbe.run { probe in
             // the footer's own button style, or the measurement is of AppKit's
             // bordered chrome rather than of the label inside it
             let ideal = probe.fittingSizes {
                 FooterFolderButton().buttonStyle(.borderless)
             }
-            #expect(ideal.en.width <= FooterFolderButton.nameWidth + 30,
-                    "the folder button wants \(ideal.en.width)pt for its name")
+            #expect(ideal.en.width < 40,
+                    "the folder button grew past an icon: \(ideal.en.width)pt")
             #expect(ideal.ru == ideal.en)
-            // squeezed past the name it keeps the icon and nothing else
-            let squeezed = probe.minimumWidths {
-                FooterFolderButton().buttonStyle(.borderless)
-            }
-            #expect(squeezed.en < FooterFolderButton.nameWidth,
-                    "the name did not give up its width: \(squeezed.en)pt")
         }
     }
 
-    /// The codec picker is the one control in the footer whose label changes with
-    /// a setting. Every codec name has to leave the row the same size — the
-    /// picker keeps its short flavour name as a fallback for exactly that.
-    @Test func theCodecPickerStaysTheSameSizeForEveryCodec() async throws {
+    /// The codec picker is icon-only too (owner item 3): the name lives in the
+    /// tooltip, so every codec has to leave the trigger byte-for-byte the same
+    /// size — a picker that resized with the setting would reflow the footer on
+    /// a codec change.
+    @Test func theCodecPickerStaysIconSizedForEveryCodec() async throws {
         try await ViewProbe.run { probe in
-            var widths: [CaptureCodec: CGFloat] = [:]
+            var first: CGSize?
             for codec in CaptureCodec.allCases {
                 probe.controller.settings.codec = codec
                 let ideal = probe.fittingSizes { FooterCodecMenu() }
                 #expect(ideal.ru == ideal.en, "\(codec.rawValue): \(ideal)")
-                widths[codec] = ideal.en.width
-                let squeezed = probe.minimumWidths { FooterCodecMenu() }
-                #expect(squeezed.en <= 60,
-                        "\(codec.rawValue) will not compress: \(squeezed.en)pt")
+                #expect(ideal.en.width < 50,
+                        "\(codec.rawValue) grew the icon to \(ideal.en.width)pt")
+                if let first {
+                    #expect(ideal.en == first,
+                            "\(codec.rawValue) resized the icon: \(ideal.en) vs \(first)")
+                } else {
+                    first = ideal.en
+                }
             }
-            // the longest name is the one the zone budget above was measured with
-            #expect(widths[.proResProxy] == widths.values.max())
         }
     }
 

@@ -56,9 +56,11 @@ enum PlayerChrome {
     static let cornerRadius: CGFloat = 7
     /// Room a plate leaves either side of its content.
     static let horizontalPadding: CGFloat = 8
-    /// Opacity of the plate. Dark enough to keep white text legible over a blown
-    /// highlight, light enough to see the picture through it.
-    static let backgroundOpacity: Double = 0.72
+    /// Opacity of the plate. Lightened from its original 72% (owner item 11 —
+    /// the row read as black bars on the picture): still dark enough to keep
+    /// white text legible over a blown highlight, light enough that the plates
+    /// sit ON the image instead of covering it.
+    static let backgroundOpacity: Double = 0.55
     static let borderOpacity: Double = 0.22
     static let borderWidth: CGFloat = 0.5
 }
@@ -85,15 +87,12 @@ extension View {
 
 /// Record/playback switch over the player.
 ///
-/// `minWidth` and not `width`: the two segment titles are localized, and a
-/// hard width clips whichever language needs more than English does — the
-/// switch keeps its 190pt look wherever it fits and grows where it has to.
+/// The plate hugs the segmented control like every other plate in the family
+/// (owner item 10): the old fixed 190pt look reserved dead air either side of
+/// two short labels. The segment titles are localized and each language pays
+/// for its own — the switch sits in the chrome row's centered slot, so a
+/// locale-dependent width moves nothing else.
 struct ViewerModeSwitch: View {
-    /// The width the switch has in English, plate included; wider languages get
-    /// what they need. Outer, not inner: it is compared against the room the
-    /// centered slot has, and that room is measured on the plate.
-    static let idealWidth: CGFloat = 190
-
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
@@ -104,7 +103,6 @@ struct ViewerModeSwitch: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .controlSize(.small)
-        .frame(minWidth: Self.idealWidth - 2 * PlayerChrome.horizontalPadding)
         .fixedSize()
         .playerChromePlate()
     }

@@ -49,12 +49,10 @@ struct FooterShootingControls: View {
     var body: some View {
         HStack(spacing: 6) {
             FooterFolderButton()
-            // Who gives up width first when the window is narrow, in order: the
-            // folder name (icon and tooltip still answer it), then the meter bars
-            // (5pt → 3pt), and the codec last — it is the readout a whole day can
-            // be shot wrong on, and it must never come out as an ellipsis.
+            // The folder and the codec are icon-only (owner item 3) — their
+            // names live in the tooltips — so the meters are the one thing left
+            // that gives up width when the window is narrow (5pt → 3pt bars).
             FooterCodecMenu()
-                .layoutPriority(2)
             NamingPresetMenu()
             FooterMonitorButton(live: controller.live)
             FooterDimButton(live: controller.live)

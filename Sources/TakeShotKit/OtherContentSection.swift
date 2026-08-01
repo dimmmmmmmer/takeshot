@@ -18,7 +18,9 @@ struct OtherContentSection: View {
                 Spacer()
                 PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }
-            .padding(.horizontal, 12)
+            // the header ends on the content margin so the view picker sits
+            // against the panel's right edge, not inside it (owner item 22)
+            .padding(.horizontal, PanelChrome.contentMargin)
             .padding(.vertical, 6)
             Divider()
             if viewMode == "grid" {
@@ -28,7 +30,7 @@ struct OtherContentSection: View {
                             OtherCell(url: url, tileWidth: tileSize)
                         }
                     }
-                    .padding(10)
+                    .padding(PanelChrome.contentMargin)
                 }
             } else {
                 List(controller.otherFiles, id: \.self) { url in
