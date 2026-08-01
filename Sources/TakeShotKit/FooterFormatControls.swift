@@ -21,130 +21,92 @@ extension CaptureController {
 
 /// Record folder. "Which drive am I shooting to" is a question with a wrong
 /// answer, so it is in the footer rather than only in Settings; clicking opens
-/// the same folder dialog Settings uses, and the tooltip carries the full path.
+/// the same folder dialog Settings uses. Icon only (owner item 3): a folder can
+/// be called anything ("2026-07-30_ProjectX_CamA") and the name ate the
+/// footer's width, so the tooltip carries the full path instead — in the locked
+/// state too, because the icon is then the only folder readout the footer has.
 struct FooterFolderButton: View {
     @EnvironmentObject private var controller: CaptureController
-
-    /// Most the folder name may take. Pinned in ViewFooterTests: the record
-    /// folder's name is operator data and must not be able to resize the footer.
-    static let nameWidth: CGFloat = 90
 
     var body: some View {
         // The tooltip hangs off the wrapper rather than off the button, so that
         // the "why is this locked" text is on a view that is NOT disabled — the
         // whole point of it is to be readable while the take is recording. Same
-        // shape as the codec picker below, where the disabled part is the menu
-        // inside the overlay. A single-child ZStack changes no geometry.
+        // shape as the codec picker below. A single-child ZStack changes no
+        // geometry.
         ZStack {
             button
                 .disabled(!controller.canChangeRecordingFormat)
         }
         .help(controller.canChangeRecordingFormat
               ? L("record_folder_help", controller.settings.destinationPath)
-              : L("record_folder_locked_help"))
+              : L("record_folder_locked_help", controller.settings.destinationPath))
     }
 
     private var button: some View {
         Button {
             controller.chooseDestinationFolder()
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "folder")
-                    .font(.system(size: 13))
-                // The name is the first thing in the footer to give up its
-                // width: at the narrowest window with 16 channels metering
-                // there is no room for it, and the icon plus the tooltip still
-                // answer the question. A truncated "Ta…" would not.
-                ViewThatFits(in: .horizontal) {
-                    Text(folderName)
-                        .font(.system(size: 11))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        // a folder can be called anything ("2026-07-30_ProjectX_
-                        // CamA"): without the cap the footer's ideal width grew
-                        // with the name and pushed the naming fields off the bar
-                        .frame(maxWidth: Self.nameWidth)
-                    EmptyView()
-                }
-            }
-            .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
+            Image(systemName: "folder")
+                .font(.system(size: 13))
+                .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
         }
-    }
-
-    private var folderName: String {
-        URL(fileURLWithPath: controller.settings.destinationPath).lastPathComponent
     }
 }
 
 /// Recording codec, in the footer: a whole day shot in Proxy because the picker
-/// was a pane deep in Settings is the mistake this exists to prevent. Disabled
-/// while a take is recording, with a tooltip that says why.
+/// was a pane deep in Settings is the mistake this exists to prevent. Icon only
+/// (owner item 3): the name ("Apple ProRes 422 Proxy") ate the footer's width,
+/// so the tooltip names the codec instead — in the locked state too, because
+/// while a take records the tooltip is the only codec readout the footer has.
+/// Disabled while a take is recording, and the tooltip also says why.
 struct FooterCodecMenu: View {
     @EnvironmentObject private var controller: CaptureController
 
-    /// The flavour name, for when the full one does not fit. These are what the
-    /// codecs are called on set (Proxy / LT / 422 / HQ), not invented
-    /// abbreviations, and H.264/HEVC are already short.
-    static func shortName(_ codec: CaptureCodec) -> String {
-        switch codec {
-        case .proResProxy: return "Proxy"
-        case .proResLT: return "LT"
-        case .proRes422: return "422"
-        case .proResHQ: return "HQ"
-        case .h264, .hevc: return codec.rawValue
-        }
-    }
-
     var body: some View {
-        // A borderless Menu sizes its label to whatever it is proposed, which
-        // collapses a ViewThatFits label to its smallest form at any width. So
-        // the label is laid out on its own and an invisible Menu is stretched
-        // over it — the same trick the takes panel's export button uses.
-        label
-            .overlay {
-                Menu {
-                    ForEach(CaptureCodec.allCases) { codec in
-                        Button {
-                            controller.settings.codec = codec
-                        } label: {
-                            if codec == controller.settings.codec {
-                                Label(codec.rawValue, systemImage: "checkmark")
-                            } else {
-                                Text(codec.rawValue)
-                            }
-                        }
-                    }
-                } label: {
-                    Color.clear
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
+        // The tooltip hangs off the wrapper rather than off the menu, so the
+        // "which codec / why locked" text is on a view that is NOT disabled —
+        // the whole point of it is to be readable while the take is recording.
+        // Same shape as the folder button above.
+        ZStack {
+            menu
                 .disabled(!controller.canChangeRecordingFormat)
-            }
-            .help(controller.canChangeRecordingFormat
-                  ? L("codec_footer_help", controller.settings.codec.rawValue)
-                  : L("codec_locked_help"))
-    }
-
-    private var label: some View {
-        HStack(spacing: 3) {
-            ViewThatFits(in: .horizontal) {
-                text(controller.settings.codec.rawValue)
-                text(Self.shortName(controller.settings.codec))
-            }
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 7, weight: .semibold))
         }
-        // colour only: a disabled picker that also changed size would reflow the
-        // whole footer the moment a take starts
-        .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
-        .foregroundStyle(.primary)
+        .help(controller.canChangeRecordingFormat
+              ? L("codec_footer_help", controller.settings.codec.rawValue)
+              : L("codec_locked_help", controller.settings.codec.rawValue))
     }
 
-    private func text(_ value: String) -> some View {
-        Text(value)
-            .font(.system(size: 11))
-            .lineLimit(1)
+    private var menu: some View {
+        Menu {
+            ForEach(CaptureCodec.allCases) { codec in
+                Button {
+                    controller.settings.codec = codec
+                } label: {
+                    if codec == controller.settings.codec {
+                        Label(codec.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(codec.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "film.stack")
+                    .font(.system(size: 13))
+                // the chevron is what says "picker, not readout" once the
+                // codec name is gone from the bar
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 7, weight: .semibold))
+            }
+            // colour only: a disabled picker that also changed size would
+            // reflow the whole footer the moment a take starts
+            .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
+            .foregroundStyle(.primary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 }
 

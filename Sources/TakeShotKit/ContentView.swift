@@ -66,6 +66,10 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
+            // BELOW the panel's chrome, not inside it: the settings/VANC/
+            // offload strip is its own plate, centered on the panel's width
+            // (owner item 2).
+            .takesPanelUtilityStrip()
             // top edge flush with the player
             .padding(.top, controller.windowTopInset)
             .padding(.bottom, 10)

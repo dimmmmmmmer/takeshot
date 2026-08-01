@@ -50,9 +50,9 @@ struct TakeListView: View {
                 }
                 Button(L("cancel"), role: .cancel) {}
             }
-            // MOUNT LINE (owner item 48): the footer's settings/VANC/offload
-            // buttons live in a strip at the bottom of this panel now.
-            .takesPanelUtilityStrip()
+            // The settings/VANC/offload strip (owner item 48) is mounted by
+            // `ContentView.sidePanel`, BELOW this panel's chrome — it is its
+            // own plate, not a row of this list (owner item 2).
     }
 
     @ViewBuilder private var sections: some View {
@@ -137,7 +137,9 @@ private struct TakesSection: View {
                 Spacer()
                 PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }
-            .padding(.horizontal, 12)
+            // the header ends on the content margin so the view picker sits
+            // against the panel's right edge, not inside it (owner item 22)
+            .padding(.horizontal, PanelChrome.contentMargin)
             .padding(.top, 4)
             .padding(.bottom, 8)
             Divider()
@@ -154,7 +156,7 @@ private struct TakesSection: View {
                             TakeCell(take: take, tileWidth: tileSize)
                         }
                     }
-                    .padding(10)
+                    .padding(PanelChrome.contentMargin)
                 }
             } else {
                 List(controller.takes.reversed()) { take in

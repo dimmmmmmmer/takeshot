@@ -54,15 +54,17 @@ struct ViewPanelTests {
     /// The offload status is the one free-text string in this panel. It used to
     /// be a single line in the takes header; since the sheet learned to close
     /// over a live run (owner item 16) it is a whole readout in the utility
-    /// strip at the bottom — a status line, a percentage, a bar, the file in
-    /// flight and Stop. This measures the WHOLE panel with that readout in it,
-    /// which is the composition the operator actually gets (`TakeListView`
-    /// mounts the strip); `ViewOffloadTests` measures the strip on its own.
+    /// strip — a status line, a percentage, a bar, the file in flight and Stop.
+    /// This measures the panel WITH the strip mounted under it, which is the
+    /// composition the operator actually gets (`ContentView.sidePanel` applies
+    /// the modifier); `ViewOffloadTests` measures the strip on its own.
     /// Neither the status nor the file name may widen the panel — they truncate.
     @Test func offloadStatusDoesNotWidenTheTakesPanel() async throws {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
-            let quiet = probe.minimumWidths(proposedHeight: 600) { TakeListView() }
+            let quiet = probe.minimumWidths(proposedHeight: 600) {
+                TakeListView().takesPanelUtilityStrip()
+            }
             probe.controller.offload.isRunning = true
             probe.controller.offload.progress = OffloadProgress(
                 filesTotal: 128, bytesTotal: 64_000_000_000,
@@ -71,7 +73,9 @@ struct ViewPanelTests {
             probe.controller.offloadStatus = ViewRender.withLanguage(.russian) {
                 L("offload_progress", 41, 128)
             }
-            let busy = probe.minimumWidths(proposedHeight: 600) { TakeListView() }
+            let busy = probe.minimumWidths(proposedHeight: 600) {
+                TakeListView().takesPanelUtilityStrip()
+            }
             #expect(busy.ru <= max(quiet.ru, ViewBudget.panelMinWidth),
                     "the offload status pushed the panel to \(busy.ru)pt")
             #expect(busy.en <= max(quiet.en, ViewBudget.panelMinWidth))
@@ -248,7 +252,7 @@ struct ViewPanelTests {
         }
     }
 
-    /// The utility strip at the bottom of the takes panel (owner item 48) is
+    /// The utility strip below the takes panel (owner items 48 and 2) is
     /// three icons — two buttons and the offload/verify menu — carrying localized
     /// tooltips and, in the menu's case, localized ITEMS. Neither may reach the
     /// strip's own width: "Проверить диск..." is many times wider than the icon
@@ -266,9 +270,9 @@ struct ViewPanelTests {
         }
     }
 
-    /// The mount modifier puts the strip UNDER whatever it is applied to (the
-    /// takes list, or the Other content section when there is one) and takes its
-    /// width from the panel, not from the strip.
+    /// The mount modifier puts the strip UNDER whatever it is applied to — its
+    /// own plate below the panel's chrome (owner item 2) — and takes its width
+    /// from the panel, not from the strip.
     @Test func theStripMountsBelowThePanelWithoutWideningIt() async throws {
         try await ViewProbe.run { probe in
             let strip = probe.fittingSizes { TakesPanelUtilityStrip() }

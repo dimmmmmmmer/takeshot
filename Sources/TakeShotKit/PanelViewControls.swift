@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// The margin the takes panel's scrollable content keeps from the panel edge —
+/// the grids' own padding. The section headers end their rows on the same
+/// margin, so the view pickers finish where the content below them does
+/// instead of floating short of the panel's right edge (owner item 22).
+enum PanelChrome {
+    static let contentMargin: CGFloat = 10
+}
+
 /// List-or-grid, and how big the tiles are.
 ///
 /// The takes section and the Other content section carry the same pair in the

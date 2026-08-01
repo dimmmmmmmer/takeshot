@@ -16,15 +16,32 @@ import Testing
 /// because the three groups were three independent corner overlays.
 @MainActor
 struct ViewPlayerBadgeTests {
-    /// The record/playback switch keeps a 190pt look and grows instead of
-    /// clipping — and today's translations do not need the growth.
-    @Test func modeSwitchFitsItsIdealWidthInBothLanguages() async throws {
+    /// The record/playback switch hugs its labels like every other plate
+    /// (owner item 10) — the old fixed 190pt look reserved dead air either
+    /// side of them. Hugging is asserted literally: the plate is the bare
+    /// segmented control plus the family's own padding, nothing reserved. The
+    /// two languages pay for their own labels, and both stay in the centered
+    /// slot's budget.
+    @Test func modeSwitchHugsItsLabelsInBothLanguages() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes { ViewerModeSwitch() }
-            #expect(ideal.ru.width == ViewerModeSwitch.idealWidth,
-                    "the Russian mode switch grew to \(ideal.ru.width)pt")
-            #expect(ideal.ru == ideal.en)
-            #expect(ideal.ru.width <= ViewBudget.playerCenterWidth)
+            let bare = probe.fittingSizes {
+                Picker("", selection: .constant(CaptureController.ViewerMode.record)) {
+                    Text(L("mode_record")).tag(CaptureController.ViewerMode.record)
+                    Text(L("mode_playback")).tag(CaptureController.ViewerMode.playback)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+            for (language, plate, control) in [("en", ideal.en, bare.en),
+                                               ("ru", ideal.ru, bare.ru)] {
+                #expect(plate.width
+                        == control.width + 2 * PlayerChrome.horizontalPadding,
+                        "the \(language) plate reserves \(plate.width)pt for a \(control.width)pt control")
+                #expect(plate.width <= ViewBudget.playerCenterWidth)
+            }
         }
     }
 
@@ -162,6 +179,18 @@ struct ViewPlayerBadgeTests {
                         "\(name) is \(ideal.ru.height)pt in Russian")
             }
         }
+    }
+
+    /// The family's darkness is one constant, and the owner asked for it
+    /// lightened (item 11: 72% black read as black bars on the picture). The
+    /// band pins both directions — a per-badge edit must not creep it back
+    /// toward the old darkness, and it must not bleach past what keeps white
+    /// text readable over a blown highlight.
+    @Test func thePlateFamilyStaysLightenedButReadable() {
+        #expect(PlayerChrome.backgroundOpacity <= 0.55,
+                "the plates darkened back to \(PlayerChrome.backgroundOpacity)")
+        #expect(PlayerChrome.backgroundOpacity >= 0.45,
+                "\(PlayerChrome.backgroundOpacity) black cannot carry white text")
     }
 
     /// The compare bar changes shape as modes are engaged (the wipe picker, the

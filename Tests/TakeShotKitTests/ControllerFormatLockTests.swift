@@ -35,20 +35,15 @@ import Testing
 
     /// The picker writes straight into settings, so the lock is what stands
     /// between a take and a codec it was not written in. This pins that the
-    /// setting the footer offers is the one the writer reads.
+    /// setting the footer offers is the one the writer reads. (The footer's
+    /// trigger is icon-only now — owner item 3 — so there is no label to pin;
+    /// the codec's name reaches the operator through the tooltip.)
     @Test func theCodecTheFooterOffersIsTheOneTakesAreWrittenIn() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.settings.codec = .proResHQ
             #expect(controller.settings.codec == .proResHQ)
             #expect(CaptureSettings.loaded(from: controller.defaults).codec
                 == .proResHQ)
-            // every codec has a short name for the footer's narrow label, and
-            // none of them is empty
-            for codec in CaptureCodec.allCases {
-                let short = FooterCodecMenu.shortName(codec)
-                #expect(!short.isEmpty)
-                #expect(short.count <= codec.rawValue.count)
-            }
         }
     }
 }
