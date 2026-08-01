@@ -150,7 +150,7 @@ struct ViewSettingsTests {
             let form = ViewBudget.settingsFormWidth
             for key in ["remote_enable", "remote_port", "remote_pin",
                         "remote_address", "remote_pin_new", "remote_offline",
-                        "remote_no_network"] {
+                        "remote_no_network", "remote_script"] {
                 let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
                 #expect(ideal.ru.width <= form,
                         "\(key) is \(ideal.ru.width)pt of \(form)")

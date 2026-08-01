@@ -58,6 +58,27 @@ extension CaptureController {
         remoteServer?.broadcast(remoteStatus())
     }
 
+    /// The script page's table: every take the panel lists, with the fields a
+    /// scripty logs. Built on the MainActor and handed over as a value, like
+    /// the status — the server never reads controller state.
+    func remoteTakeLog() -> RemoteTakeLog {
+        RemoteTakeLog(entries: takes.map { take in
+            RemoteTakeLog.Entry(id: take.id.uuidString,
+                                name: take.displayName,
+                                timecode: take.startTimecode?.description ?? "",
+                                durationSeconds: take.durationSeconds,
+                                rating: take.rating.rawValue,
+                                comment: take.comment)
+        })
+    }
+
+    /// Push the take log now rather than at the next tick — an edit the
+    /// scripty just made has to come back as pushed state, or the page reads
+    /// its own save as lost.
+    func pushRemoteTakeLog() {
+        remoteServer?.broadcastTakeLog(remoteTakeLog())
+    }
+
     // MARK: - the poster
 
     /// The last take's frame as JPEG bytes, or nil while there is none.
@@ -84,6 +105,7 @@ extension CaptureController {
         remoteStatusTask = Task { [weak self] in
             var ticks = 0
             var lastSent: RemoteStatus?
+            var lastTakeLog: RemoteTakeLog?
             while !Task.isCancelled {
                 guard let self else { return }
                 if ticks % Self.remoteDiskTicks == 0 { self.sampleRemoteDisk() }
@@ -91,6 +113,16 @@ extension CaptureController {
                 if status != lastSent || ticks % Self.remoteHeartbeatTicks == 0 {
                     self.remoteServer?.broadcast(status)
                     lastSent = status
+                }
+                // The take log goes out only when it changed: it can be a whole
+                // day of takes, and the status heartbeat already proves the
+                // socket alive. A finalize, a rating, an edit — from either
+                // side — all land here within a tick, which is how the script
+                // page updates without a refresh.
+                let takeLog = self.remoteTakeLog()
+                if takeLog != lastTakeLog {
+                    self.remoteServer?.broadcastTakeLog(takeLog)
+                    lastTakeLog = takeLog
                 }
                 ticks &+= 1
                 try? await Task.sleep(for: Self.remoteTick)
@@ -129,7 +161,26 @@ extension CaptureController {
             toggleLastRating(.good)
         case .bad:
             toggleLastRating(.bad)
+        case .rate(let takeID, let rating):
+            // The scripty's tap lands on the method the row's own controls
+            // call, so the CSV rewrite and the panel update come from there. A
+            // take that is gone (deleted between the push and the tap) is
+            // silently nothing — the next push shows the page why.
+            guard let take = take(withRemoteID: takeID) else { break }
+            setRating(rating, for: take)
+        case .comment(let takeID, let text):
+            guard let take = take(withRemoteID: takeID) else { break }
+            setComment(text, for: take)
         }
         pushRemoteStatus()
+        // Edits and finalizes both reshape the table the script page shows;
+        // pushing it with the status keeps a tap's echo inside a beat instead
+        // of a quarter-second behind it.
+        pushRemoteTakeLog()
+    }
+
+    /// The take a page-sent id names, or nil when it no longer exists.
+    private func take(withRemoteID id: String) -> Take? {
+        takes.first { $0.id.uuidString == id }
     }
 }

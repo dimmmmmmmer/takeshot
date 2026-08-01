@@ -26,6 +26,7 @@ struct RemoteSettingsSection: View {
                 portRow
                 pinRow
                 addressRow
+                scriptRow
                 Text(L("remote_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -91,6 +92,35 @@ struct RemoteSettingsSection: View {
                     .interpolation(.none)
                     .accessibilityLabel(first)
                 Spacer()
+            }
+        }
+    }
+
+    /// The script supervisor's page, one row and one QR under the operator
+    /// remote's — the same addresses with the page's path on them. Shown only
+    /// while there is something to scan; the offline and no-network states are
+    /// already said once, in `addressRow`.
+    @ViewBuilder private var scriptRow: some View {
+        let urls = controller.remoteURLs.map { $0 + RemotePage.scriptPath }
+        if controller.remoteBoundPort > 0, !urls.isEmpty {
+            LabeledContent(L("remote_script")) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    ForEach(urls, id: \.self) { url in
+                        Text(url)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            if let first = urls.first,
+               let code = RemoteAddress.qrImage(for: first, side: Self.qrSide) {
+                HStack {
+                    Spacer()
+                    Image(nsImage: code)
+                        .interpolation(.none)
+                        .accessibilityLabel(first)
+                    Spacer()
+                }
             }
         }
     }

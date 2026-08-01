@@ -222,6 +222,11 @@ final class RemoteClient {
             if let status = server.currentStatus {
                 write(RemoteWebSocketFrame.text(status))
             }
+            // And a script page opened mid-shift shows the day's takes, not an
+            // empty table waiting for the next one to land.
+            if let takeLog = server.currentTakeLog {
+                write(RemoteWebSocketFrame.text(takeLog))
+            }
         }
         guard message.command != .hello else { return }
         server.dispatch(message.command)

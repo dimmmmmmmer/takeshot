@@ -627,3 +627,11 @@
 
 /* === owner item 28: the remote page adapts to the viewer mode === */
 "remote_mode_playback" = "Playback";
+
+/* === the script supervisor's page: a live take log edited from a phone === */
+"remote_script" = "Script page";
+"script_title" = "TakeShot Script Log";
+"script_recording" = "Recording";
+"script_empty" = "No takes yet";
+"script_comment" = "Comment";
+"script_takes" = "Takes";

@@ -39,6 +39,7 @@ extension CaptureController {
         let pin = ensureRemotePIN()
         let server = RemoteServer(
             pin: pin, page: RemotePage.html(),
+            scriptPage: RemotePage.scriptHTML(),
             handlers: RemoteServer.Handlers(
                 command: { [weak self] command in
                     // The server's queue must never touch the controller: every
@@ -134,8 +135,10 @@ extension CaptureController {
         }
         if oldValue.appLanguage != settings.appLanguage {
             // The labels on the phone follow the app's language switch; the
-            // page is bytes behind the server's lock, so this needs no restart.
+            // pages are bytes behind the server's lock, so this needs no
+            // restart.
             remoteServer?.setPage(RemotePage.html())
+            remoteServer?.setScriptPage(RemotePage.scriptHTML())
         }
     }
 }
