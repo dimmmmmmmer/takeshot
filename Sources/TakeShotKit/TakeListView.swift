@@ -115,6 +115,9 @@ private struct TakesSection: View {
                         Button(L("export_report_csv")) {
                             controller.exportShiftReport(pdf: false)
                         }
+                        Button(L("export_contact_pdf")) {
+                            controller.exportContactSheet()
+                        }
                         // Offload is NOT here: it copies an arbitrary card and
                         // has nothing to do with takes, so a menu disabled by
                         // "no takes yet" made card offload unreachable exactly

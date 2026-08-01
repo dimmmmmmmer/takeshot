@@ -95,4 +95,45 @@ extension CaptureController {
             lastError = "Report: \(error.localizedDescription)"
         }
     }
+    /// Contact sheet: the day as an A4 thumbnail grid, one cell per take —
+    /// the shift report's visual sibling (same header, same vocabulary).
+    ///
+    /// Posters are decoded here, per export, from the recorded files
+    /// (`ContactSheet.exportThumbnails`) rather than taken from the panel's
+    /// cache: the cache holds only what the grid scrolled past, and a sheet
+    /// whose cells depend on scroll history is wrong. The decode is awaited,
+    /// so the save panel closes first and the toast reports the finished file.
+    func exportContactSheet() {
+        guard !takes.isEmpty else {
+            lastError = L("report_no_takes")
+            return
+        }
+        let panel = NSSavePanel()
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyMMdd"
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        panel.nameFieldStringValue = NamingEngine.sanitize(
+            "\(settings.projectName)_contacts_\(stamp.string(from: Date()))")
+            + ".pdf"
+        panel.directoryURL = destinationRoot
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let takes = takes
+        let project = settings.projectName
+        let camera = settings.cameraLabel
+        Task { [weak self] in
+            let posters = await ContactSheet.exportThumbnails(for: takes)
+            guard let data = ContactSheet.pdfData(
+                takes: takes, thumbnails: posters,
+                project: project, camera: camera) else {
+                self?.lastError = "PDF render failed"
+                return
+            }
+            do {
+                try data.write(to: url)
+                self?.lastNotice = L("contact_saved", url.lastPathComponent)
+            } catch {
+                self?.lastError = "Report: \(error.localizedDescription)"
+            }
+        }
+    }
 }

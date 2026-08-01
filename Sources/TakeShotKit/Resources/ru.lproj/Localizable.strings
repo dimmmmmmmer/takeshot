@@ -287,9 +287,11 @@
 "export_ale" = "Лог для Avid (ALE)";
 "export_report_pdf" = "Отчёт смены (PDF)";
 "export_report_csv" = "Отчёт смены (CSV)";
-"export_menu_help" = "Экспорт: EDL, ALE, отчёт смены";
+"export_contact_pdf" = "Контактный лист (PDF)";
+"export_menu_help" = "Экспорт: EDL, ALE, отчёт смены, контактный лист";
 "report_no_takes" = "Нет тейков для отчёта";
 "report_saved" = "Отчёт сохранён: %@";
+"contact_saved" = "Контактный лист сохранён: %@";
 "ale_no_takes" = "Нет тейков для экспорта";
 "ale_saved" = "ALE сохранён: %@";
 
@@ -555,6 +557,8 @@
 
 /* === owner item 21: the shift report speaks the app language === */
 "report_title" = "отчёт смены";
+/* the contact sheet shares the report's header and vocabulary */
+"contact_title" = "контактный лист";
 "report_camera" = "Камера %@";
 "report_takes_summary" = "%d дублей (%d годных, %d брак)";
 "report_footage" = "материал %@";
