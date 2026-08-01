@@ -71,6 +71,10 @@ extension CaptureController {
         // not at the moment the sheet happens to open.
         offload.attach(to: self)
         verify.attach(to: self)
+        // …and what was offloaded before this launch, for the same reason: the
+        // sheet has to be able to show it the instant it opens, and a run can
+        // append to it while the sheet has never been on screen.
+        offloadHistory.load()
         // The web remote comes back up if the operator left it on — a director
         // holding the phone from yesterday should not have to be told to go and
         // find the laptop after a relaunch. Off by default; nothing binds a port

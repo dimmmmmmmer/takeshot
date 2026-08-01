@@ -49,11 +49,12 @@ import Testing
 
     /// The whole point: a disk that came back untouched reads back clean.
     ///
-    /// Including that the two files the offload wrote BESIDE the copy — its own
-    /// manifest and its summary — are not reported as strays. They cannot be in
-    /// the manifest (it cannot list itself, and the summary is written after
-    /// it), so a naive subtraction accuses the report of being litter on every
-    /// single run, and a warning that is always on is a warning nobody reads.
+    /// Including that the three files the offload wrote BESIDE the copy — its
+    /// own manifest, its summary and the picture of that summary — are not
+    /// reported as strays. None of them can be in the manifest (it cannot list
+    /// itself, and both summaries are written after it), so a naive subtraction
+    /// accuses the report of being litter on every single run, and a warning
+    /// that is always on is a warning nobody reads.
     @Test func anUntouchedDiskVerifiesAgainstItsOwnManifest() throws {
         let fixture = try offload("green")
         defer { fixture.remove() }

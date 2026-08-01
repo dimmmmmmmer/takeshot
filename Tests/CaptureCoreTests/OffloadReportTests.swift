@@ -3,43 +3,30 @@ import Testing
 
 @testable import CaptureCore
 
-/// The two files an offload leaves behind. They are the whole deliverable of the
-/// feature: the manifest is what post re-verifies the drive against, and the
-/// summary is what somebody reads before formatting a card. So the shape of both
-/// is pinned here, including the cases that quietly produce an unopenable
-/// manifest — a filename with an ampersand in it — and the locale-dependent
-/// formatting that would make two days' reports incomparable.
+/// The two TEXT records an offload leaves behind: the manifest post re-verifies
+/// the drive against, and the summary somebody reads before formatting a card.
+/// The shape of both is pinned here, including the cases that quietly produce an
+/// unopenable manifest — a filename with an ampersand in it — and the
+/// locale-dependent formatting that would make two days' reports incomparable.
+///
+/// The picture written beside them is `OffloadReportCardTests`; both suites draw
+/// the same run out of `OffloadFixtures`, because they are two renderings of it.
 struct OffloadReportTests {
-    private let creator = OffloadCreatorInfo(toolName: "TakeShot",
-                                             toolVersion: "0.1.0",
-                                             hostname: "studio-mac.local")
+    private let creator = OffloadFixtures.reportCreator
 
     private func run(files: Int = 3, bytes: Int64 = 4096,
                      sourceFailures: [String] = [],
                      scanFailures: [String] = []) -> OffloadRunFacts {
-        OffloadRunFacts(
-            source: URL(fileURLWithPath: "/Volumes/CARD_A001"),
-            algorithm: .xxh64, creator: creator,
-            span: OffloadSpan(
-                started: Date(timeIntervalSince1970: 1_800_000_000),
-                finished: Date(timeIntervalSince1970: 1_800_000_930)),
-            card: OffloadVolume(files: files, bytes: bytes),
-            problems: OffloadProblems(scan: scanFailures,
-                                      source: sourceFailures))
+        OffloadFixtures.reportRun(files: files, bytes: bytes,
+                                  sourceFailures: sourceFailures,
+                                  scanFailures: scanFailures)
     }
 
     private func result(verified: Int = 3, mismatches: [String] = [],
                         failure: String? = nil,
                         cancelled: Bool = false) -> OffloadDestinationResult {
-        var result = OffloadDestinationResult(
-            id: 0, url: URL(fileURLWithPath: "/Volumes/SSD1/CARD_A001"),
-            totals: OffloadDestinationTotals(
-                filesVerified: verified, filesTotal: 3, bytesWritten: 4096,
-                elapsed: 930),
-            mismatches: mismatches, failure: failure, wasCancelled: cancelled)
-        result.manifestURL = URL(fileURLWithPath:
-            "/Volumes/SSD1/CARD_A001/ascmhl/0001_CARD_A001.mhl")
-        return result
+        OffloadFixtures.reportResult(verified: verified, mismatches: mismatches,
+                                     failure: failure, cancelled: cancelled)
     }
 
     // MARK: - the manifest

@@ -405,13 +405,12 @@
 "offload_remove_dest" = "Remove this destination";
 "offload_no_dest" = "Add at least one destination.";
 "offload_dest_target_help" = "A folder named after the card is created inside the destination.";
-"offload_reports_hint" = "Each destination gets an ASC MHL manifest and a summary report.";
-"offload_hash_label" = "Checksum";
-"offload_hash_help" = "xxHash64 is what DIT tools (Silverstack, OffShoot) verify against. SHA-256 is cryptographic and slower.";
+"offload_reports_hint" = "Every copy is read back off the disk and checked. Each one gets its own report — a picture and a text file — plus the checksum list post re-verifies it against.";
 "offload_error_duplicate" = "The same destination is listed twice.";
 "offload_error_nested" = "A destination is inside the card being copied.";
 "offload_start" = "Start offload";
 "offload_cancel_run" = "Stop";
+"offload_hide" = "Hide";
 "offload_cancelling" = "Finishing the current file...";
 "offload_progress_file" = "Copying: %@";
 "offload_files_done" = "%d of %d files";
@@ -420,11 +419,25 @@
 "offload_result_incomplete" = "Only %d of %d files verified — do not wipe the card";
 "offload_result_failed" = "Failed: %@";
 "offload_result_cancelled" = "Stopped: %d of %d files verified";
-"offload_manifest_saved" = "Manifest: %@";
+"offload_report_saved" = "Report: %@";
+"offload_report_help" = "Written into the copy itself, beside the checksum list (ASC MHL) that post re-verifies it against.";
 "offload_open_dest" = "Show in Finder";
 "offload_source_problems" = "%d file(s) could not be read from the card";
 "offload_done_multi" = "Offload verified: %d files, %d copies";
 "offload_alert_problem" = "Offload: %d destination(s) with problems — %@. Do not wipe the card.";
+/* a running job, seen from the takes panel with the sheet closed (item 16) */
+"offload_status_reopen" = "Show this job";
+"offload_status_percent" = "%d%%";
+/* the log of past offloads, at the bottom of the sheet (item 18) */
+"offload_history_title" = "Recent offloads";
+"offload_history_empty" = "Nothing has been offloaded from this Mac yet.";
+"offload_history_copies" = "%d copies";
+"offload_history_files" = "%d of %d files";
+"offload_history_ok" = "verified";
+"offload_history_problems" = "problems";
+"offload_history_stopped" = "stopped";
+"offload_history_failed" = "failed";
+"offload_history_reveal" = "Show this copy in the Finder";
 /* audio UX + footer reorg (owner items 7, 8, 25, 48) */
 "record_folder_help" = "Record folder: %@ — click to choose another";
 "record_folder_locked_help" = "The record folder stays put while a take is recording";
@@ -479,32 +492,33 @@
 "remote_disk" = "Free";
 "remote_no_signal" = "No signal";
 "remote_idle" = "Standby";
-/* verify a disk against the ASC MHL manifest an offload left on it */
+/* check a disk copy against the checksum list an offload left on it */
 "offload_menu_group" = "Offload and verification";
 "offload_menu_copy" = "Offload...";
-"verify_menu" = "Verify disk...";
-"verify_title" = "Verify disk against its manifest";
-"verify_hint" = "Every file listed in the ASC MHL manifest on this disk is read back off it and re-hashed. This is the check post would run — it says whether the copy is still what it was the day it was made.";
+"verify_menu" = "Check a disk copy...";
+"verify_title" = "Check a disk copy";
+"verify_hint" = "Every file the copy's checksum list covers is read back off the disk and hashed again. This is the check post would run — it says whether the copy is still what it was the day it was made.";
 "verify_disk_label" = "Disk";
-"verify_pick_disk" = "Folder that was offloaded (the one holding the ascmhl folder)";
-"verify_disk_prompt" = "Verify this";
-"verify_scanning" = "Reading the manifest...";
-"verify_progress" = "Verify %d/%d";
+"verify_pick_disk" = "A folder TakeShot offloaded to (the copy's own folder)";
+"verify_disk_prompt" = "Check this";
+"verify_scanning" = "Reading the checksum list...";
+"verify_progress" = "Check %d/%d";
 "verify_progress_file" = "Checking: %@";
 "verify_cancelling" = "Finishing the current file...";
 "verify_cancel_run" = "Stop";
-"verify_manifest_line" = "Manifest: %@ (%@)";
+"verify_checked_against" = "Checked against: %@ (%@)";
+"verify_checked_against_help" = "The copy's checksum list — an ASC MHL manifest, which Silverstack, OffShoot and ascmhl read too.";
 "verify_result_damaged" = "%d of %d files are wrong or missing — do not delete this disk";
 "verify_result_cancelled" = "Stopped: %d of %d files checked";
-"verify_list_mismatched" = "Do not match the manifest (%d)";
+"verify_list_mismatched" = "Do not match the checksum list (%d)";
 "verify_list_missing" = "Listed and not on the disk (%d)";
-"verify_list_extra" = "On the disk and in no manifest (%d)";
+"verify_list_extra" = "On the disk and in no checksum list (%d)";
 "verify_list_more" = "...and %d more";
 "verify_scan_problems" = "%d folder(s) could not be read — the stray list is incomplete";
 "verify_done" = "Disk verified: %d files";
-"verify_done_strays" = "Disk verified: %d files, %d not in the manifest";
+"verify_done_strays" = "Disk verified: %d files, %d not in the checksum list";
 "verify_alert_problem" = "Verify: %d of %d files are wrong or missing — %@. Do not delete this disk.";
-"verify_error_no_manifest" = "No ASC MHL manifest in “%@”. Nothing was offloaded to this folder by TakeShot.";
+"verify_error_no_manifest" = "“%@” holds no TakeShot offload — there is no checksum list to check it against.";
 "verify_error" = "Verify failed: %@";
 "offload_busy" = "An offload or a disk check is already running.";
 /* the last-take card on the remote page: poster frame, name, rating */

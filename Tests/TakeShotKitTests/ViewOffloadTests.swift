@@ -81,6 +81,12 @@ import Testing
                 wasCancelled: ending.cancelled)
             result.manifestURL =
                 card("SSD/ascmhl/0001_CARD_A001_2026-07-30_143102.mhl")
+            // The card names the REPORT, not the manifest (owner item 17), and
+            // the picture is what it names when there is one — so both have to
+            // be on the fixture or the line the rework added never renders and
+            // this suite measures a sheet the operator never sees.
+            result.summaryURL = card("SSD/offload-summary_2026-07-30_143102.txt")
+            result.imageURL = card("SSD/offload-summary_2026-07-30_143102.png")
             return result
         }
         return OffloadReport(
@@ -103,10 +109,12 @@ import Testing
     @Test func theEmptySheetFitsItsOwnFixedWidth() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes {
-                OffloadSheet(model: probe.controller.offload)
+                OffloadSheet(model: probe.controller.offload,
+                             history: probe.controller.offloadHistory)
             }
             let minimum = probe.minimumWidths {
-                OffloadSheet(model: probe.controller.offload).content
+                OffloadSheet(model: probe.controller.offload,
+                             history: probe.controller.offloadHistory).content
             }
 
             #expect(ideal.en.width == OffloadSheet.width)
@@ -118,16 +126,19 @@ import Testing
     }
 
     /// A card and two SSDs: paths, the "→ card folder" hint under each row, and
-    /// the checksum picker with its explanatory line.
+    /// the sentence explaining what lands in every copy — which is the longest
+    /// single string in the sheet in either language.
     @Test func theConfiguredSheetFitsInBothLanguages() async throws {
         try await ViewProbe.run { probe in
             self.configure(probe.controller.offload)
 
             let ideal = probe.fittingSizes {
-                OffloadSheet(model: probe.controller.offload)
+                OffloadSheet(model: probe.controller.offload,
+                             history: probe.controller.offloadHistory)
             }
             let minimum = probe.minimumWidths {
-                OffloadSheet(model: probe.controller.offload).content
+                OffloadSheet(model: probe.controller.offload,
+                             history: probe.controller.offloadHistory).content
             }
 
             #expect(ideal.ru.width == OffloadSheet.width)
@@ -150,8 +161,13 @@ import Testing
             model.isRunning = true
             model.progress = self.progress(failing: true)
 
-            let ideal = probe.fittingSizes { OffloadSheet(model: model) }
-            let minimum = probe.minimumWidths { OffloadSheet(model: model).content }
+            let history = probe.controller.offloadHistory
+            let ideal = probe.fittingSizes {
+                OffloadSheet(model: model, history: history)
+            }
+            let minimum = probe.minimumWidths {
+                OffloadSheet(model: model, history: history).content
+            }
 
             #expect(ideal.ru.width == OffloadSheet.width)
             #expect(minimum.ru <= Self.inner,
@@ -214,6 +230,25 @@ import Testing
         }
     }
 
+    /// What the card names is the REPORT (owner item 17): the picture that gets
+    /// handed over, the text file if the picture could not be drawn, and nothing
+    /// at all rather than the manifest — an editor handed
+    /// "Manifest: 0001_CARD_A001.mhl" does not know what they have been given.
+    @Test func theResultCardNamesTheReportAndNeverTheManifest() {
+        var result = OffloadDestinationResult(
+            id: 0, url: card("SSD/CARD_A001"),
+            totals: OffloadDestinationTotals(filesVerified: 1, filesTotal: 1,
+                                             bytesWritten: 1, elapsed: 1))
+        result.manifestURL = card("SSD/ascmhl/0001_CARD_A001.mhl")
+
+        #expect(OffloadResultPanel.reportName(result) == nil,
+                "it fell back to the manifest")
+        result.summaryURL = card("SSD/offload-summary_x.txt")
+        #expect(OffloadResultPanel.reportName(result) == "offload-summary_x.txt")
+        result.imageURL = card("SSD/offload-summary_x.png")
+        #expect(OffloadResultPanel.reportName(result) == "offload-summary_x.png")
+    }
+
     /// The whole sheet with a finished run in it — the state the operator reads
     /// before deciding to wipe the card.
     @Test func theFinishedSheetFitsInBothLanguages() async throws {
@@ -222,13 +257,55 @@ import Testing
             self.configure(model)
             model.report = self.report()
 
-            let ideal = probe.fittingSizes { OffloadSheet(model: model) }
-            let minimum = probe.minimumWidths { OffloadSheet(model: model).content }
+            let history = probe.controller.offloadHistory
+            let ideal = probe.fittingSizes {
+                OffloadSheet(model: model, history: history)
+            }
+            let minimum = probe.minimumWidths {
+                OffloadSheet(model: model, history: history).content
+            }
 
             #expect(ideal.ru.width == OffloadSheet.width)
             #expect(minimum.ru <= Self.inner,
                     "the finished sheet needs \(minimum.ru)pt")
             #expect(ideal.ru.height > 400)
+        }
+    }
+
+    // MARK: - the run seen from the takes panel (owner item 16)
+
+    /// The strip that reports a running job while the sheet is closed. It lives
+    /// in a 310pt panel, which is less than half the sheet's width, so every
+    /// line in it has to truncate.
+    ///
+    /// The status line is measured in RUSSIAN in both renders on purpose: it is
+    /// a stored string set before the view is built, and the Russian one is the
+    /// longer of the two — so this is the worst case for both languages.
+    @Test func theStatusStripFitsTheNarrowestTakesPanel() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.offload
+            model.isRunning = true
+            model.progress = self.progress(failing: false)
+            let status = ViewRender.withLanguage(.russian) {
+                L("offload_progress", 41, 128)
+            }
+            probe.controller.offloadStatus = status
+            // What the strip actually gets: the panel minus its own inset.
+            let budget = ViewBudget.panelMinWidth - 24
+
+            let minimum = probe.minimumWidths {
+                OffloadStatusStrip(status: status, offload: model,
+                                   verify: probe.controller.verify)
+            }
+            let panel = probe.minimumWidths(proposedHeight: 600) {
+                TakesPanelUtilityStrip()
+            }
+
+            #expect(minimum.ru <= budget,
+                    "the status strip needs \(minimum.ru)pt of \(budget)")
+            #expect(minimum.en <= budget)
+            #expect(panel.ru <= ViewBudget.panelMinWidth,
+                    "a running job pushed the utility strip to \(panel.ru)pt")
         }
     }
 }

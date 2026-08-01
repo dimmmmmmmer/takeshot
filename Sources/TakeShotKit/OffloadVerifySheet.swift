@@ -2,14 +2,14 @@ import AppKit
 import CaptureCore
 import SwiftUI
 
-/// "Verify disk against MHL": one folder, the manifest already on it, one pass.
+/// "Check a disk copy": one folder, the checksum list already on it, one pass.
 ///
-/// Deliberately the same shape and the same width as `OffloadSheet` — it is the
-/// same job at a different time, and the operator reads the result card in both
-/// for the same decision. What it does not have is a form: an offload is a plan
-/// the operator builds, a verify is a question about a folder, and every
-/// parameter of it (the checksum included) is already written on that folder.
-/// So the pass is running by the time the sheet appears.
+/// Deliberately the same shape, the same width and the same type family as
+/// `OffloadSheet` — it is the same job at a different time, and the operator
+/// reads the result card in both for the same decision. What it does not have
+/// is a form: an offload is a plan the operator builds, a verify is a question
+/// about a folder, and every parameter of it (the checksum included) is already
+/// written on that folder. So the pass is running by the time the sheet appears.
 struct OffloadVerifySheet: View {
     @ObservedObject var model: OffloadVerifyModel
     @Environment(\.dismiss) private var dismiss
@@ -23,26 +23,21 @@ struct OffloadVerifySheet: View {
                 .padding(.vertical, 14)
         }
         .frame(width: OffloadSheet.width)
-        // A pass must not be dismissed out from under itself: this sheet is the
-        // only place it can be stopped.
-        .interactiveDismissDisabled(model.isRunning)
     }
 
     /// The sheet without its fixed frame — what the render tests measure, at
     /// the width the padding leaves it. See `OffloadSheet.content`.
     @ViewBuilder var content: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
             Text(L("verify_title"))
-                .font(.headline)
+                .offloadText(.title)
             Text(L("verify_hint"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .offloadText(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             diskSection
             if let failure = model.failure {
                 Label(failure, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+                    .offloadText(.body, tint: .orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let progress = model.progress {
@@ -60,15 +55,20 @@ struct OffloadVerifySheet: View {
     private var diskSection: some View {
         HStack(spacing: 10) {
             Text(L("verify_disk_label"))
+                .offloadText(.body)
                 .fixedSize()
             Text(model.root?.path ?? L("offload_no_source"))
-                .foregroundStyle(model.root == nil ? .secondary : .primary)
+                .offloadText(.body,
+                             tint: model.root == nil ? Color.secondary : nil)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    /// Close is live while the pass is running, like the offload sheet's: the
+    /// pass carries on, the takes panel reports on it, and this sheet is one
+    /// click away again.
     private var footer: some View {
         HStack {
             if model.isRunning {
@@ -76,9 +76,10 @@ struct OffloadVerifySheet: View {
                     .disabled(model.isCancelling)
             }
             Spacer()
-            Button(L("close")) { dismiss() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(model.isRunning)
+            Button(model.isRunning ? L("offload_hide") : L("close")) {
+                dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
         }
     }
 }
@@ -101,20 +102,20 @@ struct OffloadVerifyProgressPanel: View {
                 Text(isCancelling
                      ? L("verify_cancelling")
                      : L("verify_progress_file", progress.currentFile))
-                    .font(.callout)
+                    .offloadText(.body)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: OffloadChrome.rowSpacing) {
                 Text(L("offload_files_done", progress.filesDone,
                        progress.filesTotal))
+                    .offloadText(.caption)
                     .monospacedDigit()
                 Spacer()
                 Text(OffloadFormat.rate(progress.megabytesPerSecond))
+                    .offloadText(.caption)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
             ProgressView(value: fraction)
         }
     }
@@ -137,28 +138,28 @@ struct OffloadVerifyResultPanel: View {
     /// Long lists are capped. A disk that lost a folder produces hundreds of
     /// rows, and a sheet hundreds of rows tall is one nobody scrolls back up to
     /// the verdict on. The count is the fact and the first few names are the
-    /// lead; the manifest on the disk has the rest.
+    /// lead; the checksum list on the disk has the rest.
     static let listLimit = 5
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             card
             if !report.scanFailures.isEmpty {
                 Label(L("verify_scan_problems", report.scanFailures.count),
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+                    .offloadText(.body, tint: .orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OffloadChrome.tightSpacing) {
             HStack(spacing: 6) {
                 Image(systemName: symbol)
                     .foregroundStyle(tint)
                 Text(report.root.lastPathComponent)
-                    .fontWeight(.semibold)
+                    .offloadText(.section)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
@@ -168,24 +169,27 @@ struct OffloadVerifyResultPanel: View {
                 .buttonStyle(.link)
             }
             Text(verdict)
-                .font(.callout)
-                .foregroundStyle(tint)
+                .offloadText(.body, tint: tint)
                 .fixedSize(horizontal: false, vertical: true)
             Text("\(OffloadFormat.bytes(report.bytesRead)) · "
                 + "\(OffloadFormat.duration(report.span.elapsed)) · "
                 + OffloadFormat.rate(report.megabytesPerSecond))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(L("verify_manifest_line", report.manifest.lastPathComponent,
+                .offloadText(.caption)
+            // What it was checked against, stated as that rather than led with
+            // the word "manifest": the file is named, and a DIT who needs to
+            // know it is an ASC MHL hashlist has it in the tooltip and in the
+            // report on the disk.
+            Text(L("verify_checked_against", report.manifest.lastPathComponent,
                    report.algorithm.displayName))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .offloadText(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .help(L("verify_checked_against_help"))
             lists
         }
-        .padding(10)
-        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .padding(OffloadChrome.cardPadding)
+        .background(tint.opacity(OffloadChrome.cardTintOpacity),
+                    in: RoundedRectangle(cornerRadius: OffloadChrome.cardRadius))
     }
 
     @ViewBuilder
@@ -196,8 +200,8 @@ struct OffloadVerifyResultPanel: View {
         list(L("verify_list_missing", report.missing.count), report.missing,
              color: .red)
         // Secondary on purpose: a stray file says nothing about the footage the
-        // manifest covers, so it is stated in the card's own quiet colour rather
-        // than shouted in red beside two things that are actually wrong.
+        // checksum list covers, so it is stated in the card's own quiet colour
+        // rather than shouted in red beside two things that are actually wrong.
         list(L("verify_list_extra", report.extra.count), report.extra,
              color: .secondary)
     }
@@ -207,23 +211,23 @@ struct OffloadVerifyResultPanel: View {
                       color: Color) -> some View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 1) {
+                // The colour is what separates the heading from the rows under
+                // it. A bolder weight as well would be a fourth combination in
+                // a family that has three.
                 Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(color)
+                    .offloadText(.caption, tint: color)
                 ForEach(rows.prefix(Self.listLimit), id: \.self) { row in
                     Text(row)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .offloadText(.caption)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 if rows.count > Self.listLimit {
                     Text(L("verify_list_more", rows.count - Self.listLimit))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .offloadText(.caption)
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, OffloadChrome.tightSpacing)
         }
     }
 

@@ -227,11 +227,13 @@ private final class OffloadRun {
             isCancelling: cancellation.isCancelled))
     }
 
-    // MARK: - the two report files
+    // MARK: - the three report files
 
-    /// Write the manifest and the summary, and fold what happened into the
-    /// result. The manifest goes first so that a manifest that could not be
-    /// written is already part of the verdict the summary states.
+    /// Write the manifest, the summary and the picture, and fold what happened
+    /// into the result. The order is the order they depend on each other in: the
+    /// manifest first, so a manifest that could not be written is already part
+    /// of the verdict the summary states, and the picture last, because it draws
+    /// that same verdict.
     private func finalize(_ target: OffloadTarget,
                           run: OffloadRunFacts) -> OffloadDestinationResult {
         let stamp = Date()
@@ -260,6 +262,15 @@ private final class OffloadRun {
             result.failure = result.failure
                 ?? "summary: \(error.localizedDescription)"
         }
+        // The picture is the copy of the report that gets handed over, and it
+        // is the ONE artifact here that nothing depends on: the .txt beside it
+        // states every fact it draws, and the manifest is what post re-verifies
+        // against. Failing an otherwise-verified destination because a bitmap
+        // context could not be made would be the worse lie, so this one is
+        // allowed to be missing — which is why it is `try?` and the two above
+        // are not.
+        result.imageURL = try? OffloadReportCard.write(
+            result: result, run: run, into: target.root, date: stamp)
         return result
     }
 

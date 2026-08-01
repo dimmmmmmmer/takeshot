@@ -127,15 +127,19 @@ public struct OffloadVerifyReport: Sendable, Equatable {
 public enum OffloadVerify {
     /// The files an offload writes BESIDE the copy rather than as part of it.
     ///
-    /// The manifest cannot list itself, and the summary is written after it, so
-    /// neither is ever in the manifest and both would be reported as strays on
-    /// every single verify. Nothing here is footage, and a stray list that cries
-    /// wolf twice per run stops being read.
+    /// The manifest cannot list itself, and the summary — text and picture
+    /// alike — is written after it, so none of them is ever in the manifest and
+    /// all of them would be reported as strays on every single verify. Nothing
+    /// here is footage, and a stray list that cries wolf three times per run
+    /// stops being read.
     public static func isReportFile(_ relativePath: String) -> Bool {
         if relativePath.hasPrefix(OffloadMHL.folderName + "/") { return true }
-        return !relativePath.contains("/")
-            && relativePath.hasPrefix(OffloadSummary.filePrefix)
-            && relativePath.hasSuffix(".txt")
+        guard !relativePath.contains("/"),
+              relativePath.hasPrefix(OffloadSummary.filePrefix) else {
+            return false
+        }
+        return relativePath.hasSuffix(".txt")
+            || relativePath.hasSuffix(".\(OffloadReportCard.fileExtension)")
     }
 
     public static func run(

@@ -8,6 +8,8 @@ import SwiftUI
 // Split out of `OffloadSheet.swift`, which is the form the operator fills in.
 // These two are read-only reports on a run that is already going, and the
 // verdict below is the one the card gets formatted on the strength of.
+//
+// Both are set in the shared type family (see `OffloadChrome`).
 
 /// Live progress: the file in flight, and a row per destination with its own
 /// rate — one slow disk in a set of three is exactly what this is for.
@@ -16,14 +18,14 @@ struct OffloadProgressPanel: View {
     let isCancelling: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             HStack {
                 ProgressView()
                     .controlSize(.small)
                 Text(isCancelling
                      ? L("offload_cancelling")
                      : L("offload_progress_file", progress.currentFile))
-                    .font(.callout)
+                    .offloadText(.body)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -35,26 +37,27 @@ struct OffloadProgressPanel: View {
 
     private func row(_ destination: OffloadDestinationProgress) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
+            HStack(spacing: OffloadChrome.rowSpacing) {
                 Text(destination.url.lastPathComponent)
+                    .offloadText(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
                 if let failure = destination.failure {
                     Text(failure)
-                        .foregroundStyle(.red)
+                        .offloadText(.caption, tint: .red)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
                     Text(L("offload_files_done", destination.filesDone,
                            progress.filesTotal))
+                        .offloadText(.caption)
                         .monospacedDigit()
                     Text(OffloadFormat.rate(destination.megabytesPerSecond))
+                        .offloadText(.caption)
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
                 }
             }
-            .font(.caption)
             ProgressView(value: fraction(destination))
         }
     }
@@ -66,12 +69,12 @@ struct OffloadProgressPanel: View {
 }
 
 /// One card per destination once the run is over: the verdict, the numbers, and
-/// a way into the folder to see the two report files.
+/// a way into the folder to see the report that was left there.
 struct OffloadResultPanel: View {
     let report: OffloadReport
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             ForEach(report.destinations) { result in
                 card(result)
             }
@@ -79,19 +82,19 @@ struct OffloadResultPanel: View {
                 Label(L("offload_source_problems",
                         report.run.problems.source.count),
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+                    .offloadText(.body, tint: .orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private func card(_ result: OffloadDestinationResult) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OffloadChrome.tightSpacing) {
             HStack(spacing: 6) {
                 Image(systemName: symbol(result.outcome))
                     .foregroundStyle(color(result.outcome))
                 Text(result.url.lastPathComponent)
-                    .fontWeight(.semibold)
+                    .offloadText(.section)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
@@ -101,25 +104,39 @@ struct OffloadResultPanel: View {
                 .buttonStyle(.link)
             }
             Text(verdict(result))
-                .font(.callout)
-                .foregroundStyle(color(result.outcome))
+                .offloadText(.body, tint: color(result.outcome))
                 .fixedSize(horizontal: false, vertical: true)
             Text("\(OffloadFormat.bytes(result.totals.bytesWritten)) · "
                 + "\(OffloadFormat.duration(result.totals.elapsed)) · "
                 + OffloadFormat.rate(result.totals.megabytesPerSecond))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let manifest = result.manifestURL {
-                Text(L("offload_manifest_saved", manifest.lastPathComponent))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .offloadText(.caption)
+            // The REPORT, not the manifest. The manifest is still written and
+            // still named in the report itself — it is what post re-verifies
+            // the disk against — but leading with the word in front of the
+            // operator taught nobody anything: an editor handed "Manifest:
+            // 0001_CARD_A001.mhl" does not know what they have been given. The
+            // picture and the text beside it are the human artifact, so that is
+            // what the card names.
+            if let name = Self.reportName(result) {
+                Text(L("offload_report_saved", name))
+                    .offloadText(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .help(L("offload_report_help"))
             }
         }
-        .padding(10)
-        .background(color(result.outcome).opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 8))
+        .padding(OffloadChrome.cardPadding)
+        .background(color(result.outcome).opacity(OffloadChrome.cardTintOpacity),
+                    in: RoundedRectangle(cornerRadius: OffloadChrome.cardRadius))
+    }
+
+    /// The picture if there is one, the text if the picture could not be drawn.
+    /// Both carry the same facts and both are in the destination folder the
+    /// button beside this line opens. Never the manifest: a destination that got
+    /// neither report says nothing here rather than falling back to the file the
+    /// operator was not meant to be handed.
+    static func reportName(_ result: OffloadDestinationResult) -> String? {
+        (result.imageURL ?? result.summaryURL)?.lastPathComponent
     }
 
     private func verdict(_ result: OffloadDestinationResult) -> String {

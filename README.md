@@ -70,10 +70,12 @@ instead of a double-click; macOS then remembers the choice.
   of every take for a Media Composer bin, shift report as PDF and CSV.
 - DIT offload of a camera card to several SSDs at once: the card is read once
   and written to every destination in the same pass, each copy is verified by
-  re-reading it off the disk, and every destination gets an ASC MHL manifest
-  plus a human-readable summary. xxHash64 by default (what Silverstack,
-  OffShoot and Hedge verify against), SHA-256 when a delivery spec asks for it.
-  A destination that fails does so alone; the others finish.
+  re-reading it off the disk, and every destination gets a report — a picture
+  to hand over and the same thing as plain text — beside the ASC MHL checksum
+  list that post re-verifies it against. xxHash64, which is what Silverstack,
+  OffShoot and Hedge check against. A destination that fails does so alone; the
+  others finish. The sheet closes over a running copy (the takes panel keeps
+  reporting it) and opens showing the last twenty offloads made from this Mac.
 
 ## Requirements
 

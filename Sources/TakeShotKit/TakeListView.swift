@@ -129,12 +129,11 @@ private struct TakesSection: View {
                 .fixedSize()
                 .disabled(controller.takes.isEmpty)
                 .help(L("export_menu_help"))
-                if let status = controller.offloadStatus {
-                    Text(status)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                // The offload status line used to sit here, squeezed between
+                // the export button and the view picker. It is a live job with
+                // a bar, a file name and a Stop button now, and it lives in the
+                // utility strip at the bottom of this panel — beside the button
+                // that started it (see OffloadStatusStrip).
                 Spacer()
                 PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }

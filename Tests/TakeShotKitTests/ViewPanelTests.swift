@@ -51,19 +51,30 @@ struct ViewPanelTests {
         }
     }
 
-    /// The offload status is the one free-text string in the takes header, and it
-    /// shares the row with the buttons and the view-mode picker. It must not be
-    /// able to widen the panel — it truncates instead.
+    /// The offload status is the one free-text string in this panel. It used to
+    /// be a single line in the takes header; since the sheet learned to close
+    /// over a live run (owner item 16) it is a whole readout in the utility
+    /// strip at the bottom — a status line, a percentage, a bar, the file in
+    /// flight and Stop. This measures the WHOLE panel with that readout in it,
+    /// which is the composition the operator actually gets (`TakeListView`
+    /// mounts the strip); `ViewOffloadTests` measures the strip on its own.
+    /// Neither the status nor the file name may widen the panel — they truncate.
     @Test func offloadStatusDoesNotWidenTheTakesPanel() async throws {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             let quiet = probe.minimumWidths(proposedHeight: 600) { TakeListView() }
+            probe.controller.offload.isRunning = true
+            probe.controller.offload.progress = OffloadProgress(
+                filesTotal: 128, bytesTotal: 64_000_000_000,
+                currentFile: "DCIM/100MEDIA/A001C042_240730_R1AB.mov",
+                destinations: [], elapsed: 48.5, isCancelling: false)
             probe.controller.offloadStatus = ViewRender.withLanguage(.russian) {
-                L("offload_done", 1024)
+                L("offload_progress", 41, 128)
             }
             let busy = probe.minimumWidths(proposedHeight: 600) { TakeListView() }
             #expect(busy.ru <= max(quiet.ru, ViewBudget.panelMinWidth),
                     "the offload status pushed the panel to \(busy.ru)pt")
+            #expect(busy.en <= max(quiet.en, ViewBudget.panelMinWidth))
         }
     }
 

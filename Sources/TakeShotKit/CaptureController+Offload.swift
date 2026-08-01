@@ -20,10 +20,41 @@ extension CaptureController {
 
     /// Open the offload sheet. This is the entry point the UI calls.
     func showOffloadSheet() {
+        // A run that is already going is not a busy signal — it is the thing
+        // the operator is asking to look at. The sheet closes over a live run
+        // now, so the menu item that opened it is also the way back in, and
+        // answering "an offload is already running" to somebody trying to WATCH
+        // that offload is the kind of answer that gets an app sworn at.
+        guard !offload.isRunning else {
+            showRunningDiskJob()
+            return
+        }
         guard claimTheDiskJob() else { return }
         verifySheetPresented = false
         offload.prepare(settings: settings, version: Self.appVersion)
         offloadSheetPresented = true
+    }
+
+    /// Bring back whichever disk job is running. The takes-panel status strip is
+    /// a button, and this is what it does.
+    func showRunningDiskJob() {
+        if offload.isRunning {
+            verifySheetPresented = false
+            offloadSheetPresented = true
+        } else if verify.isRunning {
+            offloadSheetPresented = false
+            verifySheetPresented = true
+        }
+    }
+
+    /// Stop whichever disk job is running. Offered in two places now — the
+    /// sheet's own footer and the panel strip — because the sheet is no longer
+    /// the only place a run is visible from, and a run you can see but cannot
+    /// stop is worse than one you cannot see. Both models ignore a cancel when
+    /// they are idle, so this needs no branch of its own.
+    func cancelRunningDiskJob() {
+        offload.cancel()
+        verify.cancel()
     }
 
     /// One disk job at a time.
@@ -53,11 +84,15 @@ extension CaptureController {
     /// Remember the operator's rig: the same two or three SSDs come back every
     /// day, and re-picking them through a file panel each time is the part of
     /// the old flow people complained about.
-    func rememberOffloadChoices(destinations: [URL],
-                                algorithm: OffloadHashAlgorithm) {
+    ///
+    /// The checksum is still recorded, and is still whatever the run actually
+    /// used — it is a fact about the day, not a preference any more (see
+    /// `OffloadSheetModel.algorithm`). The setting stays Optional and stays
+    /// written so a saved blob from an older build still decodes.
+    func rememberOffloadChoices(destinations: [URL]) {
         settings.offloadDestinationPaths = destinations.isEmpty
             ? nil : destinations.map(\.path)
-        settings.offloadHashAlgorithm = algorithm.rawValue
+        settings.offloadHashAlgorithm = OffloadSheetModel.algorithm.rawValue
     }
 
     /// A finished run, as the rest of the app sees it.
@@ -68,6 +103,11 @@ extension CaptureController {
     /// is how footage disappears.
     func offloadDidFinish(_ report: OffloadReport) {
         offloadStatus = nil
+        // Logged whatever happened, and before the toast or the alarm: a run
+        // that failed is exactly the one somebody comes back to the list
+        // looking for, and a log that only held the good days would answer
+        // "have I copied this card?" with a confident no.
+        offloadHistory.record(report)
         guard !report.isFullyVerified else {
             // One destination is still the common case (a single shuttle drive),
             // and "1 copies" is not what anybody wants to read.
@@ -107,6 +147,12 @@ extension CaptureController {
     /// SSD comes back from post or out of a case in a van, without `ascmhl` or
     /// Silverstack having to be on the set machine.
     func chooseDiskToVerify() {
+        // A pass already running is the one the operator wants to see, for the
+        // same reason `showOffloadSheet` reopens instead of refusing.
+        guard !verify.isRunning else {
+            showRunningDiskJob()
+            return
+        }
         // Before the panel, not after it: being told the app is busy having
         // already browsed to the disk is the annoying half of the same answer.
         guard claimTheDiskJob() else { return }

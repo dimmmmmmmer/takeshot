@@ -7,6 +7,11 @@ import Foundation
 /// re-verify with, and SHA-256 is what a delivery spec occasionally demands in
 /// writing. The choice travels into the MHL manifest, so it has to be recorded
 /// per run rather than compiled in.
+///
+/// The operator is no longer ASKED which one (see `OffloadSheetModel.algorithm`
+/// — a run is xxHash64), and this stays a two-case enum anyway: a disk offloaded
+/// by an older build, or by another tool, carries whichever hash it was made
+/// with, and the verify pass has to read that manifest years later.
 public enum OffloadHashAlgorithm: String, CaseIterable, Codable, Sendable,
                                   Identifiable {
     case xxh64
@@ -80,11 +85,14 @@ public struct OffloadHasher {
 /// the operator's UI chrome.
 public enum OffloadError: LocalizedError {
     case cannotCreateFile(String)
+    case cannotRenderReport
 
     public var errorDescription: String? {
         switch self {
         case .cannotCreateFile(let name):
             return "could not create \(name) on the destination"
+        case .cannotRenderReport:
+            return "the report image could not be rendered"
         }
     }
 }

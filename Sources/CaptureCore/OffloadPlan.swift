@@ -303,14 +303,17 @@ public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
     public var failure: String?
     public var wasCancelled: Bool
 
-    // The two report files, filled in afterwards rather than passed in. They
+    // The three report files, filled in afterwards rather than passed in. They
     // cannot be initializer parameters: the engine writes the manifest, folds
     // whether that succeeded into the result, and only then writes the summary
-    // FROM that result — so neither URL exists at the moment the result is
+    // FROM that result — so none of the URLs exists at the moment the result is
     // built. (`Take` keeps its review state out of its initializer for the same
     // reason: none of it is known when the value is made.)
     public var manifestURL: URL?
     public var summaryURL: URL?
+    /// The summary as a picture (see `OffloadReportCard`) — the copy of the
+    /// report that gets handed over.
+    public var imageURL: URL?
 
     public init(id: Int, url: URL, totals: OffloadDestinationTotals,
                 mismatches: [String] = [], failure: String? = nil,
