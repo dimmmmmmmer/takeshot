@@ -176,6 +176,15 @@ final class RemoteServer: @unchecked Sendable {
     /// server branches on it.
     var pinPressure: Int { queue.sync { tarpit.pressure } }
 
+    /// The largest send ledger any client is carrying. For the tests, like
+    /// `pinPressure`: a send whose completion has not landed yet counts
+    /// against the drop ceiling, and this is the only place that fact lives —
+    /// a test that pushes right behind a large message needs to poll the
+    /// ledger down first or it drops the very client it is asserting alive.
+    var maxClientInFlight: Int {
+        queue.sync { clients.values.map(\.inFlightBytes).max() ?? 0 }
+    }
+
     /// Seconds off a clock that only ever moves forward. The tarpit's window is
     /// measured against it rather than against `Date`, which an NTP correction
     /// or an operator setting the clock can move backwards — and a window whose

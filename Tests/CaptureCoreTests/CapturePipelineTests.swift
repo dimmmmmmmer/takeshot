@@ -48,11 +48,23 @@ struct CapturePipelineTests {
                                                   pixelBuffer: pixelBuffer)
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
-        // the pipeline processes asynchronously — wait for the take-finished event
-        await TestWait.untilWritten { !finishedTakes.isEmpty }
-        // and let every finalize task complete before the defer above removes
-        // the folder out from under a writer that is still finishing
+        // Three waits, in the order the pipeline actually produces the take.
+        // Stop is detected on the pipeline queue a few frames into the stall;
+        // once it is visible, the finalize task exists — finishTake registers
+        // it in the same pipeline-queue block that publishes the state change.
+        await TestWait.untilWritten { recStates.last == false }
+        // Then await the finalize ITSELF, not a poll against it: under load (a
+        // parallel encoder on the machine — CI, another suite, Compressor) the
+        // ProRes session is legitimately starved for the better part of a
+        // minute, which is longer than any polling budget this suite grants.
+        // This await takes exactly as long as the writer does, and it also has
+        // to complete before the defer above removes the folder out from under
+        // a writer that is still finishing.
         await pipeline.finishPendingWrites()
+        // The publication is one main-queue hop BEHIND the finalize task (see
+        // finishPendingWrites' doc) — returning guarantees the file, not the
+        // callback, so the outcome still gets a poll. This one is near-instant.
+        await TestWait.untilWritten { !finishedTakes.isEmpty }
 
         let take = try #require(finishedTakes.first)
         #expect(recStates.contains(true) && recStates.last == false)
@@ -101,7 +113,9 @@ struct CapturePipelineTests {
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "1", takeNumber: 1))
         let finishedTakes = TakeCollector()
+        let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finishedTakes.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
 
         pipeline.handleFormat(CaptureFormat(
             width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
@@ -116,8 +130,12 @@ struct CapturePipelineTests {
                                                   pixelBuffer: pixelBuffer)
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: pixelBuffer)
 
-        await TestWait.untilWritten { !finishedTakes.isEmpty }
+        // stop seen → await the finalize itself → poll for the publication,
+        // which is one main-queue hop behind it (same order as the auto-take
+        // test above, for the same encoder-starvation reason)
+        await TestWait.untilWritten { recStates.last == false }
         await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !finishedTakes.isEmpty }
         let take = try #require(finishedTakes.first)
 
         await TestWait.fileExists(at: take.url)

@@ -114,7 +114,24 @@ extension CaptureController {
             }
             sem.signal()
         }
-        _ = sem.wait(timeout: .now() + 15)
+        let flushed = sem.wait(timeout: .now() + 15)
+
+        // The files are safe now, but each finalize task published its take
+        // with a main-queue hop this parked thread has not serviced — quitting
+        // here kept the .mov and lost its list entry, its log row and its
+        // metadata. Pump the run loop until a sentinel enqueued BEHIND those
+        // publications runs (the main queue is FIFO), then let the log queue
+        // drain the CSV write the publications scheduled. Skipped when the
+        // flush itself timed out: a writer still stuck after 15 s has
+        // published nothing to wait for.
+        guard flushed == .success else { return }
+        let sentinel = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async { sentinel.signal() }
+        let deadline = Date().addingTimeInterval(2)
+        while sentinel.wait(timeout: .now()) != .success, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        Self.takeLogQueue.sync {}
     }
 }
 

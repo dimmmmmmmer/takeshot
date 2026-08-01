@@ -4,55 +4,12 @@ import Testing
 @testable import CaptureCore
 
 @Suite struct LTCDecoderTests {
-    /// Biphase-mark LTC generator (the inverse of the decoder under test).
+    /// The generator lives in `LTCTestSignal`, shared with the torture battery.
     private func encode(_ timecode: Timecode, fps: Int,
-                        sampleRate: Double = 48000,
+                        dropFrame: Bool = false,
                         polarity: inout Bool) -> [Int16] {
-        var bits = [Bool](repeating: false, count: 80)
-        func put(_ value: Int, at low: Int, width: Int) {
-            for i in 0..<width {
-                bits[low + i] = (value >> i) & 1 == 1
-            }
-        }
-        put(timecode.frames % 10, at: 0, width: 4)
-        put(timecode.frames / 10, at: 8, width: 2)
-        put(timecode.seconds % 10, at: 16, width: 4)
-        put(timecode.seconds / 10, at: 24, width: 3)
-        put(timecode.minutes % 10, at: 32, width: 4)
-        put(timecode.minutes / 10, at: 40, width: 3)
-        put(timecode.hours % 10, at: 48, width: 4)
-        put(timecode.hours / 10, at: 56, width: 2)
-        // sync word 0011111111111101 (bits 64…79)
-        let syncBits = [false, false, true, true, true, true, true, true,
-                        true, true, true, true, true, true, false, true]
-        for (i, bit) in syncBits.enumerated() {
-            bits[64 + i] = bit
-        }
-
-        let samplesPerBit = sampleRate / (Double(fps) * 80)
-        var out: [Int16] = []
-        var position = 0.0
-        for bit in bits {
-            polarity.toggle() // biphase-mark: always flip at the bit start
-            let bitEnd = position + samplesPerBit
-            if bit {
-                let mid = position + samplesPerBit / 2
-                appendLevel(&out, until: mid, from: &position, polarity)
-                polarity.toggle() // extra mid-bit flip for a "1"
-                appendLevel(&out, until: bitEnd, from: &position, polarity)
-            } else {
-                appendLevel(&out, until: bitEnd, from: &position, polarity)
-            }
-        }
-        return out
-    }
-
-    private func appendLevel(_ out: inout [Int16], until end: Double,
-                             from position: inout Double, _ high: Bool) {
-        let count = Int(end.rounded()) - Int(position.rounded())
-        out.append(contentsOf: [Int16](repeating: high ? 12000 : -12000,
-                                       count: max(0, count)))
-        position = end
+        LTCTestSignal.encode(timecode, fps: fps, dropFrame: dropFrame,
+                             polarity: &polarity)
     }
 
     @Test func decodesAContinuousRun() {
@@ -91,6 +48,49 @@ import Testing
         #expect(last?.description == "10:00:01:04")
     }
 
+    /// 30 fps LTC is 20 % faster than the 25 fps period the decoder starts
+    /// from — the adaptive half-bit period has to walk down and lock, because
+    /// an NTSC-land camera is the common source of audio timecode.
+    @Test func locksAt30fpsWithoutConfiguration() {
+        let decoder = LTCDecoder()
+        var polarity = false
+        var last: Timecode?
+        for frame in 0..<30 {
+            let tc = Timecode(frameNumber: 16 * 3600 * 30 + frame, fps: 30)
+            let samples = encode(tc, fps: 30, polarity: &polarity)
+            samples.withUnsafeBufferPointer { buffer in
+                if let result = decoder.process(samples: buffer, fps: 30) {
+                    last = result
+                }
+            }
+        }
+        // a frame completes on the next frame's first transition, so the last
+        // decodable frame of a finite run is the second-to-last one
+        #expect(last?.description == "16:00:00:28")
+    }
+
+    /// Bit 10 is the SMPTE drop-frame flag, and the decoded timecode carries
+    /// it — a 29.97 DF source whose flag is dropped labels every take with
+    /// timecodes that drift 3.6 s/hour from the camera's.
+    @Test func decodesTheDropFrameFlag() {
+        let decoder = LTCDecoder()
+        var polarity = false
+        var last: Timecode?
+        for frame in 0..<6 {
+            let tc = Timecode(hours: 10, minutes: 10, seconds: 0, frames: frame,
+                              fps: 30, isDropFrame: true)
+            let samples = encode(tc, fps: 30, dropFrame: true,
+                                 polarity: &polarity)
+            samples.withUnsafeBufferPointer { buffer in
+                if let result = decoder.process(samples: buffer, fps: 30) {
+                    last = result
+                }
+            }
+        }
+        #expect(last?.isDropFrame == true)
+        #expect(last?.description == "10:10:00;04")
+    }
+
     @Test func garbageAudioDecodesNothing() {
         let decoder = LTCDecoder()
         var noise: [Int16] = []
@@ -103,5 +103,35 @@ import Testing
             decoder.process(samples: $0, fps: 25)
         }
         #expect(result == nil)
+    }
+
+    /// `reset()` drops the phase, the shift register and the last timecode —
+    /// a decoder reused for a new source must not stitch the old source's bits
+    /// onto the new one's.
+    @Test func resetForgetsTheLastTimecode() {
+        let decoder = LTCDecoder()
+        var polarity = false
+        for frame in 0..<3 {
+            let tc = Timecode(frameNumber: 3600 * 25 + frame, fps: 25)
+            let samples = encode(tc, fps: 25, polarity: &polarity)
+            samples.withUnsafeBufferPointer {
+                _ = decoder.process(samples: $0, fps: 25)
+            }
+        }
+        #expect(decoder.lastTimecode != nil)
+        decoder.reset()
+        #expect(decoder.lastTimecode == nil)
+        // and it locks cleanly onto a different stream afterwards
+        var relocked: Timecode?
+        for frame in 0..<4 {
+            let tc = Timecode(frameNumber: 7 * 3600 * 25 + frame, fps: 25)
+            let samples = encode(tc, fps: 25, polarity: &polarity)
+            samples.withUnsafeBufferPointer {
+                if let hit = decoder.process(samples: $0, fps: 25) {
+                    relocked = hit
+                }
+            }
+        }
+        #expect(relocked?.hours == 7)
     }
 }

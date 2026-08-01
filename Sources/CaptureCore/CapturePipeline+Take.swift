@@ -153,6 +153,16 @@ extension CapturePipeline {
         }
     }
     /// Await finalization of all files still being written (capture stop, exit).
+    ///
+    /// This guarantees the FILES — every writer has finished and its moov atom
+    /// is on disk. It deliberately does NOT guarantee the publication: each
+    /// finalize task hands its take to the main queue and completes without
+    /// waiting for that hop, because the exit flush parks the main thread in a
+    /// semaphore while it awaits this method — a finalize that waited on main
+    /// there would deadlock against it. Callers that need the published take
+    /// (the list, the log row) wait for that outcome separately: the tests
+    /// poll their collector after this returns, and `flushOnTerminate` drains
+    /// the main queue once the semaphore is signalled.
     public func finishPendingWrites() async {
         let tasks: [Task<Void, Never>] = await withCheckedContinuation { cont in
             queue.async {

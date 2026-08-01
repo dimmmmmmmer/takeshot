@@ -25,7 +25,9 @@ struct PreRollAudioTests {
         let pipeline = CapturePipeline(config: .init(
             settings: settings, scene: "1", takeNumber: 1))
         let finished = TakeCollector()
+        let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finished.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
         pipeline.handleFormat(CaptureFormat(width: 320, height: 180, frameRate: 25,
                                             timecodeFPS: 25, name: "test"))
 
@@ -38,8 +40,11 @@ struct PreRollAudioTests {
                                                   pixelBuffer: frame)
         try await driver.pushStalled(rolled, count: 10, pixelBuffer: frame)
 
-        await TestWait.untilWritten { !finished.isEmpty }
+        // stop seen → await the finalize itself → poll for the publication,
+        // which is one main-queue hop behind it (see CapturePipelineTests)
+        await TestWait.untilWritten { recStates.last == false }
         await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !finished.isEmpty }
         let take = try #require(finished.first)
         await TestWait.fileExists(at: take.url)
 

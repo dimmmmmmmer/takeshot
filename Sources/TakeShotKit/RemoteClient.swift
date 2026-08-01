@@ -90,6 +90,9 @@ final class RemoteClient {
     /// everything else here: the send completion runs on the connection's queue,
     /// which is the server's.
     private var inFlight = 0
+    /// The ledger, for the tests (via `RemoteServer.maxClientInFlight`);
+    /// nothing in the server branches on it from outside `send`.
+    var inFlightBytes: Int { inFlight }
     /// Tarpit answers scheduled on this connection and not yet delivered.
     private var heldAnswers = 0
 
