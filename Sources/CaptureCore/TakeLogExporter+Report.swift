@@ -41,7 +41,7 @@ extension TakeLogExporter {
             let rating: String
             switch take.rating {
             case .good: rating = "GOOD"
-            case .bad: rating = "NG"
+            case .bad: rating = "BAD"
             case .none: rating = ""
             }
             lines.append([

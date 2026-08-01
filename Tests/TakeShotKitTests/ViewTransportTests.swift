@@ -154,6 +154,42 @@ struct ViewTransportTests {
         }
     }
 
+    /// The marker chevrons and the count were a hard-coded orange (owner item
+    /// 25): the palette's first entry, printed over a bar full of markers that
+    /// were not orange, and dim enough against the transport's material to read
+    /// as a disabled control. They are chrome, so they take the operator's
+    /// accent — which is white until somebody changes it, the same white
+    /// `PlayerChrome` puts on everything its plate holds.
+    @Test func markerNavigationIsWhiteOrTheAccentNeverTheMarkerOrange()
+        async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedPlaybackWithMarkers(probe.controller,
+                                                     in: probe.root)
+            // compared as hex rather than as Color: SwiftUI's equality is about
+            // the provider behind a colour, and "white" reached two ways is two
+            // providers of the same colour
+            @MainActor func tint() -> String {
+                MarkerButton.navigationTint(probe.controller).hexString
+            }
+            #expect(probe.controller.settings.accentHex == nil,
+                    "the fixture set an accent; the default is what this checks")
+            #expect(tint() == "#FFFFFF",
+                    "an untouched install must render the navigation white")
+            #expect(tint() != markerColor(TakeMarker.colors[0]).hexString,
+                    "the navigation is back on the marker palette's orange")
+
+            let chosen = try #require(Color(hex: "#33C3FF"))
+            probe.controller.accentColor = chosen
+            #expect(tint() == "#33C3FF",
+                    "the navigation ignored the operator's accent")
+
+            // and it is a tint, not a layout: recolouring must not reflow the bar
+            let accented = probe.fittingSize(HStack { MarkerButton() })
+            probe.controller.accentColor = try #require(Color(hex: "#FFFFFF"))
+            #expect(probe.fittingSize(HStack { MarkerButton() }) == accented)
+        }
+    }
+
     /// The marker editor popover is a grid of fixed columns — a 76pt name, a
     /// swatch, a timecode button, a 180pt note field. Its localized parts are
     /// the header, "Clear all" and the "Marker %d" fallback, none of which may

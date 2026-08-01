@@ -71,7 +71,7 @@ import Testing
             // Resolve's checkbox: ticked, empty, cleared — in that order
             #expect(csv.contains("A001C01.mov,001,1,true,hero take"))
             #expect(csv.contains("A001C02.mov,001,2,,"))
-            #expect(csv.contains("A001C03.mov,001,3,false,NG: boom in frame"))
+            #expect(csv.contains("A001C03.mov,001,3,false,Bad: boom in frame"))
 
             await rescan(controller)
 
@@ -112,6 +112,49 @@ import Testing
                     == ["10:00:00:10", "10:00:00:20"])
             #expect(restored.markers.first?.color == "red")
             #expect(restored.markers.first?.note == "фокус")
+        }
+    }
+
+    /// The same round trip for a clip that is NOT ours (owner item 24): the
+    /// sidecar is keyed by file name, so a card clip in the record folder can
+    /// carry markers, and they have to come back on the next launch the way a
+    /// take's do. Such a clip has no timecode track we read, so its rows are
+    /// offsets from zero on both sides of the file.
+    @Test func markersOnAForeignClipComeBackFromTheSidecar() async throws {
+        try await ControllerHarness.run { controller, root in
+            // deliberately NOT written through TakeWriter: what makes a file
+            // ours is the com.takeshot.origin tag, and this one must come back
+            // from the scan as Other content
+            let foreign = root.appendingPathComponent("A003_C012.mov")
+            try Data([0x00]).write(to: foreign)
+            try ControllerFixtures.settle(foreign)
+            controller.otherMarkers["A003_C012.mov"] = [
+                TakeMarker(seconds: 0.4, color: "red", note: "фокус"),
+                TakeMarker(seconds: 0.8),
+            ]
+            controller.exportTakeLog()
+
+            let csv = await sidecar(root, TakeLogExporter.markersFileName,
+                                    containing: "A003_C012.mov")
+            #expect(csv.contains("A003_C012.mov,00:00:00:10,red,фокус"))
+            #expect(csv.contains("A003_C012.mov,00:00:00:20,orange,"))
+
+            // forget the session's copy and let the folder speak for itself
+            controller.otherMarkers.removeAll()
+            controller.otherFiles.removeAll()
+            controller.scannedPaths.removeAll()
+            controller.scanDestinationFolder()
+            await ControllerWait.untilWritten {
+                !controller.scanInFlight
+                    && controller.otherMarkers["A003_C012.mov"] != nil
+            }
+
+            let restored = try #require(controller.otherMarkers["A003_C012.mov"])
+            #expect(restored.map(\.seconds) == [0.4, 0.8])
+            #expect(restored.first?.color == "red")
+            #expect(restored.first?.note == "фокус")
+            // and it did not become a take on the way back
+            #expect(controller.takes.isEmpty)
         }
     }
 }

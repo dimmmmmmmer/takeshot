@@ -10,9 +10,60 @@ import Foundation
 /// about a clip that is already loaded.
 extension CaptureController {
     /// Markers of the clip in the player (transport ticks).
+    ///
+    /// Two stores behind one property: a take carries its markers itself, and
+    /// anything else in the record folder is keyed by file name in
+    /// `otherMarkers`. Every caller in the app — the ticks, the list editor,
+    /// navigation, the hotkeys — reads through here, so which store a clip
+    /// belongs to is decided once.
     var playbackMarkers: [TakeMarker] {
         guard let url = playbackURL else { return [] }
-        return takes.first { $0.url == url }?.markers ?? []
+        if let take = takes.first(where: { $0.url == url }) { return take.markers }
+        return otherMarkers[Self.markerKey(url)] ?? []
+    }
+
+    /// The sidecar's key for a clip: its file name, the same one the ranges
+    /// sidecar uses (`TransportModel.key`).
+    nonisolated static func markerKey(_ url: URL) -> String {
+        url.lastPathComponent
+    }
+
+    /// Whether the clip in the player can carry markers at all.
+    ///
+    /// A take always can. Anything else has to be a clip the folder scan found
+    /// in the record folder — the sidecar is keyed by bare file name and lives
+    /// beside the footage, so a file from somewhere else would file its markers
+    /// under a name that means something different in that folder — and it has
+    /// to have a timeline: a still is one frame, and one marker on frame zero of
+    /// a photo is not a mark, it is a rating with extra steps.
+    var playbackAcceptsMarkers: Bool {
+        guard let url = playbackURL else { return false }
+        if takes.contains(where: { $0.url == url }) { return true }
+        guard otherFiles.contains(url) else { return false }
+        return !Self.imageExtensions.contains(url.pathExtension.lowercased())
+            || Self.isCinemaDNGFolder(url)
+    }
+
+    /// Apply `change` to whichever store owns the clip in the player, and file
+    /// the result. `false` from the closure means "nothing moved" — the sidecar
+    /// is only rewritten when something did.
+    ///
+    /// A foreign clip whose markers were all cleared keeps an EMPTY entry rather
+    /// than losing its key. The export drops empty entries, and the scan's
+    /// restore only fills keys it has never seen — so the empty entry is what
+    /// stops the next scan, a minute later, from bringing back the markers the
+    /// operator has just deleted.
+    private func editPlaybackMarkers(
+        _ change: (inout [TakeMarker]) -> Bool) {
+        guard let url = playbackURL else { return }
+        if let index = takes.firstIndex(where: { $0.url == url }) {
+            guard change(&takes[index].markers) else { return }
+        } else {
+            var markers = otherMarkers[Self.markerKey(url)] ?? []
+            guard change(&markers) else { return }
+            otherMarkers[Self.markerKey(url)] = markers
+        }
+        exportTakeLog()
     }
 
     /// Current playback position in seconds (marker navigation).
@@ -26,25 +77,40 @@ extension CaptureController {
     /// Mutate a marker of the current playback clip (list editor).
     func updatePlaybackMarker(at index: Int,
                               _ change: (inout TakeMarker) -> Void) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        change(&takes[takeIndex].markers[index])
-        exportTakeLog()
+        editPlaybackMarkers { markers in
+            guard markers.indices.contains(index) else { return false }
+            change(&markers[index])
+            return true
+        }
     }
     func removePlaybackMarker(at index: Int) {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url }),
-              takes[takeIndex].markers.indices.contains(index) else { return }
-        takes[takeIndex].markers.remove(at: index)
-        exportTakeLog()
+        editPlaybackMarkers { markers in
+            guard markers.indices.contains(index) else { return false }
+            markers.remove(at: index)
+            return true
+        }
     }
     func clearPlaybackMarkers() {
-        guard let url = playbackURL,
-              let takeIndex = takes.firstIndex(where: { $0.url == url })
-        else { return }
-        takes[takeIndex].markers.removeAll()
-        exportTakeLog()
+        editPlaybackMarkers { markers in
+            guard !markers.isEmpty else { return false }
+            markers.removeAll()
+            return true
+        }
+    }
+    /// Add one marker to whichever store owns the clip in the player, keeping
+    /// the list in position order. `false` means the frame already carries one.
+    func appendPlaybackMarker(_ marker: TakeMarker, frameStep: Double) -> Bool {
+        var placed = false
+        editPlaybackMarkers { markers in
+            guard !markers.contains(where: {
+                abs($0.seconds - marker.seconds) < frameStep * 0.6
+            }) else { return false }
+            markers.append(marker)
+            markers.sort { $0.seconds < $1.seconds }
+            placed = true
+            return true
+        }
+        return placed
     }
     /// Jump to the next/previous marker of the current clip.
     func jumpToMarker(forward: Bool) {

@@ -47,20 +47,6 @@ import Testing
         }
     }
 
-    /// Other content is playable but has nowhere to store a marker — this used
-    /// to be the silent case.
-    @Test func markingSomethingThatIsNotATakeReportsWhyItFailed() async throws {
-        try await ControllerHarness.run { controller, root in
-            controller.viewerMode = .playback
-            controller.playbackURL = root.appendingPathComponent("foreign.mp4")
-
-            controller.addMarker()
-
-            #expect(controller.lastError == L("marker_only_takes"))
-            #expect(controller.playbackMarkers.isEmpty)
-        }
-    }
-
     @Test func markersOfTheLoadedClipCanBeEditedAndRemoved() async throws {
         try await ControllerHarness.run { controller, root in
             _ = try loadedTake(controller, in: root)
@@ -286,9 +272,9 @@ import Testing
     }
 
     /// The ALE is the LOG, not the cut: it carries every take, including the
-    /// ones nobody circled and the ones marked NG. An assistant building a bin
-    /// needs the rejected takes in it — that a take was NG is metadata about
-    /// the day, not a reason to hide it from the Avid.
+    /// ones nobody circled and the ones marked bad. An assistant building a bin
+    /// needs the rejected takes in it — that a take was rejected is metadata
+    /// about the day, not a reason to hide it from the Avid.
     @Test func theALECarriesEveryTakeNotOnlyTheSelects() async throws {
         try await ControllerHarness.run { controller, root in
             var good = ControllerFixtures.take(named: "A", in: root, clip: 1)

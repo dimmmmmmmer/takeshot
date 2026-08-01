@@ -166,10 +166,17 @@ would drop a marker while a roll name is being typed.
 
 - `takeshot-log.csv` — the Resolve metadata table (File Name, Reel Name, Take,
   Good Take, Comments). Good Take is a checkbox, and the rating is ternary, so
-  the third state is the absence of a value: `true` for good, `false` plus an
-  `NG` marker in Comments for a rejected take, and EMPTY for one nobody has
+  the third state is the absence of a value: `true` for good, `false` plus a
+  `Bad` marker in Comments for a rejected take, and EMPTY for one nobody has
   rated. Writing `false` for unrated told Resolve the whole day was rejected.
-- `takeshot-markers.csv` — File Name, Timecode, Color, Note. The timecode is the
+  The written marker used to be `NG`; the parser reads both spellings forever,
+  so logs from older builds still restore their ratings.
+- `takeshot-markers.csv` — File Name, Timecode, Color, Note. It carries the
+  takes' markers and, keyed the same way, the markers of anything else in the
+  record folder (`CaptureController.otherMarkers`): the marker controls live in
+  the transport, the transport runs for whatever is loaded, and a clip copied
+  off a card is a clip somebody wants to flag. Such a file has no start timecode
+  we read, so its positions are offsets from zero. The timecode is the
   position; there is no seconds column (there was, and the two records of one
   value drifted apart). Reading is two steps — `parseMarkerRows` for the file,
   then `markers(_:of:)` once the take's own start timecode is known. A take with

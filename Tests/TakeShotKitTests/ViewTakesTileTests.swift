@@ -119,6 +119,8 @@ import Testing
         try await ViewProbe.run { probe in
             let takes = try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             let take = try #require(takes.first)
+            let other = try ViewFixtures.seedOtherFiles(probe.controller,
+                                                        in: probe.root)
 
             for width in [TakeTileBadges.tileWidthRange.lowerBound, 100.0, 150.0] {
                 let laid = probe.sizes(proposedWidth: width, proposedHeight: 400) {
@@ -128,6 +130,19 @@ import Testing
                         "the \(width)pt tile wants \(laid.en.width)pt in English")
                 #expect(laid.ru.width <= width,
                         "the \(width)pt tile wants \(laid.ru.width)pt in Russian")
+                // the Other-content tile carries the same two-line budget, and
+                // the photo is the wide case: "6000×4000" beside a file name
+                for url in other {
+                    let name = url.lastPathComponent
+                    let cell = probe.sizes(proposedWidth: width,
+                                           proposedHeight: 400) {
+                        OtherCell(url: url, tileWidth: width)
+                    }
+                    #expect(cell.en.width <= width,
+                            "\(name) at \(width)pt wants \(cell.en.width)pt")
+                    #expect(cell.ru == cell.en,
+                            "\(name) changed with the language: \(cell)")
+                }
             }
         }
     }
@@ -148,6 +163,129 @@ import Testing
             #expect(minimum.ru <= panel,
                     "the smallest-tile grid needs \(minimum.ru)pt of \(panel)")
             #expect(minimum.ru == minimum.en)
+        }
+    }
+
+    // MARK: - a tile is 16:9 whatever it is handed (owner item 26)
+
+    /// The picture in a tile is a fixed 16:9 cell for EVERY source aspect.
+    ///
+    /// It used to be a ZStack of a black plate and a `.scaledToFill()` image
+    /// under `.aspectRatio(16/9, contentMode: .fit)`. Fill answers a proposal
+    /// with a size that COVERS it, the stack takes the larger of its children,
+    /// and `.aspectRatio` reports whatever its child measured — so one vertical
+    /// clip in the folder produced a tile several times taller than the grid's
+    /// row. Measured at both ends of the slider and in the middle.
+    @Test func theTilePictureIs16By9ForEverySourceAspect() async throws {
+        try await ViewProbe.run { probe in
+            for aspect in ViewFixtures.thumbnailAspects {
+                let image = ViewFixtures.thumbnail(width: aspect.width,
+                                                   height: aspect.height)
+                for width in [TakeTileBadges.tileWidthRange.lowerBound,
+                              150.0, TakeTileBadges.tileWidthRange.upperBound] {
+                    let expected = TakeTileBadges.thumbnailHeight(tileWidth: width)
+                    let laid = probe.size(
+                        TakeTileThumbnail(image: image) { Color.clear },
+                        proposedWidth: width, proposedHeight: 4000)
+                    #expect(abs(laid.height - expected) <= 0.5,
+                            "\(aspect.name)/\(width)pt: \(laid.height)pt, 16:9 wants \(expected)pt")
+                    #expect(laid.width <= width,
+                            "\(aspect.name) at \(width)pt is \(laid.width)pt wide")
+                }
+            }
+        }
+    }
+
+    /// The acceptance case the operator reported: the grid stays uniform. A
+    /// portrait clip's whole tile — picture, badges and caption line — has to
+    /// measure exactly what a 16:9 clip's does, in both languages.
+    @Test func aPortraitThumbnailDoesNotResizeItsTile() async throws {
+        try await ViewProbe.run { probe in
+            let takes = try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            let take = try #require(takes.first)
+            let other = try ViewFixtures.seedOtherFiles(probe.controller,
+                                                        in: probe.root)
+
+            for width in [TakeTileBadges.tileWidthRange.lowerBound, 150.0] {
+                var takeSizes: [String: (en: CGSize, ru: CGSize)] = [:]
+                var otherSizes: [String: (en: CGSize, ru: CGSize)] = [:]
+                for aspect in ViewFixtures.thumbnailAspects {
+                    let image = ViewFixtures.thumbnail(width: aspect.width,
+                                                       height: aspect.height)
+                    probe.controller.thumbnails[take.id] = image
+                    probe.controller.otherThumbnails[other[0]] = image
+                    takeSizes[aspect.name] = probe.sizes(proposedWidth: width,
+                                                         proposedHeight: 4000) {
+                        TakeCell(take: take, tileWidth: width)
+                    }
+                    otherSizes[aspect.name] = probe.sizes(proposedWidth: width,
+                                                          proposedHeight: 4000) {
+                        OtherCell(url: other[0], tileWidth: width)
+                    }
+                }
+                let reference = try #require(takeSizes["16:9"])
+                for (name, size) in takeSizes {
+                    #expect(size.en == reference.en,
+                            "\(name) take tile/\(width)pt: \(size.en) vs \(reference.en)")
+                    #expect(size.ru == size.en, "\(name) take tile: \(size)")
+                }
+                let otherRef = try #require(otherSizes["16:9"])
+                for (name, size) in otherSizes {
+                    #expect(size.en == otherRef.en,
+                            "\(name) other tile/\(width)pt: \(size.en) vs \(otherRef.en)")
+                    #expect(size.ru == size.en, "\(name) other tile: \(size)")
+                }
+            }
+        }
+    }
+
+    // MARK: - photo or video, at a glance (owner item 27)
+
+    /// The type badge's rendered height is the number the tile layout decides
+    /// from — the same discipline the take badges above are held to.
+    @Test func theTypeBadgeMatchesTheConstantTheLayoutUses() async throws {
+        try await ViewProbe.run { probe in
+            let other = try ViewFixtures.seedOtherFiles(probe.controller,
+                                                        in: probe.root)
+            let assumed = TakeTileBadges.typeBadgeHeight
+            for url in other {
+                let badge = probe.fittingSizes { OtherTypeBadge(url: url) }
+                #expect(badge.en.height == assumed,
+                        "\(url.lastPathComponent): \(badge.en.height)pt, layout assumes \(assumed)")
+                #expect(badge.ru == badge.en,
+                        "a glyph cannot change with the language: \(badge)")
+            }
+            // and the pair fits above the metric pill at the sizes that claim to
+            let metric = probe.fittingSizes { TileMetricBadge(text: "6000×4000") }
+            let range = TakeTileBadges.tileWidthRange
+            for width in stride(from: range.lowerBound, through: range.upperBound,
+                                by: 5) {
+                let height = TakeTileBadges.thumbnailHeight(tileWidth: width)
+                guard TakeTileBadges.typeAndMetricFitOnImage(thumbnailHeight: height)
+                else { continue }
+                #expect(TakeTileBadges.typeBadgeHeight + metric.en.height
+                            + 3 * TakeTileBadges.inset <= height,
+                        "at \(width)pt the two badges do not fit \(height)pt")
+            }
+        }
+    }
+
+    /// A clip answers with its length and a photo with its pixel size — the
+    /// second, quieter half of telling the two apart, and the reason the cell
+    /// never shows a duration for a still.
+    @Test func otherContentShowsLengthForClipsAndSizeForPhotos() async throws {
+        try await ViewProbe.run { probe in
+            let other = try ViewFixtures.seedOtherFiles(probe.controller,
+                                                        in: probe.root)
+            #expect(!otherIsPhoto(other[0]))
+            #expect(otherIsPhoto(other[1]))
+            #expect(probe.controller.otherMetricText(for: other[0]) == "0:42")
+            #expect(probe.controller.otherMetricText(for: other[1]) == "6000×4000")
+
+            // nothing decoded yet is a third state, and it says nothing rather
+            // than "0:00" — which would read as an empty clip
+            let unknown = probe.root.appendingPathComponent("not_decoded.mov")
+            #expect(probe.controller.otherMetricText(for: unknown) == nil)
         }
     }
 

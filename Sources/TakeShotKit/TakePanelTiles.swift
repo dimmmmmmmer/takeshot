@@ -27,6 +27,11 @@ enum TakeTileBadges {
     /// Rendered height of the duration pill on the image (a caption2 line plus
     /// 1pt a side).
     static let durationHeight: CGFloat = 15
+    /// Rendered height of the photo/video type glyph an Other-content tile
+    /// carries. Same plate and the same caption2 metrics as the duration pill,
+    /// so the two badges on such a tile are one family; pinned by
+    /// ViewTakesTileTests against the real render.
+    static let typeBadgeHeight: CGFloat = 15
     /// The aspect a tile fits its thumbnail to.
     static let aspect: CGFloat = 16 / 9
     /// The tile-size slider's range, in both panel sections.
@@ -42,6 +47,14 @@ enum TakeTileBadges {
         thumbnailHeight >= controlsHeight + durationHeight + 3 * inset
     }
 
+    /// The same question for an Other-content tile, whose two badges are the
+    /// type glyph and the length-or-size pill. They share the leading edge —
+    /// glyph above, pill below — so it is their heights that decide, and both
+    /// are smaller than the takes' controls capsule.
+    static func typeAndMetricFitOnImage(thumbnailHeight: CGFloat) -> Bool {
+        thumbnailHeight >= typeBadgeHeight + durationHeight + 3 * inset
+    }
+
     /// The rect the controls cluster occupies inside a thumbnail — top-trailing,
     /// inset. Origin top-left, like the overlay alignment it describes.
     static func controlsFrame(size: CGSize, in bounds: CGSize) -> CGRect {
@@ -54,6 +67,45 @@ enum TakeTileBadges {
     static func durationFrame(size: CGSize, in bounds: CGSize) -> CGRect {
         CGRect(x: inset, y: bounds.height - inset - size.height,
                width: size.width, height: size.height)
+    }
+}
+
+// MARK: - the picture a tile shows
+
+/// A tile's picture: a 16:9 black plate with the thumbnail fitted inside it.
+///
+/// The plate is what carries the size, and the picture is an OVERLAY on it. That
+/// is the whole point of the shape. It used to be a `ZStack` of the plate and a
+/// `.scaledToFill()` image under `.aspectRatio(16/9, contentMode: .fit)`, and
+/// that combination cannot hold a tile: fill answers a proposal with a size that
+/// COVERS it, so a portrait frame reported a height several times the tile's
+/// width, the stack took the larger of its two children, and `.aspectRatio`
+/// hands back whatever its child measured. One vertical clip in the folder and
+/// the grid grew a tile taller than the panel.
+///
+/// An overlay cannot resize its host, whatever it measures, so the cell is 16:9
+/// for every source there is. Inside it the picture is FITTED, not filled:
+/// letterboxed against the black matte. Cropping a portrait frame to a landscape
+/// box would be the alternative, and it would show the operator a framing the
+/// camera never shot.
+struct TakeTileThumbnail<Fallback: View>: View {
+    let image: NSImage?
+    @ViewBuilder let fallback: () -> Fallback
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(.black)
+            .aspectRatio(TakeTileBadges.aspect, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    fallback()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -74,28 +126,39 @@ struct TakeTileControls: View {
     }
 }
 
-/// Take length. On the image it needs its own dark plate; on the caption line
-/// under the tile it is just secondary text next to the name.
-struct TakeDurationBadge: View {
-    let seconds: Double
+/// One short fact about a tile's clip — a take's length, or an Other-content
+/// item's length or pixel size. On the image it needs its own dark plate; on the
+/// caption line under the tile it is just secondary text next to the name.
+struct TileMetricBadge: View {
+    let text: String
     var onImage = true
 
     var body: some View {
         if onImage {
-            text
+            label
                 .padding(.horizontal, TakeTileBadges.inset)
                 .padding(.vertical, 1)
                 .background(.black.opacity(0.6),
                             in: RoundedRectangle(cornerRadius: 3))
                 .foregroundStyle(.white)
         } else {
-            text.foregroundStyle(.secondary)
+            label.foregroundStyle(.secondary)
         }
     }
 
-    private var text: some View {
-        Text(durationText(seconds))
+    private var label: some View {
+        Text(text)
             .font(.caption2.monospacedDigit())
+    }
+}
+
+/// Take length, in the shared metric plate.
+struct TakeDurationBadge: View {
+    let seconds: Double
+    var onImage = true
+
+    var body: some View {
+        TileMetricBadge(text: durationText(seconds), onImage: onImage)
     }
 }
 

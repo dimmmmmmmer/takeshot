@@ -76,10 +76,15 @@ extension CaptureController {
         guard !missing.isEmpty else { return }
         Task.detached(priority: .utility) { [weak self] in
             for url in missing {
-                let (image, duration) = await Self.otherThumbnail(for: url)
-                if let duration {
+                let preview = await Self.otherThumbnail(for: url)
+                let duration = preview.duration
+                let pixelSize = preview.pixelSize
+                if duration != nil || pixelSize != nil {
                     await MainActor.run { [weak self] in
-                        self?.otherDurations[url] = duration
+                        if let duration { self?.otherDurations[url] = duration }
+                        // a photo's resolution, which is what its cell shows
+                        // where a clip shows its length
+                        if let pixelSize { self?.otherPixelSizes[url] = pixelSize }
                     }
                 }
                 // The in-flight mark comes off whether or not a preview was
@@ -87,7 +92,7 @@ extension CaptureController {
                 // once — half-copied onto the card, say — marked in flight for
                 // the rest of the session, so it could never be retried even
                 // after the copy finished.
-                if let image {
+                if let image = preview.image {
                     let boxed = UncheckedSendable(image) // NSImage predates Sendable
                     await MainActor.run { [weak self] in
                         self?.otherThumbnails[url] = boxed.value

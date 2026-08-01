@@ -36,7 +36,7 @@ public enum TakeLogExporter {
 
     /// Resolve's "Good Take" checkbox column. The rating is ternary and the
     /// column is a checkbox, so the third state has to be the ABSENCE of a
-    /// value: "false" means the operator marked the take NG, and writing it for
+    /// value: "false" means the operator marked the take bad, and writing it for
     /// every unmarked take told Resolve the whole day had been rejected —
     /// including the takes nobody had got round to watching yet.
     ///
@@ -50,12 +50,24 @@ public enum TakeLogExporter {
         }
     }
 
-    /// The Comments column value: an "NG" marker for bad takes plus the free-text
-    /// comment. "NG", "NG: soft focus", or just "soft focus" for good/unrated takes.
+    /// The marker written into Comments for a rejected take. It was "NG" for
+    /// the app's whole life; the operator-facing word is "Bad" everywhere now,
+    /// and the column is read by people, so the file says what the UI says.
+    ///
+    /// Only the WRITTEN spelling changed. `badMarkersRead` is what the parser
+    /// accepts, and it keeps "NG" forever — logs written by every build before
+    /// this one are sitting in record folders, and a shift that reopens one has
+    /// to get its ratings back.
+    static let badMarkerWritten = "Bad"
+    static let badMarkersRead = ["Bad", "NG"]
+
+    /// The Comments column value: a "Bad" marker for rejected takes plus the
+    /// free-text comment. "Bad", "Bad: soft focus", or just "soft focus" for
+    /// good/unrated takes.
     static func commentsField(rating: TakeRating, comment: String) -> String {
         let text = flattened(comment).trimmingCharacters(in: .whitespacesAndNewlines)
         if rating == .bad {
-            return text.isEmpty ? "NG" : "NG: \(text)"
+            return text.isEmpty ? badMarkerWritten : "\(badMarkerWritten): \(text)"
         }
         return text
     }
@@ -89,24 +101,34 @@ public enum TakeLogExporter {
     }
 
     /// Split the Comments column into a rating and a free-text comment.
-    /// A ticked Good Take → .good; "NG" / "NG: text" → .bad; else .none — an
-    /// EMPTY checkbox and a written "false" both mean "not a good take", and
-    /// only the NG marker says the operator actively rejected it.
+    /// A ticked Good Take → .good; a bad marker ("Bad"/"Bad: text", and the "NG"
+    /// this build no longer writes) → .bad; else .none — an EMPTY checkbox and a
+    /// written "false" both mean "not a good take", and only the marker says the
+    /// operator actively rejected it.
     ///
-    /// The checkbox is read FIRST: NG is written for bad takes only, so a good
-    /// take whose comment happens to start with "NG" (a note about a shot that
-    /// was NG on the previous camera, say) keeps both its rating and its text.
+    /// The checkbox is read FIRST: the marker is written for bad takes only, so
+    /// a good take whose comment happens to start with "Bad" (a note about a
+    /// shot that was bad on the previous camera, say) keeps both its rating and
+    /// its text.
+    ///
+    /// Both spellings are read forever. Every log written before the rename says
+    /// "NG", those files live in record folders on set drives, and dropping the
+    /// old spelling would silently turn a day of rejected takes into unrated
+    /// ones the next time the folder is opened.
+    ///
+    /// Matched case-sensitively, exactly as the single spelling was: the marker
+    /// is a token this app writes, and a lower-case "bad" in the Comments column
+    /// is somebody's note about the light, not a rating.
     static func parseComments(_ value: String, good: Bool) -> (TakeRating, String) {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
         if good {
             return (.good, trimmed)
         }
-        if trimmed == "NG" {
-            return (.bad, "")
-        }
-        if trimmed.hasPrefix("NG:") {
-            let comment = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-            return (.bad, comment)
+        for marker in badMarkersRead {
+            if trimmed == marker { return (.bad, "") }
+            guard trimmed.hasPrefix(marker + ":") else { continue }
+            return (.bad, String(trimmed.dropFirst(marker.count + 1))
+                .trimmingCharacters(in: .whitespaces))
         }
         return (.none, trimmed)
     }

@@ -26,7 +26,16 @@ extension TakeLogExporter {
     /// player shows for it (`playbackTimecodeText`).
     public static func markerTimecode(of marker: TakeMarker,
                                       in take: Take) -> String {
-        guard let start = take.startTimecode else {
+        markerTimecode(of: marker, startingAt: take.startTimecode)
+    }
+
+    /// The same column for a clip that is not a take — a file that landed in the
+    /// record folder from outside, which the app knows by name and nothing else.
+    /// No start timecode is read for one, so `start` is nil and its markers are
+    /// offsets from zero, exactly like a take whose own timecode is unreadable.
+    public static func markerTimecode(of marker: TakeMarker,
+                                      startingAt start: Timecode?) -> String {
+        guard let start else {
             return offsetTimecode(seconds: marker.seconds, from: fallbackRate)
         }
         if !marker.timecodeText.isEmpty { return marker.timecodeText }
@@ -66,10 +75,20 @@ extension TakeLogExporter {
     /// ordered. A row that cannot be resolved is dropped rather than silently
     /// landing on frame zero, under the head of every take.
     public static func markers(_ rows: [MarkerRow], of take: Take) -> [TakeMarker] {
+        markers(rows, startingAt: take.startTimecode,
+                duration: take.durationSeconds)
+    }
+
+    /// The same resolution for a clip that is not a take: the rows of one file
+    /// in the sidecar, against whatever timebase that file has. Other content
+    /// has none, so it arrives with `start` nil and its column read as an offset
+    /// from zero.
+    public static func markers(_ rows: [MarkerRow], startingAt start: Timecode?,
+                               duration: Double) -> [TakeMarker] {
         rows.compactMap { row -> TakeMarker? in
             if let seconds = markerSeconds(timecodeText: row.timecodeText,
-                                           start: take.startTimecode),
-               isInside(seconds: seconds, take) {
+                                           start: start),
+               isInside(seconds: seconds, start: start, duration: duration) {
                 return TakeMarker(seconds: seconds,
                                   timecodeText: row.timecodeText,
                                   color: row.color, note: row.note)
@@ -82,23 +101,24 @@ extension TakeLogExporter {
         .sorted { $0.seconds < $1.seconds }
     }
 
-    /// Whether a resolved position can belong to this take at all.
+    /// Whether a resolved position can belong to this clip at all.
     ///
-    /// Only asked of a take with NO start timecode, where the column is an
+    /// Only asked of a clip with NO start timecode, where the column is an
     /// offset by convention (see `markerTimecode`) and a sidecar written against
     /// a take that still had its timecode track resolves hours past the end. A
-    /// take WITH a start timecode has a known anchor, so its arithmetic is not
+    /// clip WITH a start timecode has a known anchor, so its arithmetic is not
     /// in doubt and a marker is kept even if the file has since been trimmed.
     ///
     /// The slack is a second, not a frame: those markers are positioned on the
     /// wall clock from the REC press, which starts before the first written
     /// frame, so one near the end can sit just past the file's duration. It is
     /// still four orders of magnitude short of the absolute timecode this
-    /// rejects. A take whose duration could not be read has nothing to compare
+    /// rejects. A clip whose duration could not be read has nothing to compare
     /// against and vetoes nothing.
-    private static func isInside(seconds: Double, _ take: Take) -> Bool {
-        guard take.startTimecode == nil, take.durationSeconds > 0 else { return true }
-        return seconds <= take.durationSeconds + 1
+    private static func isInside(seconds: Double, start: Timecode?,
+                                 duration: Double) -> Bool {
+        guard start == nil, duration > 0 else { return true }
+        return seconds <= duration + 1
     }
 
     /// Seconds → frames on a timecode's own timebase.

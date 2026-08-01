@@ -253,20 +253,11 @@ struct TakeCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6).fill(.black)
-                if let thumbnail = controller.thumbnails[take.id] {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Image(systemName: "film")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                }
+            TakeTileThumbnail(image: controller.thumbnails[take.id]) {
+                Image(systemName: "film")
+                    .font(.title)
+                    .foregroundStyle(.secondary)
             }
-            .aspectRatio(TakeTileBadges.aspect, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
             .onAppear { controller.requestThumbnail(for: take) }
             .panelItemClicks(take.url, in: controller) {
                 controller.play(url: take.url)

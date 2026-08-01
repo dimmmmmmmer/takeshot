@@ -260,6 +260,13 @@ struct ViewProbe {
     }
 }
 
+/// One source shape a tile can be handed, and the name a failure reports it by.
+struct ThumbnailAspect {
+    let name: String
+    let width: Int
+    let height: Int
+}
+
 extension CGSize {
     /// Same size to within `slack`.
     ///
@@ -348,7 +355,9 @@ enum ViewFixtures {
         return [good, plain]
     }
 
-    /// Foreign files in the record folder, for the Other content section.
+    /// Foreign files in the record folder, for the Other content section: one
+    /// clip and one still, each carrying the fact its cell shows — a length for
+    /// the clip, a pixel size for the photo (owner item 27).
     @discardableResult
     static func seedOtherFiles(_ controller: CaptureController,
                                in root: URL) throws -> [URL] {
@@ -357,8 +366,33 @@ enum ViewFixtures {
         for url in urls { try Data([0x00]).write(to: url) }
         controller.otherFiles = urls
         controller.otherDurations[urls[0]] = 42
+        controller.otherPixelSizes[urls[1]] = CGSize(width: 6000, height: 4000)
         return urls
     }
+
+    /// A decoded thumbnail of a given pixel size, as the panel would hold one.
+    ///
+    /// The aspect is the whole point: a tile has to be 16:9 whatever it is
+    /// handed, and a portrait frame is the shape that used to blow the tile up
+    /// (owner item 26). Drawn rather than empty so the render path is the real
+    /// one — an NSImage with no representation is not resized by SwiftUI.
+    static func thumbnail(width: Int, height: Int) -> NSImage {
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        NSColor.gray.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        image.unlockFocus()
+        return image
+    }
+
+    /// The aspect ratios a record folder really produces: broadcast 16:9, a
+    /// phone shot upright, a square social crop and a scope-cropped wide.
+    static let thumbnailAspects = [
+        ThumbnailAspect(name: "16:9", width: 1920, height: 1080),
+        ThumbnailAspect(name: "portrait", width: 1080, height: 1920),
+        ThumbnailAspect(name: "square", width: 1080, height: 1080),
+        ThumbnailAspect(name: "2.39:1", width: 2048, height: 858),
+    ]
 
     /// A take in the player with markers on it. `playbackMarkers` is derived
     /// from the take list and the loaded URL, so both have to be seeded — one

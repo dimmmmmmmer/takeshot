@@ -77,8 +77,10 @@ import Testing
             // drop-frame: the semicolon separator, and 2 s is 60 real frames
             "B002C003.mov\tB002\t01:00:00;00\t01:00:02;00\t00:00:02;00\t29.97\t3\t12A\t\t",
             // no roll — the EDL's counter reel; the tab in the comment became a
-            // space, the comma stayed a comma
-            "C.mov\tTS003\t10:00:10:00\t10:00:11:00\t00:00:01:00\t25\t7\t\tfalse\tNG: wide, then tight",
+            // space, the comma stayed a comma. The rejected-take marker is the
+            // Comments column's own, shared with the Resolve CSV: "Bad", where
+            // every build before the rename wrote "NG".
+            "C.mov\tTS003\t10:00:10:00\t10:00:11:00\t00:00:01:00\t25\t7\t\tfalse\tBad: wide, then tight",
         ].joined(separator: "\r\n") + "\r\n"
         #expect(ale == expected)
     }

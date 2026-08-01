@@ -38,8 +38,8 @@ extension CaptureController {
     ///
     /// The EDL next to it is a cut and carries the circled takes only; this is
     /// the LOG, and an assistant building a bin needs the rejected takes in it
-    /// too — that a take was NG is metadata about the day, not a reason to hide
-    /// it from the Avid. `signalFormat` is the only source of a frame size,
+    /// too — that a take was marked bad is metadata about the day, not a reason
+    /// to hide it from the Avid. `signalFormat` is the only source of a frame size,
     /// since a take carries timing but no raster; with no device attached the
     /// heading says CUSTOM rather than guessing.
     func exportALE() {

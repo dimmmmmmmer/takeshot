@@ -80,6 +80,29 @@ extension CaptureController {
         // swiftlint:enable optional_data_string_conversion
         return (meta, markers)
     }
+    /// Markers on clips that are not ours, back from the same sidecar.
+    ///
+    /// Restricted to the files the scan actually found, and to the ones the
+    /// session does not already know — the same two rules `restoreRanges` keeps,
+    /// and for the same reasons: a row for a clip that has been trashed must not
+    /// come back from a sidecar written before it went, and a scan runs every
+    /// minute, so it must never undo a marker the operator just placed.
+    ///
+    /// Such a clip has no timecode track we read, so its rows are offsets from
+    /// zero on both sides of the file (see `markerTimecode(of:startingAt:)`);
+    /// the duration is unknown here, which only means nothing is vetoed for
+    /// being past the end.
+    func restoreOtherMarkers(_ stored: [String: [TakeLogExporter.MarkerRow]],
+                             forFilesNamed names: Set<String>) {
+        for (name, rows) in stored
+        where names.contains(name) && otherMarkers[name] == nil {
+            let markers = TakeLogExporter.markers(rows, startingAt: nil,
+                                                  duration: 0)
+            guard !markers.isEmpty else { continue }
+            otherMarkers[name] = markers
+        }
+    }
+
     /// Loop ranges of the day, as saved next to the takes. Read separately from
     /// the ratings and markers above because the consumer is different — these go
     /// to the transport, not onto a `Take`.

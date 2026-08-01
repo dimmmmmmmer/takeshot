@@ -56,10 +56,23 @@ extension CaptureController {
     func exportTakeLog() {
         let takes = (takes + retiredTakes).sorted { $0.recordedAt < $1.recordedAt }
         let root = destinationRoot
+        // Markers on clips that are not ours go into the same sidecar under
+        // their file names. Snapshotted here with the takes, on the actor, so
+        // the queue below writes one consistent picture of the folder.
+        //
+        // A name that is now a take's is dropped rather than written twice: the
+        // sidecar is keyed by name and the reader merges every row under one, so
+        // a file that arrived as foreign and was later adopted (a TakeShot
+        // recording copied in from another folder carries our tag) would
+        // otherwise put its old rows onto the take as well.
+        let takeNames = Set(takes.map { $0.url.lastPathComponent })
+        let other = otherMarkers.filter {
+            !$0.value.isEmpty && !takeNames.contains($0.key)
+        }
         Self.takeLogQueue.async { [weak self] in
             do {
                 _ = try TakeLogExporter.write(takes: takes, toDirectory: root)
-                _ = try TakeLogExporter.writeMarkers(takes: takes,
+                _ = try TakeLogExporter.writeMarkers(takes: takes, other: other,
                                                      toDirectory: root)
             } catch {
                 // ratings/comments silently not persisting is a day-loss bug

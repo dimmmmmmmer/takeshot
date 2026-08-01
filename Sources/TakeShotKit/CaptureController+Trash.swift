@@ -45,6 +45,14 @@ extension CaptureController {
         otherFiles.removeAll { $0 == url }
         otherThumbnails[url] = nil
         otherDurations[url] = nil
+        otherPixelSizes[url] = nil
+        // A deliberate trash takes the clip's markers with it, exactly as
+        // `transport.forgetClip` above takes its in/out points. This is NOT the
+        // case a file merely leaving the folder is (the DIT moving footage to
+        // the archive): that one keeps its rows, like a retired take.
+        guard otherMarkers.removeValue(
+            forKey: Self.markerKey(url)) != nil else { return }
+        exportTakeLog()
     }
 
     /// Move one file to the Trash and let go of every reference the session

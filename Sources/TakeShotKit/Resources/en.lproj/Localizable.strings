@@ -118,7 +118,7 @@
 "good_take" = "Good take";
 "bad_take" = "Bad take";
 "clear_rating" = "Clear rating";
-"rating_help" = "Click cycles: none → good take (✓, Good Take in Resolve) → bad take (✕, NG in comments)";
+"rating_help" = "Click cycles: none → good take (✓, Good Take in Resolve) → bad take (✕, Bad in comments)";
 
 "postfix_label" = "POSTFIX";
 "hotkey_good" = "Good take (last)";
@@ -269,7 +269,7 @@
 "hotkey_marker" = "Add marker";
 "marker_add_help" = "Add a marker at the current position";
 "marker_added" = "Marker %@";
-"marker_only_takes" = "Markers work on takes only";
+"marker_needs_clip" = "Markers need a clip from the record folder — a photo has no timeline";
 
 "export_edl_help" = "Export selects EDL (good takes + markers)";
 "edl_no_good_takes" = "No good takes to export";
@@ -468,7 +468,7 @@
 "remote_stop" = "STOP";
 "remote_marker" = "MARKER";
 "remote_good" = "GOOD";
-"remote_bad" = "NG";
+"remote_bad" = "BAD";
 "remote_connected" = "Connected";
 "remote_connecting" = "Connecting...";
 "remote_disconnected" = "No connection";
@@ -510,3 +510,7 @@
 /* the last-take card on the remote page: poster frame, name, rating */
 "remote_last_take" = "Last take";
 "remote_poster_wait" = "No frame yet";
+
+/* Other content: the type glyph on a row and on a tile (owner item 27) */
+"other_type_video" = "Video";
+"other_type_photo" = "Photo";

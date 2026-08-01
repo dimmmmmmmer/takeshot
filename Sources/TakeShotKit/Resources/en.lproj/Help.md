@@ -55,11 +55,14 @@ adopted into the list.
 - A warning appears before recording if the next filename is already taken.
 - The record folder is picked in Settings or from the folder button. Video and
   photos in it that TakeShot did not record are listed separately as **Other
-  content** — they can be played, but they cannot carry ratings or markers.
+  content** — a video type glyph and its length, a photo glyph and its pixel
+  size. They can be played and they carry markers and in/out points like a take;
+  what they do not carry is a rating, which belongs to the Resolve metadata
+  table and that table is about takes.
 
 ## Review
 
-- **Rating**: click the circle on a take to cycle unmarked → good → NG →
+- **Rating**: click the circle on a take to cycle unmarked → good → bad →
   unmarked. Good takes are what the selects EDL exports.
 - **Comment**: free text per take, kept in the metadata CSV.
 - **Markers** flag a moment. In playback the marker lands under the playhead; while
@@ -107,10 +110,13 @@ Two sidecars are kept up to date in the record folder as you work:
 - `takeshot-log.csv` — the Resolve metadata table (File Name, Reel Name, Take,
   Good Take, Comments). Import it in Resolve with Media Pool → Import Metadata;
   it matches on the file name. The Good Take column is a checkbox, so it is
-  ticked for a good take, cleared for an NG take, and left EMPTY for a take
-  nobody has rated yet. NG takes also say so in Comments.
+  ticked for a good take, cleared for a bad take, and left EMPTY for a take
+  nobody has rated yet. Bad takes also say so in Comments, as `Bad` or
+  `Bad: your note`. Logs written by older builds spell that marker `NG`; both
+  spellings are read back, so an older day's ratings still come home.
 - `takeshot-markers.csv` — one row per marker: file name, timecode, color, note.
-  The timecode is the position; there is no separate seconds column.
+  The timecode is the position; there is no separate seconds column. Markers on
+  Other content live here too, positioned from the start of the clip.
 
 On demand, from the export menu in the takes panel or the File menu:
 
@@ -165,7 +171,7 @@ Every binding below can be changed in Settings → Hotkeys.
 
 - `⌘R` — start/stop recording
 - `⌘G` — good take (the last take)
-- `⌘B` — NG take (the last take)
+- `⌘B` — bad take (the last take)
 - `⌘S` — grab a still
 - `⌘E` — instant replay
 - `M` — add a marker
