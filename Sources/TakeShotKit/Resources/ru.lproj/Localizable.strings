@@ -118,7 +118,7 @@
 "good_take" = "Good take";
 "bad_take" = "Bad take";
 "clear_rating" = "Снять отметку";
-"rating_help" = "Клик по кругу: пусто → good take (✓, Good Take в Резолве) → bad take (✕, NG в комментариях)";
+"rating_help" = "Клик по кругу: пусто → good take (✓, Good Take в Резолве) → bad take (✕, Bad в комментариях)";
 
 "postfix_label" = "POSTFIX";
 "hotkey_good" = "Good take (последний)";
@@ -272,7 +272,7 @@
 "hotkey_marker" = "Поставить маркер";
 "marker_add_help" = "Маркер на текущей позиции";
 "marker_added" = "Маркер %@";
-"marker_only_takes" = "Маркеры работают только на тейках";
+"marker_needs_clip" = "Маркер ставится на клип из папки записи — у фото нет таймлайна";
 
 "export_edl_help" = "Экспорт EDL селектов (хорошие тейки + маркеры)";
 "edl_no_good_takes" = "Нет хороших тейков для экспорта";
@@ -516,3 +516,7 @@
 /* the last-take card on the remote page: poster frame, name, rating */
 "remote_last_take" = "Последний дубль";
 "remote_poster_wait" = "Кадра ещё нет";
+
+/* Other content: the type glyph on a row and on a tile (owner item 27) */
+"other_type_video" = "Видео";
+"other_type_photo" = "Фото";

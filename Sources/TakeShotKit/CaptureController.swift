@@ -56,6 +56,17 @@ final class CaptureController: ObservableObject {
     @Published var otherThumbnails: [URL: NSImage] = [:]
     /// Video durations in Other content (seconds).
     @Published var otherDurations: [URL: Double] = [:]
+    /// Pixel size of the stills in Other content — what a photo shows where a
+    /// video shows its length, so the two are told apart at a glance.
+    @Published var otherPixelSizes: [URL: CGSize] = [:]
+    /// Markers on clips that are not takes, keyed by FILE NAME.
+    ///
+    /// Keyed like `TransportModel.rangesByFile` and for the same reason: the
+    /// sidecar beside the footage is keyed by name, and these clips have no
+    /// `Take` to hang anything off. A take's markers stay on the take — they are
+    /// part of what the EDL, the ALE and the shift report are built from — so
+    /// this is the second half of one store, not a replacement for the first.
+    @Published var otherMarkers: [String: [TakeMarker]] = [:]
     /// Sticky alarm: recording-integrity problems (writer failure, disk low,
     /// lost takes) must NOT vanish after five seconds like a toast. Cleared
     /// by the operator or by the next successful take start.

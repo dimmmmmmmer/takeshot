@@ -71,7 +71,7 @@ struct ModelShiftReportTests {
         #expect(body.contains("Cam B"))
         #expect(body.contains("3 takes"))
         #expect(body.contains("1 good"))
-        #expect(body.contains("1 NG"))
+        #expect(body.contains("1 bad"))
         // 30 + 30 + 5 seconds of footage
         #expect(body.contains("0:01:05"))
     }
@@ -113,7 +113,7 @@ struct ModelShiftReportTests {
             take(1, rating: .good), take(2, rating: .bad), take(3),
         ]))
         #expect(body.contains("GOOD"))
-        #expect(body.contains("NG"))
+        #expect(body.contains("BAD"))
     }
 
     /// Comments and markers are why the report exists at all — they are the only

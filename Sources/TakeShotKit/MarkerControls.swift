@@ -21,6 +21,19 @@ struct MarkerButton: View {
     /// so the two read as the same control.
     static let swatchSize: CGFloat = 11
 
+    /// The tint the marker NAVIGATION wears — the two chevrons and the count.
+    ///
+    /// Those three were a hard-coded orange, which is the palette's first entry:
+    /// it said "orange marker" over a bar full of markers that were not orange,
+    /// and against the transport's material it read as the dim, disabled version
+    /// of a control that is not disabled. They are chrome, not content — the
+    /// flag and the swatch beside them are what carry a marker's color — so they
+    /// take the operator's accent, which is white until somebody changes it.
+    /// That is the same white `PlayerChrome`'s plate puts on everything it holds.
+    static func navigationTint(_ controller: CaptureController) -> Color {
+        controller.accentColor
+    }
+
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var showList = false
@@ -59,7 +72,7 @@ struct MarkerButton: View {
             } label: {
                 Image(systemName: "chevron.backward.2")
                     .font(.system(size: 9))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Self.navigationTint(controller))
             }
             .buttonStyle(.plain)
             .help(L("marker_prev_help"))
@@ -69,7 +82,7 @@ struct MarkerButton: View {
             } label: {
                 Text("\(controller.playbackMarkers.count)")
                     .font(.caption2.monospacedDigit().bold())
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Self.navigationTint(controller))
             }
             .buttonStyle(.plain)
             .help(L("marker_list_help"))
@@ -82,7 +95,7 @@ struct MarkerButton: View {
             } label: {
                 Image(systemName: "chevron.forward.2")
                     .font(.system(size: 9))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Self.navigationTint(controller))
             }
             .buttonStyle(.plain)
             .help(L("marker_next_help"))

@@ -107,7 +107,7 @@ public struct Take: Identifiable, Equatable, Sendable {
     // Review state. Not initializer parameters, because none of it is known
     // when a take is recorded — the operator adds it afterwards and it is
     // persisted to the sidecars rather than the file.
-    public var rating: TakeRating = .none   // in CSV — Good Take + NG marker
+    public var rating: TakeRating = .none   // in CSV — Good Take + Bad marker
     public var comment: String = ""         // in CSV — Comments column
     public var markers: [TakeMarker] = []   // flagged moments (sidecar CSV)
 

@@ -49,32 +49,63 @@ extension TakeLogExporter {
 
     static let markersHeader = "File Name,Timecode,Color,Note"
 
-    public static func markersCSV(takes: [Take]) -> String {
+    /// The whole sidecar: the takes' markers, then the markers of everything
+    /// else in the record folder.
+    ///
+    /// `other` is keyed by FILE NAME, which is the key this file has always
+    /// used — the loop-range sidecar next door is the same shape for the same
+    /// reason. It exists because the marker UI is in the transport, the
+    /// transport runs for any clip the operator opens, and a clip that landed in
+    /// the folder from a card is a clip somebody wants to flag a moment in. Such
+    /// a file has no `Take` and no start timecode of its own, so its positions
+    /// are offsets from zero (see `markerTimecode(of:startingAt:)`).
+    ///
+    /// Its rows are written in file-name order so that two runs over the same
+    /// marks produce the same file — a sidecar that reshuffles itself on every
+    /// write is noise in the DIT's rsync log. The takes keep their own order,
+    /// which is the shooting order.
+    public static func markersCSV(takes: [Take],
+                                  other: [String: [TakeMarker]] = [:]) -> String {
         var lines = [markersHeader]
         for take in takes {
             for marker in take.markers {
-                lines.append([
-                    escape(take.url.lastPathComponent),
-                    escape(markerTimecode(of: marker, in: take)),
-                    escape(marker.color),
-                    escape(flattened(marker.note)),
-                ].joined(separator: ","))
+                lines.append(markerRow(marker, named: take.url.lastPathComponent,
+                                       startingAt: take.startTimecode))
+            }
+        }
+        for name in other.keys.sorted() {
+            for marker in other[name] ?? [] {
+                lines.append(markerRow(marker, named: name, startingAt: nil))
             }
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
+    private static func markerRow(_ marker: TakeMarker, named name: String,
+                                  startingAt start: Timecode?) -> String {
+        [
+            escape(name),
+            escape(markerTimecode(of: marker, startingAt: start)),
+            escape(marker.color),
+            escape(flattened(marker.note)),
+        ].joined(separator: ",")
+    }
+
     /// Write markers to `directory/takeshot-markers.csv` (removed when empty).
     @discardableResult
-    public static func writeMarkers(takes: [Take], toDirectory directory: URL) throws -> URL {
+    public static func writeMarkers(takes: [Take],
+                                    other: [String: [TakeMarker]] = [:],
+                                    toDirectory directory: URL) throws -> URL {
         let url = directory.appendingPathComponent(markersFileName)
-        if takes.allSatisfy({ $0.markers.isEmpty }) {
+        if takes.allSatisfy({ $0.markers.isEmpty }),
+           other.values.allSatisfy(\.isEmpty) {
             try? FileManager.default.removeItem(at: url)
             return url
         }
         try FileManager.default.createDirectory(at: directory,
                                                 withIntermediateDirectories: true)
-        try markersCSV(takes: takes).write(to: url, atomically: true, encoding: .utf8)
+        try markersCSV(takes: takes, other: other)
+            .write(to: url, atomically: true, encoding: .utf8)
         return url
     }
 

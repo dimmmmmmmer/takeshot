@@ -39,6 +39,10 @@ extension CaptureController {
         thumbnails.removeAll()
         otherThumbnails.removeAll()
         otherDurations.removeAll()
+        otherPixelSizes.removeAll()
+        // a new folder has its own markers sidecar; keeping the old folder's
+        // rows would write them into it on the next edit
+        otherMarkers.removeAll()
         scannedPaths.removeAll()
         selectedItems.removeAll()
         selectionAnchor = nil

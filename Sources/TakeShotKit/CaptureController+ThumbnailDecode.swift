@@ -15,34 +15,49 @@ import Foundation
 extension CaptureController {
     /// One Other-content preview, by format: stills decode straight, a
     /// CinemaDNG folder shows its middle frame, BRAW goes through the bridge,
-    /// everything else through AVAssetImageGenerator. The duration comes back
-    /// with it when the format knows it (Other content shows it in the cell).
-    nonisolated static func otherThumbnail(
-        for url: URL) async -> (image: NSImage?, duration: Double?) {
+    /// everything else through AVAssetImageGenerator.
+    nonisolated static func otherThumbnail(for url: URL) async -> OtherPreview {
         let ext = url.pathExtension.lowercased()
         if imageExtensions.contains(ext) {
-            return (imageThumbnail(at: url), nil)
+            let (image, pixels) = imageThumbnail(at: url)
+            return OtherPreview(image: image, pixelSize: pixels)
         }
         if isCinemaDNGFolder(url) {
             let frames = DNGSequenceSource.frameURLs(in: url)
             let middle = frames.dropFirst(frames.count / 2).first
-            return (middle.flatMap { imageThumbnail(at: $0) },
-                    Double(frames.count) / 24.0)
+            return OtherPreview(image: middle.flatMap { imageThumbnail(at: $0).image },
+                                duration: Double(frames.count) / 24.0)
         }
         if ext == "braw" {
-            return brawThumbnail(at: url)
+            let (image, duration) = brawThumbnail(at: url)
+            return OtherPreview(image: image, duration: duration)
         }
-        return await videoThumbnail(at: url)
+        let (image, duration) = await videoThumbnail(at: url)
+        return OtherPreview(image: image, duration: duration)
     }
     /// Thumbnail-sized decode: a full 24 MP still would pin ~100 MB in the cache.
-    nonisolated private static func imageThumbnail(at url: URL) -> NSImage? {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
-                  kCGImageSourceCreateThumbnailFromImageAlways: true,
-                  kCGImageSourceThumbnailMaxPixelSize: 256,
-              ] as CFDictionary) else { return nil }
-        return NSImage(cgImage: cg,
-                       size: NSSize(width: cg.width, height: cg.height))
+    ///
+    /// The pixel size comes from the file's PROPERTIES, not from the thumbnail
+    /// that was just decoded: the decode is capped at 256 px, so the image's own
+    /// size would report the cap back as the photo's resolution.
+    nonisolated private static func imageThumbnail(
+        at url: URL) -> (image: NSImage?, pixels: CGSize?) {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil)
+        else { return (nil, nil) }
+        var pixels: CGSize?
+        if let properties = CGImageSourceCopyPropertiesAtIndex(src, 0, nil)
+            as? [CFString: Any],
+           let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+           let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+           width > 0, height > 0 {
+            pixels = CGSize(width: width, height: height)
+        }
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 256,
+        ] as CFDictionary) else { return (nil, pixels) }
+        return (NSImage(cgImage: cg,
+                        size: NSSize(width: cg.width, height: cg.height)), pixels)
     }
     nonisolated private static func brawThumbnail(
         at url: URL) -> (image: NSImage?, duration: Double?) {
@@ -82,4 +97,18 @@ extension CaptureController {
         else { return nil }
         return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
+}
+
+/// What one Other-content decode produces: the preview, plus the single fact the
+/// panel shows beside the name. A clip answers with its length, a photo with its
+/// pixel size — which is also how the two are told apart at a glance (see
+/// `CaptureController.otherMetricText`).
+///
+/// At file scope rather than nested in `CaptureController`: everything that
+/// builds one is `nonisolated` and runs off the main actor, and a type nested in
+/// a `@MainActor` one is isolated to it.
+struct OtherPreview {
+    var image: NSImage?
+    var duration: Double?
+    var pixelSize: CGSize?
 }

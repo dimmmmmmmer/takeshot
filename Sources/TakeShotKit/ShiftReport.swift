@@ -116,7 +116,7 @@ private final class ReportPage {
                                (Int(total) / 60) % 60, Int(total) % 60)
         let cameraPart = camera.isEmpty ? "" : "   Cam \(camera)"
         draw("\(formatter.string(from: Date()))\(cameraPart)   "
-             + "\(takes.count) takes (\(good) good, \(bad) NG)   "
+             + "\(takes.count) takes (\(good) good, \(bad) bad)   "
              + "footage \(totalText)",
              x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
              font: bodyFont, color: .darkGray)
@@ -182,7 +182,7 @@ private final class ReportPage {
                  color: NSColor(calibratedRed: 0.1, green: 0.55, blue: 0.2,
                                 alpha: 1), offset: 2)
         case .bad:
-            draw("✕ NG", x: Self.xRating, width: 42, font: headFont,
+            draw("✕ BAD", x: Self.xRating, width: 42, font: headFont,
                  color: NSColor(calibratedRed: 0.75, green: 0.15, blue: 0.1,
                                 alpha: 1), offset: 2)
         case .none:

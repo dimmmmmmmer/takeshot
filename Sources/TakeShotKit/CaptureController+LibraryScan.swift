@@ -77,6 +77,11 @@ extension CaptureController {
         }
         adopt(restored)
         publish(foreign: foreign)
+        // Markers flagged on a foreign clip in an earlier session come back with
+        // it. Restricted to what this pass classified as foreign, so a row whose
+        // file is one of our takes cannot be adopted here as well as on the take.
+        restoreOtherMarkers(stored.markers,
+                            forFilesNamed: Set(foreign.map(\.lastPathComponent)))
         // In/out marked on a clip in an earlier session comes back with the clip.
         // This is the restart path: on launch the first scan is what discovers the
         // day's clips, and it is the only moment at which their ranges are known

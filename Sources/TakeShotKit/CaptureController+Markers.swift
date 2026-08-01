@@ -40,26 +40,31 @@ extension CaptureController {
 
     /// Flag the current moment: recording TC while recording, player position
     /// in playback. Lands in the takeshot-markers.csv sidecar (and EDL export).
+    ///
+    /// In review this works on ANY clip the record folder holds, not only on our
+    /// own takes. The marker controls sit in the transport, the transport runs
+    /// for whatever is loaded, and a clip copied off a card is exactly the kind
+    /// of thing somebody wants to flag a moment in — the operator pressing the
+    /// flag on one and getting an error toast was the report. What a foreign
+    /// clip has instead of a `Take` is a row in `otherMarkers` under its file
+    /// name; the sidecar has always been keyed that way (see
+    /// `CaptureController+MarkerList`).
     func addMarker() {
         if viewerMode == .playback, let url = playbackURL {
             // the same reading marker navigation and removal use — the engine
             // the position comes from is decided in one place
             let seconds = playbackPositionSeconds
-            let tcText = playbackTimecodeText
-            guard let index = takes.firstIndex(where: { $0.url == url }) else {
-                lastError = L("marker_only_takes")
+            guard playbackAcceptsMarkers else {
+                lastError = L("marker_needs_clip")
                 return
             }
+            let tcText = markerTimecodeText(at: seconds, of: url)
             // one marker per FRAME — close markers are legitimate for editing
-            let frameStep = 1.0 / max(1, playbackFPS)
-            guard !takes[index].markers.contains(
-                where: { abs($0.seconds - seconds) < frameStep * 0.6 })
-            else { return }
-            takes[index].markers.append(
+            guard appendPlaybackMarker(
                 TakeMarker(seconds: seconds, timecodeText: tcText,
-                           color: newMarkerColor))
-            takes[index].markers.sort { $0.seconds < $1.seconds }
-            exportTakeLog()
+                           color: newMarkerColor),
+                frameStep: 1.0 / max(1, playbackFPS))
+            else { return }
             noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
         } else if isRecording {
             let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
@@ -72,6 +77,28 @@ extension CaptureController {
                            color: newMarkerColor))
             noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
         }
+    }
+
+    /// The timecode text a marker placed at `seconds` is born with.
+    ///
+    /// A take gets what the player's own readout says — its start timecode is
+    /// known, is written into the sidecar, and is what the editor matches
+    /// against. A clip that is NOT a take gets an offset from its own zero,
+    /// derived exactly as the sidecar will derive it.
+    ///
+    /// The player badge may well be showing that clip's absolute camera
+    /// timecode; taking it would put a value in the list that the file cannot
+    /// hold — a non-take has no anchor stored anywhere, so its rows are offsets
+    /// (see `TakeLogExporter.markerTimecode(of:startingAt:)`). Written as the
+    /// camera's absolute time it would read back hours past the end of the clip,
+    /// and taken as-is only in memory it would silently become an offset the
+    /// first time the app was relaunched.
+    private func markerTimecodeText(at seconds: Double, of url: URL) -> String {
+        guard !takes.contains(where: { $0.url == url }) else {
+            return playbackTimecodeText
+        }
+        return TakeLogExporter.markerTimecode(of: TakeMarker(seconds: seconds),
+                                              startingAt: nil)
     }
 
     /// ⇧M: drop the marker under the playhead (±2 frames); while recording —

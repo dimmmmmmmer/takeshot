@@ -98,7 +98,7 @@ import Testing
             // Resolve reads the Good Take checkbox from this column
             #expect(csv.contains("A001C01.mov,001,1,true"))
             #expect(csv.contains("A001C02.mov,001,2,false"))
-            #expect(csv.contains("NG: boom in frame"))
+            #expect(csv.contains("Bad: boom in frame"))
         }
     }
 
