@@ -246,9 +246,16 @@ struct SettingsView: View {
         .padding(.top, 16) // under the window buttons: title bar hidden
         .padding([.horizontal, .bottom])
         .background(controller.appBackground.ignoresSafeArea())
+        // clicking empty space clears focus from text fields — the same escape
+        // hatch the main window has (ContentView); controls still take their
+        // own clicks first
+        .onTapGesture {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
         // Open with nothing focused: the project name is the first text field in
         // the Form, so AppKit handed it the keyboard and the first stray key
-        // renamed the show. Tab order is untouched.
+        // renamed the show. Tab order is untouched (and kept released across
+        // reopens — see InitialFocusKeeper).
         .releasesInitialFocus()
     }
 }

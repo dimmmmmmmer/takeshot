@@ -17,10 +17,13 @@ struct WindowReporter: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 
-    /// Calls back once, as soon as it has a window to report.
+    /// Calls back once per window it lands in. Not once ever: SwiftUI may hand
+    /// a kept-alive view tree a NEW window when a scene reopens, and a report
+    /// that never repeats leaves that window without whatever the callback was
+    /// supposed to do to it (its chrome, its focus keeper).
     final class ReporterView: NSView {
         private let report: (NSWindow) -> Void
-        private var reported = false
+        private weak var reportedWindow: NSWindow?
 
         init(report: @escaping (NSWindow) -> Void) {
             self.report = report
@@ -32,8 +35,8 @@ struct WindowReporter: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            guard !reported, let window else { return }
-            reported = true
+            guard let window, window !== reportedWindow else { return }
+            reportedWindow = window
             report(window)
         }
     }
@@ -93,6 +96,74 @@ enum WindowChrome {
     }
 }
 
+/// Keeps `releaseInitialFocus` in force for a window's whole LIFETIME.
+///
+/// The one-shot release at mount time is not enough, and that is exactly how
+/// the Settings focus steal came back (owner item 23 after item 28): clearing
+/// `initialFirstResponder` does not stick, because the hosting view
+/// recalculates the key-view loop on layout and AppKit re-aims the keyboard at
+/// the first text field EVERY time the window is made key with nothing
+/// focused — so the project name was selected again on every reopen.
+///
+/// So the release is re-run at the moment that matters: each time the window
+/// becomes key after having been closed (and once on its first key). Between
+/// close and reopen is the ONLY window of time it fires in — a window that
+/// merely lost key to the main window and got it back keeps whatever field the
+/// operator had focused, because re-arming happens on `willClose` alone.
+@MainActor
+final class InitialFocusKeeper {
+    /// One keeper per window, alive exactly as long as its window: the table
+    /// holds the keeper strongly and the window weakly, so a second install on
+    /// the same window (a remounted view tree) is a no-op instead of a second
+    /// set of observers.
+    private static let keepers =
+        NSMapTable<NSWindow, InitialFocusKeeper>.weakToStrongObjects()
+
+    static func install(on window: NSWindow) {
+        guard keepers.object(forKey: window) == nil else { return }
+        keepers.setObject(InitialFocusKeeper(window: window), forKey: window)
+    }
+
+    /// The next becoming-key is an OPEN, so the release must run. Armed at
+    /// birth (the first key event is the first open) and re-armed by every
+    /// close; disarmed by firing.
+    private var pendingRelease = true
+    private var observers: [NSObjectProtocol] = []
+
+    private init(window: NSWindow) {
+        // queue nil — the blocks run synchronously on the posting thread, and
+        // AppKit posts both of these from the main thread: the release happens
+        // BEFORE the key event that triggered it is followed by anything else
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: window, queue: nil) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, self.pendingRelease,
+                      let window = note.object as? NSWindow else { return }
+                self.pendingRelease = false
+                WindowChrome.releaseInitialFocus(of: window)
+                // …and again on the next turn: SwiftUI installs the field's
+                // focus after the window is already key
+                DispatchQueue.main.async {
+                    WindowChrome.releaseInitialFocus(of: window)
+                }
+            }
+        })
+        observers.append(center.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pendingRelease = true }
+        })
+    }
+
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+}
+
 extension View {
     /// Give this scene's window the app's own chrome, without waiting for it to
     /// become key (see `WindowChrome.makeMonolithic`).
@@ -107,13 +178,16 @@ extension View {
     ///
     /// Released on the next runloop turn as well as on mount: SwiftUI installs
     /// the window's first responder after the backing view lands, so clearing it
-    /// only once, at mount time, clears nothing.
+    /// only once, at mount time, clears nothing. And kept released across
+    /// reopens by `InitialFocusKeeper` — the mount-time pass alone is the fix
+    /// that regressed (see the keeper for why).
     func releasesInitialFocus() -> some View {
         background(WindowReporter { window in
             WindowChrome.releaseInitialFocus(of: window)
             DispatchQueue.main.async {
                 WindowChrome.releaseInitialFocus(of: window)
             }
+            InitialFocusKeeper.install(on: window)
         })
     }
 }

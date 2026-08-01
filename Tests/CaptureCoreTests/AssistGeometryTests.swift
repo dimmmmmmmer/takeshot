@@ -144,6 +144,77 @@ struct AssistGeometryTests {
         #expect(state.panX == 0 && state.panY == 0)
     }
 
+    // MARK: - anchored magnify (wheel and pinch zoom about the pointer)
+
+    /// The image point under `anchor` before the zoom, as a fraction of the
+    /// picture — and where that fraction lands after. Equal means the zoom
+    /// stayed centered on the pointer.
+    private func anchorDrift(_ state: ViewAssist, from before: ViewAssist,
+                             anchor: CGPoint) throws -> CGSize {
+        let placedBefore = try #require(before.placement(sourceSize: hd,
+                                                         in: viewport))
+        let u = (anchor.x - placedBefore.rect.minX) / placedBefore.rect.width
+        let v = (anchor.y - placedBefore.rect.minY) / placedBefore.rect.height
+        let placedAfter = try #require(state.placement(sourceSize: hd,
+                                                       in: viewport))
+        return CGSize(
+            width: placedAfter.rect.minX + u * placedAfter.rect.width - anchor.x,
+            height: placedAfter.rect.minY + v * placedAfter.rect.height - anchor.y)
+    }
+
+    /// A wheel tick over a detail zooms INTO that detail: the pixel under the
+    /// pointer stays under the pointer, zooming in and back out again.
+    @Test func anchoredMagnifyKeepsThePointUnderThePointer() throws {
+        let anchor = CGPoint(x: 900, y: 300)
+        for (start, factor) in [(2.0, 1.5), (1.0, 2.0), (3.0, 1 / 1.2)] {
+            let before = assist(punchIn: start)
+            var state = before
+            state.magnify(by: factor, at: anchor, sourceSize: hd, in: viewport)
+            #expect(abs(state.punchIn - start * factor) < 0.000_001)
+            let drift = try anchorDrift(state, from: before, anchor: anchor)
+            #expect(abs(drift.width) < 0.001 && abs(drift.height) < 0.001,
+                    "\(start)x·\(factor) drifted \(drift) under the pointer")
+        }
+    }
+
+    /// The anchor never wins against the clamps: past the magnification bounds
+    /// or the pan limit the picture pins to its edge instead of dragging
+    /// letterbox in — and zooming all the way back out recenters, exactly as
+    /// the un-anchored path does.
+    @Test func anchoredMagnifyRespectsTheClamps() {
+        var state = assist(punchIn: 2)
+        // the frame's top-left corner, well past what the pan limit can honor
+        for _ in 0..<10 {
+            state.magnify(by: 1.8, at: .zero, sourceSize: hd, in: viewport)
+        }
+        #expect(state.punchIn == ViewAssist.maxPunchIn)
+        let limit = state.panLimit
+        #expect(abs(state.panX) <= limit && abs(state.panY) <= limit)
+
+        state.magnify(by: 0.01, at: CGPoint(x: 900, y: 300),
+                      sourceSize: hd, in: viewport)
+        #expect(state.punchIn == ViewAssist.minPunchIn)
+        #expect(state.panX == 0 && state.panY == 0,
+                "zooming out left the picture parked off-center")
+
+        // nonsense factors change nothing (a bad event mid-stream)
+        state.setPunchIn(2)
+        let before = state
+        state.magnify(by: 0, at: .zero, sourceSize: hd, in: viewport)
+        state.magnify(by: .nan, at: .zero, sourceSize: hd, in: viewport)
+        #expect(state == before)
+    }
+
+    /// With nothing to place (no signal yet) the anchor is meaningless but the
+    /// zoom still has to work — the level changes, clamped, pan untouched.
+    @Test func anchoredMagnifyWithoutAPlacementStillZooms() {
+        var state = assist(punchIn: 2)
+        state.magnify(by: 2, at: CGPoint(x: 10, y: 10),
+                      sourceSize: .zero, in: viewport)
+        #expect(state.punchIn == 4)
+        #expect(state.panX == 0 && state.panY == 0)
+    }
+
     // MARK: - peaking stays on the picture
 
     /// R minus G per pixel of the assist output — the peaking overlay is red
@@ -205,5 +276,57 @@ struct AssistGeometryTests {
         let middleRow = lift[lift.count / 2]
         #expect((middleRow[14...17].max() ?? 0) > 20)
         #expect(middleRow[0] <= 2 && middleRow[middleRow.count - 1] <= 2)
+    }
+
+    /// RGBA bytes of an image, rendered exactly as `peakingLift` renders.
+    private func rendered(_ image: CIImage) -> [UInt8] {
+        let width = Int(image.extent.width)
+        let height = Int(image.extent.height)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        pixels.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            context.render(image, toBitmap: base, rowBytes: width * 4,
+                           bounds: image.extent, format: CIFormat.RGBA8,
+                           colorSpace: nil)
+        }
+        return pixels
+    }
+
+    /// The operator's peaking color reaches the pixels: over a gray source the
+    /// overlay is the ONLY thing that can move a channel away from its
+    /// neighbors, so per preset the channels its tint names must lift at the
+    /// edge and the others must not move at all.
+    @Test func peakingEdgesWearTheChosenColor() throws {
+        let extent = CGRect(x: 0, y: 0, width: 32, height: 18)
+        let dark = CIImage(color: CIColor(red: 0.1, green: 0.1, blue: 0.1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 16, height: 18))
+        let light = CIImage(color: CIColor(red: 0.9, green: 0.9, blue: 0.9))
+            .cropped(to: CGRect(x: 16, y: 0, width: 16, height: 18))
+        let split = dark.composited(over: light).cropped(to: extent)
+        let source = rendered(split)
+
+        let layer = MetalPreviewLayer()
+        for color in ViewAssist.PeakingColor.allCases {
+            var assist = ViewAssist()
+            assist.peakingOn = true
+            assist.peakingColor = color
+            let output = rendered(layer.applyAssist(split, assist: assist))
+
+            let tint = [color.components.red, color.components.green,
+                        color.components.blue]
+            for channel in 0..<3 {
+                let lift = stride(from: channel, to: output.count, by: 4)
+                    .map { Int(output[$0]) - Int(source[$0]) }
+                    .max() ?? 0
+                if tint[channel] == 1 {
+                    #expect(lift > 20,
+                            "\(color) never lit channel \(channel): \(lift)")
+                } else {
+                    #expect(lift <= 2,
+                            "\(color) bled into channel \(channel): \(lift)")
+                }
+            }
+        }
     }
 }

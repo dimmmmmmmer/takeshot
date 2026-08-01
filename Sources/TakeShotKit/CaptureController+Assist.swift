@@ -124,6 +124,18 @@ extension CaptureController {
         applyAssistPreview { $0.magnify(by: factor) }
     }
 
+    /// A pinch or a wheel tick anchored at the pointer: the image point under
+    /// `anchor` (view coordinates on a `viewport`-sized surface, y down) stays
+    /// put while the magnification changes around it — zooming lands on what
+    /// the pointer is over instead of the frame center.
+    func magnifyPunchIn(by factor: Double, at anchor: CGPoint,
+                        viewport: CGSize) {
+        applyAssistPreview {
+            $0.magnify(by: factor, at: anchor,
+                       sourceSize: displaySourceSize(), in: viewport)
+        }
+    }
+
     /// Pan the punched-in image by a distance in POINTS on a `viewport`-sized
     /// surface, in view coordinates (y down). Positive `delta` drags the picture
     /// right/down, the way a hand on the image would.

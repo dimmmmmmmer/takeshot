@@ -146,4 +146,63 @@ struct ViewWindowChromeTests {
         #expect(!WindowChrome.releaseInitialFocus(of: window))
         #expect(window.firstResponder === window)
     }
+
+    // MARK: - item 23: the keyboard stolen AGAIN, on reopen
+
+    /// The mount-time release alone is the fix that regressed: the hosting
+    /// view recalculates the key-view loop on layout, and AppKit re-aims the
+    /// keyboard at the first field every time the window is made key with
+    /// nothing focused — so Settings reopened onto the project name. The
+    /// keeper re-runs the release on the key event that follows every close,
+    /// and ONLY that one: a field the operator focused survives the window
+    /// merely losing key to another window and getting it back.
+    @Test func theKeeperReleasesOnOpenAndReopenButNotOnRefocus() throws {
+        let fixture = windowWithFields()
+        let (window, first) = (fixture.window, fixture.first)
+        InitialFocusKeeper.install(on: window)
+
+        // first open: AppKit hands the field the keyboard, the window keys
+        try #require(window.makeFirstResponder(first))
+        NotificationCenter.default.post(
+            name: NSWindow.didBecomeKeyNotification, object: window)
+        #expect(window.firstResponder === window,
+                "the first open kept a field focused")
+
+        // the operator clicks into a field, switches away and back: no close
+        // in between, so the field is theirs to keep
+        try #require(window.makeFirstResponder(first))
+        NotificationCenter.default.post(
+            name: NSWindow.didBecomeKeyNotification, object: window)
+        #expect(window.firstResponder !== window,
+                "coming back to the window took the operator's field away")
+
+        // close and reopen: the regression itself
+        NotificationCenter.default.post(
+            name: NSWindow.willCloseNotification, object: window)
+        try #require(window.makeFirstResponder(first))
+        NotificationCenter.default.post(
+            name: NSWindow.didBecomeKeyNotification, object: window)
+        #expect(window.firstResponder === window,
+                "reopening the window put focus back in the field")
+    }
+
+    /// A reopened scene can remount its view tree into the SAME window, which
+    /// installs the keeper again. That must be a no-op: a second, freshly
+    /// armed keeper would fire on the next key event and take a field the
+    /// operator had focused.
+    @Test func reinstallingTheKeeperDoesNotRearmTheRelease() throws {
+        let fixture = windowWithFields()
+        let (window, first) = (fixture.window, fixture.first)
+        InitialFocusKeeper.install(on: window)
+        NotificationCenter.default.post(
+            name: NSWindow.didBecomeKeyNotification, object: window) // disarms
+
+        InitialFocusKeeper.install(on: window) // the remount
+
+        try #require(window.makeFirstResponder(first))
+        NotificationCenter.default.post(
+            name: NSWindow.didBecomeKeyNotification, object: window)
+        #expect(window.firstResponder !== window,
+                "the second install re-armed the release")
+    }
 }

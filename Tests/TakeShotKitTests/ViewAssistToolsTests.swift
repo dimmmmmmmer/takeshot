@@ -214,6 +214,7 @@ struct ViewAssistToolsTests {
             CaptureSettings.self, from: Data(legacy.utf8))
         #expect(settings.legendSize == nil)
         #expect(settings.legendCorner == nil)
+        #expect(settings.peakingColor == nil)
         #expect(settings.safeActionPercentEffective == 93)
         #expect(settings.safeTitlePercentEffective == 90)
         // SMPTE RP 218 / EBU R 95, and the ORDER is the point: title safe is
@@ -252,5 +253,34 @@ struct ViewAssistToolsTests {
             #expect(probe.controller.legendSize == .medium)
             #expect(probe.controller.legendCorner == .bottomTrailing)
         }
+    }
+
+    /// The peaking color is a crew convention like the marker color, so it
+    /// persists the same way: by raw value, nil at the default so old builds
+    /// still decode the blob.
+    @Test func thePeakingColorPersists() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.setAssist { $0.peakingColor = .green }
+            #expect(probe.controller.settings.peakingColor == "green")
+            #expect(CaptureSettings.loaded(from: probe.store).peakingColor
+                    == "green")
+            // …and the renderer sees it at once: the color rides ViewAssist,
+            // which is what every surface is fed (see setViewAssist fan-out)
+            #expect(probe.controller.liveAssist.peakingColor == .green)
+
+            probe.controller.setAssist { $0.peakingColor = .red }
+            #expect(probe.controller.settings.peakingColor == nil)
+        }
+    }
+
+    /// And it comes BACK at launch — with garbage in a hand-edited blob
+    /// falling back to red rather than to a crash in the picker.
+    @Test func thePeakingColorIsRestoredAtStartup() async throws {
+        try await ViewProbe.run(configure: { $0.peakingColor = "yellow" }, { probe in
+            #expect(probe.controller.assist.peakingColor == .yellow)
+        })
+        try await ViewProbe.run(configure: { $0.peakingColor = "vermilion" }, { probe in
+            #expect(probe.controller.assist.peakingColor == .red)
+        })
     }
 }

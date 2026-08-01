@@ -135,6 +135,53 @@ struct ViewAssistZoomTests {
         }
     }
 
+    /// A wheel tick or a pinch zooms about the POINTER (owner item 4): the
+    /// image point under the anchor stays under it, and the whole thing runs
+    /// through the draft path — per-event publishes are the lag this
+    /// mechanism exists to prevent.
+    @Test func anchoredZoomKeepsThePointerPointStill() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            let viewport = CGSize(width: 1200, height: 700)
+            controller.punchInLevel = 2
+            controller.commitAssistDraft()
+
+            let anchor = CGPoint(x: 900, y: 250)
+            let source = controller.displaySourceSize()
+            let before = try #require(controller.liveAssist.placement(
+                sourceSize: source, in: viewport))
+            let u = (anchor.x - before.rect.minX) / before.rect.width
+            let v = (anchor.y - before.rect.minY) / before.rect.height
+
+            controller.magnifyPunchIn(by: 1.5, at: anchor, viewport: viewport)
+            controller.assistPersistTask?.cancel() // mid-gesture
+
+            #expect(abs(controller.liveAssist.punchIn - 3) < 0.000_001)
+            let after = try #require(controller.liveAssist.placement(
+                sourceSize: source, in: viewport))
+            #expect(abs(after.rect.minX + u * after.rect.width - anchor.x)
+                    < 0.001, "the anchored point slid horizontally")
+            #expect(abs(after.rect.minY + v * after.rect.height - anchor.y)
+                    < 0.001, "the anchored point slid vertically")
+            // still a draft: nothing published per wheel tick
+            #expect(controller.assist.punchIn == 2)
+        }
+    }
+
+    /// The ⌘-scroll step math: symmetric (+N points exactly undoes −N), a
+    /// wheel notch is worth more than a point of trackpad swipe, and an
+    /// OS-accelerated notch cannot jump more than 2x in one event.
+    @Test func theWheelZoomStepIsSymmetricAndCapped() {
+        let up = PunchEventView.wheelZoomFactor(deltaY: 3, precise: false)
+        let down = PunchEventView.wheelZoomFactor(deltaY: -3, precise: false)
+        #expect(up > 1 && down < 1)
+        #expect(abs(up * down - 1) < 0.000_001, "zoom in ≠ zoom back out")
+        #expect(PunchEventView.wheelZoomFactor(deltaY: 1, precise: false)
+                > PunchEventView.wheelZoomFactor(deltaY: 1, precise: true))
+        #expect(PunchEventView.wheelZoomFactor(deltaY: 500, precise: true) == 2)
+        #expect(PunchEventView.wheelZoomFactor(deltaY: -500, precise: true) == 0.5)
+    }
+
     /// Drag-to-pan did not work in the fullscreen player at all: the gesture was
     /// attached to the windowed viewer surface, and the fullscreen windows host
     /// mounts of their own. It lives on `playerTopBadges` now — the one mount all

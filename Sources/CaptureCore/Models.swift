@@ -270,6 +270,10 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Which corner of the player the legend sits in
     /// (`AssistLegendCorner`); nil — bottom trailing.
     public var legendCorner: String?
+    /// Focus-peaking overlay color (`ViewAssist.PeakingColor` raw value);
+    /// nil — red. A crew convention like the marker color, so it survives a
+    /// relaunch. Optional, like every added field, so old saved JSON decodes.
+    public var peakingColor: String?
     /// Action-safe area as a percentage of the frame; nil — 93.
     ///
     /// 93/90 and in that order, per SMPTE RP 218 (EBU R 95 states the same two
