@@ -20,7 +20,7 @@ struct AssistMenu: View {
             Image(systemName: Self.symbol)
                 .font(.system(size: 13))
                 .foregroundStyle(
-                    controller.liveAssist != ViewAssist()
+                    controller.liveAssist.isShowingAid
                         || controller.settings.framelineRatio != nil
                         || controller.settings.safeAreasOn == true
                     ? controller.accentColor : .white)
@@ -75,6 +75,8 @@ private struct AssistControlRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             exposureRows
+            Divider()
+            ChromaKeyRows()
             Divider()
             framingRows
             Divider()

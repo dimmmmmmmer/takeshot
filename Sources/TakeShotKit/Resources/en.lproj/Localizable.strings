@@ -653,3 +653,27 @@
 "multiview_title" = "TakeShot Multiview";
 "multiview_rec" = "REC";
 "multiview_wait" = "No video yet";
+
+/* === chroma key preview: a display-only key over the live signal === */
+"chroma_key" = "Chroma key";
+"chroma_screen" = "Screen";
+"chroma_pick_help" = "Eyedropper: click the picture to take the screen color from it";
+"chroma_pick_hint" = "Click the screen in the picture — eyedropper again to cancel";
+"chroma_picked" = "Screen color %@";
+"chroma_pick_failed" = "No frame to pick a color from";
+"chroma_preset_green" = "Green screen";
+"chroma_preset_blue" = "Blue screen";
+"chroma_tolerance" = "Tolerance";
+"chroma_softness" = "Softness";
+"chroma_spill" = "Spill";
+"chroma_background" = "Background";
+"chroma_bg_checker" = "Checkerboard";
+"chroma_bg_color" = "Color";
+"chroma_bg_image" = "Image";
+"chroma_bg_matte" = "Matte";
+"chroma_background_color" = "Background color";
+"chroma_choose_image" = "Image...";
+"chroma_no_image" = "no image";
+"chroma_clear_image" = "Remove the background image";
+"chroma_image_failed" = "The background image could not be read";
+"chroma_preview_only" = "Preview and monitor output only — takes, grabs and exports keep the original picture.";

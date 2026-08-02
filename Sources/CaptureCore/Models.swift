@@ -292,6 +292,30 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// nil — red. A crew convention like the marker color, so it survives a
     /// relaunch. Optional, like every added field, so old saved JSON decodes.
     public var peakingColor: String?
+    // MARK: - chroma key (see ChromaKey and the assist popover)
+
+    /// The screen color the keyer is set to, "#RRGGBB"; nil — digital green.
+    ///
+    /// The PARAMETERS persist and the on/off state deliberately does not: a
+    /// keyed picture that comes back by itself after a relaunch is a preview
+    /// nobody asked for, on a stage that may not even be a green one today.
+    /// The dial-in is the expensive part and that is what survives — same
+    /// treatment the zebra threshold and the peaking color get.
+    public var chromaKeyColorHex: String?
+    /// Chroma distance that counts as screen; nil — the default similarity.
+    public var chromaKeyTolerance: Double?
+    /// Feather above the tolerance; nil — the default softness.
+    public var chromaKeySoftness: Double?
+    /// Spill suppression 0…1; nil — the default.
+    public var chromaKeySpill: Double?
+    /// What shows through the key (`ChromaKey.Background` raw value);
+    /// nil — the checkerboard.
+    public var chromaKeyBackground: String?
+    /// The solid background color, "#RRGGBB"; nil — black.
+    public var chromaKeyBackgroundHex: String?
+    /// The plate that shows through the key, as a file path; nil — none.
+    public var chromaKeyBackgroundImagePath: String?
+
     /// Action-safe area as a percentage of the frame; nil — 93.
     ///
     /// 93/90 and in that order, per SMPTE RP 218 (EBU R 95 states the same two

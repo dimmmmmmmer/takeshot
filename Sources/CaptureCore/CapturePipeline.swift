@@ -155,6 +155,18 @@ public final class CapturePipeline: @unchecked Sendable {
 
     var fittedReferenceCache: FittedReference?
 
+    // Chroma key (see `+ChromaKey`): a display-stage tool, one stage after the
+    // viewing LUT and one before the sinks. The keyer is confined to
+    // `displayQueue`; the settings the main actor hands over cross under
+    // `chromaLock`, which is deliberately not the capture queue — the whole
+    // point of this feature is that it never touches per-frame capture work.
+    let chromaKeyer = ChromaKeyer()
+    let chromaLock = NSLock()
+    var storedChromaKey = ChromaKey()
+    /// Frames that reached the display queue past their own frame interval and
+    /// were shown WITHOUT the key rather than held up (guarded by chromaLock).
+    var chromaLateDropCount = 0
+
     var monitorEnabled = false
     var monitorFormatCache: CMAudioFormatDescription?
 
@@ -337,5 +349,10 @@ public final class CapturePipeline: @unchecked Sendable {
     let presentLock = NSLock()
     var pendingPresent: CVPixelBuffer?
     var presentScheduled = false
+    /// When the pending frame stops being worth extra work, in uptime
+    /// nanoseconds: one frame interval after it was handed over. The display
+    /// stage drops the chroma key on a frame that is already past it rather
+    /// than dropping the frame (see `chromaKeyed`).
+    var pendingDeadline: UInt64 = 0
 
 }

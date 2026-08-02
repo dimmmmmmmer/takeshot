@@ -70,6 +70,32 @@ between live, playback and RAW. Do not mount separate per-mode surfaces there �
 their letterboxes round independently and the image shifts by a pixel when the
 operator switches modes.
 
+### Which stage a display-only tool belongs in
+
+There are two of them and they answer different questions.
+
+- Inside the render, per sink (`MetalPreviewLayer+Assist`): false color, EL
+  Zone, zebra, peaking, desqueeze, punch-in. These are what the OPERATOR reads
+  off the glass, and they reach every surface that draws a frame — including
+  the fullscreen and external-display windows, which are sinks like any other.
+  They do **not** reach the DeckLink playout, which mirrors the pipeline's
+  display frame rather than a layer.
+- In the pipeline's display stage (`CapturePipeline+ChromaKey`, and the pinned
+  reference compare beside it): the chroma key. It is composited into the frame
+  that the sinks, the hardware monitor and the phone multiview all receive, one
+  step after the viewing LUT — which is the rule the LUT itself follows.
+  Everything that is a deliverable is taken from earlier in the frame path:
+  the writer gets the record buffer, the still grab the leveled one, the scopes
+  the wire. That ordering is why a keyed monitor cannot end up in a take, and
+  `ChromaKeyIntegrityTests` is what keeps it that way.
+
+The chroma key runs on the display queue and never on the capture queue, it
+costs one `Bool` read per frame while it is off, and a frame that reaches the
+stage older than one frame interval is shown WITHOUT the key rather than held
+up for it. Measured on an M-series laptop, release build: 1.5 ms a frame at
+1080p, 3.3 ms at UHD, plus 0.5 ms on any frame where a control moved and the
+32³ cube had to be rebuilt.
+
 ## Color pipeline
 
 RGB 4:4:4 sources are captured as 10-bit `r210` by default. `TenBitConverter`
