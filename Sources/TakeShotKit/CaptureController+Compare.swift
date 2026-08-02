@@ -18,8 +18,23 @@ extension CaptureController {
         case off        // playback only
         case wipe       // wipe
         case blend      // overlay with transparency
+        case difference // per-pixel |A−B|, amplified by differenceGain
         case sideBySide // side by side
         var id: String { rawValue }
+    }
+
+    /// Difference-mode gain. A 2-code framing error is invisible at ×1, so the
+    /// difference is amplified the way DaVinci and Nuke amplify theirs — and
+    /// the steps are the values, not an index, so the compositor takes the raw
+    /// value directly.
+    enum DifferenceGain: Int, CaseIterable, Identifiable {
+        case x1 = 1
+        case x4 = 4
+        case x16 = 16
+        var id: Int { rawValue }
+        /// The segment label. A multiplication sign and a number are symbols,
+        /// not words — the same rule as the "%" beside the blend field.
+        var label: String { "×\(rawValue)" }
     }
 
     /// Compare wipe direction.
@@ -162,6 +177,8 @@ extension CaptureController {
         case .blend: return .blend(opacity: blendOpacity)
         case .wipe: return .wipe(axis: Self.compareAxis(wipeOrientation),
                                  position: wipePosition)
+        case .difference:
+            return .difference(gain: Double(differenceGain.rawValue))
         }
     }
 
@@ -176,5 +193,19 @@ extension CaptureController {
         let mode = compareComposite()
         playbackTap.setCompare(mode)
         pipeline.setPreviewCompare(referencePinned ? mode : .off)
+    }
+
+    /// The compare mode and the difference gain survive a relaunch, like the
+    /// rest of the operator's choices. Stored as nil at the defaults — the
+    /// same convention as every other added settings field, so old saved JSON
+    /// keeps decoding — and guarded so a didSet that changed nothing does not
+    /// re-encode the whole settings blob.
+    func persistCompareSettings() {
+        let mode = compareMode == .off ? nil : compareMode.rawValue
+        let gain = differenceGain == .x1 ? nil : differenceGain.rawValue
+        guard settings.compareMode != mode
+            || settings.compareDifferenceGain != gain else { return }
+        settings.compareMode = mode
+        settings.compareDifferenceGain = gain
     }
 }

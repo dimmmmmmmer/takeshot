@@ -47,6 +47,10 @@ extension CaptureController {
         pipelineRelevant.remoteEnabled = settings.remoteEnabled
         pipelineRelevant.remotePort = settings.remotePort
         pipelineRelevant.remotePIN = settings.remotePIN
+        // the compare mode/gain reach the pipeline through pushCompare, not
+        // through the capture config — a mode click must not rebuild capture
+        pipelineRelevant.compareMode = settings.compareMode
+        pipelineRelevant.compareDifferenceGain = settings.compareDifferenceGain
         guard pipelineRelevant != settings else { return }
         pushConfig()
     }

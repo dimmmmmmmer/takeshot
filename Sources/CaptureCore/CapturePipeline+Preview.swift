@@ -81,12 +81,24 @@ extension CapturePipeline {
         defer { latestPreviewLock.unlock() }
         return latestPreview
     }
+    /// The same frame at the pre-LUT stage (levels applied, preview LUT not) —
+    /// pulled by the playback tap for the DIFFERENCE compare, which measures
+    /// code values rather than showing the operator's look. Thread-safe.
+    public func currentPreLUTPreviewBuffer() -> CVPixelBuffer? {
+        latestPreviewLock.lock()
+        defer { latestPreviewLock.unlock() }
+        return latestPreLUT
+    }
     /// `pixelBuffer` is the clean processed frame (compare provider, pinning);
-    /// `screen` is what the preview sinks draw (may carry the reference wipe).
+    /// `preLUT` the same frame before the preview LUT (difference measures on
+    /// it); `screen` is what the preview sinks draw (may carry the reference
+    /// wipe).
     func enqueuePreview(pixelBuffer: CVPixelBuffer,
+                        preLUT: CVPixelBuffer? = nil,
                         screen: CVPixelBuffer? = nil) {
         latestPreviewLock.lock()
         latestPreview = pixelBuffer
+        latestPreLUT = preLUT ?? pixelBuffer
         latestPreviewLock.unlock()
         let presented = screen ?? pixelBuffer
         presentLock.lock()

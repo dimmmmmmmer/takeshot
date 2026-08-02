@@ -82,9 +82,12 @@ adopted into the list.
 
 ## Compare
 
-Wipe, blend or side-by-side. The other side is either the live signal or another
-take with a synced transport; a still can be pinned as the reference instead.
-Drag the seam to move a wipe.
+Wipe, blend, difference or side-by-side. The other side is either the live
+signal or another take with a synced transport; a still can be pinned as the
+reference instead. Drag the seam to move a wipe. Difference shows per-pixel
+|A−B| — identical framing reads as pure black — with a ×1/×4/×16 gain to make
+small mismatches visible; it measures the clean signal, so the preview LUT
+never bends it.
 
 ## Scopes and assists
 

@@ -13,17 +13,27 @@ import Foundation
 /// `+Compare` of its own — this is that feature's pipeline half.
 extension CapturePipeline {
     /// Pin an already-decoded frame (deep copy — pooled buffers get reused).
+    /// The buffer arrives clean (a playback frame or a still off disk, neither
+    /// carries the preview LUT), so the one copy serves both compare stages.
     public func setPreviewReference(buffer: CVPixelBuffer?) {
         queue.async {
-            self.previewReference = buffer.flatMap { self.deepCopy($0) }
+            let copy = buffer.flatMap { self.deepCopy($0) }
+            self.previewReference = copy
+            self.previewReferencePreLUT = copy
         }
     }
 
-    /// Pin the current live frame.
+    /// Pin the current live frame — as the operator sees it (for wipe/blend)
+    /// AND at the pre-LUT stage (for difference). With no preview LUT the two
+    /// are the same frame, and one copy serves both.
     public func pinReferenceFromCurrentFrame() {
         queue.async {
             guard let current = self.currentPreviewBuffer() else { return }
-            self.previewReference = self.deepCopy(current)
+            let copy = self.deepCopy(current)
+            self.previewReference = copy
+            let preLUT = self.currentPreLUTPreviewBuffer()
+            self.previewReferencePreLUT = (preLUT == nil || preLUT === current)
+                ? copy : preLUT.flatMap { self.deepCopy($0) }
         }
     }
 
@@ -35,15 +45,32 @@ extension CapturePipeline {
 
     /// pinned reference compare — on screen only (scopes/stills/the
     /// compare-provider frame stay clean)
-    func presentProcessedFrame(_ displayBuffer: CVPixelBuffer) {
+    ///
+    /// Wipe and blend composite the DISPLAY frame — both halves carry the
+    /// preview LUT, which is what makes the seam fair. Difference is the
+    /// opposite contract: it is a measurement of the signal, so it reads the
+    /// pre-LUT frame against the pre-LUT pin and its output bypasses the
+    /// viewing LUT entirely — a look bent over |A−B| would bend the very
+    /// numbers the operator is checking.
+    func presentProcessedFrame(_ displayBuffer: CVPixelBuffer,
+                               preLUT: CVPixelBuffer) {
         var screenBuffer = displayBuffer
-        if let reference = previewReference {
-            if case .off = previewCompare {} else {
+        switch previewCompare {
+        case .off:
+            break
+        case .difference:
+            if let reference = previewReferencePreLUT {
+                screenBuffer = compositeReference(reference, over: preLUT)
+                    ?? displayBuffer
+            }
+        case .blend, .wipe:
+            if let reference = previewReference {
                 screenBuffer = compositeReference(reference, over: displayBuffer)
                     ?? displayBuffer
             }
         }
-        enqueuePreview(pixelBuffer: displayBuffer, screen: screenBuffer)
+        enqueuePreview(pixelBuffer: displayBuffer, preLUT: preLUT,
+                       screen: screenBuffer)
     }
 
     private func deepCopy(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {

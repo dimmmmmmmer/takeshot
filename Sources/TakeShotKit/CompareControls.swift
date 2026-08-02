@@ -17,6 +17,8 @@ struct CompareControls: View {
                     .tag(CaptureController.CompareMode.off)
                 Text(L("compare_wipe")).tag(CaptureController.CompareMode.wipe)
                 Text(L("compare_blend")).tag(CaptureController.CompareMode.blend)
+                Text(L("compare_difference"))
+                    .tag(CaptureController.CompareMode.difference)
                 Text(L("compare_side")).tag(CaptureController.CompareMode.sideBySide)
             }
             .pickerStyle(.segmented)
@@ -41,8 +43,31 @@ struct CompareControls: View {
                 .labelsHidden()
                 .controlSize(.mini)
             }
+            // The wipe has its seam and the blend its slider; difference has
+            // its gain — the same control family, in the same slot. No wipe
+            // position anywhere near it: a seam through |A−B| means nothing.
+            if controller.compareMode == .difference {
+                Picker("", selection: $controller.differenceGain) {
+                    ForEach(CaptureController.DifferenceGain.allCases) { gain in
+                        Text(gain.label).tag(gain)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .labelsHidden()
+                .controlSize(.mini)
+                .help(L("difference_gain_help"))
+            }
+            // The B-side menu belongs to an ENGAGED compare (it names the other
+            // half), so the resting bar goes without it: with five modes in the
+            // picker, the off state has to fit the centered slot between the
+            // badge groups, and the menu is what it can spare — engaging any
+            // mode brings it back, and picking a B clip arms the wipe anyway.
+            // It stays while a B clip is chosen with the compare off, so the
+            // choice never becomes invisible.
             if controller.viewerMode == .playback,
-               controller.rawPlayer == nil {
+               controller.rawPlayer == nil,
+               controller.compareMode != .off || controller.compareClipURL != nil {
                 Menu {
                     Button {
                         controller.compareClipURL = nil

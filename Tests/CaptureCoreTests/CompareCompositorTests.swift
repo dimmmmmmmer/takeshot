@@ -1,4 +1,5 @@
 import CoreImage
+import CoreVideo
 import Foundation
 import Testing
 @testable import CaptureCore
@@ -91,6 +92,96 @@ struct CompareCompositorTests {
         let sample = pixel(middle, x: side / 2, y: side / 2)
         #expect(sample.r > 40 && sample.r < 215)
         #expect(sample.b > 40 && sample.b < 215)
+    }
+
+    // MARK: - difference
+
+    /// An image whose 8-bit code is chosen per COLUMN, entering the compositor
+    /// with color management off — exactly how every real caller hands frames
+    /// in. `solid()` above would not do here: a `CIColor` carries sRGB, the
+    /// context linearizes it on entry, and a 10-code delta comes back as 7.
+    /// The wipe/blend tests get away with it because 0 and 255 are fixed
+    /// points of that conversion; the difference tests measure code values, so
+    /// their fixtures have to enter as code values.
+    private func codes(_ level: (Int) -> UInt8) -> CIImage {
+        var out: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, side, side,
+                            kCVPixelFormatType_32BGRA,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]]
+                                as CFDictionary, &out)
+        guard let out else { fatalError("could not allocate a test frame") }
+        CVPixelBufferLockBaseAddress(out, [])
+        if let base = CVPixelBufferGetBaseAddress(out) {
+            let rowBytes = CVPixelBufferGetBytesPerRow(out)
+            let bytes = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<side {
+                for x in 0..<side {
+                    let value = level(x)
+                    let pixel = bytes + y * rowBytes + x * 4
+                    pixel[0] = value
+                    pixel[1] = value
+                    pixel[2] = value
+                    pixel[3] = 255 // opaque: 32BGRA reads as premultiplied
+                }
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(out, [])
+        return CIImage(cvPixelBuffer: out, options: [.colorSpace: NSNull()])
+    }
+
+    /// A flat gray at an exact 8-bit code (see `codes`).
+    private func gray(_ code: UInt8) -> CIImage {
+        codes { _ in code }
+    }
+
+    /// Identical inputs must come out EXACT black at every gain — the tool
+    /// answers "did anything move", and any bias would light up a frame that
+    /// matches perfectly. The gain makes this stricter, not looser: a residue
+    /// invisible at ×1 is 16 times as visible at ×16.
+    @Test func identicalImagesDifferenceToExactBlackAtEveryGain() {
+        let image = gray(100)
+        for gain in [1.0, 4.0, 16.0] {
+            let composed = CompareCompositor.compose(
+                front: image, back: image, mode: .difference(gain: gain))
+            for (x, y) in [(1, 1), (side / 2, side / 2), (side - 2, side - 2)] {
+                let sample = pixel(composed, x: x, y: y)
+                #expect(sample.r == 0 && sample.g == 0 && sample.b == 0,
+                        "×\(gain) at (\(x),\(y)): \(sample.r)/\(sample.g)/\(sample.b)")
+            }
+        }
+    }
+
+    /// A constructed pair — B is A + 10 codes on the left half and A + 20 on
+    /// the right — measured through every gain step. ×1 reads the deltas back
+    /// exactly; ×4 multiplies them exactly; ×16 pushes 20 codes past white and
+    /// must clamp to 255 while 10 codes (160) still measures, not saturates.
+    @Test func differenceMeasuresExactlyAndGainClampsAtTheCeiling() {
+        let base = gray(100)
+        let other = codes { x in x < side / 2 ? 110 : 120 }
+
+        for (gain, expectLeft, expectRight) in [(1.0, 10, 20), (4.0, 40, 80),
+                                                (16.0, 160, 255)] {
+            let composed = CompareCompositor.compose(
+                front: base, back: other, mode: .difference(gain: gain))
+            let l = pixel(composed, x: 4, y: side / 2)
+            let r = pixel(composed, x: side - 4, y: side / 2)
+            #expect(l.r == expectLeft && l.g == expectLeft && l.b == expectLeft,
+                    "×\(gain) left: \(l.r)/\(l.g)/\(l.b), expected \(expectLeft)")
+            #expect(r.r == expectRight && r.g == expectRight && r.b == expectRight,
+                    "×\(gain) right: \(r.r)/\(r.g)/\(r.b), expected \(expectRight)")
+        }
+    }
+
+    /// |A−B| has no direction — swapping the halves must not change a single
+    /// value, which is what lets every caller ignore which image is "front".
+    @Test func differenceIsSymmetric() {
+        let one = CompareCompositor.compose(front: gray(100), back: gray(140),
+                                            mode: .difference(gain: 1))
+        let two = CompareCompositor.compose(front: gray(140), back: gray(100),
+                                            mode: .difference(gain: 1))
+        let a = pixel(one, x: side / 2, y: side / 2)
+        let b = pixel(two, x: side / 2, y: side / 2)
+        #expect(a.r == 40 && b.r == 40, "asymmetric: \(a.r) vs \(b.r)")
     }
 
     /// A stretched image would make the geometric comparison meaningless, so a

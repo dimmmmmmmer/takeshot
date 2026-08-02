@@ -51,10 +51,11 @@ struct ViewPlayerBadgeTests {
     /// narrowest window the app allows.
     ///
     /// Only that state is held to the budget. Engage a compare mode and the bar
-    /// grows past it (309pt for wipe, 386 for wipe in playback, 460 for blend)
-    /// in ENGLISH as much as in Russian — it is over budget by construction, and
-    /// what stops that from covering the format badge is the chrome being one
-    /// row that compresses. See `badgeOverlayNeverStretchesThePlayer`.
+    /// grows past it (the wipe picker, the blend slider, the difference gain and
+    /// the B-side menu all join the row) in ENGLISH as much as in Russian — it
+    /// is over budget by construction, and what stops that from covering the
+    /// format badge is the chrome being one row that compresses. See
+    /// `badgeOverlayNeverStretchesThePlayer`.
     @Test func compareBarFitsTheCenteredSlotWhileCompareIsOff() async throws {
         try await ViewProbe.run { probe in
             let center = ViewBudget.playerCenterWidth
@@ -83,7 +84,7 @@ struct ViewPlayerBadgeTests {
             probe.controller.viewerMode = .playback
 
             for mode in [CaptureController.CompareMode.off, .wipe,
-                         .blend, .sideBySide] {
+                         .blend, .difference, .sideBySide] {
                 probe.controller.compareMode = mode
                 let ideal = probe.fittingSizes { CompareControls() }
                 #expect(ideal.ru == ideal.en,
@@ -93,16 +94,35 @@ struct ViewPlayerBadgeTests {
     }
 
     /// Record mode swaps the first segment for "Source"/"Сигнал" and Cyrillic
-    /// costs ~5pt per segment there — 20 across the control. That is inside the
-    /// slot, and this pins how much room is left before it is not.
+    /// costs ~5pt per segment there — 25 across the five-segment control. That
+    /// is inside the slot, and this pins how much room is left before it is not.
     @Test func recordCompareBarStaysCloseToTheEnglishWidth() async throws {
         try await ViewProbe.run { probe in
             probe.controller.referencePinned = true
             let ideal = probe.fittingSizes { CompareControls() }
             let surcharge = ideal.ru.width - ideal.en.width
             #expect(surcharge >= 0)
-            #expect(surcharge <= 24,
+            #expect(surcharge <= 30,
                     "Russian costs \(surcharge)pt on the record compare bar")
+        }
+    }
+
+    /// Engaging difference brings the gain picker into the row — the bar has
+    /// to grow, by the same amount in both languages: ×1/×4/×16 are symbols,
+    /// not words, so the picker itself owes no translation surcharge.
+    @Test func theDifferenceBarBringsItsGainPicker() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.viewerMode = .playback
+
+            let resting = probe.fittingSizes { CompareControls() }
+            probe.controller.compareMode = .difference
+            let engaged = probe.fittingSizes { CompareControls() }
+
+            #expect(engaged.en.width > resting.en.width,
+                    "the gain picker never joined the difference bar")
+            #expect(engaged.ru == engaged.en,
+                    "the difference bar differs by language: \(engaged)")
         }
     }
 
@@ -204,7 +224,7 @@ struct ViewPlayerBadgeTests {
             probe.controller.referencePinned = true
 
             for mode in [CaptureController.CompareMode.off, .wipe,
-                         .blend, .sideBySide] {
+                         .blend, .difference, .sideBySide] {
                 probe.controller.compareMode = mode
                 let ideal = probe.fittingSizes { CompareControls() }
                 #expect(ideal.en.height == PlayerChrome.height,

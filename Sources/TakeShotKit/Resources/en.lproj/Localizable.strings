@@ -129,6 +129,10 @@
 "compare_off" = "Playback";
 "compare_wipe" = "Wipe";
 "compare_blend" = "Blend";
+/* Kept short on purpose: a segmented control charges every segment the width
+   of the widest label, and this row has to fit the centered player slot. */
+"compare_difference" = "Diff";
+"difference_gain_help" = "Difference gain: amplify |A−B| so small mismatches become visible";
 "compare_side" = "A|B";
 "playback_speed" = "Playback speed";
 "playback_loop" = "Loop";

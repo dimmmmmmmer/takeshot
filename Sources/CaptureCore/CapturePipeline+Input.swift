@@ -66,6 +66,7 @@ extension CapturePipeline {
         // no stale frame for later sink registrations or the compare
         latestPreviewLock.lock()
         latestPreview = nil
+        latestPreLUT = nil
         latestPreviewLock.unlock()
         displayQueue.async {
             self.displaySinks.clearToBlack()

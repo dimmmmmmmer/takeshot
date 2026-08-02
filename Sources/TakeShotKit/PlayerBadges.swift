@@ -137,9 +137,10 @@ struct PlayerTopBadgesModifier: ViewModifier {
     ///
     /// They used to be three independent corner overlays, and overlays do not
     /// know about each other: the centered group slid straight under the badges
-    /// on either side as soon as it grew. It grows a lot — 306pt for the compare
-    /// bar in playback, 386 with the wipe picker, 460 in blend mode, against the
-    /// ~340pt the badge groups leave at the narrowest window. One HStack with two
+    /// on either side as soon as it grew. It grows a lot — an engaged compare
+    /// (the wipe picker, the blend slider, the difference gain) runs the bar
+    /// well past the ~340pt the badge groups leave at the narrowest window.
+    /// One HStack with two
     /// equally flexible side zones keeps the group exactly centered (both zones
     /// always get the same width) and makes overlap impossible: a group too wide
     /// for the row compresses instead of covering the format badge.

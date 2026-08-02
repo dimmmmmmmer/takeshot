@@ -33,6 +33,7 @@ extension CaptureController {
         live.volume = storedVolume
         live.lutIntensity = stored.lutIntensity ?? 1
         monitorOn = stored.monitorEnabled ?? true
+        restoreCompare(from: stored)
         assist.desqueeze = stored.desqueezeFactor ?? 1
         assist.peakingColor = stored.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
@@ -70,6 +71,12 @@ extension CaptureController {
         playbackTap.setLiveBufferProvider { [pipeline] in
             pipeline.currentPreviewBuffer()
         }
+        // …and the pre-LUT stage of the same frame, for the difference
+        // compare: it measures code values, so its back half must not carry
+        // the preview LUT the display buffer does.
+        playbackTap.setLivePreLUTBufferProvider { [pipeline] in
+            pipeline.currentPreLUTPreviewBuffer()
+        }
         refreshDevices() // selecting the first device starts capture via didSet
         startFolderSync()
         refreshNameCollision()
@@ -94,5 +101,15 @@ extension CaptureController {
         // find the laptop after a relaunch. Off by default; nothing binds a port
         // until it is switched on once.
         startRemoteIfEnabled()
+    }
+
+    /// The compare mode and its gain come back like every other working
+    /// preference. Gain first: each didSet pushes the whole compare state, and
+    /// the mode's push should already carry the restored gain.
+    private func restoreCompare(from stored: CaptureSettings) {
+        differenceGain = stored.compareDifferenceGain
+            .flatMap(DifferenceGain.init(rawValue:)) ?? .x1
+        compareMode = stored.compareMode
+            .flatMap(CompareMode.init(rawValue:)) ?? .off
     }
 }

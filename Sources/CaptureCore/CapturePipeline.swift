@@ -130,6 +130,12 @@ public final class CapturePipeline: @unchecked Sendable {
     // Pinned reference compare (all access on queue): the reference frame is
     // composited over the live preview with the shared wipe/blend math.
     var previewReference: CVPixelBuffer?
+    /// The same pin, taken at the pre-LUT stage. Wipe/blend compare what the
+    /// operator SEES (both halves carry the preview LUT), but difference is a
+    /// measurement: it reads this copy against the pre-LUT live frame, so an
+    /// active viewing LUT cannot bend the numbers (see `presentProcessedFrame`).
+    /// Identical to `previewReference` whenever no preview LUT is applied.
+    var previewReferencePreLUT: CVPixelBuffer?
     var previewCompare: CompareCompositor.Mode = .off
     let comparePool = PixelBufferPool()
 
@@ -310,6 +316,11 @@ public final class CapturePipeline: @unchecked Sendable {
 
     let latestPreviewLock = NSLock()
     var latestPreview: CVPixelBuffer?
+    /// The same frame BEFORE the preview LUT (the leveled display buffer) —
+    /// what the difference compare measures on, and what a pin taken while a
+    /// LUT is active stores as its pre-LUT copy. The very same buffer as
+    /// `latestPreview` while no preview LUT is applied.
+    var latestPreLUT: CVPixelBuffer?
 
     // Presentation runs on its own queue with latest-wins coalescing:
     // MetalPreviewLayer.present renders + waits on the GPU and nextDrawable()

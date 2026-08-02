@@ -132,6 +132,10 @@
    the player, where the long form is the widest label of the row and pushes
    the whole compare bar into the badges beside it. */
 "compare_blend" = "Микс";
+/* "Дифф" and not "Разница" for the same reason as "Микс" above: every
+   segment pays the width of the widest label. */
+"compare_difference" = "Дифф";
+"difference_gain_help" = "Усиление разницы: |A−B| умножается, чтобы мелкие расхождения стали видны";
 "compare_side" = "A|B";
 "playback_speed" = "Скорость воспроизведения";
 "playback_loop" = "Зациклить";

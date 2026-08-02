@@ -70,8 +70,10 @@ import Testing
             controller.playbackURL = root.appendingPathComponent("a.mov")
             #expect(controller.showsWipeHandle)
 
-            // the other compare modes have no seam to drag
-            for mode in [CaptureController.CompareMode.off, .blend, .sideBySide] {
+            // the other compare modes have no seam to drag — difference
+            // included: a wipe position through |A−B| means nothing
+            for mode in [CaptureController.CompareMode.off, .blend, .difference,
+                         .sideBySide] {
                 controller.compareMode = mode
                 #expect(!controller.showsWipeHandle, "\(mode.rawValue) is not a wipe")
             }

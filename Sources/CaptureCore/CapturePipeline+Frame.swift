@@ -43,7 +43,7 @@ extension CapturePipeline {
         }
         analyzeScopes(wire: leveled.scopeSource, display: products.display)
         serveFrameGrab(record: products.record, leveled: leveled.display)
-        presentProcessedFrame(products.display)
+        presentProcessedFrame(products.display, preLUT: leveled.display)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
     }
 
