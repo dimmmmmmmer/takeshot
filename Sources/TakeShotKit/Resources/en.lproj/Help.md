@@ -183,23 +183,24 @@ verified by re-reading it from the destination disk. The source's own folder
 name is preserved inside every destination. A file that does not verify is
 reported; a run is never reported as done with an error inside it.
 
-Every copy gets its own **report**: a picture to hand over and the same thing
-as plain text to search, both stating the files, bytes, times, speed and the
-one verdict line. Beside it goes the **checksum list** (`ascmhl/…mhl`, an ASC
-MHL manifest) — the receipt Silverstack, OffShoot and `ascmhl` re-verify the
-disk against months later.
+Every copy gets its own **report**, in the root of the copy: a picture to hand
+over and the same thing as plain text to search, both stating the files, bytes,
+times, speed and the one verdict line. The **checksum list** (`ascmhl/…mhl`, an
+ASC MHL manifest) sits in its own folder beside it, which is where Silverstack,
+OffShoot and `ascmhl` look for it when they re-verify the disk months later.
 
 The sheet can be closed while a copy runs. The job carries on and reports
 itself in the takes-panel strip — percentage, the file in flight and Stop —
 and clicking that strip brings the sheet back. The sheet also opens showing the
 last twenty offloads made from this Mac, so "have I already copied this card?"
 has an answer before anything is picked; clicking a row shows that copy in the
-Finder.
+Finder. Under it are the cards the app has stopped asking about — copied, or
+answered with Never — and any of them can be cleared to be asked about again.
 
-**Check a disk copy…** (next to Offload in the takes-panel strip and in the
-File menu) is the reverse: point it at a copy made earlier and it re-reads
-every file against the newest checksum list on that disk, reporting what
-verified, what mismatched, what is missing and what is a stray.
+**Check a disk copy…** (in the offload sheet's own footer and in the File menu)
+is the reverse: point it at a copy made earlier and it re-reads every file
+against the newest checksum list on that disk, reporting what verified, what
+mismatched, what is missing and what is a stray.
 
 This is for originals. TakeShot's own takes do not need it — they are not the
 original media.

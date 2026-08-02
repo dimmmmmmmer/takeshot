@@ -75,6 +75,54 @@ import Testing
             == OffloadFixtures.card.reduce(0) { $0 + Int64($1.bytes) })
     }
 
+    /// Where the offload leaves each of its three files, and that the verify
+    /// tool still finds every one of them (owner item 24).
+    ///
+    /// The receipt — the .txt and the picture — is in the ROOT of the copy,
+    /// not in a folder of its own: it is read by a person, who should find it
+    /// by opening the copy. The manifest is the one artifact that IS in a
+    /// subfolder, `ascmhl/`, because that is where the ASC MHL spec puts it and
+    /// where every tool that re-verifies the disk looks. Both halves are held
+    /// here, because moving either one silently breaks the other end: a receipt
+    /// anywhere but the root is reported as a stray by `isReportFile`, and a
+    /// manifest anywhere but `ascmhl/` is not found by the reader at all.
+    @Test func theReceiptIsInTheRootAndTheManifestInItsSpecFolder() throws {
+        let card = try OffloadFixtures.scratch("receipt-card")
+        try OffloadFixtures.makeCard(at: card)
+        let disk = try OffloadFixtures.scratch("receipt-disk")
+        defer {
+            try? FileManager.default.removeItem(at: card)
+            try? FileManager.default.removeItem(at: disk)
+        }
+
+        let run = OffloadEngine.run(OffloadPlan(
+            source: card, destinations: [disk],
+            chunkBytes: OffloadFixtures.chunk))
+
+        let result = try #require(run.destinations.first)
+        let summary = try #require(result.summaryURL)
+        let picture = try #require(result.imageURL)
+        let manifest = try #require(result.manifestURL)
+        #expect(summary.deletingLastPathComponent().path == disk.path,
+                "the summary landed in \(summary.deletingLastPathComponent())")
+        #expect(picture.deletingLastPathComponent().path == disk.path,
+                "the picture landed in \(picture.deletingLastPathComponent())")
+        #expect(manifest.deletingLastPathComponent().lastPathComponent
+            == OffloadMHL.folderName)
+        #expect(manifest.deletingLastPathComponent()
+            .deletingLastPathComponent().path == disk.path)
+
+        // …and the verify tool reads the manifest out of `ascmhl/` and does not
+        // mistake either half of the receipt for litter left on the disk.
+        let report = try verify(disk)
+        #expect(report.manifest == manifest)
+        #expect(report.isIntact)
+        #expect(report.extra.isEmpty,
+                "reported as strays: \(report.extra.joined(separator: ", "))")
+        #expect(OffloadVerify.isReportFile(summary.lastPathComponent))
+        #expect(OffloadVerify.isReportFile(picture.lastPathComponent))
+    }
+
     /// The algorithm comes from the manifest, not from a default: a disk
     /// offloaded under a SHA-256 delivery spec has to verify months later
     /// without anybody remembering which box was ticked that day.

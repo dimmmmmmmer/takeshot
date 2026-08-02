@@ -91,12 +91,18 @@ final class OffloadedCardLedger: ObservableObject {
                                   date: date))
     }
 
-    /// Start offering every card again. The way back from a mis-clicked Never,
+    /// Start offering THIS card again. The way back from a mis-clicked Never,
     /// which is otherwise permanent — and a permanent, invisible, unreachable
     /// decision taken by one click is not a decision an app should be able to
     /// impose.
-    func clear() {
-        cards = []
+    ///
+    /// One card at a time rather than a "forget everything" button (owner item
+    /// 18): the operator who wants to be asked about one disk again should not
+    /// have to re-answer for every card of the shoot to get it. Nothing calls
+    /// this directly — `CaptureController.forgetOffloadedCard` does, because
+    /// the session's own copy of the decision has to go with it.
+    func forget(_ key: String) {
+        cards.removeAll { $0.key == key }
         save()
     }
 

@@ -171,7 +171,7 @@ struct SettingsView: View {
                         controller.settings.preRollSeconds = nil
                     }), range: 0...100)
             }
-            OffloadSettingsSection(ledger: controller.offloadedCards)
+            OffloadSettingsSection()
             RemoteSettingsSection()
             Section(L("settings_hotkeys")) {
                 // fifteen rows of label-plus-button used to live here and made

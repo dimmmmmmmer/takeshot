@@ -454,8 +454,8 @@
 "offload_add_dest" = "Добавить диск";
 "offload_remove_dest" = "Убрать этот диск";
 "offload_no_dest" = "Добавьте хотя бы один диск.";
-"offload_dest_target_help" = "Внутри выбранной папки будет создана папка с именем карты.";
-"offload_reports_hint" = "Каждая копия перечитывается с диска и сверяется. В каждую кладётся свой отчёт — картинкой и текстом — и список контрольных сумм, по которому копию перепроверят на постпродакшене.";
+"offload_space_free" = "%@ свободно из %@";
+"offload_space_used" = "%@ занято из %@";
 "offload_error_duplicate" = "Один и тот же диск указан дважды.";
 "offload_error_nested" = "Папка назначения находится внутри копируемой карты.";
 "offload_start" = "Начать офлоад";
@@ -470,7 +470,6 @@
 "offload_result_failed" = "Сбой: %@";
 "offload_result_cancelled" = "Остановлено: сверено %d из %d файлов";
 "offload_report_saved" = "Отчёт: %@";
-"offload_report_help" = "Лежит в самой копии, рядом со списком контрольных сумм (ASC MHL), по которому её перепроверят на постпродакшене.";
 "offload_open_dest" = "Показать в Finder";
 "offload_source_problems" = "Не удалось прочитать файлов с карты: %d";
 "offload_done_multi" = "Офлоад сверен: файлов — %d, копий — %d";
@@ -542,11 +541,9 @@
 "remote_no_signal" = "Нет сигнала";
 "remote_idle" = "Ожидание";
 /* проверка копии на диске по списку контрольных сумм от офлоада */
-"offload_menu_group" = "Копирование и проверка";
 "offload_menu_copy" = "Офлоад карты...";
 "verify_menu" = "Проверить копию на диске...";
 "verify_title" = "Проверка копии на диске";
-"verify_hint" = "Каждый файл, попавший в список контрольных сумм этой копии, читается с диска обратно и пересчитывается заново. Так же копию проверят на постпродакшене — проверка отвечает, осталась ли она такой, какой была записана.";
 "verify_disk_label" = "Диск";
 "verify_pick_disk" = "Папка, куда TakeShot делал офлоад (папка самой копии)";
 "verify_disk_prompt" = "Проверить эту";
@@ -556,7 +553,6 @@
 "verify_cancelling" = "Завершаю текущий файл...";
 "verify_cancel_run" = "Остановить";
 "verify_checked_against" = "Сверено по: %@ (%@)";
-"verify_checked_against_help" = "Список контрольных сумм копии — манифест ASC MHL, его же читают Silverstack, OffShoot и ascmhl.";
 "verify_result_damaged" = "Испорчено или потеряно %d из %d файлов — этот диск не удалять";
 "verify_result_cancelled" = "Остановлено: проверено %d из %d файлов";
 "verify_list_mismatched" = "Не сошлись с контрольными суммами (%d)";
@@ -659,8 +655,8 @@
 "offload_report_stat_speed" = "СКОРОСТЬ";
 "offload_report_stat_files_fmt" = "%d из %d";
 "offload_report_problems" = "ПРОБЛЕМЫ";
-"offload_report_footer_fmt" = "%@ %@ на %@   ·   контрольные суммы %@   ·   квитанция: %@";
-"offload_report_receipt_missing" = "не записана";
+"offload_report_footer_fmt" = "%@ %@ на %@   ·   %@   ·   список сумм: %@";
+"offload_report_checksum_list_missing" = "не записан";
 "offload_report_dest_failed_fmt" = "Назначение отказало — %@";
 "offload_report_more_problems_fmt" = "…и ещё %d — см. сводку .txt";
 "offload_report_hours_unit" = "ч";
@@ -735,17 +731,16 @@
 "card_reason_structure" = "На ней найдена папка камеры %@.";
 "card_reason_video" = "Съёмный диск с видеофайлами (%d) — проверьте, что это нужный.";
 "card_offer_offload" = "Оффлоад";
-"card_offer_offload_help" = "Открыть окно оффлоада с этой картой как источником. Копирование начнётся только по вашей команде.";
 "card_offer_ignore" = "Не сейчас";
-"card_offer_ignore_help" = "Пропустить. Карту предложат снова при следующем запуске.";
 "card_offer_never" = "Никогда";
-"card_offer_never_help" = "Больше не предлагать этот диск. Отменяется в настройках.";
 "settings_offload" = "Оффлоад";
 "offer_mounted_cards" = "Предлагать оффлоад подключённых карт";
 "offer_mounted_cards_hint" = "Подключённая карта поднимает строку в панели дублей. Ничего не копируется без вашей команды.";
+/* карты, о которых приложение больше не спрашивает — список в окне офлоада */
 "cards_remembered" = "Карты, с которыми уже разобрались";
 "cards_forget" = "Спрашивать снова";
-"cards_remembered_hint" = "Скопированные карты и диски с отметкой «Никогда». Карту, на которую снимали после, предложат снова.";
+"cards_kind_offloaded" = "скопирована";
+"cards_kind_never" = "не спрашивать";
 /* === chroma key preview: a display-only key over the live signal === */
 "chroma_key" = "Хромакей";
 "chroma_screen" = "Фон";

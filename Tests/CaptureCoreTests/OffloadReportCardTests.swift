@@ -76,17 +76,23 @@ struct OffloadReportCardTests {
         }
     }
 
-    /// Where the machine-readable receipt is, relative to the copy — and that a
+    /// Where the checksum list is, relative to the copy — and that a
     /// destination which never got one SAYS so. The footer is a fixed line, so a
-    /// missing manifest would otherwise read as a blank after "receipt:", which
+    /// missing manifest would otherwise read as a blank after the label, which
     /// somebody scanning the card takes for "there, and I did not read it".
-    @Test func theFooterNamesTheReceiptOrStatesThatThereIsNone() {
+    ///
+    /// It is named as the checksum list and never as the receipt (owner item
+    /// 24): the receipt is this card and the .txt beside it, both in the root
+    /// of the copy, and a footer calling the `ascmhl/` file the receipt read as
+    /// though the thing being handed over had been filed away in a subfolder.
+    @Test func theFooterNamesTheChecksumListOrStatesThatThereIsNone() {
         var orphan = result()
         orphan.manifestURL = nil
 
-        #expect(OffloadReportCard.receipt(result())
+        #expect(OffloadReportCard.checksumList(result())
             == "ascmhl/0001_CARD_A001.mhl")
-        #expect(OffloadReportCard.receipt(orphan) == "not written")
+        #expect(OffloadReportCard.checksumList(orphan) == "not written")
+        #expect(!OffloadReportLabels.english.footerFormat.contains("receipt"))
     }
 
     /// The card has one line per number: the exact byte count `OffloadFormat`
@@ -95,11 +101,11 @@ struct OffloadReportCardTests {
     @Test func theStatsDropTheExactByteCountTheTextKeeps() {
         #expect(OffloadFormat.bytes(64_236_544)
             == "64.2 MB (64,236,544 bytes)")
-        #expect(OffloadReportCard.shortBytes(64_236_544) == "64.2 MB")
-        #expect(OffloadReportCard.shortBytes(2_000_000_000_000) == "2.0 TB")
+        #expect(OffloadFormat.shortBytes(64_236_544) == "64.2 MB")
+        #expect(OffloadFormat.shortBytes(2_000_000_000_000) == "2.0 TB")
         // …and a count small enough to be quoted in bytes is left alone rather
         // than truncated to nothing.
-        #expect(OffloadReportCard.shortBytes(512) == "512 bytes")
+        #expect(OffloadFormat.shortBytes(512) == "512 bytes")
     }
 
     /// A disk that lost a folder produces hundreds of problem lines, and a card

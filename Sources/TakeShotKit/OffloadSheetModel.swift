@@ -98,6 +98,20 @@ final class OffloadSheetModel: ObservableObject {
         rows.compactMap { destinationFolder(for: $0) }
     }
 
+    /// What "show it in the Finder" opens for a row (owner item 23): the copy's
+    /// own folder once it exists, and the disk the operator chose before that.
+    ///
+    /// A run that has not started has no card folder yet, and a button that
+    /// does nothing until the copy is under way is one the operator stops
+    /// trying. During and after the run it opens the copy itself, which is
+    /// what they are actually asking to look at.
+    func finderTarget(for row: Row) -> URL {
+        guard let folder = destinationFolder(for: row),
+              FileManager.default.fileExists(atPath: folder.path)
+        else { return row.url }
+        return folder
+    }
+
     // MARK: - validation
 
     /// Why the run cannot start, in the operator's language. nil means either

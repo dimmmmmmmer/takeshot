@@ -66,8 +66,9 @@ import Testing
 
     // MARK: - the sheet
 
-    /// Freshly opened, before the first file has been hashed: the title, the
-    /// paragraph explaining what the check is, and the disk path.
+    /// Freshly opened, before the first file has been hashed: the title and the
+    /// disk, as a tile of the same family the offload sheet's two ends are
+    /// drawn in (owner item 22).
     @Test func theOpeningSheetFitsItsOwnFixedWidth() async throws {
         try await ViewProbe.run { probe in
             probe.controller.verify.root = self.disk("DAILIES_SSD_1/CARD_A001")

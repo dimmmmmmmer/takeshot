@@ -111,22 +111,20 @@ public enum OffloadReportCard {
                       all.count - CardMetrics.maxProblemLines)]
     }
 
-    /// Where the machine-readable receipt is, relative to the copy — or that it
+    /// Where the machine's checksum list is, relative to the copy — or that it
     /// is not there, which the card has to state rather than leave blank.
-    static func receipt(_ result: OffloadDestinationResult,
-                        labels: OffloadReportLabels = .english) -> String {
+    ///
+    /// Named as the checksum list and never as "the receipt" (owner item 24).
+    /// The receipt is THIS card and the .txt beside it, both in the root of the
+    /// copy; the `ascmhl/` path below is the machine's file, and a footer that
+    /// called it the receipt read as though the thing the operator was handed
+    /// had been filed away in a subfolder.
+    static func checksumList(_ result: OffloadDestinationResult,
+                             labels: OffloadReportLabels = .english) -> String {
         guard let manifest = result.manifestURL else {
-            return labels.receiptMissing
+            return labels.checksumListMissing
         }
         return OffloadEngine.relativePath(of: manifest, under: result.url)
-    }
-
-    /// `32.0 GB`, without the exact byte count `OffloadFormat.bytes` appends.
-    /// The card has one line per number and the parenthesis is for the .txt,
-    /// where somebody is checking arithmetic rather than reading a headline.
-    static func shortBytes(_ count: Int64) -> String {
-        let full = OffloadFormat.bytes(count)
-        return full.components(separatedBy: " (").first ?? full
     }
 
     // MARK: - the bitmap

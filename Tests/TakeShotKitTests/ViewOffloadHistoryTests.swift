@@ -114,13 +114,15 @@ import Testing
         try await ViewProbe.run { probe in
             let store = probe.controller.offloadHistory
             for report in self.pastRuns() { store.record(report) }
+            let ledger = probe.controller.offloadedCards
 
             let ideal = probe.fittingSizes {
-                OffloadSheet(model: probe.controller.offload, history: store)
+                OffloadSheet(model: probe.controller.offload, history: store,
+                             ledger: ledger)
             }
             let minimum = probe.minimumWidths {
-                OffloadSheet(model: probe.controller.offload,
-                             history: store).content
+                OffloadSheet(model: probe.controller.offload, history: store,
+                             ledger: ledger).content
             }
 
             #expect(ideal.en.width == OffloadSheet.width)
@@ -129,6 +131,92 @@ import Testing
                     "the sheet with history needs \(minimum.ru)pt")
             // The history is the tallest thing on an otherwise empty sheet.
             #expect(ideal.ru.height > 300)
+        }
+    }
+}
+
+/// The cards the app has stopped asking about, under the history (owner item
+/// 18), rendered headless in both languages.
+///
+/// The row is the same shape as a history row and has the same problem: a card
+/// name, a date the machine's locale formats, and a localized word saying which
+/// of the two decisions this was — all on one line that must truncate rather
+/// than widen the sheet. Russian is the longer of the two everywhere here
+/// ("offloaded" against "скопирована").
+@Suite @MainActor struct ViewCardLedgerTests {
+    static let inner = OffloadSheet.width - 40
+
+    private func remember(_ ledger: OffloadedCardLedger) {
+        ledger.markOffloaded(
+            CardCandidate(
+                volume: MountedVolume(
+                    url: URL(fileURLWithPath: "/Volumes/CARD_A001_240730_R2"),
+                    name: "CARD_A001_240730_R2"),
+                files: 128, bytes: 61_000_000_000,
+                evidence: .cameraStructure("DCIM")),
+            at: Date(timeIntervalSince1970: 1_800_000_000))
+        ledger.suppress(
+            CardCandidate(
+                volume: MountedVolume(
+                    url: URL(fileURLWithPath: "/Volumes/DIT_SCRATCH_DISK"),
+                    name: "DIT_SCRATCH_DISK"),
+                files: 4, bytes: 200_000_000,
+                evidence: .detachableVideo(2)),
+            at: Date(timeIntervalSince1970: 1_800_000_500))
+    }
+
+    /// Both kinds of row, drawn and measured. A card that was copied and a disk
+    /// answered with Never are different decisions with different consequences,
+    /// and the list is worth nothing if it cannot tell them apart on screen.
+    @Test func bothKindsOfRowRenderAndFitTheSheet() async throws {
+        try await ViewProbe.run { probe in
+            let ledger = probe.controller.offloadedCards
+            self.remember(ledger)
+            #expect(ledger.cards.count == 2)
+
+            let minimum = probe.minimumWidths {
+                OffloadCardLedgerList(ledger: ledger)
+            }
+            let sizes = probe.sizes(proposedWidth: Self.inner) {
+                OffloadCardLedgerList(ledger: ledger)
+            }
+
+            #expect(minimum.ru <= Self.inner,
+                    "the remembered cards need \(minimum.ru)pt of \(Self.inner)")
+            #expect(sizes.ru.width <= Self.inner)
+            #expect(sizes.en.width <= Self.inner)
+            // a heading and two two-line rows: a short answer means a row did
+            // not render
+            #expect(sizes.ru.height > 60)
+            // …and the two rows say different things, in both languages
+            for language in [AppLanguage.english, .russian] {
+                let details = ViewRender.withLanguage(language) {
+                    ledger.cards.map(OffloadCardLedgerList.detail)
+                }
+                #expect(Set(details).count == 2,
+                        "\(language): both rows read the same — \(details)")
+                for detail in details {
+                    #expect(!detail.contains("cards_kind"),
+                            "\(language) renders a raw key: \(detail)")
+                }
+            }
+        }
+    }
+
+    /// Nothing remembered draws nothing at all. It is the last block on the
+    /// sheet, so an absent heading moves nothing under it, and the only person
+    /// who comes looking for this list is one whose card was not offered —
+    /// which means it is not empty.
+    @Test func anEmptyLedgerDrawsNothing() async throws {
+        try await ViewProbe.run { probe in
+            let ledger = probe.controller.offloadedCards
+            #expect(ledger.cards.isEmpty)
+
+            let sizes = probe.sizes(proposedWidth: Self.inner) {
+                OffloadCardLedgerList(ledger: ledger)
+            }
+
+            #expect(sizes.en.height == 0, "the empty list drew \(sizes.en)")
         }
     }
 }
