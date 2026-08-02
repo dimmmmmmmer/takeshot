@@ -636,6 +636,7 @@
 "script_comment" = "Comment";
 "script_takes" = "Takes";
 
+<<<<<<< HEAD
 /* === the digital slate: a fullscreen TC + take card to point a camera at === */
 "menu_slate" = "Digital slate";
 "slate_window_title" = "Slate";
@@ -644,3 +645,10 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "SYNC";
 "slate_sync_hint" = "Click or press Space — sync flash";
+=======
+/* === the multiview page: a live camera grid on a phone === */
+"remote_multiview" = "Multiview page";
+"multiview_title" = "TakeShot Multiview";
+"multiview_rec" = "REC";
+"multiview_wait" = "No video yet";
+>>>>>>> worktree-agent-ad08536b7d0ec74e0

@@ -15,6 +15,14 @@ extension CapturePipeline {
         displayFrameHandler = handler
         displayFrameLock.unlock()
     }
+    /// The multiview mirror of the displayed frame (see the handler's own
+    /// comment in CapturePipeline). Called on the display queue, like the
+    /// playout mirror — never on the capture queue.
+    public func setOnMultiviewFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+        displayFrameLock.lock()
+        multiviewFrameHandler = handler
+        displayFrameLock.unlock()
+    }
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.add(layer)
         // show the current frame right away — a paused/idle signal won't push
@@ -106,8 +114,10 @@ extension CapturePipeline {
             self.displaySinks.present(buffer)
             self.displayFrameLock.lock()
             let handler = self.displayFrameHandler
+            let multiview = self.multiviewFrameHandler
             self.displayFrameLock.unlock()
             handler?(buffer)
+            multiview?(buffer)
         }
     }
 }

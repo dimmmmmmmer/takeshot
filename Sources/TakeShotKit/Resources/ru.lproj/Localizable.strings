@@ -647,3 +647,8 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "СИНХРО";
 "slate_sync_hint" = "Клик или пробел — синхровспышка";
+/* === the multiview page: a live camera grid on a phone === */
+"remote_multiview" = "Мультивью";
+"multiview_title" = "TakeShot: мультивью";
+"multiview_rec" = "REC";
+"multiview_wait" = "Видео ещё нет";

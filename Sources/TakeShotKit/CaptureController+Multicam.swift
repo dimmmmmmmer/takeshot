@@ -20,6 +20,11 @@ extension CaptureController {
         for channel in extraChannels { channel.stop() }
         extraChannels.removeAll()
         multicamOn = on
+        // The multiview taps follow the channel list in both directions: a
+        // camera that joined starts feeding its tile, and switching multicam
+        // off leaves only the main tap (the stopped channels' pipelines went
+        // with them). A no-op while nobody is watching.
+        defer { refreshRemoteMultiviewTaps() }
         guard on else { return }
 
         let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)

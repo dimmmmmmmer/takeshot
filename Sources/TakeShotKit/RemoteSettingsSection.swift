@@ -27,6 +27,7 @@ struct RemoteSettingsSection: View {
                 pinRow
                 addressRow
                 scriptRow
+                multiviewRow
                 Text(L("remote_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -104,6 +105,33 @@ struct RemoteSettingsSection: View {
         let urls = controller.remoteURLs.map { $0 + RemotePage.scriptPath }
         if controller.remoteBoundPort > 0, !urls.isEmpty {
             LabeledContent(L("remote_script")) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    ForEach(urls, id: \.self) { url in
+                        Text(url)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            if let first = urls.first,
+               let code = RemoteAddress.qrImage(for: first, side: Self.qrSide) {
+                HStack {
+                    Spacer()
+                    Image(nsImage: code)
+                        .interpolation(.none)
+                        .accessibilityLabel(first)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    /// The camera grid, one row and one QR under the script page's — the
+    /// exact pattern that row set, path and all.
+    @ViewBuilder private var multiviewRow: some View {
+        let urls = controller.remoteURLs.map { $0 + RemotePage.multiviewPath }
+        if controller.remoteBoundPort > 0, !urls.isEmpty {
+            LabeledContent(L("remote_multiview")) {
                 VStack(alignment: .trailing, spacing: 4) {
                     ForEach(urls, id: \.self) { url in
                         Text(url)
