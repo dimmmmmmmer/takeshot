@@ -139,7 +139,7 @@ extension ScopesPanel {
         }
         if !controller.scopesWindowOpen {
             Button {
-                openWindow(id: "scopes")
+                AppWindows.present(.scopes, opening: openWindow)
                 controller.showScopesOverlay = false
             } label: {
                 Image(systemName: "macwindow.on.rectangle")

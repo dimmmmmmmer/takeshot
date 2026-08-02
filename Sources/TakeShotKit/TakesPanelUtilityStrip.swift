@@ -44,8 +44,12 @@ struct TakesPanelUtilityStrip: View {
 
     private var buttons: some View {
         HStack(spacing: 14) {
+            // Both of these FOCUS a window that is already open rather than
+            // doing nothing visible: the strip is on the main window, so a
+            // Settings window behind it is exactly where these get clicked
+            // twice (see AppWindows).
             Button {
-                openWindow(id: "settings")
+                AppWindows.present(.settings, opening: openWindow)
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 14))
@@ -53,7 +57,7 @@ struct TakesPanelUtilityStrip: View {
             .help(L("open_settings"))
 
             Button {
-                openWindow(id: "vanc-monitor")
+                AppWindows.present(.vancMonitor, opening: openWindow)
             } label: {
                 Image(systemName: "waveform.badge.magnifyingglass")
                     .font(.system(size: 14))

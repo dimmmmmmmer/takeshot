@@ -87,20 +87,39 @@ extension CaptureController {
         rebuildLUT()
         rebuildPlayout()
         startDiskWatch()
-        // The offload model reports back through the controller (status line,
-        // toast, sticky alarm), so it is wired for the controller's lifetime and
-        // not at the moment the sheet happens to open.
+        attachOffload()
+        attachAppLevelPresences()
+    }
+
+    /// The DIT offload's long-lived wiring. The models report back through the
+    /// controller (status line, toast, sticky alarm), so they are attached for
+    /// the controller's lifetime and not at the moment the sheet happens to
+    /// open — and what was offloaded before this launch is read now, so the
+    /// sheet can show it the instant it opens and a run can append to it while
+    /// the sheet has never been on screen.
+    private func attachOffload() {
         offload.attach(to: self)
         verify.attach(to: self)
-        // …and what was offloaded before this launch, for the same reason: the
-        // sheet has to be able to show it the instant it opens, and a run can
-        // append to it while the sheet has never been on screen.
         offloadHistory.load()
+    }
+
+    /// The three presences that outlive the main window.
+    private func attachAppLevelPresences() {
+        // Quitting finalizes a take in progress, and the delegate reaches it
+        // through this reference (`applicationWillTerminate` →
+        // `flushOnTerminate`). Claimed here rather than only from ContentView's
+        // onAppear, which is exactly what has NOT run when the app is quit from
+        // the menu bar with no window open. nil in a test — there is no
+        // delegate in one.
+        AppDelegate.shared?.controller = self
         // The web remote comes back up if the operator left it on — a director
         // holding the phone from yesterday should not have to be told to go and
         // find the laptop after a relaunch. Off by default; nothing binds a port
         // until it is switched on once.
         startRemoteIfEnabled()
+        // …and the menu-bar item, on the same terms: off by default, and back
+        // where it was left for anyone who switched it on (see +MenuBar).
+        updateMenuBarPresence()
     }
 
     /// The compare mode and its gain come back like every other working

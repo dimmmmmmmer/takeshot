@@ -653,3 +653,15 @@
 "multiview_title" = "TakeShot Multiview";
 "multiview_rec" = "REC";
 "multiview_wait" = "No video yet";
+
+/* === the menu bar (status item): state at a glance, essentials in a menu === */
+"menubar_keep" = "Keep TakeShot in the menu bar";
+"menubar_keep_hint" = "Adds a status item that shows the take timecode while recording, with REC, marker and mute in its menu — so a rolling take stays visible and stoppable when the main window is closed or behind other apps.";
+"menubar_take" = "Take: %@";
+"menubar_no_take" = "No take yet";
+"menubar_mute_monitor" = "Mute monitoring";
+"menubar_open_main" = "Open TakeShot";
+"menubar_quit" = "Quit TakeShot";
+"menubar_status_idle" = "TakeShot — no signal";
+"menubar_status_ready" = "TakeShot — ready";
+"menubar_status_recording" = "TakeShot — recording";

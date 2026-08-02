@@ -4,7 +4,6 @@ import SwiftUI
 /// Player card: TC, format, and the mode switch live right on it.
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         PreviewView()

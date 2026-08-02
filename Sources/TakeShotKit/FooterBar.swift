@@ -245,7 +245,6 @@ struct RecordButton: View {
 private struct FooterAudioMeters: View {
     @EnvironmentObject private var controller: CaptureController
     @ObservedObject var live: LiveSignal
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         if live.audioLevels.isEmpty {

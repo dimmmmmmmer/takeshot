@@ -89,6 +89,7 @@ struct SettingsView: View {
                     Text(L("panel_right")).tag("right")
                     Text(L("panel_left")).tag("left")
                 }
+                MenuBarSettingsRow()
                 Button(L("reset_interface"), role: .destructive) {
                     controller.resetInterface()
                 }

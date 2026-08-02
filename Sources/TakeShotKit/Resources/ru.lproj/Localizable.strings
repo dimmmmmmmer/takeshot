@@ -656,3 +656,15 @@
 "multiview_title" = "TakeShot: мультивью";
 "multiview_rec" = "REC";
 "multiview_wait" = "Видео ещё нет";
+
+/* === the menu bar (status item): state at a glance, essentials in a menu === */
+"menubar_keep" = "Держать TakeShot в строке меню";
+"menubar_keep_hint" = "Добавляет значок в строку меню: во время записи он показывает таймкод дубля, а в его меню — REC, маркер и заглушение. Идущий дубль остаётся виден, и его можно остановить, когда главное окно закрыто или скрыто за другими программами.";
+"menubar_take" = "Дубль: %@";
+"menubar_no_take" = "Дубля ещё нет";
+"menubar_mute_monitor" = "Заглушить мониторинг";
+"menubar_open_main" = "Открыть TakeShot";
+"menubar_quit" = "Завершить TakeShot";
+"menubar_status_idle" = "TakeShot — нет сигнала";
+"menubar_status_ready" = "TakeShot — готов";
+"menubar_status_recording" = "TakeShot — идёт запись";
