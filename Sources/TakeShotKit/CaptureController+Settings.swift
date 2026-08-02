@@ -28,6 +28,7 @@ extension CaptureController {
         applyNamingChange(from: oldValue)
         applyRemoteChange(from: oldValue)
         applyCardWatchChange(from: oldValue)
+        applyMenuBarChange(from: oldValue)
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.
@@ -49,6 +50,9 @@ extension CaptureController {
         pipelineRelevant.remoteEnabled = settings.remoteEnabled
         pipelineRelevant.remotePort = settings.remotePort
         pipelineRelevant.remotePIN = settings.remotePIN
+        // the status item is a window-level affordance; the writer has never
+        // heard of it, and toggling it must not rebuild the capture config
+        pipelineRelevant.keepInMenuBar = settings.keepInMenuBar
         // the compare mode/gain reach the pipeline through pushCompare, not
         // through the capture config — a mode click must not rebuild capture
         pipelineRelevant.compareMode = settings.compareMode

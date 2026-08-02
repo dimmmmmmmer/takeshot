@@ -284,6 +284,16 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var compareMode: String?
     /// Difference-compare gain multiplier (1/4/16); nil — 1.
     public var compareDifferenceGain: Int?
+    /// Keep a status item in the system menu bar; nil/false — off, which is the
+    /// default.
+    ///
+    /// Off by default for the same reason `remoteEnabled` is: an app does not
+    /// take a slot in the operator's menu bar until it is asked to. With it on,
+    /// a take that is rolling stays visible (and stoppable) while the main
+    /// window is closed or behind other apps — closing the window has never
+    /// stopped a take and still does not. Optional, like every added field, so
+    /// settings written by an older build still decode.
+    public var keepInMenuBar: Bool?
     /// Forced input display mode ("1080p25"…); nil — autodetect.
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.

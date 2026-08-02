@@ -182,6 +182,45 @@ struct ViewSettingsTests {
         }
     }
 
+    /// "Keep TakeShot in the menu bar" is a toggle with a caption under it, and
+    /// the caption is the longest sentence in the Interface section. A grouped
+    /// Form truncates a label rather than wrapping it, so the row is measured
+    /// against the width the window actually gives it, in both languages —
+    /// Russian runs half again as long here.
+    @Test func theMenuBarRowFitsTheSettingsForm() async throws {
+        try await ViewProbe.run { probe in
+            let form = ViewBudget.settingsFormWidth
+            let label = probe.fittingSizes { Text(L("menubar_keep")).fixedSize() }
+            #expect(label.ru.width <= form,
+                    "the menu-bar toggle label is \(label.ru.width)pt of \(form)")
+            #expect(label.en.width <= form)
+
+            // The caption is allowed to wrap — what it must not do is fail to
+            // render, or come out a different number of lines' worth of height
+            // by a margin that says a string went missing.
+            let row = probe.sizes(proposedWidth: form) { MenuBarSettingsRow() }
+            #expect(row.en.width <= form + 1)
+            #expect(row.ru.width <= form + 1)
+            #expect(row.en.height > 0 && row.ru.height > 0)
+        }
+    }
+
+    /// …and the whole form still measures the same in both languages with the
+    /// row in it: a section that fell out of the Russian build shows up here.
+    @Test func theSettingsFormStillMatchesWithTheMenuBarRow() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.settings.keepInMenuBar = nil
+            let off = probe.fittingSizes { SettingsView() }
+            #expect(off.ru.matches(off.en, slack: 8),
+                    "the Russian settings form is a different size: \(off)")
+            // Switching it on must not resize the window — the toggle is the
+            // only thing that moves, and the controller must not install a
+            // status item from a render (no `menuBar` is built here: the
+            // setting is read back, not applied through a presence).
+            #expect(!probe.controller.keepInMenuBar)
+        }
+    }
+
     /// Recording in progress disables the device pickers and hides nothing; the
     /// form must still measure the same.
     @Test func settingsFormWhileRecordingKeepsItsSize() async throws {

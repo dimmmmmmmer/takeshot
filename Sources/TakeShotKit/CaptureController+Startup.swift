@@ -65,11 +65,26 @@ extension CaptureController {
         rebuildPlayout()
         startDiskWatch()
         attachBackgroundJobModels()
+        attachAppLevelPresences()
+    }
+
+    /// The three presences that outlive the main window.
+    private func attachAppLevelPresences() {
+        // Quitting finalizes a take in progress, and the delegate reaches it
+        // through this reference (`applicationWillTerminate` →
+        // `flushOnTerminate`). Claimed here rather than only from ContentView's
+        // onAppear, which is exactly what has NOT run when the app is quit from
+        // the menu bar with no window open. nil in a test — there is no
+        // delegate in one.
+        AppDelegate.shared?.controller = self
         // The web remote comes back up if the operator left it on — a director
         // holding the phone from yesterday should not have to be told to go and
         // find the laptop after a relaunch. Off by default; nothing binds a port
         // until it is switched on once.
         startRemoteIfEnabled()
+        // …and the menu-bar item, on the same terms: off by default, and back
+        // where it was left for anyone who switched it on (see +MenuBar).
+        updateMenuBarPresence()
     }
 
     /// The long-running-job models (offload, verify, dailies) and the card

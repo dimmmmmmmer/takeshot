@@ -47,8 +47,10 @@ private struct SettingsCommands: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button(L("open_settings")) { openWindow(id: "settings") }
-            .keyboardShortcut(",", modifiers: .command)
+        Button(L("open_settings")) {
+            AppWindows.present(.settings, opening: openWindow)
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
 
@@ -228,13 +230,19 @@ private struct ViewCommands: View {
             get: { controller.showScopesOverlay },
             set: { controller.showScopesOverlay = $0 }))
             .keyboardShortcut(hotkeys.combo(for: .toggleScopesOverlay).menuShortcut)
+        // Every one of these FOCUSES the window it names when it is already
+        // open (see AppWindows): a View-menu item that silently does nothing
+        // because the window is behind the main one is the same bug as one that
+        // opens a second copy.
         Button(L("menu_scopes_window")) {
-            openWindow(id: "scopes")
+            AppWindows.present(.scopes, opening: openWindow)
             // the overlay and the window show the same scopes; two at once is
             // twice the analysis for one pair of eyes
             controller.showScopesOverlay = false
         }
-        Button(L("menu_slate")) { openWindow(id: "slate") }
+        Button(L("menu_slate")) {
+            AppWindows.present(.slate, opening: openWindow)
+        }
 
         Divider()
 
@@ -248,7 +256,9 @@ private struct ViewCommands: View {
 
         Divider()
 
-        Button(L("menu_vanc")) { openWindow(id: "vanc-monitor") }
+        Button(L("menu_vanc")) {
+            AppWindows.present(.vancMonitor, opening: openWindow)
+        }
     }
 }
 
@@ -320,8 +330,10 @@ private struct HelpCommands: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button(L("menu_help")) { openWindow(id: "help") }
-            .keyboardShortcut("?", modifiers: .command)
+        Button(L("menu_help")) {
+            AppWindows.present(.help, opening: openWindow)
+        }
+        .keyboardShortcut("?", modifiers: .command)
     }
 }
 

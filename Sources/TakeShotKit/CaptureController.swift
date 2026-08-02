@@ -350,6 +350,10 @@ final class CaptureController: ObservableObject {
     /// the tests reach the same instance the window shows. Lazy because it
     /// captures `self`.
     lazy var slate = SlateModel(controller: self)
+    /// The status item in the system menu bar; nil — the setting is off, which
+    /// is the default (see `+MenuBar`). Owned here rather than by a view: it
+    /// exists precisely when no window does.
+    var menuBar: MenuBarPresence?
     /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
     var playbackFullscreenWindow: NSWindow?
