@@ -35,6 +35,7 @@ extension CaptureController {
         if viewerMode == .record {
             player.pause()
             rawPlayer?.pause() // a looping BRAW decode must not fight capture
+            endSyncPlay() // record mode shows the camera, not a comparison
         }
         updateAudioMonitorRouting()
         updateTapRunning()

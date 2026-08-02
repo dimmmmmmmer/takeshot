@@ -82,6 +82,11 @@ struct TakeContextMenu: View {
 
     var body: some View {
         Button(L("play")) { controller.play(url: take.url) }
+        // enabled by the selection, not the clicked row: comparing needs 2–4
+        // takes picked first, and a grey item teaches that better than a
+        // missing one
+        Button(L("sync_play_menu")) { controller.startSyncPlay() }
+            .disabled(!controller.canStartSyncPlay)
         Divider()
         Button(L("good_take")) { controller.setRating(.good, for: take) }
         Button(L("bad_take")) { controller.setRating(.bad, for: take) }

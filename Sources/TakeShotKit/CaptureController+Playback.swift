@@ -39,6 +39,8 @@ extension CaptureController {
     /// Open a file in the player and switch to playback mode.
     /// Photos are just displayed (AVPlayer isn't needed for them).
     func play(url: URL) {
+        // One take in the single player supersedes a running comparison.
+        endSyncPlay()
         // In/out belong to the clip they were marked on. The outgoing RAW
         // engine is about to be thrown away, so its range is filed here while
         // it still exists; the AVPlayer transport files its own in `loadClip`.
