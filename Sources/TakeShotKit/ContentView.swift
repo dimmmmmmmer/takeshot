@@ -31,6 +31,12 @@ struct ContentView: View {
         .sheet(isPresented: $controller.verifySheetPresented) {
             OffloadVerifySheet(model: controller.verify)
         }
+        // Dailies with burn-ins — a transcode queue over finished takes. A
+        // sheet for the offload's reasons: burn-in switches, a destination
+        // and a live run need more than a menu item can hold.
+        .sheet(isPresented: $controller.dailiesSheetPresented) {
+            DailiesSheet(model: controller.dailies)
+        }
         // clicking empty space clears focus from text fields
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)

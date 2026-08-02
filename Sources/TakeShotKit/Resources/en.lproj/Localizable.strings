@@ -653,3 +653,29 @@
 "multiview_title" = "TakeShot Multiview";
 "multiview_rec" = "REC";
 "multiview_wait" = "No video yet";
+
+/* === dailies with burn-ins (DailiesSheet, DailiesStatusStrip) === */
+"dailies_menu" = "Dailies…";
+"dailies_title" = "Dailies with burn-ins";
+"dailies_batch" = "%d takes → H.264 dailies (<name>_DAILY.mp4)";
+"dailies_burn_section" = "Burned-in text";
+"dailies_burn_tc" = "Running timecode (top center)";
+"dailies_burn_name" = "Clip name (bottom left)";
+"dailies_burn_project" = "Project · camera/roll (bottom right)";
+"dailies_burn_date" = "Recording date (bottom right)";
+"dailies_custom_placeholder" = "Custom line (top left)";
+"dailies_dest_label" = "Destination:";
+"dailies_pick_dest" = "Where the dailies land";
+"dailies_start" = "Start";
+"dailies_stop" = "Stop queue";
+"dailies_skip" = "Skip file";
+"dailies_status" = "Dailies %d/%d";
+"dailies_paused_rec" = "paused — recording";
+"dailies_frames" = "%d/%d frames";
+"dailies_status_reopen" = "Open the dailies queue";
+"dailies_cancelling" = "Dailies: stopping…";
+"dailies_done" = "Dailies done: %d files";
+"dailies_failed" = "Dailies: %d failed (%@)";
+"dailies_cancelled" = "Dailies stopped: %d of %d done";
+"dailies_result_done" = "Done: %d of %d";
+"dailies_result_cancelled" = "The queue was stopped; unfinished files were removed.";

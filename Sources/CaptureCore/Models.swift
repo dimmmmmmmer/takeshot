@@ -322,6 +322,26 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// is xxHash64 now. Kept because it is written back on every run and an old
     /// saved blob still has to decode.
     public var offloadHashAlgorithm: String?
+
+    // MARK: - dailies (see DailiesEngine and CaptureController+Dailies)
+    //
+    // The burn-in set is a crew convention like the marker color: one unit
+    // burns the same lines all day, and re-ticking four boxes per batch is
+    // how dailies end up inconsistent. All Optional, like every added field,
+    // so settings JSON written by an older build still decodes.
+
+    /// Burn the running timecode into dailies; nil — on.
+    public var dailiesBurnTimecode: Bool?
+    /// Burn the clip/take name; nil — on.
+    public var dailiesBurnClipName: Bool?
+    /// Burn the project + camera/roll line; nil — on.
+    public var dailiesBurnProject: Bool?
+    /// Burn the recording date; nil — off (the date is on the slate already).
+    public var dailiesBurnDate: Bool?
+    /// The free text line; nil/empty — no strip.
+    public var dailiesCustomText: String?
+    /// Where the dailies land; nil — a Dailies folder beside the takes.
+    public var dailiesDestinationPath: String?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy

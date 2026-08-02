@@ -64,6 +64,10 @@ extension CaptureController {
         refreshNameCollision() // start hides it, stop recomputes
         // multicam: the other cameras in sync with the main one
         for channel in extraChannels { channel.setRecording(recording) }
+        // Recording protection (hard rule): a running dailies transcode holds
+        // between frames while a take rolls and resumes when it ends — it
+        // must never compete with TakeWriter for the disk or the encoder.
+        dailies.recordingStateChanged(recording)
     }
     /// A finalized take joins the list, the log and the thumbnail queue.
     private func adoptFinishedTake(_ take: Take) {
