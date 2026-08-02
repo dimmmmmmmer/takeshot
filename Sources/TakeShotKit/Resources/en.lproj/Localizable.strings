@@ -653,3 +653,14 @@
 "multiview_title" = "TakeShot Multiview";
 "multiview_rec" = "REC";
 "multiview_wait" = "No video yet";
+
+/* === sync-play: 2-4 takes side by side, transport-locked === */
+"sync_play_menu" = "Sync play";
+/* Kept short like the compare segments: both labels ride one mini segmented
+   control in the grid's header plate. */
+"sync_align_start" = "From start";
+"sync_align_tc" = "By timecode";
+"sync_align_help" = "Align the takes at their own first frames, or on their shared timecode overlap";
+"sync_tc_fallback" = "No timecode overlap — aligned from start";
+"sync_close" = "Close sync play";
+"sync_audio_help" = "Hear this take (one take at a time)";

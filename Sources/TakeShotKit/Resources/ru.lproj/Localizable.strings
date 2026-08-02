@@ -656,3 +656,14 @@
 "multiview_title" = "TakeShot: мультивью";
 "multiview_rec" = "REC";
 "multiview_wait" = "Видео ещё нет";
+
+/* === sync-play: 2-4 takes side by side, transport-locked === */
+"sync_play_menu" = "Синхронный просмотр";
+/* Kept short like the compare segments: both labels ride one mini segmented
+   control in the grid's header plate. */
+"sync_align_start" = "От начала";
+"sync_align_tc" = "По таймкоду";
+"sync_align_help" = "Выровнять дубли по их первым кадрам или по общему пересечению таймкода";
+"sync_tc_fallback" = "Таймкод не пересекается — выровнено от начала";
+"sync_close" = "Закрыть синхронный просмотр";
+"sync_audio_help" = "Слушать этот дубль (только один за раз)";

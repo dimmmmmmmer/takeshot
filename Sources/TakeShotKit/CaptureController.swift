@@ -326,6 +326,10 @@ final class CaptureController: ObservableObject {
 
     /// The engine for a loaded RAW clip (nil — AVPlayer/photo content).
     @Published var rawPlayer: RawPlayerModel?
+    /// Sync-play of 2–4 takes side by side (nil — normal playback). Owned here
+    /// like the RAW engine: the mode outlives any render of the grid, and
+    /// entry/exit live in `+SyncPlay`.
+    @Published var syncPlay: SyncPlayModel?
     /// Why the RAW clip couldn't be opened (SDK missing, bad file).
     @Published var rawPlayerError: String?
 

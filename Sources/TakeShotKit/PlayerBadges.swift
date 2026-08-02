@@ -205,7 +205,10 @@ struct PlayerTopBadgesModifier: ViewModifier {
                 ViewerModeSwitch()
             }
 
-            if (controller.viewerMode == .playback
+            // not in sync-play: the compare bar drives the single player's
+            // composite, which is not on screen under the grid
+            if controller.syncPlay == nil,
+               (controller.viewerMode == .playback
                 && controller.playbackURL != nil)
                 || (controller.viewerMode == .record
                     && controller.referencePinned) {

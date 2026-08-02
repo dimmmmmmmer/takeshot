@@ -17,7 +17,8 @@ struct PreviewView: View {
     /// would eventually drift, and a still on the drifted side gets a video
     /// transport drawn over a photo.
     private var showsTransport: Bool {
-        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        guard controller.viewerMode == .playback, controller.syncPlay == nil,
+              let url = controller.playbackURL
         else { return false }
         let ext = url.pathExtension.lowercased()
         return !CaptureController.imageExtensions.contains(ext)
@@ -27,7 +28,8 @@ struct PreviewView: View {
 
     /// RAW clips get the engine's own transport.
     private var showsRawTransport: Bool {
-        guard controller.viewerMode == .playback, let url = controller.playbackURL
+        guard controller.viewerMode == .playback, controller.syncPlay == nil,
+              let url = controller.playbackURL
         else { return false }
         if controller.rawPlayer?.url == url { return true }
         return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
@@ -57,6 +59,12 @@ struct PreviewView: View {
                     if controller.viewerMode == .record, controller.multicamOn,
                        !controller.extraChannels.isEmpty {
                         MulticamGrid()
+                    } else if controller.viewerMode == .playback,
+                              let sync = controller.syncPlay {
+                        // 2–4 takes side by side, each tile its own tap and
+                        // layer — the single ViewerSurface stays out of the
+                        // tree, exactly like the two grid modes above/below
+                        SyncPlayView(model: sync)
                     } else if controller.showsCompareSplit {
                         // the same split the fullscreen player and the external
                         // display mount, from the same view

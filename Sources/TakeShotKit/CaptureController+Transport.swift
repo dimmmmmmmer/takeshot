@@ -12,13 +12,16 @@ import Foundation
 /// routing is the only thing that is new.
 extension CaptureController {
     /// A clip is loaded and the app is showing it, rather than the live signal.
-    /// What every transport item in the menu is enabled by.
+    /// What every transport item in the menu is enabled by. A sync-play grid
+    /// counts: its master transport answers the same keys.
     var isReviewingClip: Bool {
-        viewerMode == .playback && playbackURL != nil
+        viewerMode == .playback && (playbackURL != nil || syncPlay != nil)
     }
 
     func togglePlayPause() {
-        if let raw = rawPlayer {
+        if let sync = syncPlay {
+            sync.togglePlay()
+        } else if let raw = rawPlayer {
             raw.togglePlay()
         } else {
             transport.togglePlay()
@@ -27,7 +30,9 @@ extension CaptureController {
 
     /// Jump by `seconds`; negative goes back.
     func skipPlayback(bySeconds seconds: Double) {
-        if let raw = rawPlayer {
+        if let sync = syncPlay {
+            sync.skip(bySeconds: seconds)
+        } else if let raw = rawPlayer {
             raw.seek(to: raw.currentFrame
                 + Int((seconds * raw.frameRate).rounded()))
         } else {
@@ -38,15 +43,20 @@ extension CaptureController {
     /// One frame either way — how a focus or an eyeline is checked.
     func stepPlayback(forward: Bool) {
         let step = forward ? 1 : -1
-        if let raw = rawPlayer {
+        if let sync = syncPlay {
+            sync.step(forward: forward)
+        } else if let raw = rawPlayer {
             raw.seek(to: raw.currentFrame + step)
         } else {
             transport.skip(Double(step) / max(1, playbackFPS))
         }
     }
 
-    /// Set or clear the loop in/out point at the playhead.
+    /// Set or clear the loop in/out point at the playhead. Sync-play has no
+    /// loop range — the guard keeps the key from marking the hidden single
+    /// player's clip underneath the grid.
     func toggleLoopPoint(out: Bool) {
+        guard syncPlay == nil else { return }
         if let raw = rawPlayer {
             raw.toggleRangePoint(out: out)
         } else {
