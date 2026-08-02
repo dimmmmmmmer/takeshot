@@ -46,10 +46,13 @@ struct WaveformView: View {
 ///
 /// The waveform's per-channel mode and the parade draw exactly this, and each
 /// had its own copy — including `.interpolation(.medium)`, which is the
-/// difference between a readable trace and a stair-stepped one. The density map
-/// is 512x512 and the box it is drawn in is at most a few hundred points, so on
-/// a retina display this is a mild DOWNscale: nothing about the trace is
-/// invented by the interpolator.
+/// difference between a readable trace and a stair-stepped one.
+///
+/// How much the interpolator has to invent is NOT the same in the two scopes,
+/// and that is what the operator was seeing: a parade squeezes the 1024-column
+/// map into a third of the box and is always downscaling, a waveform spreads
+/// one map across all of it. That is what sets the map's width — see
+/// `ScopeData.waveWidth`.
 private struct ScopeChannelImage: View {
     let map: ScopeImageCache.Map
     let data: ScopeData
@@ -110,28 +113,36 @@ struct HistogramView: View {
     let channel: String
 
     var body: some View {
-        VStack(spacing: 1) {
-            let series = selectedSeries
-            // channels stacked in rows — each normalized to its own peak,
-            // all three readable at once (nothing blended away)
-            ForEach(Array(series.enumerated()), id: \.offset) { index, item in
-                GeometryReader { geo in
-                    ZStack {
-                        let peak = max(1, item.bins.max() ?? 1)
-                        channelPath(item.bins, peak: peak, in: geo.size)
-                            .fill(LinearGradient(
-                                colors: [item.color.opacity(0.85),
-                                         item.color.opacity(0.35)],
-                                startPoint: .top, endPoint: .bottom))
-                        channelPath(item.bins, peak: peak, in: geo.size)
-                            .stroke(item.color, lineWidth: 1)
-                        // the graticule and its numbers now come from the same
-                        // ScopeAxis the traces are drawn through, so the
-                        // brightness slider reaches them like everything else
-                        ScopeCodeAxisMarks(nominal: data.nominal,
-                                           showsNumbers: index == series.count - 1)
-                    }
+        // One axis over the whole stack, not one per row. The rows share a
+        // single code axis — three copies of it drew the same rules three times
+        // and gave the numbers to only one of them, which is how the marks on
+        // the other two ended up as lines with nothing naming them.
+        ZStack {
+            VStack(spacing: 1) {
+                // channels stacked in rows — each normalized to its own peak,
+                // all three readable at once (nothing blended away)
+                ForEach(Array(selectedSeries.enumerated()),
+                        id: \.offset) { _, item in
+                    channelRow(item.bins, color: item.color)
                 }
+            }
+            // the graticule and its numbers come from the same ScopeAxis the
+            // traces are drawn through, so the brightness slider reaches them
+            // like everything else
+            ScopeCodeAxisMarks(nominal: data.nominal)
+        }
+    }
+
+    private func channelRow(_ bins: [Int], color: Color) -> some View {
+        GeometryReader { geo in
+            let peak = max(1, bins.max() ?? 1)
+            ZStack {
+                channelPath(bins, peak: peak, in: geo.size)
+                    .fill(LinearGradient(
+                        colors: [color.opacity(0.85), color.opacity(0.35)],
+                        startPoint: .top, endPoint: .bottom))
+                channelPath(bins, peak: peak, in: geo.size)
+                    .stroke(color, lineWidth: 1)
             }
         }
     }

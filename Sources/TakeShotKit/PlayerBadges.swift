@@ -187,7 +187,7 @@ struct PlayerTopBadgesModifier: ViewModifier {
 
     @ViewBuilder private var scopesOverlay: some View {
         if controller.showScopesOverlay, !controller.scopesWindowOpen {
-            ScopesPanel(live: controller.live, singleScope: true)
+            ScopesPanel(scopes: controller.scopes, singleScope: true)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(.white.opacity(0.12)))

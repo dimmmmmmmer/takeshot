@@ -26,26 +26,50 @@ extension EnvironmentValues {
 }
 
 /// Drag-to-reorder for scope boxes.
+///
+/// Every hover writes VIEW STATE, never the defaults. `dropEntered` fires each
+/// time the boxes move under the pointer — which the reorder itself causes — so
+/// writing the persisted order there put a synchronous `UserDefaults` write and
+/// a republish of the entire panel on the drag's own feedback loop. The
+/// arrangement is committed once, when the drag ends.
 struct ScopeDropDelegate: DropDelegate {
     let target: ScopeKind
     @Binding var dragged: ScopeKind?
-    @Binding var orderRaw: String
+    @Binding var live: [ScopeKind]?
+    let commit: () -> Void
     let order: [ScopeKind]
 
-    func dropEntered(info: DropInfo) {
+    /// The order with the dragged box moved to the target's place, or nil when
+    /// there is nothing to move. Pure, so the reorder can be tested without a
+    /// drag session.
+    static func reordered(_ order: [ScopeKind], moving dragged: ScopeKind?,
+                          onto target: ScopeKind) -> [ScopeKind]? {
         guard let dragged, dragged != target,
               let from = order.firstIndex(of: dragged),
-              let to = order.firstIndex(of: target) else { return }
+              let to = order.firstIndex(of: target) else { return nil }
         var kinds = order
         kinds.move(fromOffsets: IndexSet(integer: from),
                    toOffset: to > from ? to + 1 : to)
-        orderRaw = kinds.map(\.rawValue).joined(separator: ",")
+        return kinds
     }
 
+    func dropEntered(info: DropInfo) { hover() }
+
     func performDrop(info: DropInfo) -> Bool {
-        dragged = nil
+        drop()
         return true
     }
+
+    /// What a hover does, without the `DropInfo` a test cannot construct: move
+    /// the boxes, and touch nothing that outlives the drag.
+    func hover() {
+        guard let kinds = Self.reordered(order, moving: dragged, onto: target)
+        else { return }
+        live = kinds
+    }
+
+    /// What the release does — the one moment the arrangement is persisted.
+    func drop() { commit() }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)

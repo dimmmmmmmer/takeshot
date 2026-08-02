@@ -74,9 +74,22 @@ struct VectorscopeView: View {
     /// box there would be half outside the scope.
     static let targets100 = targets(atAmplitude: 255)
 
+    /// How much of the box the scope square is allowed to take.
+    ///
+    /// It used to take all of it: measured in a 472x295 box the graticule ran
+    /// from the first row of the canvas to the last, so the boundary circle was
+    /// drawn hard against the frame, the rounded corners of the box clipped the
+    /// square's own corners, and the G/Mg 100 % marks — which sit at 0.954 of
+    /// the height — landed four points from the edge. That is what "the
+    /// vectorscope does not fit inside its scope" looks like: nothing overflowed,
+    /// there was simply no gap between the measurement and the box holding it.
+    /// 3 % a side separates them at every size the panel offers and costs 6 % of
+    /// the diameter.
+    static let boxFill = 0.94
+
     var body: some View {
         GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
+            let side = min(geo.size.width, geo.size.height) * Self.boxFill
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             ZStack {
                 if let image = ScopeImageCache.vector(from: data) {

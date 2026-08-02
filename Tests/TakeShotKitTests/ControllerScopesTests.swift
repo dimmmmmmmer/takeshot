@@ -1,5 +1,6 @@
 import AppKit
 import CaptureCore
+import Combine
 import Foundation
 import Testing
 
@@ -148,6 +149,40 @@ struct ControllerScopesTests {
             controller.showAudioPanel = true
             #expect(controller.scopesWindowOpen)
             #expect(controller.showScopes)
+        }
+    }
+
+    // MARK: - what republishes the scopes (owner item 34)
+
+    /// A timecode or a meter tick must not republish the scopes.
+    ///
+    /// The scope panel is the most expensive body in the app to re-run — four
+    /// trace views, their graticules and a density image each — and it used to
+    /// observe `LiveSignal`, where the timecode arrives every frame and the
+    /// meters arrive with every packet that differs from the last. That is two
+    /// to eight full rebuilds per analysis it actually had to draw, and during
+    /// a reorder drag every one of them relaid out the grid the operator was
+    /// moving a box around in.
+    @Test func aTimecodeOrMeterTickDoesNotRepublishTheScopes() async throws {
+        try await ControllerHarness.run { controller, _ in
+            var scopePublishes = 0
+            let token = controller.scopes.objectWillChange.sink { _ in
+                scopePublishes += 1
+            }
+            defer { token.cancel() }
+
+            var timecode = Timecode(hours: 10, minutes: 0, seconds: 0,
+                                    frames: 0, fps: 25)
+            for tick in 0..<100 {
+                timecode = timecode.advanced(by: 1)
+                controller.live.currentTimecode = timecode
+                controller.live.audioLevels = [Float(tick) * -0.5]
+            }
+            #expect(scopePublishes == 0,
+                    "the live signal republished the scopes \(scopePublishes) times")
+
+            controller.scopes.data = nil
+            #expect(scopePublishes == 1, "an analysis has to reach the panel")
         }
     }
 }

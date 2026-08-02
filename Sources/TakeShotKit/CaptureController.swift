@@ -28,9 +28,13 @@ final class CaptureController: ObservableObject {
     @Published var isRecording = false
     @Published var signalPresent = true
     @Published var signalFormat: CaptureFormat?
-    /// Per-frame values (TC/meters/scopes) — deliberately NOT @Published here;
-    /// views that show them observe `live` so the rest of the UI stays still.
+    /// Per-frame values (TC/meters) — deliberately NOT @Published here; views
+    /// that show them observe `live` so the rest of the UI stays still.
     let live = LiveSignal()
+    /// The analysed frame the scopes draw, on its own publisher: it arrives at
+    /// a fraction of the rate `live` does, and the scopes panel is the most
+    /// expensive body in the app to re-run (see `ScopeFeed`).
+    let scopes = ScopeFeed()
     @Published var takes: [Take] = []
     /// Take preview frames for thumbnail mode.
     @Published var thumbnails: [Take.ID: NSImage] = [:]

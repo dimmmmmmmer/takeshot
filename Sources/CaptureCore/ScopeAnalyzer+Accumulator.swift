@@ -9,15 +9,6 @@ import Foundation
 /// Internal rather than private: the readers that feed it live in the other
 /// file.
 extension ScopeAnalyzer {
-    /// A density map's shape. The trace maps and the vectorscope are both
-    /// blurred and they are not the same size, so the passes are told which one
-    /// they are walking instead of reading the waveform's constants.
-    struct Grid {
-        let width: Int
-        let height: Int
-        var cells: Int { width * height }
-    }
-
     /// Shared accumulation: everything is derived from 10-bit gamma-encoded
     /// R'G'B' samples, so all sources land on the same scales.
     ///
@@ -39,10 +30,6 @@ extension ScopeAnalyzer {
         static let diffCells = width * (height + 1)
         static let vectorSize = ScopeData.vectorSize
         static let vectorCells = vectorSize * vectorSize
-        /// The trace maps' shape, and the vectorscope's — both are blurred, and
-        /// the blur has to be told which it is walking.
-        static let traceGrid = Grid(width: width, height: height)
-        static let vectorGrid = Grid(width: vectorSize, height: vectorSize)
 
         /// What the wire codes mean, for the nominal range `finish()` publishes
         /// and for the vectorscope's chroma gain.
@@ -195,77 +182,75 @@ extension ScopeAnalyzer {
         }
 
         /// A difference map all the way to its softened density, in ONE sweep:
-        /// the column integration and both halves of the 1-2-1 blur together.
+        /// the column integration and the vertical 1-2-1 together.
         ///
-        /// This is the change that pays for the taller map. It used to be three
-        /// separate passes — integrate, blur across, blur down — each reading
-        /// and writing a megabyte, and doubling the map's height doubled all
-        /// three. Two of them fold away:
+        /// The VERTICAL blur of a prefix sum is expressible in terms of the sum
+        /// and the two differences bracketing it,
+        /// `J[y] = I[y−1] + 2·I[y] + I[y+1] = 4·I[y] − d[y] + d[y+1]`, and both
+        /// differences are already being read to compute `I[y]` — so the blur
+        /// costs two adds on a value that is in a register, instead of a second
+        /// pass over a megabyte.
         ///
-        /// - The VERTICAL blur of a prefix sum is expressible in terms of the
-        ///   sum and the two differences bracketing it,
-        ///   `J[y] = I[y−1] + 2·I[y] + I[y+1] = 4·I[y] − d[y] + d[y+1]`, and
-        ///   both differences are already being read to compute `I[y]`.
-        /// - The HORIZONTAL blur only needs the row's own neighbours, so it
-        ///   runs on the 2 KB scratch row while it is still in L1 rather than
-        ///   on a megabyte that has been evicted.
+        /// The map's spare row makes the bottom edge come out right with no
+        /// branch — every segment is closed by the time the walk ends, so
+        /// `d[height]` is exactly −I[height−1] and the formula degenerates to
+        /// the zero-padded `3·I[h−1] − d[h−1]` on its own. The top edge does the
+        /// same with `I[−1] = 0`.
         ///
-        /// The result is the same picture, exactly: a separable blur commutes
-        /// with itself across independent axes, and the zero padding is
-        /// per-axis. The map's spare row makes the bottom edge come out right
-        /// with no branch — every segment is closed by the time the walk ends,
-        /// so `d[height]` is exactly −I[height−1] and the formula degenerates
-        /// to the zero-padded `3·I[h−1] − d[h−1]` on its own. The top edge does
-        /// the same with `I[−1] = 0`.
+        /// There is deliberately NO horizontal blur here, and that is the fix
+        /// for the waveform reading thick and hazy next to the parade. It filled
+        /// nothing: the accumulator writes EVERY column for every grid row (a
+        /// sample's segment reaches back to its left-hand neighbour's value), so
+        /// a trace map has no horizontal gaps for a blur to close — the pass
+        /// only widened the trace by a column each way. A column is sub-pixel in
+        /// a parade, whose three channels squeeze the whole map into a third of
+        /// the box, and it is several device pixels in a waveform, which
+        /// stretches one map across all of it. Same code, same map, and the
+        /// smear it added was invisible in one scope and the dominant blur in
+        /// the other. Measured on a detailed 1080p frame in a 472 pt box, the
+        /// horizontal detail surviving to the screen went from 0.35 of the
+        /// parade's to 0.57 with the pass gone, and to 1.05 once the map was
+        /// widened to match.
         private static func softened(
             _ diff: UnsafeMutablePointer<Int32>) -> [Int32] {
-            // one running total per column and one scratch row: 4 KB between
-            // them, so both stay in L1 for the whole sweep. Walking columns
-            // instead would stride a megabyte per step.
+            // one running total per column: 4 KB, so it stays in L1 for the
+            // whole sweep. Walking columns instead would stride a megabyte per
+            // step.
             var running = [Int32](repeating: 0, count: width)
-            var scratch = [Int32](repeating: 0, count: width)
             return Array(unsafeUninitializedCapacity: cells) { dst, count in
                 count = cells
                 running.withUnsafeMutableBufferPointer { totals in
-                    scratch.withUnsafeMutableBufferPointer { row in
-                        for y in 0..<height {
-                            softenRow(y, diff: diff, totals: totals, row: row,
-                                      into: dst)
-                        }
+                    for y in 0..<height {
+                        softenRow(y, diff: diff, totals: totals, into: dst)
                     }
                 }
             }
         }
 
-        /// One row of `softened`: integrate down into it, then blur along it.
+        /// One row of `softened`: integrate down into it, blurring as it goes.
         @inline(__always)
         private static func softenRow(
             _ y: Int, diff: UnsafeMutablePointer<Int32>,
             totals: UnsafeMutableBufferPointer<Int32>,
-            row: UnsafeMutableBufferPointer<Int32>,
             into dst: UnsafeMutableBufferPointer<Int32>) {
             let base = y * width
             for col in 0..<width {
                 let here = diff[base + col]
                 totals[col] += here
-                row[col] = 4 * totals[col] - here + diff[base + width + col]
+                dst[base + col] = 4 * totals[col] - here + diff[base + width + col]
             }
-            // the width is a compile-time 512, so the two ends are stated once
-            // rather than costing a bounds test on every one of the 512 columns
-            dst[base] = 2 * row[0] + row[1]
-            for col in 1..<(width - 1) {
-                dst[base + col] = 2 * row[col] + row[col - 1] + row[col + 1]
-            }
-            dst[base + width - 1] = 2 * row[width - 1] + row[width - 2]
         }
 
-        /// Separable 1-2-1 blur over a density map that is NOT a difference
-        /// map — the vectorscope, which has one sample per cell and no
-        /// segments, so there is no integration sweep to fold it into.
-        static func blurred(_ counts: [Int32],
-                            grid: Grid = traceGrid) -> [Int32] {
-            let row = (step: 1, count: grid.width)
-            let column = (step: grid.width, count: grid.height)
+        /// Separable 1-2-1 blur over the vectorscope's square density map.
+        ///
+        /// The trace maps do NOT go through this. They have one integration
+        /// sweep that carries their vertical softening, and they need no
+        /// horizontal one (see `softened`). The vectorscope is the opposite
+        /// case: one sample per cell, no segments, real gaps between the hits
+        /// in both directions — so it gets the full separable blur.
+        static func blurred(_ counts: [Int32], size: Int) -> [Int32] {
+            let row = (step: 1, count: size)
+            let column = (step: size, count: size)
             return blurPass(blurPass(counts, along: row, across: column),
                             along: column, across: row)
         }
@@ -298,9 +283,9 @@ extension ScopeAnalyzer {
         /// Every cell of every map used to call `Foundation.log` twice (once for
         /// the byte, once for the colored trace) — 600 k transcendental calls
         /// per frame for a 255-level output.
-        /// Covers every density a blurred trace map can reach (the grid puts
-        /// `gridRows` samples in a column and the two blur passes multiply by
-        /// 16); the vectorscope's few hottest cells fall through to `log`.
+        /// Covers every density a softened trace map can reach (the grid puts
+        /// `gridRows` samples in a column and the vertical 1-2-1 multiplies by
+        /// 4); the vectorscope's few hottest cells fall through to `log`.
         private static let logTable: [Double] =
             (0...8192).map { Foundation.log(Double($0) + 1) }
 
@@ -343,14 +328,13 @@ extension ScopeAnalyzer {
                 waveformYColor: colored,
                 histR: histogram(0), histG: histogram(1),
                 histB: histogram(2), histY: histogram(3),
-                // the vectorscope gets the same 1-2-1 softening as the traces:
-                // one sample per cell and no segments to fill left it a field
-                // of hard dots that read as a low-resolution scope rather than
-                // as a density
+                // the vectorscope is softened in both directions: one sample per
+                // cell and no segments to fill left it a field of hard dots
+                // that read as a low-resolution scope rather than as a density
                 vector: Self.toBytesLog(Self.blurred(
                     Array(UnsafeBufferPointer(start: vector,
                                               count: Self.vectorCells)),
-                    grid: Self.vectorGrid)),
+                    size: Self.vectorSize)),
                 nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
                                            black: Self.unit(of: codes.black)),
                 sequence: ScopeAnalyzer.nextSequence())

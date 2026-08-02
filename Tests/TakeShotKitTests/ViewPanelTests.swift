@@ -153,7 +153,7 @@ struct ViewPanelTests {
     @Test func scopesChromeFitsTheInPlayerOverlay() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live, singleScope: true)
+                ScopesPanel(scopes: probe.controller.scopes, singleScope: true)
             }
             let overlay = ViewBudget.scopesOverlayWidth
             #expect(ideal.ru.width <= overlay,
@@ -170,7 +170,7 @@ struct ViewPanelTests {
         try await ViewProbe.run { probe in
             probe.controller.scopesWindowOpen = true
             let ideal = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             #expect(ideal.ru.width <= 980,
                     "the scopes window chrome wants \(ideal.ru.width)pt of 980")
@@ -182,7 +182,7 @@ struct ViewPanelTests {
     @Test func scopesChromeStacksInsteadOfClippingWhenNarrow() async throws {
         try await ViewProbe.run { probe in
             let narrow = probe.sizes(proposedWidth: 420, proposedHeight: 260) {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             #expect(narrow.ru.width == 420,
                     "the scopes panel overflowed its own minimum width")
