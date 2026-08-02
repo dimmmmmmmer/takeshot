@@ -44,10 +44,25 @@ struct RemoteStatus: Equatable, Sendable {
     /// owner, only REC is a static control, and a marker button offered over
     /// playback marks something the person holding the phone cannot see.
     var mode: String = "record"
+    /// One entry per camera, main first, in the order the multiview page's
+    /// binary frames index them. The REC light on each tile is this state,
+    /// not the top-level `recording` — in multicam the boards record apart.
+    var cameras: [CameraState] = []
+
+    /// A camera as the multiview tile shows it: its label and whether ITS
+    /// pipeline is writing right now.
+    struct CameraState: Equatable, Sendable {
+        var name: String
+        var recording: Bool
+    }
 
     /// The wire form. Hand-built rather than Codable so the field names are
     /// visible next to the page that reads them.
     var json: String {
+        let tiles = cameras.map {
+            "{\"name\":\(RemoteJSON.quoted($0.name))"
+                + ",\"recording\":\($0.recording)}"
+        }
         let fields: [String] = [
             "\"type\":\"status\"",
             "\"tc\":\(RemoteJSON.quoted(timecode))",
@@ -61,6 +76,7 @@ struct RemoteStatus: Equatable, Sendable {
             "\"rating\":\(RemoteJSON.quoted(rating))",
             "\"diskGB\":\(RemoteJSON.number(diskFreeGB))",
             "\"markers\":\(markerCount)",
+            "\"cameras\":[" + tiles.joined(separator: ",") + "]",
         ]
         return "{" + fields.joined(separator: ",") + "}"
     }
@@ -118,9 +134,17 @@ enum RemoteCommand: Equatable, Sendable {
     case rate(takeID: String, rating: TakeRating)
     /// Replace one take's free-text comment.
     case comment(takeID: String, text: String)
+    /// The multiview page asked for (or gave up) the camera-frame stream.
+    /// Settled by the server itself — a per-connection subscription, not an
+    /// app command — so it is never dispatched to the controller.
+    case multiview(on: Bool)
 
     /// The wire action plus whatever arguments it carries. nil for anything
     /// malformed — an unknown rating word must not be read as "clear it".
+    ///
+    /// The bare actions here, the ones that carry arguments below: reading
+    /// the argument rules inline put this over the project's complexity
+    /// ceiling, which is the ceiling doing its job.
     static func parse(action: String,
                       in dictionary: [String: Any]) -> RemoteCommand? {
         switch action {
@@ -129,6 +153,13 @@ enum RemoteCommand: Equatable, Sendable {
         case "marker": return .marker
         case "good": return .good
         case "bad": return .bad
+        default: return parseWithArguments(action: action, in: dictionary)
+        }
+    }
+
+    private static func parseWithArguments(
+        action: String, in dictionary: [String: Any]) -> RemoteCommand? {
+        switch action {
         case "rate":
             guard let id = dictionary["id"] as? String, !id.isEmpty,
                   let rating = TakeRating(
@@ -140,6 +171,10 @@ enum RemoteCommand: Equatable, Sendable {
                   let text = dictionary["text"] as? String
             else { return nil }
             return .comment(takeID: id, text: text)
+        case "multiview":
+            // Strict, like `rate`: a missing flag must not be read as "on".
+            guard let on = dictionary["on"] as? Bool else { return nil }
+            return .multiview(on: on)
         default:
             return nil
         }

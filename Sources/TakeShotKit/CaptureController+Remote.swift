@@ -40,6 +40,7 @@ extension CaptureController {
         let server = RemoteServer(
             pin: pin, page: RemotePage.html(),
             scriptPage: RemotePage.scriptHTML(),
+            multiviewPage: RemotePage.multiviewHTML(),
             handlers: RemoteServer.Handlers(
                 command: { [weak self] command in
                     // The server's queue must never touch the controller: every
@@ -59,6 +60,11 @@ extension CaptureController {
                     // reads controller state itself, here no more than anywhere
                     // else.
                     Task { @MainActor in reply(self?.remoteTakePoster()) }
+                },
+                multiviewDemand: { [weak self] active in
+                    // The taps and the encoder are controller state; the
+                    // demand edge hops here like a command does.
+                    Task { @MainActor in self?.setRemoteMultiviewActive(active) }
                 }))
         remoteServer = server
         server.start(port: UInt16(clamping: overridePort
@@ -69,6 +75,10 @@ extension CaptureController {
     func stopRemoteServer() {
         remoteStatusTask?.cancel()
         remoteStatusTask = nil
+        // The multiview taps and encoder go with the server, deterministically
+        // — the server's own demand recount would say the same thing, but only
+        // after a hop the teardown should not have to wait for.
+        setRemoteMultiviewActive(false)
         remoteServer?.stop()
         remoteServer = nil
         remoteBoundPort = 0
@@ -139,6 +149,7 @@ extension CaptureController {
             // restart.
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
+            remoteServer?.setMultiviewPage(RemotePage.multiviewHTML())
         }
     }
 }

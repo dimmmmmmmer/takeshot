@@ -33,6 +33,16 @@ extension CaptureController {
         status.markerCount = remoteMarkerCount
         // the page shows/hides its non-REC controls on this — see remote.html
         status.mode = viewerMode == .playback ? "playback" : "record"
+        // Main camera first, extras in channel order — the same indexing the
+        // multiview frames carry in their camera byte. Each tile's REC light
+        // is its OWN pipeline's state: in multicam the boards record apart,
+        // and a B-cam whose writer died must not glow red on A-cam's word.
+        status.cameras = [RemoteStatus.CameraState(
+            name: settings.cameraLabel, recording: isRecording)]
+            + extraChannels.map {
+                RemoteStatus.CameraState(name: $0.camLabel,
+                                         recording: $0.isRecording)
+            }
         return status
     }
 
@@ -147,8 +157,11 @@ extension CaptureController {
     /// One command from a phone, on the MainActor.
     func perform(remote command: RemoteCommand) {
         switch command {
-        case .hello:
-            break // the PIN handshake; the server has already answered it
+        case .hello, .multiview:
+            // hello is the PIN handshake and multiview is a per-connection
+            // subscription — the server settles both itself, so neither
+            // arrives here with any work left to do.
+            break
         case .rec:
             // The same guard the on-screen button carries: with no capture
             // running there is nothing to record, and the pipeline would take
@@ -162,15 +175,9 @@ extension CaptureController {
         case .bad:
             toggleLastRating(.bad)
         case .rate(let takeID, let rating):
-            // The scripty's tap lands on the method the row's own controls
-            // call, so the CSV rewrite and the panel update come from there. A
-            // take that is gone (deleted between the push and the tap) is
-            // silently nothing — the next push shows the page why.
-            guard let take = take(withRemoteID: takeID) else { break }
-            setRating(rating, for: take)
+            editTake(takeID) { setRating(rating, for: $0) }
         case .comment(let takeID, let text):
-            guard let take = take(withRemoteID: takeID) else { break }
-            setComment(text, for: take)
+            editTake(takeID) { setComment(text, for: $0) }
         }
         pushRemoteStatus()
         // Edits and finalizes both reshape the table the script page shows;
@@ -179,8 +186,15 @@ extension CaptureController {
         pushRemoteTakeLog()
     }
 
-    /// The take a page-sent id names, or nil when it no longer exists.
-    private func take(withRemoteID id: String) -> Take? {
-        takes.first { $0.id.uuidString == id }
+    /// Run one edit against the take a page-sent id names. The scripty's tap
+    /// lands on the method the row's own controls call, so the CSV rewrite
+    /// and the panel update come from there. A take that is gone (deleted
+    /// between the push and the tap) is silently nothing — the next push
+    /// shows the page why.
+    private func editTake(_ id: String, _ edit: (Take) -> Void) {
+        guard let take = takes.first(where: { $0.id.uuidString == id }) else {
+            return
+        }
+        edit(take)
     }
 }

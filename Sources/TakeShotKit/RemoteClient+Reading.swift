@@ -75,6 +75,10 @@ extension RemoteClient {
             // The markup is as public as the operator page's — everything it
             // shows arrives over the socket, behind the same PIN.
             writeAndClose(RemoteResponse.page(server?.currentScriptPage ?? Data()))
+        case RemotePage.multiviewPath:
+            // Same rule: the markup is empty tiles, and every frame that
+            // could fill them rides the socket behind the PIN.
+            writeAndClose(RemoteResponse.page(server?.currentMultiviewPage ?? Data()))
         case RemotePage.posterPath:
             servePoster(request)
         default:

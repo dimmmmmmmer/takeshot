@@ -104,6 +104,12 @@ public final class CapturePipeline: @unchecked Sendable {
     /// read releases the box under the reader's feet.
     let displayFrameLock = NSLock()
     var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+    /// A second mirror of the same displayed frame, for the phone multiview.
+    /// Its own slot rather than a list: `displayFrameHandler` is owned by the
+    /// hardware playout mirror and re-routed on every record/playback switch,
+    /// and sharing it would take the operator's monitor output away. Behind
+    /// the same lock, for the same torn-closure-read reason.
+    var multiviewFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
 
     // LUT (all access on queue)
     let ciContext = CIContext(options: [.cacheIntermediates: false])

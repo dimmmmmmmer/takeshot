@@ -638,3 +638,9 @@
 "script_empty" = "Дублей пока нет";
 "script_comment" = "Комментарий";
 "script_takes" = "Дубли";
+
+/* === the multiview page: a live camera grid on a phone === */
+"remote_multiview" = "Мультивью";
+"multiview_title" = "TakeShot: мультивью";
+"multiview_rec" = "REC";
+"multiview_wait" = "Видео ещё нет";

@@ -32,15 +32,22 @@ final class RemoteServer: @unchecked Sendable {
         /// which is what a server driven without a controller has.
         var poster: @Sendable (@escaping @Sendable (Data?) -> Void) -> Void
             = { reply in reply(nil) }
+        /// Somebody started (true) or the last somebody stopped (false)
+        /// watching the multiview stream. The app answers by building or
+        /// tearing down the encoder, so an idle set encodes nothing. Called
+        /// on the server's queue, only on a change. The default ignores it,
+        /// which is what a server driven without a controller wants.
+        var multiviewDemand: @Sendable (Bool) -> Void = { _ in }
     }
 
-    /// The values the app pushes in while the server runs: the PIN and the two
+    /// The values the app pushes in while the server runs: the PIN and the
     /// localized pages. All change without a restart (the operator switches
     /// language, or regenerates the code).
     private struct Shared {
         var pin: String
         var page: Data
         var scriptPage: Data
+        var multiviewPage: Data
     }
 
     /// A handful of phones is the whole use case. The cap is what stops a
@@ -90,12 +97,17 @@ final class RemoteServer: @unchecked Sendable {
     /// connection's, because a reconnect is what defeats every per-connection
     /// count. See `RemotePINTarpit`.
     private var tarpit = RemotePINTarpit()
+    /// What `handlers.multiviewDemand` was last told, so the app hears about
+    /// edges only — every subscribe, unsubscribe and disconnect recounts, and
+    /// most recounts change nothing.
+    private var multiviewDemand = false
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         handlers: Handlers) {
+         multiviewPage: Data = Data(), handlers: Handlers) {
         self.handlers = handlers
         self.shared = OSAllocatedUnfairLock(
-            initialState: Shared(pin: pin, page: page, scriptPage: scriptPage))
+            initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
+                                 multiviewPage: multiviewPage))
     }
 
     /// Start listening. `port` 0 binds an ephemeral one and reports it through
@@ -123,6 +135,9 @@ final class RemoteServer: @unchecked Sendable {
             clients.removeAll()
             lastStatus = nil
             lastTakeLog = nil
+            // The clients are gone, so the demand is too — the app tears the
+            // encoder down on this edge even when it forgot to on its own.
+            multiviewDemandChanged()
         }
     }
 
@@ -170,6 +185,22 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.scriptPage = page }
     }
 
+    /// Replace the multiview page, for the same language switch.
+    func setMultiviewPage(_ page: Data) {
+        shared.withLock { $0.multiviewPage = page }
+    }
+
+    /// Push one camera's fresh JPEG to every client that asked for frames.
+    /// Fire-and-forget from the encoder's queue; each client applies its own
+    /// one-in-flight rule, so a slow phone holds nothing up (see
+    /// `RemoteClient+Multiview`).
+    func broadcastFrame(camera: Int, jpeg: Data) {
+        let index = UInt8(clamping: camera)
+        queue.async { [self] in
+            for client in clients.values { client.send(frame: jpeg, camera: index) }
+        }
+    }
+
     /// Replace the PIN. Sockets already authenticated stay open; their next
     /// command carries the old code and is refused, which is what a rotated
     /// code has to mean.
@@ -182,8 +213,19 @@ final class RemoteServer: @unchecked Sendable {
     var currentPIN: String { shared.withLock { $0.pin } }
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
+    var currentMultiviewPage: Data { shared.withLock { $0.multiviewPage } }
     var currentStatus: String? { lastStatus }
     var currentTakeLog: String? { lastTakeLog }
+
+    /// A client subscribed, unsubscribed or went away: recount, and tell the
+    /// app only when the answer changed. Queue-confined, like the registry it
+    /// reads.
+    func multiviewDemandChanged() {
+        let demand = clients.values.contains(where: \.wantsMultiview)
+        guard demand != multiviewDemand else { return }
+        multiviewDemand = demand
+        handlers.multiviewDemand(demand)
+    }
 
     /// Register one PIN verification and say how long its answer must be held
     /// back. Queue-confined, like the tarpit it reads.
@@ -212,6 +254,26 @@ final class RemoteServer: @unchecked Sendable {
         queue.sync { clients.values.map(\.inFlightBytes).max() ?? 0 }
     }
 
+    /// Frames handed to the transport, across all clients. For the tests —
+    /// the one-in-flight rule is otherwise invisible from outside: a frame
+    /// held back is indistinguishable on the wire from one not yet encoded.
+    var multiviewFrameSends: Int {
+        queue.sync { clients.values.map(\.frameSends).reduce(0, +) }
+    }
+
+    /// Clients with a frame handed over whose completion has not landed.
+    /// For the tests, like the ledger above.
+    var multiviewFramesInFlight: Int {
+        queue.sync { clients.values.filter(\.frameInFlight).count }
+    }
+
+    /// The largest held-frame count any client is carrying — the latest-wins
+    /// bound the tests assert: one per camera, however many frames were
+    /// pushed while the socket stalled.
+    var multiviewPendingFrames: Int {
+        queue.sync { clients.values.map(\.pendingFrames.count).max() ?? 0 }
+    }
+
     /// Seconds off a clock that only ever moves forward. The tarpit's window is
     /// measured against it rather than against `Date`, which an NTP correction
     /// or an operator setting the clock can move backwards — and a window whose
@@ -226,5 +288,8 @@ final class RemoteServer: @unchecked Sendable {
 
     func clientClosed(_ client: RemoteClient) {
         clients.removeValue(forKey: ObjectIdentifier(client))
+        // A watcher that walked away is a demand change like any other: the
+        // last one out is what lets the app stop encoding.
+        multiviewDemandChanged()
     }
 }

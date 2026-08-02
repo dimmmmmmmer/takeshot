@@ -88,10 +88,11 @@ import Testing
         #expect(text.hasPrefix("HTTP/1.1 200 OK\r\n"))
         #expect(text.contains("Content-Length: 2\r\n"))
         #expect(text.contains("default-src 'none'"))
-        // The take poster is fetched from this same origin and nowhere else.
-        // Without the allowance the browser blocks the <img> and says so only
+        // The take poster is fetched from this same origin and nowhere else,
+        // and the multiview tiles are blob: URLs built from socket bytes.
+        // Without the allowances the browser blocks the <img> and says so only
         // to a console on a phone, which looks exactly like a 404 from the app.
-        #expect(text.contains("img-src 'self'"))
+        #expect(text.contains("img-src 'self' blob:"))
         #expect(!text.contains("img-src *"))
         #expect(text.contains("X-Content-Type-Options: nosniff"))
         #expect(text.hasSuffix("hi"))

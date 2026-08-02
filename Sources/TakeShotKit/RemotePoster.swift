@@ -9,33 +9,21 @@ import Foundation
 /// known picture and read the bytes back out of. The image itself is the takes
 /// panel's own thumbnail — see `CaptureController.remoteTakePoster`.
 ///
-/// ## Why this is a still and not a live MJPEG stream
+/// ## The poster beside the multiview stream
 ///
-/// A one-client, PIN-gated MJPEG preview off the display tap was considered and
-/// is deliberately not built. It was only ever worth having if it stayed small,
-/// and nothing about it does:
+/// A live camera grid exists now (`/multiview`, owner-approved), and it was
+/// built the way the objections recorded here said it would have to be: the
+/// frames come off a second display-tap slot (`setOnMultiviewFrame`) rather
+/// than the playout mirror's, they ride the WebSocket as binary messages
+/// rather than a `multipart/x-mixed-replace` connection the HTTP side has no
+/// model for, and the encoder exists only while a phone is subscribed — see
+/// `MultiviewEncoder` and `RemoteClient+Multiview`.
 ///
-/// - **There is no frame-out seam to take it from.** `PreviewSinkRegistry` is
-///   typed to `MetalPreviewLayer`, a concrete CALayer — a sink is a view's own
-///   layer, not a frame consumer. Streaming means opening that up in
-///   `CaptureCore`, on the preview path, which is the load-bearing side of the
-///   capture queue rather than a corner of the remote.
-/// - **The other tap is already owned.** `CapturePipeline.displayFrameHandler`
-///   is a single slot behind a lock, held by the hardware playout mirror and
-///   re-routed on every record/playback switch. Taking it is taking the
-///   operator's monitor output away.
-/// - **The connection model is wrong for it.** Every HTTP answer here is
-///   `writeAndClose`. A `multipart/x-mixed-replace` body is an open connection
-///   with no end, against a cap of eight, on a phone that can walk out of Wi-Fi
-///   without sending a FIN — a second backpressure story to get right beside
-///   the one the socket already has.
-/// - **It is continuous encode work on a machine that is recording.** A poster
-///   is one JPEG per take; a stream is one per frame, forever, for the sake of
-///   a picture nobody watches between takes.
-///
-/// What the phone actually needed from a stream — "what did that take look
-/// like" — is what the poster answers, at a cost that is one cached thumbnail
-/// re-encoded when a take lands.
+/// The poster stays regardless, because it answers a different question. The
+/// stream is "what is the camera seeing NOW"; the poster is "what did that
+/// take look like" — a frame of footage that landed, shown next to the rating
+/// buttons that act on it, at a cost of one cached thumbnail re-encoded when
+/// a take finalizes.
 enum RemotePoster {
     /// Longest edge of the served image.
     ///

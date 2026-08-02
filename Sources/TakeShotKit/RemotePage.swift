@@ -1,7 +1,7 @@
 import Foundation
 
-/// The two pages the remote serves: the operator remote at `/` and the script
-/// supervisor's take log at `/script`.
+/// The pages the remote serves: the operator remote at `/`, the script
+/// supervisor's take log at `/script` and the camera grid at `/multiview`.
 ///
 /// The markup is a bundle resource, not a Swift string literal: it is HTML,
 /// CSS and JavaScript, and none of those are readable once they are escaped
@@ -78,6 +78,24 @@ enum RemotePage {
         ("takes", "script_takes"),
     ]
 
+    /// Where the camera grid lives. Stated once, like the script page's path.
+    static let multiviewPath = "/multiview"
+
+    /// The multiview page's label → key table. The gate and connection
+    /// strings are shared with the other pages — same socket, same PIN.
+    static let multiviewLabels: [(field: String, key: String)] = [
+        ("title", "multiview_title"),
+        ("connected", "remote_connected"),
+        ("connecting", "remote_connecting"),
+        ("disconnected", "remote_disconnected"),
+        ("connect", "remote_connect"),
+        ("pinPrompt", "remote_pin_prompt"),
+        ("pinBad", "remote_pin_bad"),
+        ("noSignal", "remote_no_signal"),
+        ("wait", "multiview_wait"),
+        ("rec", "multiview_rec"),
+    ]
+
     /// The operator page with the current language's labels baked in.
     ///
     /// Called on the MainActor whenever the language changes; the server holds
@@ -89,6 +107,11 @@ enum RemotePage {
     /// The script supervisor's page, same discipline.
     static func scriptHTML() -> Data {
         render(resource: "script", labels: scriptLabels)
+    }
+
+    /// The camera grid, same discipline again.
+    static func multiviewHTML() -> Data {
+        render(resource: "multiview", labels: multiviewLabels)
     }
 
     private static func render(resource: String,

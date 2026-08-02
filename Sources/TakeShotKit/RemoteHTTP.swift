@@ -146,9 +146,11 @@ enum RemoteResponse {
         // `img-src 'self'` is what lets the take poster load at all: under
         // `default-src 'none'` the browser blocks the <img> and reports it only
         // to a console on a phone, which looks exactly like an endpoint that is
-        // answering 404. 'self' and nothing else — the page still fetches
-        // nothing from off the set network.
-        head += "img-src 'self'; connect-src 'self' ws:\r\n"
+        // answering 404. `blob:` is the multiview page's frames — bytes that
+        // arrived over the socket and never left the page. 'self', blob: and
+        // nothing else — the page still fetches nothing from off the set
+        // network.
+        head += "img-src 'self' blob:; connect-src 'self' ws:\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"
         head += "Connection: close\r\n\r\n"
         return Data(head.utf8) + body

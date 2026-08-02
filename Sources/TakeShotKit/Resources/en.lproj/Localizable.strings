@@ -635,3 +635,9 @@
 "script_empty" = "No takes yet";
 "script_comment" = "Comment";
 "script_takes" = "Takes";
+
+/* === the multiview page: a live camera grid on a phone === */
+"remote_multiview" = "Multiview page";
+"multiview_title" = "TakeShot Multiview";
+"multiview_rec" = "REC";
+"multiview_wait" = "No video yet";
