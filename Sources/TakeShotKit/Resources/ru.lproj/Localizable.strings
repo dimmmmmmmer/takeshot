@@ -68,6 +68,21 @@
 
 /* Hotkeys */
 "settings_hotkeys" = "Горячие клавиши";
+/* the hotkey editor sheet (owner item 20): the settings row that opens it, the
+   list's own chrome, and the names of the chords it will not let go */
+"hotkey_bindings" = "Назначения клавиш";
+"hotkey_edit" = "Изменить…";
+"hotkey_search" = "Поиск";
+"hotkey_no_matches" = "Ничего не найдено";
+"hotkey_conflict" = "Уже занято: %@";
+"hotkey_reset_one" = "Сбросить это сочетание";
+"reset_hotkeys_confirm" = "Сбросить все сочетания на стандартные?";
+"reserved_settings" = "Настройки";
+"reserved_open_folder" = "Открыть папку записи";
+"reserved_help" = "Справка";
+"reserved_rename_take" = "Переименовать дубль";
+"reserved_play_pause" = "Воспроизведение / пауза";
+"reserved_close_overlay" = "Закрыть оверлей";
 "hotkey_record" = "Запись / стоп";
 "hotkey_circle" = "Оценить последний дубль (good/bad)";
 "hotkey_demo_rec" = "REC демо-камеры";
@@ -152,7 +167,9 @@
 "playback_speed" = "Скорость воспроизведения";
 "playback_loop" = "Зациклить";
 "fullscreen" = "Во весь экран";
-"settings_output" = "Вывод";
+"settings_output" = "Вывод видео";
+/* the sound department's own block, split off from Output (owner item 9) */
+"settings_audio" = "Аудио";
 "external_display" = "Вывод на внешний монитор";
 "external_off" = "Выкл";
 "record_channels" = "Аудиоканалы в запись";
@@ -217,9 +234,8 @@
 /* Color tags */
 "color_tags" = "Цветовые теги видео";
 "video_levels" = "Уровни входа";
-"levels_limited" = "Limited (16-235) — расширять";
-"levels_full" = "Full (0-255) — как есть";
-"levels_hint" = "Что источник шлёт по проводу. Limited (например, HDMI камеры) один раз расширяется для корректного контраста, а коды вне 16-235 (64-940 в 10 битах) при этом срезаются — и на экране, и в файле. «С запасами» расширяет весь легальный размах камеры, поэтому подчёрные и сверхбелые сохраняются для цветокоррекции; картинка чуть менее контрастная. Full (например, плейаут-устройство с выходом Full) проходит без изменений. В файлы всегда пишется стандартный legal-range.";
+"levels_limited" = "Limited";
+"levels_full" = "Full";
 "color_tags_hint" = "Дефолт — Rec.709 nclc 1-1-1, limited: то, чего ждут 99% HD-пайплайнов. Настройка уровней полноценно заработает с форматами живого железа";
 
 "preset_arri35" = "ARRI Alexa 35";
@@ -238,7 +254,7 @@
 "reset_colors" = "Сбросить цвета";
 "reset_all" = "Сбросить все настройки";
 
-"levels_auto" = "Авто (RGB-источник: limited)";
+"levels_auto" = "Авто";
 "lut_intensity_label" = "Интенсивность";
 
 "multicam_toggle" = "Мультикам: захват всех камер сразу (в демо — вторая камера; на железе — все другие платы DeckLink)";
@@ -246,7 +262,6 @@
 /* LUT folder + placeholders */
 "settings_luts" = "LUT-файлы";
 "luts_folder" = "Импортированные LUT";
-"luts_hint" = "Импортированные луки (.cube, .cdl, .ccc, .cc) копируются сюда (Application Support/TakeShot/LUTs).";
 "open_in_finder" = "Открыть в Finder";
 "clear_data" = "Очистить";
 "cancel" = "Отмена";
@@ -368,11 +383,7 @@
 
 "loop_in_help" = "Поставить/снять точку входа лупа";
 "loop_out_help" = "Поставить/снять точку выхода лупа";
-"backup_folder" = "Проверяемый бэкап";
 "choose" = "Выбрать...";
-"backup_copying" = "Копируется...";
-"backup_verified" = "В бэкапе (чексумма сошлась)";
-"backup_failed" = "Бэкап не удался: %@ (%@)";
 
 "assist_el_zone" = "EL Zone (стопы)";
 
@@ -513,7 +524,6 @@
 "remote_address" = "Адрес";
 "remote_no_network" = "Этот Mac не в сети";
 "remote_offline" = "Не слушает";
-"remote_hint" = "Откройте адрес на телефоне в той же сети и введите PIN. Кода в QR нет — продиктуйте его.";
 "remote_failed" = "Веб-пульт: %@";
 "remote_title" = "Пульт TakeShot";
 "remote_rec" = "REC";
@@ -567,8 +577,7 @@
 /* Other content: the type glyph on a row and on a tile (owner item 27) */
 "other_type_video" = "Видео";
 "other_type_photo" = "Фото";
-/* === scopes: 10-bit wire reading and the third input-levels mode === */
-"levels_excursions" = "Limited, с запасами (4-1019)";
+/* === scopes: 10-bit wire reading === */
 "scope_wire_badge" = "ПРОВОД";
 "scope_wire_hint" = "Измеряется 10-битный сигнал с провода, до расширения уровней: трасса может уходить ниже 0% и выше 100%, эти полосы затенены.";
 
@@ -762,7 +771,6 @@
 "chroma_preview_only" = "Только превью и выход на монитор — в дубли, кадры и экспорт идёт исходная картинка.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Держать TakeShot в строке меню";
-"menubar_keep_hint" = "Добавляет значок в строку меню: во время записи он показывает таймкод дубля, а в его меню — REC, маркер и заглушение. Идущий дубль остаётся виден, и его можно остановить, когда главное окно закрыто или скрыто за другими программами.";
 "menubar_take" = "Дубль: %@";
 "menubar_no_take" = "Дубля ещё нет";
 "menubar_mute_monitor" = "Заглушить мониторинг";

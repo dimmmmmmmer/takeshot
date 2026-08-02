@@ -75,7 +75,7 @@ extension CapturePipeline {
         }
         let mode = InputLevels.resolved(inputLevels)
         let leveled = mode.expandsEightBit
-            ? (expandLimitedRGB(pixelBuffer, mode: mode) ?? pixelBuffer)
+            ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
             : pixelBuffer
         return LevelledFrame(display: leveled, tenBitRecord: nil,
                              scopeSource: nil)
@@ -84,7 +84,7 @@ extension CapturePipeline {
     /// The levels decision for this frame, logged whenever it changes.
     ///
     /// input levels: the setting states what the SOURCE carries on the wire.
-    /// "limited" (16-235 RGB) is expanded once to the full-range BGRA the
+    /// "limited" (studio swing) is expanded once to the full-range BGRA the
     /// rest of the pipeline assumes; "full" passes through untouched (e.g.
     /// a playout device already set to Full output levels). auto (nil)
     /// assumes limited for RGB 4:4:4 HDMI (CTA-861 default). Conversion to
@@ -109,10 +109,10 @@ extension CapturePipeline {
     /// single levels operation in the pipeline; the encoder handles full-RGB →
     /// legal-YUV for the file, and YUV sources are legal-range by definition.
     ///
-    /// `mode` picks the window: 16–235 for the normal reading, 1–254 when the
-    /// operator asked for the excursions to survive.
-    private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer,
-                                  mode: InputLevels) -> CVPixelBuffer? {
+    /// The window is the legal swing 1–254, not 16–235: a camera's sub-blacks
+    /// and super-whites are codes it deliberately sent, and clamping them here
+    /// takes them out of the recorded file as well as off the screen.
+    private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
         guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA
         else { return nil }
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
@@ -124,7 +124,7 @@ extension CapturePipeline {
             width: vImagePixelCount(CVPixelBufferGetWidth(pixelBuffer)),
             rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
         // byte order is B G R A: remap the three color channels, keep alpha
-        let error = Self.levelsExpandTable(for: mode).withUnsafeBufferPointer { lut in
+        let error = Self.levelsLimitedTable.withUnsafeBufferPointer { lut in
             Self.levelsTableIdentity.withUnsafeBufferPointer { identity in
                 vImageTableLookUp_ARGB8888(&image, &image,
                                            lut.baseAddress!, lut.baseAddress!,

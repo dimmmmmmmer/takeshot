@@ -188,9 +188,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var safeAreasOn: Bool?
     /// Anamorphic desqueeze factor for the preview (nil = 1).
     public var desqueezeFactor: Double?
-    /// Verified backup: every finished take/still is copied here with a
-    /// SHA-256 check (nil — off).
-    public var backupPath: String?
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     public var projectName: String = ""
@@ -237,13 +234,13 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020".
     public var colorTagPreset: String?
     /// Input levels of the source signal: nil/"auto" — RGB 4:4:4 assumed
-    /// limited; "limited" (16-235) — expanded once to full-range BGRA, and the
-    /// codes outside that window clamped away; "limited_excursions" — the whole
-    /// legal swing expanded instead, so a camera's sub-blacks and super-whites
-    /// survive into the file; "full" (0-255) — passed through (a playout device
-    /// already set to Full output levels). Legacy "off" is treated as "full".
-    /// The values are `InputLevels` raw values, and the property stays a
-    /// `String?` so settings JSON written by an older build still decodes.
+    /// limited; "limited" — studio swing, the whole legal swing expanded to
+    /// full range so a camera's sub-blacks and super-whites survive into the
+    /// file; "full" — passed through (a playout device already set to Full
+    /// output levels). Legacy "off" is treated as "full" and the retired
+    /// "limited_excursions" as "limited" (see `migrateToVersion2`). The values
+    /// are `InputLevels` raw values, and the property stays a `String?` so
+    /// settings JSON written by an older build still decodes.
     public var videoLevels: String?
     /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
     /// OFF on launch (no surprise audio on set).
@@ -433,7 +430,9 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     ///
     /// 1 — everything up to and including the naming-template migrations below,
     ///     which used to run unconditionally on every load.
-    public static let currentSchemaVersion = 1
+    /// 2 — the two input-levels modes collapsed into one, and the retired
+    ///     verified-backup folder handed to the offload destinations.
+    public static let currentSchemaVersion = 2
 
     /// Version of the decoded blob. Optional so that saves written before this
     /// field existed decode as nil and are treated as version 0.
@@ -443,7 +442,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         guard let data = defaults.data(forKey: defaultsKey),
               var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
         else { return CaptureSettings() }
-        settings = migrate(settings)
+        settings = migrate(settings, retired: RetiredSettings(from: data))
         settings.schemaVersion = currentSchemaVersion
         return settings
     }
@@ -451,10 +450,38 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Explicit, ordered migration chain. Previously every rule below ran on
     /// every load forever, which quietly forbids ever reusing an old template
     /// string and gives no place to put a change that is not a new Optional.
-    static func migrate(_ input: CaptureSettings) -> CaptureSettings {
+    ///
+    /// `retired` carries the fields that are no longer on this type at all: the
+    /// synthesized decoder drops unknown keys, so a migration that has to READ
+    /// a removed field needs it decoded separately.
+    static func migrate(_ input: CaptureSettings,
+                        retired: RetiredSettings = RetiredSettings()) -> CaptureSettings {
         var settings = input
         if (settings.schemaVersion ?? 0) < 1 {
             settings = migrateToVersion1(settings)
+        }
+        if (settings.schemaVersion ?? 0) < 2 {
+            settings = migrateToVersion2(settings, retired: retired)
+        }
+        return settings
+    }
+
+    /// Input levels lost their second studio-swing mode, and the app lost the
+    /// verified-backup folder to the DIT offload.
+    private static func migrateToVersion2(
+        _ input: CaptureSettings, retired: RetiredSettings) -> CaptureSettings {
+        var settings = input
+        // There is one Limited now, and it is the excursion-preserving reading
+        // — so the operator who had asked for that keeps exactly what they had,
+        // and the one who had the clamping reading is moved off it deliberately.
+        if settings.videoLevels == "limited_excursions" {
+            settings.videoLevels = InputLevels.limited.rawValue
+        }
+        // The offload supersedes the verified backup, and its destination list
+        // is where that folder belongs. Adopted only when the operator has not
+        // already set one up: their own list is never second-guessed.
+        if settings.offloadDestinationPaths == nil, let backup = retired.backupPath {
+            settings.offloadDestinationPaths = [backup]
         }
         return settings
     }

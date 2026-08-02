@@ -50,6 +50,72 @@ struct KeyCombo: Codable, Equatable {
     }
 }
 
+/// A chord the app answers to that is NOT remappable: a fixed key equivalent on
+/// a menu item or a view.
+///
+/// Production data rather than a list in a test, because two things need it and
+/// they must not drift apart: the editor, which refuses to bind a chord AppKit
+/// has already spoken for, and the test that checks no shipped default lands on
+/// one. `key` and `modifiers` are what AppKit actually matches a key equivalent
+/// on — the same two fields `KeyCombo` compares.
+struct ReservedShortcut {
+    let key: String
+    let modifiers: UInt
+    /// Localization key naming what owns the chord, for the conflict message.
+    let titleKey: String
+
+    func matches(_ combo: KeyCombo) -> Bool {
+        combo.key == key && combo.modifiers == modifiers
+    }
+
+    /// Every fixed shortcut in the app. Keep in step with the `keyboardShortcut`
+    /// modifiers in `AppCommands`, `TakeRowControls`, the transport bars and the
+    /// overlay dismissals.
+    static let all: [ReservedShortcut] = {
+        let command = NSEvent.ModifierFlags.command.rawValue
+        let commandShift = NSEvent.ModifierFlags([.command, .shift]).rawValue
+        return [
+            ReservedShortcut(key: ",", modifiers: command,
+                             titleKey: "reserved_settings"),
+            ReservedShortcut(key: "o", modifiers: commandShift,
+                             titleKey: "reserved_open_folder"),
+            ReservedShortcut(key: "?", modifiers: command,
+                             titleKey: "reserved_help"),
+            ReservedShortcut(key: "return", modifiers: command,
+                             titleKey: "reserved_rename_take"),
+            ReservedShortcut(key: "space", modifiers: 0,
+                             titleKey: "reserved_play_pause"),
+            ReservedShortcut(key: "escape", modifiers: 0,
+                             titleKey: "reserved_close_overlay"),
+        ]
+    }()
+
+    static func owning(_ combo: KeyCombo) -> ReservedShortcut? {
+        all.first { $0.matches(combo) }
+    }
+}
+
+/// What already answers to a chord the operator just pressed.
+///
+/// `install` walks the bindings dictionary and fires the FIRST action whose
+/// combo matches; dictionary order is not defined, so a chord on two actions
+/// fires unpredictably — REC one day, grab-still the next. That is the bug this
+/// type exists to make impossible to create by hand.
+enum HotkeyConflict: Equatable {
+    /// Another remappable action holds it.
+    case action(HotkeyAction)
+    /// A fixed shortcut holds it, named by its localization key.
+    case reserved(String)
+
+    /// The localization key naming the owner.
+    var ownerTitleKey: String {
+        switch self {
+        case .action(let action): return action.titleKey
+        case .reserved(let key): return key
+        }
+    }
+}
+
 /// Actions that hotkeys can be bound to.
 enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleRecord

@@ -296,7 +296,7 @@ import Testing
     /// Every string the item and its menu put on screen. A key with a typo
     /// renders as itself, which no build or lint step notices.
     private static let keys = [
-        "menubar_keep", "menubar_keep_hint", "menubar_take", "menubar_no_take",
+        "menubar_keep", "menubar_take", "menubar_no_take",
         "menubar_mute_monitor", "menubar_open_main", "menubar_quit",
         "menubar_status_idle", "menubar_status_ready", "menubar_status_recording",
         // reused, because the item and the button are the same action
@@ -314,10 +314,10 @@ import Testing
         }
     }
 
-    /// Menu rows are titles. The one sentence here is the settings caption,
-    /// which is not a menu row.
+    /// Menu rows are titles. The settings toggle's label is not a menu row —
+    /// and the paragraph that used to sit under it is gone (owner item 3).
     @Test func menuRowTitlesAreTitlesNotSentences() {
-        let rows = Self.keys.filter { $0 != "menubar_keep_hint" && $0 != "menubar_keep" }
+        let rows = Self.keys.filter { $0 != "menubar_keep" }
         for language in [AppLanguage.english, .russian] {
             ViewRender.withLanguage(language) {
                 for key in rows {

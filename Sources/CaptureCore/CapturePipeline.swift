@@ -335,23 +335,15 @@ public final class CapturePipeline: @unchecked Sendable {
     /// gets the alarm.
     static let failedTakeSuffix = "_FAILED"
 
-    /// Expansion table for limited-range RGB inputs — 16-235 → 0-255 normally,
-    /// 1-254 → 0-255 when the operator asked for the excursions to survive.
-    /// Defined on gamma-encoded code values, so it must run on raw bytes — a
-    /// CIColorMatrix in CI's linear working space crushes shadows and dulls
-    /// highlights.
+    /// Expansion table for limited-range RGB inputs — the legal 8-bit swing
+    /// 1-254 onto 0-255, so the sub-blacks and super-whites a camera rides
+    /// outside 16-235 survive. Defined on gamma-encoded code values, so it must
+    /// run on raw bytes — a CIColorMatrix in CI's linear working space crushes
+    /// shadows and dulls highlights.
     ///
-    /// Both are built once at first use: a table per frame would be 256
-    /// divisions on the capture queue for a value that only changes when the
-    /// operator opens Settings.
-    static func levelsExpandTable(for levels: InputLevels) -> [UInt8] {
-        levels == .limitedPreservingExcursions ? levelsExcursionTable
-            : levelsLimitedTable
-    }
-
+    /// Built once at first use: a table per frame would be 256 divisions on the
+    /// capture queue for a value that never changes.
     static let levelsLimitedTable = expansionTable(for: .limited)
-    static let levelsExcursionTable =
-        expansionTable(for: .limitedPreservingExcursions)
 
     private static func expansionTable(for levels: InputLevels) -> [UInt8] {
         let window = levels.eightBitWindow

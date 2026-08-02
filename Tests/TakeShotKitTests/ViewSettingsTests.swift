@@ -26,10 +26,9 @@ struct ViewSettingsTests {
         }
     }
 
-    /// The input-levels picker gained a third option, and it is the longest
-    /// string in the row by some way ("Limited, preserving excursions
-    /// (4-1019)"). A menu picker is as wide as its widest option, so this is
-    /// exactly the shape of row that silently truncates.
+    /// The input-levels menu is exactly Auto / Limited / Full, with no
+    /// parenthetical explanation trailing any of them (owner item 5). A menu
+    /// picker is as wide as its widest option, so the row is measured too.
     @Test func theInputLevelsRowFitsTheSettingsForm() async throws {
         try await ViewProbe.run { probe in
             let form = ViewBudget.settingsFormWidth
@@ -40,6 +39,42 @@ struct ViewSettingsTests {
                     "the levels row wants \(ideal.en.width)pt of \(form)")
             #expect(ideal.ru.height == ideal.en.height,
                     "the levels row wrapped in one language: \(ideal)")
+        }
+    }
+
+    /// The three option labels are the option and nothing else. A subtitle
+    /// glued onto one of them ("Limited (16-235) — expand") is what the owner
+    /// asked to be rid of, and it comes back the moment someone "clarifies" a
+    /// translation.
+    @Test func theInputLevelsOptionsCarryNoExplanation() async throws {
+        try await ViewProbe.run { _ in
+            for language in [AppLanguage.english, .russian] {
+                ViewRender.withLanguage(language) {
+                    for key in ["levels_auto", "levels_limited", "levels_full"] {
+                        let label = L(key)
+                        #expect(!label.contains("("),
+                                "\(key) explains itself: \(label)")
+                        #expect(!label.contains("—"),
+                                "\(key) explains itself: \(label)")
+                        #expect(label.count <= 12,
+                                "\(key) is \(label.count) characters: \(label)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The retired second Limited must not come back as a stray string either:
+    /// a key with no code behind it is how a dead option gets re-added by
+    /// someone who found it in the .strings file.
+    @Test func theRetiredLevelsOptionIsGoneFromBothLanguages() throws {
+        for language in ["en", "ru"] {
+            let path = try #require(Bundle.module.path(forResource: language,
+                                                       ofType: "lproj"))
+            let strings = try #require(NSDictionary(
+                contentsOfFile: path + "/Localizable.strings") as? [String: String])
+            #expect(strings["levels_excursions"] == nil)
+            #expect(strings["levels_hint"] == nil)
         }
     }
 
@@ -62,36 +97,25 @@ struct ViewSettingsTests {
         }
     }
 
-    /// The hotkey section is a label, a spacer and a 90pt shortcut button per
-    /// action. The labels are the longest sentences in the window ("Fullscreen
-    /// (playback fullscreen while viewing)"), and a label that outgrows the row
-    /// truncates silently.
-    @Test func hotkeyRowsFitTheSettingsForm() async throws {
+    /// The settings form itself now carries ONE hotkey row — the button that
+    /// opens the editor. Fifteen label-plus-button rows in the middle of the
+    /// form is what owner item 20 was about, and a `ForEach` over `allCases`
+    /// creeping back in here is the regression.
+    @Test func theHotkeySectionIsOneRowInTheSettingsForm() async throws {
         try await ViewProbe.run { probe in
-            // the same 90pt minimum the settings row gives the shortcut button
-            let shortcutColumn: CGFloat = 90
             let form = ViewBudget.settingsFormWidth
-            for action in HotkeyAction.allCases {
-                let ideal = probe.fittingSizes {
-                    Text(L(action.titleKey)).fixedSize()
-                }
-                let needed = ideal.ru.width + shortcutColumn
-                #expect(needed <= form,
-                        "\(action.titleKey) needs \(needed)pt of \(form)")
+            for key in ["settings_hotkeys", "hotkey_bindings", "hotkey_edit"] {
+                let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
+                #expect(ideal.ru.width <= form,
+                        "\(key) is \(ideal.ru.width)pt of \(form)")
             }
-        }
-    }
-
-    /// Every hotkey action has a translation in both files, and the recording
-    /// placeholder is what replaces the combo while a key is being captured —
-    /// both land in the same 90pt-minimum button.
-    @Test func hotkeyTitlesAreTranslated() async throws {
-        try await ViewProbe.run { _ in
-            for action in HotkeyAction.allCases {
-                let ru = ViewRender.withLanguage(.russian) { L(action.titleKey) }
-                #expect(ru != action.titleKey,
-                        "\(action.titleKey) renders as its raw key in Russian")
+            // the longest action title plus the editor's shortcut column would
+            // not have to fit the settings form at all any more — it fits the
+            // SHEET, which is measured in ViewHotkeyEditorTests
+            let row = probe.fittingSizes {
+                Text(L(HotkeyAction.fullscreen.titleKey)).fixedSize()
             }
+            #expect(row.ru.height == row.en.height)
         }
     }
 
@@ -158,6 +182,44 @@ struct ViewSettingsTests {
         }
     }
 
+    /// Video output and audio are two blocks now, not one (owner item 9). Both
+    /// headings and the rows under them have to render in either language.
+    @Test func theOutputAndAudioSectionsBothRender() async throws {
+        try await ViewProbe.run { probe in
+            let form = ViewBudget.settingsFormWidth
+            for key in ["settings_output", "settings_audio", "external_display",
+                        "monitor_device", "playback_output",
+                        "audio_input_source"] {
+                let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
+                #expect(ideal.ru.width <= form,
+                        "\(key) is \(ideal.ru.width)pt of \(form)")
+            }
+            let sections = probe.fittingSizes {
+                Form { OutputSettingsSection() }.formStyle(.grouped)
+            }
+            #expect(abs(sections.ru.height - sections.en.height) <= 8,
+                    "the Russian output/audio pair differs: \(sections)")
+        }
+    }
+
+    /// The captions that restated what a control obviously does are gone
+    /// (owner items 3, 6, 8, 14). They were localized strings, so the way they
+    /// come back is somebody re-adding the key — and the render tests above
+    /// would simply measure a taller form without saying why.
+    @Test func theRetiredSettingsCaptionsAreGoneFromBothLanguages() throws {
+        for language in ["en", "ru"] {
+            let path = try #require(Bundle.module.path(forResource: language,
+                                                       ofType: "lproj"))
+            let strings = try #require(NSDictionary(
+                contentsOfFile: path + "/Localizable.strings") as? [String: String])
+            for key in ["menubar_keep_hint", "luts_hint", "remote_hint",
+                        "backup_folder", "backup_copying", "backup_verified",
+                        "backup_failed"] {
+                #expect(strings[key] == nil, "\(key) is back in \(language)")
+            }
+        }
+    }
+
     /// The Offload section is two explanatory paragraphs and two rows, and the
     /// paragraphs are the only wrapping text in the window. A translation one
     /// line longer than the base moves the whole form, which is what the two
@@ -182,11 +244,11 @@ struct ViewSettingsTests {
         }
     }
 
-    /// "Keep TakeShot in the menu bar" is a toggle with a caption under it, and
-    /// the caption is the longest sentence in the Interface section. A grouped
-    /// Form truncates a label rather than wrapping it, so the row is measured
-    /// against the width the window actually gives it, in both languages —
-    /// Russian runs half again as long here.
+    /// "Keep TakeShot in the menu bar" is a toggle and nothing else now — the
+    /// paragraph that used to explain what a status item is went with owner
+    /// item 3. A grouped Form truncates a label rather than wrapping it, so the
+    /// row is still measured against the width the window gives it, in both
+    /// languages — Russian runs half again as long here.
     @Test func theMenuBarRowFitsTheSettingsForm() async throws {
         try await ViewProbe.run { probe in
             let form = ViewBudget.settingsFormWidth
@@ -195,13 +257,16 @@ struct ViewSettingsTests {
                     "the menu-bar toggle label is \(label.ru.width)pt of \(form)")
             #expect(label.en.width <= form)
 
-            // The caption is allowed to wrap — what it must not do is fail to
-            // render, or come out a different number of lines' worth of height
-            // by a margin that says a string went missing.
             let row = probe.sizes(proposedWidth: form) { MenuBarSettingsRow() }
             #expect(row.en.width <= form + 1)
             #expect(row.ru.width <= form + 1)
             #expect(row.en.height > 0 && row.ru.height > 0)
+            // one control's worth of height, in both languages: a caption
+            // creeping back under the toggle shows up here first
+            #expect(abs(row.ru.height - row.en.height) <= 1,
+                    "the menu-bar row differs by language: \(row)")
+            #expect(row.en.height < 44,
+                    "the menu-bar row is \(row.en.height)pt — more than a row")
         }
     }
 

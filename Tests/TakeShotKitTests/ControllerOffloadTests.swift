@@ -57,13 +57,17 @@ import Testing
         }
     }
 
-    /// The folder the old two-panel flow left in `backupPath` is still worth
-    /// something: it is the destination that operator had already chosen.
-    @Test func theOldSingleDestinationSettingIsAdopted() async throws {
-        let legacy: (inout CaptureSettings) -> Void = {
-            $0.backupPath = "/Volumes/OLD"
+    /// The folder the retired verified backup left behind is still worth
+    /// something: it is a destination that operator had already chosen. It
+    /// reaches the sheet through the settings list, because
+    /// `CaptureSettings.migrateToVersion2` moves it there on load — the sheet
+    /// itself no longer knows the retired field existed
+    /// (`ModelSettingsMigrationTests` covers the move).
+    @Test func theMigratedBackupFolderReachesTheSheet() async throws {
+        let migrated: (inout CaptureSettings) -> Void = {
+            $0.offloadDestinationPaths = ["/Volumes/OLD"]
         }
-        try await ControllerHarness.run(configure: legacy) { controller, _ in
+        try await ControllerHarness.run(configure: migrated) { controller, _ in
             controller.showOffloadSheet()
 
             #expect(controller.offload.destinations.map(\.path) == ["/Volumes/OLD"])

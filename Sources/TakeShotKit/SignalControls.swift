@@ -46,37 +46,36 @@ struct ForcedInputRGBToggle: View {
     }
 }
 
-/// What the source's code values mean on the wire — and, for the third option,
-/// what the pipeline is allowed to throw away while reading them.
+/// What the source's code values mean on the wire.
 ///
-/// Three, not two. The first two are the settings this app has always had:
-/// expand studio swing once, or pass a full-swing signal through. The third
-/// exists because the expansion CLAMPS: a camera legally rides its blacks below
-/// code 64 and its highlights above 940, and the normal reading destroys those
-/// codes in the display buffer and in the recorded file both — the record
-/// buffer is built from the expanded value, so what is clipped on the glass is
-/// clipped in the deliverable. `limited_excursions` expands the camera's whole
-/// legal swing instead, so nothing is lost; the picture is a hair flatter in
-/// exchange. It is never selected automatically — the default does not change.
+/// Three options, and one of them is Limited — there were two studio-swing
+/// entries for a while, and the one that survived is the one that expands the
+/// camera's WHOLE legal swing. The other clamped: the record buffer is built
+/// from the expanded value, so codes 4 and 1019 decoded to 0 and 1023 and the
+/// excursions were destroyed in the deliverable, not just on the glass.
 struct InputLevelsPicker: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// Legacy stored spellings map onto the option that now means them, so an
+    /// operator's saved choice selects a row rather than nothing (see
+    /// `CaptureSettings.migrateToVersion2`, which rewrites the value itself).
+    private var selection: String {
+        switch controller.settings.videoLevels {
+        case nil: return "auto"
+        case "off": return InputLevels.full.rawValue
+        case "limited_excursions": return InputLevels.limited.rawValue
+        case let value?: return value
+        }
+    }
+
     var body: some View {
         Picker(L("video_levels"), selection: Binding(
-            get: {
-                guard let value = controller.settings.videoLevels else {
-                    return "auto"
-                }
-                return value == "off" ? "full" : value // legacy spelling
-            },
+            get: { selection },
             set: { controller.settings.videoLevels = $0 == "auto" ? nil : $0 })) {
             Text(L("levels_auto")).tag("auto")
             Text(L("levels_limited")).tag(InputLevels.limited.rawValue)
-            Text(L("levels_excursions"))
-                .tag(InputLevels.limitedPreservingExcursions.rawValue)
             Text(L("levels_full")).tag(InputLevels.full.rawValue)
         }
-        .help(L("levels_hint"))
     }
 }
 

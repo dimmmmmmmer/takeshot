@@ -186,9 +186,6 @@ extension CaptureController {
         var folders = [destinationRoot]
         folders += (settings.offloadDestinationPaths ?? [])
             .map { URL(fileURLWithPath: $0) }
-        if let backup = settings.backupPath {
-            folders.append(URL(fileURLWithPath: backup))
-        }
         return folders
     }
 

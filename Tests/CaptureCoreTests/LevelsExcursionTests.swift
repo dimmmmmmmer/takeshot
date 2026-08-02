@@ -11,12 +11,13 @@ import Testing
 /// file.
 ///
 /// The operator reported "slight clipping in the shadows and the highlights"
-/// and was right: the limited→full expansion clamps, and because the record
-/// buffer is built FROM the expanded value the codes are gone from the
-/// deliverable as well, not just from the preview. Both readings are pinned
-/// here numerically — the default one because it is what ships and someone has
-/// to be able to see what it costs, and the new one because "preserves the
-/// excursions" is a claim about numbers.
+/// and was right: a limited→full expansion onto 64–940 clamps, and because the
+/// record buffer is built FROM the expanded value the codes were gone from the
+/// deliverable as well, not just from the preview. `Limited` expands the whole
+/// legal swing instead, and there is only one Limited now — the clamping
+/// reading was removed rather than left in a menu for someone to pick by
+/// mistake. "Preserves the excursions" is a claim about numbers, so the numbers
+/// are pinned here.
 struct LevelsExcursionTests {
     /// The four codes the whole question is about: the bottom and top of the
     /// legal 10-bit range, and nominal black and white between them.
@@ -78,35 +79,10 @@ struct LevelsExcursionTests {
 
     // MARK: - the converter, with no codec in the way
 
-    /// The default. 4 and 64 both become black, 1019 and 940 both become white
-    /// — in the DISPLAY buffer, which is what the scopes used to read, and in
-    /// the RECORD buffer, which is what the colourist gets.
-    @Test func theDefaultReadingDestroysTheExcursions() throws {
-        let converter = TenBitConverter()
-        converter.setLevels(.limited)
-        let result = try #require(converter.convert(try bandedFrame()))
-
-        #expect(displayByte(result.display, band: 0) == 0)   // 4    → 0
-        #expect(displayByte(result.display, band: 1) == 0)   // 64   → 0
-        #expect(displayByte(result.display, band: 2) == 255) // 940  → 255
-        #expect(displayByte(result.display, band: 3) == 255) // 1019 → 255
-
-        // and the record buffer, which is derived from the same expanded value
-        #expect(recordCode(result.record, band: 0)
-            == recordCode(result.record, band: 1),
-                "the sub-black is already gone from the recorded frame")
-        #expect(recordCode(result.record, band: 2)
-            == recordCode(result.record, band: 3),
-                "the super-white is already gone from the recorded frame")
-        // the exact codes, so a change to the precompensation is visible here
-        #expect(recordCode(result.record, band: 0) == 64)
-        #expect(recordCode(result.record, band: 3) == 960)
-    }
-
-    /// The new mode. Every one of the four codes survives as its own value.
+    /// Limited. Every one of the four codes survives as its own value.
     @Test func preservingExcursionsKeepsEveryCode() throws {
         let converter = TenBitConverter()
-        converter.setLevels(.limitedPreservingExcursions)
+        converter.setLevels(.limited)
         let result = try #require(converter.convert(try bandedFrame()))
 
         // 4 and 1019 are the ends of the scale now
@@ -121,10 +97,10 @@ struct LevelsExcursionTests {
         #expect(Set(codes).count == 4, "two codes collapsed onto one")
     }
 
-    /// Nothing about the default changed. Same test as above run through the
-    /// old two-state switch, because that is the call the settings plumbing
-    /// still makes for the two original modes.
-    @Test func theBooleanSwitchStillMeansTheOldTwoModes() throws {
+    /// The two-state switch still means the same two modes. Same frame run
+    /// through it, because that is the call some of the settings plumbing
+    /// still makes.
+    @Test func theBooleanSwitchStillMeansTheTwoModes() throws {
         let limited = TenBitConverter()
         limited.setLimitedRange(true)
         let viaBool = try #require(limited.convert(try bandedFrame()))
@@ -142,8 +118,9 @@ struct LevelsExcursionTests {
     @Test func theSettingStringResolvesToTheMode() {
         #expect(InputLevels.resolved("full") == .full)
         #expect(InputLevels.resolved("limited") == .limited)
-        #expect(InputLevels.resolved("limited_excursions")
-            == .limitedPreservingExcursions)
+        // the retired second studio-swing mode: an operator who had it selected
+        // lands on the one Limited, which is the reading they had asked for
+        #expect(InputLevels.resolved("limited_excursions") == .limited)
         // auto, and anything unrecognised, is studio swing
         #expect(InputLevels.resolved(nil) == .limited)
         #expect(InputLevels.resolved("something else") == .limited)
@@ -214,26 +191,15 @@ struct LevelsExcursionTests {
         }
     }
 
-    /// The default: the file comes back with the sub-black indistinguishable
-    /// from nominal black and the super-white from nominal white.
-    @Test func theDefaultLosesTheExcursionsInTheFileToo() async throws {
-        let decoded = try await decodedBands(levels: .limited)
-        print("LEVELS default decoded: \(decoded)")
-        #expect(abs(decoded[0] - decoded[1]) <= 8,
-                "sub-black and nominal black should be the same code: \(decoded)")
-        #expect(abs(decoded[3] - decoded[2]) <= 8,
-                "super-white and nominal white should be the same code: \(decoded)")
-    }
-
-    /// The new mode: the same four codes come back four different values, with
-    /// the ends where the expansion put them.
+    /// Limited: the four codes come back four different values, with the ends
+    /// where the expansion put them.
     ///
     /// The tolerance is the codec's, measured: ProRes HQ is a DCT codec and
     /// nothing here claims it is lossless. What is asserted is the property the
     /// mode exists for — the codes are still TOLD APART — plus each band
     /// landing near the value the converter wrote.
     @Test func preservingExcursionsSurvivesTheEncodeDecodeRoundTrip() async throws {
-        let decoded = try await decodedBands(levels: .limitedPreservingExcursions)
+        let decoded = try await decodedBands(levels: .limited)
         print("LEVELS preserving decoded: \(decoded)")
         // the converter wrote 0, 60, 943, 1023 as intended full-range values
         let intended = [0, 60, 943, 1023]
