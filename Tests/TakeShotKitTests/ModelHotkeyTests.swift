@@ -159,43 +159,53 @@ struct ModelHotkeyTests {
     }
 
     /// The bindings the app hands AppKit as key equivalents are not all in
-    /// `HotkeyAction`: Settings, the folder, Help, the reveal item and the
+    /// `HotkeyAction`: Settings, the folder, Help, the rename item and the
     /// transport's Space/Esc are fixed shortcuts on their own views. A default
     /// that lands on one of those is a key the operator presses expecting one
     /// thing and gets the other, and no test over `allCases` alone would see it.
+    ///
+    /// The list is `ReservedShortcut.all` rather than a copy here, because the
+    /// editor refuses a chord against the same list — two copies would drift
+    /// and the editor's refusal would stop matching what the app actually does.
     @Test func noDefaultCollidesWithAFixedShortcut() {
-        let command = NSEvent.ModifierFlags.command.rawValue
-        let commandShift = NSEvent.ModifierFlags([.command, .shift]).rawValue
-        // key + modifiers only: what AppKit matches a key equivalent on
-        let fixed: [(String, UInt)] = [
-            (",", command),          // Settings (AppCommands)
-            ("o", commandShift),     // open the record folder (AppCommands)
-            ("?", command),          // Help (AppCommands)
-            ("return", command),     // rename a take (TakeRowControls)
-            ("space", 0),            // play/pause (TransportBar, RawTransportBar)
-            ("escape", 0),           // close an overlay (AudioChannelPanel)
-        ]
         for action in HotkeyAction.allCases {
             let combo = action.defaultCombo
-            for (key, modifiers) in fixed
-            where combo.key == key && combo.modifiers == modifiers {
+            if let reserved = ReservedShortcut.owning(combo) {
                 Issue.record("""
-                    \(action) defaults to \(combo.display), which is already a \
-                    fixed shortcut
+                    \(action) defaults to \(combo.display), which is already \
+                    \(reserved.titleKey)
                     """)
             }
         }
     }
 
-    /// Every action needs a label in the Settings list; a missing string shows
+    /// Every reserved chord names itself in both languages — the conflict
+    /// banner puts that name in front of the operator, and a missing string
+    /// would show them the raw key instead.
+    @Test func everyReservedShortcutIsNamedInBothLanguages() throws {
+        for language in ["en", "ru"] {
+            let strings = try Self.strings(language)
+            let missing = ReservedShortcut.all
+                .map(\.titleKey)
+                .filter { strings[$0] == nil }
+            #expect(missing.isEmpty,
+                    "\(language) is missing \(missing.joined(separator: ", "))")
+        }
+    }
+
+    /// The .strings file for a language, as a dictionary.
+    private static func strings(_ language: String) throws -> [String: String] {
+        let path = try #require(Bundle.module.path(forResource: language,
+                                                   ofType: "lproj"))
+        return try #require(NSDictionary(
+            contentsOfFile: path + "/Localizable.strings") as? [String: String])
+    }
+
+    /// Every action needs a label in the editor's list; a missing string shows
     /// the raw key to the operator.
     @Test func everyActionHasATitleInBothLanguages() throws {
-        let bundle = Bundle.module
         for language in ["en", "ru"] {
-            let path = try #require(bundle.path(forResource: language,
-                                                ofType: "lproj"))
-            let strings = try #require(NSDictionary(
-                contentsOfFile: path + "/Localizable.strings") as? [String: String])
+            let strings = try Self.strings(language)
             let missing = HotkeyAction.allCases
                 .map(\.titleKey)
                 .filter { strings[$0] == nil }

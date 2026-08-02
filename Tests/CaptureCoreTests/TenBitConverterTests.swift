@@ -85,13 +85,19 @@ struct TenBitConverterTests {
         #expect(pixel >> 24 == 0xFF)                       // opaque alpha
     }
 
-    @Test func limitedRangeSourceExpandsBlackAndWhiteToTheFullScale() throws {
+    /// Limited expands the LEGAL swing 4-1019, not the nominal 64-940 — that is
+    /// the whole point of the one Limited that survived. So the ends of the
+    /// legal range land on the ends of the scale, and nominal black and white
+    /// land just inside them with room left for a camera's excursions.
+    @Test func limitedRangeSourceExpandsTheLegalSwingToTheFullScale() throws {
         let converter = TenBitConverter() // limited is the default
-        // 64 is limited-range black, 940 is limited-range white
-        let source = makeR210(width: 4, height: 2) { x, _ in x == 0 ? 64 : 940 }
+        let codes = [4, 64, 940, 1019]
+        let source = makeR210(width: codes.count, height: 2) { x, _ in codes[x] }
         let result = try #require(converter.convert(source))
         #expect(bgraPixel(result.display, x: 0, y: 0) & 0xFF == 0)
-        #expect(bgraPixel(result.display, x: 1, y: 0) & 0xFF == 255)
+        #expect(bgraPixel(result.display, x: 1, y: 0) & 0xFF == 15)
+        #expect(bgraPixel(result.display, x: 2, y: 0) & 0xFF == 235)
+        #expect(bgraPixel(result.display, x: 3, y: 0) & 0xFF == 255)
     }
 
     @Test func recordValuesLandInsideVideoToolboxsWindow() throws {

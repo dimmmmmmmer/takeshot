@@ -28,10 +28,6 @@ struct RemoteSettingsSection: View {
                 addressRow
                 scriptRow
                 multiviewRow
-                Text(L("remote_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

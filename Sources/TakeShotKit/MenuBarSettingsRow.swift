@@ -4,10 +4,9 @@ import SwiftUI
 /// to see and drive a rolling take while the main window is closed or behind
 /// other apps.
 ///
-/// Its own view rather than two more lines in `SettingsView.body`: that type is
+/// Its own view rather than one more line in `SettingsView.body`: that type is
 /// the densest one in the app and is measured against a fixed window width, so
-/// a row with a caption under it is worth being able to render on its own (see
-/// `ViewSettingsTests`).
+/// the row is worth being able to render on its own (see `ViewSettingsTests`).
 struct MenuBarSettingsRow: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -18,8 +17,5 @@ struct MenuBarSettingsRow: View {
             // never touched it writes no field at all, which is what keeps an
             // older build able to decode the blob.
             set: { controller.settings.keepInMenuBar = $0 ? true : nil }))
-        Text(L("menubar_keep_hint"))
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }

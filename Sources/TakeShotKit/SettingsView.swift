@@ -39,6 +39,7 @@ struct SettingsView: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
     @State private var confirmClearLUTs = false
+    @State private var editingHotkeys = false
 
     var body: some View {
         Form {
@@ -104,29 +105,6 @@ struct SettingsView: View {
                 }
                 TextField(L("project"), text: $controller.settings.projectName)
                 HStack(spacing: 8) {
-                    Text(L("backup_folder"))
-                        .fixedSize()
-                    Text(controller.settings.backupPath ?? L("assist_off"))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Button(L("choose")) {
-                        let panel = NSOpenPanel()
-                        panel.canChooseFiles = false
-                        panel.canChooseDirectories = true
-                        panel.canCreateDirectories = true
-                        if panel.runModal() == .OK, let url = panel.url {
-                            controller.settings.backupPath = url.path
-                        }
-                    }
-                    if controller.settings.backupPath != nil {
-                        Button(L("assist_off")) {
-                            controller.settings.backupPath = nil
-                        }
-                    }
-                }
-                HStack(spacing: 8) {
                     Text(L("destination_folder"))
                         .fixedSize()
                     Text(controller.settings.destinationPath)
@@ -176,9 +154,6 @@ struct SettingsView: View {
                         .disabled(controller.availableLUTs.isEmpty)
                     }
                 }
-                Text(L("luts_hint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             OutputSettingsSection()
             Section(L("settings_detection")) {
@@ -199,28 +174,12 @@ struct SettingsView: View {
             OffloadSettingsSection(ledger: controller.offloadedCards)
             RemoteSettingsSection()
             Section(L("settings_hotkeys")) {
-                ForEach(HotkeyAction.allCases) { action in
-                    HStack {
-                        Text(L(action.titleKey))
-                        Spacer()
-                        Button {
-                            hotkeys.recordingAction =
-                                (hotkeys.recordingAction == action) ? nil : action
-                        } label: {
-                            Text(hotkeys.recordingAction == action
-                                 ? L("press_keys")
-                                 : hotkeys.combo(for: action).display)
-                                .frame(minWidth: 90)
-                        }
-                        .tint(hotkeys.recordingAction == action
-                              ? controller.accentColor : nil)
-                    }
+                // fifteen rows of label-plus-button used to live here and made
+                // everything below them a scroll away; the list is a sheet now
+                // (HotkeyEditorView), with its own search and conflict check
+                LabeledContent(L("hotkey_bindings")) {
+                    Button(L("hotkey_edit")) { editingHotkeys = true }
                 }
-                Button(L("reset_hotkeys"), role: .destructive) {
-                    hotkeys.resetToDefaults()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
             }
             Section {
                 Button(L("reset_all"), role: .destructive) {
@@ -235,6 +194,11 @@ struct SettingsView: View {
         .confirmationDialog(L("clear_luts_confirm"), isPresented: $confirmClearLUTs) {
             Button(L("clear_data"), role: .destructive) { controller.clearLUTs() }
             Button(L("cancel"), role: .cancel) {}
+        }
+        .sheet(isPresented: $editingHotkeys) {
+            HotkeyEditorView(hotkeys: hotkeys)
+                .environmentObject(controller)
+                .environmentObject(hotkeys)
         }
         .scrollContentBackground(.hidden)
         .background(controller.appBackground)

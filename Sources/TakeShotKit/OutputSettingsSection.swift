@@ -1,7 +1,12 @@
 import SwiftUI
 
-/// The Output section of the settings window: where the picture and the sound
-/// go — a second screen, a DeckLink monitor out, and the audio device.
+/// Two sections of the settings window, one per department: where the PICTURE
+/// goes — a second screen and a DeckLink monitor out — and, under its own
+/// heading, where the SOUND comes from and goes to.
+///
+/// One section held both until the operator pointed out that the audio device
+/// rows read as an afterthought under a heading about monitors. They are the
+/// sound department's rows and they get their own block.
 ///
 /// Lifted out of `SettingsView` when the Remote section arrived: that type was
 /// at its body-length ceiling exactly, so the next section had to displace one.
@@ -28,6 +33,19 @@ struct OutputSettingsSection: View {
                     Text(device.name).tag(String?.some(device.id))
                 }
             }
+        }
+        AudioSettingsSection()
+    }
+}
+
+/// The sound department's block: what is recorded, and what the room hears
+/// during playback.
+struct AudioSettingsSection: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Section(L("settings_audio")) {
+            AudioInputPicker()
             Picker(L("playback_output"), selection: Binding(
                 get: { controller.playbackOutputUID },
                 set: { controller.playbackOutputUID = $0 })) {
@@ -36,7 +54,6 @@ struct OutputSettingsSection: View {
                     Text(device.name).tag(String?.some(device.uid))
                 }
             }
-            AudioInputPicker()
         }
     }
 }
@@ -69,9 +86,5 @@ struct AudioInputPicker: View {
         }
         .disabled(controller.isRecording)
         .onAppear { controller.refreshAudioInputDevices() }
-        // which source is actually feeding the pipeline right now
-        Text(controller.audioSourceStatusText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }

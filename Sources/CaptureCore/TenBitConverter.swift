@@ -14,11 +14,9 @@ import Foundation
 ///   unbiased — versus the systematic +0.4 8-bit codes of the BGRA path that
 ///   steep viewing LUTs amplified into a visible lift.
 ///
-/// Levels follow the same policy as the 8-bit path, and the SAME three-way
-/// choice: `full` passes wire codes through, `limited` expands 64–940 onto the
-/// full scale and clamps everything outside it, and
-/// `limitedPreservingExcursions` expands the camera's whole legal swing
-/// 4–1019 instead, so no code is destroyed on the way to either product.
+/// Levels follow the same policy as the 8-bit path: `full` passes wire codes
+/// through, `limited` expands the camera's whole legal swing 4–1019 onto the
+/// full scale, so no code is destroyed on the way to either product.
 ///
 /// The expansion is one table either way — the mode picks its two ends. That
 /// matters for the recorded file as much as for the screen: `precomp` is built
@@ -41,8 +39,8 @@ public final class TenBitConverter {
     }
 
     /// `limited` mirrors the 8-bit levels setting (auto → limited for RGB444).
-    /// Kept because it says exactly what the two original modes were; the
-    /// three-way form below is what the pipeline calls.
+    /// Kept because it says exactly what the choice is; the named form below is
+    /// what the pipeline calls.
     public func setLimitedRange(_ limited: Bool) {
         setLevels(limited ? .limited : .full)
     }

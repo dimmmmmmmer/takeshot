@@ -64,11 +64,10 @@ final class OffloadSheetModel: ObservableObject {
             isCancelling = false
         }
         guard rows.isEmpty else { return }
-        // The operator's saved destination list; failing that, the folder the
-        // old two-panel flow used to leave in `backupPath`, so nobody loses a
-        // path they had already chosen.
-        let saved = settings.offloadDestinationPaths
-            ?? settings.backupPath.map { [$0] } ?? []
+        // The operator's saved destination list. The folder the retired verified
+        // backup used to hold is in it too — `CaptureSettings.migrateToVersion2`
+        // moves it there on load, so nobody loses a path they had chosen.
+        let saved = settings.offloadDestinationPaths ?? []
         rows = saved.map { Row(url: URL(fileURLWithPath: $0)) }
     }
 

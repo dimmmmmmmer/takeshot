@@ -10,8 +10,13 @@ import Testing
 /// because they WERE 8-bit — a 10-bit source quantized to 256 levels on its way
 /// into the display buffer, and then onto a 256-row trace map, which is a
 /// staircase however good the camera is. And the shadows and highlights looked
-/// slightly clipped because they were: the limited→full expansion clamps
-/// everything outside 64…940 before the scopes ever see it.
+/// slightly clipped because they were: the expansion onto 64…940 clamped
+/// everything outside it before the scopes ever saw it.
+///
+/// The clamp is gone — `Limited` expands the whole legal swing now — but the
+/// tap is not redundant, and the tests below say why in numbers: a full-range
+/// display buffer cannot tell a scope WHERE nominal black and white are, and
+/// what is left of a camera's footroom in 8 bits is fifteen codes.
 struct ScopeWireTests {
     private func r210(width: Int = 320, height: Int = 180,
                       code: (_ x: Int) -> Int) throws -> CVPixelBuffer {
@@ -83,18 +88,31 @@ struct ScopeWireTests {
         #expect(subBlack.nominal.showsExcursions)
     }
 
-    /// The display buffer cannot show either of them — which is the reason for
-    /// the tap, stated as a measurement rather than as a claim in a comment.
-    @Test func theDisplayBufferHasAlreadyThrownTheExcursionsAway() throws {
+    /// What the display buffer can still not do — which is the reason the tap
+    /// stays, stated as a measurement rather than as a claim in a comment.
+    ///
+    /// It no longer throws the excursions away (Limited keeps them), but it is
+    /// a FULL-RANGE buffer: it carries no nominal reference, so a scope reading
+    /// it draws no 0 % and 100 % lines and the operator cannot see that a
+    /// shadow is below picture black rather than merely dark. And what survives
+    /// of the footroom is 15 of 256 codes against 60 of 1024 on the wire.
+    @Test func theDisplayBufferCannotPlaceTheNominalLines() throws {
         let converter = TenBitConverter() // limited is the default
         let atFour = try #require(converter.convert(try r210 { _ in 4 }))
         let atSixtyFour = try #require(converter.convert(try r210 { _ in 64 }))
         let low = try #require(ScopeAnalyzer.analyze(atFour.display))
         let black = try #require(ScopeAnalyzer.analyze(atSixtyFour.display))
-        #expect(traceRows(low) == traceRows(black),
-                "the 8-bit display buffer somehow told 4 from 64 apart")
+
         #expect(!low.nominal.showsExcursions,
                 "a full-range buffer must not claim excursion room")
+        #expect(low.nominal.black == black.nominal.black)
+        // the two codes are told apart, but by a sliver: sub-black to nominal
+        // black is the bottom 6 % of the trace, where the wire tap gives the
+        // same span 60 of its 1024 codes to draw in
+        let separation = abs(traceUnit(low) - traceUnit(black))
+        #expect(separation > 0, "the display buffer clamped 4 onto 64")
+        #expect(separation < 0.08,
+                "the footroom is \(separation) of the trace, not a sliver")
     }
 
     // MARK: - the detail that was quantized away

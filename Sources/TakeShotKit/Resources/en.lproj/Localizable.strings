@@ -68,6 +68,21 @@
 
 /* Hotkeys */
 "settings_hotkeys" = "Hotkeys";
+/* the hotkey editor sheet (owner item 20): the settings row that opens it, the
+   list's own chrome, and the names of the chords it will not let go */
+"hotkey_bindings" = "Key bindings";
+"hotkey_edit" = "Edit…";
+"hotkey_search" = "Search";
+"hotkey_no_matches" = "Nothing matches";
+"hotkey_conflict" = "Already assigned to: %@";
+"hotkey_reset_one" = "Reset this shortcut";
+"reset_hotkeys_confirm" = "Reset every shortcut to its default?";
+"reserved_settings" = "Settings";
+"reserved_open_folder" = "Open the record folder";
+"reserved_help" = "Help";
+"reserved_rename_take" = "Rename take";
+"reserved_play_pause" = "Play / pause";
+"reserved_close_overlay" = "Close overlay";
 "hotkey_record" = "Record / stop";
 "hotkey_circle" = "Rate last take (good/bad)";
 "hotkey_demo_rec" = "Demo camera REC";
@@ -150,7 +165,9 @@
 "playback_speed" = "Playback speed";
 "playback_loop" = "Loop";
 "fullscreen" = "Fullscreen";
-"settings_output" = "Output";
+"settings_output" = "Video output";
+/* the sound department's own block, split off from Output (owner item 9) */
+"settings_audio" = "Audio";
 "external_display" = "External monitor output";
 "external_off" = "Off";
 "record_channels" = "Audio channels to record";
@@ -215,9 +232,8 @@
 /* Color tags */
 "color_tags" = "Video color tags";
 "video_levels" = "Input levels";
-"levels_limited" = "Limited (16-235) — expand";
-"levels_full" = "Full (0-255) — as is";
-"levels_hint" = "What the source sends on the wire. Limited (e.g. camera HDMI) is expanded once for correct contrast, and codes outside 16-235 (64-940 in 10-bit) are clipped away — on screen AND in the file. “Preserving excursions” expands the camera's whole legal swing instead, so sub-blacks and super-whites survive for the grade; the picture is slightly flatter. Full (e.g. a playout device set to Full output) passes through untouched. Files always get standard legal-range encoding.";
+"levels_limited" = "Limited";
+"levels_full" = "Full";
 "color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
 
 "preset_arri35" = "ARRI Alexa 35";
@@ -236,7 +252,7 @@
 "reset_colors" = "Reset colors";
 "reset_all" = "Reset all settings";
 
-"levels_auto" = "Auto (RGB source: limited)";
+"levels_auto" = "Auto";
 "lut_intensity_label" = "Intensity";
 
 "multicam_toggle" = "Multicam: capture all cameras at once (demo adds a 2nd camera; with hardware, all other DeckLink devices)";
@@ -244,7 +260,6 @@
 /* LUT folder + placeholders */
 "settings_luts" = "LUTs";
 "luts_folder" = "Imported LUTs";
-"luts_hint" = "Imported looks (.cube, .cdl, .ccc, .cc) are copied here (Application Support/TakeShot/LUTs).";
 "open_in_finder" = "Open in Finder";
 "clear_data" = "Clear";
 "cancel" = "Cancel";
@@ -363,11 +378,7 @@
 
 "loop_in_help" = "Set/clear the loop IN point";
 "loop_out_help" = "Set/clear the loop OUT point";
-"backup_folder" = "Verified backup";
 "choose" = "Choose...";
-"backup_copying" = "Backing up...";
-"backup_verified" = "Backed up (checksum verified)";
-"backup_failed" = "Backup failed: %@ (%@)";
 
 "assist_el_zone" = "EL Zone (stops)";
 
@@ -508,7 +519,6 @@
 "remote_address" = "Address";
 "remote_no_network" = "This Mac is on no network";
 "remote_offline" = "Not listening";
-"remote_hint" = "Open the address on a phone on the same network and enter the PIN. The code is not in the QR — read it out.";
 "remote_failed" = "Web remote: %@";
 "remote_title" = "TakeShot Remote";
 "remote_rec" = "REC";
@@ -562,8 +572,7 @@
 /* Other content: the type glyph on a row and on a tile (owner item 27) */
 "other_type_video" = "Video";
 "other_type_photo" = "Photo";
-/* === scopes: 10-bit wire reading and the third input-levels mode === */
-"levels_excursions" = "Limited, preserving excursions (4-1019)";
+/* === scopes: 10-bit wire reading === */
 "scope_wire_badge" = "WIRE";
 "scope_wire_hint" = "Measuring the 10-bit signal on the wire, before levels expansion: the trace can go below 0% and above 100%, and those bands are shaded.";
 
@@ -760,7 +769,6 @@
 "chroma_preview_only" = "Preview and monitor output only — takes, grabs and exports keep the original picture.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Keep TakeShot in the menu bar";
-"menubar_keep_hint" = "Adds a status item that shows the take timecode while recording, with REC, marker and mute in its menu — so a rolling take stays visible and stoppable when the main window is closed or behind other apps.";
 "menubar_take" = "Take: %@";
 "menubar_no_take" = "No take yet";
 "menubar_mute_monitor" = "Mute monitoring";

@@ -10,14 +10,13 @@ review layer on top.
   starts as soon as a device is selected — there is no separate start button.
 - Above the player: timecode on the left, resolution and frame rate on the
   right. A missing badge means no signal is arriving.
-- **Input levels** state what the SOURCE sends. Limited (16–235) is expanded
-  once; Full passes through untouched. Auto assumes limited for RGB 4:4:4 HDMI,
-  which is what cameras send.
-- Limited also CLIPS: codes below 16 and above 235 (64 and 940 in 10-bit) —
-  the sub-blacks and super-whites a camera legally sends — stop existing, on
-  screen and in the recorded file. Choose **Limited, preserving excursions** if
-  the grade needs them; it expands the camera's whole legal swing instead, at
-  the cost of a very slightly flatter picture. The default does not change.
+- **Input levels** state what the SOURCE sends. Limited is expanded once; Full
+  passes through untouched. Auto assumes limited for RGB 4:4:4 HDMI, which is
+  what cameras send.
+- Limited expands the camera's WHOLE legal swing (4–1019 in 10-bit), so the
+  sub-blacks and super-whites it rides outside 64–940 are still there for the
+  grade. There was a second Limited that clipped them away; it is gone, and a
+  saved setting that named it now reads as Limited.
 - RGB 4:4:4 sources are captured as 10-bit by default. Turn that off in Settings
   if the board or the disk cannot keep up.
 - **Forced input mode** overrides autodetection for a source whose format the
@@ -203,8 +202,7 @@ every file against the newest checksum list on that disk, reporting what
 verified, what mismatched, what is missing and what is a stray.
 
 This is for originals. TakeShot's own takes do not need it — they are not the
-original media. A separate **verified backup** folder can be set in Settings to
-mirror every finished take and still as it is written.
+original media.
 
 ## Windows and output
 
@@ -217,7 +215,8 @@ mirror every finished take and still as it is written.
 
 ## Keyboard
 
-Every binding below can be changed in Settings → Hotkeys.
+Every binding below can be changed in Settings → Hotkeys → Edit. The editor
+refuses a chord another action already holds, and names the one that has it.
 
 - `⌘R` — start/stop recording
 - `⌘G` — good take (the last take)
