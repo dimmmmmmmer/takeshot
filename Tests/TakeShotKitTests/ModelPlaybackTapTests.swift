@@ -228,6 +228,77 @@ struct ModelPlaybackTapTests {
                 "expected the untouched playback frame, got \(sample.description)")
     }
 
+    /// Difference delivers the measured |A−B|, exactly: playback at 0x20
+    /// against live at 0x2A is 10 codes on every channel, and the gain
+    /// multiplies the measurement, not the picture.
+    @Test func differenceDeliversTheMeasuredDeltaAtTheDialledGain() throws {
+        let (tap, collector) = tapWithCollector()
+        let live = buffer(0x2A)
+        tap.setLiveBufferProvider { live }
+
+        tap.setCompare(.difference(gain: 1))
+        tap.attachStill(buffer(0x20))
+        drain(tap)
+        let one = pixel(try #require(collector.last))
+        #expect(one.red == 10 && one.green == 10 && one.blue == 10,
+                "×1 measured \(one.description), expected 10")
+
+        tap.setCompare(.difference(gain: 4))
+        drain(tap)
+        let four = pixel(try #require(collector.last))
+        #expect(four.red == 40 && four.green == 40 && four.blue == 40,
+                "×4 measured \(four.description), expected 40")
+    }
+
+    /// The playback LUT never reaches the measurement: with an invert loaded,
+    /// difference still reads the RAW playback frame against the live one.
+    /// Wipe and blend rightly show the LUT — difference is the one mode whose
+    /// output is numbers, and the look must not bend them.
+    @Test func differenceIgnoresTheActiveLUT() throws {
+        let (tap, collector) = tapWithCollector()
+        tap.setLUT(CIFilter(name: "CIColorInvert"), intensity: 1)
+        let live = buffer(0x2A)
+        tap.setLiveBufferProvider { live }
+        tap.setCompare(.difference(gain: 1))
+        tap.attachStill(buffer(0x20))
+        drain(tap)
+
+        let sample = pixel(try #require(collector.last))
+        // measured post-LUT this would be |invert(0x20) − 0x2A| = 181
+        #expect(sample.red == 10 && sample.green == 10 && sample.blue == 10,
+                "the LUT bent the measurement: \(sample.description)")
+    }
+
+    /// The difference reads the live signal at the PRE-LUT stage while the
+    /// wipe keeps reading the display stage — one back half each, and they
+    /// must not get crossed.
+    @Test func differenceReadsThePreLUTLiveHalf() throws {
+        let (tap, collector) = tapWithCollector()
+        let display = buffer(0xE0) // what the viewer shows (LUT baked)
+        let clean = buffer(0x2A)   // the same frame before the LUT
+        tap.setLiveBufferProvider { display }
+        tap.setLivePreLUTBufferProvider { clean }
+
+        tap.setCompare(.difference(gain: 1))
+        tap.attachStill(buffer(0x20))
+        drain(tap)
+        let measured = pixel(try #require(collector.last))
+        #expect(measured.red == 10,
+                "difference read the display half: \(measured.description)")
+
+        // the wipe still shows the display half on its side of the seam
+        tap.setCompare(.wipe(axis: .vertical, position: 0.5))
+        drain(tap)
+        let delivered = try #require(collector.last)
+        CVPixelBufferLockBaseAddress(delivered, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(delivered, .readOnly) }
+        let base = try #require(CVPixelBufferGetBaseAddress(delivered))
+        let rowBytes = CVPixelBufferGetBytesPerRow(delivered)
+        let row = base.assumingMemoryBound(to: UInt8.self) + 32 * rowBytes
+        #expect(Int(row[4 * 59]) == 0xE0,
+                "the wipe lost its display half: \(Int(row[4 * 59]))")
+    }
+
     /// Turning compare back off restores the shortcut.
     @Test func turningCompareOffRestoresThePassThrough() {
         let (tap, collector) = tapWithCollector()

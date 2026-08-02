@@ -245,6 +245,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// like every other added field, so settings written by an older build still
     /// decode.
     public var defaultMarkerColor: String?
+    /// Compare mode the operator left engaged (`CompareMode` raw value:
+    /// "wipe"/"blend"/"difference"/"sideBySide"); nil — off, which is the
+    /// default. Persisted like the wipe's orientation is not: the MODE is a
+    /// working method (a unit that frames against a reference all day wants
+    /// difference back after a relaunch), the seam position is a moment.
+    /// Optional, like every added field, so old saved JSON still decodes.
+    public var compareMode: String?
+    /// Difference-compare gain multiplier (1/4/16); nil — 1.
+    public var compareDifferenceGain: Int?
     /// Forced input display mode ("1080p25"…); nil — autodetect.
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.

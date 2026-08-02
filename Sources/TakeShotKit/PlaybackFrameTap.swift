@@ -128,10 +128,19 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var compare: Compare = .off
     /// Pulls the latest live preview frame (assigned via setLiveBufferProvider).
     var liveBufferProvider: (() -> CVPixelBuffer?)?
+    /// Pulls the same live frame at the pre-LUT stage — the difference compare
+    /// measures code values, so its back half must not carry the preview LUT.
+    /// Falls back to `liveBufferProvider` when unset.
+    var livePreLUTBufferProvider: (() -> CVPixelBuffer?)?
 
     /// Queue-confined setter — the provider is read on the tap queue.
     func setLiveBufferProvider(_ provider: @escaping () -> CVPixelBuffer?) {
         queue.async { self.liveBufferProvider = provider }
+    }
+
+    /// Queue-confined setter for the pre-LUT half (see the property above).
+    func setLivePreLUTBufferProvider(_ provider: @escaping () -> CVPixelBuffer?) {
+        queue.async { self.livePreLUTBufferProvider = provider }
     }
     var lutFilter: CIFilter?
     var lutIntensity: Double = 1

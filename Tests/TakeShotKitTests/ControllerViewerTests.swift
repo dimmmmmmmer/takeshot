@@ -228,4 +228,73 @@ import Testing
             #expect(!controller.playbackLUTSuppressed)
         }
     }
+
+    /// Difference reaches the render as ONE compositor mode carrying the
+    /// dialled gain. The mapping is written once in `compareComposite`, and
+    /// "a fourth mode forgotten in the translation" is the exact bug that
+    /// single spelling exists to prevent — asserted here for the mode that
+    /// was added fourth, and re-checked when the gain alone changes (a
+    /// paused player redraws off this push, so a stale gain would sit on
+    /// screen until the next frame).
+    @Test func differenceReachesTheRenderWithItsGain() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.differenceGain = .x4
+            controller.compareMode = .difference
+
+            let tap = controller.playbackTap
+            var tapMode = CompareCompositor.Mode.off
+            tap.queue.sync { tapMode = tap.compare }
+            guard case .difference(let gain) = tapMode else {
+                Issue.record("the tap got \(tapMode), not difference")
+                return
+            }
+            #expect(gain == 4)
+
+            controller.differenceGain = .x16
+            tap.queue.sync { tapMode = tap.compare }
+            guard case .difference(let bumped) = tapMode else {
+                Issue.record("the gain change lost the mode: \(tapMode)")
+                return
+            }
+            #expect(bumped == 16)
+        }
+    }
+
+    /// The compare mode and the difference gain come back after a relaunch —
+    /// a unit that frames against a reference all day wants its difference at
+    /// ×16 back, not a hunt through the compare bar every morning. The
+    /// defaults are stored as nil, like every other settings field.
+    @Test func theCompareModeAndGainSurviveARelaunch() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.compareMode = .difference
+            controller.differenceGain = .x16
+
+            let second = CaptureController(
+                backends: [("mock", SyntheticSignalBackend())],
+                defaults: controller.defaults)
+            second.monitorOn = false
+            second.audioMonitor.stop()
+            second.stopCapture()
+            second.folderWatcher?.cancel()
+            second.folderWatcher = nil
+            defer {
+                second.volumePersistTask?.cancel()
+                second.lutPersistTask?.cancel()
+                second.assistPersistTask?.cancel()
+                second.stopCapture()
+                second.monitorOn = false
+                second.audioMonitor.stop()
+            }
+
+            #expect(second.compareMode == .difference)
+            #expect(second.differenceGain == .x16)
+
+            // back at the defaults nothing is stored — off is nil, not "off"
+            controller.compareMode = .off
+            controller.differenceGain = .x1
+            let reloaded = CaptureSettings.loaded(from: controller.defaults)
+            #expect(reloaded.compareMode == nil)
+            #expect(reloaded.compareDifferenceGain == nil)
+        }
+    }
 }

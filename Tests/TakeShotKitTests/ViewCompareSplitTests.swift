@@ -61,7 +61,8 @@ import Testing
             #expect(controller.showsCompareSplit)
 
             // the other compare modes are composited into one picture
-            for mode in [CaptureController.CompareMode.off, .wipe, .blend] {
+            for mode in [CaptureController.CompareMode.off, .wipe, .blend,
+                         .difference] {
                 controller.compareMode = mode
                 #expect(!controller.showsCompareSplit,
                         "\(mode.rawValue) is not a split")
@@ -144,9 +145,10 @@ import Testing
         }
     }
 
-    /// Wipe and blend are composited inside the tap and arrive as one picture,
-    /// so those two surfaces needed no split — and must not grow one. A compare
-    /// sink here would put the B clip on screen a second time, uncomposited.
+    /// Wipe, blend and difference are composited inside the tap and arrive as
+    /// one picture, so those two surfaces needed no split — and must not grow
+    /// one. A compare sink here would put the B clip on screen a second time,
+    /// uncomposited.
     @Test func theCompositedCompareModesMountNoSecondPane() async throws {
         try await ViewProbe.run { probe in
             let controller = probe.controller
@@ -159,7 +161,8 @@ import Testing
             // is drained by the autorelease pool at a moment of AppKit's
             // choosing, so an earlier iteration's layer may still be in the
             // weak registry. What the surface itself added is the assertion.
-            for mode in [CaptureController.CompareMode.wipe, .blend] {
+            for mode in [CaptureController.CompareMode.wipe, .blend,
+                         .difference] {
                 controller.compareMode = mode
                 for surface in [AnyView(PlaybackFullscreenView()),
                                 AnyView(ExternalOutputView())] {

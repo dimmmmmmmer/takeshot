@@ -92,7 +92,12 @@ extension PlaybackFrameTap {
     ///
     /// Reads the buffer `deliver` already pulled rather than pulling its own —
     /// see the comment there for why there is exactly one pull per frame.
-    func liveImage(matching extent: CGRect) -> CIImage? {
+    ///
+    /// `preLUT` asks for the live frame BEFORE the preview LUT — the
+    /// difference compare measures code values and must not see the look. The
+    /// B clip is decoded straight off disk and never carries it, so the flag
+    /// only matters on the live branch.
+    func liveImage(matching extent: CGRect, preLUT: Bool = false) -> CIImage? {
         if compareOutput != nil {
             guard let buffer = lastCompareBuffer else { return nil }
             let image = CIImage(cvPixelBuffer: buffer,
@@ -100,7 +105,10 @@ extension PlaybackFrameTap {
             guard image.extent.width > 0 else { return nil }
             return CompareCompositor.fitted(image, into: extent)
         }
-        guard let live = liveBufferProvider?() else { return nil }
+        let provider = preLUT
+            ? (livePreLUTBufferProvider ?? liveBufferProvider)
+            : liveBufferProvider
+        guard let live = provider?() else { return nil }
         let isBGRA = CVPixelBufferGetPixelFormatType(live) == kCVPixelFormatType_32BGRA
         // BGRA carries raw full-range codes; YUV needs CI's managed decode
         let image = isBGRA

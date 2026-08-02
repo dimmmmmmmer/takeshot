@@ -95,7 +95,10 @@ final class CaptureController: ObservableObject {
     @Published var playbackURL: URL?
 
     @Published var compareMode: CompareMode = .off {
-        didSet { pushCompare() }
+        didSet {
+            pushCompare()
+            persistCompareSettings()
+        }
     }
     @Published var wipeOrientation: WipeOrientation = .vertical {
         didSet { pushCompare() }
@@ -107,6 +110,14 @@ final class CaptureController: ObservableObject {
     /// Playback opacity in blend mode.
     @Published var blendOpacity: Double = 0.5 {
         didSet { pushCompare() }
+    }
+    /// Difference-mode gain (×1/×4/×16 — small differences are invisible
+    /// unamplified). Persisted with the mode, see `persistCompareSettings`.
+    @Published var differenceGain: DifferenceGain = .x1 {
+        didSet {
+            pushCompare()
+            persistCompareSettings()
+        }
     }
 
     /// One-line offload status for the takes panel ("Offload 41/128"); nil when

@@ -127,6 +127,7 @@ extension CapturePipeline {
             self.preRollAudio.removeAll()
             self.latestPreviewLock.lock()
             self.latestPreview = nil // don't compare against a frozen frame
+            self.latestPreLUT = nil
             self.latestPreviewLock.unlock()
             self.rawVancStats.removeAll()
             self.vancStatsLastPublish = 0

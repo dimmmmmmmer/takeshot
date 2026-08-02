@@ -69,8 +69,21 @@ extension PlaybackFrameTap {
     /// LUT + compare composite in raw code values (color management off — the
     /// values pass through exactly like the live path's).
     private func composed(from playbackBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-        var playback = CIImage(cvPixelBuffer: playbackBuffer,
-                               options: [.colorSpace: NSNull()])
+        let raw = CIImage(cvPixelBuffer: playbackBuffer,
+                          options: [.colorSpace: NSNull()])
+        // Difference is a measurement, not a picture: both halves are read at
+        // the pre-LUT stage (the raw playback frame, the pre-LUT live buffer)
+        // and the |A−B| output bypasses the viewing LUT entirely — a look bent
+        // over the numbers would bend exactly what the operator is checking.
+        // With no back half it falls through and shows the plain playback
+        // frame, the same fallback the other modes have.
+        if case .difference = compare,
+           let back = liveImage(matching: raw.extent, preLUT: true) {
+            let result = CompareCompositor.compose(front: raw, back: back,
+                                                   mode: compare)
+            return rendered(result, extent: raw.extent)
+        }
+        var playback = raw
         if let lutFilter {
             lutFilter.setValue(playback, forKey: kCIInputImageKey)
             if let filtered = lutFilter.outputImage {
@@ -80,7 +93,7 @@ extension PlaybackFrameTap {
         }
         var result = playback
         switch compare {
-        case .off:
+        case .off, .difference:
             if lutFilter == nil { return nil } // untouched frame — no render needed
         case .blend, .wipe:
             // One arm for both: the wipe and the blend differ only inside the

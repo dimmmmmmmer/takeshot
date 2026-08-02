@@ -14,6 +14,10 @@ public enum CompareCompositor {
         case off
         case blend(opacity: Double)
         case wipe(axis: Axis, position: Double)
+        /// Per-pixel |A−B|, amplified by `gain` (×1/×4/×16 in the UI) and
+        /// clamped. The framing-match tool: identical frames come out exact
+        /// black, and anything that moved lights up.
+        case difference(gain: Double)
     }
 
     /// `front` occupies the left/top side of the wipe, or fades in over
@@ -28,6 +32,8 @@ public enum CompareCompositor {
             // premultiplied image leaves RGB at full strength and over-brightens
             return CapturePipeline.mix(source: back, filtered: front,
                                        intensity: opacity)
+        case .difference(let gain):
+            return difference(front: front, back: back, gain: gain)
         case .wipe(let axis, let position):
             let extent = front.extent
             switch axis {
@@ -64,6 +70,34 @@ public enum CompareCompositor {
                 ])
             }
         }
+    }
+
+    /// Per-pixel |A−B|, amplified and clamped.
+    ///
+    /// |A−B| per channel on the raw code values (both inputs are read with
+    /// color management off, like everything else in this path), so identical
+    /// frames land on exact black with no bias. The blend-mode filter needs
+    /// opaque inputs — both halves are, everywhere this is called.
+    private static func difference(front: CIImage, back: CIImage,
+                                   gain: Double) -> CIImage {
+        let diff = front.applyingFilter("CIDifferenceBlendMode", parameters: [
+            kCIInputBackgroundImageKey: back,
+        ])
+        guard gain > 1 else { return diff }
+        // The gain is what makes small differences visible at all (a 2-code
+        // framing error is invisible at ×1), scaled on RGB only — alpha stays
+        // opaque — and clamped back into range explicitly: the intermediate
+        // is float and would otherwise carry >1.0 values into whatever is
+        // composited downstream.
+        return diff.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: gain, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: gain, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: gain, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+        ]).applyingFilter("CIColorClamp", parameters: [
+            "inputMinComponents": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputMaxComponents": CIVector(x: 1, y: 1, z: 1, w: 1),
+        ])
     }
 
     /// Aspect-fit `image` into `extent`, letterboxed with black — an
