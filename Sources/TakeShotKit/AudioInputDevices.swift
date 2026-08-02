@@ -29,6 +29,22 @@ struct AudioInputDeviceInfo: Identifiable, Equatable {
 /// NATIVE format plus the host-clock timestamp of the buffer's first frame,
 /// serially on the device's own queue; `ExternalAudioSource` converts from
 /// there. `onDeviceGone` fires when the hardware disappears mid-capture.
+/// One input device, opened.
+///
+/// Threading contract, which every conformer owes its callers:
+/// - `onBuffer` fires on the device's own delivery queue, `onDeviceGone` on
+///   whatever thread learns of the unplug. Neither runs on main.
+/// - Both may be SET from any thread at any time, including while delivery is
+///   in flight. A closure property is a two-word value with an ARC-managed
+///   context, so an unguarded slot hands the reader a function pointer paired
+///   with the wrong context — see `CapturePipeline`'s handler slots, which
+///   carry a lock for exactly this reason. Conformers guard theirs.
+/// - `stop()` is a REQUEST, not a barrier: a real capture session spins down
+///   asynchronously, so a straggling buffer may still arrive after it returns.
+///   `CapturePipeline.handleAudio(_:from:)` gates on the active source and
+///   discards packets from a source that is no longer selected, which is what
+///   makes the straggler harmless — nothing may depend on `stop()` having
+///   silenced the device by the time it returns.
 protocol AudioCaptureDevice: AnyObject {
     var uid: String { get }
     var channelCount: Int { get }
@@ -126,8 +142,23 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
 
     let uid: String
     let channelCount: Int
-    var onBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)?
-    var onDeviceGone: (() -> Void)?
+
+    // Both slots are written from main (start, stop, source switches) and read
+    // off it — `onBuffer` on the delegate queue, `onDeviceGone` on whichever
+    // thread posts the notification. See the protocol's threading contract for
+    // why a bare closure property is not safe here.
+    private let callbackLock = NSLock()
+    private var storedOnBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)?
+    private var storedOnDeviceGone: (() -> Void)?
+
+    var onBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)? {
+        get { callbackLock.withLock { storedOnBuffer } }
+        set { callbackLock.withLock { storedOnBuffer = newValue } }
+    }
+    var onDeviceGone: (() -> Void)? {
+        get { callbackLock.withLock { storedOnDeviceGone } }
+        set { callbackLock.withLock { storedOnDeviceGone = newValue } }
+    }
 
     private let device: AVCaptureDevice
     private let session = AVCaptureSession()
@@ -158,7 +189,10 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
             object: nil, queue: nil) { [weak self] note in
             guard let self, (note.object as? AVCaptureDevice) == self.device
             else { return }
-            self.onDeviceGone?()
+            // copy out, then call: a client closure invoked while the slot's
+            // lock is held is a deadlock waiting for a caller that reaches back
+            let gone = self.onDeviceGone
+            gone?()
         }
         // startRunning blocks while the session spins up — never on main
         queue.async { [session] in session.startRunning() }
@@ -176,7 +210,8 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let pcm = Self.pcmBuffer(from: sampleBuffer) else { return }
-        onBuffer?(pcm, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+        let deliver = onBuffer
+        deliver?(pcm, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
     }
 
     /// The delegate's CMSampleBuffer as an AVAudioPCMBuffer in the device's

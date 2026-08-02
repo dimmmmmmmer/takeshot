@@ -50,40 +50,70 @@ final class FakeAudioCaptureDevice: AudioCaptureDevice, @unchecked Sendable {
     let amplitude: Int16
     private let automatic: Bool
 
-    var onBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)?
-    var onDeviceGone: (() -> Void)?
+    // The real devices guard these slots (see the AudioCaptureDevice contract);
+    // a double that leaves them bare turns the sanitizer into noise about
+    // itself, so it models the contract rather than undercutting it.
+    private let lock = NSLock()
+    private var storedOnBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)?
+    private var storedOnDeviceGone: (() -> Void)?
+
+    var onBuffer: ((AVAudioPCMBuffer, CMTime) -> Void)? {
+        get { lock.withLock { storedOnBuffer } }
+        set { lock.withLock { storedOnBuffer = newValue } }
+    }
+    var onDeviceGone: (() -> Void)? {
+        get { lock.withLock { storedOnDeviceGone } }
+        set { lock.withLock { storedOnDeviceGone = newValue } }
+    }
 
     private let queue = DispatchQueue(label: "takeshot.tests.fake-usb")
+    private static let queueKey = DispatchSpecificKey<Void>()
+    private let interval: DispatchTimeInterval
     private var timer: DispatchSourceTimer?
     private var framesPushed: Int64 = 0
     private var base: CMTime?
-    private(set) var started = false
+    private var startedFlag = false
+    var started: Bool { lock.withLock { startedFlag } }
 
     init(uid: String = "fake-usb", name: String = "Fake USB Interface",
          channelCount: Int = 2, sampleRate: Double = 48_000,
-         amplitude: Int16 = 9000, automatic: Bool = true) {
+         amplitude: Int16 = 9000, automatic: Bool = true,
+         interval: DispatchTimeInterval = .milliseconds(40)) {
         self.uid = uid
         self.name = name
         self.channelCount = channelCount
         self.sampleRate = sampleRate
         self.amplitude = amplitude
         self.automatic = automatic
+        self.interval = interval
+        queue.setSpecific(key: Self.queueKey, value: ())
     }
 
     func start() throws {
-        started = true
+        lock.withLock { startedFlag = true }
         guard automatic else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(40))
+        timer.schedule(deadline: .now(), repeating: interval)
         timer.setEventHandler { [weak self] in self?.push() }
         timer.resume()
         self.timer = timer
     }
 
+    /// Returns with no delivery in flight. `DispatchSourceTimer.cancel()` does
+    /// not wait for a handler that is already running, so the drain is what
+    /// makes "stopped" true rather than merely requested — the double is held
+    /// to a stricter standard than the hardware here on purpose (the real
+    /// session spins down asynchronously; a test that cannot tell the
+    /// difference cannot assert "nothing arrived after stop").
     func stop() {
         timer?.cancel()
         timer = nil
-        started = false
+        lock.withLock { startedFlag = false }
+        // re-entrancy: a stop reached from the delivery itself must not
+        // deadlock on its own queue
+        if DispatchQueue.getSpecific(key: Self.queueKey) == nil {
+            queue.sync {}
+        }
     }
 
     /// One 40 ms buffer, synchronously on the caller's thread — the manual
@@ -101,6 +131,7 @@ final class FakeAudioCaptureDevice: AudioCaptureDevice, @unchecked Sendable {
     }
 
     private func push() {
+        guard started else { return }
         let frames = AVAudioFrameCount(sampleRate * 0.04)
         // the layout-carrying builder: a plain AVAudioFormat init returns nil
         // past two channels, and USB fakes go up to 32
@@ -118,7 +149,9 @@ final class FakeAudioCaptureDevice: AudioCaptureDevice, @unchecked Sendable {
         let pts = CMTimeAdd(base, CMTime(value: framesPushed,
                                          timescale: CMTimeScale(sampleRate)))
         framesPushed += Int64(frames)
-        onBuffer?(buffer, pts)
+        // copy out, then call — never invoke a client closure under the lock
+        let deliver = onBuffer
+        deliver?(buffer, pts)
     }
 }
 

@@ -66,10 +66,13 @@ final class ExternalAudioSource {
         try device.start()
     }
 
+    /// Stops the device and nothing else. The callback slots are deliberately
+    /// left alone: both closures capture `self` weakly, so there is no cycle to
+    /// break, and clearing them from here was a write racing the device's own
+    /// delivery — ThreadSanitizer caught exactly that. What makes a straggling
+    /// packet harmless is the pipeline's source gate, not an empty slot.
     func stop() {
         device.stop()
-        device.onBuffer = nil
-        device.onDeviceGone = nil
     }
 
     // MARK: - on the device's delivery queue

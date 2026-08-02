@@ -97,4 +97,46 @@ struct ExternalAudioSourceTests {
         #expect(gone.value == 1)
         #expect(!device.started)
     }
+
+    /// Stopping a source while its device is mid-delivery.
+    ///
+    /// ThreadSanitizer caught this as a data race on `onBuffer`: the slot was
+    /// written from the stopping thread while the delivery queue was reading
+    /// it. A closure is a function pointer plus an ARC-managed context, so a
+    /// torn read pairs the two from different closures and the process dies on
+    /// whatever signal the garbage earns — intermittently, and never on the
+    /// machine you develop on. The delivery interval is 1 ms so the two
+    /// genuinely overlap; without the fix this run flags under `--sanitize=thread`.
+    @Test func stoppingWhileTheDeviceDeliversIsSafe() throws {
+        for _ in 0..<40 {
+            let device = FakeAudioCaptureDevice(interval: .milliseconds(1))
+            let source = ExternalAudioSource(device: device)
+            let packets = PacketCollector()
+            source.onPacket = { packets.append($0) }
+            try source.start()
+            source.stop()
+            #expect(!device.started)
+        }
+    }
+
+    /// `stop()` on the double is a barrier, so "nothing arrived afterwards" is
+    /// a fact the suite can assert rather than a race it hopes to win. The real
+    /// session spins down asynchronously — what makes a straggler harmless
+    /// there is the pipeline's source gate, which its own tests cover.
+    @Test func noPacketArrivesAfterStopReturns() throws {
+        let device = FakeAudioCaptureDevice(interval: .milliseconds(1))
+        let source = ExternalAudioSource(device: device)
+        let packets = PacketCollector()
+        source.onPacket = { packets.append($0) }
+        try source.start()
+        while packets.count == 0 { usleep(200) } // delivery is genuinely live
+        source.stop()
+
+        let atStop = packets.count
+        // a settle window, not a wait for an outcome: the assertion is that
+        // NOTHING happens, and only elapsed time can evidence that
+        usleep(50_000)
+        #expect(packets.count == atStop,
+                "a packet landed after stop() returned")
+    }
 }
