@@ -635,3 +635,12 @@
 "script_empty" = "No takes yet";
 "script_comment" = "Comment";
 "script_takes" = "Takes";
+
+/* === the digital slate: a fullscreen TC + take card to point a camera at === */
+"menu_slate" = "Digital slate";
+"slate_window_title" = "Slate";
+"slate_next" = "NEXT";
+"slate_date" = "Date";
+"slate_fps" = "FPS";
+"slate_sync_tag" = "SYNC";
+"slate_sync_hint" = "Click or press Space — sync flash";

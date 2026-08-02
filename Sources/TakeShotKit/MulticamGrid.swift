@@ -75,7 +75,7 @@ private struct CameraTile: View {
                 .padding(6)
         }
         .overlay(alignment: .bottomLeading) {
-            Text(timecode?.description ?? "--:--:--:--")
+            Text(timecode?.description ?? timecodeFallbackText)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(recording ? .red : .white)
                 .padding(.horizontal, 5).padding(.vertical, 1)

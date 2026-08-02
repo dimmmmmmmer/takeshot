@@ -638,3 +638,12 @@
 "script_empty" = "Дублей пока нет";
 "script_comment" = "Комментарий";
 "script_takes" = "Дубли";
+
+/* === the digital slate: a fullscreen TC + take card to point a camera at === */
+"menu_slate" = "Цифровой слейт";
+"slate_window_title" = "Слейт";
+"slate_next" = "СЛЕД.";
+"slate_date" = "Дата";
+"slate_fps" = "FPS";
+"slate_sync_tag" = "СИНХРО";
+"slate_sync_hint" = "Клик или пробел — синхровспышка";

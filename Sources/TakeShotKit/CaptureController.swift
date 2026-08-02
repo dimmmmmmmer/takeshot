@@ -257,6 +257,12 @@ final class CaptureController: ObservableObject {
     /// window that is closed and reopened replaces them instead of stacking
     /// another pair on the same window.
     var scopesFrameObservers: [NSObjectProtocol] = []
+    /// The digital slate window's state (the sync flash/freeze and the card
+    /// fields, all read off this controller — see `SlateModel`). Owned here so
+    /// a hold in progress survives the window closing and reopening, and so
+    /// the tests reach the same instance the window shows. Lazy because it
+    /// captures `self`.
+    lazy var slate = SlateModel(controller: self)
     /// A separate playback fullscreen window (not the system app fullscreen).
     @Published var isPlaybackFullscreen = false
     var playbackFullscreenWindow: NSWindow?
