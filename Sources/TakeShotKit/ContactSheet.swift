@@ -193,7 +193,13 @@ private final class SheetPage {
         draw(take.displayName, x: x, width: Self.cellWidth, font: nameFont,
              offset: textTop + 3)
         let tc = take.startTimecode?.description ?? "—"
-        draw("\(tc) · \(L("report_duration_fmt", take.durationSeconds))",
+        // The slate leads the detail line rather than taking a line of its
+        // own: the cell's height puts exactly 12 takes on an A4 page, and a
+        // fifth text row would silently make it 9. "12A/B T3" is pure data,
+        // so the sheet still reads the same in both languages.
+        let slate = take.slate.compact
+        let detail = "\(tc) · \(L("report_duration_fmt", take.durationSeconds))"
+        draw(slate.isEmpty ? detail : "\(slate) · \(detail)",
              x: x, width: Self.cellWidth, font: detailFont, color: .darkGray,
              offset: textTop + 14)
         drawRating(take, x: x, offset: textTop + 25)

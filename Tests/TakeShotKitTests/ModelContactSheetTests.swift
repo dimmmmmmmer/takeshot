@@ -117,6 +117,25 @@ struct ModelContactSheetTests {
         #expect(body.contains("⚑ 2"))
     }
 
+    /// The slate leads the cell's detail line. It shares that line rather than
+    /// taking one of its own because the cell height is what puts exactly 12
+    /// takes on an A4 page — pinned here beside the page-count test above.
+    @Test func cellsCarryTheSlateWithoutCostingAPageRow() throws {
+        var slated = take(1)
+        slated.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+        let body = text(of: try document([slated]))
+        #expect(body.contains("12A/B T3"))
+        #expect(body.contains(try #require(slated.startTimecode).description),
+                "the slate displaced the timecode")
+
+        let twelve = (1...12).map { index -> Take in
+            var subject = take(index)
+            subject.slate = SlateMetadata(scene: "12A", shot: "B", take: index)
+            return subject
+        }
+        #expect(try document(twelve).pageCount == 1)
+    }
+
     /// The sheet speaks the app language like the report does (owner item 21):
     /// title, summary and ratings all come out Russian under the Russian UI.
     @Test func theContactSheetSpeaksTheAppLanguage() throws {

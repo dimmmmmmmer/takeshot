@@ -34,8 +34,16 @@ public enum ALEExporter {
     /// field (see `EDLExporter.reelName`) — an assistant conforming the EDL and
     /// importing this log side by side has to see one name for one roll, or the
     /// two do not join up.
+    ///
+    /// `Scene`, `Shot`, `Take` and `Description` are the creative columns, and
+    /// they are spelled exactly as Avid and Resolve name those fields — the
+    /// whole value of this file is that an assistant maps nothing by hand.
+    /// `Shot` sits beside `Scene` because that is how a slate reads;
+    /// `Description` is last because it is the widest cell and an ALE opened in
+    /// a text editor is easier to scan with the long field on the end.
     static let columns = ["Name", "Tape", "Start", "End", "Duration", "FPS",
-                          "Take", "Scene", "Good Take", "Comments"]
+                          "Take", "Scene", "Shot", "Good Take", "Comments",
+                          "Description"]
 
     /// Build the ALE text. `takes` are already filtered/ordered by the caller;
     /// nil when there is nothing to export, matching `EDLExporter.selectsEDL`.
@@ -81,11 +89,15 @@ public enum ALEExporter {
             end.description,
             TakeLogExporter.durationTimecode(of: take),
             rateText(TakeLogExporter.realRate(of: start)),
-            String(take.takeNumber),
-            take.scene,
+            // the creative take when the scripty logged one, else the clip
+            // counter — the Avid's Take column is about the performance
+            String(take.editorialTakeNumber),
+            take.slate.scene,
+            take.slate.shot,
             TakeLogExporter.goodTakeField(rating: take.rating),
             TakeLogExporter.commentsField(rating: take.rating,
                                           comment: take.comment),
+            take.logDescription,
         ].map(field).joined(separator: "\t")
     }
 

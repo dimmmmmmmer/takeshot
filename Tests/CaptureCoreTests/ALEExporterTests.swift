@@ -34,14 +34,19 @@ import Testing
                   tc: Timecode(hours: 10, minutes: 0, seconds: 0, frames: 0,
                                fps: 25),
                   duration: 4) {
-             $0.scene = "12"
+             // a fully slated take: the creative columns come from the slate,
+             // and the Take column is the slate's number, not the clip's
+             $0.slate = SlateMetadata(scene: "12", shot: "B", take: 4)
              $0.rating = .good
              $0.comment = "hero"
+             $0.logDescription = "wide on the door"
          },
          makeTake(name: "B002C003.mov", roll: "B002",
                   tc: Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0,
                                fps: 30, isDropFrame: true),
                   duration: 2) {
+             // a scene with no shot letter and no slated take: the clip
+             // counter is what the Take column falls back to
              $0.scene = "12A"
              $0.takeNumber = 3
          },
@@ -70,17 +75,21 @@ import Testing
             "FPS\t25",
             "",
             "Column",
-            "Name\tTape\tStart\tEnd\tDuration\tFPS\tTake\tScene\tGood Take\tComments",
+            "Name\tTape\tStart\tEnd\tDuration\tFPS\tTake\tScene\tShot\tGood Take"
+                + "\tComments\tDescription",
             "",
             "Data",
-            "A001C001.mov\tA001\t10:00:00:00\t10:00:04:00\t00:00:04:00\t25\t1\t12\ttrue\thero",
+            "A001C001.mov\tA001\t10:00:00:00\t10:00:04:00\t00:00:04:00\t25\t4\t12"
+                + "\tB\ttrue\thero\twide on the door",
             // drop-frame: the semicolon separator, and 2 s is 60 real frames
-            "B002C003.mov\tB002\t01:00:00;00\t01:00:02;00\t00:00:02;00\t29.97\t3\t12A\t\t",
+            "B002C003.mov\tB002\t01:00:00;00\t01:00:02;00\t00:00:02;00\t29.97\t3\t12A"
+                + "\t\t\t\t",
             // no roll — the EDL's counter reel; the tab in the comment became a
             // space, the comma stayed a comma. The rejected-take marker is the
             // Comments column's own, shared with the Resolve CSV: "Bad", where
             // every build before the rename wrote "NG".
-            "C.mov\tTS003\t10:00:10:00\t10:00:11:00\t00:00:01:00\t25\t7\t\tfalse\tBad: wide, then tight",
+            "C.mov\tTS003\t10:00:10:00\t10:00:11:00\t00:00:01:00\t25\t7\t\t"
+                + "\tfalse\tBad: wide, then tight\t",
         ].joined(separator: "\r\n") + "\r\n"
         #expect(ale == expected)
     }

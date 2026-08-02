@@ -167,6 +167,16 @@ private final class ReportPage {
         }
         let name = take.url.deletingPathExtension().lastPathComponent
         draw(name, x: Self.xClip, width: 158, font: bodyFont, offset: 2)
+        // The slate under the file name, and above the markers: the production
+        // office reads this table by scene, and the file name says nothing
+        // about which one it is. Pure data ("12A/B T3") — no words, so the row
+        // reads the same in both languages.
+        let slate = take.slate.compact
+        if !slate.isEmpty {
+            draw(slate, x: Self.xClip, width: 158,
+                 font: NSFont.boldSystemFont(ofSize: 7),
+                 color: .darkGray, offset: 15)
+        }
         if !take.markers.isEmpty {
             let flags = take.markers.map {
                 $0.note.isEmpty ? $0.timecodeText : "\($0.timecodeText) \($0.note)"
@@ -174,7 +184,7 @@ private final class ReportPage {
             draw("⚑ \(flags)", x: Self.xClip,
                  width: Self.pageSize.width - Self.margin - Self.xClip,
                  font: NSFont.systemFont(ofSize: 7),
-                 color: .orange, offset: 15)
+                 color: .orange, offset: slate.isEmpty ? 15 : 28)
         }
         draw(take.startTimecode?.description ?? "—", x: Self.xTCIn, width: 66,
              font: monoFont, offset: 2)

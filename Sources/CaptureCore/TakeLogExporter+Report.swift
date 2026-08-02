@@ -60,11 +60,17 @@ extension TakeLogExporter {
                 escape(take.url.lastPathComponent),
                 escape(take.roll),
                 String(take.takeNumber),
+                // the creative columns sit next to the clip they belong to: the
+                // production office reads this table by scene, not by file
+                escape(flattened(take.slate.scene)),
+                escape(flattened(take.slate.shot)),
+                take.slate.take > 0 ? String(take.slate.take) : "",
                 take.startTimecode?.description ?? "",
                 endTimecode(of: take)?.description ?? "",
                 durationTimecode(of: take),
                 escape(rating),
                 escape(flattened(take.comment)),
+                escape(flattened(take.logDescription)),
                 escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
                 formatter.string(from: take.recordedAt),
             ].joined(separator: ","))
@@ -73,14 +79,14 @@ extension TakeLogExporter {
     }
 }
 
-/// The shift-report CSV's translatable words: the ten column headers, in
-/// column order, and the two rating values. Injected by the app in its UI
-/// language; the English default is exactly what the file always said.
+/// The shift-report CSV's translatable words: the column headers, in column
+/// order, and the two rating values. Injected by the app in its UI language;
+/// the English default is what the file says with no app around it.
 public struct ShiftReportCSVLabels: Sendable, Equatable {
     /// One label per column — the writer above defines the order.
-    public var header = ["File Name", "Roll", "Clip", "Start TC", "End TC",
-                         "Duration", "Rating", "Comments", "Markers",
-                         "Recorded At"]
+    public var header = ["File Name", "Roll", "Clip", "Scene", "Shot", "Take",
+                         "Start TC", "End TC", "Duration", "Rating",
+                         "Comments", "Description", "Markers", "Recorded At"]
     public var good = "GOOD"
     public var bad = "BAD"
 

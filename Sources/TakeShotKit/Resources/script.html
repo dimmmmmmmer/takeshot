@@ -121,7 +121,7 @@ main {
 }
 .rate.good.on { background: var(--good); border-color: var(--good); color: #06210c; }
 .rate.bad.on { background: var(--bad); border-color: var(--bad); color: #fff; }
-.note {
+.note, .slate input {
   width: 100%; margin-top: 8px; padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg); color: var(--text);
@@ -130,7 +130,13 @@ main {
   font-size: 16px; font-family: inherit;
   -webkit-user-select: text; user-select: text;
 }
-.note::placeholder { color: var(--dim); }
+.note::placeholder, .slate input::placeholder { color: var(--dim); }
+/* The slate row: scene and shot share the width, the take number is a narrow
+   box on the end — the same shape as the card an assistant fills in by hand. */
+.slate { display: flex; gap: 8px; }
+.slate .scene { flex: 2 1 0; min-width: 0; }
+.slate .shot { flex: 1 1 0; min-width: 0; }
+.slate .take { flex: 0 0 74px; }
 
 footer {
   display: flex; gap: 12px; justify-content: space-between; align-items: center;
@@ -223,6 +229,9 @@ var rows = {};
 // a socket authenticates; until then the field keeps the scripty's text
 // instead of being clobbered by a replayed log.
 var pending = {};
+// The same queue for slates: scene/shot/take commit as one message, so one
+// entry per take id holds all three.
+var pendingSlate = {};
 
 function text(id, value) { el(id).textContent = value; }
 
@@ -286,13 +295,36 @@ function commitComment(id, row) {
   flushPending();
 }
 
-// Send every queued comment the socket can take. Called on blur and again
-// when a socket authenticates — a comment typed in a dead spot goes out when
-// the phone walks back into coverage.
+// The slate commits as a unit: whichever of the three fields was left, the
+// message carries all three, so a half-applied slate can never be pushed back
+// between two of them.
+function commitSlate(id, row) {
+  var slate = { scene: row.scene.value, shot: row.shot.value,
+                take: row.take.value };
+  if (slate.scene === row.pushedSlate.scene
+      && slate.shot === row.pushedSlate.shot
+      && slate.take === row.pushedSlate.take) {
+    delete pendingSlate[id];
+    return;
+  }
+  pendingSlate[id] = slate;
+  flushPending();
+}
+
+// Send every queued edit the socket can take. Called on blur and again when a
+// socket authenticates — anything typed in a dead spot goes out when the phone
+// walks back into coverage.
 function flushPending() {
   Object.keys(pending).forEach(function (id) {
     if (send({ action: "comment", id: id, text: pending[id] })) {
       delete pending[id];
+    }
+  });
+  Object.keys(pendingSlate).forEach(function (id) {
+    var slate = pendingSlate[id];
+    if (send({ action: "slate", id: id, scene: slate.scene,
+               shot: slate.shot, take: slate.take })) {
+      delete pendingSlate[id];
     }
   });
 }
@@ -325,11 +357,22 @@ function makeRow(id) {
   note.placeholder = S.comment;
   note.autocomplete = "off";
   note.spellcheck = false;
+  var slate = document.createElement("div");
+  slate.className = "slate";
+  var scene = slateField("scene", S.scene, "text");
+  var shot = slateField("shot", S.shot, "text");
+  var take = slateField("take", S.take, "numeric");
+  slate.appendChild(scene);
+  slate.appendChild(shot);
+  slate.appendChild(take);
   root.appendChild(top);
+  root.appendChild(slate);
   root.appendChild(note);
 
   var row = { root: root, name: name, when: when, good: good, bad: bad,
-              note: note, rating: "none", pushed: "" };
+              note: note, scene: scene, shot: shot, take: take,
+              rating: "none", pushed: "",
+              pushedSlate: { scene: "", shot: "", take: "" } };
   good.addEventListener("click", sendRate(id, row));
   bad.addEventListener("click", sendRate(id, row));
   // Save on blur; Enter is just a blur, which is what "done" means on a
@@ -338,8 +381,27 @@ function makeRow(id) {
     if (event.key === "Enter") { note.blur(); }
   });
   note.addEventListener("blur", function () { commitComment(id, row); });
+  [scene, shot, take].forEach(function (field) {
+    field.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { field.blur(); }
+    });
+    field.addEventListener("blur", function () { commitSlate(id, row); });
+  });
   rows[id] = row;
   return row;
+}
+
+// One slate box. The take field is numeric-only on the phone keyboard, which
+// is the difference between a scripty typing "3" and typing "3 " all day.
+function slateField(kind, label, mode) {
+  var field = document.createElement("input");
+  field.className = kind;
+  field.type = "text";
+  field.placeholder = label;
+  field.inputMode = mode;
+  field.autocomplete = "off";
+  field.spellcheck = false;
+  return field;
 }
 
 function updateRow(row, take) {
@@ -351,11 +413,20 @@ function updateRow(row, take) {
   row.good.classList.toggle("on", take.rating === "good");
   row.bad.classList.toggle("on", take.rating === "bad");
   row.pushed = take.comment;
+  row.pushedSlate = { scene: take.scene || "", shot: take.shot || "",
+                      take: take.take || "" };
   // Refresh from pushed state — the operator may have edited in the app —
   // but never clobber a field the scripty is typing in, and never overwrite
   // a comment still queued for a socket that comes back.
   if (document.activeElement !== row.note && !(take.id in pending)) {
     row.note.value = take.comment;
+  }
+  if (!(take.id in pendingSlate)) {
+    [["scene", row.scene], ["shot", row.shot], ["take", row.take]]
+      .forEach(function (pair) {
+        if (document.activeElement === pair[1]) { return; }
+        pair[1].value = row.pushedSlate[pair[0]];
+      });
   }
 }
 
@@ -383,6 +454,7 @@ function renderTakes(list) {
       container.removeChild(rows[id].root);
       delete rows[id];
       delete pending[id];
+      delete pendingSlate[id];
     }
   });
   el("empty").hidden = list.length > 0;

@@ -25,7 +25,7 @@ extension CapturePipeline {
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()
-            takeScene = config.scene
+            takeSlate = config.slate
             takeRoll = config.roll
             takeNumber = config.takeNumber
             droppedFrames = 0
@@ -55,6 +55,9 @@ extension CapturePipeline {
                 }
                 return meta
             }(),
+            // the creative side, embedded so it survives a copy that leaves
+            // the sidecars behind — see TakeWriter's key documentation
+            slate: config.slate,
             colorTagPreset: config.settings.colorTagPreset,
             audioChannelCount: recordChannelCount)
     }
@@ -134,14 +137,16 @@ extension CapturePipeline {
     /// The take as the app will list it, snapshotted from the writer before the
     /// finalize task takes it away.
     private func describeTake(from writer: TakeWriter) -> Take {
-        Take(
+        var take = Take(
             url: writer.url,
-            scene: takeScene,
+            scene: takeSlate.scene,
             roll: takeRoll,
             takeNumber: takeNumber,
             startTimecode: takeStartTC,
             durationSeconds: writer.durationSeconds,
             recordedAt: takeStartedAt)
+        take.slate = takeSlate
+        return take
     }
 
     /// Drop a finished task's handle, back on the pipeline queue that owns the

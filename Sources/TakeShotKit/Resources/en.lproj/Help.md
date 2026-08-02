@@ -65,6 +65,26 @@ adopted into the list.
   what they do not carry is a rating, which belongs to the Resolve metadata
   table and that table is about takes.
 
+## Slate (scene, shot, take)
+
+- The **SLATE** chip in the footer holds the creative metadata of the NEXT
+  take: scene, shot and the take number inside that scene. Click it to type.
+- The take number follows the clip counter until you type one; from then on it
+  is yours, and it restarts at 1 whenever the scene changes. Clearing the field
+  hands numbering back to the clip counter.
+- Scene, shot and take are written INSIDE the recorded .mov, so a file copied
+  without its sidecars still knows which scene it is. They also go into the
+  ALE, the shift report, the contact sheet and the `takeshot-slate.csv` sidecar
+  beside the footage.
+- To fix a take that has already been recorded, open the speech-bubble button
+  on its row — scene, shot, take, description and comment are all editable
+  there, and so are they on the script supervisor's remote page. **A recorded
+  file is never rewritten**: the correction is saved to the sidecar and travels
+  through the log and the exports. That is deliberate — the footage is camera
+  original, and the offload's checksums are taken over it.
+- The digital slate window shows scene/shot/take on its card, so a camera
+  pointed at it records the same values the file carries.
+
 ## Review
 
 - **Rating**: click the circle on a take to cycle unmarked → good → bad →

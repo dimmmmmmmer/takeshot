@@ -54,7 +54,10 @@ struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        // 6pt, not the 8 this row had with four fields: the slate makes five,
+        // and the row still has to fit `footerHalfWidth` with the collision
+        // badge showing — see `SlateChip.width` for the measurement.
+        HStack(alignment: .top, spacing: 6) {
             // warning: the current name is already taken in the folder
             if let collision = controller.nameCollision {
                 VStack(spacing: 1) {
@@ -68,6 +71,10 @@ struct NamingFieldsView: View {
                 .help(L("name_taken_help", collision))
                 .transition(.opacity)
             }
+            // The slate is NOT gated on the template like the fields after it:
+            // scene/shot/take describe what was shot, not how the file is
+            // named, so they are there whether or not a placeholder uses them.
+            SlateChip()
             // show only the fields that actually exist in the current template
             if uses("{cam}") {
                 // camera labels are plain uppercase latin (A, B, C…): anything

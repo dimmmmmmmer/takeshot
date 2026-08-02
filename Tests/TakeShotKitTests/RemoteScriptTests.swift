@@ -224,6 +224,55 @@ import Testing
         }
     }
 
+    /// The scripty's own columns: a slate typed on the phone goes through
+    /// `setSlate` — the method the panel popover calls — and lands in the
+    /// creative sidecar, which is the file a correction is allowed to change.
+    @Test func aSlateCommandPersistsAndEchoesBack() async throws {
+        try await ControllerHarness.run { controller, root in
+            try seedTakes(controller, in: root,
+                          [Seed(name: "A001C01"), Seed(name: "A001C02")])
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let client = try await RemoteHarness.connect(
+                port: port, pin: pin, session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+            let id = try #require(controller.takes.first?.id.uuidString)
+
+            try await client.send(["action": "slate", "id": id, "scene": "12A",
+                                   "shot": "B", "take": "3", "pin": pin])
+            let stored = await ControllerWait.until {
+                controller.takes.first?.slate
+                    == SlateMetadata(scene: "12A", shot: "B", take: 3)
+            }
+            #expect(stored, "the slate never reached the controller")
+            #expect(controller.takes.last?.slate.isEmpty == true,
+                    "the slate landed on the wrong take")
+
+            let url = root.appendingPathComponent(TakeLogExporter.slateFileName)
+            func text() -> String? { try? String(contentsOf: url, encoding: .utf8) }
+            await ControllerWait.until { text()?.contains("12A") == true }
+            #expect(text()?.contains("A001C01.mov,12A,B,3,") == true,
+                    "the slate never reached the creative sidecar")
+
+            // …and it comes straight back as pushed state, which is how the
+            // page knows the save landed
+            let echoed = try await nextTakes(from: client) { takes in
+                takes.first?["scene"] as? String == "12A"
+                    && takes.first?["shot"] as? String == "B"
+                    && takes.first?["take"] as? String == "3"
+            }
+            #expect(echoed, "the slate edit never came back as pushed state")
+
+            // clearing the take number travels as an empty string
+            try await client.send(["action": "slate", "id": id, "scene": "12A",
+                                   "shot": "", "take": "", "pin": pin])
+            let cleared = await ControllerWait.until {
+                controller.takes.first?.slate == SlateMetadata(scene: "12A")
+            }
+            #expect(cleared, "an emptied slate field never reached the take")
+        }
+    }
+
     // MARK: - the shift, end to end
 
     /// A take rolled from the operator page reaches the scripty as it happens:
@@ -286,6 +335,24 @@ import Testing
         #expect(RemoteMessage.parse(
             #"{"action":"comment","id":"AB-1","text":"","pin":"1"}"#)?.command
             == .comment(takeID: "AB-1", text: ""))
+    }
+
+    @Test func slateMessagesCarryAllThreeFieldsAtOnce() throws {
+        let slate = try #require(RemoteMessage.parse(
+            #"{"action":"slate","id":"AB-1","scene":"12A","shot":"B","take":"3","pin":"0417"}"#))
+        #expect(slate.command == .slate(
+            takeID: "AB-1",
+            slate: SlateMetadata(scene: "12A", shot: "B", take: 3)))
+        // an emptied take field is "not logged", not take 0
+        #expect(RemoteMessage.parse(
+            #"{"action":"slate","id":"A","scene":"12","shot":"","take":"","pin":"1"}"#)?
+            .command == .slate(takeID: "A",
+                               slate: SlateMetadata(scene: "12")))
+        // a missing field would CLEAR it, so the message is refused instead
+        #expect(RemoteMessage.parse(
+            #"{"action":"slate","id":"A","scene":"12","shot":"B","pin":"1"}"#) == nil)
+        #expect(RemoteMessage.parse(
+            #"{"action":"slate","scene":"12","shot":"B","take":"3","pin":"1"}"#) == nil)
     }
 
     @Test func malformedEditsAreNotCommands() {
@@ -380,6 +447,12 @@ import Testing
         // Comments save on blur/Enter, never per keystroke.
         #expect(html.contains(#"note.addEventListener("blur""#))
         #expect(!html.contains(#"note.addEventListener("input""#))
+        // The slate row exists, commits as one message, and is protected from
+        // a push landing on a field being typed in.
+        #expect(html.contains(#"action: "slate""#),
+                "the page can no longer send a slate")
+        #expect(html.contains("document.activeElement === pair[1]"),
+                "a pushed slate would clobber a field being typed in")
         // The page reads the watchdog it is handed, like the operator page.
         #expect(html.contains("watchdogMs:\(RemotePage.watchdogMilliseconds)"))
         #expect(html.contains("CFG.watchdogMs"))

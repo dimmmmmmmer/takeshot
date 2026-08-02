@@ -46,6 +46,32 @@ final class CaptureController: ObservableObject {
             refreshNameCollision()
         }
     }
+
+    // MARK: - the slate (creative metadata, see +Slate)
+
+    /// Scene the NEXT take will be slated with. Creative, not technical: it
+    /// goes inside the .mov and into every export, and it restarts the scene's
+    /// take numbering when it changes.
+    @Published var scene: String = "" {
+        didSet { applySceneChange(from: oldValue) }
+    }
+    /// Shot / setup letter of the next take.
+    @Published var shot: String = "" {
+        didSet {
+            pushConfig()
+            refreshNameCollision()
+        }
+    }
+    /// The take number inside the scene, when the operator has taken it over;
+    /// nil — follow the clip counter.
+    ///
+    /// Optional rather than a plain Int because "not overridden" is a real
+    /// state with its own behaviour: an unslated day must keep exporting the
+    /// clip counter it always did, and only an operator who has actually
+    /// started logging scenes gets numbering that restarts under them.
+    @Published var slateTakeOverride: Int? {
+        didSet { pushConfig() }
+    }
     /// The filename the current naming combo would produce already exists in the folder.
     /// nil — no collision. We warn the operator BEFORE recording (the stepper landed on
     /// a taken number, the roll was rolled back, etc.); we won't overwrite anyway.

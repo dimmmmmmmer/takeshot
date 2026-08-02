@@ -88,11 +88,13 @@ final class CameraChannel: ObservableObject, Identifiable {
         recordingRequested = false
     }
 
-    func update(settings: CaptureSettings, roll: String, takeNumber: Int) {
+    func update(settings: CaptureSettings, slate: SlateMetadata = .empty,
+                roll: String, takeNumber: Int) {
         var camSettings = settings
         camSettings.cameraLabel = camLabel
         self.takeNumber = takeNumber
-        pipeline.update(config: .init(settings: camSettings, roll: roll, takeNumber: takeNumber))
+        pipeline.update(config: .init(settings: camSettings, slate: slate,
+                                      roll: roll, takeNumber: takeNumber))
     }
 
     /// What REC has asked of this channel. Deliberately NOT `isRecording`: that

@@ -76,6 +76,9 @@ enum RemotePage {
         ("empty", "script_empty"),
         ("comment", "script_comment"),
         ("takes", "script_takes"),
+        ("scene", "scene"),
+        ("shot", "slate_shot"),
+        ("take", "slate_take"),
     ]
 
     /// Where the camera grid lives. Stated once, like the script page's path.

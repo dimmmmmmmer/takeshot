@@ -131,6 +131,22 @@ struct ModelShiftReportTests {
 
     /// The out point is derived from the start TC plus the duration; printing
     /// the start twice would make every take look zero-length.
+    /// The production office reads the day by scene, and the file name says
+    /// nothing about which one it is. The slate line is pure data ("12A/B T3")
+    /// so it reads the same in both languages, and it must not push the
+    /// markers line off the row.
+    @Test func rowsCarryTheSlateAlongsideTheMarkers() throws {
+        var slated = take(1, markers: [TakeMarker(seconds: 2,
+                                                  timecodeText: "10:00:02:00",
+                                                  note: "boom")])
+        slated.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+        let body = text(of: try document([slated, take(2)]))
+        #expect(body.contains("12A/B T3"))
+        #expect(body.contains("boom"), "the slate crowded out the markers line")
+        // an unslated take prints no slate line at all
+        #expect(!body.contains("T0"))
+    }
+
     @Test func timecodeInAndOutAreBothPrintedAndDiffer() throws {
         let subject = take(1, duration: 12)
         let body = text(of: try document([subject]))

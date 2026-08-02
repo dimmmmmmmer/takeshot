@@ -90,12 +90,33 @@ public struct TakeMarker: Equatable, Sendable {
 public struct Take: Identifiable, Equatable, Sendable {
     public let id = UUID()
     public var url: URL
-    public var scene: String
+    /// Scene, shot and the take number within the scene — the creative side of
+    /// the take, written into the .mov and carried by every export.
+    public var slate: SlateMetadata = .empty
     public var roll: String
+    /// The CLIP number the file was named with. Kept under its own name because
+    /// it is the technical counter: it runs on for the whole roll while
+    /// `slate.take` restarts with every scene.
     public var takeNumber: Int
     public var startTimecode: Timecode?
     public var durationSeconds: Double
     public var recordedAt: Date
+
+    /// Flat accessor for the scene, which every caller had before the rest of
+    /// the slate existed. One storage location, so a take cannot carry two
+    /// answers to the same question.
+    public var scene: String {
+        get { slate.scene }
+        set { slate.scene = newValue }
+    }
+
+    /// The take number editorial should see: the slate's own take when one was
+    /// logged, else the clip counter — which is exactly what this app wrote
+    /// into the Take columns before scenes were enterable at all, so a shift
+    /// that logs no slate exports byte for byte what it always did.
+    public var editorialTakeNumber: Int {
+        slate.take > 0 ? slate.take : takeNumber
+    }
 
     /// The label in the take list. Derived from the file rather than stored
     /// alongside it: both places that built a take computed exactly this, and a
@@ -110,17 +131,21 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var rating: TakeRating = .none   // in CSV — Good Take + Bad marker
     public var comment: String = ""         // in CSV — Comments column
     public var markers: [TakeMarker] = []   // flagged moments (sidecar CSV)
+    /// What the shot IS, as a DIT/scripty logs it — the ALE and Resolve
+    /// "Description" field. Kept apart from `comment`, which is a note ABOUT
+    /// the take ("boom in frame"), because post reads the two differently.
+    public var logDescription: String = ""
 
     public init(url: URL, scene: String, roll: String = "", takeNumber: Int,
                 startTimecode: Timecode?, durationSeconds: Double,
                 recordedAt: Date) {
         self.url = url
-        self.scene = scene
         self.roll = roll
         self.takeNumber = takeNumber
         self.startTimecode = startTimecode
         self.durationSeconds = durationSeconds
         self.recordedAt = recordedAt
+        self.slate.scene = scene
     }
 }
 

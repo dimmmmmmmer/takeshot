@@ -123,13 +123,23 @@ struct SlateView: View {
             }
     }
 
-    /// The identification card: project on top, CAM/ROLL/CLIP as a slate row,
-    /// date and rate underneath.
+    /// The identification card: project on top, then the CREATIVE row a camera
+    /// is actually pointed at a slate for — scene, shot, take — then the
+    /// technical CAM/ROLL/CLIP, then date and rate.
+    ///
+    /// Scene/shot/take go above the technical row on purpose: an editor
+    /// syncing off this face reads the slate first, and the file's own name is
+    /// already spelled out in the header above the timecode.
     private func card(unit: CGFloat) -> some View {
         Grid(horizontalSpacing: unit * 0.012, verticalSpacing: unit * 0.012) {
             GridRow {
                 cell(L("project"), value: model.projectName, unit: unit)
                     .gridCellColumns(3)
+            }
+            GridRow {
+                cell(L("scene"), value: model.sceneText, unit: unit)
+                cell(L("slate_shot"), value: model.shotText, unit: unit)
+                cell(L("slate_take"), value: model.slateTakeText, unit: unit)
             }
             GridRow {
                 cell(L("cam_label"), value: model.cameraLabel, unit: unit)

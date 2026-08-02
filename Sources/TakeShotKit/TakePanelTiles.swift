@@ -118,7 +118,7 @@ struct TakeTileControls: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            CommentButton(take: take)
+            TakeLogButton(take: take)
             RatingToggle(take: take)
         }
         .padding(TakeTileBadges.inset)

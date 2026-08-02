@@ -98,6 +98,22 @@ final class SlateModel: ObservableObject {
     var clipText: String { controller?.clipDisplay ?? "" }
     var isRecording: Bool { controller?.isRecording ?? false }
 
+    // MARK: - the creative half of the card
+    //
+    // Read off the controller like everything else here, so the face a camera
+    // is pointed at cannot disagree with the metadata the writer is embedding.
+
+    var sceneText: String { controller?.scene ?? "" }
+    var shotText: String { controller?.shot ?? "" }
+    /// Take number within the scene; empty while nothing is being slated —
+    /// the card shows a dash for it rather than a misleading number.
+    var slateTakeText: String {
+        guard let number = controller?.slateTakeNumber, number > 0 else {
+            return ""
+        }
+        return String(number)
+    }
+
     /// The take name on the card. While recording this is the file actually
     /// being written (the clip number advances only on a successful finalize),
     /// otherwise the name the next take will get — one `pendingTakeName` for

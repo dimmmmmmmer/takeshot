@@ -69,9 +69,26 @@ public final class TakeWriter {
     /// Name of the LUT baked into the file (absent — the file is clean).
     public static let lutKey = "com.takeshot.lut"
 
+    // MARK: - creative (slate) keys
+    //
+    // QuickTime has no standard key for scene, shot or take — the mdta
+    // vocabulary Apple publishes (`com.apple.quicktime.*`) covers title,
+    // description, comment, author, creation date and camera identity, and
+    // stops there. So the machine-precise values go into TakeShot's OWN
+    // reverse-DNS namespace, exactly like the roll and clip keys above, and a
+    // human-readable digest of them goes into the standard description keys
+    // (see `standardSlateItems`) where an NLE will actually surface it.
+    /// Scene, as the script supervisor writes it.
+    public static let sceneKey = "com.takeshot.scene"
+    /// Shot / setup letter inside the scene.
+    public static let shotKey = "com.takeshot.shot"
+    /// Take number WITHIN the scene — not the clip counter in `clipKey`.
+    public static let takeKey = "com.takeshot.take"
+
     public init(url: URL, format: CaptureFormat, codec: CaptureCodec,
                 startTimecode: Timecode?,
                 markerMetadata: [String: String] = [:],
+                slate: SlateMetadata = .empty,
                 colorTagPreset: String? = nil,
                 audioChannelCount: Int = 0) throws {
         self.url = url
@@ -87,7 +104,7 @@ public final class TakeWriter {
             throw WriterError.cannotCreateWriter(error)
         }
 
-        writer.metadata = Self.metadataItems(markerMetadata)
+        writer.metadata = Self.metadataItems(markerMetadata, slate: slate)
 
         videoInput = AVAssetWriterInput(
             mediaType: .video,

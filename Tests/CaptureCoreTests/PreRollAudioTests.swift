@@ -23,7 +23,7 @@ struct PreRollAudioTests {
         settings.preRollSeconds = 0.8 // 20 frames at 25 fps
 
         let pipeline = CapturePipeline(config: .init(
-            settings: settings, scene: "1", takeNumber: 1))
+            settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))
         let finished = TakeCollector()
         let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finished.append($0) }

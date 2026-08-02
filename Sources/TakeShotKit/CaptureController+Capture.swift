@@ -31,11 +31,16 @@ extension CaptureController {
     }
 
     func pushConfig() {
+        let slate = pendingSlate
         pipeline.update(config: .init(
-            settings: settings, roll: roll, takeNumber: nextTakeNumber))
+            settings: settings, slate: slate, roll: roll,
+            takeNumber: nextTakeNumber))
         pipeline.setVideoLevels(settings.videoLevels)
         for channel in extraChannels {
-            channel.update(settings: settings, roll: roll, takeNumber: nextTakeNumber)
+            // the slate is the SHOT, not the camera: every channel records the
+            // same scene/shot/take, only the cam label differs
+            channel.update(settings: settings, slate: slate, roll: roll,
+                           takeNumber: nextTakeNumber)
         }
     }
     func refreshDevices() {
