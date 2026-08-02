@@ -190,6 +190,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var audioChannelMask: Int?
     /// Audio device UID for playback output; nil — system.
     public var playbackAudioDeviceUID: String?
+    /// Audio input for recording: a Core Audio input device UID (a USB
+    /// interface carrying the sound cart's mix), recorded INSTEAD of the audio
+    /// embedded in the capture board's signal; nil — embedded, the default.
+    /// Optional, like every added field, so old saved JSON still decodes.
+    public var audioInputDeviceUID: String?
     /// Control accent color, hex; nil — neutral grey.
     public var accentHex: String?
     /// DeckLink device for video-out to a monitor (SDI/HDMI); nil — off.

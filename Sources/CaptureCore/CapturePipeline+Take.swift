@@ -29,6 +29,8 @@ extension CapturePipeline {
             takeRoll = config.roll
             takeNumber = config.takeNumber
             droppedFrames = 0
+            gapFilledAudioPackets = 0
+            lastExternalAudioEnd = nil
             warnIfTakeHasNoAudioTrack(url: url)
             drainPreRoll(into: writer, startIndex: startIndex)
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
@@ -90,6 +92,7 @@ extension CapturePipeline {
         let finishID = nextFinishID
         nextFinishID += 1
         let droppedVideo = droppedFrames
+        let gapFilledAudio = gapFilledAudioPackets
         let task = Task { [weak self] in
             defer { self?.prunePendingFinish(finishID) }
             do {
@@ -104,6 +107,13 @@ extension CapturePipeline {
                     if droppedAudio > 0 {
                         report?.failed("Take \(take.displayName): "
                             + "\(droppedAudio) audio packet(s) dropped")
+                    }
+                    // stated like the drop totals: the sticky alarm fired the
+                    // moment the source was lost, this is the take's tally
+                    if gapFilledAudio > 0 {
+                        report?.failed("Take \(take.displayName): "
+                            + "\(gapFilledAudio) audio packet(s) gap-filled "
+                            + "with silence")
                     }
                     // the live alarm only fires on sustained loss, so the take's
                     // real total is stated here — quietly, but never hidden
@@ -129,12 +139,18 @@ extension CapturePipeline {
             }
         }
         pendingFinishTasks[finishID] = task
+        // an audio-source switch that arrived mid-take waited for the latched
+        // writer to close; it applies now, before the next take can start
+        if let pending = pendingAudioSourceSwitch {
+            applyAudioSourceSwitch(pending.kind,
+                                   expectedChannels: pending.expectedChannels)
+        }
     }
 
     /// The take as the app will list it, snapshotted from the writer before the
     /// finalize task takes it away.
     private func describeTake(from writer: TakeWriter) -> Take {
-        Take(
+        var take = Take(
             url: writer.url,
             scene: takeScene,
             roll: takeRoll,
@@ -142,6 +158,14 @@ extension CapturePipeline {
             startTimecode: takeStartTC,
             durationSeconds: writer.durationSeconds,
             recordedAt: takeStartedAt)
+        if gapFilledAudioPackets > 0 {
+            // the take's log row says what happened to its sound — a padded
+            // take found only in the edit is exactly the silent failure the
+            // integrity rules exist to prevent
+            take.comment = "USB audio lost — \(gapFilledAudioPackets) "
+                + "packet(s) padded with silence"
+        }
+        return take
     }
 
     /// Drop a finished task's handle, back on the pipeline queue that owns the

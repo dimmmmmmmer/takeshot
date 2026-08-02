@@ -271,7 +271,8 @@ import Testing
 
             let second = CaptureController(
                 backends: [("mock", SyntheticSignalBackend())],
-                defaults: controller.defaults)
+                defaults: controller.defaults,
+                audioInputs: FakeAudioInputProvider())
             second.monitorOn = false
             second.audioMonitor.stop()
             second.stopCapture()

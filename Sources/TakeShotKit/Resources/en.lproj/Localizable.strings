@@ -153,6 +153,16 @@
 "meters_click_help" = "Audio channels — click for the full panel with dB values and per-channel toggles";
 "playback_output" = "Playback audio output";
 "system_default" = "System default";
+
+/* USB audio input (record-side source) */
+"audio_input_source" = "Audio input";
+"audio_input_embedded" = "Embedded (capture device)";
+"audio_input_device_label" = "%@ — %d ch";
+"audio_input_missing_entry" = "Selected device not connected";
+"usb_audio_missing" = "USB AUDIO source unavailable — recording embedded audio";
+"usb_audio_disconnected" = "USB AUDIO disconnected — recording embedded audio";
+"audio_source_embedded_live" = "Source: embedded (capture device)";
+"audio_source_usb_live" = "Source: %@ — %d ch";
 "fullscreen_playback" = "Playback fullscreen (Esc to exit). The green window button fullscreens the whole app";
 
 "panel_position" = "Takes panel position";

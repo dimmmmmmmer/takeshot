@@ -60,6 +60,12 @@ extension CaptureController {
             recordingStartDate = Date()
             recordingMarkers = []
             persistentAlert = nil // a clean start clears the alarm
+            // …but a take rolling on embedded fallback instead of the chosen
+            // USB source is not a clean start, and must say so (+AudioInput)
+            warnIfAudioFellBackAtRecStart()
+        } else {
+            // a take that outlived its USB device resolves the source now
+            reconcileAudioInputAfterTake()
         }
         refreshNameCollision() // start hides it, stop recomputes
         // multicam: the other cameras in sync with the main one
@@ -105,7 +111,7 @@ extension CaptureController {
     /// quietly than a dropped frame. An operator watching the slate rather than
     /// the screen had no way to learn about them.
     func reportPipelineError(_ message: String) {
-        let sticky = ["TAKE LOST", "Dropped", "ingress",
+        let sticky = ["TAKE LOST", "AUDIO LOST", "Dropped", "ingress",
                       "Failed to start recording", "Take closed:",
                       "Pre-roll incomplete"]
         if sticky.contains(where: message.contains) {

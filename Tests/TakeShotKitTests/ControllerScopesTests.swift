@@ -79,7 +79,8 @@ struct ControllerScopesTests {
 
             // a fresh controller on the same preferences is what a relaunch is
             let relaunched = CaptureController(
-                backends: [], defaults: controller.defaults)
+                backends: [], defaults: controller.defaults,
+                audioInputs: FakeAudioInputProvider())
             #expect(relaunched.savedScopesWindowFrame(screens: [screen]) == frame)
         }
     }

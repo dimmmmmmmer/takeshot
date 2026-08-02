@@ -120,6 +120,12 @@ extension CapturePipeline {
             self.detector.reset()
             self.format = nil
             self.lastTimecode = nil
+            // the next session's streams start a fresh PTS timeline, so the
+            // external audio anchor (and its gap bookkeeping) is stale
+            self.externalHostAnchor = nil
+            self.lastExternalAudioEnd = nil
+            self.externalAudioStarved = false
+            self.externalAudioLost = false
             self.latestLTC = nil // the old session's LTC must not name new takes
             self.ltcDecoder.reset()
             self.frameGrabHandler = nil

@@ -23,21 +23,42 @@ extension CapturePipeline {
         }
     }
     public func handleAudio(_ sampleBuffer: CMSampleBuffer) {
+        handleAudio(sampleBuffer, from: .embedded)
+    }
+
+    /// The one audio entry, for both sources: everything downstream — the
+    /// meters, LTC, the monitor feed, the take — is shared, and which source
+    /// feeds it is decided here in one place.
+    public func handleAudio(_ sampleBuffer: CMSampleBuffer,
+                            from source: AudioSource) {
         queue.async {
-            let levels = PCMAudio.peakLevels(of: sampleBuffer)
+            // never mixed: while one source is active the other's packets are
+            // discarded whole — a take spliced from two clocks would be worse
+            // than either source alone
+            guard source == self.audioSourceKind else { return }
+            var packet = sampleBuffer
+            if source == .external {
+                // host clock → stream clock (see +ExternalAudio)
+                guard let admitted = self.admitExternalPacket(sampleBuffer)
+                else { return }
+                packet = admitted
+            }
+            let levels = PCMAudio.peakLevels(of: packet)
             self.sourceAudioChannels = levels.count
             if self.config.settings.timecodeSource == "ltc" {
-                self.decodeLTC(from: sampleBuffer, channels: levels.count)
+                self.decodeLTC(from: packet, channels: levels.count)
             }
-            self.recordAudio(sampleBuffer)
-            self.feedMonitor(sampleBuffer)
+            self.recordAudio(packet)
+            self.feedMonitor(packet)
             self.publishLevels(levels)
         }
     }
 
     /// Route the packet to the take (or the pre-roll ring while standing by).
     /// Meters show ALL channels; only the ones in the mask are written.
-    private func recordAudio(_ sampleBuffer: CMSampleBuffer) {
+    /// Internal rather than private: the silence padding in `+ExternalAudio`
+    /// sends its packets through the same door as the real ones.
+    func recordAudio(_ sampleBuffer: CMSampleBuffer) {
         // the mask is LATCHED for the take: the writer's channel count is
         // fixed at start, a live change would kill the whole file
         let activeMask = writer != nil
@@ -69,7 +90,9 @@ extension CapturePipeline {
     }
 
     /// Meters, deduplicated — identical level arrays are not worth a main hop.
-    private func publishLevels(_ levels: [Float]) {
+    /// Internal rather than private: the silence padding in `+ExternalAudio`
+    /// keeps the meters honest through the same publisher.
+    func publishLevels(_ levels: [Float]) {
         guard !levels.isEmpty, levels != lastPublishedLevels else { return }
         if lastPublishedLevels.isEmpty {
             os_log("audio: %d channel(s) flowing",
