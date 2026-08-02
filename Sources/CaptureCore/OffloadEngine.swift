@@ -234,6 +234,17 @@ private final class OffloadRun {
     /// manifest first, so a manifest that could not be written is already part
     /// of the verdict the summary states, and the picture last, because it draws
     /// that same verdict.
+    ///
+    /// **Where the three land, which is not a free choice** (owner item 24):
+    ///
+    /// - the RECEIPT — the summary `.txt` and the report-card `.png` — goes in
+    ///   the ROOT of the copy, `target.root`, alongside the footage. It is read
+    ///   by a person, and it is the first thing in the folder they open rather
+    ///   than something to go looking for in a subfolder of its own;
+    /// - the MANIFEST goes in `ascmhl/`, and that one is not ours to move. The
+    ///   ASC MHL v2 hashlist document puts it there, and `ascmhl`, Silverstack
+    ///   and OffShoot look there and nowhere else — a manifest in the root
+    ///   would simply not be found by the tools the whole file exists for.
     private func finalize(_ target: OffloadTarget,
                           run: OffloadRunFacts) -> OffloadDestinationResult {
         let stamp = Date()

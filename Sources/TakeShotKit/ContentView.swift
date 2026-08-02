@@ -24,7 +24,15 @@ struct ContentView: View {
         // each, none of which a chain of modal file panels can show.
         .sheet(isPresented: $controller.offloadSheetPresented) {
             OffloadSheet(model: controller.offload,
-                         history: controller.offloadHistory)
+                         history: controller.offloadHistory,
+                         ledger: controller.offloadedCards)
+                // Re-injected rather than inherited, the way `SlateFields`
+                // does it for its popover: a presentation is hosted in its own
+                // context, and a view inside it reaching for an
+                // `@EnvironmentObject` that never arrived does not degrade —
+                // it traps. The sheet's footer and its remembered-cards list
+                // both need the controller.
+                .environmentObject(controller)
         }
         // …and the other half of the same job: re-reading a disk that was
         // offloaded weeks ago against the manifest left on it.

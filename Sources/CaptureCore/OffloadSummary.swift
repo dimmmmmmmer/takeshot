@@ -13,6 +13,11 @@ import Foundation
 /// CaptureCore itself stays localization-free, so the default is the English
 /// the file has always used. The DATA between the labels — paths, mismatch
 /// reasons, engine errors — stays English; see `OffloadReportLabels`.
+///
+/// It is written into the ROOT of the copy, next to the footage rather than in
+/// a folder of its own (owner item 24) — the person it is for opens the copy
+/// and it is there. The `ascmhl/` manifest beside it is the one artifact that
+/// does live in a subfolder, because the spec puts it there (see `OffloadMHL`).
 public enum OffloadSummary {
     /// What every summary's name starts with. A constant because the verify
     /// tool has to recognize the file it is looking at — a summary reported as
@@ -166,6 +171,16 @@ public enum OffloadFormat {
             out.append(digit)
         }
         return (count < 0 ? "-" : "") + out
+    }
+
+    /// `32.0 GB`, without the exact byte count `bytes` appends.
+    ///
+    /// For anywhere the number is a headline rather than an audit: the report
+    /// card's stat row, and the free/used line on the offload sheet's tiles.
+    /// The parenthesis is for the .txt, where somebody is checking arithmetic.
+    public static func shortBytes(_ count: Int64) -> String {
+        let full = bytes(count)
+        return full.components(separatedBy: " (").first ?? full
     }
 
     public static func rate(_ megabytesPerSecond: Double) -> String {

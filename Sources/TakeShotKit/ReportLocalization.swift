@@ -71,7 +71,7 @@ extension OffloadReportLabels {
         labels.statFilesFormat = L("offload_report_stat_files_fmt")
         labels.problemsHeading = L("offload_report_problems")
         labels.footerFormat = L("offload_report_footer_fmt")
-        labels.receiptMissing = L("offload_report_receipt_missing")
+        labels.checksumListMissing = L("offload_report_checksum_list_missing")
         labels.destinationFailedLineFormat = L("offload_report_dest_failed_fmt")
         labels.moreProblemsFormat = L("offload_report_more_problems_fmt")
         labels.hoursUnit = L("offload_report_hours_unit")

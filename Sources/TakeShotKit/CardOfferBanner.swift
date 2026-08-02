@@ -58,15 +58,17 @@ struct CardOfferBanner: View {
     /// Offload / Ignore / Never. Offload is the only prominent one: the other
     /// two are ways out, and a row of three equal buttons makes dismissing look
     /// like the same weight of decision as starting a copy.
+    ///
+    /// No tooltips (owner items 17/21/26). Three verbs a DIT reads once, and
+    /// the one thing that was genuinely worth saying — that Never can be undone
+    /// — is now a row in the offload sheet's own list of remembered cards
+    /// rather than a sentence promising it somewhere the operator has to trust.
     private var buttons: some View {
         HStack(spacing: OffloadChrome.rowSpacing) {
             Button(L("card_offer_offload")) { controller.acceptCardOffer() }
                 .buttonStyle(.borderedProminent)
-                .help(L("card_offer_offload_help"))
             Button(L("card_offer_ignore")) { controller.ignoreCardOffer() }
-                .help(L("card_offer_ignore_help"))
             Button(L("card_offer_never")) { controller.neverOfferCardAgain() }
-                .help(L("card_offer_never_help"))
             Spacer(minLength: 0)
         }
         .controlSize(.small)

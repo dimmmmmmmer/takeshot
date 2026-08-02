@@ -74,10 +74,13 @@ public struct OffloadReportLabels: Sendable, Equatable {
     public var statFilesFormat = "%d of %d"
     /// Heading over the card's problem list; the count is appended as "(n)".
     public var problemsHeading = "PROBLEMS"
-    /// Tool, version, host, checksum name, receipt path — the card's one-line
-    /// footer.
-    public var footerFormat = "%@ %@ on %@   ·   %@ checksums   ·   receipt: %@"
-    public var receiptMissing = "not written"
+    /// Tool, version, host, checksum name, checksum-list path — the card's
+    /// one-line footer. It does NOT call the manifest the receipt: the receipt
+    /// is this card and the .txt beside it, in the root of the copy (owner
+    /// item 24).
+    public var footerFormat
+        = "%@ %@ on %@   ·   %@   ·   checksum list: %@"
+    public var checksumListMissing = "not written"
     /// A dead destination, as the card's problem list words it.
     public var destinationFailedLineFormat = "Destination failed — %@"
     /// The line that stands in for the problems the card had no room for.

@@ -158,19 +158,21 @@ struct ViewSettingsTests {
         }
     }
 
-    /// The Offload section is two explanatory paragraphs and two rows, and the
-    /// paragraphs are the only wrapping text in the window. A translation one
-    /// line longer than the base moves the whole form, which is what the two
-    /// whole-form tests here fail on — measured on its own, this one says WHICH
-    /// section did it.
+    /// The Offload section is a toggle and the one paragraph under it, which is
+    /// the only wrapping text in the window. A translation one line longer than
+    /// the base moves the whole form, which is what the two whole-form tests
+    /// here fail on — measured on its own, this one says WHICH section did it.
+    ///
+    /// The remembered-cards row that used to be here is on the offload sheet
+    /// now (owner item 18); its render budget is `ViewOffloadHistoryTests`.
     @Test func theOffloadSectionIsTheSameHeightInBothLanguages() async throws {
         try await ViewProbe.run { probe in
-            // The paragraphs are what wraps, so they are measured at the width
-            // the form's rows actually get rather than through the Form — asked
+            // The paragraph is what wraps, so it is measured at the width the
+            // form's rows actually get rather than through the Form — asked
             // for a loose height a grouped Form answers with the whole
             // proposal, which is a test that cannot fail.
             let inner = ViewBudget.settingsFormWidth - 40
-            for key in ["offer_mounted_cards_hint", "cards_remembered_hint"] {
+            for key in ["offer_mounted_cards_hint"] {
                 let ideal = probe.sizes(proposedWidth: inner) {
                     Text(L(key))
                         .font(.caption)

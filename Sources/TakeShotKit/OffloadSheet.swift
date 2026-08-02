@@ -13,9 +13,18 @@ import SwiftUI
 /// Everything in it is set in one small type family (see `OffloadChrome`), and
 /// it can be closed over a running job — the run reports on itself from the
 /// takes panel while the sheet is away (see `OffloadStatusStrip`).
+///
+/// The two ends of the operation are drawn as one family of tiles (owner item
+/// 22) and both can be opened in the Finder (item 23); the other half of the
+/// job — checking a copy made earlier — is a button in the footer rather than a
+/// second item in a dropdown somewhere else (item 25).
 struct OffloadSheet: View {
     @ObservedObject var model: OffloadSheetModel
     @ObservedObject var history: OffloadHistoryStore
+    /// Cards the app has stopped asking about. Shown under the history (owner
+    /// item 18) — without it a card that silently never prompts is
+    /// indistinguishable from a bug.
+    @ObservedObject var ledger: OffloadedCardLedger
     @Environment(\.dismiss) private var dismiss
 
     /// Wide enough for a full destination path at a readable size; the sheet is
@@ -30,7 +39,7 @@ struct OffloadSheet: View {
             // reachable rather than be the part that gets clipped off.
             ScrollView { content.padding(20) }
             Divider()
-            footer
+            OffloadSheetFooter(model: model) { dismiss() }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
         }
@@ -69,30 +78,48 @@ struct OffloadSheet: View {
             // "have I already copied this card?" gets asked.
             Divider()
             OffloadHistoryList(store: history)
+            OffloadCardLedgerList(ledger: ledger)
         }
     }
 
     // MARK: - source
 
+    /// The card, as a tile of the same family as a destination (owner item 22).
+    /// It used to be a line of text beside two prominent icon rows, which said
+    /// the destinations were the important half — they are not, and picking the
+    /// wrong source is the more expensive mistake of the two.
     private var sourceSection: some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             Text(L("offload_source_label"))
-                .offloadText(.body)
-                .fixedSize()
-            Text(model.source?.path ?? L("offload_no_source"))
-                .offloadText(.body,
-                             tint: model.source == nil ? Color.secondary : nil)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(L("choose")) {
-                if let url = OffloadPanels.pickFolder(
-                    message: L("offload_pick_source"),
-                    prompt: L("offload_source_prompt")) {
-                    model.source = url
+                .offloadText(.section)
+            OffloadPathTile(
+                icon: model.source.map(OffloadVolumeFacts.icon) ?? "folder",
+                title: model.source.map(OffloadVolumeFacts.name)
+                    ?? L("offload_no_source"),
+                path: model.source?.path,
+                detail: sourceDetail,
+                isEmpty: model.source == nil,
+                finderTarget: model.source) {
+                    Button(L("choose")) { pickSource() }
+                        .disabled(model.isRunning)
                 }
-            }
-            .disabled(model.isRunning)
+        }
+    }
+
+    /// How full the card is — but only for a volume. The same two numbers over
+    /// a folder on a working disk would describe the disk, which is not what
+    /// the line beside a sound roll appears to be saying.
+    private var sourceDetail: String? {
+        guard let source = model.source,
+              OffloadVolumeFacts.isVolumeRoot(source) else { return nil }
+        return OffloadVolumeFacts.usedText(of: source)
+    }
+
+    private func pickSource() {
+        if let url = OffloadPanels.pickFolder(
+            message: L("offload_pick_source"),
+            prompt: L("offload_source_prompt")) {
+            model.source = url
         }
     }
 
@@ -105,9 +132,7 @@ struct OffloadSheet: View {
                     .offloadText(.section)
                 Spacer()
                 Button {
-                    if let url = OffloadPanels.pickFolder(
-                        message: L("offload_pick_dest"),
-                        prompt: L("offload_dest_prompt")) {
+                    if let url = pickDestination() {
                         model.addDestination(url)
                     }
                 } label: {
@@ -120,35 +145,19 @@ struct OffloadSheet: View {
                     .offloadText(.caption)
             }
             ForEach(model.rows) { row in
-                destinationRow(row)
+                destinationTile(row)
             }
-            Text(L("offload_reports_hint"))
-                .offloadText(.caption)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func destinationRow(_ row: OffloadSheetModel.Row) -> some View {
-        HStack(spacing: OffloadChrome.rowSpacing) {
-            Image(systemName: "externaldrive")
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.url.path)
-                    .offloadText(.body)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let folder = model.destinationFolder(for: row) {
-                    Text("→ \(folder.lastPathComponent)")
-                        .offloadText(.caption)
-                        .lineLimit(1)
-                        .help(L("offload_dest_target_help"))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func destinationTile(_ row: OffloadSheetModel.Row) -> some View {
+        OffloadPathTile(icon: "externaldrive",
+                        title: OffloadVolumeFacts.name(of: row.url),
+                        path: row.url.path,
+                        detail: destinationDetail(row),
+                        finderTarget: model.finderTarget(for: row)) {
             Button(L("choose")) {
-                if let url = OffloadPanels.pickFolder(
-                    message: L("offload_pick_dest"),
-                    prompt: L("offload_dest_prompt")) {
+                if let url = pickDestination() {
                     model.setDestination(url, at: row.id)
                 }
             }
@@ -164,23 +173,57 @@ struct OffloadSheet: View {
         }
     }
 
-    // MARK: - footer
+    /// Where this copy lands and whether the disk can hold it — the two facts
+    /// the operator checks before pressing Start, on one line.
+    private func destinationDetail(_ row: OffloadSheetModel.Row) -> String? {
+        let parts = [model.destinationFolder(for: row)
+            .map { "→ \($0.lastPathComponent)" },
+                     OffloadVolumeFacts.freeText(of: row.url)]
+            .compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
-    /// Close is live while a run is going, and says so: the run continues, the
-    /// takes panel reports on it, and this sheet is one click away again. The
-    /// sheet used to refuse to close at all, which meant a half-hour copy
-    /// covered the app — and left the operator no way to check on a job they
-    /// had started except to leave it in front of everything.
-    private var footer: some View {
+    private func pickDestination() -> URL? {
+        OffloadPanels.pickFolder(message: L("offload_pick_dest"),
+                                 prompt: L("offload_dest_prompt"))
+    }
+
+}
+
+/// The sheet's action bar.
+///
+/// Its own view rather than a computed property on the sheet for two reasons:
+/// it is the one part that needs the controller (starting a verify is a
+/// controller decision — one disk job at a time), and a view that reads an
+/// `@EnvironmentObject` has to be evaluated by SwiftUI rather than by whoever
+/// asks for the property, which is exactly what the render tests do.
+///
+/// Close is live while a run is going, and says so: the run continues, the
+/// takes panel reports on it, and the sheet is one click away again. It used to
+/// refuse to close at all, which meant a half-hour copy covered the app.
+///
+/// Checking a copy made earlier sits on the same bar (owner item 25) — the
+/// other half of this job, previously the second item of an unlabelled dropdown
+/// on a strip under the takes panel, where nobody looked for it.
+struct OffloadSheetFooter: View {
+    @ObservedObject var model: OffloadSheetModel
+    @EnvironmentObject private var controller: CaptureController
+    /// Passed in rather than read from the environment here: the sheet owns its
+    /// own dismissal, and a footer measured on its own in a render test has no
+    /// sheet to dismiss.
+    let dismiss: () -> Void
+
+    var body: some View {
         HStack {
             if model.isRunning {
                 Button(L("offload_cancel_run")) { model.cancel() }
                     .disabled(model.isCancelling)
             }
+            Button(L("verify_menu")) { controller.chooseDiskToVerify() }
+                .disabled(model.isRunning || controller.verify.isRunning)
             Spacer()
-            Button(model.isRunning ? L("offload_hide") : L("close")) {
-                dismiss()
-            }
+            Button(model.isRunning ? L("offload_hide") : L("close"),
+                   action: dismiss)
             Button(L("offload_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canStart)

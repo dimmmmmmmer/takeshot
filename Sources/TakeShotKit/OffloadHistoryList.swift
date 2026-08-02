@@ -114,15 +114,14 @@ struct OffloadHistoryList: View {
     }
 
     /// The first destination still on the machine. A disk that is not mounted
-    /// is the common case for an old run, and the Finder is handed the folder
-    /// only when it is actually there — `activateFileViewerSelecting` on a
-    /// vanished path opens a window on nothing.
+    /// is the common case for an old run; `FinderOpen` is the one place that
+    /// decides what to do about it, and it does nothing rather than open a
+    /// window on a vanished path.
     @MainActor
     static func reveal(_ run: OffloadRunRecord) {
-        let present = run.destinationURLs.first {
+        guard let present = run.destinationURLs.first(where: {
             FileManager.default.fileExists(atPath: $0.path)
-        }
-        guard let present else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([present])
+        }) else { return }
+        FinderOpen.folder(present)
     }
 }

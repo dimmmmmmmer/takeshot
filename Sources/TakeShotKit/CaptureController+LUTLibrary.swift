@@ -133,9 +133,7 @@ extension CaptureController {
     }
     /// Open the imported-LUTs folder in Finder.
     func openLUTsInFinder() {
-        let dir = lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
+        FinderOpen.ownFolder(lutsDirectory)
     }
     /// Delete every imported look and clear the selected one.
     func clearLUTs() {

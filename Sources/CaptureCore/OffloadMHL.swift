@@ -19,6 +19,11 @@ import Foundation
 /// folder is managed by repeated ascmhl operations, and the optional root hash.
 public enum OffloadMHL {
     /// Where ASC MHL keeps manifests, and the name every tool looks for.
+    ///
+    /// Not a choice of ours and not one to revisit (owner item 24): the receipt
+    /// a person reads is in the root of the copy, but this file is read by
+    /// `ascmhl`, Silverstack and OffShoot, and all three look in `ascmhl/`.
+    /// Moved to the root it would simply never be found.
     public static let folderName = "ascmhl"
     public static let fileExtension = "mhl"
 

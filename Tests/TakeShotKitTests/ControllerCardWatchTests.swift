@@ -15,10 +15,15 @@ import Testing
 /// directories the tests populate as fake cards — mounting a disk image per test
 /// would need privileges no CI runner has and would leave a volume mounted behind
 /// every failure.
-@Suite @MainActor struct ControllerCardWatchTests {
-    // MARK: - fixtures
-
-    private func scratch(_ name: String) throws -> URL {
+/// Shared fixtures for the two suites below.
+///
+/// A namespace rather than methods on the suite because there are two of them
+/// now — the watch itself, and the list of cards it has stopped asking about
+/// (owner item 18) — and a fixture set that belongs to whichever suite happens
+/// to be written first is how the second one ends up with a copy of it.
+@MainActor
+private enum CardFixture {
+    static func scratch(_ name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("takeshot-card-\(name)-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url,
@@ -27,8 +32,8 @@ import Testing
     }
 
     /// A card as a camera leaves it: a DCIM tree with two clips in it.
-    private func makeCard(_ name: String) throws -> URL {
-        let root = try scratch(name)
+    static func makeCard(_ name: String) throws -> URL {
+        let root = try Self.scratch(name)
         let dcim = root.appendingPathComponent("DCIM/100CANON")
         try FileManager.default.createDirectory(at: dcim,
                                                 withIntermediateDirectories: true)
@@ -39,9 +44,9 @@ import Testing
         return root
     }
 
-    /// How many bytes are under a folder — the assertion that nothing was copied
+    /// How many files are under a folder — the assertion that nothing was copied
     /// is made against this, not against a flag.
-    private func fileCount(under root: URL) -> Int {
+    static func fileCount(under root: URL) -> Int {
         let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.isRegularFileKey])
         var count = 0
@@ -56,7 +61,7 @@ import Testing
     /// harness has already pointed the ledger at scratch — the real one lives in
     /// the operator's Application Support and decides which cards they get asked
     /// about at all.
-    private func withWatch(
+    static func withWatch(
         configure: @escaping (inout CaptureSettings) -> Void = { _ in },
         _ body: (CaptureController, FakeVolumeWatch) async throws -> Void)
         async throws {
@@ -71,21 +76,23 @@ import Testing
     /// card is a few hundred milliseconds of metadata I/O and the window must not
     /// stall for it.
     @discardableResult
-    private func waitForOffer(_ controller: CaptureController) async -> Bool {
+    static func waitForOffer(_ controller: CaptureController) async -> Bool {
         await ControllerWait.until { controller.cardOffer != nil }
     }
+}
 
+@Suite @MainActor struct ControllerCardWatchTests {
     // MARK: - the rule: ask, never copy
 
     @Test func aMountedCardRaisesAPromptAndCopiesNothing() async throws {
-        let card = try makeCard("ask")
+        let card = try CardFixture.makeCard("ask")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
-            let before = self.fileCount(under: card)
+        try await CardFixture.withWatch { controller, watch in
+            let before = CardFixture.fileCount(under: card)
 
             watch.mount(card, name: "A001")
 
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             let offer = try #require(controller.cardOffer)
             #expect(offer.files == 2)
             #expect(offer.bytes == 3072)
@@ -95,7 +102,7 @@ import Testing
             #expect(!controller.offloadSheetPresented)
             #expect(controller.offload.source == nil)
             #expect(controller.offloadStatus == nil)
-            #expect(self.fileCount(under: card) == before,
+            #expect(CardFixture.fileCount(under: card) == before,
                     "the card was written to by a prompt")
         }
     }
@@ -104,11 +111,11 @@ import Testing
     /// destinations stay the operator's — the app never guesses where footage
     /// lands.
     @Test func acceptingOpensTheSheetPreFilledWithThatCard() async throws {
-        let card = try makeCard("accept")
+        let card = try CardFixture.makeCard("accept")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
 
             controller.acceptCardOffer()
 
@@ -120,11 +127,11 @@ import Testing
     }
 
     @Test func ignoreDismissesTheCardForThisSessionOnly() async throws {
-        let card = try makeCard("ignore")
+        let card = try CardFixture.makeCard("ignore")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
 
             controller.ignoreCardOffer()
             #expect(controller.cardOffer == nil)
@@ -141,11 +148,11 @@ import Testing
     /// Never is the persistent one, and it holds whatever gets shot onto the card
     /// afterwards.
     @Test func neverSilencesTheCardForGood() async throws {
-        let card = try makeCard("never")
+        let card = try CardFixture.makeCard("never")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             let key = try #require(controller.cardOffer?.key)
 
             controller.neverOfferCardAgain()
@@ -169,11 +176,11 @@ import Testing
     // MARK: - never re-offer, but notice new footage
 
     @Test func anOffloadedCardIsNotOfferedAgain() async throws {
-        let card = try makeCard("settled")
+        let card = try CardFixture.makeCard("settled")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             let candidate = try #require(controller.cardOffer)
             controller.offloadedCards.markOffloaded(candidate)
             controller.cardOffer = nil
@@ -188,11 +195,11 @@ import Testing
     /// …but a card that has been shot on since IS offered again. That is the
     /// whole reason the ledger stores a fingerprint beside the key.
     @Test func theSameCardWithOneMoreFileIsOfferedAgain() async throws {
-        let card = try makeCard("grown")
+        let card = try CardFixture.makeCard("grown")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             controller.offloadedCards.markOffloaded(try #require(controller.cardOffer))
             controller.cardOffer = nil
 
@@ -200,7 +207,7 @@ import Testing
                 to: card.appendingPathComponent("DCIM/100CANON/A001C003.MOV"))
             watch.mount(card, name: "A001")
 
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             #expect(controller.cardOffer?.files == 3)
         }
     }
@@ -209,15 +216,15 @@ import Testing
     /// one leaves it exactly as unasked-about as it was — that card is precisely
     /// the one nobody should assume is copied.
     @Test func onlyAVerifiedRunSettlesTheCard() async throws {
-        let card = try makeCard("verified")
-        let destination = try scratch("verified-dst")
+        let card = try CardFixture.makeCard("verified")
+        let destination = try CardFixture.scratch("verified-dst")
         defer {
             try? FileManager.default.removeItem(at: card)
             try? FileManager.default.removeItem(at: destination)
         }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             let key = try #require(controller.cardOffer?.key)
             controller.acceptCardOffer()
             controller.offload.addDestination(destination)
@@ -237,9 +244,9 @@ import Testing
     // MARK: - never during a take
 
     @Test func aMountDuringRecordingWaitsForTheTakeToClose() async throws {
-        let card = try makeCard("mid-take")
+        let card = try CardFixture.makeCard("mid-take")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             controller.isRecording = true
 
             watch.mount(card, name: "A001")
@@ -261,7 +268,7 @@ import Testing
     // MARK: - volumes that are never cards
 
     @Test func theBootVolumeNeverPrompts() async throws {
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(URL(fileURLWithPath: "/"), name: "Macintosh HD")
 
             #expect(!(await ControllerWait.until(
@@ -272,9 +279,9 @@ import Testing
     /// The app's own destination disk: offering to copy a card OFF the disk the
     /// copies land on is the one wrong guess that costs more than a click.
     @Test func theDestinationVolumeNeverPrompts() async throws {
-        let card = try makeCard("own-disk")
+        let card = try CardFixture.makeCard("own-disk")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             // as if the record folder were a folder on this very volume
             controller.settings.destinationPath =
                 card.appendingPathComponent("Dailies").path
@@ -289,12 +296,12 @@ import Testing
     }
 
     @Test func aSavedOffloadDestinationNeverPrompts() async throws {
-        let card = try makeCard("saved-dst")
+        let card = try CardFixture.makeCard("saved-dst")
         defer { try? FileManager.default.removeItem(at: card) }
         let rig: (inout CaptureSettings) -> Void = { [card] in
             $0.offloadDestinationPaths = [card.appendingPathComponent("DIT").path]
         }
-        try await withWatch(configure: rig) { controller, watch in
+        try await CardFixture.withWatch(configure: rig) { controller, watch in
             #expect(controller.isExcludedVolume(
                 MountedVolume(url: card, name: "DAILIES_SSD")))
             watch.mount(card, name: "DAILIES_SSD")
@@ -307,10 +314,10 @@ import Testing
     // MARK: - the setting
 
     @Test func theToggleOffSuppressesEverything() async throws {
-        let card = try makeCard("off")
+        let card = try CardFixture.makeCard("off")
         defer { try? FileManager.default.removeItem(at: card) }
         let off: (inout CaptureSettings) -> Void = { $0.offerMountedCards = false }
-        try await withWatch(configure: off) { controller, watch in
+        try await CardFixture.withWatch(configure: off) { controller, watch in
             #expect(!controller.offersMountedCards)
             #expect(!watch.isRunning, "the observers were installed anyway")
 
@@ -326,11 +333,11 @@ import Testing
     /// already on screen — a switch that leaves the last prompt up has not been
     /// turned off as far as the operator is concerned.
     @Test func turningTheToggleOffClearsAPromptAlreadyUp() async throws {
-        let card = try makeCard("toggle")
+        let card = try CardFixture.makeCard("toggle")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
             #expect(watch.isRunning)
 
             controller.settings.offerMountedCards = false
@@ -343,11 +350,11 @@ import Testing
     // MARK: - unmount
 
     @Test func pullingTheCardTakesItsPromptWithIt() async throws {
-        let card = try makeCard("pulled")
+        let card = try CardFixture.makeCard("pulled")
         defer { try? FileManager.default.removeItem(at: card) }
-        try await withWatch { controller, watch in
+        try await CardFixture.withWatch { controller, watch in
             watch.mount(card, name: "A001")
-            #expect(await self.waitForOffer(controller))
+            #expect(await CardFixture.waitForOffer(controller))
 
             watch.unmount(card)
 
@@ -472,5 +479,77 @@ import Testing
         #expect(try #require(CardScan.inspect(volume)).key == "UUID-1")
         #expect(try #require(CardScan.inspect(
             MountedVolume(url: root, name: "CARD"))).key == root.standardized.path)
+    }
+}
+
+/// The cards the app has stopped asking about, as the offload sheet lists them
+/// (owner item 18).
+///
+/// Its own suite because it is a different question from the one above: the
+/// watch decides whether to ASK, this decides what the operator can see and
+/// undo about the asking. Everything is asserted through the watch rather than
+/// through the store — a ledger row disappearing is not the feature, a card
+/// prompting again is.
+@Suite @MainActor struct ControllerCardLedgerTests {
+    /// Both kinds of entry reach the ledger the list draws from, and each says
+    /// which of the two decisions it was — they are not interchangeable: a
+    /// copied card comes back the moment it has been shot on again, a silenced
+    /// one never does.
+    @Test func theLedgerRecordsBothKindsOfDecision() async throws {
+        let copied = try CardFixture.makeCard("ledger-copied")
+        let silenced = try CardFixture.makeCard("ledger-never")
+        defer {
+            try? FileManager.default.removeItem(at: copied)
+            try? FileManager.default.removeItem(at: silenced)
+        }
+        try await CardFixture.withWatch { controller, watch in
+            watch.mount(copied, name: "A001")
+            #expect(await CardFixture.waitForOffer(controller))
+            controller.offloadedCards.markOffloaded(
+                try #require(controller.cardOffer))
+            controller.cardOffer = nil
+
+            watch.mount(silenced, name: "DIT_STICK")
+            #expect(await CardFixture.waitForOffer(controller))
+            controller.neverOfferCardAgain()
+
+            #expect(controller.offloadedCards.cards.count == 2)
+            let names = Set(controller.offloadedCards.cards.map(\.name))
+            #expect(names == ["A001", "DIT_STICK"])
+            let kinds = Set(controller.offloadedCards.cards.map(\.suppressed))
+            #expect(kinds == [true, false], "both kinds must be distinguishable")
+        }
+    }
+
+    /// Clearing a row of that list makes the card promptable again — asserted
+    /// through the watch, because the store forgetting it is only half of the
+    /// job. `neverOfferCardAgain` also writes the key into this session's
+    /// `ignoredCardKeys`, and a forget that cleared the file alone would leave
+    /// the card silent until the next launch: exactly the "is this broken?"
+    /// the list exists to answer.
+    @Test func forgettingARememberedCardMakesItPromptAgain() async throws {
+        let card = try CardFixture.makeCard("forget")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await CardFixture.withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await CardFixture.waitForOffer(controller))
+            let key = try #require(controller.cardOffer?.key)
+            controller.neverOfferCardAgain()
+            watch.mount(card, name: "A001")
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))),
+                    "a silenced card prompted before it was forgotten")
+
+            controller.forgetOffloadedCard(key)
+
+            #expect(controller.offloadedCards.record(for: key) == nil)
+            // still in the reader, so it is asked about now rather than at the
+            // next mount — and it prompts on a fresh mount too
+            #expect(controller.cardOffer?.key == key)
+            controller.ignoreCardOffer()
+            controller.ignoredCardKeys.remove(key)
+            watch.mount(card, name: "A001")
+            #expect(await CardFixture.waitForOffer(controller))
+        }
     }
 }

@@ -23,6 +23,33 @@ import Testing
         URL(fileURLWithPath: "/Volumes/\(name)")
     }
 
+    /// The sheet with everything it now draws: the form, the run history and
+    /// the cards already dealt with (owner item 18). Built through one helper
+    /// so a block added to the sheet cannot go unmeasured in half the states.
+    private func sheet(_ probe: ViewProbe) -> OffloadSheet {
+        OffloadSheet(model: probe.controller.offload,
+                     history: probe.controller.offloadHistory,
+                     ledger: probe.controller.offloadedCards)
+    }
+
+    /// Two remembered cards, one of each kind. Written into the ledger the
+    /// harness has already pointed at scratch — never the operator's own.
+    private func rememberCards(_ probe: ViewProbe) {
+        let ledger = probe.controller.offloadedCards
+        ledger.markOffloaded(
+            CardCandidate(volume: MountedVolume(url: card("CARD_A001"),
+                                                name: "CARD_A001"),
+                          files: 128, bytes: 61_000_000_000,
+                          evidence: .cameraStructure("DCIM")),
+            at: Date(timeIntervalSince1970: 1_800_000_000))
+        ledger.suppress(
+            CardCandidate(volume: MountedVolume(url: card("DIT_STICK"),
+                                                name: "DIT_STICK"),
+                          files: 4, bytes: 200_000_000,
+                          evidence: .detachableVideo(2)),
+            at: Date(timeIntervalSince1970: 1_800_000_500))
+    }
+
     private func configure(_ model: OffloadSheetModel) {
         model.source = card("CARD_A001")
         model.addDestination(card("DAILIES_SSD_1/Offload"))
@@ -104,18 +131,14 @@ import Testing
     // MARK: - the sheet
 
     /// Nothing chosen yet: the empty states are localized sentences ("Add at
-    /// least one destination", "Ничего не выбрано") and they share the row with
-    /// the pickers.
+    /// least one destination", "Ничего не выбрано") and they sit in a tile of
+    /// the same family a chosen card gets.
     @Test func theEmptySheetFitsItsOwnFixedWidth() async throws {
         try await ViewProbe.run { probe in
-            let ideal = probe.fittingSizes {
-                OffloadSheet(model: probe.controller.offload,
-                             history: probe.controller.offloadHistory)
-            }
-            let minimum = probe.minimumWidths {
-                OffloadSheet(model: probe.controller.offload,
-                             history: probe.controller.offloadHistory).content
-            }
+            self.rememberCards(probe)
+
+            let ideal = probe.fittingSizes { self.sheet(probe) }
+            let minimum = probe.minimumWidths { self.sheet(probe).content }
 
             #expect(ideal.en.width == OffloadSheet.width)
             #expect(ideal.ru.width == OffloadSheet.width)
@@ -125,21 +148,17 @@ import Testing
         }
     }
 
-    /// A card and two SSDs: paths, the "→ card folder" hint under each row, and
-    /// the sentence explaining what lands in every copy — which is the longest
-    /// single string in the sheet in either language.
+    /// A card and two SSDs, as two halves of one operation (owner item 22): the
+    /// source is a tile with a name, a path and a size line, exactly like the
+    /// destinations under it, and each destination's tile also says which
+    /// folder its copy lands in.
     @Test func theConfiguredSheetFitsInBothLanguages() async throws {
         try await ViewProbe.run { probe in
             self.configure(probe.controller.offload)
+            self.rememberCards(probe)
 
-            let ideal = probe.fittingSizes {
-                OffloadSheet(model: probe.controller.offload,
-                             history: probe.controller.offloadHistory)
-            }
-            let minimum = probe.minimumWidths {
-                OffloadSheet(model: probe.controller.offload,
-                             history: probe.controller.offloadHistory).content
-            }
+            let ideal = probe.fittingSizes { self.sheet(probe) }
+            let minimum = probe.minimumWidths { self.sheet(probe).content }
 
             #expect(ideal.ru.width == OffloadSheet.width)
             #expect(minimum.ru <= Self.inner,
@@ -158,16 +177,12 @@ import Testing
         try await ViewProbe.run { probe in
             let model = probe.controller.offload
             self.configure(model)
+            self.rememberCards(probe)
             model.isRunning = true
             model.progress = self.progress(failing: true)
 
-            let history = probe.controller.offloadHistory
-            let ideal = probe.fittingSizes {
-                OffloadSheet(model: model, history: history)
-            }
-            let minimum = probe.minimumWidths {
-                OffloadSheet(model: model, history: history).content
-            }
+            let ideal = probe.fittingSizes { self.sheet(probe) }
+            let minimum = probe.minimumWidths { self.sheet(probe).content }
 
             #expect(ideal.ru.width == OffloadSheet.width)
             #expect(minimum.ru <= Self.inner,
@@ -255,15 +270,11 @@ import Testing
         try await ViewProbe.run { probe in
             let model = probe.controller.offload
             self.configure(model)
+            self.rememberCards(probe)
             model.report = self.report()
 
-            let history = probe.controller.offloadHistory
-            let ideal = probe.fittingSizes {
-                OffloadSheet(model: model, history: history)
-            }
-            let minimum = probe.minimumWidths {
-                OffloadSheet(model: model, history: history).content
-            }
+            let ideal = probe.fittingSizes { self.sheet(probe) }
+            let minimum = probe.minimumWidths { self.sheet(probe).content }
 
             #expect(ideal.ru.width == OffloadSheet.width)
             #expect(minimum.ru <= Self.inner,
@@ -309,6 +320,61 @@ import Testing
         }
     }
 
+}
+
+/// The two pieces of the sheet a whole-sheet measurement cannot see.
+///
+/// Its own suite rather than more of the one above, which is at the type-length
+/// ceiling — and these two are measured on their own for a reason of their own:
+/// the sheet is PINNED to 620pt, so anything that does not fit inside it is
+/// clipped rather than reported, and every measurement of the sheet answers 620
+/// whatever is on it.
+@Suite @MainActor struct ViewOffloadTileTests {
+    static let inner = OffloadSheet.width - 40
+
+    /// The action bar. Four Russian labels in a row — Stop, "Проверить копию на
+    /// диске...", Hide and "Начать офлоад" — is the widest it ever gets, and the
+    /// verify button is what put it there (owner item 25).
+    @Test func theFooterFitsTheSheetsFixedWidthInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.offload
+            model.isRunning = true
+
+            let minimum = probe.minimumWidths {
+                OffloadSheetFooter(model: model) {}
+            }
+
+            #expect(minimum.ru <= Self.inner,
+                    "the footer needs \(minimum.ru)pt of \(Self.inner)")
+            #expect(minimum.en <= Self.inner)
+        }
+    }
+
+    /// The two ends of the copy read as one family (owner item 22): the source
+    /// tile and a destination tile are the same view, so what is measured here
+    /// is the widest thing either can hold — a full path and a size line.
+    @Test func theSourceAndDestinationTilesFitTheSheet() async throws {
+        try await ViewProbe.run { probe in
+            let long = "/Volumes/DAILIES_SSD_1/2026-07-30/Offload/CARD_A001"
+            let sizes = probe.minimumWidths {
+                VStack {
+                    OffloadPathTile(
+                        icon: "externaldrive", title: "CARD_A001", path: long,
+                        detail: L("offload_space_used", "312.0 GB", "512.0 GB"),
+                        finderTarget: URL(fileURLWithPath: long)) {
+                            Button(L("choose")) {}
+                        }
+                    OffloadPathTile(
+                        icon: "folder", title: L("offload_no_source"),
+                        isEmpty: true) { Button(L("choose")) {} }
+                }
+            }
+
+            #expect(sizes.ru <= Self.inner,
+                    "the tiles need \(sizes.ru)pt of \(Self.inner)")
+            #expect(sizes.en <= Self.inner)
+        }
+    }
 }
 
 /// The prompt a mounted card raises, as a rendered view.

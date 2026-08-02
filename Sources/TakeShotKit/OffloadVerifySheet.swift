@@ -31,9 +31,6 @@ struct OffloadVerifySheet: View {
         VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
             Text(L("verify_title"))
                 .offloadText(.title)
-            Text(L("verify_hint"))
-                .offloadText(.caption)
-                .fixedSize(horizontal: false, vertical: true)
             diskSection
             if let failure = model.failure {
                 Label(failure, systemImage: "exclamationmark.triangle.fill")
@@ -52,17 +49,21 @@ struct OffloadVerifySheet: View {
         }
     }
 
+    /// The disk under the loupe, as a tile of the same family the offload sheet
+    /// draws its two ends in (owner item 22) — this is the same job at a
+    /// different time, and it should not need a second reading convention.
     private var diskSection: some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             Text(L("verify_disk_label"))
-                .offloadText(.body)
-                .fixedSize()
-            Text(model.root?.path ?? L("offload_no_source"))
-                .offloadText(.body,
-                             tint: model.root == nil ? Color.secondary : nil)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .offloadText(.section)
+            OffloadPathTile(
+                icon: model.root.map(OffloadVolumeFacts.icon) ?? "externaldrive",
+                title: model.root.map(OffloadVolumeFacts.name)
+                    ?? L("offload_no_source"),
+                path: model.root?.path,
+                detail: model.root.flatMap(OffloadVolumeFacts.freeText),
+                isEmpty: model.root == nil,
+                finderTarget: model.root) { EmptyView() }
         }
     }
 
@@ -164,7 +165,7 @@ struct OffloadVerifyResultPanel: View {
                     .truncationMode(.middle)
                 Spacer()
                 Button(L("offload_open_dest")) {
-                    NSWorkspace.shared.activateFileViewerSelecting([report.root])
+                    FinderOpen.folder(report.root)
                 }
                 .buttonStyle(.link)
             }
@@ -185,7 +186,6 @@ struct OffloadVerifyResultPanel: View {
                 .offloadText(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .help(L("verify_checked_against_help"))
             lists
         }
         .padding(OffloadChrome.cardPadding)

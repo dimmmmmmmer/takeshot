@@ -27,6 +27,13 @@ enum OffloadChrome {
     /// How much of the card's colour is left in its plate. Enough to read as a
     /// verdict, not enough to fight the text on it.
     static let cardTintOpacity: Double = 0.08
+    /// A source or destination tile's plate. Quieter than a result card's: a
+    /// tile is something the operator picked, not a verdict about it.
+    static let tilePlateOpacity: Double = 0.06
+    /// The icon column a tile's name is aligned against. Fixed, so the source
+    /// tile and every destination under it line up as one list rather than
+    /// stepping in and out with the width of a glyph.
+    static let tileIconWidth: CGFloat = 22
 }
 
 /// What a line of text IS, rather than what size it should be. The size follows

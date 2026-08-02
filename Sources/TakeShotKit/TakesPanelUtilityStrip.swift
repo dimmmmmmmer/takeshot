@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Compact utility strip under the takes panel: Settings, the VANC monitor and
-/// a verified offload copy — and, while one is running, the offload itself.
+/// the offload — and, while one is running, the job itself.
 ///
 /// The first three used to be in the footer's bottom-left corner. They are
 /// setup, not shooting — nobody opens Settings between takes — and the footer
@@ -79,21 +79,23 @@ struct TakesPanelUtilityStrip: View {
             }
             .help(L("vanc_open_help"))
 
-            // A menu rather than a button since there are two halves of the same
-            // job: copying a card off, and re-checking a disk that was copied
-            // weeks ago. This strip is their only home — the export menu beside
-            // the takes cannot hold them, because it is disabled while there are
-            // no takes and both of these happen before there is one.
-            Menu {
-                Button(L("offload_menu_copy")) { controller.showOffloadSheet() }
-                Button(L("verify_menu")) { controller.chooseDiskToVerify() }
+            // One button, not a menu (owner item 25). It was a dropdown of two
+            // items because copying a card off and re-checking a disk copied
+            // weeks ago are two halves of one job — but the second half then
+            // lived behind an icon with no label, on a strip under the takes
+            // panel, and nobody ever found it. It is a button on the offload
+            // sheet's own footer now, which is where the operator already is.
+            //
+            // This strip is still the offload's only home in the window: the
+            // export menu beside the takes cannot hold it, being disabled while
+            // there are no takes, and an offload happens before there is one.
+            Button {
+                controller.showOffloadSheet()
             } label: {
                 Image(systemName: "externaldrive.badge.checkmark")
                     .font(.system(size: 14))
             }
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(L("offload_menu_group"))
+            .help(L("offload_menu_copy"))
         }
     }
 }

@@ -98,7 +98,7 @@ final class OffloadReportCanvas {
                                       result.totals.filesVerified,
                                       run.card.files)),
             (labels.statCopied,
-             OffloadReportCard.shortBytes(result.totals.bytesWritten)),
+             OffloadFormat.shortBytes(result.totals.bytesWritten)),
             (labels.statTime, OffloadFormat.duration(result.totals.elapsed,
                                                      labels: labels)),
             (labels.statSpeed,
@@ -154,10 +154,10 @@ final class OffloadReportCanvas {
         y += 10
     }
 
-    /// Who made it, when, and where the machine-readable receipt is. The
-    /// checksum list is named here rather than in the headline on purpose: the
-    /// person holding this picture cares about the verdict, and the tool that
-    /// cares about the manifest can find it by its folder.
+    /// Who made it, when, and where the checksum list is. The list is named
+    /// here rather than in the headline on purpose: the person holding this
+    /// picture cares about the verdict, and the tool that cares about the
+    /// manifest can find it by its folder.
     private func drawFooter(result: OffloadDestinationResult,
                             run: OffloadRunFacts) {
         rule()
@@ -165,7 +165,7 @@ final class OffloadReportCanvas {
         draw(String(format: labels.footerFormat, run.creator.toolName,
                     run.creator.toolVersion, run.creator.hostname,
                     run.algorithm.displayName,
-                    OffloadReportCard.receipt(result, labels: labels)),
+                    OffloadReportCard.checksumList(result, labels: labels)),
              CardTextStyle(size: CardMetrics.labelSize,
                            color: CardInk.secondary))
     }

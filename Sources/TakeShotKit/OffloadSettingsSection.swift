@@ -1,7 +1,12 @@
 import SwiftUI
 
-/// The Offload section of the settings window: whether a mounted card is offered
-/// at all, and the way back from a "Never".
+/// The Offload section of the settings window: whether a mounted card is
+/// offered at all.
+///
+/// The cards already dealt with used to be here too, as a count and a "forget
+/// all" button. They are a named, per-row list on the offload sheet now (owner
+/// item 18) — a count answers neither "which cards" nor "this one, please", and
+/// the sheet is where the operator is already asking what has been copied.
 ///
 /// Its own file rather than another block in `SettingsView`, for the reason
 /// `RemoteSettingsSection` is: that view is the densest localized surface in the
@@ -9,7 +14,6 @@ import SwiftUI
 /// push a comment out to make room.
 struct OffloadSettingsSection: View {
     @EnvironmentObject private var controller: CaptureController
-    @ObservedObject var ledger: OffloadedCardLedger
 
     var body: some View {
         Section(L("settings_offload")) {
@@ -19,18 +23,6 @@ struct OffloadSettingsSection: View {
                 get: { controller.offersMountedCards },
                 set: { controller.settings.offerMountedCards = $0 ? nil : false }))
             Text(L("offer_mounted_cards_hint"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            LabeledContent(L("cards_remembered")) {
-                HStack {
-                    Text("\(ledger.cards.count)")
-                        .foregroundStyle(.secondary)
-                    Button(L("cards_forget")) { ledger.clear() }
-                        .disabled(ledger.cards.isEmpty)
-                }
-            }
-            Text(L("cards_remembered_hint"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

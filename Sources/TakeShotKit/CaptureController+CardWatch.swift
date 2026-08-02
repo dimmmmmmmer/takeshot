@@ -140,14 +140,34 @@ extension CaptureController {
     }
 
     /// Never — this disk is not a card the operator wants offering. Persisted,
-    /// and undone from Settings, which is the only way back (see
-    /// `OffloadedCardLedger.clear`).
+    /// and undone from the remembered-cards list on the offload sheet, which is
+    /// the way back (see `forgetOffloadedCard`).
     func neverOfferCardAgain() {
         guard let offer = cardOffer else { return }
         offloadedCards.suppress(offer)
         ignoredCardKeys.insert(offer.key)
         cardOffer = nil
         drainDeferredCardOffers()
+    }
+
+    /// "Ask me about this card again", from the offload sheet's list of cards
+    /// already dealt with (owner item 18).
+    ///
+    /// BOTH halves of the decision, or it does nothing visible: the ledger
+    /// entry is the part that survives a relaunch, and `ignoredCardKeys` is the
+    /// session's own copy of it — `neverOfferCardAgain` writes both. Clearing
+    /// only the ledger would leave the card silent until the next launch, which
+    /// is precisely the "is this thing broken?" the list exists to answer.
+    ///
+    /// And if the card is still in the reader it is offered NOW. An "ask again"
+    /// that waits for the card to be unplugged and put back is indistinguishable
+    /// from having done nothing at all.
+    func forgetOffloadedCard(_ key: String) {
+        offloadedCards.forget(key)
+        ignoredCardKeys.remove(key)
+        guard let candidate = seenCards.values.first(where: { $0.key == key })
+        else { return }
+        considerCard(candidate)
     }
 
     // MARK: - what settles a card

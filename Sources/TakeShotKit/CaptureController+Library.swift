@@ -51,9 +51,7 @@ extension CaptureController {
         scanDestinationFolder()
     }
     func openDestinationInFinder() {
-        try? FileManager.default.createDirectory(at: destinationRoot,
-                                                 withIntermediateDirectories: true)
-        NSWorkspace.shared.open(destinationRoot)
+        FinderOpen.ownFolder(destinationRoot)
     }
     /// Change-record-folder dialog (used from both Settings and the bottom bar).
     func chooseDestinationFolder() {

@@ -99,7 +99,7 @@ struct OffloadResultPanel: View {
                     .truncationMode(.middle)
                 Spacer()
                 Button(L("offload_open_dest")) {
-                    NSWorkspace.shared.activateFileViewerSelecting([result.url])
+                    FinderOpen.folder(result.url)
                 }
                 .buttonStyle(.link)
             }
@@ -123,7 +123,6 @@ struct OffloadResultPanel: View {
                     .offloadText(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(L("offload_report_help"))
             }
         }
         .padding(OffloadChrome.cardPadding)

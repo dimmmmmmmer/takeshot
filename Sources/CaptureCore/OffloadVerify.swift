@@ -132,6 +132,12 @@ public enum OffloadVerify {
     /// all of them would be reported as strays on every single verify. Nothing
     /// here is footage, and a stray list that cries wolf three times per run
     /// stops being read.
+    ///
+    /// Two shapes, and they mirror where the engine puts each artifact: the
+    /// manifest under `ascmhl/`, the receipt in the ROOT of the copy — hence
+    /// the "no slash in the path" guard, which is what keeps a file the camera
+    /// happened to name `offload-summary_*.txt` three folders down from being
+    /// waved through as one of ours.
     public static func isReportFile(_ relativePath: String) -> Bool {
         if relativePath.hasPrefix(OffloadMHL.folderName + "/") { return true }
         guard !relativePath.contains("/"),
