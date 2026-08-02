@@ -78,7 +78,13 @@ extension CaptureController {
                                 timecode: take.startTimecode?.description ?? "",
                                 durationSeconds: take.durationSeconds,
                                 rating: take.rating.rawValue,
-                                comment: take.comment)
+                                comment: take.comment,
+                                scene: take.slate.scene,
+                                shot: take.slate.shot,
+                                // empty, not "0": the page shows an unlogged
+                                // take number as a blank field
+                                take: take.slate.take > 0
+                                    ? String(take.slate.take) : "")
         })
     }
 
@@ -178,6 +184,11 @@ extension CaptureController {
             editTake(takeID) { setRating(rating, for: $0) }
         case .comment(let takeID, let text):
             editTake(takeID) { setComment(text, for: $0) }
+        case .slate(let takeID, let slate):
+            // The same method the panel's own popover calls, so the sidecar
+            // rewrite and the "never touch the recorded file" rule come from
+            // one place (see CaptureController+Slate).
+            editTake(takeID) { setSlate(slate, for: $0) }
         }
         pushRemoteStatus()
         // Edits and finalizes both reshape the table the script page shows;

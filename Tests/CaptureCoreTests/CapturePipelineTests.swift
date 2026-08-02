@@ -22,7 +22,7 @@ struct CapturePipelineTests {
         settings.preRollSeconds = 0 // pre-roll is checked by a separate test
 
         let pipeline = CapturePipeline(config: .init(
-            settings: settings, scene: "7", takeNumber: 2))
+            settings: settings, slate: SlateMetadata(scene: "7"), takeNumber: 2))
 
         let finishedTakes = TakeCollector()
         let recStates = EventCollector<Bool>()
@@ -111,7 +111,7 @@ struct CapturePipelineTests {
         settings.preRollSeconds = 0.8 // 20 frames at 25 fps
 
         let pipeline = CapturePipeline(config: .init(
-            settings: settings, scene: "1", takeNumber: 1))
+            settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))
         let finishedTakes = TakeCollector()
         let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finishedTakes.append($0) }
@@ -211,7 +211,7 @@ struct CapturePipelineTests {
         settings.detectionMode = .manual
 
         let pipeline = CapturePipeline(config: .init(
-            settings: settings, scene: "1", takeNumber: 1))
+            settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))
         var recStarted = false
         pipeline.onRecStateChanged = { if $0 { recStarted = true } }
 

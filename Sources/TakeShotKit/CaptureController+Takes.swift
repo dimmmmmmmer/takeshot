@@ -74,6 +74,11 @@ extension CaptureController {
                 _ = try TakeLogExporter.write(takes: takes, toDirectory: root)
                 _ = try TakeLogExporter.writeMarkers(takes: takes, other: other,
                                                      toDirectory: root)
+                // The creative fields do not fit the frozen Resolve schema, so
+                // they get their own sidecar — written here, with the log, so
+                // one edit produces one consistent picture of the folder.
+                _ = try TakeLogExporter.writeSlates(takes: takes,
+                                                    toDirectory: root)
             } catch {
                 // ratings/comments silently not persisting is a day-loss bug
                 DispatchQueue.main.async {

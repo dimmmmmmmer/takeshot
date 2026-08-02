@@ -31,7 +31,11 @@ extension CaptureController {
         let engine = NamingEngine(template: settings.namingTemplate,
                                   clipPadding: settings.clipPadWidthEffective)
         let context = NamingContext(
-            project: settings.projectName, date: Date(),
+            // the scene reaches the template through {scene}, so it has to be
+            // here too: the pipeline builds its own context WITH it, and a
+            // preview that left it out would show the collision warning, the
+            // slate window and the phone a name the writer is not using
+            project: settings.projectName, date: Date(), scene: scene,
             take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
             postfix: settings.postfix ?? "",
             timecode: currentTimecode)

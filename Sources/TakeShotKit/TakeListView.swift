@@ -237,7 +237,7 @@ struct TakeRow: View {
             .panelItemClicks(take.url, in: controller) {
                 controller.play(url: take.url)
             }
-            CommentButton(take: take)
+            TakeLogButton(take: take)
             RatingToggle(take: take)
         }
         .contextMenu { TakeContextMenu(take: take) }

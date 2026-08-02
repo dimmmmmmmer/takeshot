@@ -100,6 +100,19 @@
 "roll_label" = "ROLL";
 "clip_label" = "CLIP";
 "clip_help" = "Next clip number, auto-increments after every recording";
+
+/* Slate — the creative metadata (scene/shot/take) embedded in the recording.
+   "slate_label" is latin in both languages on purpose: it sits in the footer
+   row beside CAM/ROLL/CLIP, which must measure the same whatever the UI
+   language is. */
+"slate_label" = "SLATE";
+"slate_shot" = "Shot";
+"slate_take" = "Take";
+"slate_help" = "Scene, shot and take of the NEXT recording — written into the .mov itself and into every export";
+"slate_take_help" = "Take number inside the scene. Left empty it follows the clip counter; type one and it takes over, restarting at 1 whenever the scene changes";
+"slate_next_hint" = "Applies to the next take. Scene, shot and take are embedded in the recorded file.";
+"slate_sidecar_note" = "A recorded file is never rewritten: corrections are saved to takeshot-slate.csv beside the footage and travel through the log, the ALE and the reports.";
+"description_label" = "Description";
 "open_folder" = "Open takes folder in Finder";
 "other_content" = "Other content";
 "debounce_hint" = "Confirmation frames before start/stop is detected; 0 = react instantly (one frame of timecode movement is still required)";
@@ -584,6 +597,10 @@
 "report_csv_file" = "File Name";
 "report_csv_roll" = "Roll";
 "report_csv_clip" = "Clip";
+"report_csv_scene" = "Scene";
+"report_csv_shot" = "Shot";
+"report_csv_take" = "Take";
+"report_csv_description" = "Description";
 "report_csv_start" = "Start TC";
 "report_csv_end" = "End TC";
 "report_csv_duration" = "Duration";

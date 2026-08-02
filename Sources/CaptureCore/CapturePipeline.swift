@@ -20,14 +20,21 @@ import os.log
 public final class CapturePipeline: @unchecked Sendable {
     public struct Config: Sendable {
         public var settings: CaptureSettings
-        public var scene: String
+        /// The creative values the NEXT take will be slated with.
+        public var slate: SlateMetadata
         public var roll: String
         public var takeNumber: Int
 
-        public init(settings: CaptureSettings, scene: String = "",
+        /// Flat accessor kept for the callers that only ever set a scene.
+        public var scene: String {
+            get { slate.scene }
+            set { slate.scene = newValue }
+        }
+
+        public init(settings: CaptureSettings, slate: SlateMetadata = .empty,
                     roll: String = "", takeNumber: Int) {
             self.settings = settings
-            self.scene = scene
+            self.slate = slate
             self.roll = roll
             self.takeNumber = takeNumber
         }
@@ -172,7 +179,9 @@ public final class CapturePipeline: @unchecked Sendable {
     var lastTimecode: Timecode?
     var takeStartTC: Timecode?
     var takeStartedAt = Date()
-    var takeScene = ""
+    /// The slate latched when the take started — like the audio channel mask,
+    /// so a scene typed mid-take cannot retag the footage already written.
+    var takeSlate = SlateMetadata.empty
     var takeRoll = ""
     var takeNumber = 0
     /// One buffered frame awaiting a possible take start.

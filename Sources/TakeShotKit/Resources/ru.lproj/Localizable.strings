@@ -100,6 +100,18 @@
 "roll_label" = "ROLL";
 "clip_label" = "CLIP";
 "clip_help" = "Номер следующего клипа, автоинкремент после каждой записи";
+
+/* Slate — the creative metadata (scene/shot/take) embedded in the recording.
+   "slate_label" stays latin: it sits in the footer row beside CAM/ROLL/CLIP,
+   which must measure the same in both languages. */
+"slate_label" = "SLATE";
+"slate_shot" = "Кадр";
+"slate_take" = "Дубль";
+"slate_help" = "Сцена, кадр и дубль СЛЕДУЮЩЕЙ записи — пишутся внутрь .mov и во все экспорты";
+"slate_take_help" = "Номер дубля внутри сцены. Пустое поле — идёт за счётчиком клипов; введите номер, и он станет главным, начинаясь с 1 при каждой смене сцены";
+"slate_next_hint" = "Применится к следующему дублю. Сцена, кадр и дубль пишутся внутрь записанного файла.";
+"slate_sidecar_note" = "Записанный файл никогда не переписывается: правки сохраняются в takeshot-slate.csv рядом с материалом и уходят в журнал, ALE и отчёты.";
+"description_label" = "Описание";
 "open_folder" = "Открыть папку дублей в Finder";
 "other_content" = "Другие файлы";
 "debounce_hint" = "Кадры подтверждения перед стартом/стопом; 0 = мгновенная реакция (один кадр движения таймкода всё равно нужен)";
@@ -590,6 +602,10 @@
 "report_csv_file" = "Имя файла";
 "report_csv_roll" = "Ролл";
 "report_csv_clip" = "Клип";
+"report_csv_scene" = "Сцена";
+"report_csv_shot" = "Кадр";
+"report_csv_take" = "Дубль";
+"report_csv_description" = "Описание";
 "report_csv_start" = "TC начала";
 "report_csv_end" = "TC конца";
 "report_csv_duration" = "Длительность";

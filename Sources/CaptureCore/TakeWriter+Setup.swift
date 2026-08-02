@@ -9,21 +9,61 @@ import Foundation
 ///
 /// Split out of TakeWriter, whose initializer had grown past 90 lines.
 extension TakeWriter {
-    /// The file's QuickTime metadata: whatever the take carries, plus the
-    /// marker that tells TakeShot's own files apart from foreign ones in the
-    /// record folder.
-    static func metadataItems(_ markerMetadata: [String: String]) -> [AVMetadataItem] {
-        var metadataItems: [AVMetadataItem] = []
+    /// The file's QuickTime metadata: whatever the take carries, the creative
+    /// slate, plus the marker that tells TakeShot's own files apart from
+    /// foreign ones in the record folder.
+    ///
+    /// An empty slate contributes nothing at all — a day shot without a script
+    /// supervisor must not leave three blank keys in every file.
+    static func metadataItems(_ markerMetadata: [String: String],
+                              slate: SlateMetadata = .empty) -> [AVMetadataItem] {
         var allMetadata = markerMetadata
         allMetadata[Self.markerKey] = "1"
-        for (key, value) in allMetadata {
-            let item = AVMutableMetadataItem()
-            item.keySpace = .quickTimeMetadata
-            item.key = key as NSString
-            item.value = value as NSString
-            metadataItems.append(item)
-        }
-        return metadataItems
+        if !slate.scene.isEmpty { allMetadata[Self.sceneKey] = slate.scene }
+        if !slate.shot.isEmpty { allMetadata[Self.shotKey] = slate.shot }
+        if slate.take > 0 { allMetadata[Self.takeKey] = String(slate.take) }
+        return allMetadata.map { key, value in
+            mdtaItem(key: key, value: value)
+        } + standardSlateItems(slate)
+    }
+
+    /// One item in the modern QuickTime metadata ('mdta') key space, which
+    /// takes reverse-DNS keys and is what every key above is written in.
+    private static func mdtaItem(key: String, value: String) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.keySpace = .quickTimeMetadata
+        item.key = key as NSString
+        item.value = value as NSString
+        return item
+    }
+
+    /// The slate written where an NLE will show it without knowing anything
+    /// about TakeShot: as the file's DESCRIPTION, in both QuickTime metadata
+    /// containers.
+    ///
+    /// Both, because the two are read by different tools and neither is a
+    /// superset of the other: `com.apple.quicktime.description` is the modern
+    /// mdta key Final Cut and QuickTime Player's inspector read, and `©des` is
+    /// the classic user-data ('udta') atom that Premiere and the long tail of
+    /// older tools read. Writing one of them would leave the slate invisible in
+    /// half the rooms this footage lands in; writing both costs a few dozen
+    /// bytes in the moov atom and no tracks at all.
+    ///
+    /// The value is the human digest ("Scene 12A / Shot B / Take 3"), never the
+    /// three fields concatenated blindly: this is the field a person reads, and
+    /// the parseable copy already exists under the namespaced keys.
+    private static func standardSlateItems(
+        _ slate: SlateMetadata) -> [AVMetadataItem] {
+        guard !slate.isEmpty else { return [] }
+        let summary = slate.summary
+        let mdta = mdtaItem(
+            key: AVMetadataKey.quickTimeMetadataKeyDescription.rawValue,
+            value: summary)
+        let udta = AVMutableMetadataItem()
+        udta.keySpace = .quickTimeUserData
+        udta.key = AVMetadataKey.quickTimeUserDataKeyDescription.rawValue as NSString
+        udta.value = summary as NSString
+        return [mdta, udta]
     }
 
     static func videoSettings(format: CaptureFormat, codec: CaptureCodec,

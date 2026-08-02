@@ -85,6 +85,9 @@ extension CaptureController {
         recordingMarkers = []
         takes.append(take)
         nextTakeNumber += 1
+        // the next take of the same scene, when the operator is numbering takes
+        // themselves — see CaptureController+Slate
+        advanceSlateTake()
         exportTakeLog()
         requestThumbnail(for: take) // deduped against a cell's request
         flashNewItem(take.url)

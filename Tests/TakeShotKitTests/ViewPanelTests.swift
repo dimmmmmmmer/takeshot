@@ -296,7 +296,7 @@ struct ViewPanelTests {
         try await ViewProbe.run { probe in
             let takes = try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             let take = try #require(takes.first)
-            let comment = probe.fittingSizes { CommentButton(take: take) }
+            let comment = probe.fittingSizes { TakeLogButton(take: take) }
             let rating = probe.fittingSizes { RatingToggle(take: take) }
             #expect(comment.en == CGSize(width: 18, height: 18))
             #expect(comment.ru == comment.en)

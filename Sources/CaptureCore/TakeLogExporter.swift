@@ -20,13 +20,22 @@ public enum TakeLogExporter {
         }
     }
 
+    /// The header is FROZEN: it is the contract Resolve's Media Pool → Import
+    /// Metadata is mapped against, and a column added here silently re-maps
+    /// every column after it. The creative fields that do not fit it live in
+    /// `takeshot-slate.csv` (see `+Slate`) for exactly that reason.
+    public static let resolveCSVHeader = "File Name,Reel Name,Take,Good Take,Comments"
+
     public static func resolveCSV(takes: [Take]) -> String {
-        var lines = ["File Name,Reel Name,Take,Good Take,Comments"]
+        var lines = [resolveCSVHeader]
         for take in takes {
             lines.append([
                 escape(take.url.lastPathComponent),
                 escape(take.roll.isEmpty ? take.scene : take.roll),
-                String(take.takeNumber),
+                // Resolve's Take field is the CREATIVE take, so the slate's own
+                // number wins when one was logged; with no slate this is the
+                // clip counter, which is what the column always carried.
+                String(take.editorialTakeNumber),
                 goodTakeField(rating: take.rating),
                 escape(commentsField(rating: take.rating, comment: take.comment)),
             ].joined(separator: ","))

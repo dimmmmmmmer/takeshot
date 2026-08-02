@@ -25,7 +25,7 @@ extension CapturePipeline {
             self.writer = writer
             takeStartTC = timecode
             takeStartedAt = Date()
-            takeScene = config.scene
+            takeSlate = config.slate
             takeRoll = config.roll
             takeNumber = config.takeNumber
             droppedFrames = 0
@@ -57,6 +57,9 @@ extension CapturePipeline {
                 }
                 return meta
             }(),
+            // the creative side, embedded so it survives a copy that leaves
+            // the sidecars behind — see TakeWriter's key documentation
+            slate: config.slate,
             colorTagPreset: config.settings.colorTagPreset,
             audioChannelCount: recordChannelCount)
     }
@@ -152,12 +155,13 @@ extension CapturePipeline {
     private func describeTake(from writer: TakeWriter) -> Take {
         var take = Take(
             url: writer.url,
-            scene: takeScene,
+            scene: takeSlate.scene,
             roll: takeRoll,
             takeNumber: takeNumber,
             startTimecode: takeStartTC,
             durationSeconds: writer.durationSeconds,
             recordedAt: takeStartedAt)
+        take.slate = takeSlate
         if gapFilledAudioPackets > 0 {
             // the take's log row says what happened to its sound — a padded
             // take found only in the edit is exactly the silent failure the

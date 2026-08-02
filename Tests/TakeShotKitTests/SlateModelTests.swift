@@ -66,6 +66,28 @@ import Testing
 
     /// The flash captures the TC of the click moment and holds it on the
     /// readout while the live clock keeps ticking underneath.
+    /// The card's creative row. A camera pointed at this face is pointed at a
+    /// slate, and a slate that cannot say which scene it is is a clock.
+    @Test func theCardCarriesTheSceneShotAndTake() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let slate = controller.slate
+            // nothing logged: the card shows nothing rather than a stray 0
+            #expect(slate.sceneText.isEmpty)
+            #expect(slate.shotText.isEmpty)
+            #expect(slate.slateTakeText.isEmpty)
+
+            controller.scene = "12A"
+            controller.shot = "B"
+            controller.slateTakeOverride = 3
+            #expect(slate.sceneText == "12A")
+            #expect(slate.shotText == "B")
+            #expect(slate.slateTakeText == "3")
+            // and it is the same answer the writer is about to embed
+            #expect(controller.pendingSlate
+                == SlateMetadata(scene: "12A", shot: "B", take: 3))
+        }
+    }
+
     @Test func theSyncFlashFreezesTheClickMomentTimecode() async throws {
         try await ControllerHarness.run { controller, _ in
             let slate = controller.slate

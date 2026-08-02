@@ -74,7 +74,7 @@ struct PipelineLTCTests {
         settings.ltcChannel = 1
 
         let pipeline = CapturePipeline(config: .init(
-            settings: settings, scene: "9", takeNumber: 1))
+            settings: settings, slate: SlateMetadata(scene: "9"), takeNumber: 1))
         let finishedTakes = TakeCollector()
         let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finishedTakes.append($0) }

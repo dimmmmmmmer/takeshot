@@ -15,9 +15,12 @@ extension ShiftReportCSVLabels {
     static func current() -> ShiftReportCSVLabels {
         var labels = ShiftReportCSVLabels()
         labels.header = [L("report_csv_file"), L("report_csv_roll"),
-                         L("report_csv_clip"), L("report_csv_start"),
-                         L("report_csv_end"), L("report_csv_duration"),
-                         L("report_csv_rating"), L("report_csv_comments"),
+                         L("report_csv_clip"), L("report_csv_scene"),
+                         L("report_csv_shot"), L("report_csv_take"),
+                         L("report_csv_start"), L("report_csv_end"),
+                         L("report_csv_duration"), L("report_csv_rating"),
+                         L("report_csv_comments"),
+                         L("report_csv_description"),
                          L("report_csv_markers"), L("report_csv_recorded")]
         labels.good = L("report_rating_good")
         labels.bad = L("report_rating_bad")

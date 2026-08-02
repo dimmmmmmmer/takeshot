@@ -10,11 +10,19 @@ import Foundation
 /// work — the rating, the comment and the markers live beside the footage, not
 /// inside it.
 extension CaptureController {
+    /// The day's sidecars, read once per scan and keyed by file name. A named
+    /// type rather than a tuple: there are three of them now, they are all
+    /// dictionaries of file name to something, and positional members of that
+    /// shape are indistinguishable at the call site.
+    struct StoredSidecars {
+        var meta: [String: TakeLogExporter.TakeMeta] = [:]
+        var markers: [String: [TakeLogExporter.MarkerRow]] = [:]
+        var slates: [String: TakeLogExporter.SlateRow] = [:]
+    }
+
     /// Identify one candidate, restoring its take metadata when it is ours.
-    func classify(
-        _ url: URL,
-        stored: (meta: [String: TakeLogExporter.TakeMeta],
-                 markers: [String: [TakeLogExporter.MarkerRow]])) async -> ScanOutcome {
+    func classify(_ url: URL,
+                  stored: StoredSidecars) async -> ScanOutcome {
         if scannedPaths.contains(url.path) {
             return takes.contains(where: { $0.url.path == url.path })
                 ? .known : .foreign
@@ -55,15 +63,35 @@ extension CaptureController {
         take.comment = stored.meta[name]?.comment ?? ""
         take.markers = TakeLogExporter.markers(stored.markers[name] ?? [],
                                                of: take)
+        // The creative fields are the one thing that lives in BOTH places. The
+        // sidecar wins because it is the only one a correction can reach (see
+        // CaptureController+Slate); the file's own keys are the fallback, and
+        // they are what makes a .mov copied away from its sidecars still know
+        // which scene it is — the whole point of embedding them.
+        take.slate = embeddedSlate(
+            scene: await value(TakeWriter.sceneKey),
+            shot: await value(TakeWriter.shotKey),
+            take: await value(TakeWriter.takeKey))
+        if let row = stored.slates[name] {
+            take.slate = row.slate
+            take.logDescription = row.logDescription
+        }
         return .take(take)
     }
-    /// Ratings, comments and markers of the day, as saved next to the takes.
-    /// The markers stay unresolved rows here: their position is a timecode in
-    /// the sidecar, and turning it into an offset needs the take's own start TC,
-    /// which is only read further down in `classify`.
-    func loadStoredMetadata()
-        -> (meta: [String: TakeLogExporter.TakeMeta],
-            markers: [String: [TakeLogExporter.MarkerRow]]) {
+
+    /// The slate as the file itself carries it. A take key of 0 or nonsense is
+    /// dropped rather than trusted: a hand-tagged file must not put a take
+    /// number the slate never had into the day's log.
+    private func embeddedSlate(scene: String?, shot: String?,
+                               take: String?) -> SlateMetadata {
+        SlateMetadata(scene: scene ?? "", shot: shot ?? "",
+                      take: max(0, Int(take ?? "") ?? 0))
+    }
+    /// Ratings, comments, markers and slates of the day, as saved next to the
+    /// takes. The markers stay unresolved rows here: their position is a
+    /// timecode in the sidecar, and turning it into an offset needs the take's
+    /// own start TC, which is only read further down in `classify`.
+    func loadStoredMetadata() -> StoredSidecars {
         // Lossy decode on purpose: one bad byte must not wipe the day's
         // ratings. The failable String(bytes:encoding:) the linter prefers
         // would return nil for the whole file, which is exactly the outcome
@@ -77,8 +105,13 @@ extension CaptureController {
         let markers = (try? Data(contentsOf: markersURL))
             .map { TakeLogExporter.parseMarkerRows(
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+        let slatesURL = destinationRoot
+            .appendingPathComponent(TakeLogExporter.slateFileName)
+        let slates = (try? Data(contentsOf: slatesURL))
+            .map { TakeLogExporter.parseSlates(
+                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         // swiftlint:enable optional_data_string_conversion
-        return (meta, markers)
+        return StoredSidecars(meta: meta, markers: markers, slates: slates)
     }
     /// Markers on clips that are not ours, back from the same sidecar.
     ///

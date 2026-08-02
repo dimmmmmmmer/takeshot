@@ -97,6 +97,12 @@ struct RemoteTakeLog: Equatable, Sendable {
         /// "none" / "good" / "bad" — the same three states as the panel.
         var rating: String
         var comment: String
+        /// The creative fields the scripty owns. Scene and shot as typed; the
+        /// take as text, because an empty string is how "not logged" travels
+        /// and a number has no way to say it.
+        var scene: String = ""
+        var shot: String = ""
+        var take: String = ""
     }
 
     /// Oldest first, matching the app's take list; the page renders newest on
@@ -112,7 +118,10 @@ struct RemoteTakeLog: Equatable, Sendable {
                 + ",\"tc\":\(RemoteJSON.quoted(entry.timecode))"
                 + ",\"dur\":\(RemoteJSON.number(entry.durationSeconds))"
                 + ",\"rating\":\(RemoteJSON.quoted(entry.rating))"
-                + ",\"comment\":\(RemoteJSON.quoted(entry.comment))}"
+                + ",\"comment\":\(RemoteJSON.quoted(entry.comment))"
+                + ",\"scene\":\(RemoteJSON.quoted(entry.scene))"
+                + ",\"shot\":\(RemoteJSON.quoted(entry.shot))"
+                + ",\"take\":\(RemoteJSON.quoted(entry.take))}"
         }
         return "{\"type\":\"takes\",\"takes\":["
             + rows.joined(separator: ",") + "]}"
@@ -134,6 +143,11 @@ enum RemoteCommand: Equatable, Sendable {
     case rate(takeID: String, rating: TakeRating)
     /// Replace one take's free-text comment.
     case comment(takeID: String, text: String)
+    /// Replace one take's slate — scene, shot and the take number inside the
+    /// scene. All three at once rather than three commands: the page commits
+    /// the row's slate as a unit, and three messages racing each other would
+    /// let a half-applied slate be pushed back between them.
+    case slate(takeID: String, slate: SlateMetadata)
     /// The multiview page asked for (or gave up) the camera-frame stream.
     /// Settled by the server itself — a per-connection subscription, not an
     /// app command — so it is never dispatched to the controller.
@@ -171,6 +185,18 @@ enum RemoteCommand: Equatable, Sendable {
                   let text = dictionary["text"] as? String
             else { return nil }
             return .comment(takeID: id, text: text)
+        case "slate":
+            // Strict about the id and about the three fields being present:
+            // a message missing one of them would silently CLEAR it, which is
+            // how a scripty loses a scene number they typed an hour ago.
+            guard let id = dictionary["id"] as? String, !id.isEmpty,
+                  let scene = dictionary["scene"] as? String,
+                  let shot = dictionary["shot"] as? String,
+                  let take = dictionary["take"] as? String
+            else { return nil }
+            return .slate(takeID: id,
+                          slate: SlateMetadata(scene: scene, shot: shot,
+                                               take: slateTake(take)))
         case "multiview":
             // Strict, like `rate`: a missing flag must not be read as "on".
             guard let on = dictionary["on"] as? Bool else { return nil }
@@ -178,6 +204,15 @@ enum RemoteCommand: Equatable, Sendable {
         default:
             return nil
         }
+    }
+
+    /// The slate's take number off the wire. Empty — and anything that is not
+    /// a positive whole number — means "not logged", which is a state the page
+    /// can express by clearing the field.
+    private static func slateTake(_ text: String) -> Int {
+        guard let value = Int(text.trimmingCharacters(in: .whitespaces)),
+              value > 0 else { return 0 }
+        return value
     }
 }
 
