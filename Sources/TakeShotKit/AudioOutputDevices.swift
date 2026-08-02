@@ -45,8 +45,10 @@ enum AudioOutputDevices {
         return size > 0
     }
 
-    private static func stringProperty(_ id: AudioObjectID,
-                                       _ selector: AudioObjectPropertySelector) -> String? {
+    /// Internal rather than private: the input-device walk in
+    /// `AudioInputDevices.swift` reads UIDs and names the same way.
+    static func stringProperty(_ id: AudioObjectID,
+                               _ selector: AudioObjectPropertySelector) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,

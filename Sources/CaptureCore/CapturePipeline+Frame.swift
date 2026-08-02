@@ -29,6 +29,10 @@ extension CapturePipeline {
         let vancTrigger = vancTrigger ?? VancParser.recTrigger(in: ancillaryPackets)
         let timecode = resolvedTimecode(rawTimecode, format: format)
         lastTimecode = timecode
+        // external (USB) audio: the frame path owns the stream clock, so it
+        // pins the host→stream anchor and keeps a starving take padded
+        anchorExternalClock(framePTS: pts)
+        padExternalAudioIfNeeded(upTo: pts)
 
         guard let leveled = levelledFrame(from: pixelBuffer, format: format)
         else { return }

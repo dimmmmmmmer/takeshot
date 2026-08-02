@@ -24,6 +24,7 @@ extension CaptureController {
         applyLanguageChange(from: oldValue)
         applyPipelineChange(from: oldValue)
         applyDeviceChange(from: oldValue)
+        applyAudioInputChange(from: oldValue)
         applyNamingChange(from: oldValue)
         applyRemoteChange(from: oldValue)
     }

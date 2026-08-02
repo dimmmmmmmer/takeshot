@@ -28,6 +28,9 @@ extension CapturePipeline {
             self.detector.reset()
             self.preRollBuffer.removeAll()
             self.preRollAudio.removeAll()
+            // the restart resets the stream's PTS timeline, so the external
+            // audio anchor is stale — re-pinned on the next frame
+            self.externalHostAnchor = nil
             DispatchQueue.main.async { self.onFormatChanged?(newFormat) }
         }
     }

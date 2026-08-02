@@ -307,6 +307,16 @@ final class CaptureController: ObservableObject {
     let playbackTap = PlaybackFrameTap()
     /// Live capture audio monitor (renderer to a system output).
     let audioMonitor = AudioMonitor()
+    /// The external (USB) audio source while one is selected and running (see
+    /// +AudioInput); nil — the board's embedded audio feeds the pipeline.
+    var externalAudioSource: ExternalAudioSource?
+    /// Input devices for the Settings picker, refreshed on hot-plug.
+    @Published var audioInputDevices: [AudioInputDeviceInfo] = []
+    /// The pipeline is being fed by the external source right now — what the
+    /// channels panel and Settings state as the live source.
+    @Published var externalAudioActive = false
+    /// The hot-plug watcher is installed once, on first use (see +AudioInput).
+    var audioInputWatchStarted = false
     /// Level to restore when the speaker button un-mutes (see +Audio).
     var monitorVolumeBeforeMute: Double = 1
     /// Channel selection to come back to when the bank key leaves mix-only (see
@@ -411,6 +421,12 @@ final class CaptureController: ObservableObject {
 
     let backend: AggregateBackend
 
+    /// Where input audio devices come from (see +AudioInput). Injected for
+    /// the same reason the backend list is: the real provider enumerates and
+    /// opens the machine's audio hardware, and no headless test may depend on
+    /// what happens to be plugged into the runner.
+    let audioInputs: AudioInputDeviceProviding
+
     /// Where the app's own preferences live. `.standard` in the app; tests hand
     /// in a scratch suite so a headless controller cannot read or overwrite the
     /// operator's real settings (record folder included).
@@ -421,8 +437,10 @@ final class CaptureController: ObservableObject {
     /// hot-plug callback and adopts whatever board is attached to the machine
     /// running the tests, which no headless test can be deterministic against.
     init(backends: [(String, CaptureBackend)]? = nil,
-         defaults: UserDefaults = .standard) {
+         defaults: UserDefaults = .standard,
+         audioInputs: AudioInputDeviceProviding? = nil) {
         self.defaults = defaults
+        self.audioInputs = audioInputs ?? SystemAudioInputProvider()
         let backend = AggregateBackend(children: backends ?? Self.shippingBackends())
         self.backend = backend
 

@@ -234,6 +234,29 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Audio channel mask captured at take start (see handleAudio).
     var recordingMask: Int?
 
+    // MARK: - external (USB) audio source — all queue-confined (see +ExternalAudio)
+
+    /// Which source's packets the audio path admits. The inactive source's
+    /// packets are discarded whole — the two are never mixed.
+    var audioSourceKind: AudioSource = .embedded
+    /// Host→stream clock anchor for external audio, taken on the frame path.
+    var externalHostAnchor: (host: CMTime, stream: CMTime)?
+    /// The external device is known gone; pad the running take with silence.
+    var externalAudioLost = false
+    /// External packets stopped arriving without a disconnect event — the
+    /// starvation watchdog opened the same silence-padding path.
+    var externalAudioStarved = false
+    /// Stream-time end of the last admitted (or padded) external packet while
+    /// a take runs; where the next padding chunk starts.
+    var lastExternalAudioEnd: CMTime?
+    /// Silence packets written to keep the take's audio continuous after the
+    /// external source went away. Per take, reported like dropped audio.
+    var gapFilledAudioPackets = 0
+    var padFormatCache: CMAudioFormatDescription?
+    /// A source switch requested mid-take waits here for the writer to close:
+    /// the take's channel count is latched and must not change under it.
+    var pendingAudioSourceSwitch: (kind: AudioSource, expectedChannels: Int)?
+
     // TC-run onset detection for the mid-take timecode re-anchor.
     var lastWireTimecode: Timecode?
     var frozenTCStreak = 0

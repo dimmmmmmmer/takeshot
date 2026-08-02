@@ -67,8 +67,10 @@ extension CaptureController {
         do {
             try backend.startCapture(deviceID: deviceID)
             // before any audio packet, so a take triggered on frame 1 still gets
-            // an audio track
-            pipeline.setExpectedAudioChannels(backend.embeddedAudioChannels)
+            // an audio track — stated by whichever source is actually feeding
+            pipeline.setExpectedAudioChannels(externalAudioActive
+                ? (externalAudioSource?.channelCount ?? 0)
+                : backend.embeddedAudioChannels)
             isCapturing = true
             lastError = nil
         } catch {

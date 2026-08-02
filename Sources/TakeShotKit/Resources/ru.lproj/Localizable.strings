@@ -156,6 +156,16 @@
 "meters_click_help" = "Аудиоканалы — клик открывает крупную панель с dB и вкл/выкл каналов";
 "playback_output" = "Аудиовыход плейбека";
 "system_default" = "Системный";
+
+/* USB audio input (record-side source) */
+"audio_input_source" = "Аудиовход";
+"audio_input_embedded" = "Встроенный (плата захвата)";
+"audio_input_device_label" = "%@ — %d кан.";
+"audio_input_missing_entry" = "Выбранное устройство не подключено";
+"usb_audio_missing" = "USB-АУДИО недоступно — пишется встроенный звук";
+"usb_audio_disconnected" = "USB-АУДИО отключено — пишется встроенный звук";
+"audio_source_embedded_live" = "Источник: встроенный (плата захвата)";
+"audio_source_usb_live" = "Источник: %@ — %d кан.";
 "fullscreen_playback" = "Плейбек во весь экран (выход — Esc). Зелёная кнопка окна разворачивает всё приложение";
 
 "panel_position" = "Панель дублей";

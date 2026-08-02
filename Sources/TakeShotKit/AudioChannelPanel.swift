@@ -38,6 +38,15 @@ struct AudioChannelPanel: View {
                 }
                 dbScale
             }
+            // whose channels these are: the board's embed or the USB source
+            // (with its honest channel count) — the meters look the same
+            // either way, and mistaking one for the other costs a take's sound
+            Text(controller.audioSourceStatusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: panelWidth)
             // live monitor: toggle + volume (first two enabled channels)
             HStack(spacing: 8) {
                 Button {

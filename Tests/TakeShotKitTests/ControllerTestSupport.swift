@@ -45,6 +45,7 @@ enum ControllerHarness {
     static func run(
         live: Bool = false,
         extraBackends: [(String, CaptureBackend)] = [],
+        audioInputs: FakeAudioInputProvider? = nil,
         configure: (inout CaptureSettings) -> Void = { _ in },
         _ body: (CaptureController, URL) async throws -> Void) async throws {
         let id = UUID().uuidString
@@ -84,9 +85,13 @@ enum ControllerHarness {
         // machine's hardware nor depend on whether any is attached. It stands
         // in for the demo source under the same "mock:" prefix and device ID —
         // see SyntheticSignalBackend for why the real one is not used.
+        // The audio-input provider is ALWAYS a fake for the same reason: the
+        // real one enumerates and opens the machine's audio devices, and no
+        // suite may reach for whatever is plugged into the runner.
         let controller = CaptureController(
             backends: [("mock", SyntheticSignalBackend())] + extraBackends,
-            defaults: defaults)
+            defaults: defaults,
+            audioInputs: audioInputs ?? FakeAudioInputProvider())
         // Belt and braces: a controller that did not get the fixture's folder
         // has to fail here rather than quietly work on the operator's.
         try #require(controller.settings.destinationPath == root.path,
@@ -121,6 +126,8 @@ enum ControllerHarness {
             // rest of the suite. Harmless when the remote was never started.
             controller.stopRemoteServer()
             controller.stopCapture()
+            // a fake USB device keeps its delivery timer otherwise
+            controller.externalAudioSource?.stop()
         }
         if !live { controller.stopCapture() }
         // The kernel folder watcher turns every write into a rescan at an
