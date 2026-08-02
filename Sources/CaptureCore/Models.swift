@@ -322,6 +322,14 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// is xxHash64 now. Kept because it is written back on every run and an old
     /// saved blob still has to decode.
     public var offloadHashAlgorithm: String?
+    /// Offer to offload a card the moment it is mounted; nil — on.
+    ///
+    /// On by default because the OFFER is safe: it is one dismissible line in
+    /// the takes panel and nothing is read, written or started by it. What needs
+    /// the operator's consent is the copying, and that still goes through the
+    /// offload sheet exactly as it always did. Optional so a settings blob saved
+    /// before this field existed still decodes.
+    public var offerMountedCards: Bool?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy

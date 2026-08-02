@@ -653,3 +653,23 @@
 "multiview_title" = "TakeShot Multiview";
 "multiview_rec" = "REC";
 "multiview_wait" = "No video yet";
+
+/* === a card mounted: the offer, which never starts a copy by itself === */
+"card_detected" = "Card detected: %@";
+"card_contents" = "%d files, %@";
+"card_size_gb" = "%.1f GB";
+"card_size_mb" = "%.0f MB";
+"card_reason_structure" = "Camera folder %@ found on it.";
+"card_reason_video" = "A removable disk holding %d video file(s) — check it is the right one.";
+"card_offer_offload" = "Offload";
+"card_offer_offload_help" = "Open the offload sheet with this card as the source. Nothing is copied until you start it.";
+"card_offer_ignore" = "Ignore";
+"card_offer_ignore_help" = "Not now. This card is offered again next time the app starts.";
+"card_offer_never" = "Never";
+"card_offer_never_help" = "Never offer this disk again. Undone in Settings.";
+"settings_offload" = "Offload";
+"offer_mounted_cards" = "Offer to offload mounted cards";
+"offer_mounted_cards_hint" = "A card plugged in raises a dismissible line in the takes panel. Nothing is copied until you start it.";
+"cards_remembered" = "Cards already dealt with";
+"cards_forget" = "Ask again";
+"cards_remembered_hint" = "Cards that were offloaded, and disks answered with Never. One that has been shot on since is offered again.";

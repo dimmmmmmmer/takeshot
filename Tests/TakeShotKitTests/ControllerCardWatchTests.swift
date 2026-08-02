@@ -1,0 +1,476 @@
+import CaptureCore
+import Foundation
+import Testing
+
+@testable import TakeShotKit
+
+/// A card that mounts must ASK, and must never copy itself.
+///
+/// That is the owner's one condition on the whole feature ("авто оффлоад супер,
+/// но должен получить подтверждение от пользователя"), so most of what follows is
+/// about the things that must NOT happen: no copy, no modal, no prompt during a
+/// take, no second ask about a card already dealt with.
+///
+/// Never a real volume. `FakeVolumeWatch` reports synthetic mounts over scratch
+/// directories the tests populate as fake cards — mounting a disk image per test
+/// would need privileges no CI runner has and would leave a volume mounted behind
+/// every failure.
+@Suite @MainActor struct ControllerCardWatchTests {
+    // MARK: - fixtures
+
+    private func scratch(_ name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("takeshot-card-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url,
+                                                withIntermediateDirectories: true)
+        return ControllerFixtures.resolved(url)
+    }
+
+    /// A card as a camera leaves it: a DCIM tree with two clips in it.
+    private func makeCard(_ name: String) throws -> URL {
+        let root = try scratch(name)
+        let dcim = root.appendingPathComponent("DCIM/100CANON")
+        try FileManager.default.createDirectory(at: dcim,
+                                                withIntermediateDirectories: true)
+        try Data(repeating: 7, count: 2048)
+            .write(to: dcim.appendingPathComponent("A001C001.MOV"))
+        try Data(repeating: 9, count: 1024)
+            .write(to: dcim.appendingPathComponent("A001C002.MOV"))
+        return root
+    }
+
+    /// How many bytes are under a folder — the assertion that nothing was copied
+    /// is made against this, not against a flag.
+    private func fileCount(under root: URL) -> Int {
+        let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.isRegularFileKey])
+        var count = 0
+        for case let url as URL in enumerator ?? .init() {
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            if values?.isRegularFile == true { count += 1 }
+        }
+        return count
+    }
+
+    /// The controller under test, with a fake volume watch wired into it. The
+    /// harness has already pointed the ledger at scratch — the real one lives in
+    /// the operator's Application Support and decides which cards they get asked
+    /// about at all.
+    private func withWatch(
+        configure: @escaping (inout CaptureSettings) -> Void = { _ in },
+        _ body: (CaptureController, FakeVolumeWatch) async throws -> Void)
+        async throws {
+        let watch = FakeVolumeWatch()
+        try await ControllerHarness.run(volumeWatch: watch,
+                                        configure: configure) { controller, _ in
+            try await body(controller, watch)
+        }
+    }
+
+    /// Wait for the mount scan, which runs off the MainActor on purpose: a full
+    /// card is a few hundred milliseconds of metadata I/O and the window must not
+    /// stall for it.
+    @discardableResult
+    private func waitForOffer(_ controller: CaptureController) async -> Bool {
+        await ControllerWait.until { controller.cardOffer != nil }
+    }
+
+    // MARK: - the rule: ask, never copy
+
+    @Test func aMountedCardRaisesAPromptAndCopiesNothing() async throws {
+        let card = try makeCard("ask")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            let before = self.fileCount(under: card)
+
+            watch.mount(card, name: "A001")
+
+            #expect(await self.waitForOffer(controller))
+            let offer = try #require(controller.cardOffer)
+            #expect(offer.files == 2)
+            #expect(offer.bytes == 3072)
+            #expect(offer.evidence == .cameraStructure("DCIM"))
+            // …and the whole point: no run, no sheet, nothing written anywhere.
+            #expect(!controller.offload.isRunning)
+            #expect(!controller.offloadSheetPresented)
+            #expect(controller.offload.source == nil)
+            #expect(controller.offloadStatus == nil)
+            #expect(self.fileCount(under: card) == before,
+                    "the card was written to by a prompt")
+        }
+    }
+
+    /// Accepting opens the ordinary sheet with the card in the source slot. The
+    /// destinations stay the operator's — the app never guesses where footage
+    /// lands.
+    @Test func acceptingOpensTheSheetPreFilledWithThatCard() async throws {
+        let card = try makeCard("accept")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+
+            controller.acceptCardOffer()
+
+            #expect(controller.offloadSheetPresented)
+            #expect(controller.offload.source == card)
+            #expect(controller.cardOffer == nil)
+            #expect(!controller.offload.isRunning, "it started copying by itself")
+        }
+    }
+
+    @Test func ignoreDismissesTheCardForThisSessionOnly() async throws {
+        let card = try makeCard("ignore")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+
+            controller.ignoreCardOffer()
+            #expect(controller.cardOffer == nil)
+
+            // the same card, plugged in again during this session
+            watch.mount(card, name: "A001")
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+            // …and nothing was written down, so the next launch asks again
+            #expect(controller.offloadedCards.cards.isEmpty)
+        }
+    }
+
+    /// Never is the persistent one, and it holds whatever gets shot onto the card
+    /// afterwards.
+    @Test func neverSilencesTheCardForGood() async throws {
+        let card = try makeCard("never")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+            let key = try #require(controller.cardOffer?.key)
+
+            controller.neverOfferCardAgain()
+
+            let record = try #require(controller.offloadedCards.record(for: key))
+            #expect(record.suppressed)
+            #expect(record.fingerprint == nil, "a Never must not depend on content")
+            // it survives a relaunch: a fresh ledger over the same file
+            let reloaded = OffloadedCardLedger()
+            reloaded.fileURL = controller.offloadedCards.fileURL
+            #expect(reloaded.record(for: key)?.suppressed == true)
+            // …and even with new footage on it, the card stays quiet
+            try Data(repeating: 3, count: 4096).write(
+                to: card.appendingPathComponent("DCIM/100CANON/A001C003.MOV"))
+            watch.mount(card, name: "A001")
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+        }
+    }
+
+    // MARK: - never re-offer, but notice new footage
+
+    @Test func anOffloadedCardIsNotOfferedAgain() async throws {
+        let card = try makeCard("settled")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+            let candidate = try #require(controller.cardOffer)
+            controller.offloadedCards.markOffloaded(candidate)
+            controller.cardOffer = nil
+
+            watch.mount(card, name: "A001")
+
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+        }
+    }
+
+    /// …but a card that has been shot on since IS offered again. That is the
+    /// whole reason the ledger stores a fingerprint beside the key.
+    @Test func theSameCardWithOneMoreFileIsOfferedAgain() async throws {
+        let card = try makeCard("grown")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+            controller.offloadedCards.markOffloaded(try #require(controller.cardOffer))
+            controller.cardOffer = nil
+
+            try Data(repeating: 5, count: 512).write(
+                to: card.appendingPathComponent("DCIM/100CANON/A001C003.MOV"))
+            watch.mount(card, name: "A001")
+
+            #expect(await self.waitForOffer(controller))
+            #expect(controller.cardOffer?.files == 3)
+        }
+    }
+
+    /// Only a run that verified end to end settles a card. A stopped or broken
+    /// one leaves it exactly as unasked-about as it was — that card is precisely
+    /// the one nobody should assume is copied.
+    @Test func onlyAVerifiedRunSettlesTheCard() async throws {
+        let card = try makeCard("verified")
+        let destination = try scratch("verified-dst")
+        defer {
+            try? FileManager.default.removeItem(at: card)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+            let key = try #require(controller.cardOffer?.key)
+            controller.acceptCardOffer()
+            controller.offload.addDestination(destination)
+
+            controller.offload.start()
+            #expect(await ControllerWait.untilWritten {
+                controller.offload.report != nil
+            })
+
+            #expect(try #require(controller.offload.report).isFullyVerified)
+            #expect(controller.offloadedCards.record(for: key)?.suppressed == false)
+            #expect(controller.offloadedCards.record(for: key)?.fingerprint
+                == CardFingerprint(files: 2, bytes: 3072))
+        }
+    }
+
+    // MARK: - never during a take
+
+    @Test func aMountDuringRecordingWaitsForTheTakeToClose() async throws {
+        let card = try makeCard("mid-take")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            controller.isRecording = true
+
+            watch.mount(card, name: "A001")
+            // give the scan every chance to land while the take is still open
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+            #expect(await ControllerWait.until {
+                !controller.deferredCardOffers.isEmpty
+            }, "the card was dropped instead of queued")
+
+            controller.isRecording = false
+            controller.drainDeferredCardOffers()
+
+            #expect(controller.cardOffer != nil)
+            #expect(controller.deferredCardOffers.isEmpty)
+        }
+    }
+
+    // MARK: - volumes that are never cards
+
+    @Test func theBootVolumeNeverPrompts() async throws {
+        try await withWatch { controller, watch in
+            watch.mount(URL(fileURLWithPath: "/"), name: "Macintosh HD")
+
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+        }
+    }
+
+    /// The app's own destination disk: offering to copy a card OFF the disk the
+    /// copies land on is the one wrong guess that costs more than a click.
+    @Test func theDestinationVolumeNeverPrompts() async throws {
+        let card = try makeCard("own-disk")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            // as if the record folder were a folder on this very volume
+            controller.settings.destinationPath =
+                card.appendingPathComponent("Dailies").path
+            #expect(controller.isExcludedVolume(
+                MountedVolume(url: card, name: "A001")))
+
+            watch.mount(card, name: "A001")
+
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+        }
+    }
+
+    @Test func aSavedOffloadDestinationNeverPrompts() async throws {
+        let card = try makeCard("saved-dst")
+        defer { try? FileManager.default.removeItem(at: card) }
+        let rig: (inout CaptureSettings) -> Void = { [card] in
+            $0.offloadDestinationPaths = [card.appendingPathComponent("DIT").path]
+        }
+        try await withWatch(configure: rig) { controller, watch in
+            #expect(controller.isExcludedVolume(
+                MountedVolume(url: card, name: "DAILIES_SSD")))
+            watch.mount(card, name: "DAILIES_SSD")
+
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+        }
+    }
+
+    // MARK: - the setting
+
+    @Test func theToggleOffSuppressesEverything() async throws {
+        let card = try makeCard("off")
+        defer { try? FileManager.default.removeItem(at: card) }
+        let off: (inout CaptureSettings) -> Void = { $0.offerMountedCards = false }
+        try await withWatch(configure: off) { controller, watch in
+            #expect(!controller.offersMountedCards)
+            #expect(!watch.isRunning, "the observers were installed anyway")
+
+            watch.mount(card, name: "A001")
+
+            #expect(!(await ControllerWait.until(
+                { controller.cardOffer != nil }, timeout: .seconds(2))))
+            #expect(controller.deferredCardOffers.isEmpty)
+        }
+    }
+
+    /// Turning it off mid-session takes the observers down and clears whatever is
+    /// already on screen — a switch that leaves the last prompt up has not been
+    /// turned off as far as the operator is concerned.
+    @Test func turningTheToggleOffClearsAPromptAlreadyUp() async throws {
+        let card = try makeCard("toggle")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+            #expect(watch.isRunning)
+
+            controller.settings.offerMountedCards = false
+
+            #expect(controller.cardOffer == nil)
+            #expect(!watch.isRunning)
+        }
+    }
+
+    // MARK: - unmount
+
+    @Test func pullingTheCardTakesItsPromptWithIt() async throws {
+        let card = try makeCard("pulled")
+        defer { try? FileManager.default.removeItem(at: card) }
+        try await withWatch { controller, watch in
+            watch.mount(card, name: "A001")
+            #expect(await self.waitForOffer(controller))
+
+            watch.unmount(card)
+
+            #expect(controller.cardOffer == nil)
+        }
+    }
+}
+
+/// Recognition on its own: what counts as camera media and what does not.
+@Suite struct CardScanTests {
+    private func scratch(_ name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("takeshot-scan-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url,
+                                                withIntermediateDirectories: true)
+        return url
+    }
+
+    private func write(_ name: String, in root: URL, bytes: Int = 16) throws {
+        let url = root.appendingPathComponent(name)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: 1, count: bytes).write(to: url)
+    }
+
+    /// Every layout a DIT actually meets. A structure match is the strong signal
+    /// — nothing but a camera writes `XDROOT`.
+    @Test(arguments: ["DCIM/A/x.mov", "XDROOT/Clip/x.mxf", "BPAV/x.mp4",
+                      "M4ROOT/CLIP/x.mxf", "CLIPS/x.braw", "CONTENTS/VIDEO/x.mxf",
+                      "PRIVATE/AVCHD/BDMV/STREAM/x.mts"])
+    func aKnownCameraLayoutIsRecognised(path: String) throws {
+        let root = try scratch("layout")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write(path, in: root)
+
+        let card = try #require(CardScan.inspect(
+            MountedVolume(url: root, name: "CARD")))
+        guard case .cameraStructure = card.evidence else {
+            Issue.record("recognised as \(card.evidence), not a camera layout")
+            return
+        }
+        #expect(card.files == 1)
+    }
+
+    /// `PRIVATE` alone proves nothing — plenty of ordinary disks have one, and
+    /// only what is INSIDE it makes it a camcorder card.
+    @Test func abarePrivateFolderIsNotACard() throws {
+        let root = try scratch("private")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("PRIVATE/notes.txt", in: root)
+
+        #expect(CardScan.inspect(MountedVolume(url: root, name: "STICK")) == nil)
+    }
+
+    /// A USB stick with a couple of MP4s is a maybe: offered, with the reason
+    /// saying exactly why so the operator can judge.
+    @Test func aRemovableDiskWithVideoIsAMaybe() throws {
+        let root = try scratch("stick")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("holiday.mp4", in: root)
+        try write("notes.txt", in: root)
+
+        let card = try #require(CardScan.inspect(MountedVolume(
+            url: root, name: "USB", isRemovable: true)))
+        #expect(card.evidence == .detachableVideo(1))
+        #expect(card.files == 2, "the fingerprint must cover the whole card")
+    }
+
+    /// …and the same files on a disk that cannot be unplugged are not a card at
+    /// all. An internal scratch disk full of MP4s must never prompt.
+    @Test func videoOnAFixedDiskIsNotACard() throws {
+        let root = try scratch("fixed")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("holiday.mp4", in: root)
+
+        #expect(CardScan.inspect(MountedVolume(url: root, name: "SCRATCH")) == nil)
+    }
+
+    /// A Time Machine disk is a no, even though it is removable and full of
+    /// files. So is a disk that already holds offloads — that is a DESTINATION.
+    @Test(arguments: ["Backups.backupdb/x", ".com.apple.timemachine.supported",
+                      "ascmhl/x.mhl"])
+    func aBackupOrDestinationDiskIsRefused(marker: String) throws {
+        let root = try scratch("refused")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write(marker, in: root)
+        try write("DCIM/A/x.mov", in: root)
+
+        #expect(CardScan.inspect(MountedVolume(
+            url: root, name: "TM", isRemovable: true)) == nil)
+    }
+
+    /// A freshly formatted card has the structure and nothing to copy.
+    @Test func anEmptyCardIsNotOffered() throws {
+        let root = try scratch("empty")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("DCIM"),
+            withIntermediateDirectories: true)
+
+        #expect(CardScan.inspect(MountedVolume(
+            url: root, name: "BLANK", isRemovable: true)) == nil)
+    }
+
+    @Test func aNetworkShareIsNeverWalked() throws {
+        let root = try scratch("share")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("DCIM/A/x.mov", in: root)
+
+        #expect(CardScan.inspect(MountedVolume(
+            url: root, name: "NAS", isLocal: false)) == nil)
+    }
+
+    /// The volume UUID is the identity when there is one: the same card in a
+    /// different reader mounts at a different path and is still that card.
+    @Test func theKeyPrefersTheVolumeUUID() throws {
+        let root = try scratch("key")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("DCIM/A/x.mov", in: root)
+        let volume = MountedVolume(url: root, name: "CARD", uuid: "UUID-1")
+
+        #expect(try #require(CardScan.inspect(volume)).key == "UUID-1")
+        #expect(try #require(CardScan.inspect(
+            MountedVolume(url: root, name: "CARD"))).key == root.standardized.path)
+    }
+}

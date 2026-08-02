@@ -64,6 +64,9 @@ extension CaptureController {
         refreshNameCollision() // start hides it, stop recomputes
         // multicam: the other cameras in sync with the main one
         for channel in extraChannels { channel.setRecording(recording) }
+        // A card that mounted mid-take waited for this moment rather than
+        // putting a prompt on screen during it (see +CardWatch).
+        if !recording { drainDeferredCardOffers() }
     }
     /// A finalized take joins the list, the log and the thumbnail queue.
     private func adoptFinishedTake(_ take: Take) {

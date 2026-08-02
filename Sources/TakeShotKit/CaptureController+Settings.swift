@@ -26,6 +26,7 @@ extension CaptureController {
         applyDeviceChange(from: oldValue)
         applyNamingChange(from: oldValue)
         applyRemoteChange(from: oldValue)
+        applyCardWatchChange(from: oldValue)
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.

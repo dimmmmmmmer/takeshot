@@ -21,6 +21,14 @@ struct TakesPanelUtilityStrip: View {
     var body: some View {
         VStack(spacing: 6) {
             buttons
+            // A card that has just been plugged in, asking. Above the running
+            // job rather than below it: it is a question waiting on an answer,
+            // and the readout under it is a job that needs none. Conditional
+            // here for the same reason the status strip is — an app with no
+            // card waiting pays nothing for it.
+            if let card = controller.cardOffer {
+                CardOfferBanner(card: card)
+            }
             // The live run, when there is one (see OffloadStatusStrip). Under
             // the buttons rather than beside them: it is three lines of text
             // and a bar, and the row above is icons. Its lines keep their own

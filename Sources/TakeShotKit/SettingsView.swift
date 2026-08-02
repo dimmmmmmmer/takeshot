@@ -195,6 +195,7 @@ struct SettingsView: View {
                         controller.settings.preRollSeconds = nil
                     }), range: 0...100)
             }
+            OffloadSettingsSection(ledger: controller.offloadedCards)
             RemoteSettingsSection()
             Section(L("settings_hotkeys")) {
                 ForEach(HotkeyAction.allCases) { action in

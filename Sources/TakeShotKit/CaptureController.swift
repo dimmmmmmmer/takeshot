@@ -138,6 +138,32 @@ final class CaptureController: ObservableObject {
     /// to it without the sheet being on screen at all.
     let offloadHistory = OffloadHistoryStore()
 
+    // MARK: - cards that mount while the app is running (see +CardWatch)
+
+    /// The card the operator is being ASKED about. Never a card being copied:
+    /// a mount starts nothing on its own, and this is the whole feature — the
+    /// owner's one condition on it was that a card must never begin copying
+    /// itself.
+    @Published var cardOffer: CardCandidate?
+    /// Cards that mounted mid-take. Nothing may contend with a take, so the
+    /// prompt waits here and goes up when the take closes.
+    var deferredCardOffers: [CardCandidate] = []
+    /// Cards dismissed with Ignore. This session only, deliberately: Ignore
+    /// means "not now", and the operator who plugs the card back in tomorrow is
+    /// asking a different question. "Never" is the persistent one (see
+    /// `offloadedCards`).
+    var ignoredCardKeys: Set<String> = []
+    /// Every card seen this session, by mount path — how a finished run is
+    /// matched back to the card it copied.
+    var seenCards: [String: CardCandidate] = [:]
+    /// Which cards must not be asked about again, across launches.
+    let offloadedCards = OffloadedCardLedger()
+    /// Where mount/unmount events come from. Injected for the same reason the
+    /// backend list is: the real one installs process-wide NSWorkspace
+    /// observers, and no test may depend on what is plugged into the machine
+    /// running it.
+    let volumeWatch: VolumeWatching
+
     /// The verify-against-manifest sheet is up.
     @Published var verifySheetPresented = false
     /// Re-reading a disk that was offloaded earlier against the ASC MHL
@@ -403,8 +429,10 @@ final class CaptureController: ObservableObject {
     /// hot-plug callback and adopts whatever board is attached to the machine
     /// running the tests, which no headless test can be deterministic against.
     init(backends: [(String, CaptureBackend)]? = nil,
-         defaults: UserDefaults = .standard) {
+         defaults: UserDefaults = .standard,
+         volumeWatch: VolumeWatching? = nil) {
         self.defaults = defaults
+        self.volumeWatch = volumeWatch ?? WorkspaceVolumeWatch()
         let backend = AggregateBackend(children: backends ?? Self.shippingBackends())
         self.backend = backend
 

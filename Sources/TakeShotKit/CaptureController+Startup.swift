@@ -87,6 +87,20 @@ extension CaptureController {
         rebuildLUT()
         rebuildPlayout()
         startDiskWatch()
+        startOffloadSide()
+        // The web remote comes back up if the operator left it on — a director
+        // holding the phone from yesterday should not have to be told to go and
+        // find the laptop after a relaunch. Off by default; nothing binds a port
+        // until it is switched on once.
+        startRemoteIfEnabled()
+    }
+
+    /// Everything the DIT side needs standing before a window exists.
+    ///
+    /// One call rather than four lines in `completeStartup`: the three stores
+    /// and the watch are one subsystem, and the startup function is a list of
+    /// subsystems.
+    private func startOffloadSide() {
         // The offload model reports back through the controller (status line,
         // toast, sticky alarm), so it is wired for the controller's lifetime and
         // not at the moment the sheet happens to open.
@@ -96,11 +110,10 @@ extension CaptureController {
         // sheet has to be able to show it the instant it opens, and a run can
         // append to it while the sheet has never been on screen.
         offloadHistory.load()
-        // The web remote comes back up if the operator left it on — a director
-        // holding the phone from yesterday should not have to be told to go and
-        // find the laptop after a relaunch. Off by default; nothing binds a port
-        // until it is switched on once.
-        startRemoteIfEnabled()
+        // …and the watch for cards mounted from here on. No initial enumeration
+        // on purpose: only a volume that appears while the app is running is
+        // ever asked about (see `WorkspaceVolumeWatch`).
+        startCardWatch()
     }
 
     /// The compare mode and its gain come back like every other working
