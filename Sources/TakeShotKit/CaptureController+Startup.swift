@@ -87,20 +87,28 @@ extension CaptureController {
         rebuildLUT()
         rebuildPlayout()
         startDiskWatch()
-        // The offload model reports back through the controller (status line,
-        // toast, sticky alarm), so it is wired for the controller's lifetime and
-        // not at the moment the sheet happens to open.
-        offload.attach(to: self)
-        verify.attach(to: self)
-        // …and what was offloaded before this launch, for the same reason: the
-        // sheet has to be able to show it the instant it opens, and a run can
-        // append to it while the sheet has never been on screen.
-        offloadHistory.load()
+        attachBackgroundJobModels()
         // The web remote comes back up if the operator left it on — a director
         // holding the phone from yesterday should not have to be told to go and
         // find the laptop after a relaunch. Off by default; nothing binds a port
         // until it is switched on once.
         startRemoteIfEnabled()
+    }
+
+    /// The long-running-job models (offload, verify, dailies), wired for the
+    /// controller's lifetime rather than when a sheet happens to open: each
+    /// reports back through the controller (status line, toast, sticky
+    /// alarm), and one started any other way would run perfectly silently.
+    /// The dailies queue has one reason more — the REC state has to reach it
+    /// (recording pauses the queue) with no sheet on screen at all.
+    private func attachBackgroundJobModels() {
+        offload.attach(to: self)
+        verify.attach(to: self)
+        dailies.attach(to: self)
+        // …and what was offloaded before this launch, for the same reason: the
+        // sheet has to be able to show it the instant it opens, and a run can
+        // append to it while the sheet has never been on screen.
+        offloadHistory.load()
     }
 
     /// The compare mode and its gain come back like every other working

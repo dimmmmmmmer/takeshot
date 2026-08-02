@@ -118,6 +118,13 @@ private struct TakesSection: View {
                         Button(L("export_contact_pdf")) {
                             controller.exportContactSheet()
                         }
+                        Divider()
+                        // Dailies IS here, unlike the offload below: it is an
+                        // export OF takes, so "disabled while there are no
+                        // takes" is exactly right for it.
+                        Button(L("dailies_menu")) {
+                            controller.showDailiesSheet()
+                        }
                         // Offload is NOT here: it copies an arbitrary card and
                         // has nothing to do with takes, so a menu disabled by
                         // "no takes yet" made card offload unreachable exactly

@@ -1,0 +1,173 @@
+import CaptureCore
+import Foundation
+
+/// State of the dailies sheet, and the queue it drives.
+///
+/// Owned by the controller rather than by the view, like `OffloadSheetModel`
+/// and for the same reasons: the run outlives any render of the sheet, the
+/// takes-panel status strip reads from it, and the REC state has to reach a
+/// running queue whether the sheet is on screen or not. File panels stay out
+/// of it so everything engine-facing is reachable from a test.
+@MainActor
+final class DailiesQueueModel: ObservableObject {
+    // The burn-in switches, seeded from settings and written back on Start.
+    @Published var burnTimecode = true
+    @Published var burnClipName = true
+    @Published var burnProject = true
+    @Published var burnDate = false
+    @Published var customText = ""
+    /// Where the dailies land. Defaults to a Dailies folder beside the takes.
+    @Published var destination: URL?
+    /// What Start will queue, in take order. Seeded by the controller from
+    /// the panel selection (or the whole day) when the sheet opens.
+    @Published var queuedTakes: [Take] = []
+    /// Live state of the run; nil when nothing is running.
+    @Published var progress: DailiesProgress?
+    /// The last finished run — the sheet's result panel.
+    @Published var report: DailiesReport?
+    @Published var isRunning = false
+    /// Stop has been pressed: the frame in hand finishes, then the run ends.
+    @Published var isCancelling = false
+
+    private var control: DailiesControl?
+    private weak var controller: CaptureController?
+
+    /// Wired once, in startup, rather than when the sheet opens — a queue
+    /// reports through the controller (status line, toast) and must not run
+    /// silently if it is ever started another way. Same contract as the
+    /// offload model's `attach`.
+    func attach(to controller: CaptureController) {
+        self.controller = controller
+    }
+
+    /// Seed the sheet from the operator's saved convention and clear the
+    /// previous run's result — a stale "done" card over a fresh batch reads
+    /// as that batch being finished.
+    func prepare(takes: [Take], settings: CaptureSettings, defaultFolder: URL) {
+        if !isRunning {
+            progress = nil
+            report = nil
+            isCancelling = false
+            queuedTakes = takes
+        }
+        burnTimecode = settings.dailiesBurnTimecode ?? true
+        burnClipName = settings.dailiesBurnClipName ?? true
+        burnProject = settings.dailiesBurnProject ?? true
+        burnDate = settings.dailiesBurnDate ?? false
+        customText = settings.dailiesCustomText ?? ""
+        destination = settings.dailiesDestinationPath
+            .map { URL(fileURLWithPath: $0) } ?? defaultFolder
+    }
+
+    var canStart: Bool {
+        !isRunning && !queuedTakes.isEmpty && destination != nil
+    }
+
+    var burnins: DailiesBurnins {
+        DailiesBurnins(
+            timecode: burnTimecode, clipName: burnClipName,
+            project: burnProject, date: burnDate,
+            customText: customText.trimmingCharacters(in: .whitespaces))
+    }
+
+    // MARK: - the run
+
+    func start() {
+        guard canStart, let destination, let controller else { return }
+        let items = queuedTakes.map {
+            Self.item(for: $0, settings: controller.settings)
+        }
+        let token = DailiesControl()
+        // Recording protection from the first frame: a queue started while a
+        // take is rolling opens already paused and waits its turn.
+        token.setPaused(controller.isRecording)
+        control = token
+        isRunning = true
+        isCancelling = false
+        progress = nil
+        report = nil
+        controller.rememberDailiesChoices(from: self)
+        controller.dailiesStatus = L("dailies_status", 0, items.count)
+        let burnins = burnins
+        // Utility priority, off the main actor: the encode must never compete
+        // with the capture path for the machine (the pause gate guards the
+        // disk and encoder; this guards the CPU).
+        Task.detached(priority: .utility) { [weak self] in
+            let result = await DailiesEngine.run(
+                items: items, burnins: burnins, into: destination,
+                control: token) { snapshot in
+                // FIFO onto the main queue, like the offload's progress: a
+                // Task per snapshot could land out of order.
+                DispatchQueue.main.async { self?.apply(snapshot) }
+            }
+            DispatchQueue.main.async { self?.finish(result) }
+        }
+    }
+
+    /// Stop the whole queue. The frame in hand finishes and the partial
+    /// output is deleted; items not reached are reported as cancelled.
+    func cancel() {
+        guard isRunning else { return }
+        control?.cancel()
+        isCancelling = true
+        controller?.dailiesStatus = L("dailies_cancelling")
+    }
+
+    /// Skip the item in flight; the next one starts. Index-keyed so a skip
+    /// pressed as an item finishes cannot spill onto the next.
+    func skipCurrentItem() {
+        guard isRunning, let index = progress?.itemIndex else { return }
+        control?.skip(item: index)
+    }
+
+    /// The REC gate, called from the controller's recording state: the queue
+    /// holds while a take rolls and resumes when it ends.
+    func recordingStateChanged(_ recording: Bool) {
+        control?.setPaused(recording)
+    }
+
+    // MARK: - what the engine is told about one take
+
+    /// A take as a queue item: the file, the `<name>_DAILY` output, and the
+    /// burn-in facts composed from the settings that own them.
+    static func item(for take: Take, settings: CaptureSettings) -> DailiesItem {
+        let cameraRoll = take.roll.isEmpty
+            ? settings.cameraLabel : settings.cameraLabel + take.roll
+        let projectLine = [settings.projectName, cameraRoll]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+        // ISO date, POSIX locale: a burn-in is read by post in another
+        // country, and "03/04" means two different days to two of them.
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyyy-MM-dd"
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        return DailiesItem(
+            source: take.url,
+            outputName: take.displayName + "_DAILY",
+            clipName: take.displayName,
+            projectLine: projectLine,
+            dateText: stamp.string(from: take.recordedAt),
+            startTimecode: take.startTimecode)
+    }
+
+    // MARK: - what the run reports back
+
+    private func apply(_ snapshot: DailiesProgress) {
+        guard isRunning else { return }
+        progress = snapshot
+        guard !isCancelling else { return }
+        controller?.dailiesStatus = snapshot.isPaused
+            ? L("dailies_paused_rec")
+            : L("dailies_status", min(snapshot.itemIndex + 1,
+                                      snapshot.itemCount),
+                snapshot.itemCount)
+    }
+
+    private func finish(_ result: DailiesReport) {
+        isRunning = false
+        isCancelling = false
+        progress = nil
+        report = result
+        control = nil
+        controller?.dailiesDidFinish(result)
+    }
+}

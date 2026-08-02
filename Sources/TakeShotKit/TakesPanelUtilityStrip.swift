@@ -32,6 +32,13 @@ struct TakesPanelUtilityStrip: View {
                 OffloadStatusStrip(status: status, offload: controller.offload,
                                    verify: controller.verify)
             }
+            // The dailies queue, when one is running — its own strip rather
+            // than a shared one because dailies and an offload legitimately
+            // run at once, and one readout flickering between two jobs says
+            // nothing about either.
+            if let status = controller.dailiesStatus {
+                DailiesStatusStrip(status: status, dailies: controller.dailies)
+            }
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)

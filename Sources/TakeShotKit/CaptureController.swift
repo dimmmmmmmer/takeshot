@@ -138,6 +138,20 @@ final class CaptureController: ObservableObject {
     /// to it without the sheet being on screen at all.
     let offloadHistory = OffloadHistoryStore()
 
+    // MARK: - dailies (see +Dailies)
+
+    /// One-line dailies status for the takes panel ("Dailies 2/14"); nil when
+    /// nothing is running. Separate from `offloadStatus` because the two jobs
+    /// are independent and can legitimately run at once.
+    @Published var dailiesStatus: String?
+    /// The dailies sheet is up.
+    @Published var dailiesSheetPresented = false
+    /// Burn-in choices, the batch and the running transcode queue. Owned here
+    /// for the offload model's reasons: the run outlives the sheet, the panel
+    /// strip reads its status — and the RECORDING state has to reach it
+    /// whether the sheet is on screen or not (see `handleRecState`).
+    let dailies = DailiesQueueModel()
+
     /// The verify-against-manifest sheet is up.
     @Published var verifySheetPresented = false
     /// Re-reading a disk that was offloaded earlier against the ASC MHL
