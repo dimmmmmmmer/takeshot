@@ -2,6 +2,11 @@ import AVFoundation
 import CaptureCore
 import SwiftUI
 
+/// What a TC readout shows when there is no timecode to show. One string for
+/// the player badge, the multicam tiles and the slate — "no signal" has to
+/// read the same on every readout.
+let timecodeFallbackText = "--:--:--:--"
+
 /// TC readout that updates every frame — isolated so only this text
 /// re-renders at frame rate (see LiveSignal). Internal, not private: the badge
 /// that hosts it lives in `PlayerBadgeMenus.swift`.
@@ -10,7 +15,7 @@ struct LiveTimecodeText: View {
     let tint: Color
 
     var body: some View {
-        Text(live.currentTimecode?.description ?? "--:--:--:--")
+        Text(live.currentTimecode?.description ?? timecodeFallbackText)
             .font(.body)
             .monospacedDigit()
             .foregroundStyle(tint)

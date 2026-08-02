@@ -234,6 +234,7 @@ private struct ViewCommands: View {
             // twice the analysis for one pair of eyes
             controller.showScopesOverlay = false
         }
+        Button(L("menu_slate")) { openWindow(id: "slate") }
 
         Divider()
 
