@@ -170,37 +170,105 @@ struct ScopeWireTests {
         #expect(abs(spanRatio - 1) < 0.2, "the spans differ: \(spanRatio)")
     }
 
-    /// The map is tall enough for the signal it now carries. A 256-row map
-    /// quantizes a 10-bit code straight back to 8 bits and the tap buys
-    /// nothing, so this is not a style preference.
-    @Test func theTraceMapIsTallEnoughForTenBits() {
-        #expect(ScopeData.waveHeight >= 512)
-        #expect(ScopeData.waveWidth == 512)
+    /// The same, for one of the parade's channel maps.
+    private func traceSteps(_ bytes: [UInt8]) -> Int {
+        let width = ScopeData.waveWidth
+        var heights: Set<Int> = []
+        for col in 0..<width {
+            let top = (0..<ScopeData.waveHeight).first {
+                bytes[$0 * width + col] > 0
+            }
+            if let top { heights.insert(top) }
+        }
+        return heights.count
     }
 
-    /// The 1-2-1 softening survived being folded into the integration sweep.
+    /// The waveform and the parade are the SAME measurement.
+    ///
+    /// The owner reported the parade as excellent and the waveform, beside it,
+    /// as thick and hazy. This is the half of that which is not true: on a
+    /// neutral signal the luma map and all three channel maps resolve the same
+    /// steps over the same rows, because one accumulator writes all four in one
+    /// pass. Whatever the two scopes look like, they cannot be looking at
+    /// different data — which is what sent the fix to the drawing side.
+    @Test func theWaveformAndTheParadeAreTheSameMeasurement() throws {
+        let width = 320
+        let ramp = { (x: Int) in 300 + x * 400 / (width - 1) }
+        let data = try #require(ScopeAnalyzer.analyze(
+            try r210(width: width) { ramp($0) }, wireLevels: .limited))
+        let luma = traceSteps(data)
+        for (name, map) in [("R", data.waveformR), ("G", data.waveformG),
+                            ("B", data.waveformB)] {
+            #expect(traceSteps(map) == luma,
+                    "\(name) resolves \(traceSteps(map)) steps, luma \(luma)")
+        }
+        #expect(luma > 100, "a 400-code ramp resolved only \(luma) steps")
+    }
+
+    /// The map is wide enough that a waveform is not stretched across the box
+    /// it is drawn in.
+    ///
+    /// A parade squeezes the whole map into a third of its box and is always
+    /// downscaling. A waveform draws one map across all of it, so the map's
+    /// width has to cover the box in DEVICE pixels or the interpolator invents
+    /// the difference — which is what the thick hazy trace was. The scopes
+    /// window opens at 980 pt and puts two scopes side by side, leaving 472 pt
+    /// of canvas each; on the 2x display the operator is looking at that is 944
+    /// pixels.
+    @Test func aFullWidthWaveformGetsAMapColumnPerDevicePixel() {
+        let canvasPoints = 472.0
+        let retinaScale = 2.0
+        let devicePixels = canvasPoints * retinaScale
+        #expect(Double(ScopeData.waveWidth) >= devicePixels,
+                "\(ScopeData.waveWidth) columns across \(devicePixels) pixels")
+    }
+
+    /// The map is tall enough for the signal it now carries, and wide enough
+    /// for the box it is drawn in.
+    ///
+    /// Neither number is a style preference. A 256-row map quantizes a 10-bit
+    /// code straight back to 8 bits and the tap buys nothing. And 512 columns
+    /// is a downscale in a parade, which draws the map three times across a
+    /// box, but a two-to-fourfold STRETCH in a waveform, which draws it once —
+    /// same data, and the operator reported the waveform as thick and hazy
+    /// beside a parade he was happy with. See `ScopeData.waveWidth`.
+    @Test func theTraceMapIsTallEnoughForTenBitsAndWideEnoughForTheBox() {
+        #expect(ScopeData.waveHeight >= 512)
+        #expect(ScopeData.waveWidth == 2 * ScopeData.waveHeight)
+    }
+
+    /// The softening is vertical, 1-2-1, and there is no horizontal half.
     ///
     /// The accumulator used to integrate each difference map and then blur it
-    /// twice — three passes over a megabyte, and doubling the map's height
-    /// doubled all three. It is one sweep now, on the algebra that the vertical
-    /// blur of a prefix sum is `4·I[y] − d[y] + d[y+1]` and that the horizontal
-    /// half only needs the row it is already holding. "Same picture, exactly"
-    /// is the claim that makes the fusion legitimate, so here it is as numbers:
-    /// a flat frame puts its whole trace on one row, and the map has to read
-    /// 1:2:1 down the three rows around it.
-    @Test func theSofteningIsStillOneTwoOne() throws {
+    /// twice. The vertical blur folds into the integration for free — the blur
+    /// of a prefix sum is `4·I[y] − d[y] + d[y+1]`, and both differences are
+    /// already in hand. The horizontal one does not fold, and it was doing no
+    /// work: a sample's segment reaches back to its left-hand neighbour's
+    /// value, so every column of every grid row is written and there are no
+    /// horizontal gaps to close. All it did was widen the trace by a column
+    /// each way — invisible in a parade, the dominant blur in a waveform.
+    ///
+    /// A flat frame puts its whole trace on one row, so the map has to read
+    /// 1:2:1 down the three rows around it and be FLAT across them.
+    @Test func theSofteningIsVerticalOnly() throws {
         let data = try #require(ScopeAnalyzer.analyze(try r210 { _ in 512 },
                                                       wireLevels: .full))
         let rows = traceRows(data)
         #expect(rows.count == 3, "rows: \(rows)")
         let width = ScopeData.waveWidth
-        let column = width / 2 // interior, so both horizontal taps are real
+        let column = width / 2 // interior, where a horizontal tap would be real
         let values = rows.map { Int(data.waveformY[$0 * width + column]) }
         #expect(values[1] == 255, "the centre row is the peak: \(values)")
-        // the log curve turns half the density into 0.91 of the peak byte:
-        // 255 * log(1081) / log(2161)
-        #expect(abs(values[0] - 232) <= 2, "\(values)")
+        // the log curve turns half the density into 0.89 of the peak byte:
+        // 255 * log(271) / log(541)
+        #expect(abs(values[0] - 227) <= 2, "\(values)")
         #expect(values[0] == values[2], "the blur is not symmetric: \(values)")
+        // …and an interior column reads exactly like the one beside it: a
+        // horizontal pass would have made the two edge columns differ from it
+        let neighbour = rows.map { Int(data.waveformY[$0 * width + column + 1]) }
+        #expect(neighbour == values, "\(values) vs \(neighbour)")
+        let edge = rows.map { Int(data.waveformY[$0 * width]) }
+        #expect(edge == values, "the first column was blurred: \(edge)")
     }
 
     // MARK: - the nominal range itself

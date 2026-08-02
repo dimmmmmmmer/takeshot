@@ -44,6 +44,13 @@ struct ScopeTick: Identifiable {
     let unit: Double
     let label: String
     let weight: Weight
+    /// Whether the tick draws a rule as well as a number.
+    ///
+    /// The two ends of the map do not. The edge of the canvas is already the
+    /// edge of the scale, and a rule drawn on it is a hairline hard against the
+    /// frame — which is the kind of mark these numbers exist to explain away,
+    /// not to add another of.
+    var drawsRule = true
     var id: Double { unit }
 }
 
@@ -96,13 +103,38 @@ struct ScopeAxis {
     }
 
     private var percentTicks: [ScopeTick] {
-        var out: [ScopeTick] = []
+        var out = excursionTicks
         for percent in stride(from: 100, through: 0, by: -10) {
             let weight: ScopeTick.Weight = .ofPercent(percent)
             out.append(ScopeTick(unit: unit(ofLevel: Double(percent) / 100),
                                  label: String(percent), weight: weight))
         }
         return out
+    }
+
+    /// The two ends of the map, named at the scale.
+    ///
+    /// The shaded excursion bands were the owner's "unexplained limit lines at
+    /// the top and bottom": a strip of tint whose inner edge reads as a rule and
+    /// whose outer edge is the frame, with nothing anywhere saying what the
+    /// territory between them is. It is the room the wire signal has above 100 %
+    /// and below 0 %, and the cheapest way to say so is to put the number on it
+    /// — a band running from a labelled 100 to a labelled 109 needs no caption.
+    ///
+    /// Percent mode only, and only on a wire frame: on a full-range one these
+    /// ARE 100 and 0 and the ladder already draws them, and in code mode the
+    /// ends of the map are 1023 and 0, which `codeTicks` names.
+    private var excursionTicks: [ScopeTick] {
+        guard nominal.showsExcursions else { return [] }
+        let levels = nominal.visibleLevels
+        return [ScopeTick(unit: 0, label: percentLabel(levels.upperBound),
+                          weight: .minor, drawsRule: false),
+                ScopeTick(unit: 1, label: percentLabel(levels.lowerBound),
+                          weight: .minor, drawsRule: false)]
+    }
+
+    private func percentLabel(_ level: Double) -> String {
+        String(Int((level * 100).rounded()))
     }
 
     private var codeTicks: [ScopeTick] {
@@ -205,7 +237,7 @@ struct ScopeLevelGraticule: View {
 
     private func lines(_ axis: ScopeAxis, in size: CGSize) -> some View {
         ZStack {
-            ForEach(axis.ticks) { tick in
+            ForEach(axis.ticks.filter(\.drawsRule)) { tick in
                 rule(at: tick.unit, in: size, opacity: tick.weight.opacity)
             }
             ForEach(axis.extraNominalUnits, id: \.self) { unit in
@@ -231,16 +263,46 @@ struct ScopeLevelGraticule: View {
     /// top and bottom rules, and centring them there would put half of each
     /// outside the box — which is the complaint this whole change answers.
     private func numbers(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ForEach(axis.ticks) { tick in
+        ForEach(legible(axis.ticks, in: size)) { tick in
             Text(tick.label)
                 .font(.system(size: 8, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.35 + brightness * 0.5))
                 .shadow(color: .black.opacity(0.9), radius: 1)
                 .frame(height: scopeLabelHeight)
                 .padding(.leading, 3)
-                .offset(y: min(size.height - scopeLabelHeight,
-                               max(0, size.height * tick.unit
-                                   - scopeLabelHeight / 2)))
+                .offset(y: labelTop(tick, in: size))
         }
+    }
+
+    private func labelTop(_ tick: ScopeTick, in size: CGSize) -> CGFloat {
+        min(size.height - scopeLabelHeight,
+            max(0, size.height * tick.unit - scopeLabelHeight / 2))
+    }
+
+    /// The ticks whose numbers can actually be read, loudest first.
+    ///
+    /// A short canvas puts the excursion end labels within a few points of the
+    /// 100 and the 0 they explain — 109 over 100 is worse than no 109 at all.
+    /// Sorting by weight before position means the reference pair always wins
+    /// the space and the explanation is what gets dropped, which is the right
+    /// way round: the box that has no room for it is the in-player glance, not
+    /// the window the operator reads a level in.
+    private func legible(_ ticks: [ScopeTick], in size: CGSize) -> [ScopeTick] {
+        // weight first, then position: `sorted` is not stable, and which of
+        // two equally quiet numbers survives may not depend on the run
+        let ordered = ticks.sorted {
+            $0.weight.opacity == $1.weight.opacity
+                ? $0.unit < $1.unit
+                : $0.weight.opacity > $1.weight.opacity
+        }
+        var kept: [ScopeTick] = []
+        for tick in ordered
+        where !kept.contains(where: {
+            abs(labelTop($0, in: size) - labelTop(tick, in: size))
+                < scopeLabelHeight
+        }) {
+            kept.append(tick)
+        }
+        return kept
     }
 }

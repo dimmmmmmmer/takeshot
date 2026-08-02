@@ -14,7 +14,8 @@ struct ScopesWindowView: View {
         // own chrome the content runs to the top of the window, and without it
         // the traffic lights sit on top of the first scope toggle. Same
         // measured value the main window reserves.
-        ScopesPanel(live: controller.live, topInset: controller.windowTopInset)
+        ScopesPanel(scopes: controller.scopes,
+                    topInset: controller.windowTopInset)
             .ignoresSafeArea(.container, edges: .top)
             .background(ScopesWindowFrameKeeper(controller: controller))
             // The window's own chrome, styled like the main window's and the
@@ -62,8 +63,10 @@ enum ScopeKind: String, CaseIterable, Identifiable {
 struct ScopesPanel: View {
     @EnvironmentObject var controller: CaptureController
     @Environment(\.openWindow) var openWindow
-    // scope data updates ~12-15/s — observed separately from the controller
-    @ObservedObject var live: LiveSignal
+    /// Scope data updates 12-15/s and NOTHING else does — observed separately
+    /// from both the controller and `LiveSignal`, whose timecode and audio
+    /// meters would otherwise re-run this body two to eight times per analysis.
+    @ObservedObject var scopes: ScopeFeed
     /// The in-player overlay: one scope, its own selection, no reordering.
     var singleScope = false
     /// Room reserved above the toolbar for the window buttons (window only).
@@ -97,8 +100,24 @@ struct ScopesPanel: View {
     /// check does not want a line across it.
     @AppStorage("scopeSkinTone") var skinToneOn = true
     @State private var dragged: ScopeKind?
+    /// The order while a box is being dragged, before it is committed.
+    ///
+    /// The reorder used to write `orderRaw` — an `@AppStorage` — from
+    /// `dropEntered`, and `dropEntered` fires again every time the boxes move
+    /// under the pointer, which is exactly what the write causes. Each tick was
+    /// a synchronous `UserDefaults` write plus a full republish of the panel:
+    /// the grid relaid out, every box rebuilt, every trace image re-read from
+    /// the cache — during a drag, at pointer rate. It is `@State` now and the
+    /// defaults are written once, on drop.
+    @State private var dragOrder: [ScopeKind]?
 
     var order: [ScopeKind] {
+        if let dragOrder { return dragOrder }
+        return storedOrder
+    }
+
+    /// The persisted order, which is what a drop commits back to.
+    var storedOrder: [ScopeKind] {
         var kinds = orderRaw.split(separator: ",").compactMap {
             ScopeKind(rawValue: String($0))
         }
@@ -137,7 +156,7 @@ struct ScopesPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             toolbar
-            if let data = live.scopeData {
+            if let data = scopes.data {
                 let visible = visibleScopes
                 if visible.isEmpty {
                     Text(L("scope_none_hint"))
@@ -228,8 +247,18 @@ struct ScopesPanel: View {
                 .environment(\.scopeScaleMode, ScopeScaleMode(setting: scaleMode))
         }
         .modifier(ScopeReorderDrag(kind: kind, enabled: reorderable,
-                                   dragged: $dragged, orderRaw: $orderRaw,
-                                   order: order))
+                                   dragged: $dragged, live: $dragOrder,
+                                   commit: commitDragOrder, order: order))
+    }
+
+    /// End of a drag: the order the operator arranged becomes the stored one.
+    /// The only `UserDefaults` write the whole gesture makes.
+    private func commitDragOrder() {
+        if let dragOrder, dragOrder != storedOrder {
+            orderRaw = dragOrder.map(\.rawValue).joined(separator: ",")
+        }
+        dragOrder = nil
+        dragged = nil
     }
 
     /// The trace itself, and nothing about how it is framed.
@@ -258,19 +287,25 @@ private struct ScopeReorderDrag: ViewModifier {
     let kind: ScopeKind
     let enabled: Bool
     @Binding var dragged: ScopeKind?
-    @Binding var orderRaw: String
+    /// The arrangement being dragged, held in view state until the drop.
+    @Binding var live: [ScopeKind]?
+    let commit: () -> Void
     let order: [ScopeKind]
 
     func body(content: Content) -> some View {
         if enabled {
             content
                 .onDrag {
+                    // A drag released outside every box never reaches
+                    // `performDrop`, so the arrangement it left behind is
+                    // banked here rather than lost at the next launch.
+                    commit()
                     dragged = kind
                     return NSItemProvider(object: kind.rawValue as NSString)
                 }
                 .onDrop(of: [UTType.plainText], delegate: ScopeDropDelegate(
-                    target: kind, dragged: $dragged, orderRaw: $orderRaw,
-                    order: order))
+                    target: kind, dragged: $dragged, live: $live,
+                    commit: commit, order: order))
         } else {
             content
         }

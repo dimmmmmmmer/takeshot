@@ -15,10 +15,21 @@ import SwiftUI
 /// on a wire frame: a percent mark rides with the nominal pair, a code mark
 /// does not. `ScopeAxis.horizontalTicks` owns that distinction — see the
 /// reasoning there.
+///
+/// It carries NO excursion shading, and that is the other half of the owner's
+/// "unexplained limit lines — at the left and right of the histogram".
+///
+/// On a level scope the excursion band is a wide horizontal strip with a
+/// labelled rule along its inner edge, and naming the far end of it (see
+/// `ScopeAxis.excursionTicks`) turns it into a range the operator can read. On
+/// a code axis the same band is a strip 6 to 8 % of the box WIDE: there is no
+/// room in it for a number, the histogram used to draw one copy per stacked
+/// channel row, and only the bottom row carried any numbers at all — so on the
+/// default RGB histogram it was six tinted strips and nothing to explain them.
+/// The bins to the left of the 0 mark and to the right of the 100 mark say the
+/// same thing, and that is how Resolve and Baselight draw a histogram too.
 struct ScopeCodeAxisMarks: View {
     let nominal: ScopeNominalRange
-    /// Only the bottom row of a stacked histogram carries the numbers.
-    var showsNumbers: Bool
     @Environment(\.scopeGridBrightness) private var brightness
     @Environment(\.scopeScaleMode) private var mode
 
@@ -26,23 +37,9 @@ struct ScopeCodeAxisMarks: View {
         GeometryReader { geo in
             let axis = ScopeAxis(nominal: nominal, mode: mode)
             ZStack(alignment: .topLeading) {
-                bands(axis, in: geo.size)
                 lines(axis, in: geo.size)
-                if showsNumbers { numbers(axis, in: geo.size) }
+                numbers(axis, in: geo.size)
             }
-        }
-    }
-
-    private func bands(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ForEach(axis.excursionBands.indices, id: \.self) { index in
-            // the bands are unit positions DOWN a trace map, where the top row
-            // is the highest code; on a code axis x grows with the code, so the
-            // band that sits above 100 % is the one on the RIGHT
-            let band = axis.excursionBands[index]
-            Rectangle()
-                .fill(.white.opacity(0.05 + 0.05 * brightness))
-                .frame(width: size.width * (band.to - band.from))
-                .offset(x: size.width * (1 - band.to))
         }
     }
 

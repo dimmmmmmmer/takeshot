@@ -10,7 +10,7 @@ import Testing
 ///
 /// The existing chrome tests render the panel with no data, so only the toolbar
 /// ever laid out. Everything below the toolbar — the boxes, the box headers, the
-/// value scale, the vectorscope — first appears when `live.scopeData` does, and
+/// value scale, the vectorscope — first appears when `scopes.data` does, and
 /// that is where the labels the operator complained about live.
 @MainActor
 struct ViewScopesTests {
@@ -56,10 +56,10 @@ struct ViewScopesTests {
     @Test func theOverlayWithTracesFitsThePlayer() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             let laid = probe.sizes(proposedWidth: ViewBudget.scopesOverlayWidth,
                                    proposedHeight: 320) {
-                ScopesPanel(live: probe.controller.live, singleScope: true)
+                ScopesPanel(scopes: probe.controller.scopes, singleScope: true)
             }
             #expect(laid.ru.width <= ViewBudget.scopesOverlayWidth,
                     "the overlay overflowed: \(laid)")
@@ -73,11 +73,11 @@ struct ViewScopesTests {
     @Test func everyScopeKindRendersAlone() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             for kind in ScopeKind.allCases {
                 probe.store.set(kind.rawValue, forKey: "scopeOverlayKind")
                 let laid = probe.sizes(proposedWidth: 600, proposedHeight: 300) {
-                    ScopesPanel(live: probe.controller.live, singleScope: true)
+                    ScopesPanel(scopes: probe.controller.scopes, singleScope: true)
                 }
                 #expect(laid.ru == laid.en, "\(kind.rawValue) overlay: \(laid)")
                 #expect(laid.ru.width == 600)
@@ -91,13 +91,13 @@ struct ViewScopesTests {
     @Test func onlyTheReorderableGridAdvertisesDragging() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             window(probe, scopes: [.waveform, .parade])
             let grid = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             let overlay = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live, singleScope: true)
+                ScopesPanel(scopes: probe.controller.scopes, singleScope: true)
             }
             // the overlay should be narrower by exactly the drag hint
             #expect(overlay.en.width < grid.en.width,
@@ -107,7 +107,7 @@ struct ViewScopesTests {
             // one box in the window: nothing to reorder there either
             window(probe, scopes: [.waveform])
             let single = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             #expect(single.en.width < grid.en.width)
         }
@@ -118,11 +118,11 @@ struct ViewScopesTests {
     @Test func theWindowGridFitsItsDefaultSize() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             probe.controller.scopesWindowOpen = true
             window(probe, scopes: [.waveform, .vector])
             let laid = probe.sizes(proposedWidth: 980, proposedHeight: 380) {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             #expect(laid.ru.width == 980, "the window grid overflowed: \(laid)")
             #expect(laid.ru == laid.en, "window grid: \(laid)")
@@ -135,9 +135,9 @@ struct ViewScopesTests {
     @Test func theOverlayDoesNotDisturbTheWindowSelection() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             window(probe, scopes: [.waveform, .parade, .vector])
-            _ = probe.size(ScopesPanel(live: probe.controller.live,
+            _ = probe.size(ScopesPanel(scopes: probe.controller.scopes,
                                        singleScope: true),
                            proposedWidth: 860, proposedHeight: 320)
             #expect(probe.store.bool(forKey: "scopeWaveformOn"))
@@ -167,11 +167,11 @@ struct ViewScopesTests {
     @Test func escapeClosesTheOverlay() async throws {
         let data = try Self.scopeData()
         try await ViewProbe.run { probe in
-            probe.controller.live.scopeData = data
+            probe.controller.scopes.data = data
             probe.controller.showScopesOverlay = true
 
             let host = NSHostingView(rootView: AnyView(probe.hosted(
-                ScopesPanel(live: probe.controller.live, singleScope: true))))
+                ScopesPanel(scopes: probe.controller.scopes, singleScope: true))))
             host.frame = CGRect(x: 0, y: 0, width: 700, height: 300)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled],
                                   backing: .buffered, defer: false)
@@ -277,10 +277,10 @@ struct ViewScopesTests {
             probe.controller.scopesWindowOpen = true
             window(probe, scopes: [.waveform])
             let windowChrome = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live)
+                ScopesPanel(scopes: probe.controller.scopes)
             }
             let overlayChrome = probe.fittingSizes {
-                ScopesPanel(live: probe.controller.live, singleScope: true)
+                ScopesPanel(scopes: probe.controller.scopes, singleScope: true)
             }
             let widths = "\(overlayChrome.en.width) vs \(windowChrome.en.width)"
             #expect(overlayChrome.en.width > windowChrome.en.width,

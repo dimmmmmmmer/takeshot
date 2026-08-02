@@ -1,16 +1,31 @@
 import CaptureCore
 import Foundation
 
-/// High-frequency live values: timecode (~25/s), audio meters (~25/s), scopes
-/// (~8/s). They live in their own observable object so per-frame updates
-/// re-render only the small views that display them — when they were @Published
-/// on CaptureController, every view observing the controller relaid out the
-/// whole window at frame rate (~1 CPU core burned on SwiftUI layout).
+/// One frame's analysis, on a publisher of its own.
+///
+/// It used to be a field of `LiveSignal`, which is the same mistake `LiveSignal`
+/// itself was extracted to fix, one level down. The scopes arrive 12-15 times a
+/// second; the timecode arrives every frame and the audio meters arrive with
+/// every packet that differs from the last, so a panel observing `LiveSignal`
+/// re-ran its whole body — four trace views, their graticules and a CGImage
+/// cache lookup each — two to eight times per analysis it actually had to draw.
+/// Idle that is waste; during a drag it is the reason the box the operator is
+/// holding stutters, because every one of those republishes relays out the grid
+/// the drag is moving boxes around in.
+@MainActor
+final class ScopeFeed: ObservableObject {
+    @Published var data: ScopeData?
+}
+
+/// High-frequency live values: timecode (~25/s), audio meters (~25/s). They
+/// live in their own observable object so per-frame updates re-render only the
+/// small views that display them — when they were @Published on
+/// CaptureController, every view observing the controller relaid out the whole
+/// window at frame rate (~1 CPU core burned on SwiftUI layout).
 @MainActor
 final class LiveSignal: ObservableObject {
     @Published var currentTimecode: Timecode?
     @Published var audioLevels: [Float] = []
-    @Published var scopeData: ScopeData?
     /// One shared volume (live monitor AND player — switching rec/playback
     /// must not change loudness). Lives here, not in @Published settings: a
     /// slider drag would otherwise re-render the whole window and persist

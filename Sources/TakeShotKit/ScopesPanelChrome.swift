@@ -10,6 +10,18 @@ import UniformTypeIdentifiers
 /// and this half of it is a separate concern: what the operator switches on,
 /// versus what gets drawn. Internal rather than private for that reason —
 /// `ScopesPanel.body` is the only caller.
+/// The panel's chrome buttons, in the order they are laid out left to right.
+///
+/// Close is LAST. It is the only control in the row that takes the scopes away,
+/// so it goes at the far edge with nothing past it to be hit by mistake — and
+/// the operator reaching for "open in a separate window" no longer crosses it
+/// on the way. They were the other way round, which is what he reported.
+enum ScopeChromeButton: String, CaseIterable, Identifiable {
+    case openInWindow
+    case close
+    var id: String { rawValue }
+}
+
 extension ScopesPanel {
     /// The per-scope controls in a box header: channel choice where a scope has
     /// channels, the skin-tone line where it has one.
@@ -63,7 +75,7 @@ extension ScopesPanel {
     /// "why is my trace above 100 now?" — because this is the signal the camera
     /// is sending, not the one the levels stage has already clipped.
     @ViewBuilder var wireBadge: some View {
-        if live.scopeData?.nominal.showsExcursions == true {
+        if scopes.data?.nominal.showsExcursions == true {
             Text(L("scope_wire_badge"))
                 .font(.system(size: 8, weight: .semibold))
                 .padding(.horizontal, 4)
@@ -125,30 +137,44 @@ extension ScopesPanel {
     /// bar with the system's own close button in it, and the X that used to sit
     /// in its content was a second control doing the same job two centimetres
     /// away from the first.
+    ///
+    /// The row is built by walking `ScopeChromeButton.allCases`, so the order
+    /// declared there is the order drawn — it was hand-written the other way
+    /// round and no test could see it.
     @ViewBuilder var windowButtons: some View {
-        if singleScope {
-            Button {
-                controller.showScopesOverlay = false
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+        ForEach(ScopeChromeButton.allCases) { button in
+            switch button {
+            case .openInWindow:
+                if !controller.scopesWindowOpen { openInWindowButton }
+            case .close:
+                if singleScope { closeButton }
             }
-            .buttonStyle(.plain)
-            .help(L("close"))
         }
-        if !controller.scopesWindowOpen {
-            Button {
-                AppWindows.present(.scopes, opening: openWindow)
-                controller.showScopesOverlay = false
-            } label: {
-                Image(systemName: "macwindow.on.rectangle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-            .help(L("scope_open_window"))
+    }
+
+    private var openInWindowButton: some View {
+        Button {
+            AppWindows.present(.scopes, opening: openWindow)
+            controller.showScopesOverlay = false
+        } label: {
+            Image(systemName: "macwindow.on.rectangle")
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.6))
         }
+        .buttonStyle(.plain)
+        .help(L("scope_open_window"))
+    }
+
+    private var closeButton: some View {
+        Button {
+            controller.showScopesOverlay = false
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .buttonStyle(.plain)
+        .help(L("close"))
     }
 
     func scopeToggle(_ title: String, isOn: Binding<Bool>) -> some View {

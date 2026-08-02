@@ -147,6 +147,76 @@ enum ViewRender {
         return columns.sorted()
     }
 
+    /// The bounding box, in points, of everything the view drew above `floor`.
+    ///
+    /// `brightColumns` answers "is it there"; this answers "does it stay inside
+    /// the space it was given". A scope that runs from the first row of its
+    /// canvas to the last has nothing left between the measurement and the
+    /// frame around it, which is what the operator reported the vectorscope
+    /// doing. Nil when the view drew nothing.
+    static func drawnBounds(_ view: some View, in size: CGSize,
+                            floor: Double = 0.06) -> CGRect? {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { return nil }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let scale = Double(max(1, rep.pixelsWide / max(1, Int(size.width))))
+        var minX = Int.max, maxX = -1, minY = Int.max, maxY = -1
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let color = rep.colorAt(x: x, y: y)?
+                    .usingColorSpace(.genericRGB) else { continue }
+                let peak = max(Double(color.redComponent),
+                               max(Double(color.greenComponent),
+                                   Double(color.blueComponent)))
+                guard peak > floor else { continue }
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= 0 else { return nil }
+        return CGRect(x: Double(minX) / scale, y: Double(minY) / scale,
+                      width: Double(maxX - minX + 1) / scale,
+                      height: Double(maxY - minY + 1) / scale)
+    }
+
+    /// How much horizontal detail survived to the screen: the mean absolute
+    /// step between horizontally adjacent device pixels, over the mean level.
+    ///
+    /// The number that separates a trace drawn near its own resolution from one
+    /// the interpolator has stretched. A waveform and a parade draw the SAME
+    /// density map — the parade squeezes it into a third of the box and the
+    /// waveform spreads it over all of it — so this is the only way from a test
+    /// to see the difference the operator was reporting.
+    static func horizontalDetail(_ view: some View, in size: CGSize) -> Double {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { return 0 }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        var steps = 0.0
+        var total = 0.0
+        // every third row: this is an average over a few hundred thousand
+        // pixels either way, and the answer moves in the fourth decimal
+        for y in stride(from: 0, to: rep.pixelsHigh, by: 3) {
+            var previous: Double?
+            for x in 0..<rep.pixelsWide {
+                guard let color = rep.colorAt(x: x, y: y)?
+                    .usingColorSpace(.genericRGB) else { continue }
+                let value = 0.2126 * Double(color.redComponent)
+                    + 0.7152 * Double(color.greenComponent)
+                    + 0.0722 * Double(color.blueComponent)
+                if let previous { steps += abs(value - previous) }
+                total += value
+                previous = value
+            }
+        }
+        return total > 0 ? steps / total : 0
+    }
+
     /// Mean brightness of a rendered view, 0…1.
     ///
     /// The question `brightColumns` cannot answer: "does this control reach

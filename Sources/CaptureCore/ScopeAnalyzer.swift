@@ -3,8 +3,17 @@ import Foundation
 
 /// One frame's worth of scope data: per-channel waveform density maps, RGB/luma
 /// histograms and a vectorscope density map. Computed on the CPU from a fixed
-/// sampling grid, on the scope queue — ~14 ms per 1080p frame, whatever the
-/// content, which is what makes a ~15 Hz update rate affordable.
+/// sampling grid, on the scope queue — ~23 ms per 1080p frame in release on an
+/// idle machine, whatever the content and whatever the frame size, against a
+/// stride interval of 80 ms at 25 fps and 67 ms at 60. That is what makes a
+/// ~15 Hz update rate affordable.
+///
+/// It was ~12 ms while the trace maps were 512 columns wide. Doubling them
+/// doubled the sampling grid and every sweep over it, and the horizontal blur
+/// that came out at the same time gave 8 % of it back; the delivered rate is
+/// unchanged (20 of 20 offered passes land at 25 fps) because the budget is a
+/// stride interval, and 23 ms is a third of the tightest one. See
+/// `ScopeData.waveWidth` for what the width buys.
 ///
 /// Colorimetry: gamma-encoded R'G'B' code values (the standard scope domain),
 /// BT.709 luma Y' = 0.2126 R' + 0.7152 G' + 0.0722 B', full-range chroma
@@ -18,10 +27,23 @@ import Foundation
 /// rows puts it straight back where it started, and a near-flat gradient drawn
 /// on 256 rows is the "8-bit, undetailed" staircase the operator sees.
 public struct ScopeData: Sendable {
-    /// Waveform trace resolution. 512 rows is retina for the box the scopes are
-    /// drawn in (~300 pt tall on a 2x display) — anything less is upscaled and
-    /// the trace gains stairs that are not in the signal.
-    public static let waveWidth = 512
+    /// Waveform trace resolution.
+    ///
+    /// 512 rows is retina for the box the scopes are drawn in (~300 pt tall on
+    /// a 2x display) — anything less is upscaled and the trace gains stairs
+    /// that are not in the signal.
+    ///
+    /// The map is TWICE as wide as it is tall, and that is not symmetry for its
+    /// own sake. A parade draws the same map three times across a box, so one
+    /// map column lands inside a device pixel and the picture is a downscale; a
+    /// waveform draws one map across the whole box, so at 1024 columns a
+    /// 472 pt box (the scopes window's two-up layout) is 1:1 and a full-width
+    /// one is a mild stretch. At 512 the waveform was interpolating every
+    /// column across two to four device pixels while the parade beside it was
+    /// sharpening — same data, and the operator saw a thick hazy trace next to
+    /// a clean one. Measured horizontal detail reaching the screen in a 472 pt
+    /// box went from 0.35 of the parade's to 1.05 of it.
+    public static let waveWidth = 1024
     public static let waveHeight = 512
     /// Vectorscope resolution (square). Deliberately NOT raised with the
     /// waveform: the grid puts ~138 k samples on this map and 256² already
@@ -136,6 +158,11 @@ public enum ScopeAnalyzer {
 
     /// Fixed sampling grid: identical column population for any frame size
     /// (resolution-dependent striding caused vertical banding).
+    ///
+    /// One grid column per map column, so widening the map narrows the step
+    /// between neighbouring samples — and the trace is drawn as the segment
+    /// between them, so a finer step is also a THINNER trace, not just a
+    /// sharper one.
     static let gridCols = ScopeData.waveWidth
     static let gridRows = 270
 

@@ -35,10 +35,10 @@ extension CaptureController {
             self?.signalPresent = present
         }
         pipeline.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
+            self?.scopes.data = data
         }
         playbackTap.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
+            self?.scopes.data = data
         }
         // capture the monitor object itself: this fires on the pipeline queue
         // and must not touch the MainActor-isolated controller

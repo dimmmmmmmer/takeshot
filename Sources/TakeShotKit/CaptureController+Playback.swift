@@ -96,7 +96,7 @@ extension CaptureController {
             return
         }
         model.onScopeData = { [weak self] data in
-            self?.live.scopeData = data
+            self?.scopes.data = data
         }
         // A RAW engine is built from scratch per clip, so it starts with no
         // range at all; what was marked on THIS clip earlier in the session is
