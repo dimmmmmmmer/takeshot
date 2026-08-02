@@ -308,4 +308,64 @@ import Testing
                     "a running job pushed the utility strip to \(panel.ru)pt")
         }
     }
+
+}
+
+/// The prompt a mounted card raises, as a rendered view.
+///
+/// Its own suite rather than more of the one above: the offload views were
+/// already at the type-length ceiling, and this is a different surface — three
+/// buttons and two sentences squeezed into the takes panel, not a sheet.
+@MainActor
+struct ViewCardOfferTests {
+    /// The card-mount prompt shares that 310pt panel and carries the longest
+    /// localized sentences in it: a card name, the reason it is being offered,
+    /// and three buttons in a row. Three Russian button labels side by side is
+    /// exactly the shape that pushes a panel wider than the split view allows.
+    @Test func theCardOfferBannerFitsTheNarrowestTakesPanel() async throws {
+        try await ViewProbe.run { probe in
+            let card = CardCandidate(
+                volume: MountedVolume(url: URL(fileURLWithPath: "/Volumes/A001"),
+                                      name: "CARD_A001", isRemovable: true),
+                files: 128, bytes: 61_000_000_000,
+                evidence: .cameraStructure("DCIM"))
+            // What the banner actually gets: the panel minus the strip's inset.
+            let budget = ViewBudget.panelMinWidth - 24
+
+            let minimum = probe.minimumWidths { CardOfferBanner(card: card) }
+            #expect(minimum.ru <= budget,
+                    "the card prompt needs \(minimum.ru)pt of \(budget)")
+            #expect(minimum.en <= budget)
+
+            probe.controller.cardOffer = card
+            let panel = probe.minimumWidths(proposedHeight: 600) {
+                TakesPanelUtilityStrip()
+            }
+            #expect(panel.ru <= ViewBudget.panelMinWidth,
+                    "a card prompt pushed the utility strip to \(panel.ru)pt")
+        }
+    }
+
+    /// Both branches of the heuristic explain themselves, in both languages —
+    /// the reason line is the whole reason the prompt is trustworthy, and a raw
+    /// key there would be worse than no reason at all.
+    @Test func everyOfferReasonIsTranslated() async throws {
+        try await ViewProbe.run { _ in
+            let card = CardCandidate(
+                volume: MountedVolume(url: URL(fileURLWithPath: "/Volumes/X"),
+                                      name: "X"),
+                files: 3, bytes: 300, evidence: .cameraStructure("XDROOT"))
+            var stick = card
+            stick.evidence = .detachableVideo(2)
+            for candidate in [card, stick] {
+                for language in [AppLanguage.english, .russian] {
+                    let reason = ViewRender.withLanguage(language) {
+                        candidate.reasonText
+                    }
+                    #expect(!reason.hasPrefix("card_reason"),
+                            "\(candidate.evidence) renders its raw key in \(language)")
+                }
+            }
+        }
+    }
 }

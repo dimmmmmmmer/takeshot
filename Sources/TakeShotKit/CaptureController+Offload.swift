@@ -108,6 +108,9 @@ extension CaptureController {
         // looking for, and a log that only held the good days would answer
         // "have I copied this card?" with a confident no.
         offloadHistory.record(report)
+        // …and the card itself stops being asked about, but only on a run that
+        // verified end to end (see `noteOffloadedCard`).
+        noteOffloadedCard(report)
         guard !report.isFullyVerified else {
             // One destination is still the common case (a single shuttle drive),
             // and "1 copies" is not what anybody wants to read.

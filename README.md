@@ -76,6 +76,13 @@ instead of a double-click; macOS then remembers the choice.
   OffShoot and Hedge check against. A destination that fails does so alone; the
   others finish. The sheet closes over a running copy (the takes panel keeps
   reporting it) and opens showing the last twenty offloads made from this Mac.
+- A card plugged in while the app is running is recognised (DCIM, XDROOT, BPAV,
+  M4ROOT, AVCHD, CONTENTS…) and **offered** in the takes panel — Offload,
+  Ignore or Never, with the reason it was recognised shown so the operator can
+  judge. Nothing is ever copied without that answer, and nothing is asked
+  during a take: a card that mounts mid-take is offered when the take closes.
+  A card already offloaded is not offered again unless it has been shot on
+  since.
 
 ## Requirements
 

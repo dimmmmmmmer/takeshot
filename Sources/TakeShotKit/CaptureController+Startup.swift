@@ -74,12 +74,12 @@ extension CaptureController {
         startRemoteIfEnabled()
     }
 
-    /// The long-running-job models (offload, verify, dailies), wired for the
-    /// controller's lifetime rather than when a sheet happens to open: each
-    /// reports back through the controller (status line, toast, sticky
-    /// alarm), and one started any other way would run perfectly silently.
-    /// The dailies queue has one reason more — the REC state has to reach it
-    /// (recording pauses the queue) with no sheet on screen at all.
+    /// The long-running-job models (offload, verify, dailies) and the card
+    /// watch, wired for the controller's lifetime rather than when a sheet
+    /// happens to open: each reports back through the controller (status line,
+    /// toast, sticky alarm), and one started any other way would run perfectly
+    /// silently. The dailies queue has one reason more — the REC state has to
+    /// reach it (recording pauses the queue) with no sheet on screen at all.
     private func attachBackgroundJobModels() {
         offload.attach(to: self)
         verify.attach(to: self)
@@ -88,6 +88,10 @@ extension CaptureController {
         // sheet has to be able to show it the instant it opens, and a run can
         // append to it while the sheet has never been on screen.
         offloadHistory.load()
+        // …and the watch for cards mounted from here on. No initial enumeration
+        // on purpose: only a volume that appears while the app is running is
+        // ever asked about (see `WorkspaceVolumeWatch`).
+        startCardWatch()
     }
 
     /// The two persisted monitoring HOLDS, re-applied over the stored level.

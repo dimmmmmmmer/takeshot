@@ -702,3 +702,22 @@
 "dailies_cancelled" = "Дейлизы остановлены: готово %d из %d";
 "dailies_result_done" = "Готово: %d из %d";
 "dailies_result_cancelled" = "Очередь остановлена; недописанные файлы удалены.";
+/* === a card mounted: the offer, which never starts a copy by itself === */
+"card_detected" = "Обнаружена карта: %@";
+"card_contents" = "%d файл(ов), %@";
+"card_size_gb" = "%.1f ГБ";
+"card_size_mb" = "%.0f МБ";
+"card_reason_structure" = "На ней найдена папка камеры %@.";
+"card_reason_video" = "Съёмный диск с видеофайлами (%d) — проверьте, что это нужный.";
+"card_offer_offload" = "Оффлоад";
+"card_offer_offload_help" = "Открыть окно оффлоада с этой картой как источником. Копирование начнётся только по вашей команде.";
+"card_offer_ignore" = "Не сейчас";
+"card_offer_ignore_help" = "Пропустить. Карту предложат снова при следующем запуске.";
+"card_offer_never" = "Никогда";
+"card_offer_never_help" = "Больше не предлагать этот диск. Отменяется в настройках.";
+"settings_offload" = "Оффлоад";
+"offer_mounted_cards" = "Предлагать оффлоад подключённых карт";
+"offer_mounted_cards_hint" = "Подключённая карта поднимает строку в панели дублей. Ничего не копируется без вашей команды.";
+"cards_remembered" = "Карты, с которыми уже разобрались";
+"cards_forget" = "Спрашивать снова";
+"cards_remembered_hint" = "Скопированные карты и диски с отметкой «Никогда». Карту, на которую снимали после, предложат снова.";

@@ -46,6 +46,7 @@ enum ControllerHarness {
         live: Bool = false,
         extraBackends: [(String, CaptureBackend)] = [],
         audioInputs: FakeAudioInputProvider? = nil,
+        volumeWatch: VolumeWatching? = nil,
         configure: (inout CaptureSettings) -> Void = { _ in },
         _ body: (CaptureController, URL) async throws -> Void) async throws {
         let id = UUID().uuidString
@@ -88,10 +89,16 @@ enum ControllerHarness {
         // The audio-input provider is ALWAYS a fake for the same reason: the
         // real one enumerates and opens the machine's audio devices, and no
         // suite may reach for whatever is plugged into the runner.
+        // The volume watch is injected for the same reason: the real one
+        // installs process-wide NSWorkspace observers, and a suite that reacted
+        // to a disk somebody plugged into the machine running it would be
+        // neither deterministic nor confined to its own scratch folder. The
+        // default here is a fake that reports nothing at all.
         let controller = CaptureController(
             backends: [("mock", SyntheticSignalBackend())] + extraBackends,
             defaults: defaults,
-            audioInputs: audioInputs ?? FakeAudioInputProvider())
+            audioInputs: audioInputs ?? FakeAudioInputProvider(),
+            volumeWatch: volumeWatch ?? FakeVolumeWatch())
         // Belt and braces: a controller that did not get the fixture's folder
         // has to fail here rather than quietly work on the operator's.
         try #require(controller.settings.destinationPath == root.path,
@@ -102,6 +109,12 @@ enum ControllerHarness {
         // the list somebody uses to decide whether a card has been copied.
         controller.offloadHistory.fileURL =
             root.appendingPathComponent("offload-history.json")
+        // Same for the ledger of cards already dealt with, which lives beside
+        // it: a suite that wrote to the real one would silence a card on the
+        // operator's own machine, and one that read it would be at the mercy of
+        // whatever they last plugged in.
+        controller.offloadedCards.fileURL =
+            root.appendingPathComponent("offloaded-cards.json")
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false
@@ -262,6 +275,38 @@ final class SyntheticSignalBackend: CaptureBackend {
                 formatCache: &audioFormatCache)
         }
         if let buffer { delegate?.backend(self, didReceiveAudio: buffer) }
+    }
+}
+
+/// A volume watch the test drives by hand.
+///
+/// Stands in for a card reader being plugged in. The synthetic volume it reports
+/// is a scratch directory the test populated as a fake card, with the volume
+/// attributes the test wants it to have — removability in particular cannot be
+/// faked any other way, and it is half of the recognition heuristic.
+@MainActor
+final class FakeVolumeWatch: VolumeWatching {
+    var onMount: ((MountedVolume) -> Void)?
+    var onUnmount: ((URL) -> Void)?
+    /// Whether the observers are installed. The settings toggle is supposed to
+    /// take them down, and a test that only checked the prompt would not notice
+    /// a watch left running behind a switch that says it is off.
+    private(set) var isRunning = false
+
+    func start() { isRunning = true }
+    func stop() { isRunning = false }
+
+    /// A card appears. Removable by default: that is what a reader looks like,
+    /// and the tests that care about a fixed disk say so.
+    func mount(_ url: URL, name: String, uuid: String? = nil,
+               isRemovable: Bool = true, isLocal: Bool = true) {
+        onMount?(MountedVolume(url: url, name: name, uuid: uuid,
+                               isRemovable: isRemovable, isEjectable: isRemovable,
+                               isLocal: isLocal))
+    }
+
+    func unmount(_ url: URL) {
+        onUnmount?(url)
     }
 }
 
