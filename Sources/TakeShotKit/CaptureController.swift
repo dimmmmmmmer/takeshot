@@ -250,8 +250,19 @@ final class CaptureController: ObservableObject {
                 settings.peakingColor = assist.peakingColor == .red
                     ? nil : assist.peakingColor.rawValue
             }
+            // the chroma key's dial-in is persisted the same way, in one place
+            // rather than a line per parameter (see persistChromaSettings)
+            if oldValue.chroma != assist.chroma { persistChromaSettings() }
         }
     }
+    /// The chroma-key eyedropper is waiting for a click on the picture (see
+    /// `+ChromaKey`). Published because it changes the pointer and puts a
+    /// pick surface over the player.
+    @Published var chromaPickArmed = false
+    /// File name of the plate loaded behind the key; nil — none. The buffer
+    /// itself lives in the display stage, which is the only thing that draws
+    /// it; this is what the panel shows.
+    @Published var chromaBackgroundImageName: String?
     /// The aids as the preview surfaces are showing them right now, sliders and
     /// zoom gestures included (see `applyAssistPreview` in +Assist).
     let assistLive = AssistLiveState()

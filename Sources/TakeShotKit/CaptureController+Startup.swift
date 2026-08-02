@@ -34,9 +34,7 @@ extension CaptureController {
         live.lutIntensity = stored.lutIntensity ?? 1
         monitorOn = stored.monitorEnabled ?? true
         restoreCompare(from: stored)
-        assist.desqueeze = stored.desqueezeFactor ?? 1
-        assist.peakingColor = stored.peakingColor
-            .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
+        restoreAssists(from: stored)
         player.volume = Float(storedVolume)
         restoreMonitorHolds(from: stored, storedVolume: storedVolume)
         transport.attach(player) // one attachment for the app's lifetime
@@ -123,6 +121,19 @@ extension CaptureController {
             audioMonitor.volume = 0
             player.volume = 0
         }
+    }
+
+    /// The operator aids that outlive a session: the desqueeze factor, the
+    /// peaking tint and the chroma key's dial-in. Each is an assignment to
+    /// `assist`, whose observer pushes it to every surface — grouped into one
+    /// call so that adding the next one does not push `completeStartup` past
+    /// the length at which nobody reads a function top to bottom.
+    private func restoreAssists(from stored: CaptureSettings) {
+        assist.desqueeze = stored.desqueezeFactor ?? 1
+        assist.peakingColor = stored.peakingColor
+            .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
+        // the key comes back dialled in and switched OFF (see restoreChroma)
+        restoreChroma(from: stored)
     }
 
     /// The compare mode and its gain come back like every other working

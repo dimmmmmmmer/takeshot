@@ -2,6 +2,11 @@ import Foundation
 
 /// Operator display aids applied inside the preview render (identically on
 /// every surface: live, playback, RAW, fullscreen, external).
+///
+/// One member is the exception and says so at its own declaration: `chroma`
+/// travels with the aids because it is dialled in the same popover and has to
+/// ride the same draft/debounce path a slider needs, but it is APPLIED a stage
+/// earlier, in the pipeline's display path. The renderer ignores it.
 public struct ViewAssist: Equatable, Sendable {
     /// Color remap tools are mutually exclusive; zebra/peaking stack on top.
     public enum ColorTool: String, CaseIterable, Sendable {
@@ -59,9 +64,27 @@ public struct ViewAssist: Equatable, Sendable {
     /// Pan while punched in, in image-fraction units (0 = centered).
     public var panX: Double = 0
     public var panY: Double = 0
+    /// The chroma-key preview. Carried here, applied elsewhere: the pipeline
+    /// splits it out in `setViewAssist` and runs it in the display stage, where
+    /// it can reach the hardware monitor the way the viewing LUT does. It is
+    /// deliberately absent from `anyToolActive` below — that flag asks whether
+    /// the RENDERER has work to do, and for the key it never does.
+    public var chroma = ChromaKey()
 
     public var anyToolActive: Bool {
         colorTool != .off || zebraOn || peakingOn
+    }
+
+    /// Whether anything the operator switched on is on the picture — what the
+    /// assist badge lights up for.
+    ///
+    /// Not `self != ViewAssist()`, which is what the badge used to ask: the
+    /// chroma key's dial-in is persisted while the key itself stays off, so a
+    /// remembered tolerance would leave the badge lit for the rest of the
+    /// project. Each aid is named here instead, and a stored value that nothing
+    /// is showing counts for nothing.
+    public var isShowingAid: Bool {
+        anyToolActive || desqueeze != 1 || punchIn > 1 || chroma.isOn
     }
 
     public init() {}
@@ -190,5 +213,25 @@ public struct ViewAssist: Equatable, Sendable {
             x: (viewport.width - width) / 2 - shiftX,
             y: (viewport.height - height) / 2 - shiftY,
             width: width, height: height))
+    }
+
+    /// Where a point on the SURFACE lands on the picture, as fractions of the
+    /// frame (0,0 top-left, y down like the placement it inverts). nil when the
+    /// point is off the picture — on the letterbox, or outside a punched-in
+    /// crop — because there is no pixel there to answer for.
+    ///
+    /// The inverse of `placement`, and it lives beside it for the reason the
+    /// overlays read `placement` instead of keeping their own copy: the
+    /// eyedropper has to hit the pixel the operator is pointing at through the
+    /// desqueeze, the punch-in and the pan, and a second copy of that transform
+    /// is how the two come to disagree.
+    public func imageFraction(of point: CGPoint, sourceSize: CGSize,
+                              in viewport: CGSize) -> CGPoint? {
+        guard let placed = placement(sourceSize: sourceSize, in: viewport),
+              placed.rect.width > 0, placed.rect.height > 0 else { return nil }
+        let u = (point.x - placed.rect.minX) / placed.rect.width
+        let v = (point.y - placed.rect.minY) / placed.rect.height
+        guard (0...1).contains(u), (0...1).contains(v) else { return nil }
+        return CGPoint(x: u, y: v)
     }
 }

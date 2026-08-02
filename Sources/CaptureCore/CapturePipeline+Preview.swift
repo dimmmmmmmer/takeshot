@@ -37,8 +37,12 @@ extension CapturePipeline {
     public func removeDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.remove(layer)
     }
+    /// The operator aids, to every surface — and the chroma key out of the same
+    /// value to the display stage, which is where it is applied (see
+    /// `+ChromaKey` for why it cannot ride along inside the sinks).
     public func setViewAssist(_ assist: ViewAssist) {
         displaySinks.setAssist(assist)
+        setChromaKey(assist.chroma)
     }
     public func setPreviewLetterbox(_ color: CIColor) {
         displaySinks.setLetterbox(color)
@@ -111,6 +115,7 @@ extension CapturePipeline {
         let presented = screen ?? pixelBuffer
         presentLock.lock()
         pendingPresent = presented
+        pendingDeadline = displayDeadline()
         let schedule = !presentScheduled
         presentScheduled = true
         presentLock.unlock()
@@ -119,17 +124,25 @@ extension CapturePipeline {
             guard let self else { return }
             self.presentLock.lock()
             let buffer = self.pendingPresent
+            let deadline = self.pendingDeadline
             self.pendingPresent = nil
             self.presentScheduled = false
             self.presentLock.unlock()
             guard let buffer else { return }
-            self.displaySinks.present(buffer)
+            // The last display-only stage, and the one the deliverables never
+            // see: `pixelBuffer` above is already published clean for the
+            // compare provider, and the grab was served from the untouched
+            // frame back on the capture queue. What is keyed here is what the
+            // MIRRORS get — the viewer, the hardware monitor, the multiview —
+            // which is the same rule the viewing LUT follows.
+            let shown = self.chromaKeyed(buffer, deadline: deadline) ?? buffer
+            self.displaySinks.present(shown)
             self.displayFrameLock.lock()
             let handler = self.displayFrameHandler
             let multiview = self.multiviewFrameHandler
             self.displayFrameLock.unlock()
-            handler?(buffer)
-            multiview?(buffer)
+            handler?(shown)
+            multiview?(shown)
         }
     }
 }

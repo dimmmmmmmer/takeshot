@@ -99,6 +99,9 @@ struct PreviewView: View {
                         // the same overlay the fullscreen player and the
                         // external display mount, from the same view
                         CompareWipeOverlay()
+                        // over the picture only while the eyedropper is armed;
+                        // it draws and hit-tests nothing otherwise
+                        ChromaPickOverlay()
                     }
                 }
             }

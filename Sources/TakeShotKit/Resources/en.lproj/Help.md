@@ -123,6 +123,15 @@ never bends it.
 - Framing: framelines with a chosen aspect, action and title safe areas,
   anamorphic desqueeze.
 - **Punch-in** magnifies the center for a focus check; drag the image to pan.
+- **Chroma key** shows the actor against the intended background instead of the
+  cyc. Take the screen color off the picture with the eyedropper — a lit green
+  is nowhere near the digital green a preset can offer — then dial in tolerance,
+  softness and spill suppression. Behind the actor goes a checkerboard, a solid
+  color, a still plate from disk, or the matte itself in black and white, which
+  is how a key is actually judged.
+- The key is on the viewer AND on the hardware monitor the director is watching,
+  because both mirror the same display frame. It is in no take, no grab and no
+  export — those come off the picture before the key is applied.
 - Assists and LUTs are a display layer. Nothing they show reaches the recorded
   file unless "bake into recording" is on for the LUT.
 

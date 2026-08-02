@@ -737,3 +737,26 @@
 "cards_remembered" = "Карты, с которыми уже разобрались";
 "cards_forget" = "Спрашивать снова";
 "cards_remembered_hint" = "Скопированные карты и диски с отметкой «Никогда». Карту, на которую снимали после, предложат снова.";
+/* === chroma key preview: a display-only key over the live signal === */
+"chroma_key" = "Хромакей";
+"chroma_screen" = "Фон";
+"chroma_pick_help" = "Пипетка: кликните по картинке, чтобы взять цвет фона с неё";
+"chroma_pick_hint" = "Кликните по зелёнке в кадре — пипетка ещё раз, чтобы отменить";
+"chroma_picked" = "Цвет фона %@";
+"chroma_pick_failed" = "Нет кадра, чтобы взять цвет";
+"chroma_preset_green" = "Зелёный фон";
+"chroma_preset_blue" = "Синий фон";
+"chroma_tolerance" = "Допуск";
+"chroma_softness" = "Смягчение";
+"chroma_spill" = "Засветка";
+"chroma_background" = "Подложка";
+"chroma_bg_checker" = "Шахматка";
+"chroma_bg_color" = "Цвет";
+"chroma_bg_image" = "Картинка";
+"chroma_bg_matte" = "Маска";
+"chroma_background_color" = "Цвет подложки";
+"chroma_choose_image" = "Картинка...";
+"chroma_no_image" = "нет файла";
+"chroma_clear_image" = "Убрать картинку подложки";
+"chroma_image_failed" = "Не удалось прочитать картинку подложки";
+"chroma_preview_only" = "Только превью и выход на монитор — в дубли, кадры и экспорт идёт исходная картинка.";
