@@ -10,7 +10,10 @@ import Foundation
 extension AssistFilters {
     /// One entry of an exposure palette. A named type rather than a triple:
     /// three unlabelled Doubles read the same whatever order they are in.
-    struct BandColor {
+    ///
+    /// Equatable so the legend's swatches can be held against the paint they
+    /// are a key to (`AssistLegendTests`).
+    struct BandColor: Equatable {
         let red: Double
         let green: Double
         let blue: Double

@@ -108,6 +108,10 @@ public final class AssistStage: @unchecked Sendable {
             image = AssistFilters.applied(source, assist: current)
         }
         image = current.guides.drawn(over: image)
+        // last, and over the matte: the legend is the key to the colours the
+        // stage has just painted, and a frameline drawn on top of it would dim
+        // the one thing on the frame that has to be read literally
+        image = current.legend.drawn(over: image, tool: current.colorTool)
         let destination = CIRenderDestination(pixelBuffer: out)
         destination.colorSpace = nil
         guard let task = try? context.startTask(toRender: image, to: destination),

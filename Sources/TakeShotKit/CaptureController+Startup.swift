@@ -147,9 +147,11 @@ extension CaptureController {
         assist.desqueeze = stored.desqueezeFactor ?? 1
         assist.peakingColor = stored.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
-        // the framelines are settings rather than assist state, but they are
-        // DRAWN with the aids now, so the drawn value has to be seeded too
+        // the framelines and the exposure legend are settings rather than
+        // assist state, but they are DRAWN with the aids now, so the drawn
+        // values have to be seeded too
         assist.guides = AssistGuides(settings: stored)
+        assist.legend = AssistLegend(settings: stored)
         // clamped, not trusted: the blob may have been written by a build with
         // a different ceiling, or hand-edited
         assist.peakingIntensity = min(

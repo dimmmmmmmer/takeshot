@@ -30,6 +30,7 @@ extension CaptureController {
         applyCardWatchChange(from: oldValue)
         applyMenuBarChange(from: oldValue)
         applyGuideChange()
+        applyLegendChange()
     }
 
     /// The framelines and the safe areas are stored as settings but DRAWN with
@@ -41,6 +42,17 @@ extension CaptureController {
         let guides = AssistGuides(settings: settings)
         guard guides != assist.guides else { return }
         setAssist { $0.guides = guides }
+    }
+
+    /// The exposure legend is stored the same way and drawn in the same place
+    /// (see `AssistLegend`), so its size and edge take the same route to the
+    /// renderer: a picker click reaches the hardware monitor because `assist`
+    /// is what every surface is fed. Guarded on a real difference for the
+    /// reason above — every settings write lands here.
+    private func applyLegendChange() {
+        let legend = AssistLegend(settings: settings)
+        guard legend != assist.legend else { return }
+        setAssist { $0.legend = legend }
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.

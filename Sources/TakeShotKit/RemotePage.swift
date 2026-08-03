@@ -49,12 +49,58 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
 ///
 /// The markup is a bundle resource, not a Swift string literal: it is HTML,
 /// CSS and JavaScript, and none of those are readable once they are escaped
-/// into Swift. What the app injects is the one thing the files cannot know —
-/// the labels in the language the operator has chosen. The pages load nothing
-/// from anywhere, so they work on a set network with no internet at all.
+/// into Swift. What the app injects is what the files cannot know — the labels
+/// in the language the operator has chosen, and the web font, whose bytes live
+/// in the app bundle next to them. The pages load nothing from anywhere, so
+/// they work on a set network with no internet at all; that is exactly why the
+/// font travels inside the page rather than as a URL.
 enum RemotePage {
     /// The token in `remote.html` that the config object replaces.
     static let configToken = "__TAKESHOT_CONFIG__"
+
+    /// The token in every page's stylesheet that the web font replaces.
+    static let fontToken = "__TAKESHOT_FONT__"
+
+    /// The app's own face, as the pages name it.
+    static let fontFamily = "Resist Sans Display"
+
+    /// The faces that are shipped, and the weight each answers for.
+    ///
+    /// TWO of the family's fourteen. These pages are opened on a phone over a
+    /// set Wi-Fi network and the bytes travel inside the page, so every weight
+    /// is paid for on every load: the pages use 400 for text and 600/700/800
+    /// for buttons and labels, and a browser given 400 and 700 snaps 600 and
+    /// 800 onto the bold rather than downloading two more faces to tell them
+    /// apart at a glance nobody takes. The obliques are used nowhere at all.
+    ///
+    /// WOFF2 rather than the licensed .otf: same glyphs, 47 % of the bytes
+    /// (117 KB → 55 KB per face), and base64 then inflates whatever is left by
+    /// a third. Every browser that can open these pages reads it.
+    static let fontFaces: [(resource: String, weight: Int)] = [
+        ("ResistSansDisplay-Regular", 400),
+        ("ResistSansDisplay-Bold", 700),
+    ]
+
+    /// The `@font-face` rules with the font in them, built once.
+    ///
+    /// Once because it is ~145 KB of base64 that never changes: the language
+    /// switch re-renders all three pages, and re-encoding the same two files on
+    /// every switch is work with no output. Empty when the resource is missing,
+    /// which leaves the pages on the system stack behind it rather than on a
+    /// broken `src`.
+    static let fontCSS: String = buildFontCSS()
+
+    private static func buildFontCSS() -> String {
+        fontFaces.compactMap { face in
+            guard let url = Bundle.module.url(forResource: face.resource,
+                                              withExtension: "woff2"),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return "@font-face{font-family:\"\(fontFamily)\";"
+                + "font-style:normal;font-weight:\(face.weight);"
+                + "font-display:swap;src:url(data:font/woff2;base64,"
+                + "\(data.base64EncodedString())) format(\"woff2\")}"
+        }.joined(separator: "\n")
+    }
 
     /// How long the page waits for anything from the server before it calls the
     /// socket dead and reconnects.
@@ -175,8 +221,9 @@ enum RemotePage {
             // blank page that looks like a network fault.
             return Data("<!doctype html><title>TakeShot</title>\(L("help_unavailable"))".utf8)
         }
-        return Data(template.replacingOccurrences(
-            of: configToken, with: config(labels: labels)).utf8)
+        return Data(template
+            .replacingOccurrences(of: configToken, with: config(labels: labels))
+            .replacingOccurrences(of: fontToken, with: fontCSS).utf8)
     }
 
     /// `{"lang":"en","watchdogMs":12000,"posterPath":"…","strings":{…}}` — a

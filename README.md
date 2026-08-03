@@ -57,7 +57,8 @@ instead of a double-click; macOS then remembers the choice.
 
 ### Operator tools
 
-- False color, EL Zone, zebra and focus peaking — stacking, with a legend.
+- False color, EL Zone, zebra and focus peaking — stacking, with a legend that
+  is burned into the picture, so the hardware monitor gets it too.
 - Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
 - Markers with timecode while recording and while reviewing.
@@ -118,3 +119,6 @@ so a card copied in by hand is one double-click from playback.
 
 MIT — see [LICENSE](LICENSE). The vendor SDKs TakeShot builds against are not
 included here and stay under their own terms; [NOTICE](NOTICE) lists them.
+The web remote's pages embed **Resist Sans Display** (Groteskly Yours, Eugene
+Tantsurin), included under a licence held by the project owner and not covered
+by the MIT License — see [NOTICE](NOTICE).
