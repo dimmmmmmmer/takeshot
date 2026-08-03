@@ -73,81 +73,141 @@ struct CaptureBitDepthTests {
         #expect(CaptureBitDepth.allCases.count == 3)
     }
 
-    /// A board that delivered less than was asked for is reported.
+    /// The same setting, asked about a YCbCr 4:2:2 source. 12 means 10 there —
+    /// not a rounding-down of the wish but the truth about the wire: there is no
+    /// 12-bit YCbCr format, so 'v210' is as deep as a 4:2:2 signal goes.
+    @Test func theDepthsAlsoAnswerForAYCbCrWire() {
+        #expect(CaptureBitDepth.eight.yuvBits == 8)
+        #expect(CaptureBitDepth.ten.yuvBits == 10)
+        #expect(CaptureBitDepth.twelve.yuvBits == 10)
+        // and the shipped default asks for 10-bit on BOTH samplings
+        #expect(CaptureSettings().resolvedCaptureBitDepth.yuvBits == 10)
+    }
+
+    private static func signal(rgb444: Bool, bitDepth: Int) -> CaptureFormat {
+        CaptureFormat(width: 1920, height: 1080, frameRate: 25, timecodeFPS: 25,
+                      name: "1080p25", isRGB444: rgb444, bitDepth: bitDepth)
+    }
+
+    /// Which depth a signal is measured against, and whether it fell short.
+    ///
+    /// The YUV half is what the 10-bit YCbCr wave changed. This suite used to
+    /// assert that a YUV signal could never fall short at all, on the stated
+    /// grounds that "a YUV source is 8-bit '2vuy' by design and was never a
+    /// request that could fail" — 'v210' is now the default request for a 4:2:2
+    /// signal, so a board that delivers '2vuy' instead HAS fallen back.
+    @Test func theShortfallRuleUsesTheDepthThatAppliesToTheSignal() {
+        let twelve = CaptureBitDepth.twelve
+        // RGB 4:4:4 measured against 12, and short at 10
+        let rgbShort = CaptureController.bitDepthShortfall(
+            format: Self.signal(rgb444: true, bitDepth: 10), requested: twelve)
+        #expect(rgbShort?.requested == 12)
+        #expect(rgbShort?.delivered == 10)
+        #expect(CaptureController.bitDepthShortfall(
+            format: Self.signal(rgb444: true, bitDepth: 12),
+            requested: twelve) == nil, "a met request warned")
+        // YCbCr 4:2:2 measured against 10 — asking for 12 on a 4:2:2 wire IS
+        // asking for 10, so 'v210' delivered is silence and '2vuy' is not
+        let yuvShort = CaptureController.bitDepthShortfall(
+            format: Self.signal(rgb444: false, bitDepth: 8), requested: twelve)
+        #expect(yuvShort?.requested == 10, "the YUV request is not 10-bit")
+        #expect(yuvShort?.delivered == 8)
+        #expect(CaptureController.bitDepthShortfall(
+            format: Self.signal(rgb444: false, bitDepth: 10),
+            requested: twelve) == nil, "v210 delivered, yet it warned")
+        // …and an operator who chose 8-bit asked for what they got
+        #expect(CaptureController.bitDepthShortfall(
+            format: Self.signal(rgb444: false, bitDepth: 8),
+            requested: .eight) == nil)
+    }
+
+    /// A board that delivered less than was asked for is reported, with both
+    /// numbers in the message.
     @Test func aShortfallIsReportedToTheOperator() async throws {
         // both closures passed explicitly: a trailing closure alongside
         // `configure:` is two closures on one call, which the linter rejects
         try await ControllerHarness.run(
             configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
             { controller, _ in
+            // a BOARD is the source — the harness stands in for the demo source
+            // under the "mock:" prefix, and the demo source never reports a
+            // shortfall (see below). There is no such backend, so the restart
+            // this triggers fails; the notice it leaves is cleared next.
+            controller.selectedDeviceID = "decklink:board"
             controller.lastError = nil
             // what the bridge reports after falling back to 'r210'
             controller.reportBitDepthShortfall(
-                CaptureFormat(width: 1920, height: 1080, frameRate: 25,
-                              timecodeFPS: 25, name: "1080p25",
-                              isRGB444: true, bitDepth: 10))
+                Self.signal(rgb444: true, bitDepth: 10))
             let message = try #require(controller.lastError,
                                        "the fallback was silent")
             #expect(message.contains("12"), "message: \(message)")
             #expect(message.contains("10"), "message: \(message)")
-        })
-    }
 
-    /// …and a request that WAS met says nothing at all. A notice on every format
-    /// change would train the operator to ignore the one that matters.
-    @Test func meetingTheRequestIsSilent() async throws {
-        // both closures passed explicitly: a trailing closure alongside
-        // `configure:` is two closures on one call, which the linter rejects
-        try await ControllerHarness.run(
-            configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
-            { controller, _ in
+            // …and a request that WAS met says nothing at all. A notice on every
+            // format change would train the operator to ignore the one that
+            // matters.
             controller.lastError = nil
             controller.reportBitDepthShortfall(
-                CaptureFormat(width: 1920, height: 1080, frameRate: 25,
-                              timecodeFPS: 25, name: "1080p25",
-                              isRGB444: true, bitDepth: 12))
+                Self.signal(rgb444: true, bitDepth: 12))
             #expect(controller.lastError == nil)
-        })
-    }
-
-    /// A YUV signal is 8-bit '2vuy' by design and was never a request that
-    /// could fail, so it must not produce a notice either — otherwise every
-    /// operator shooting YUV gets a warning they cannot act on.
-    @Test func aYuvSignalIsNotAShortfall() async throws {
-        // both closures passed explicitly: a trailing closure alongside
-        // `configure:` is two closures on one call, which the linter rejects
-        try await ControllerHarness.run(
-            configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
-            { controller, _ in
-            controller.lastError = nil
-            controller.reportBitDepthShortfall(
-                CaptureFormat(width: 1920, height: 1080, frameRate: 25,
-                              timecodeFPS: 25, name: "1080p25",
-                              isRGB444: false, bitDepth: 8))
-            #expect(controller.lastError == nil)
-            // …and neither does losing the signal entirely
+            // nor does losing the signal entirely
             controller.reportBitDepthShortfall(nil)
             #expect(controller.lastError == nil)
         })
     }
 
-    /// The setting reaches the bridge: 12-bit asks for both flags, 8-bit asks
-    /// for neither. This is the wiring that decides which pixel format the
-    /// board is actually opened with.
+    /// The demo source never reports a shortfall, whatever the picker says.
+    ///
+    /// It generates an 8-bit signal by construction and nothing asked it for
+    /// more, so the comparison is meaningless — and a notice nobody can act on,
+    /// on every launch of `--demo`, is how an operator learns to ignore the
+    /// banner that matters. The old RGB-only guard suppressed this by accident;
+    /// now that a YUV signal IS measured, it has to be deliberate.
+    @Test func theDemoSourceNeverReportsAShortfall() async throws {
+        // both closures passed explicitly: a trailing closure alongside
+        // `configure:` is two closures on one call, which the linter rejects
+        try await ControllerHarness.run(
+            configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
+            { controller, _ in
+            #expect(controller.isMockSelected,
+                    "the harness is meant to stand in for the demo source")
+            controller.lastError = nil
+            // the very format the demo generator reports, against a 12-bit ask
+            controller.reportBitDepthShortfall(
+                Self.signal(rgb444: false, bitDepth: 8))
+            #expect(controller.lastError == nil,
+                    "the demo source warned: \(controller.lastError ?? "")")
+            // and the rule itself would have had something to say about it,
+            // so the silence is the SOURCE being excluded and not the arithmetic
+            #expect(CaptureController.bitDepthShortfall(
+                format: Self.signal(rgb444: false, bitDepth: 8),
+                requested: .twelve) != nil)
+        })
+    }
+
+    /// The setting reaches the bridge: 12-bit asks for both RGB flags, 8-bit asks
+    /// for none of the three. This is the wiring that decides which pixel format
+    /// the board is actually opened with.
     @Test func theSettingReachesTheAdapter() {
         let adapter = DeckLinkBackendAdapter(watchesDevices: false)
-        // the shipped default, unchanged
+        // the shipped defaults
         #expect(adapter.preferTenBitRGB, "10-bit RGB capture is the default")
         #expect(!adapter.preferTwelveBitRGB, "12-bit must be off by default")
+        #expect(adapter.preferTenBitYUV, "10-bit YCbCr capture is the default")
         for (depth, ten, twelve) in [(CaptureBitDepth.eight, false, false),
                                      (.ten, true, false),
                                      (.twelve, true, true)] {
             var settings = CaptureSettings()
             settings.captureBitDepth = depth.rawValue
-            adapter.preferTenBitRGB = settings.resolvedCaptureBitDepth != .eight
-            adapter.preferTwelveBitRGB = settings.resolvedCaptureBitDepth == .twelve
+            let resolved = settings.resolvedCaptureBitDepth
+            adapter.preferTenBitRGB = resolved != .eight
+            adapter.preferTwelveBitRGB = resolved == .twelve
+            adapter.preferTenBitYUV = resolved.yuvBits == 10
             #expect(adapter.preferTenBitRGB == ten, "\(depth) ten-bit flag")
             #expect(adapter.preferTwelveBitRGB == twelve, "\(depth) 12-bit flag")
+            // 10-bit YCbCr is asked for at every depth except 8: there is no
+            // 12-bit YCbCr format to ask for instead
+            #expect(adapter.preferTenBitYUV == ten, "\(depth) ten-bit YUV flag")
         }
     }
 

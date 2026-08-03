@@ -121,6 +121,7 @@ extension CaptureController {
             capture.timecodeFPS = format.timecodeFPS
             capture.isDropFrame = format.isDropFrame
             capture.isRGB444 = format.isRGB444
+            capture.wireBitDepth = format.bitDepth
         }
         capture.currentTimecode = currentTimecode?.description
         capture.levelsSetting = settings.videoLevels ?? "auto"

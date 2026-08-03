@@ -264,4 +264,80 @@ struct WireDisplayTableTests {
             #expect(table[code] == UInt16(code))
         }
     }
+
+    /// The same claim on the CONVERTERS rather than on the table, and with the
+    /// 10-bit YCbCr path joined to it — which is the harder version, because
+    /// `'v210'` reaches this table through a colour-space conversion that the two
+    /// RGB formats do not need.
+    ///
+    /// A grey frame at every one of the 1024 codes, through all three converters,
+    /// has to arrive on the monitor as the same byte. It works because the matrix
+    /// is exactly the identity on neutral chroma (`WireYCbCrTests`) and because
+    /// the levels decision then happens in one place for all three. Had the
+    /// YCbCr path folded its range expansion into the matrix — the textbook
+    /// conversion — this test is what would have caught the drift.
+    @Test func allThreeWireConvertersShowTheSamePicture() throws {
+        let width = 1026 // ≥ 1024 codes, and a whole number of 'v210' blocks
+        let ten = TenBitConverter()
+        let twelve = TwelveBitConverter()
+        let yuv = TenBitYUVConverter()
+        for levels in [InputLevels.limited, .full] {
+            ten.setLevels(levels)
+            twelve.setLevels(levels)
+            yuv.setLevels(levels)
+            let shown = try [
+                "r210": Self.displayBytes(of: ten.convert(
+                    try Self.makeR210(width: width) { $0 & 0x3FF }), width: width),
+                "R12B": Self.displayBytes(of: twelve.convert(
+                    try R12BFixtures.makeGrey(width: width, height: 2) { x, _ in
+                        (x & 0x3FF) << 2
+                    }), width: width),
+                "v210": Self.displayBytes(of: yuv.convert(
+                    try V210Fixtures.makeGrey(width: width, height: 2) { x, _ in
+                        x & 0x3FF
+                    }), width: width),
+            ]
+            for code in 0..<1024 {
+                let bytes = shown.mapValues { $0[code] }
+                let spread = (bytes.values.max() ?? 0) - (bytes.values.min() ?? 0)
+                #expect(spread <= 1, "\(levels) code \(code): \(bytes)")
+            }
+        }
+    }
+
+    /// The blue byte of every pixel of the first row of a display product.
+    private static func displayBytes(
+        of split: (display: CVPixelBuffer, record: CVPixelBuffer)?,
+        width: Int) throws -> [Int] {
+        let display = try #require(split?.display)
+        CVPixelBufferLockBaseAddress(display, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(display, .readOnly) }
+        let base = try #require(CVPixelBufferGetBaseAddress(display))
+            .assumingMemoryBound(to: UInt32.self)
+        return (0..<width).map { Int(base[$0] & 0xFF) }
+    }
+
+    /// A grey 'r210' frame. Written out here rather than shared: the 10-bit RGB
+    /// suites each build their own, which is what keeps them independent.
+    private static func makeR210(width: Int,
+                                 code: (_ x: Int) -> Int) throws -> CVPixelBuffer {
+        var out: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, width, 2, TenBitConverter.r210,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+                            &out)
+        let buffer = try #require(out)
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        let base = try #require(CVPixelBufferGetBaseAddress(buffer))
+        let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+        for y in 0..<2 {
+            let row = base.advanced(by: y * rowBytes)
+                .assumingMemoryBound(to: UInt32.self)
+            for x in 0..<width {
+                let value = UInt32(code(x))
+                row[x] = ((value << 20) | (value << 10) | value).bigEndian
+            }
+        }
+        return buffer
+    }
 }

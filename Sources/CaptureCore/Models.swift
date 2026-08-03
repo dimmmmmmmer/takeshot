@@ -16,8 +16,11 @@ public struct CaptureFormat: Equatable, Sendable {
     /// What the backend settled on, not what the settings asked for, so the app
     /// can tell the operator when a request could not be met (a board or a
     /// source that cannot do 12-bit falls back, and silence there is a colour
-    /// decision made behind their back). Only meaningful for RGB 4:4:4; YUV
-    /// capture is 8-bit '2vuy'.
+    /// decision made behind their back).
+    ///
+    /// Meaningful for both samplings: RGB 4:4:4 is 8 ('BGRA'), 10 ('r210') or 12
+    /// ('R12B'), and YCbCr 4:2:2 is 8 ('2vuy') or 10 ('v210'). It used to be
+    /// documented as RGB-only, because YUV capture was 8-bit and nothing else.
     public var bitDepth: Int
 
     public init(width: Int, height: Int, frameRate: Double, timecodeFPS: Int,
@@ -53,12 +56,19 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     public var isRGB444Capable: Bool { self == .proRes4444 }
 }
 
-/// Bits per component to ask the board for on an RGB 4:4:4 source.
+/// Bits per component to ask the board for.
 ///
 /// A setting rather than a constant because the three are real trade-offs: 8
 /// is BGRA and cheapest, 10 is 'r210' and has been the default since the
 /// pipeline learned to split wire frames, 12 is 'R12B' and costs twice the
 /// record bandwidth for two more bits that only ProRes 4444 can carry.
+///
+/// ONE setting for both samplings rather than two pickers, because "how many
+/// bits do I want off the wire" is one question an operator asks once. The wire
+/// format it names differs — see `bits` for RGB 4:4:4 and `yuvBits` for
+/// YCbCr 4:2:2 — and so does what a board is likely to do with the request:
+/// 12-bit RGB is exotic and often refused, 10-bit YCbCr is the baseline SDI
+/// format and effectively always available.
 public enum CaptureBitDepth: String, CaseIterable, Codable, Sendable, Identifiable {
     case eight = "8"
     case ten = "10"
@@ -66,7 +76,16 @@ public enum CaptureBitDepth: String, CaseIterable, Codable, Sendable, Identifiab
 
     public var id: String { rawValue }
 
+    /// Bits to request from an RGB 4:4:4 source: 8 'BGRA', 10 'r210', 12 'R12B'.
     public var bits: Int { Int(rawValue) ?? 10 }
+
+    /// Bits to request from a YCbCr 4:2:2 source: 8 '2vuy' or 10 'v210'.
+    ///
+    /// 12 means 10 here, and that is not a rounding-down of the operator's
+    /// wish — there IS no 12-bit YCbCr wire format in the SDK, so 'v210' is the
+    /// deepest thing a 4:2:2 signal can be asked for. Someone who selected 12
+    /// asked for as many bits as the wire has, and on a YCbCr wire that is ten.
+    public var yuvBits: Int { self == .eight ? 8 : 10 }
 }
 
 /// Resolution to decode .r3d clips at.
@@ -247,12 +266,19 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// resolve to the depth the operator had chosen — see
     /// `resolvedCaptureBitDepth`. Nothing writes it any more.
     public var tenBitCapture: Bool?
-    /// Bits per component to request for RGB 4:4:4 capture ("8"/"10"/"12");
-    /// nil — fall back to `tenBitCapture`, i.e. 10-bit.
+    /// Bits per component to request from the board ("8"/"10"/"12"); nil — fall
+    /// back to `tenBitCapture`, i.e. 10-bit.
     ///
     /// Optional like every added field, so old saved JSON still decodes — and
     /// that nil is also what makes 12-bit OFF by default: nobody gets moved to
     /// a format their board may not deliver by installing an update.
+    ///
+    /// The same nil now also means 10-bit YCbCr ('v210') on a 4:2:2 source,
+    /// where it used to mean 8-bit '2vuy'. That IS a changed default, chosen
+    /// deliberately rather than inherited: v210 is what the SDI wire carries, so
+    /// 8-bit capture of it was the driver discarding two bits of the operator's
+    /// picture, and the request falls back visibly on a board that refuses it.
+    /// See `CaptureBitDepth.yuvBits`.
     public var captureBitDepth: String?
     /// Resolution to decode .r3d clips at (`R3DDecodeScale`); nil — auto, which
     /// is enough pixels for a 1080-class viewer and no more.

@@ -47,6 +47,11 @@ public final class TwelveBitConverter: WireConverter {
     /// sized from this — a 3 s lead at UHD is twice the RAM it is at 10 bits,
     /// and the ring's memory cap has to know that or it overshoots its budget.
     public var recordBytesPerPixel: Int { 8 }
+    /// Yes, exactly as for 'r210': the file carries the wire's studio-swing
+    /// CODES and no RGB coded picture can say so on its own. 12-bit swing
+    /// 256/3760 is 16/235 in the 8 bits the player works in, so the existing
+    /// playback table needs no 12-bit case.
+    public var recordNeedsPlaybackExpansion: Bool { true }
 
     /// wire code (0…4095) → the value that appears on the DISPLAY.
     private var expand = WireDisplayTable.expand(levels: .limited, bits: 12)

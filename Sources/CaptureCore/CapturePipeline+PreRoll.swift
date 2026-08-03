@@ -41,8 +41,8 @@ extension CapturePipeline {
         guard writer == nil else { return }
         // the pre-roll must hold what the WRITER gets: the wire-code record
         // buffer when active, but BGRA when a LUT is baked into the recording —
-        // beginTake runs applyLUT over these frames and CoreImage cannot read
-        // 'r210' or 'R12B'
+        // beginTake runs applyLUT over these frames and a wire format ('r210',
+        // 'R12B', 'v210') is not something to hand CoreImage
         let preRollFrameBuffer = lutRecord
             ? leveled.display : (leveled.wireRecord ?? leveled.display)
         preRollBuffer.append(PreRollFrame(index: frameIndex,

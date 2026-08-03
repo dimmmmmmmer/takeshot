@@ -22,7 +22,9 @@ import Foundation
 ///
 /// The samples themselves are 10-bit (0…1023) whatever the source is. An 8-bit
 /// frame is bit-replicated up, which is exact at both ends and costs a table
-/// lookup; a 10-bit r210 wire frame keeps every code it arrived with. The trace
+/// lookup; a 10-bit wire frame — `'r210'` or `'v210'` — keeps every code it
+/// arrived with, and for `'v210'` the analyzer's scale and the source's are the
+/// same scale, which for once means no conversion in either direction. The trace
 /// maps are 512 rows for the same reason: quantizing a 10-bit signal onto 256
 /// rows puts it straight back where it started, and a near-flat gradient drawn
 /// on 256 rows is the "8-bit, undetailed" staircase the operator sees.
@@ -80,7 +82,7 @@ public struct ScopeData: Sendable {
 }
 
 /// Computes scope data from capture/playback pixel buffers.
-/// Supports 32BGRA, r210, 2vuy and 420v frames.
+/// Supports 32BGRA, r210, R12B, v210, 2vuy and 420v frames.
 public enum ScopeAnalyzer {
     /// The internal sample scale: everything the accumulator sees is a 10-bit
     /// code, whatever the source carried.
@@ -122,9 +124,10 @@ public enum ScopeAnalyzer {
     /// `region` is the part of the frame to analyze — the punched-in crop the
     /// viewer is showing, or `.full` for the whole frame.
     ///
-    /// `wireLevels` only means anything for an r210 frame, which is the one
-    /// format that reaches the analyzer before the levels stage has touched it.
-    /// Every other format arrives already expanded and is read as `.full`.
+    /// `wireLevels` only means anything for a WIRE frame — 'r210', 'R12B' or
+    /// 'v210' — those being the formats that reach the analyzer before the levels
+    /// stage has touched them. Every other format arrives already expanded and is
+    /// read as `.full`.
     public static func analyze(_ pixelBuffer: CVPixelBuffer,
                                region: ScopeRegion = .full,
                                wireLevels: ScopeWireLevels = .full) -> ScopeData? {
@@ -149,6 +152,15 @@ public enum ScopeAnalyzer {
                     >= R12BPacking.blockRowBytes(width: $0.width) else { return nil }
                 return analyzed(R12BReader(plane: $0), region: region,
                                 levels: wireLevels)
+            }
+        case V210Packing.pixelFormat: // 'v210', 10-bit YCbCr 4:2:2
+            return PackedPlane(pixelBuffer).flatMap {
+                // a stride too short for whole 16-byte blocks would be read
+                // past the end of each row — refuse the frame instead
+                guard CVPixelBufferGetBytesPerRow(pixelBuffer)
+                    >= V210Packing.blockRowBytes(width: $0.width) else { return nil }
+                return analyzed(V210Reader(plane: $0, levels: wireLevels),
+                                region: region, levels: wireLevels)
             }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
             return PackedPlane(pixelBuffer).flatMap {
@@ -313,6 +325,48 @@ public enum ScopeAnalyzer {
     @inline(__always)
     static func narrowed(_ code: Int) -> Int {
         min(sampleLevels - 1, (code + 2) >> 2)
+    }
+
+    /// 'v210' — 10-bit YCbCr 4:2:2, the standard professional SDI signal. The
+    /// third wire reader, and the only one whose depth matches the analyzer's own
+    /// sample scale exactly: nothing is widened and nothing is narrowed, so every
+    /// code the camera sent is the code that lands on the trace.
+    ///
+    /// Same place in the pipeline as its two RGB siblings — before the split, so
+    /// nothing has been quantized to 256 levels and nothing outside the nominal
+    /// pair has been clamped away. The bit layout is not repeated here: both
+    /// readers of this format go through `V210Packing`.
+    ///
+    /// The chroma is NEAREST — the pair's coded samples, not an interpolation.
+    /// The picture path interpolates and says why; an instrument must not, because
+    /// the samples an upsampler invents are not in the signal, and a vectorscope
+    /// exists to show what arrived. This is also exactly what the 8-bit '2vuy'
+    /// reader below has always done.
+    private struct V210Reader: PackedPlaneReader {
+        let plane: PackedPlane
+        /// The matrix onto R'G'B' — carried rather than shared with the converter
+        /// instance because the analyzer is handed a frame and a levels reading,
+        /// not a pipeline.
+        let matrix: WireYCbCr
+
+        init(plane: PackedPlane, levels: ScopeWireLevels) {
+            self.plane = plane
+            matrix = WireYCbCr(levels: levels)
+        }
+
+        func sample(x: Int, y: Int) -> Sample {
+            let pixel = V210Packing.pixel(plane.row(y), x: x)
+            let rgb = matrix.rgb(luma: pixel.luma, cb: pixel.cb, cr: pixel.cr)
+            // The parade gets R'G'B' on the WIRE's swing, which is the same
+            // domain the r210 reader hands over — so a 10-bit YCbCr source and a
+            // 10-bit RGB source draw the same trace for the same picture. Luma
+            // and chroma ride along unclamped so an illegal excursion is plotted
+            // as itself instead of being folded into the RGB gamut.
+            return Sample(r: rgb.r, g: rgb.g, b: rgb.b,
+                          nativeChroma: matrix.chromaDifference(cb: pixel.cb,
+                                                                cr: pixel.cr),
+                          nativeLuma: pixel.luma)
+        }
     }
 
     /// '2vuy' — one Cb Y0 Cr Y1 macropixel covers two columns.
