@@ -98,12 +98,26 @@ extension CaptureController {
         }
     }
 
-    /// Focus-peaking edge gain.
+    /// Focus-peaking edge gain, in the renderer's own unit.
     var peakingIntensity: Double {
         get { liveAssist.peakingIntensity }
         set {
-            applyAssistPreview { $0.peakingIntensity = min(30, max(2, newValue)) }
+            applyAssistPreview {
+                $0.peakingIntensity = min(ViewAssist.maxPeakingIntensity,
+                                          max(0, newValue))
+            }
         }
+    }
+
+    /// The same control as the operator reads it: sensitivity, 0…100 %.
+    ///
+    /// The slider is in these units and the stored value is in the renderer's
+    /// (see `CaptureSettings.peakingIntensity`) — "2 to 30" is a number out of
+    /// the CoreImage documentation and says nothing about how much peaking that
+    /// is.
+    var peakingPercent: Double {
+        get { ViewAssist.peakingPercent(forIntensity: liveAssist.peakingIntensity) }
+        set { peakingIntensity = ViewAssist.peakingIntensity(forPercent: newValue) }
     }
 
     // MARK: - zoom and pan
@@ -172,13 +186,15 @@ extension CaptureController {
         set { settings.legendSize = newValue == .medium ? nil : newValue.rawValue }
     }
 
-    var legendCorner: AssistLegendCorner {
+    /// Which edge the legend runs along; bottom, centered, is the default and
+    /// is stored as nil like every other default.
+    var legendPlacement: AssistLegendPlacement {
         get {
-            AssistLegendCorner(rawValue: settings.legendCorner ?? "")
-                ?? .bottomTrailing
+            AssistLegendPlacement(rawValue: settings.legendPlacement ?? "")
+                ?? .standard
         }
         set {
-            settings.legendCorner = newValue == .bottomTrailing
+            settings.legendPlacement = newValue == .standard
                 ? nil : newValue.rawValue
         }
     }

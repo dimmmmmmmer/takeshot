@@ -216,6 +216,147 @@ import Testing
         }
     }
 
+    // MARK: - playback starts inside the range (owner item 38)
+
+    /// The decision on its own, without a player attached.
+    ///
+    /// The bug: the loop was enforced at the OUT point alone — the periodic
+    /// observer seeks back when time passes it, the end-of-item observer does
+    /// the same at the tail — and nothing ever put the playhead INSIDE the
+    /// range to begin with. A fresh `AVPlayerItem` starts at zero, so the first
+    /// pass over a clip with a range on it played the whole lead-in and only
+    /// then began looping.
+    @Test func theRangeDecidesWherePlaybackBegins() {
+        let transport = TransportModel()
+        transport.loadClip(url("A001C001.mov"))
+
+        // no range: nothing to decide, the playhead stays where it is
+        #expect(transport.rangeStart(forPlayheadAt: 0) == nil)
+        #expect(transport.rangeStart(forPlayheadAt: 7) == nil)
+
+        transport.inPoint = 4
+        transport.outPoint = 9
+        #expect(transport.rangeStart(forPlayheadAt: 0) == 4,
+                "playback from the head ignored the in point")
+        #expect(transport.rangeStart(forPlayheadAt: 3.9) == 4)
+        // already inside it: left alone, so a pause and a resume do not jump
+        #expect(transport.rangeStart(forPlayheadAt: 4) == nil)
+        #expect(transport.rangeStart(forPlayheadAt: 6) == nil)
+        // at or past the out point: the next play restarts the range
+        #expect(transport.rangeStart(forPlayheadAt: 9) == 4)
+        #expect(transport.rangeStart(forPlayheadAt: 20) == 4)
+
+        // an out point with no in point sends it back to the head
+        transport.inPoint = nil
+        #expect(transport.rangeStart(forPlayheadAt: 0) == nil)
+        #expect(transport.rangeStart(forPlayheadAt: 9) == 0)
+
+        // with looping off the out point is not enforced anywhere, so it does
+        // not reposition the start either; an in point still does
+        transport.isLooping = false
+        #expect(transport.rangeStart(forPlayheadAt: 9) == nil)
+        transport.inPoint = 4
+        #expect(transport.rangeStart(forPlayheadAt: 0) == 4)
+    }
+
+    /// And through the controller, on real media: opening a clip that carries a
+    /// range puts the FIRST delivered position inside it.
+    ///
+    /// The assertion is on the player's own clock immediately after the open,
+    /// which is the reading the old code answered with 0 — a poll for "is it in
+    /// the range yet" would go green either way once playback reached the out
+    /// point and wrapped, which is precisely the behaviour being fixed.
+    @Test func openingAClipWithARangeStartsInsideIt() async throws {
+        let media = try MediaFixtures.makeDirectory("range-start")
+        defer { try? FileManager.default.removeItem(at: media) }
+        // 2 s at 25 fps, so there is a lead-in worth measuring
+        let clip = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("A001C001.mov"), frames: 50)
+
+        try await ControllerHarness.run { controller, _ in
+            MediaFixtures.silence(controller)
+            defer { MediaFixtures.stopPlayback(controller) }
+            let transport = controller.transport
+
+            // the range is on file before the clip is ever opened — a mark made
+            // in an earlier session, restored from takeshot-ranges.csv
+            transport.storeRange(ClipRange(inPoint: 1.2, outPoint: 1.8),
+                                 for: clip)
+
+            controller.play(url: clip)
+            #expect(transport.inPoint == 1.2, "the range was not adopted")
+
+            let first = controller.player.currentTime().seconds
+            #expect(first >= 1.15,
+                    "playback opened at \(first)s, outside the 1.2–1.8 range")
+            #expect(first <= 1.85)
+            #expect(transport.position.currentTime >= 1.15,
+                    "the transport readout still says the head of the clip")
+        }
+    }
+
+    /// A clip with no range is left where it always started, and one whose
+    /// range is only an OUT point starts at the head — the fix must not turn
+    /// every open into a seek.
+    @Test func aClipWithoutAnInPointStillOpensAtTheHead() async throws {
+        let media = try MediaFixtures.makeDirectory("range-start-none")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let plain = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("A001C001.mov"), frames: 50)
+        let outOnly = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("A001C002.mov"), frames: 50)
+
+        try await ControllerHarness.run { controller, _ in
+            MediaFixtures.silence(controller)
+            defer { MediaFixtures.stopPlayback(controller) }
+            controller.transport.storeRange(ClipRange(inPoint: nil, outPoint: 1.5),
+                                            for: outOnly)
+
+            controller.play(url: plain)
+            #expect(controller.player.currentTime().seconds < 0.2)
+
+            controller.play(url: outOnly)
+            #expect(controller.player.currentTime().seconds < 0.2,
+                    "an out point on its own moved the start of the clip")
+        }
+    }
+
+    /// The RAW engine had the same bug and it is fixed in the same place: a
+    /// clip opened with an in point marked on it starts on that frame.
+    @Test func aRawClipWithARangeAlsoStartsInsideIt() async throws {
+        try await ControllerHarness.run { _, root in
+            // a long enough sequence that a range has somewhere to sit; the
+            // frames are never decoded, only counted
+            let folder = root.appendingPathComponent("A002.dng-sequence")
+            try FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true)
+            for index in 1...80 {
+                try Data("frame".utf8).write(to: folder.appendingPathComponent(
+                    String(format: "frame_%06d.dng", index)))
+            }
+            var error: String?
+            let raw = try #require(RawPlayerModel(url: folder, error: &error),
+                                   "the DNG folder was refused: \(error ?? "-")")
+            raw.pause()
+            #expect(raw.frameCount == 80)
+            raw.inFrame = 40
+            raw.outFrame = 60
+
+            #expect(raw.startOfPlayback() == 40,
+                    "the loop would have started at the head again")
+            raw.currentFrame = 50 // already inside: left where it is
+            #expect(raw.startOfPlayback() == 50)
+            raw.currentFrame = 60 // at the out point: back round
+            #expect(raw.startOfPlayback() == 40)
+
+            // no range, no repositioning
+            raw.inFrame = nil
+            raw.outFrame = nil
+            raw.currentFrame = 7
+            #expect(raw.startOfPlayback() == 7)
+        }
+    }
+
     /// Deleting the clip in the player releases its range along with everything
     /// else the controller was holding for it.
     @Test func deletingATakeForgetsItsRange() async throws {

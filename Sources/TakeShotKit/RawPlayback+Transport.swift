@@ -40,16 +40,36 @@ extension RawPlayerModel {
     }
 
     func play() {
+        startPlaying(at: startOfPlayback())
+    }
+
+    /// Begin the decode loop at an exact frame, whatever the range says — how a
+    /// scrub that lands outside the range resumes where the operator dropped it
+    /// instead of snapping back to the in point under their hand.
+    func startPlaying(at frame: Int) {
         guard !isPlaying, frameCount > 0 else { return }
         isPlaying = true
         playGeneration += 1
         let generation = playGeneration
-        // restart from the top (or the in point) when play is hit at the end
-        let floorFrame = inFrame ?? 0
-        let startFrame = currentFrame >= frameCount - 1
-            ? floorFrame : max(currentFrame, 0)
+        let startFrame = min(max(0, frame), max(0, frameCount - 1))
         currentFrame = startFrame
         playTask = makePlayTask(startFrame: startFrame, generation: generation)
+    }
+
+    /// Which frame playback begins on.
+    ///
+    /// The engine's half of owner item 38, and the same bug the AVPlayer
+    /// transport had: the loop was enforced at the OUT point only (see
+    /// `makePlayTask`), so a clip opened with an in point marked on it played
+    /// the whole lead-in and started looping when it arrived. Playback belongs
+    /// inside the range from the first frame — hit play before the in point, or
+    /// at or past the out point, and it starts at the in point.
+    func startOfPlayback() -> Int {
+        let floorFrame = min(max(0, inFrame ?? 0), max(0, frameCount - 1))
+        let position = max(currentFrame, 0)
+        if position >= frameCount - 1 { return floorFrame }
+        if let outFrame, position >= outFrame { return floorFrame }
+        return max(position, floorFrame)
     }
 
     func pause() {
@@ -74,7 +94,7 @@ extension RawPlayerModel {
         currentFrame = clamped
         showFrame(clamped)
         if wasPlaying {
-            play()
+            startPlaying(at: clamped)
         }
     }
 

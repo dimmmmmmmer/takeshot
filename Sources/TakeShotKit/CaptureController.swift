@@ -254,6 +254,13 @@ final class CaptureController: ObservableObject {
                 settings.peakingColor = assist.peakingColor == .red
                     ? nil : assist.peakingColor.rawValue
             }
+            // …and so is how hard it is driven. Stored in the renderer's unit,
+            // shown as a percentage (see CaptureSettings.peakingIntensity).
+            if oldValue.peakingIntensity != assist.peakingIntensity {
+                settings.peakingIntensity =
+                    assist.peakingIntensity == ViewAssist().peakingIntensity
+                    ? nil : assist.peakingIntensity
+            }
             // the chroma key's dial-in is persisted the same way, in one place
             // rather than a line per parameter (see persistChromaSettings)
             if oldValue.chroma != assist.chroma { persistChromaSettings() }
@@ -263,6 +270,14 @@ final class CaptureController: ObservableObject {
     /// `+ChromaKey`). Published because it changes the pointer and puts a
     /// pick surface over the player.
     @Published var chromaPickArmed = false
+    /// The assist popover is open.
+    ///
+    /// Here rather than in `AssistMenu`'s own `@State` because the eyedropper
+    /// has to close it for the duration of a click on the picture and put it
+    /// straight back afterwards — see `toggleChromaPick`.
+    @Published var showAssistPopover = false
+    /// Arming the eyedropper took the popover away, so the pick puts it back.
+    var chromaPickReopensAssist = false
     /// File name of the plate loaded behind the key; nil — none. The buffer
     /// itself lives in the display stage, which is the only thing that draws
     /// it; this is what the panel shows.

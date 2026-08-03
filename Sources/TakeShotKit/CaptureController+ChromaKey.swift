@@ -1,14 +1,11 @@
-import AppKit
 import CaptureCore
 import CoreGraphics
-import CoreImage
 import Foundation
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// The chroma-key preview's controller half: the controls the panel binds to,
-/// the eyedropper, the plate that goes behind the actor, and what of all that
-/// survives a relaunch.
+/// the eyedropper, and what of all that survives a relaunch. The plate that
+/// goes behind the actor — loading it, and placing it — is `+ChromaPlate`.
 ///
 /// The key itself rides inside `ViewAssist` (see the `chroma` member there), so
 /// everything here goes through the same two doors the rest of the aids use —
@@ -37,15 +34,14 @@ extension CaptureController {
         set { setAssist { $0.chroma.background = newValue } }
     }
 
-    /// The screen color, as the swatch and the color well see it.
-    var chromaKeyColor: Color {
-        get { Color(chroma.keyColor) }
-        set { setAssist { $0.chroma.keyColor = ChromaKey.RGB(newValue) } }
-    }
-
-    var chromaBackgroundColor: Color {
-        get { Color(chroma.backgroundColor) }
-        set { setAssist { $0.chroma.backgroundColor = ChromaKey.RGB(newValue) } }
+    /// The solid background, in the keyer's own triple.
+    ///
+    /// Not a SwiftUI `Color` (which is what the color well used to hand back):
+    /// a round trip through `Color` and `NSColor` quantises to 8 bits per
+    /// channel and moves a hex the operator typed by a code value.
+    var chromaBackgroundRGB: ChromaKey.RGB {
+        get { chroma.backgroundColor }
+        set { setAssist { $0.chroma.backgroundColor = newValue.clamped() } }
     }
 
     /// The two presets. A click, not a drag — published straight away.
@@ -58,7 +54,8 @@ extension CaptureController {
 
     // MARK: - the dragged controls
 
-    /// Chroma distance that counts as screen (the similarity control).
+    /// Where the boundary between screen and subject sits, in chroma distance —
+    /// the control that decides how much of the screen is keyed at all.
     var chromaTolerance: Double {
         get { liveAssist.chroma.tolerance }
         set {
@@ -68,7 +65,7 @@ extension CaptureController {
         }
     }
 
-    /// Feather above the tolerance.
+    /// How gradually the matte crosses that boundary, 0…1 of the tolerance.
     var chromaSoftness: Double {
         get { liveAssist.chroma.softness }
         set {
@@ -93,8 +90,30 @@ extension CaptureController {
     /// Picking from the live image is the whole feature: nobody can name the
     /// green their cyc actually is under their actual lights, and every minute
     /// spent guessing at a color well is a minute the unit is waiting.
+    ///
+    /// Arming CLOSES the assist popover and remembers to bring it back. The
+    /// pick is a click on the picture, i.e. a click outside the popover, and a
+    /// popover that is open when it lands eats the click to dismiss itself — so
+    /// the operator's first click did nothing and the second one picked a color
+    /// with the panel already gone. Closing it deliberately makes the first
+    /// click the pick, and reopening afterwards puts the operator back in front
+    /// of the dials with the new key on screen, which is when the key is
+    /// actually judged.
     func toggleChromaPick() {
         chromaPickArmed.toggle()
+        if chromaPickArmed {
+            chromaPickReopensAssist = showAssistPopover
+            showAssistPopover = false
+        } else {
+            reopenAssistAfterPick()
+        }
+    }
+
+    /// Put the popover back after a pick, if arming took it away.
+    func reopenAssistAfterPick() {
+        guard chromaPickReopensAssist else { return }
+        chromaPickReopensAssist = false
+        showAssistPopover = true
     }
 
     /// A click on the preview at `point`, on a `viewport`-sized surface (view
@@ -117,72 +136,8 @@ extension CaptureController {
             $0.chroma.isOn = true
         }
         lastNotice = L("chroma_picked", color.hexString)
-    }
-
-    // MARK: - the plate
-
-    /// Pick the intended background off disk.
-    func chooseChromaBackgroundImage() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = Self.imageExtensions
-            .compactMap { UTType(filenameExtension: $0) }
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.message = L("chroma_choose_image")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        loadChromaBackground(imageURL: url)
-    }
-
-    /// Decode a plate and hand it to the display stage.
-    ///
-    /// The same path a pinned reference still takes (`pinReference(imageURL:)`):
-    /// managed input rendered INTO Rec.709, so a plate that arrives with an
-    /// sRGB or Display P3 profile is converted exactly once, here, rather than
-    /// by whatever draws it later. Off the main actor — the art department's
-    /// plate is a 6K TIFF as often as not.
-    func loadChromaBackground(imageURL url: URL) {
-        settings.chromaKeyBackgroundImagePath = url.path
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let decoded = Self.decodePlate(url)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard let decoded else {
-                    self.lastError = L("chroma_image_failed")
-                    return
-                }
-                self.pipeline.setChromaBackgroundImage(decoded.value)
-                self.chromaBackgroundImageName = url.lastPathComponent
-            }
-        }
-    }
-
-    /// The decode itself, off the actor. `nonisolated` and static so the
-    /// detached task above does not have to reach back into the controller for
-    /// anything but the answer.
-    nonisolated private static func decodePlate(
-        _ url: URL) -> UncheckedSendable<CVPixelBuffer>? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cg = CGImageSourceCreateImageAtIndex(source, 0, [
-                  kCGImageSourceShouldCacheImmediately: true,
-              ] as CFDictionary) else { return nil }
-        let attachments = [
-            kCVImageBufferColorPrimariesKey: kCVImageBufferColorPrimaries_ITU_R_709_2,
-            kCVImageBufferTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_709_2,
-            kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
-        ] as CFDictionary
-        let space = CVImageBufferCreateColorSpaceFromAttachments(attachments)?
-            .takeRetainedValue() ?? CGColorSpaceCreateDeviceRGB()
-        guard let buffer = CIBufferRender.render(CIImage(cgImage: cg),
-                                                 width: cg.width,
-                                                 height: cg.height,
-                                                 into: space) else { return nil }
-        return UncheckedSendable(buffer)
-    }
-
-    func clearChromaBackgroundImage() {
-        pipeline.setChromaBackgroundImage(nil)
-        chromaBackgroundImageName = nil
-        settings.chromaKeyBackgroundImagePath = nil
+        // straight back to the dials, with the new key already on the picture
+        reopenAssistAfterPick()
     }
 
     // MARK: - persistence
@@ -207,6 +162,7 @@ extension CaptureController {
             ? nil : key.background.rawValue
         updated.chromaKeyBackgroundHex = key.backgroundColor == base.backgroundColor
             ? nil : key.backgroundColor.hexString
+        Self.storePlateLayout(key.plate, into: &updated)
         guard updated != settings else { return }
         settings = updated
     }
@@ -223,6 +179,7 @@ extension CaptureController {
             .flatMap(ChromaKey.Background.init(rawValue:)) ?? key.background
         if let hex = stored.chromaKeyBackgroundHex,
            let color = ChromaKey.RGB(hex: hex) { key.backgroundColor = color }
+        key.plate = Self.plateLayout(from: stored)
         key.clamp()
         key.isOn = false
         assist.chroma = key
@@ -230,26 +187,21 @@ extension CaptureController {
         // leaves the checkerboard showing
         if let path = stored.chromaKeyBackgroundImagePath,
            FileManager.default.fileExists(atPath: path) {
-            loadChromaBackground(imageURL: URL(fileURLWithPath: path))
+            loadChromaBackground(mediaURL: URL(fileURLWithPath: path))
         }
     }
 }
 
 /// The bridge between the keyer's plain triple and SwiftUI's color type. Lives
 /// here and not on the CaptureCore struct — that module has no SwiftUI.
+///
+/// One direction only, and deliberately: the swatches DRAW the key's colors,
+/// and nothing hands one back any more. The reverse bridge went with the
+/// `ColorPicker` that used to need it (owner item 30) — a round trip through
+/// `NSColor` quantises to 8 bits a channel, so a typed hex came back a code
+/// value away from itself.
 extension Color {
     init(_ rgb: ChromaKey.RGB) {
         self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
-    }
-}
-
-extension ChromaKey.RGB {
-    /// A picked color in the display's own code values. sRGB rather than the
-    /// device space: the well hands back whatever the picker was showing, and
-    /// the keyer measures the codes the signal arrives in.
-    init(_ color: Color) {
-        let ns = NSColor(color).usingColorSpace(.sRGB) ?? .black
-        self.init(Double(ns.redComponent), Double(ns.greenComponent),
-                  Double(ns.blueComponent))
     }
 }

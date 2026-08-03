@@ -16,6 +16,11 @@ struct RetiredSettings: Decodable {
     /// months later, which is everything this did and more — but the folder the
     /// operator had chosen is still the disk they back up to.
     var backupPath: String?
+    /// Which CORNER of the player the exposure legend sat in. The legend is a
+    /// strip and now lives against an edge (`legendPlacement`), so the corner
+    /// itself is gone — but "the operator had it at the top" is still worth
+    /// carrying across (see `migrateToVersion3`).
+    var legendCorner: String?
 
     init() {}
 

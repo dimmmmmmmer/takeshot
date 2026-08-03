@@ -20,11 +20,13 @@ public final class ChromaKeyer: @unchecked Sendable {
     /// The last cube built, and the parameters it was built from.
     private var cachedCubeKey: ChromaKey.CubeKey?
     private var cachedCube: Data?
-    /// The fitted plate is invariant per (buffer, frame size) — rebuilt only
-    /// when the operator loads another one or the signal changes shape.
+    /// The placed plate is invariant per (buffer, frame size, layout) — rebuilt
+    /// only when the operator loads another one, drags the placement, or the
+    /// signal changes shape.
     private struct FittedPlate {
         let source: CVPixelBuffer
         let extent: CGRect
+        let layout: ChromaKey.PlateLayout
         let image: CIImage
     }
 
@@ -114,15 +116,46 @@ public final class ChromaKeyer: @unchecked Sendable {
             // to look different
             guard let plate else { return Self.checkerboard(extent: extent) }
             if let cache = fittedPlate, cache.source === plate,
-               cache.extent == extent {
+               cache.extent == extent, cache.layout == key.plate {
                 return cache.image
             }
-            let fitted = CompareCompositor.fitted(
-                CIImage(cvPixelBuffer: plate, options: [.colorSpace: NSNull()]),
-                into: extent)
-            fittedPlate = FittedPlate(source: plate, extent: extent, image: fitted)
-            return fitted
+            let placed = Self.placed(plate, layout: key.plate, in: extent)
+            fittedPlate = FittedPlate(source: plate, extent: extent,
+                                      layout: key.plate, image: placed)
+            return placed
         }
+    }
+
+    /// The plate scaled and shifted per the operator's layout, cropped to the
+    /// frame and backed with black where it does not reach.
+    ///
+    /// Black and not a checkerboard: an uncovered edge here is the operator's
+    /// own framing decision, not the "you have loaded nothing" state, and a
+    /// pattern behind a deliberately inset plate reads as a broken key.
+    private static func placed(_ buffer: CVPixelBuffer,
+                               layout: ChromaKey.PlateLayout,
+                               in extent: CGRect) -> CIImage {
+        let image = CIImage(cvPixelBuffer: buffer, options: [.colorSpace: NSNull()])
+        let source = image.extent
+        guard let target = layout.rect(forPlate: source.size, in: extent) else {
+            return image
+        }
+        let scaled = image
+            .transformed(by: CGAffineTransform(
+                scaleX: target.width / source.width,
+                y: target.height / source.height))
+        // the scale left the image at the origin the source had; move its own
+        // corner onto the target's rather than assuming either was at zero
+        let positioned = scaled.transformed(by: CGAffineTransform(
+            translationX: target.minX - scaled.extent.minX,
+            y: target.minY - scaled.extent.minY))
+        guard !layout.covers(extent, plate: source.size) else {
+            return positioned.cropped(to: extent)
+        }
+        return positioned
+            .composited(over: CIImage(color: CIColor(red: 0, green: 0, blue: 0))
+                .cropped(to: extent))
+            .cropped(to: extent)
     }
 
     /// The "is my key clean" background: two grays, squares sized off the frame

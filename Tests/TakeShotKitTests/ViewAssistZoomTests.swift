@@ -182,6 +182,89 @@ struct ViewAssistZoomTests {
         #expect(PunchEventView.wheelZoomFactor(deltaY: -500, precise: true) == 0.5)
     }
 
+    /// The ceiling is 10x (owner item 42), and everything that depends on the
+    /// magnification still behaves there: the pan limit, the anchored zoom and
+    /// the readout the popover prints.
+    @Test func theZoomReachesTenTimesWithEverythingStillBehaving() async throws {
+        #expect(ViewAssist.maxPunchIn == 10)
+
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            let viewport = CGSize(width: 1200, height: 700)
+
+            // the slider can be dragged there, and cannot be pushed past it
+            controller.punchInLevel = 10
+            #expect(controller.punchInLevel == 10)
+            controller.punchInLevel = 40
+            #expect(controller.punchInLevel == 10, "the ceiling is not a ceiling")
+            controller.commitAssistDraft()
+
+            // only a tenth of the frame is visible, so its centre may travel
+            // (1 − 1/10)/2 of a frame — the clamp scales with the level rather
+            // than staying at whatever 8x needed
+            #expect(abs(controller.liveAssist.panLimit - 0.45) < 0.000_001)
+            for _ in 0..<40 {
+                controller.panPunchIn(by: CGSize(width: -400, height: -400),
+                                      viewport: viewport)
+            }
+            #expect(controller.liveAssist.panX == 0.45)
+            #expect(controller.liveAssist.panY == 0.45)
+            // …and the picture is still on screen: the visible window sits
+            // inside the frame at the limit, not past its edge
+            let placed = try #require(controller.liveAssist.placement(
+                sourceSize: controller.displaySourceSize(), in: viewport))
+            #expect(placed.rect.maxX >= viewport.width - 0.001,
+                    "panned to the limit at 10x, the picture left the viewport")
+            #expect(placed.rect.minX <= 0.001)
+
+            // the cursor-anchored maths holds at the ceiling: a zoom that
+            // cannot grow any further must not slide the picture under the
+            // pointer either
+            let anchor = CGPoint(x: 950, y: 200)
+            let source = controller.displaySourceSize()
+            let before = try #require(controller.liveAssist.placement(
+                sourceSize: source, in: viewport))
+            let u = (anchor.x - before.rect.minX) / before.rect.width
+            controller.magnifyPunchIn(by: 2, at: anchor, viewport: viewport)
+            controller.assistPersistTask?.cancel()
+            #expect(controller.liveAssist.punchIn == 10)
+            let after = try #require(controller.liveAssist.placement(
+                sourceSize: source, in: viewport))
+            #expect(abs(after.rect.minX + u * after.rect.width - anchor.x) < 0.001,
+                    "the anchored point slid at the ceiling")
+
+            // and zooming back out brings the picture with it
+            controller.punchInLevel = 1
+            #expect(controller.liveAssist.panX == 0)
+            #expect(controller.liveAssist.panY == 0)
+        }
+    }
+
+    /// The popover has to be able to PRINT 10x. The readout is a fixed-width
+    /// column beside the slider, and "10.0x" is a character wider than every
+    /// magnification the old ceiling could reach.
+    @Test func theZoomReadoutFitsAtTheCeiling() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.punchInLevel = 1
+            probe.controller.commitAssistDraft()
+            let single = probe.fittingSizes { AssistControlsPanel() }
+
+            probe.controller.punchInLevel = ViewAssist.maxPunchIn
+            probe.controller.commitAssistDraft()
+            let double = probe.fittingSizes { AssistControlsPanel() }
+
+            #expect(double.en.width == single.en.width,
+                    "the panel reflowed at 10x: \(single.en) → \(double.en)")
+            #expect(double.ru.width == single.ru.width)
+
+            let box = AssistControlsPanel.contentWidth
+            let minimum = probe.minimumWidths { AssistControlsPanel() }
+            #expect(minimum.ru <= box,
+                    "at 10x the Russian panel wants \(minimum.ru)pt of \(box)")
+            #expect(minimum.en <= box)
+        }
+    }
+
     /// Drag-to-pan did not work in the fullscreen player at all: the gesture was
     /// attached to the windowed viewer surface, and the fullscreen windows host
     /// mounts of their own. It lives on `playerTopBadges` now — the one mount all

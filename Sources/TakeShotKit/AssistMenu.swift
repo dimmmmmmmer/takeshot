@@ -11,11 +11,19 @@ struct AssistMenu: View {
     static let symbol = "camera.metering.matrix"
 
     @EnvironmentObject private var controller: CaptureController
-    @State private var showPopover = false
+
+    /// Whether the panel is open lives on the CONTROLLER, not in a `@State`
+    /// here. The eyedropper has to be able to put it away for the duration of a
+    /// click on the picture and bring it straight back (see `toggleChromaPick`),
+    /// and a flag private to this view cannot be reached from there.
+    private var isOpen: Binding<Bool> {
+        Binding(get: { controller.showAssistPopover },
+                set: { controller.showAssistPopover = $0 })
+    }
 
     var body: some View {
         Button {
-            showPopover.toggle()
+            controller.showAssistPopover.toggle()
         } label: {
             Image(systemName: Self.symbol)
                 .font(.system(size: 13))
@@ -27,7 +35,7 @@ struct AssistMenu: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+        .popover(isPresented: isOpen, arrowEdge: .bottom) {
             AssistControlsPanel()
                 .padding(AssistControlsPanel.padding)
                 .frame(width: AssistControlsPanel.width)
@@ -120,13 +128,16 @@ private struct AssistControlRows: View {
             get: { controller.liveAssist.peakingOn },
             set: { on in controller.setAssist { $0.peakingOn = on } }))
         if controller.liveAssist.peakingOn {
+            // sensitivity as a percentage, not the renderer's 2…30 (owner item
+            // 41): the operator's question is "how much peaking", and the
+            // filter's own gain units answer a different one
             HStack(spacing: 6) {
                 Slider(value: Binding(
-                    get: { controller.peakingIntensity },
-                    set: { controller.peakingIntensity = $0 }),
-                    in: 2...30)
+                    get: { controller.peakingPercent },
+                    set: { controller.peakingPercent = $0 }),
+                    in: 0...100)
                     .controlSize(.mini)
-                Text("\(Int(controller.peakingIntensity))")
+                Text("\(Int(controller.peakingPercent.rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 34, alignment: .trailing)
@@ -166,7 +177,7 @@ private struct AssistControlRows: View {
         }
     }
 
-    /// Legend size and corner — only while a legend is on screen.
+    /// Legend size and placement — only while a legend is on screen.
     @ViewBuilder private var legendRows: some View {
         Picker(L("legend_size"), selection: Binding(
             get: { controller.legendSize },
@@ -175,11 +186,11 @@ private struct AssistControlRows: View {
                 Text(L(size.labelKey)).tag(size)
             }
         }
-        Picker(L("legend_corner"), selection: Binding(
-            get: { controller.legendCorner },
-            set: { controller.legendCorner = $0 })) {
-            ForEach(AssistLegendCorner.allCases) { corner in
-                Text(L(corner.labelKey)).tag(corner)
+        Picker(L("legend_placement"), selection: Binding(
+            get: { controller.legendPlacement },
+            set: { controller.legendPlacement = $0 })) {
+            ForEach(AssistLegendPlacement.allCases) { placement in
+                Text(L(placement.labelKey)).tag(placement)
             }
         }
     }
@@ -257,15 +268,12 @@ private struct AssistControlRows: View {
                 set: { controller.punchInLevel = $0 }),
                 in: ViewAssist.minPunchIn...ViewAssist.maxPunchIn)
                 .controlSize(.mini)
+            // 40 and not 34: the ceiling is 10x now, and "10.0x" does not fit
+            // the width one digit of magnification was sized for
             Text(verbatim: String(format: "%.1fx", controller.punchInLevel))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 34, alignment: .trailing)
-        }
-        if controller.liveAssist.punchIn > 1 {
-            Text(L("punch_pan_hint"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .trailing)
         }
     }
 }

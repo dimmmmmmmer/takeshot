@@ -64,8 +64,41 @@ final class TransportModel: ObservableObject {
                item.currentTime() >= item.duration {
                 player.seek(to: .zero)
             }
+            beginInsideRange()
             player.rate = Float(desiredRate)
         }
+    }
+
+    /// Where playback has to BEGIN for the loop range that is marked, given the
+    /// playhead at `position`. nil when the playhead is already somewhere the
+    /// range allows and nothing needs moving.
+    ///
+    /// This is the fix for a real bug, not a preference. The loop was enforced
+    /// at the OUT point alone — the periodic observer seeks back when time
+    /// passes it, and the end-of-item observer does the same at the tail — and
+    /// nothing anywhere ever put the playhead INSIDE the range to start with. A
+    /// fresh `AVPlayerItem` begins at zero, so the first pass over a clip with a
+    /// range on it always played the whole lead-in and only then began looping,
+    /// which is exactly what the operator saw.
+    ///
+    /// Pure and separate from the seek so the decision can be tested without a
+    /// player attached.
+    func rangeStart(forPlayheadAt position: Double) -> Double? {
+        let start = inPoint ?? 0
+        // past the end of the range: the next play restarts it rather than
+        // running on into whatever follows
+        if let outPoint, position >= outPoint, isLooping { return start }
+        // before it: the range is where the operator wants to be watching
+        guard inPoint != nil, position < start - 0.001 else { return nil }
+        return start
+    }
+
+    /// Put the playhead inside the range before playback starts.
+    func beginInsideRange() {
+        guard let start = rangeStart(forPlayheadAt: position.currentTime)
+        else { return }
+        seek(to: start)
+        position.currentTime = start
     }
 
     /// Set/clear the in or out point at the playhead (click near an existing

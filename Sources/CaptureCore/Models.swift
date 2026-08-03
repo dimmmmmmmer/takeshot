@@ -322,13 +322,25 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// Exposure-legend size: "s" / "m" / "l"; nil — medium. The legend is read
     /// from behind the camera, so its size is the operator's call, not ours.
     public var legendSize: String?
-    /// Which corner of the player the legend sits in
-    /// (`AssistLegendCorner`); nil — bottom trailing.
-    public var legendCorner: String?
+    /// Which edge of the player the legend sits against
+    /// (`AssistLegendPlacement`); nil — bottom, centered.
+    ///
+    /// Replaces the four corners this used to be (`legendCorner`, migrated in
+    /// `migrateToVersion3`): a legend is a strip, and a strip belongs along an
+    /// edge — vertical down the left or the right, horizontal centered along
+    /// the top or the bottom.
+    public var legendPlacement: String?
     /// Focus-peaking overlay color (`ViewAssist.PeakingColor` raw value);
     /// nil — red. A crew convention like the marker color, so it survives a
     /// relaunch. Optional, like every added field, so old saved JSON decodes.
     public var peakingColor: String?
+    /// Focus-peaking edge gain — the RENDERER's unit (`CIEdges` intensity),
+    /// not the percentage the panel shows; nil — the default 12.
+    ///
+    /// The renderer's unit on purpose: the percentage is a presentation of it
+    /// (`ViewAssist.peakingPercent`), and storing the presentation would mean a
+    /// change to the scale silently re-tuned every operator's saved setting.
+    public var peakingIntensity: Double?
     // MARK: - chroma key (see ChromaKey and the assist popover)
 
     /// The screen color the keyer is set to, "#RRGGBB"; nil — digital green.
@@ -339,9 +351,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// The dial-in is the expensive part and that is what survives — same
     /// treatment the zebra threshold and the peaking color get.
     public var chromaKeyColorHex: String?
-    /// Chroma distance that counts as screen; nil — the default similarity.
+    /// Chroma distance at which a pixel is half keyed; nil — the default.
     public var chromaKeyTolerance: Double?
-    /// Feather above the tolerance; nil — the default softness.
+    /// Feather width as a FRACTION of the tolerance, 0…1; nil — the default.
+    /// It used to be an absolute distance added above the tolerance; blobs
+    /// written that way are converted in `migrateToVersion3`.
     public var chromaKeySoftness: Double?
     /// Spill suppression 0…1; nil — the default.
     public var chromaKeySpill: Double?
@@ -350,8 +364,19 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var chromaKeyBackground: String?
     /// The solid background color, "#RRGGBB"; nil — black.
     public var chromaKeyBackgroundHex: String?
-    /// The plate that shows through the key, as a file path; nil — none.
+    /// The plate that shows through the key, as a file path; nil — none. Not
+    /// necessarily a still: a take or an Other-content clip is accepted too and
+    /// contributes its first frame (see `loadChromaBackground`).
     public var chromaKeyBackgroundImagePath: String?
+    /// How the plate is matched to the frame (`ChromaKey.PlateFit` raw
+    /// value); nil — fit.
+    public var chromaKeyPlateFit: String?
+    /// Magnification on top of that fit; nil — 1.
+    public var chromaKeyPlateScale: Double?
+    /// Plate offset as a fraction of the frame, positive x right / y up;
+    /// nil — centered.
+    public var chromaKeyPlateOffsetX: Double?
+    public var chromaKeyPlateOffsetY: Double?
 
     /// Action-safe area as a percentage of the frame; nil — 93.
     ///
@@ -432,7 +457,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     ///     which used to run unconditionally on every load.
     /// 2 — the two input-levels modes collapsed into one, and the retired
     ///     verified-backup folder handed to the offload destinations.
-    public static let currentSchemaVersion = 2
+    /// 3 — the exposure legend moved from four corners to four edges, and the
+    ///     chroma key's softness from an absolute feather to a relative one.
+    ///     Both are re-readings of a value that is still in range, which is
+    ///     exactly the change an Optional field cannot express.
+    public static let currentSchemaVersion = 3
 
     /// Version of the decoded blob. Optional so that saves written before this
     /// field existed decode as nil and are treated as version 0.
@@ -462,6 +491,37 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         }
         if (settings.schemaVersion ?? 0) < 2 {
             settings = migrateToVersion2(settings, retired: retired)
+        }
+        if (settings.schemaVersion ?? 0) < 3 {
+            settings = migrateToVersion3(settings, retired: retired)
+        }
+        return settings
+    }
+
+    /// The legend's corner became an edge, and the key's softness became a
+    /// fraction of its tolerance.
+    ///
+    /// Both values would still decode as they stand and both would mean
+    /// something else, which is the case a version number exists for.
+    static func migrateToVersion3(
+        _ input: CaptureSettings, retired: RetiredSettings) -> CaptureSettings {
+        var settings = input
+        // Four corners → four edges. The side the corner was on says nothing
+        // about a strip that now spans the whole edge, so only top vs bottom
+        // carries over — and bottom is the new default, i.e. nil.
+        if settings.legendPlacement == nil,
+           let corner = retired.legendCorner, corner.hasPrefix("top") {
+            settings.legendPlacement = "top"
+        }
+        // The feather used to be an absolute chroma width hung outside the
+        // tolerance (tolerance … tolerance + softness) and is now a fraction of
+        // the tolerance straddling it (t·(1−s) … t·(1+s)). Converting on the
+        // WIDTH keeps the edge exactly as gradual as the operator left it:
+        // 2·t·new = old.
+        if let stored = settings.chromaKeySoftness {
+            let tolerance = settings.chromaKeyTolerance ?? ChromaKey().tolerance
+            settings.chromaKeySoftness = tolerance > 0.01
+                ? min(1, stored / (2 * tolerance)) : 0
         }
         return settings
     }

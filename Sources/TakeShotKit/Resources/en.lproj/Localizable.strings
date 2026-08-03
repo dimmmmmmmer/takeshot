@@ -385,7 +385,6 @@
 "compare_b_live" = "vs Live";
 "compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
 
-"punch_pan_hint" = "Drag or scroll to pan, pinch or ⌘-scroll to zoom";
 "offload_menu" = "Verified copy of a folder...";
 "offload_pick_source" = "Folder to copy (camera card, sound, etc.)";
 "offload_source_prompt" = "Copy this";
@@ -399,22 +398,22 @@
 /* i18n layout pass */
 "playback_volume" = "Playback volume";
 
-/* assist tools + zoom (legend size/corner, safe-area margins) */
+/* assist tools + zoom (legend size/placement, safe-area margins) */
 "legend_size" = "Legend size";
 "legend_size_s" = "Small";
 "legend_size_m" = "Medium";
 "legend_size_l" = "Large";
-"legend_corner" = "Legend corner";
+"legend_placement" = "Legend";
 "peaking_color" = "Peaking color";
 "peaking_color_red" = "Red";
 "peaking_color_green" = "Green";
 "peaking_color_blue" = "Blue";
 "peaking_color_yellow" = "Yellow";
 "peaking_color_white" = "White";
-"corner_top_left" = "Top left";
-"corner_top_right" = "Top right";
-"corner_bottom_left" = "Bottom left";
-"corner_bottom_right" = "Bottom right";
+"legend_top" = "Top";
+"legend_bottom" = "Bottom";
+"legend_left" = "Left";
+"legend_right" = "Right";
 "safe_action" = "Action safe";
 "safe_title" = "Title safe";
 
@@ -748,7 +747,6 @@
 "chroma_key" = "Chroma key";
 "chroma_screen" = "Screen";
 "chroma_pick_help" = "Eyedropper: click the picture to take the screen color from it";
-"chroma_pick_hint" = "Click the screen in the picture — eyedropper again to cancel";
 "chroma_picked" = "Screen color %@";
 "chroma_pick_failed" = "No frame to pick a color from";
 "chroma_preset_green" = "Green screen";
@@ -763,9 +761,19 @@
 "chroma_bg_matte" = "Matte";
 "chroma_background_color" = "Background color";
 "chroma_choose_image" = "Image...";
+"chroma_choose_file" = "Choose a file...";
 "chroma_no_image" = "no image";
 "chroma_clear_image" = "Remove the background image";
 "chroma_image_failed" = "The background image could not be read";
+"chroma_plate_fit" = "Placement";
+"chroma_plate_fit_fit" = "Fit";
+"chroma_plate_fit_fill" = "Fill";
+"chroma_plate_fit_stretch" = "Stretch";
+"chroma_plate_scale" = "Scale";
+"chroma_plate_offset_x" = "Offset X";
+"chroma_plate_offset_y" = "Offset Y";
+"chroma_plate_reset" = "Back to a centered fit";
+"media_group_takes" = "Takes";
 "chroma_preview_only" = "Preview and monitor output only — takes, grabs and exports keep the original picture.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Keep TakeShot in the menu bar";

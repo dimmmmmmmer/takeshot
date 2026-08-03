@@ -37,6 +37,11 @@ extension TransportModel {
     /// this model's empty range would be written over the RAW engine's.
     func loadClip(_ url: URL?, driving: Bool = true) {
         if let loadedClip { file(currentRange, for: loadedClip) }
+        // The playhead reading belongs to the clip that was in the player. The
+        // 10 Hz observer will correct it, but not before the range decision
+        // that starts playback is made off it (see `rangeStart`), and a stale
+        // reading from the outgoing clip is how that decision goes wrong.
+        position.currentTime = 0
         guard let url, driving else {
             loadedClip = nil
             inPoint = nil

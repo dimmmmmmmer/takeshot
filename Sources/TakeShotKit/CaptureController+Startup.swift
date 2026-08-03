@@ -147,6 +147,11 @@ extension CaptureController {
         assist.desqueeze = stored.desqueezeFactor ?? 1
         assist.peakingColor = stored.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
+        // clamped, not trusted: the blob may have been written by a build with
+        // a different ceiling, or hand-edited
+        assist.peakingIntensity = min(
+            ViewAssist.maxPeakingIntensity,
+            max(0, stored.peakingIntensity ?? ViewAssist().peakingIntensity))
         // the key comes back dialled in and switched OFF (see restoreChroma)
         restoreChroma(from: stored)
     }
