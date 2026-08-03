@@ -21,7 +21,10 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* The app's face when the machine has it, the system one otherwise —
+     never embedded, see remote.html for why. */
+  font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none; user-select: none;
   overscroll-behavior: none;
@@ -250,6 +253,15 @@ function setConnection(state) {
   document.body.classList.toggle("off", state !== "live");
 }
 
+// The gate's own labels, like the other two pages paint theirs. This page did
+// not, so a phone opening it first met an unlabelled field and a blank button —
+// the strings were injected and never read.
+function paintLabels() {
+  el("gateHint").textContent = S.pinPrompt;
+  el("connect").textContent = S.connect;
+  el("pin").placeholder = "····";
+}
+
 function showGate(message) {
   el("gateError").textContent = message || "";
   el("gate").classList.add("show");
@@ -313,6 +325,8 @@ function connect() {
       setConnection("live");
       // The subscription: frames flow only after this, so a page that never
       // asks costs the recorder nothing.
+      // "multiview" is the wire name of the frame STREAM and stays as it is;
+      // the page this arrives on is the cameras page (see RemoteLink).
       send({ action: "multiview", on: true });
     } else if (msg.type === "auth") {
       pin = "";
@@ -353,6 +367,7 @@ el("pin").addEventListener("keydown", function (event) {
   if (event.key === "Enter") { el("connect").click(); }
 });
 
+paintLabels();
 setConnection("down");
 ensureTiles(1);
 try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) { pin = ""; }

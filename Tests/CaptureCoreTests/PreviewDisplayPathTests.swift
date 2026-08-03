@@ -254,6 +254,108 @@ enum PreviewProbe {
         #expect(cleared == nil)
     }
 
+    // MARK: - the camera grid's tap (owner item 13)
+
+    /// THE contract the phone grid rests on: it is handed the CLEAN processed
+    /// frame, and the operator's own tooling never rides along.
+    ///
+    /// The grid used to tap the same buffer the viewer draws, which put the
+    /// pinned-reference wipe on a phone: half of every tile was a frame from
+    /// whenever the operator pinned it, under a label saying A-cam. This drives
+    /// the pipeline with a reference pinned, a wipe running, the chroma key on
+    /// and every layer-drawn aid switched on at once — the grid still gets the
+    /// live frame and nothing else.
+    @Test func theCameraGridGetsTheCleanFrameAndNotTheOperatorsView() async throws {
+        let pipeline = PreviewProbe.makePipeline()
+        let screen = PreviewCollector()
+        let grid = PreviewCollector()
+        pipeline.setOnDisplayFrame { screen.record($0) }
+        pipeline.setOnMultiviewFrame { grid.record($0) }
+        defer {
+            pipeline.setOnDisplayFrame(nil)
+            pipeline.setOnMultiviewFrame(nil)
+        }
+
+        // Everything the operator can switch on, on at once.
+        var assist = ViewAssist()
+        assist.colorTool = .falseColor
+        assist.zebraOn = true
+        assist.peakingOn = true
+        assist.desqueeze = 2
+        assist.setPunchIn(2)
+        assist.chroma = ChromaProbe.magentaKey()
+        pipeline.setViewAssist(assist)
+        pipeline.setPreviewReference(buffer: PreviewProbe.frame(0xE0))
+        pipeline.setPreviewCompare(.wipe(axis: .vertical, position: 0.5))
+
+        let source = PreviewProbe.frame(0x20)
+        PreviewProbe.push(pipeline, source, frame: 1)
+        await TestWait.until { screen.count > 0 && grid.count > 0 }
+
+        // The viewer is looking at the composite — otherwise this proves
+        // nothing about what the grid escaped.
+        let composite = try #require(screen.last, "nothing reached the viewer")
+        #expect(PreviewProbe.level(of: composite, atFractionX: 0.1) > 0xA0,
+                "the wipe never reached the viewer")
+
+        let tile = try #require(grid.last, "nothing reached the camera grid")
+        // No wipe: both sides of where the seam would be are the live frame.
+        #expect(PreviewProbe.level(of: tile, atFractionX: 0.1) == 0x20,
+                "the operator's pinned reference reached the phone")
+        #expect(PreviewProbe.level(of: tile, atFractionX: 0.9) == 0x20)
+        // No punch-in and no desqueeze: the frame is the signal's own shape,
+        // whole. Those live in MetalPreviewLayer, per surface, and the grid is
+        // not one of its surfaces — this is what keeps it that way.
+        #expect(CVPixelBufferGetWidth(tile) == 64)
+        #expect(CVPixelBufferGetHeight(tile) == 32)
+        // And it is the very buffer the frame path produced, not a copy of
+        // anything the display stage built on top of it.
+        #expect(tile === source,
+                "the grid was handed a processed frame, not the clean one")
+    }
+
+    /// With nothing switched on the two taps see the same frame — the split
+    /// above must not be a second processing path that could drift.
+    @Test func withNoToolsOnTheGridAndTheViewerSeeTheSameFrame() async throws {
+        let pipeline = PreviewProbe.makePipeline()
+        let screen = PreviewCollector()
+        let grid = PreviewCollector()
+        pipeline.setOnDisplayFrame { screen.record($0) }
+        pipeline.setOnMultiviewFrame { grid.record($0) }
+        defer {
+            pipeline.setOnDisplayFrame(nil)
+            pipeline.setOnMultiviewFrame(nil)
+        }
+
+        let source = PreviewProbe.frame(0x55)
+        PreviewProbe.push(pipeline, source, frame: 1)
+        await TestWait.until { screen.count > 0 && grid.count > 0 }
+
+        #expect(try #require(screen.last) === source)
+        #expect(try #require(grid.last) === source)
+    }
+
+    /// Clearing the grid's handler stops deliveries, like the display one:
+    /// the encoder is torn down when the last phone leaves, and a tap left
+    /// live would keep scaling and encoding for nobody.
+    @Test func clearingTheGridHandlerStopsDeliveries() async {
+        let pipeline = PreviewProbe.makePipeline()
+        let grid = PreviewCollector()
+        pipeline.setOnMultiviewFrame { grid.record($0) }
+
+        PreviewProbe.push(pipeline, PreviewProbe.frame(0x40), frame: 1)
+        await TestWait.until { grid.count > 0 }
+        pipeline.setOnMultiviewFrame(nil)
+        let settled = grid.count
+
+        for index in 2...6 {
+            PreviewProbe.push(pipeline, PreviewProbe.frame(0x80), frame: index)
+        }
+        await TestWait.until({ grid.count > settled }, timeout: .seconds(1))
+        #expect(grid.count == settled,
+                "frames kept reaching a torn-down camera grid")
+    }
+
     // MARK: - sinks
 
     /// Registration and the per-surface state that joins with it. Every mount

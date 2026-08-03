@@ -10,12 +10,13 @@ import Testing
 
 /// The rule the whole feature is built around: the chroma key is a PREVIEW.
 ///
-/// It reaches the viewer, the hardware monitor and the multiview because those
-/// mirror what the operator is looking at — the same rule the viewing LUT
-/// follows. It reaches the recorded file, the still grab and the scopes'
-/// measurement nowhere at all, and that is what this suite exists to keep true:
+/// It reaches the viewer and the hardware monitor because those mirror what the
+/// operator is looking at — the same rule the viewing LUT follows. It reaches
+/// the recorded file, the still grab, the scopes' measurement and the phone
+/// camera grid nowhere at all, and that is what this suite exists to keep true:
 /// a director watching a keyed monitor must never be the reason a take comes
-/// back from post with a magenta background baked into it.
+/// back from post with a magenta background baked into it. (The grid is a
+/// monitoring surface, not an assist one — see `PreviewDisplayPathTests`.)
 struct ChromaKeyIntegrityTests {
     /// A pipeline that can record, on a scratch folder of its own.
     private func recordingPipeline(root: URL) -> CapturePipeline {

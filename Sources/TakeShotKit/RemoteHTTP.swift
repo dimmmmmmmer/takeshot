@@ -104,10 +104,10 @@ enum RemoteResponse {
              body: Data("Not found\n".utf8))
     }
 
-    /// The last take's poster frame. `no-store` comes with `make` and matters
-    /// more here than on the page: the URL is stable across takes, and a phone
-    /// handed the previous take's frame out of its own cache shows the director
-    /// the wrong take with no way to tell.
+    /// A take's poster frame. `no-store` comes with `make` and matters more
+    /// here than on the page: the operator page asks the same route for
+    /// whatever take is newest, and a phone handed the previous one out of its
+    /// own cache shows the director the wrong take with no way to tell.
     static func jpeg(_ body: Data) -> Data {
         make(status: "200 OK", contentType: "image/jpeg", body: body)
     }
@@ -143,10 +143,11 @@ enum RemoteResponse {
         // from the set network.
         head += "Content-Security-Policy: default-src 'none'; "
         head += "style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-        // `img-src 'self'` is what lets the take poster load at all: under
+        // `img-src 'self'` is what lets the take posters load at all — the
+        // operator page's card and every row of the script log: under
         // `default-src 'none'` the browser blocks the <img> and reports it only
         // to a console on a phone, which looks exactly like an endpoint that is
-        // answering 404. `blob:` is the multiview page's frames — bytes that
+        // answering 404. `blob:` is the camera grid's frames — bytes that
         // arrived over the socket and never left the page. 'self', blob: and
         // nothing else — the page still fetches nothing from off the set
         // network.

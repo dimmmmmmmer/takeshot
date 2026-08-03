@@ -9,9 +9,9 @@ import Foundation
 /// known picture and read the bytes back out of. The image itself is the takes
 /// panel's own thumbnail — see `CaptureController.remoteTakePoster`.
 ///
-/// ## The poster beside the multiview stream
+/// ## The poster beside the camera grid
 ///
-/// A live camera grid exists now (`/multiview`, owner-approved), and it was
+/// A live camera grid exists now (`/cameras`, owner-approved), and it was
 /// built the way the objections recorded here said it would have to be: the
 /// frames come off a second display-tap slot (`setOnMultiviewFrame`) rather
 /// than the playout mirror's, they ride the WebSocket as binary messages
@@ -30,8 +30,17 @@ enum RemotePoster {
     /// The take thumbnails are decoded at 256 today (`requestThumbnail`), so
     /// this is a ceiling nobody currently meets rather than a resize. It is
     /// here so that a larger thumbnail later does not quietly start pushing a
-    /// megabyte at a phone on set Wi-Fi once per take.
+    /// megabyte at a phone on set Wi-Fi once per take. 256 across is already
+    /// more than the script page's 96pt row needs on a 3x screen, and the
+    /// encoded row comes to a handful of kilobytes.
     static let maximumEdge: CGFloat = 640
+    /// Encoded posters kept per session.
+    ///
+    /// The script page asks for one image per take and a shift is a few dozen;
+    /// at ~10 KB each the whole day is under a megabyte, and the bound is here
+    /// for the same reason the thumbnail cache has one — a week-long install
+    /// must not grow without limit.
+    static let cacheLimit = 200
     /// JPEG quality. A poster answers "which take is this" at arm's length; it
     /// is not a deliverable, and the grabs that are never come through here.
     static let quality = 0.6

@@ -13,7 +13,9 @@ import Testing
 /// The bytes are checked as an image rather than for length. A "poster" that is
 /// four bytes of an error page still satisfies "something came back", and on a
 /// phone it is a broken-image icon nobody can debug from a set.
-@Suite @MainActor struct RemotePosterTests {
+/// Shared by the two poster suites: a stand-in thumbnail, and what the bytes
+/// that come back actually are.
+enum PosterFixtures {
     /// A decoded take thumbnail, standing in for one the controller made.
     ///
     /// It has an alpha channel on purpose: that is what a still or a RAW bridge
@@ -21,7 +23,7 @@ import Testing
     /// rather than re-wrap. It also has some structure in it, because a flat
     /// frame compresses to almost nothing and would satisfy a size assertion by
     /// accident.
-    private func picture(width: Int, height: Int) throws -> NSImage {
+    static func picture(width: Int, height: Int) throws -> NSImage {
         let rep = try #require(NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
@@ -43,7 +45,7 @@ import Testing
 
     /// What the bytes actually are: the container type they declare and the
     /// size they decode to.
-    private struct DecodedImage {
+    struct DecodedImage {
         var type: String
         var width: Int
         var height: Int
@@ -52,7 +54,7 @@ import Testing
     /// The bytes read back through ImageIO. Asserting on this rather than on a
     /// byte count is the difference between "a poster arrived" and "an error
     /// page arrived with image/jpeg on it".
-    private func decoded(_ data: Data) throws -> DecodedImage {
+    static func decoded(_ data: Data) throws -> DecodedImage {
         let source = try #require(CGImageSourceCreateWithData(data as CFData, nil),
                                   "the bytes are not an image at all")
         let properties = try #require(
@@ -61,6 +63,16 @@ import Testing
             type: try #require(CGImageSourceGetType(source) as String?),
             width: try #require(properties[kCGImagePropertyPixelWidth] as? Int),
             height: try #require(properties[kCGImagePropertyPixelHeight] as? Int))
+    }
+}
+
+@Suite @MainActor struct RemotePosterTests {
+    private func picture(width: Int, height: Int) throws -> NSImage {
+        try PosterFixtures.picture(width: width, height: height)
+    }
+
+    private func decoded(_ data: Data) throws -> PosterFixtures.DecodedImage {
+        try PosterFixtures.decoded(data)
     }
 
     // MARK: - the encoder
@@ -237,5 +249,150 @@ import Testing
         #expect(html.contains("lastTakeId"),
                 "the page never notices a new take landing")
         #expect(html.contains("lastTake"))
+    }
+}
+
+/// The per-take posters the script supervisor's log draws (owner item 11).
+///
+/// Its own suite rather than more rows in `RemotePosterTests`: that one is
+/// about the operator page's single card — the last take that landed — and
+/// this is about a route that is asked for a take by name, thirty times on one
+/// page load. The shared fixtures are `PosterFixtures`.
+@Suite @MainActor struct RemoteRowPosterTests {
+    private func picture(width: Int, height: Int) throws -> NSImage {
+        try PosterFixtures.picture(width: width, height: height)
+    }
+
+    private func decoded(_ data: Data) throws -> PosterFixtures.DecodedImage {
+        try PosterFixtures.decoded(data)
+    }
+
+    /// The script page draws a poster per row, so the route takes a take id and
+    /// answers for THAT take — not for whichever one landed last, which is what
+    /// a log of thirty rows would otherwise show thirty times.
+    @Test func theEndpointServesTheTakeItIsAskedFor() async throws {
+        try await ControllerHarness.run { controller, root in
+            var takes: [Take] = []
+            for clip in 30...31 {
+                var take = ControllerFixtures.take(named: "A001C\(clip)",
+                                                   in: root, clip: clip)
+                try ControllerFixtures.placeholder(for: take)
+                take.rating = .none
+                takes.append(take)
+            }
+            controller.takes = takes
+            // Two different SIZES, so the answer names itself: a route that
+            // ignored the id would hand back the same picture twice.
+            controller.thumbnails[takes[0].id] = try picture(width: 200,
+                                                             height: 112)
+            controller.thumbnails[takes[1].id] = try picture(width: 128,
+                                                             height: 72)
+            let (port, pin) = try await RemoteHarness.serve(controller)
+
+            let older = try await RemoteHarness.poster(
+                port: port, pin: pin, take: takes[0].id.uuidString)
+            #expect(older.http.statusCode == 200)
+            #expect(try decoded(older.body).width == 200)
+
+            let newer = try await RemoteHarness.poster(
+                port: port, pin: pin, take: takes[1].id.uuidString)
+            #expect(try decoded(newer.body).width == 128)
+
+            // No id at all is still "the last take that landed" — the operator
+            // page's card asks that way when it has no id yet.
+            let last = try await RemoteHarness.poster(port: port, pin: pin)
+            #expect(try decoded(last.body).width == 128)
+        }
+    }
+
+    /// A row's thumbnail is production picture exactly as the status is, and it
+    /// is behind the same four digits. An image route that answered without the
+    /// PIN would be the whole day's footage in stills to anyone on the port.
+    @Test func aRowsFrameNeedsThePINLikeEverythingElse() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take = try RemoteHarness.seedTake(controller, in: root,
+                                                  named: "A001C32", clip: 32)
+            controller.thumbnails[take.id] = try picture(width: 256, height: 144)
+            let (port, pin) = try await RemoteHarness.serve(controller)
+
+            let refused = try await RemoteHarness.poster(
+                port: port, pin: RemoteHarness.wrongPIN(besides: pin),
+                take: take.id.uuidString)
+            #expect(refused.http.statusCode == 403)
+            #expect(CGImageSourceCreateWithData(refused.body as CFData, nil)
+                .flatMap { CGImageSourceGetType($0) } == nil,
+                "a refused request still came back carrying an image")
+        }
+    }
+
+    /// A take that is no longer in the list — deleted between the push and the
+    /// tap — is a 404 and not somebody else's frame.
+    @Test func anUnknownTakeIdIsNotAnswered() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take = try RemoteHarness.seedTake(controller, in: root,
+                                                  named: "A001C33", clip: 33)
+            controller.thumbnails[take.id] = try picture(width: 256, height: 144)
+            let (port, pin) = try await RemoteHarness.serve(controller)
+
+            let answer = try await RemoteHarness.poster(
+                port: port, pin: pin, take: UUID().uuidString)
+            #expect(answer.http.statusCode == 404)
+        }
+    }
+
+    /// Encoded once per take, not once per request: a page with a shift's worth
+    /// of rows on it would otherwise put a JPEG pass per row on the MainActor,
+    /// which is where the REC button lives.
+    @Test func aTakesPosterIsEncodedOnceAndKept() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take = try RemoteHarness.seedTake(controller, in: root,
+                                                  named: "A001C34", clip: 34)
+            controller.thumbnails[take.id] = try picture(width: 256, height: 144)
+
+            let first = try #require(
+                controller.remoteTakePoster(id: take.id.uuidString))
+            #expect(controller.remotePosterJPEG[take.id] != nil)
+            // The image behind it goes away; the bytes are still served.
+            controller.thumbnails[take.id] = nil
+            let second = try #require(
+                controller.remoteTakePoster(id: take.id.uuidString))
+            #expect(second == first)
+        }
+    }
+
+    /// The payload carries the reference, so the page never builds the route
+    /// itself — a page that assembled its own would break silently on the next
+    /// rename, as a log of empty boxes.
+    @Test func everyTakeLogRowCarriesItsThumbnailReference() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take = try RemoteHarness.seedTake(controller, in: root,
+                                                  named: "A001C35", clip: 35)
+            let entry = try #require(controller.remoteTakeLog().entries.first)
+            #expect(entry.poster.hasPrefix(RemotePage.posterPath))
+            #expect(entry.poster.contains(take.id.uuidString))
+            #expect(!entry.poster.contains("pin"),
+                    "the code was baked into a reference the app pushes")
+
+            let object = try #require(try JSONSerialization.jsonObject(
+                with: Data(controller.remoteTakeLog().json.utf8))
+                as? [String: Any])
+            let rows = try #require(object["takes"] as? [[String: Any]])
+            #expect(rows.first?["poster"] as? String == entry.poster)
+        }
+    }
+
+    /// And the page reads it — with the PIN added on its side, one fetch at a
+    /// time so a log's worth of images cannot eat the server's connection
+    /// slots out from under the next phone's socket.
+    @Test func theScriptPageDrawsRowsFromThatReference() throws {
+        let html = try #require(String(bytes: RemotePage.scriptHTML(),
+                                       encoding: .utf8))
+        #expect(html.contains("row.posterURL"),
+                "the page ignores the reference it is pushed")
+        #expect(html.contains(#"row.posterURL + "&pin=""#),
+                "the page fetches a row's frame without the code")
+        #expect(html.contains("posterBusy"),
+                "the page fetches every row's frame at once")
+        #expect(html.contains("rowPoster"))
     }
 }

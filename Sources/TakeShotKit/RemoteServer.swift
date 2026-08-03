@@ -23,15 +23,17 @@ final class RemoteServer: @unchecked Sendable {
         var ready: @Sendable (UInt16) -> Void
         /// The listener died. A port already in use arrives here.
         var failed: @Sendable (String) -> Void
-        /// The freshest take's poster, as JPEG bytes; nil while there is none
-        /// to hand over yet.
+        /// One take's poster, as JPEG bytes; nil while there is none to hand
+        /// over yet. The take is named by id — an empty string means the
+        /// freshest one, which is what the operator page's card is about,
+        /// while the script page asks for a specific row.
         ///
         /// Asked for on the server's queue and answered from wherever the app
         /// keeps the image — the MainActor — so the reply is a closure the app
         /// calls back rather than a return value. The default answers "none",
         /// which is what a server driven without a controller has.
-        var poster: @Sendable (@escaping @Sendable (Data?) -> Void) -> Void
-            = { reply in reply(nil) }
+        var poster: @Sendable (String, @escaping @Sendable (Data?) -> Void) -> Void
+            = { _, reply in reply(nil) }
         /// Somebody started (true) or the last somebody stopped (false)
         /// watching the multiview stream. The app answers by building or
         /// tearing down the encoder, so an idle set encodes nothing. Called
@@ -47,7 +49,7 @@ final class RemoteServer: @unchecked Sendable {
         var pin: String
         var page: Data
         var scriptPage: Data
-        var multiviewPage: Data
+        var camerasPage: Data
     }
 
     /// A handful of phones is the whole use case. The cap is what stops a
@@ -103,11 +105,11 @@ final class RemoteServer: @unchecked Sendable {
     private var multiviewDemand = false
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         multiviewPage: Data = Data(), handlers: Handlers) {
+         camerasPage: Data = Data(), handlers: Handlers) {
         self.handlers = handlers
         self.shared = OSAllocatedUnfairLock(
             initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
-                                 multiviewPage: multiviewPage))
+                                 camerasPage: camerasPage))
     }
 
     /// Start listening. `port` 0 binds an ephemeral one and reports it through
@@ -185,9 +187,9 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.scriptPage = page }
     }
 
-    /// Replace the multiview page, for the same language switch.
-    func setMultiviewPage(_ page: Data) {
-        shared.withLock { $0.multiviewPage = page }
+    /// Replace the camera grid's page, for the same language switch.
+    func setCamerasPage(_ page: Data) {
+        shared.withLock { $0.camerasPage = page }
     }
 
     /// Push one camera's fresh JPEG to every client that asked for frames.
@@ -213,7 +215,7 @@ final class RemoteServer: @unchecked Sendable {
     var currentPIN: String { shared.withLock { $0.pin } }
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
-    var currentMultiviewPage: Data { shared.withLock { $0.multiviewPage } }
+    var currentCamerasPage: Data { shared.withLock { $0.camerasPage } }
     var currentStatus: String? { lastStatus }
     var currentTakeLog: String? { lastTakeLog }
 

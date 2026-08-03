@@ -5,9 +5,9 @@ import Foundation
 /// spill is pulled out of the subject, and what goes behind the actor.
 ///
 /// A PREVIEW tool. The key is applied in the pipeline's display stage — the
-/// same stage the viewing LUT feeds — so it reaches the viewer, the hardware
-/// monitor and the phone multiview, and it reaches the recorder, the grabs and
-/// the scopes nowhere at all (see `CapturePipeline+ChromaKey`).
+/// same stage the viewing LUT feeds — so it reaches the viewer and the hardware
+/// monitor, and it reaches the recorder, the grabs, the scopes and the phone
+/// camera grid nowhere at all (see `CapturePipeline+ChromaKey`).
 ///
 /// The math it defines lives in `ChromaKey+Matte`; the CoreImage stage that
 /// runs it is `ChromaKeyer`.

@@ -82,12 +82,21 @@ There are two of them and they answer different questions.
   display frame rather than a layer.
 - In the pipeline's display stage (`CapturePipeline+ChromaKey`, and the pinned
   reference compare beside it): the chroma key. It is composited into the frame
-  that the sinks, the hardware monitor and the phone multiview all receive, one
-  step after the viewing LUT — which is the rule the LUT itself follows.
+  that the sinks and the hardware monitor receive, one step after the viewing
+  LUT — which is the rule the LUT itself follows.
   Everything that is a deliverable is taken from earlier in the frame path:
   the writer gets the record buffer, the still grab the leveled one, the scopes
   the wire. That ordering is why a keyed monitor cannot end up in a take, and
   `ChromaKeyIntegrityTests` is what keeps it that way.
+
+The phone camera grid (`/cameras`) is deliberately NOT on either list. It is a
+monitoring surface, not an assist one: it is handed the clean processed frame
+from `enqueuePreview`, so the operator's compare wipe and chroma-key preview
+never reach it, and the layer-drawn aids — false colour, EL Zone, zebra,
+peaking, desqueeze, punch-in — cannot, because it is not one of the layer's
+surfaces. `MultiviewEncoder` then encodes it with Rec.709 declared on both
+ends, so the tile is the app's own picture rather than a gamma conversion of
+it (owner item 13).
 
 The chroma key runs on the display queue and never on the capture queue, it
 costs one `Bool` read per frame while it is off, and a frame that reaches the

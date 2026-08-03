@@ -84,7 +84,9 @@ extension CaptureController {
                                 // empty, not "0": the page shows an unlogged
                                 // take number as a blank field
                                 take: take.slate.take > 0
-                                    ? String(take.slate.take) : "")
+                                    ? String(take.slate.take) : "",
+                                poster: RemoteTakeLog.Entry.posterReference(
+                                    takeID: take.id.uuidString))
         })
     }
 
@@ -97,23 +99,48 @@ extension CaptureController {
 
     // MARK: - the poster
 
-    /// The last take's frame as JPEG bytes, or nil while there is none.
+    /// One take's frame as JPEG bytes, or nil while there is none. An empty
+    /// `id` means the last take that landed — the operator page's card.
     ///
     /// The takes panel's own thumbnail, re-encoded. A second decoder for the
     /// same frame would be a second thing to keep in step with a file that
     /// finalizes asynchronously, and it would decode a take the operator is
-    /// already looking at twice.
+    /// already looking at twice. The contact sheet's export-time decode was the
+    /// other candidate and is the wrong one here: it renders at print size for
+    /// a document, has no cache a phone could hit, and repeats none of the
+    /// retry-while-the-file-finalizes that `requestThumbnail` already does.
     ///
     /// Asking also STARTS the decode when the cache has nothing: the phone's
     /// 404 is what sets up the answer to its next attempt, so a take recorded
     /// while nobody has the takes panel in thumbnail mode still gets a poster.
-    func remoteTakePoster() -> Data? {
-        guard let take = takes.last else { return nil }
+    ///
+    /// Nothing here touches the capture queue, and nothing here decodes: the
+    /// frame is already an `NSImage` in `thumbnails` or it is not served yet.
+    func remoteTakePoster(id: String = "") -> Data? {
+        guard let take = id.isEmpty
+            ? takes.last : takes.first(where: { $0.id.uuidString == id })
+        else { return nil }
+        if let cached = remotePosterJPEG[take.id] { return cached }
         guard let image = thumbnails[take.id] else {
             requestThumbnail(for: take)
             return nil
         }
-        return RemotePoster.jpeg(from: image)
+        guard let jpeg = RemotePoster.jpeg(from: image) else { return nil }
+        storeRemotePoster(jpeg, for: take.id)
+        return jpeg
+    }
+
+    /// Keep the encoded bytes, bounded. A take's frame never changes once it is
+    /// decoded, and the script page asks for one per ROW: re-encoding the whole
+    /// day's log on every phone that opens the page would put that work on the
+    /// MainActor, which is where the REC button lives.
+    private func storeRemotePoster(_ jpeg: Data, for id: Take.ID) {
+        remotePosterJPEG[id] = jpeg
+        remotePosterOrder.removeAll { $0 == id }
+        remotePosterOrder.append(id)
+        while remotePosterOrder.count > RemotePoster.cacheLimit {
+            remotePosterJPEG[remotePosterOrder.removeFirst()] = nil
+        }
     }
 
     func startRemoteStatusPump() {
