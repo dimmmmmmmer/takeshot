@@ -317,24 +317,26 @@ struct TenBitYUVRecordTests {
         }
     }
 
-    /// The one measurement that says "do not route this through ProRes 4444",
-    /// and the mirror image of the 12-bit RGB path's finding.
+    /// The 4:2:2 family keeps the wire's legal excursions, which is what the
+    /// record path exists to protect and what every default in the app relies
+    /// on (`CaptureSettings.codec` is `.proRes422`).
     ///
-    /// ProRes 4444 codes RGB, so a YCbCr source is matrixed on the way in and the
-    /// legal excursions fold onto the nominal pair — measured: 4 and 1019 come
-    /// back as 64 and 940. The 4:2:2 family keeps them because it codes YCbCr and
-    /// the wire already IS YCbCr. So the codec that is the right answer for a
-    /// 12-bit RGB capture is the wrong one for a 10-bit YCbCr capture, and this
-    /// is here so that a later tidy-up cannot make them "consistent".
-    @Test func proRes4444FoldsTheExcursionsAndTheFourTwoTwoFamilyDoesNot() async throws {
+    /// ProRes 4444 is deliberately NOT asserted here, and that is the finding.
+    /// It codes RGB, so a YCbCr source is matrixed on the way in — and what
+    /// VideoToolbox then does with codes outside the nominal pair is not a
+    /// contract: on macOS 26 they fold onto 64/940, on the macOS 15 runner they
+    /// come back untouched. An assertion either way pins the host's encoder
+    /// rather than this app's behaviour, and it pinned the wrong one — the
+    /// suite was green here and red on CI for exactly that reason. If a 4444
+    /// v210 take ever matters, measure it on the OS it will ship to; the
+    /// `print` below is what makes the difference visible in a run's log.
+    @Test func theFourTwoTwoFamilyKeepsTheWiresExcursions() async throws {
         let subsampled = try await decodedBands(codec: .proResHQ).map(\.luma)
         let rgbCoded = try await decodedBands(codec: .proRes4444).map(\.luma)
         print("v210 through 422 HQ: \(subsampled), through 4444: \(rgbCoded)")
         #expect(subsampled[0] < V210Fixtures.nominalBlack - 30,
                 "422 HQ lost the footroom: \(subsampled)")
-        #expect(rgbCoded[0] >= V210Fixtures.nominalBlack - 1,
-                "4444 kept the footroom after all: \(rgbCoded)")
-        #expect(rgbCoded[4] <= V210Fixtures.nominalWhite + 1,
-                "4444 kept the headroom after all: \(rgbCoded)")
+        #expect(subsampled[4] > V210Fixtures.nominalWhite + 30,
+                "422 HQ lost the headroom: \(subsampled)")
     }
 }
