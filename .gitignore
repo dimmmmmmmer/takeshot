@@ -22,3 +22,6 @@ ROADMAP.md
 # match an archive whose folders are capitalised.
 vendor/*/*
 !vendor/*/README.md
+# Our own linking stub for RED's static library — no RED content in it, and the
+# build needs it in the checkout. See the comment inside the file.
+!vendor/R3DSDK.xcframework/**

@@ -171,9 +171,14 @@ import Testing
         }
     }
 
-    /// R3D is recognised and reported, not silently ignored: an operator who
-    /// double-clicks a RED clip must be told why nothing happened.
-    @Test func anR3DClipReportsItsMissingDecoder() async throws {
+    /// R3D goes to our own engine and reports why when it cannot open a file —
+    /// an operator who double-clicks a RED clip must be told what happened.
+    ///
+    /// The exact sentence depends on the build: without RED's SDK there is no
+    /// decoder at all (CI, and a release built without it), with it the bridge
+    /// answers about the file. Both are asserted; which one applies is checked in
+    /// `ModelR3DClipTests.aBadR3DAlwaysExplainsItself`.
+    @Test func anR3DClipThatCannotBeOpenedReportsWhy() async throws {
         let media = try MediaFixtures.makeDirectory("playback-r3d")
         defer { try? FileManager.default.removeItem(at: media) }
         let clip = media.appendingPathComponent("A001_C001.r3d")
@@ -185,7 +190,8 @@ import Testing
 
             controller.play(url: clip)
             #expect(controller.rawPlayer == nil)
-            #expect(controller.rawPlayerError == L("r3d_not_supported"))
+            let reason = try #require(controller.rawPlayerError)
+            #expect(!reason.isEmpty)
             #expect(controller.playbackURL == clip)
             #expect(controller.viewerMode == .playback)
             #expect(controller.player.currentItem == nil,

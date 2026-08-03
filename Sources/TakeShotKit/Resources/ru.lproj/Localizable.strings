@@ -338,7 +338,23 @@
 "ale_no_takes" = "Нет тейков для экспорта";
 "ale_saved" = "ALE сохранён: %@";
 
-"r3d_not_supported" = "Воспроизведение R3D пока не подключено (нужен REDCODE SDK)";
+"r3d_sdk_unavailable" = "Для воспроизведения R3D нужен R3D SDK от RED";
+"r3d_edge_tc" = "Edge TC";
+"raw_color_showing" = "На экране:";
+"raw_decode_scale" = "Декодируется в 1/%d для просмотра";
+"raw_camera_lut_skipped" = "В клипе есть камерный 3D LUT (%@) — не применён";
+"raw_camera_lut_applied" = "Камерный 3D LUT применён (%@)";
+"raw_decode_stopped" = "Воспроизведение остановлено: кадр не декодируется";
+
+"settings_r3d" = "Воспроизведение R3D";
+"r3d_decode_scale" = "Разрешение декодирования";
+"r3d_scale_auto" = "Авто";
+"r3d_scale_full" = "Полное";
+"r3d_scale_half" = "1/2";
+"r3d_scale_quarter" = "1/4";
+"r3d_scale_eighth" = "1/8";
+"r3d_camera_lut" = "Применять камерный 3D LUT";
+"r3d_color_legend" = "Разворачивается в Rec.709; экспозиция как снято, камерный лук выключен.";
 
 "tc_source" = "Источник таймкода";
 "tc_source_rp188" = "RP188 (видеопоток)";

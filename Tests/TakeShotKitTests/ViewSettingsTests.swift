@@ -78,6 +78,28 @@ struct ViewSettingsTests {
         }
     }
 
+    /// The R3D section: a picker whose label is long in Russian
+    /// ("Разрешение декодирования"), a toggle, and a caption. A menu picker is
+    /// as wide as its widest option, and the caption is the only multi-line row
+    /// in the section — if it wraps to a different number of lines in one
+    /// language the whole form's height diverges, which is what the form test
+    /// above measures.
+    @Test func theR3DSectionFitsTheSettingsForm() async throws {
+        try await ViewProbe.run { probe in
+            let form = ViewBudget.settingsFormWidth
+            let ideal = probe.fittingSizes { R3DSettingsSection() }
+            #expect(ideal.ru.width <= form,
+                    "the R3D section wants \(ideal.ru.width)pt of \(form)")
+            #expect(ideal.en.width <= form,
+                    "the R3D section wants \(ideal.en.width)pt of \(form)")
+            // Width is allowed to differ — Russian labels are longer, and the
+            // Form fixes the width anyway. HEIGHT is the wrap check: a caption
+            // that takes one more line in one language moves the whole form.
+            #expect(ideal.ru.height == ideal.en.height,
+                    "the R3D section wrapped in one language: \(ideal)")
+        }
+    }
+
     /// The three frame-count rows carry the longest labels in the detection
     /// section ("REC start confirm (frames)" / "Подтверждение старта (кадры)")
     /// next to a 56pt field and a stepper. Each has to fit the form.

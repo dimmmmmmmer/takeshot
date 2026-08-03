@@ -69,6 +69,35 @@ public enum CaptureBitDepth: String, CaseIterable, Codable, Sendable, Identifiab
     public var bits: Int { Int(rawValue) ?? 10 }
 }
 
+/// Resolution to decode .r3d clips at.
+///
+/// RED's decoder works natively at 1/1, 1/2, 1/4 and 1/8 — a reduction is less
+/// work, not a resize afterwards — and a video-assist viewer wants one: an 8K
+/// clip decoded full costs sixteen times a quarter-res decode to fill the same
+/// 1080-class window. `auto` picks the most reduction that still fills that
+/// window and is the default; the explicit rows exist for the operator who is
+/// checking critical focus and will accept a slower player for it.
+public enum R3DDecodeScale: String, CaseIterable, Codable, Sendable, Identifiable {
+    case auto
+    case full
+    case half
+    case quarter
+    case eighth
+
+    public var id: String { rawValue }
+
+    /// What the bridge is asked for. 0 means "decide from the clip's width".
+    public var divisor: Int {
+        switch self {
+        case .auto: return 0
+        case .full: return 1
+        case .half: return 2
+        case .quarter: return 4
+        case .eighth: return 8
+        }
+    }
+}
+
 /// Take rating: good (Good Take in Resolve) / bad / unmarked.
 public enum TakeRating: String, Equatable, Sendable {
     case none
@@ -225,6 +254,17 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// that nil is also what makes 12-bit OFF by default: nobody gets moved to
     /// a format their board may not deliver by installing an update.
     public var captureBitDepth: String?
+    /// Resolution to decode .r3d clips at (`R3DDecodeScale`); nil — auto, which
+    /// is enough pixels for a 1080-class viewer and no more.
+    public var r3dDecodeScale: String?
+    /// Bake the clip's in-camera Creative 3D LUT and CDL into R3D playback;
+    /// nil — off.
+    ///
+    /// Off is the honest default: a viewer that silently applies someone's look
+    /// is not a reference, and the operator cannot tell whether the flatness or
+    /// the contrast they are judging came from the camera or from a .cube. On is
+    /// the operator asking to see the look, and the player says so while it is.
+    public var r3dApplyCameraLUT: Bool?
     /// Live audio monitor on/off (nil = on) — the footer speaker state.
     public var monitorEnabled: Bool?
     /// Frameline aspect (2.39, 1.85…); nil — off.
@@ -520,6 +560,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
             return depth
         }
         return (tenBitCapture ?? true) ? .ten : .eight
+    }
+
+    /// Resolution to decode .r3d clips at: the operator's choice, else auto.
+    public var r3dDecodeScaleEffective: R3DDecodeScale {
+        r3dDecodeScale.flatMap(R3DDecodeScale.init(rawValue:)) ?? .auto
     }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy

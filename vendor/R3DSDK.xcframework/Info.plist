@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  This file is OURS, not RED's, which is why it is the one thing under vendor/
+  besides the READMEs that is committed (see .gitignore).
+
+  RED ships a STATIC library, not a dynamically loaded framework like DeckLink
+  and Blackmagic RAW: libR3DSDK-libcpp.a is the dispatch layer that dlopens
+  REDR3D.dylib at runtime, and it has to be LINKED. SwiftPM has exactly three
+  linker settings — .linkedLibrary, .linkedFramework and .unsafeFlags — and
+  none of the first two can carry a library search path, while .unsafeFlags is
+  off limits. A binaryTarget is the one sanctioned way in, and the paths inside
+  an .xcframework's Info.plist are resolved relative to the bundle, ".." and
+  all — so this stub reaches straight into the vendor drop instead of holding a
+  copy of RED's library, which may not be redistributed.
+
+  Nothing is generated and nothing is copied: drop the SDK into vendor/R3DSDK
+  and `swift build` links it. Without the drop the two paths below do not
+  resolve, Package.swift leaves the binary target out of the graph entirely,
+  and Sources/CR3D compiles as a stub (CR3DClip.isSDKAvailable == NO).
+
+  If a future SDK drop changes the archive's name or its architectures, this
+  plist is the single place to say so.
+-->
+<plist version="1.0">
+<dict>
+	<key>AvailableLibraries</key>
+	<array>
+		<dict>
+			<key>HeadersPath</key>
+			<string>../../R3DSDK/Include</string>
+			<key>LibraryIdentifier</key>
+			<string>macos-arm64_x86_64</string>
+			<key>LibraryPath</key>
+			<string>../../R3DSDK/Lib/mac64/libR3DSDK-libcpp.a</string>
+			<key>SupportedArchitectures</key>
+			<array>
+				<string>arm64</string>
+				<string>x86_64</string>
+			</array>
+			<key>SupportedPlatform</key>
+			<string>macos</string>
+		</dict>
+	</array>
+	<key>CFBundlePackageType</key>
+	<string>XFWK</string>
+	<key>XCFrameworkFormatVersion</key>
+	<string>1.0</string>
+</dict>
+</plist>

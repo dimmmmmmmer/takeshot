@@ -336,7 +336,23 @@
 "ale_no_takes" = "No takes to export";
 "ale_saved" = "ALE saved: %@";
 
-"r3d_not_supported" = "R3D playback isn\u2019t integrated yet (REDCODE SDK required)";
+"r3d_sdk_unavailable" = "R3D playback needs RED\u2019s R3D SDK";
+"r3d_edge_tc" = "Edge TC";
+"raw_color_showing" = "Showing:";
+"raw_decode_scale" = "Decoded at 1/%d for the viewer";
+"raw_camera_lut_skipped" = "Clip carries a camera 3D LUT (%@) \u2014 not applied";
+"raw_camera_lut_applied" = "Camera 3D LUT applied (%@)";
+"raw_decode_stopped" = "Playback stopped: a frame could not be decoded";
+
+"settings_r3d" = "R3D playback";
+"r3d_decode_scale" = "Decode resolution";
+"r3d_scale_auto" = "Auto";
+"r3d_scale_full" = "Full";
+"r3d_scale_half" = "1/2";
+"r3d_scale_quarter" = "1/4";
+"r3d_scale_eighth" = "1/8";
+"r3d_camera_lut" = "Apply the camera 3D LUT";
+"r3d_color_legend" = "Developed to Rec.709; exposure as shot, camera look off unless asked for.";
 
 "tc_source" = "Timecode source";
 "tc_source_rp188" = "RP188 (video stream)";

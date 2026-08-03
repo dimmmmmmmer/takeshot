@@ -28,8 +28,8 @@ extension CaptureController {
             return OtherPreview(image: middle.flatMap { imageThumbnail(at: $0).image },
                                 duration: Double(frames.count) / 24.0)
         }
-        if ext == "braw" {
-            let (image, duration) = brawThumbnail(at: url)
+        if ext == "braw" || ext == "r3d" {
+            let (image, duration) = rawThumbnail(at: url, extension: ext)
             return OtherPreview(image: image, duration: duration)
         }
         let (image, duration) = await videoThumbnail(at: url)
@@ -59,16 +59,30 @@ extension CaptureController {
         return (NSImage(cgImage: cg,
                         size: NSSize(width: cg.width, height: cg.height)), pixels)
     }
-    nonisolated private static func brawThumbnail(
-        at url: URL) -> (image: NSImage?, duration: Double?) {
-        guard let clip = try? CBRClip(path: url.path) else { return (nil, nil) }
-        var image: NSImage?
-        if clip.frameCount > 0,
-           let buffer = clip.copyFrame(at: clip.frameCount / 2) {
-            image = thumbnail(from: buffer, maxSize: 256)
+    /// BRAW and R3D through their own bridges — AVAssetImageGenerator cannot
+    /// open either, and until this branch existed an .r3d showed the generic film
+    /// glyph and no duration.
+    ///
+    /// Both go through `RawClipSource`, the same abstraction the player uses,
+    /// rather than reaching into the bridges directly as the BRAW path used to:
+    /// one decode contract, and the R3D options (a small decode scale for a
+    /// 256 px thumbnail) are stated in one place.
+    nonisolated private static func rawThumbnail(
+        at url: URL, extension ext: String) -> (image: NSImage?, duration: Double?) {
+        let clip: RawClipSource?
+        if ext == "r3d" {
+            // A thumbnail is 256 px: an eighth-res decode of an 8K frame is
+            // still four times what it needs, and a folder of R3D clips would
+            // otherwise be a full-res decode each.
+            clip = try? R3DSource(url: url, scale: .eighth, applyCameraLUT: false)
+        } else {
+            clip = try? BRAWSource(url: url)
         }
+        guard let clip, clip.frameCount > 0 else { return (nil, nil) }
+        let image = clip.copyFrame(at: clip.frameCount / 2)
+            .flatMap { thumbnail(from: $0, maxSize: 256) }
         let duration = clip.frameRate > 0
-            ? Double(clip.frameCount) / Double(clip.frameRate) : nil
+            ? Double(clip.frameCount) / clip.frameRate : nil
         return (image, duration)
     }
     nonisolated private static func videoThumbnail(

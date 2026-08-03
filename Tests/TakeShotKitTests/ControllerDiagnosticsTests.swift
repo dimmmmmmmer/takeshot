@@ -137,7 +137,13 @@ import Testing
     @Test func thePINIsInNoFileAndThePortIsInThem() async throws {
         try await ControllerHarness.run { controller, root in
             let out = try scratch(in: root)
-            controller.settings.remotePIN = "4271"
+            // Six digits, not four. A TCP port is at most five, so a six-digit
+            // PIN cannot be a substring of one — with a four-digit 4271 this test failed
+            // whenever the kernel happened to hand out 54271 or 64271, reporting
+            // a leaked credential that was really the port it also asserts is
+            // present. The app takes any length; the bundle's redaction works on
+            // key names, so the digits here are only the needle.
+            controller.settings.remotePIN = "427193"
             // Port 0: the listener picks an ephemeral one, so the suite never
             // claims a fixed port on the machine running it.
             controller.startRemoteServer(overridePort: 0)
@@ -152,7 +158,7 @@ import Testing
             #expect(files.count == 3)
             for file in files {
                 let text = try read(folder, file)
-                #expect(!text.contains("4271"), "the PIN is in \(file)")
+                #expect(!text.contains("427193"), "the PIN is in \(file)")
                 #expect(!text.lowercased().contains("remotepin"),
                         "the PIN's key is in \(file)")
             }

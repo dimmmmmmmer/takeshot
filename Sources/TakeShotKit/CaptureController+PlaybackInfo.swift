@@ -61,18 +61,28 @@ extension CaptureController {
             }
             await MainActor.run { [weak self] in
                 guard let self, self.player.currentItem === item else { return }
-                let fpsText = fps > 0
-                    ? (abs(fps.rounded() - fps) < 0.05
-                       ? String(Int(fps.rounded())) : String(format: "%.2f", fps))
-                    : "?"
-                // same short style as the live badge: 1080p25
-                self.playbackFormatText = "\(Int(size.height))p\(fpsText)"
+                self.playbackFormatText = Self.shortFormat(
+                    height: Int(size.height), fps: fps)
                 self.playbackStartTC = startTC
                 self.playbackFPS = fps > 0 ? fps : 25
                 self.playbackAspect = size.height > 0
                     ? size.width / size.height : nil
             }
         }
+    }
+
+    /// The short format badge — "1080p25", "2160p24".
+    ///
+    /// One spelling, because there were two: the RAW engine rounded the rate
+    /// unconditionally and the AVFoundation path rounded only within 0.05 of an
+    /// integer, so a rate further off than that read differently depending on
+    /// which engine opened the clip. The near-integer rates cameras actually
+    /// shoot (23.976, 29.97) round either way, which is why it went unnoticed.
+    nonisolated static func shortFormat(height: Int, fps: Double) -> String {
+        guard fps > 0 else { return "\(height)p?" }
+        let rate = abs(fps.rounded() - fps) < 0.05
+            ? String(Int(fps.rounded())) : String(format: "%.2f", fps)
+        return "\(height)p\(rate)"
     }
 
     /// First tc32 sample of a timecode track: the start frame number.
