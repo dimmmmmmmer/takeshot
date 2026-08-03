@@ -16,11 +16,11 @@ import Testing
 @Suite @MainActor struct RemoteMultiviewTests {
     // MARK: - the page
 
-    @Test func theMultiviewPageIsServedAtItsRoute() async throws {
+    @Test func theCamerasPageIsServedAtItsRoute() async throws {
         try await ControllerHarness.run { controller, _ in
             let (port, _) = try await RemoteHarness.serve(controller)
             let url = try #require(URL(
-                string: "http://127.0.0.1:\(port)\(RemotePage.multiviewPath)"))
+                string: "http://127.0.0.1:\(port)\(RemotePage.camerasPath)"))
             let (data, response) = try await RemoteHarness.session().data(from: url)
             let http = try #require(response as? HTTPURLResponse)
 
@@ -29,7 +29,7 @@ import Testing
                 == "text/html; charset=utf-8")
             let html = try #require(String(bytes: data, encoding: .utf8))
             #expect(html.contains("<!doctype html>"))
-            #expect(html.contains(L("multiview_title")))
+            #expect(html.contains(L("cameras_title")))
             #expect(!html.contains(RemotePage.configToken))
         }
     }
@@ -106,6 +106,58 @@ import Testing
                     "a wrong PIN was enough to start the multiview encoder")
             #expect(controller.remoteServer?.multiviewFrameSends == 0,
                     "a frame went to a client that never authenticated")
+        }
+    }
+
+    /// The same thing again against a controller with the operator's tooling
+    /// switched on — punch-in at 2x and every assist lit.
+    ///
+    /// Which half of the claim this can carry is worth being exact about. The
+    /// routing — the grid is handed the clean frame, byte for byte, with a
+    /// wipe running, the key on and every aid lit — is pinned deterministically
+    /// in `PreviewDisplayPathTests.theCameraGridGetsTheCleanFrameAndNotTheOperatorsView`,
+    /// against known pixels the synthetic source here cannot offer. What this
+    /// adds is the end of the wire: with all of it on, frames still flow, the
+    /// tile is still the whole signal (a 2x desqueeze would halve its height),
+    /// and the buffer behind it is still full frame — which is the punch-in's
+    /// crop not having happened.
+    @Test func punchInAndTheAssistsDoNotReachThePhone() async throws {
+        try await ControllerHarness.run(live: true) { controller, _ in
+            await ControllerWait.until { controller.signalFormat != nil }
+            controller.setAssist {
+                $0.colorTool = .falseColor
+                $0.zebraOn = true
+                $0.peakingOn = true
+                $0.desqueeze = 2
+                $0.setPunchIn(2)
+            }
+            try #require(controller.assist.punchIn == 2,
+                         "the fixture never switched the punch-in on")
+            try #require(controller.assist.anyToolActive)
+
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let client = try await RemoteHarness.connect(
+                port: port, pin: pin, session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+            try await client.send(["action": "multiview", "on": true,
+                                   "pin": pin])
+
+            let frame = try await client.nextFrame()
+            let jpeg = Data(frame.dropFirst(RemoteClient.frameHeaderBytes))
+            let image = try #require(NSBitmapImageRep(data: jpeg),
+                                     "the frame bytes do not decode")
+            // 1080p25 whole, scaled to the ceiling — the same numbers the
+            // assist-free test above asserts.
+            #expect(image.pixelsWide == 480)
+            #expect(image.pixelsHigh == 270, "the desqueeze reshaped the tile")
+            // The frame the grid is fed is the pipeline's clean one, and it is
+            // the whole signal: a punch-in applied here would have cropped it
+            // to a quarter of the area before the encoder ever saw it.
+            let clean = try #require(controller.pipeline.currentPreviewBuffer())
+            #expect(CVPixelBufferGetWidth(clean) == 1920,
+                    "the punch-in cropped the frame the grid encodes")
+            #expect(CVPixelBufferGetHeight(clean) == 1080)
         }
     }
 
@@ -294,6 +346,35 @@ import Testing
                 "a frame under the ceiling was upscaled")
     }
 
+    /// The tile is the app's own picture, not a re-grade of it (owner item
+    /// 13a).
+    ///
+    /// The display path's contract is that the buffer holds 709-encoded code
+    /// values and every surface says so rather than converting them. The
+    /// encoder used to read the buffer without naming a space — CoreImage then
+    /// guesses, and guesses sRGB for a buffer carrying no colour attachments —
+    /// and write 709, which turns the guess into a gamma conversion the app
+    /// performs nowhere else. A known grey has to come back as itself.
+    @Test func aKnownGreyEncodesBackAsItself() throws {
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let grey: UInt8 = 0x80
+        let frame = MediaFixtures.pixelBuffer(level: grey, width: 320,
+                                              height: 180)
+        let jpeg = try #require(MultiviewEncoder.jpeg(from: frame,
+                                                      context: context))
+        let image = try #require(NSBitmapImageRep(data: jpeg))
+        // The raw samples, not `colorAt` — that answers in a colour space, and
+        // converting the answer is the very operation under test.
+        let base = try #require(image.bitmapData)
+        let offset = (image.pixelsHigh / 2) * image.bytesPerRow
+            + (image.pixelsWide / 2) * image.samplesPerPixel
+        let level = Int(base[offset])
+        // JPEG at 0.5 quality moves a flat field by a code or two; the sRGB
+        // reading the encoder used to take moves 0x80 by about twenty.
+        #expect(abs(level - Int(grey)) <= 6,
+                "the encoder re-graded the frame: \(level) for \(grey)")
+    }
+
     /// Latest-wins under the pace: a burst of offers produces the first pass
     /// at once and at most ONE coalesced pass behind it — never a pass per
     /// offer, which is what would make a 25 fps wire cost 25 encodes.
@@ -364,13 +445,13 @@ import Testing
 
     /// The page parses and carries its labels in both languages — the same
     /// guard the other two pages have, for the same blank-phone failure.
-    @Test @MainActor func theMultiviewPageCarriesItsLabelsAndParses() throws {
+    @Test @MainActor func theCamerasPageCarriesItsLabelsAndParses() throws {
         for language in [AppLanguage.english, .russian] {
             let served = ViewRender.withLanguage(language) {
-                RemotePage.multiviewHTML()
+                RemotePage.camerasHTML()
             }
             let html = try #require(String(bytes: served, encoding: .utf8))
-            let title = ViewRender.withLanguage(language) { L("multiview_title") }
+            let title = ViewRender.withLanguage(language) { L("cameras_title") }
             #expect(!html.contains(RemotePage.configToken),
                     "\(language.rawValue): the config token was not replaced")
             #expect(html.contains(title),
@@ -390,8 +471,19 @@ import Testing
         }
     }
 
-    @Test @MainActor func everyMultiviewLabelIsTranslated() {
-        for (field, key) in RemotePage.multiviewLabels {
+    /// The gate's labels are painted, not merely injected. This page shipped
+    /// with an unlabelled PIN field and a blank Connect button — the strings
+    /// were in the config object and nothing ever read them.
+    @Test @MainActor func theCameraPagePaintsItsGate() throws {
+        let html = try #require(String(bytes: RemotePage.camerasHTML(),
+                                       encoding: .utf8))
+        #expect(html.contains("S.pinPrompt"), "the gate has no prompt")
+        #expect(html.contains("S.connect"), "the connect button has no label")
+        #expect(html.contains("paintLabels()"))
+    }
+
+    @Test @MainActor func everyCamerasLabelIsTranslated() {
+        for (field, key) in RemotePage.camerasLabels {
             for language in [AppLanguage.english, AppLanguage.russian] {
                 let value = ViewRender.withLanguage(language) { L(key) }
                 #expect(value != key,

@@ -516,8 +516,13 @@
 "remote_pin" = "PIN";
 "remote_pin_new" = "New PIN";
 "remote_address" = "Address";
+/* the segmented switch that picks which page the address and QR are for */
+"remote_page" = "Page";
+"remote_link_remote" = "Remote";
+"remote_link_script" = "Script";
+"remote_link_cameras" = "Cameras";
 "remote_no_network" = "This Mac is on no network";
-"remote_offline" = "Not listening";
+"remote_not_listening" = "Not listening";
 "remote_failed" = "Web remote: %@";
 "remote_title" = "TakeShot Remote";
 "remote_rec" = "REC";
@@ -525,9 +530,10 @@
 "remote_marker" = "MARKER";
 "remote_good" = "GOOD";
 "remote_bad" = "BAD";
-"remote_connected" = "Connected";
+/* the connection state every page shows in its footer (owner item 15) */
+"remote_online" = "Online";
 "remote_connecting" = "Connecting...";
-"remote_disconnected" = "No connection";
+"remote_offline" = "Offline";
 "remote_connect" = "Connect";
 "remote_pin_prompt" = "Enter the PIN shown in TakeShot settings";
 "remote_pin_bad" = "Wrong PIN";
@@ -665,7 +671,6 @@
 "remote_mode_playback" = "Playback";
 
 /* === the script supervisor's page: a live take log edited from a phone === */
-"remote_script" = "Script page";
 "script_title" = "TakeShot Script Log";
 "script_recording" = "Recording";
 "script_empty" = "No takes yet";
@@ -680,11 +685,11 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "SYNC";
 "slate_sync_hint" = "Click or press Space — sync flash";
-/* === the multiview page: a live camera grid on a phone === */
-"remote_multiview" = "Multiview page";
-"multiview_title" = "TakeShot Multiview";
-"multiview_rec" = "REC";
-"multiview_wait" = "No video yet";
+/* === the cameras page: the boards' LIVE signal as a grid on a phone.
+   Not "playback" (owner item 13d): nothing recorded is shown here. === */
+"cameras_title" = "TakeShot Cameras";
+"cameras_rec" = "REC";
+"cameras_wait" = "No video yet";
 
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Sync play";

@@ -75,10 +75,10 @@ extension RemoteClient {
             // The markup is as public as the operator page's — everything it
             // shows arrives over the socket, behind the same PIN.
             writeAndClose(RemoteResponse.page(server?.currentScriptPage ?? Data()))
-        case RemotePage.multiviewPath:
+        case RemotePage.camerasPath:
             // Same rule: the markup is empty tiles, and every frame that
             // could fill them rides the socket behind the PIN.
-            writeAndClose(RemoteResponse.page(server?.currentMultiviewPage ?? Data()))
+            writeAndClose(RemoteResponse.page(server?.currentCamerasPage ?? Data()))
         case RemotePage.posterPath:
             servePoster(request)
         default:
@@ -86,7 +86,9 @@ extension RemoteClient {
         }
     }
 
-    /// `GET /take-poster?pin=…` — a JPEG of the last take that landed.
+    /// `GET /take-poster?pin=…&take=…` — a JPEG of one take's frame. Without a
+    /// `take` it is the last take that landed, which is the operator page's
+    /// card; the script page names the row it is drawing.
     ///
     /// The code travels in the query string because the page fetches this with
     /// an `<img>`, and an `<img>` carries no headers. That is the one place in
@@ -95,6 +97,11 @@ extension RemoteClient {
     /// yes or no to a code for free is the same four digits with the delay
     /// switched off, and being the cheaper of the two is all an enumeration
     /// needs. Nothing logs the target, and the server hands out no referrer.
+    ///
+    /// The take id is gated behind the same code as everything else: a row's
+    /// thumbnail is production picture exactly as the status is, and an image
+    /// route that answered without the PIN would be the whole day's footage in
+    /// stills to anyone who can reach the port.
     private func servePoster(_ request: RemoteRequest) {
         guard let server else {
             writeAndClose(RemoteResponse.notFound())
@@ -102,12 +109,14 @@ extension RemoteClient {
         }
         let candidate = RemoteRequest.queryValue("pin", in: request.query) ?? ""
         let accepted = RemotePIN.matches(candidate, expected: server.currentPIN)
+        let take = RemoteRequest.queryValue(RemotePage.posterTakeParameter,
+                                            in: request.query) ?? ""
         holdForTarpit(server.notePINAttempt(failed: !accepted)) { [weak self] in
-            self?.answerPoster(accepted: accepted)
+            self?.answerPoster(accepted: accepted, take: take)
         }
     }
 
-    private func answerPoster(accepted: Bool) {
+    private func answerPoster(accepted: Bool, take: String) {
         guard accepted else {
             writeAndClose(RemoteResponse.forbidden())
             return
@@ -123,7 +132,7 @@ extension RemoteClient {
         // this" — and it is cheaper than a box asserting that a queue-confined
         // object may be carried through another thread untouched.
         let id = ObjectIdentifier(self)
-        server.handlers.poster { [weak server] jpeg in
+        server.handlers.poster(take) { [weak server] jpeg in
             // The app builds the image where it keeps it, which is not this
             // queue. Everything in this class is queue-confined, so the reply
             // hops back before it touches any of it.

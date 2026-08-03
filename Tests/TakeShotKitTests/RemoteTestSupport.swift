@@ -67,10 +67,15 @@ enum RemoteHarness {
         var body: Data
     }
 
-    /// One fetch of the take poster, timed.
-    static func poster(port: Int, pin: String) async throws -> PosterAnswer {
+    /// One fetch of a take poster, timed. `take` empty asks for the last take
+    /// that landed, which is what the operator page's card wants.
+    static func poster(port: Int, pin: String,
+                       take: String = "") async throws -> PosterAnswer {
+        let named = take.isEmpty
+            ? "" : "&\(RemotePage.posterTakeParameter)=\(take)"
         let url = try #require(URL(
-            string: "http://127.0.0.1:\(port)\(RemotePage.posterPath)?pin=\(pin)"))
+            string: "http://127.0.0.1:\(port)\(RemotePage.posterPath)?pin=\(pin)"
+                + named))
         let started = ContinuousClock.now
         let (body, response) = try await session().data(from: url)
         let elapsed = started.duration(to: .now)

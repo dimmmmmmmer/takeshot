@@ -84,20 +84,30 @@ final class MultiviewEncoder: @unchecked Sendable {
     /// context, like `RemotePoster.jpeg` and for the same reason: scaling and
     /// encoding needs no encoder state, and a test can hand it a known frame
     /// and measure the bytes that come back.
+    ///
+    /// **The colour space is declared on BOTH ends, and that is the point.**
+    /// The display path's contract is the one stated at `MetalPreviewLayer`:
+    /// the buffer holds 709-encoded code values, and the surface says so rather
+    /// than converting them. Reading the buffer WITHOUT naming a space asks
+    /// CoreImage to guess from whatever colour attachments the pooled buffer
+    /// happens to carry — sRGB when there are none, and a pool recycles
+    /// IOSurfaces between frames — and then writing 709 turns that guess into a
+    /// gamma conversion. The result is a tile a few percent off the app's own
+    /// picture, changing with the frame that recycled the buffer. Naming 709 in
+    /// and 709 out makes the pass an identity, exactly as the still grabs do
+    /// (see `CapturePipeline.pngData`).
     static func jpeg(from buffer: CVPixelBuffer, context: CIContext,
                      maxEdge: CGFloat = maximumEdge,
                      quality: Double = quality) -> Data? {
-        let image = CIImage(cvPixelBuffer: buffer)
+        let space = CGColorSpace(name: CGColorSpace.itur_709)
+            ?? CGColorSpaceCreateDeviceRGB()
+        let image = CIImage(cvPixelBuffer: buffer,
+                            options: [.colorSpace: space])
         let longest = max(image.extent.width, image.extent.height)
         guard longest > 0 else { return nil }
         let scale = min(1, maxEdge / longest)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale,
                                                              y: scale))
-        // Tagged Rec.709 like the frame grabs (see CapturePipeline.pngData):
-        // the display buffer carries 709-encoded values, and the tile should
-        // read like the viewer, not like a second grade of it.
-        let space = CGColorSpace(name: CGColorSpace.itur_709)
-            ?? CGColorSpaceCreateDeviceRGB()
         let option = CIImageRepresentationOption(
             rawValue: kCGImageDestinationLossyCompressionQuality as String)
         return context.jpegRepresentation(of: scaled, colorSpace: space,

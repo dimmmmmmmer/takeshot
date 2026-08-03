@@ -521,8 +521,13 @@
 "remote_pin" = "PIN";
 "remote_pin_new" = "Новый PIN";
 "remote_address" = "Адрес";
+/* the segmented switch that picks which page the address and QR are for */
+"remote_page" = "Страница";
+"remote_link_remote" = "Пульт";
+"remote_link_script" = "Скрипт";
+"remote_link_cameras" = "Камеры";
 "remote_no_network" = "Этот Mac не в сети";
-"remote_offline" = "Не слушает";
+"remote_not_listening" = "Не слушает";
 "remote_failed" = "Веб-пульт: %@";
 "remote_title" = "Пульт TakeShot";
 "remote_rec" = "REC";
@@ -530,9 +535,10 @@
 "remote_marker" = "МАРКЕР";
 "remote_good" = "ДУБЛЬ";
 "remote_bad" = "БРАК";
-"remote_connected" = "На связи";
+/* the connection state every page shows in its footer (owner item 15) */
+"remote_online" = "Онлайн";
 "remote_connecting" = "Соединение...";
-"remote_disconnected" = "Нет связи";
+"remote_offline" = "Офлайн";
 "remote_connect" = "Подключиться";
 "remote_pin_prompt" = "Введите PIN из настроек TakeShot";
 "remote_pin_bad" = "Неверный PIN";
@@ -667,7 +673,6 @@
 "remote_mode_playback" = "Просмотр";
 
 /* === the script supervisor's page: a live take log edited from a phone === */
-"remote_script" = "Скрипт-супервайзер";
 "script_title" = "TakeShot: журнал дублей";
 "script_recording" = "Идёт запись";
 "script_empty" = "Дублей пока нет";
@@ -682,11 +687,11 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "СИНХРО";
 "slate_sync_hint" = "Клик или пробел — синхровспышка";
-/* === the multiview page: a live camera grid on a phone === */
-"remote_multiview" = "Мультивью";
-"multiview_title" = "TakeShot: мультивью";
-"multiview_rec" = "REC";
-"multiview_wait" = "Видео ещё нет";
+/* === the cameras page: the boards' LIVE signal as a grid on a phone.
+   Not "playback" (owner item 13d): nothing recorded is shown here. === */
+"cameras_title" = "TakeShot: камеры";
+"cameras_rec" = "REC";
+"cameras_wait" = "Видео ещё нет";
 
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Синхронный просмотр";

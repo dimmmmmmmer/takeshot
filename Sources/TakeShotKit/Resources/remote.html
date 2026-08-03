@@ -22,7 +22,14 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* "Resist Sans Display" is the app's own face and is NOT shipped with
+     these pages: it is a commercial licence (Groteskly Yours, all rights
+     reserved) and this repository is public, so embedding it as a base64
+     web font would redistribute it. Named first anyway — a Mac that has it
+     installed renders in it, and every phone on set falls straight through
+     to the system face. */
+  font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none; user-select: none;
   overscroll-behavior: none;
@@ -334,12 +341,15 @@ function refreshPoster(next) {
   if (now - posterAskedAt < POSTER_RETRY_MS) { return; }
   posterAskedAt = now;
   posterTries += 1;
-  // The take id and the attempt are in the URL as much for the browser as for
-  // the server, which ignores both: a mobile Safari that decides to reuse the
-  // response it already has would otherwise show the previous take for the rest
-  // of the shoot, and the answer to attempt one is 404 far more often than not.
+  // The take id names the frame wanted — the card is about the take that
+  // LANDED, and asking for it by name rather than for "the newest" closes the
+  // window where a take finalizes between the status push and this fetch. The
+  // attempt number is for the browser alone, which the server ignores: a mobile
+  // Safari that decides to reuse the response it already has would otherwise
+  // show the previous take for the rest of the shoot, and the answer to attempt
+  // one is 404 far more often than not.
   el("poster").src = CFG.posterPath + "?pin=" + encodeURIComponent(pin)
-    + "&take=" + encodeURIComponent(posterTake) + "." + posterTries;
+    + "&take=" + encodeURIComponent(posterTake) + "&n=" + posterTries;
 }
 
 function showGate(message) {

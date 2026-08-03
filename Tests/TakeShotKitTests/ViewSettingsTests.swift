@@ -134,9 +134,10 @@ struct ViewSettingsTests {
         }
     }
 
-    /// The Remote section grows a port field, the PIN, the addresses and a QR
-    /// code when it is switched on. All of it has to render in both languages,
-    /// and the QR has to be an image rather than a missing one.
+    /// The Remote section grows a port field, the PIN, the page switch, one
+    /// address row and one QR code when it is switched on. All of it has to
+    /// render in both languages, and the QR has to be an image rather than a
+    /// missing one.
     ///
     /// The listener is started explicitly on an ephemeral port first: switching
     /// the setting on is what brings the server up in the app, and a view test
@@ -167,18 +168,57 @@ struct ViewSettingsTests {
         }
     }
 
+    /// One switched row, not three stacked ones (owner item 10).
+    ///
+    /// Three link rows each with their own QR made this section taller than the
+    /// settings window on a laptop screen, and two of the three codes were
+    /// always the wrong one to point a camera at. The switch is what shrank it,
+    /// and the height is the only thing that can say the switch is still there:
+    /// each link that grows a row of its own costs a `qrSide` code plus the
+    /// address row above it, so a budget one code above what the section
+    /// measures today fails the moment a second one comes back, and leaves
+    /// plenty of room for a translation or an OS metric moving underneath.
+    @Test func theRemoteSectionIsOneLinkRowAndOneCode() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.startRemoteServer(overridePort: 0)
+            await ControllerWait.until { probe.controller.remoteBoundPort > 0 }
+            probe.controller.settings.remoteEnabled = true
+
+            let expanded = probe.fittingSizes {
+                Form { RemoteSettingsSection() }.formStyle(.grouped)
+            }
+            // Measured at 445pt; one more code and its row is +160pt.
+            let budget = 445 + RemoteSettingsSection.qrSide - 20
+            for (language, size) in [("en", expanded.en), ("ru", expanded.ru)] {
+                #expect(size.height < budget,
+                        "\(language): \(size.height)pt — a second link row is back")
+            }
+        }
+    }
+
     /// The section's own labels sit beside controls in a window of fixed width,
-    /// and a grouped Form truncates rather than wraps.
+    /// and a grouped Form truncates rather than wraps. The three link segments
+    /// share ONE segmented control, so they are measured together.
     @Test func remoteRowLabelsFitTheSettingsForm() async throws {
         try await ViewProbe.run { probe in
             let form = ViewBudget.settingsFormWidth
             for key in ["remote_enable", "remote_port", "remote_pin",
-                        "remote_address", "remote_pin_new", "remote_offline",
-                        "remote_no_network", "remote_script"] {
+                        "remote_address", "remote_pin_new",
+                        "remote_not_listening", "remote_no_network",
+                        "remote_page"] {
                 let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
                 #expect(ideal.ru.width <= form,
                         "\(key) is \(ideal.ru.width)pt of \(form)")
             }
+            let segments = probe.fittingSizes {
+                HStack {
+                    ForEach(RemoteLink.allCases) { link in
+                        Text(L(link.labelKey)).fixedSize()
+                    }
+                }
+            }
+            #expect(segments.ru.width <= form,
+                    "the page switch is \(segments.ru.width)pt of \(form)")
         }
     }
 

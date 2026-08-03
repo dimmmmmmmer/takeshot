@@ -4,6 +4,58 @@ import Testing
 
 @testable import TakeShotKit
 
+/// What the three pages call the socket being up and down (owner item 15).
+///
+/// One pair of strings for all of them: they describe the same socket, and a
+/// page saying "Connected" beside one saying "Online" is two answers to one
+/// question. The old pair — "Connected" / "No connection" — read as a verdict
+/// on the network rather than as this page's own state.
+@Suite @MainActor struct RemoteConnectionWordingTests {
+    @Test func everyPageSaysOnlineAndOffline() throws {
+        for language in [AppLanguage.english, .russian] {
+            let online = ViewRender.withLanguage(language) { L("remote_online") }
+            let offline = ViewRender.withLanguage(language) { L("remote_offline") }
+            #expect(online != "remote_online")
+            #expect(offline != "remote_offline")
+            #expect(online != offline)
+
+            // Rendered INSIDE the language, not handed a page rendered before
+            // it: the labels are baked in at render time.
+            let pages = ViewRender.withLanguage(language) {
+                [RemotePage.html(), RemotePage.scriptHTML(),
+                 RemotePage.camerasHTML()]
+            }
+            for page in pages {
+                let html = try #require(String(bytes: page, encoding: .utf8))
+                #expect(html.contains("connected:\(RemoteJSON.quoted(online))"),
+                        "a page does not say \(online) in \(language.rawValue)")
+                #expect(html.contains("disconnected:\(RemoteJSON.quoted(offline))"))
+            }
+        }
+        // English is the base language and the wording is the item: the old
+        // strings must not come back through a merge.
+        L10n.apply(.english)
+        #expect(L("remote_online") == "Online")
+        #expect(L("remote_offline") == "Offline")
+        // The settings row for "the listener is not up" is a different state
+        // and keeps its own words — a server that is off is not a phone that
+        // walked out of range.
+        #expect(L("remote_not_listening") != L("remote_offline"))
+    }
+
+    /// Each page's label table names the same two keys, so a page added later
+    /// cannot quietly reintroduce a third wording.
+    @Test func thePagesShareTheConnectionKeys() {
+        for labels in [RemotePage.labels, RemotePage.scriptLabels,
+                       RemotePage.camerasLabels] {
+            let table = Dictionary(uniqueKeysWithValues:
+                labels.map { ($0.field, $0.key) })
+            #expect(table["connected"] == "remote_online")
+            #expect(table["disconnected"] == "remote_offline")
+        }
+    }
+}
+
 /// The wire formats the remote speaks, on their own: an HTTP request head, an
 /// RFC 6455 frame, the JSON both ways. None of this needs a socket, and all of
 /// it is the kind of code that fails silently — a frame decoded one byte off

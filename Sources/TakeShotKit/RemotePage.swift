@@ -1,7 +1,51 @@
 import Foundation
 
+/// One of the three pages the remote serves, as a link the operator can hand
+/// out: the path it lives at, and the label Settings puts on it.
+///
+/// A type rather than three loose constants because Settings offers them as
+/// one switched row (three rows with three QR codes made the section taller
+/// than the window). Anything that adds a page adds a case here and is then
+/// unable to forget the switch, the route or the label.
+enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
+    /// The operator remote: REC, marker, the two rating buttons.
+    case remote
+    /// The script supervisor's take log.
+    case script
+    /// The live camera grid.
+    ///
+    /// Called "cameras" and not "playback": the tiles are the boards' live
+    /// signal, and a page named playback would be read as the recorded takes —
+    /// which is the one thing it does not show. Not "multiview" either, on the
+    /// page or in Settings; that is the name of the frame STREAM behind it
+    /// (see `MultiviewEncoder`), and a phone is being offered a link, not a
+    /// piece of the architecture.
+    case cameras
+
+    var id: String { rawValue }
+
+    /// Where the server answers. The route, the settings link and the QR all
+    /// read this, so they cannot drift into a 404 apart from each other.
+    var path: String {
+        switch self {
+        case .remote: return "/"
+        case .script: return "/script"
+        case .cameras: return "/cameras"
+        }
+    }
+
+    /// `Localizable.strings` key for the switch's segment.
+    var labelKey: String {
+        switch self {
+        case .remote: return "remote_link_remote"
+        case .script: return "remote_link_script"
+        case .cameras: return "remote_link_cameras"
+        }
+    }
+}
+
 /// The pages the remote serves: the operator remote at `/`, the script
-/// supervisor's take log at `/script` and the camera grid at `/multiview`.
+/// supervisor's take log at `/script` and the camera grid at `/cameras`.
 ///
 /// The markup is a bundle resource, not a Swift string literal: it is HTML,
 /// CSS and JavaScript, and none of those are readable once they are escaped
@@ -33,9 +77,9 @@ enum RemotePage {
         ("marker", "remote_marker"),
         ("good", "remote_good"),
         ("bad", "remote_bad"),
-        ("connected", "remote_connected"),
+        ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
-        ("disconnected", "remote_disconnected"),
+        ("disconnected", "remote_offline"),
         ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
@@ -48,22 +92,26 @@ enum RemotePage {
         ("modePlayback", "remote_mode_playback"),
     ]
 
-    /// Where the page fetches the last take's frame. Stated once, here, so the
-    /// route the server answers and the URL the page builds cannot drift apart
-    /// — a mismatch shows up as a card that is permanently "no frame yet".
+    /// Where the pages fetch a take's frame. Stated once, here, so the route
+    /// the server answers and the URL the page builds cannot drift apart — a
+    /// mismatch shows up as a card that is permanently "no frame yet".
     static let posterPath = "/take-poster"
 
-    /// Where the script supervisor's page lives. Stated once for the same
-    /// reason: the route, the settings link and the QR all read this.
-    static let scriptPath = "/script"
+    /// Query parameter naming the take whose frame is wanted; absent or empty
+    /// means the last take that landed, which is what the operator page's card
+    /// is about.
+    static let posterTakeParameter = "take"
+
+    /// Where the script supervisor's page lives.
+    static let scriptPath = RemoteLink.script.path
 
     /// The script page's label → key table. The gate and connection strings
     /// are shared with the operator page — the two describe the same socket.
     static let scriptLabels: [(field: String, key: String)] = [
         ("title", "script_title"),
-        ("connected", "remote_connected"),
+        ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
-        ("disconnected", "remote_disconnected"),
+        ("disconnected", "remote_offline"),
         ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
@@ -81,22 +129,22 @@ enum RemotePage {
         ("take", "slate_take"),
     ]
 
-    /// Where the camera grid lives. Stated once, like the script page's path.
-    static let multiviewPath = "/multiview"
+    /// Where the camera grid lives.
+    static let camerasPath = RemoteLink.cameras.path
 
-    /// The multiview page's label → key table. The gate and connection
-    /// strings are shared with the other pages — same socket, same PIN.
-    static let multiviewLabels: [(field: String, key: String)] = [
-        ("title", "multiview_title"),
-        ("connected", "remote_connected"),
+    /// The camera page's label → key table. The gate and connection strings
+    /// are shared with the other pages — same socket, same PIN.
+    static let camerasLabels: [(field: String, key: String)] = [
+        ("title", "cameras_title"),
+        ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
-        ("disconnected", "remote_disconnected"),
+        ("disconnected", "remote_offline"),
         ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
         ("noSignal", "remote_no_signal"),
-        ("wait", "multiview_wait"),
-        ("rec", "multiview_rec"),
+        ("wait", "cameras_wait"),
+        ("rec", "cameras_rec"),
     ]
 
     /// The operator page with the current language's labels baked in.
@@ -113,8 +161,8 @@ enum RemotePage {
     }
 
     /// The camera grid, same discipline again.
-    static func multiviewHTML() -> Data {
-        render(resource: "multiview", labels: multiviewLabels)
+    static func camerasHTML() -> Data {
+        render(resource: "cameras", labels: camerasLabels)
     }
 
     private static func render(resource: String,

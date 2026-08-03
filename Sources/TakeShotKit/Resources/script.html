@@ -22,7 +22,10 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* The app's face when the machine has it, the system one otherwise —
+     never embedded, see remote.html for why. */
+  font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none; user-select: none;
   overscroll-behavior: none;
@@ -102,10 +105,32 @@ main {
   border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
   padding: 10px; margin: 8px 0;
 }
-.rowTop { display: flex; gap: 8px; align-items: center; }
-/* min-width: 0 or a long take name refuses to ellipsize and pushes the rating
-   buttons off the side of the phone instead. */
-.rowMeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Wraps, and that is the whole layout decision. The picture, the name and two
+   44pt touch targets do not fit across a 375pt phone — measured, with the name
+   down to "PROJ_…" and the timecode broken over two lines. So the rating pair
+   is one flex item: it sits beside the name where there is room (landscape, a
+   tablet) and drops to a full-width row of its own where there is not, which
+   is a larger target rather than a compromised one. */
+.rowTop { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* The poster frame. A scripty scrolling a day of takes recognises the setup
+   from the picture long before they read the name, which is the whole point of
+   the column — so it leads the row. The box holds its size whether or not the
+   frame has arrived, so a thumbnail landing does not shuffle the rows under
+   the finger. */
+.rowPoster {
+  flex: none; width: 96px; height: 54px; border-radius: 6px;
+  overflow: hidden; background: #000; border: 1px solid var(--line);
+}
+.rowPoster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rowPoster img[hidden] { display: none; }
+/* The basis is what makes the line break where it should: a name column
+   narrower than this is not worth having, so the rating pair goes below
+   instead. min-width: 0 or a long take name refuses to ellipsize and pushes
+   the buttons off the side of the phone. */
+.rowMeta {
+  flex: 1 1 150px; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
 .rowName {
   font-weight: 700; font-size: 16px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -115,8 +140,9 @@ main {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+.rowRate { flex: 1 1 auto; display: flex; gap: 8px; }
 .rate {
-  flex: none; height: 44px; min-width: 72px; padding: 0 10px;
+  flex: 1 1 auto; height: 44px; min-width: 72px; padding: 0 10px;
   font-size: 14px; font-weight: 700;
 }
 .rate.good.on { background: var(--good); border-color: var(--good); color: #06210c; }
@@ -232,6 +258,21 @@ var pending = {};
 // The same queue for slates: scene/shot/take commit as one message, so one
 // entry per take id holds all three.
 var pendingSlate = {};
+// Rows waiting for their poster frame, and whether one is being fetched.
+//
+// ONE at a time, deliberately. The server holds eight connection slots for the
+// whole set (RemoteServer.maximumClients) and a browser will happily open six
+// of them at once for six <img> tags — which on a two-phone unit is every slot
+// gone to thumbnails, including the one the next phone needs for its socket.
+// A queue costs a fraction of a second per row over a set network and cannot
+// starve anybody.
+var posterQueue = [];
+var posterBusy = false;
+// Attempts per row before the page stops asking. A take's frame is decoded off
+// the main thread once the file finalizes, so "not yet" is the normal answer to
+// the first ask for a take that just landed.
+var POSTER_RETRY_MS = 1500;
+var POSTER_TRIES = 12;
 
 function text(id, value) { el(id).textContent = value; }
 
@@ -329,11 +370,55 @@ function flushPending() {
   });
 }
 
+// Ask for one row's frame, one row at a time. Nothing here blocks the page:
+// the log is already on screen and each thumbnail fills its own box when it
+// arrives, or leaves it black when the take has no readable file.
+function pumpPosters() {
+  if (posterBusy) { return; }
+  var row = posterQueue.shift();
+  while (row && (row.posterDone || !row.posterURL)) { row = posterQueue.shift(); }
+  if (!row) { return; }
+  posterBusy = true;
+  row.posterTries += 1;
+  // The attempt rides in the URL for the browser, not for the server, which
+  // ignores it: the answer to attempt one is a 404 far more often than not,
+  // and a phone that cached that would show an empty box for the rest of the
+  // shoot.
+  row.poster.src = row.posterURL + "&pin=" + encodeURIComponent(pin)
+    + "&n=" + row.posterTries;
+}
+
+function posterSettled(row, ok) {
+  return function () {
+    posterBusy = false;
+    row.poster.hidden = !ok;
+    if (ok) {
+      row.posterDone = true;
+    } else if (row.posterTries < POSTER_TRIES) {
+      setTimeout(function () { queuePoster(row); }, POSTER_RETRY_MS);
+    }
+    pumpPosters();
+  };
+}
+
+function queuePoster(row) {
+  if (row.posterDone || !row.posterURL) { return; }
+  if (posterQueue.indexOf(row) < 0) { posterQueue.push(row); }
+  pumpPosters();
+}
+
 function makeRow(id) {
   var root = document.createElement("section");
   root.className = "row";
   var top = document.createElement("div");
   top.className = "rowTop";
+  var posterBox = document.createElement("div");
+  posterBox.className = "rowPoster";
+  var poster = document.createElement("img");
+  poster.alt = "";
+  poster.hidden = true;
+  poster.decoding = "async";
+  posterBox.appendChild(poster);
   var meta = document.createElement("div");
   meta.className = "rowMeta";
   var name = document.createElement("div");
@@ -348,9 +433,14 @@ function makeRow(id) {
   var bad = document.createElement("button");
   bad.className = "rate bad";
   bad.textContent = S.bad;
+  // The pair is one flex item so it wraps together — see `.rowRate`.
+  var rate = document.createElement("div");
+  rate.className = "rowRate";
+  rate.appendChild(good);
+  rate.appendChild(bad);
+  top.appendChild(posterBox);
   top.appendChild(meta);
-  top.appendChild(good);
-  top.appendChild(bad);
+  top.appendChild(rate);
   var note = document.createElement("input");
   note.className = "note";
   note.type = "text";
@@ -371,8 +461,11 @@ function makeRow(id) {
 
   var row = { root: root, name: name, when: when, good: good, bad: bad,
               note: note, scene: scene, shot: shot, take: take,
-              rating: "none", pushed: "",
+              poster: poster, posterURL: "", posterTries: 0,
+              posterDone: false, rating: "none", pushed: "",
               pushedSlate: { scene: "", shot: "", take: "" } };
+  poster.addEventListener("load", posterSettled(row, true));
+  poster.addEventListener("error", posterSettled(row, false));
   good.addEventListener("click", sendRate(id, row));
   bad.addEventListener("click", sendRate(id, row));
   // Save on blur; Enter is just a blur, which is what "done" means on a
@@ -406,6 +499,14 @@ function slateField(kind, label, mode) {
 
 function updateRow(row, take) {
   row.name.textContent = take.name;
+  // The route comes from the app, PIN excluded (see RemoteTakeLog.Entry): the
+  // page never builds it, so it cannot drift into a broken thumbnail.
+  if (take.poster && take.poster !== row.posterURL) {
+    row.posterURL = take.poster;
+    row.posterDone = false;
+    row.posterTries = 0;
+    queuePoster(row);
+  }
   var when = take.tc || "--:--:--:--";
   var dur = duration(take.dur);
   row.when.textContent = dur ? when + " · " + dur : when;
@@ -452,6 +553,9 @@ function renderTakes(list) {
   Object.keys(rows).forEach(function (id) {
     if (!seen[id]) {
       container.removeChild(rows[id].root);
+      // A row still waiting for its frame must stop asking for it: the take is
+      // gone from the app, and the queue is the one place holding the node.
+      rows[id].posterURL = "";
       delete rows[id];
       delete pending[id];
       delete pendingSlate[id];

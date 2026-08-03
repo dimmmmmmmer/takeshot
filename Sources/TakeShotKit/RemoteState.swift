@@ -103,6 +103,20 @@ struct RemoteTakeLog: Equatable, Sendable {
         var scene: String = ""
         var shot: String = ""
         var take: String = ""
+        /// Where this row's frame comes from — the image route with the take
+        /// named on it, PIN excluded. The page appends the code it is holding.
+        ///
+        /// Carried in the payload rather than assembled on the page: the page
+        /// would otherwise be the fourth place that knows the route's shape,
+        /// and the failure mode of a mismatch is a log of broken thumbnails
+        /// that looks exactly like footage the app cannot read.
+        var poster: String = ""
+
+        /// The reference for a take id — the one place the query is built.
+        static func posterReference(takeID: String) -> String {
+            RemotePage.posterPath + "?" + RemotePage.posterTakeParameter + "="
+                + takeID
+        }
     }
 
     /// Oldest first, matching the app's take list; the page renders newest on
@@ -121,7 +135,8 @@ struct RemoteTakeLog: Equatable, Sendable {
                 + ",\"comment\":\(RemoteJSON.quoted(entry.comment))"
                 + ",\"scene\":\(RemoteJSON.quoted(entry.scene))"
                 + ",\"shot\":\(RemoteJSON.quoted(entry.shot))"
-                + ",\"take\":\(RemoteJSON.quoted(entry.take))}"
+                + ",\"take\":\(RemoteJSON.quoted(entry.take))"
+                + ",\"poster\":\(RemoteJSON.quoted(entry.poster))}"
         }
         return "{\"type\":\"takes\",\"takes\":["
             + rows.joined(separator: ",") + "]}"

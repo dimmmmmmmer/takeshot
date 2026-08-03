@@ -1,12 +1,18 @@
 import SwiftUI
 
 /// The Remote section of the settings window: the switch, the port, the code,
-/// and the addresses a phone can reach the app on.
+/// and the address a phone can reach one of the three pages on.
 ///
 /// Its own file rather than another block in `SettingsView`: that view is
 /// already the densest localized surface in the app and close enough to the
 /// file-length ceiling that the next section would have pushed a comment out to
 /// make room.
+///
+/// One link row, not three. Each page used to get its own row and its own QR
+/// code, which made this section taller than the settings window on a laptop
+/// screen — and two of the three codes were always the wrong one to scan. The
+/// page is picked with a segmented switch (the idiom the exposure tool and the
+/// rec/playback control already use) and the row below it follows.
 struct RemoteSettingsSection: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -14,6 +20,11 @@ struct RemoteSettingsSection: View {
     /// from arm's length across a cart, small enough to leave the settings
     /// window its fixed width.
     static let qrSide: CGFloat = 132
+
+    /// Which page the row and the code point at. View state: it is a question
+    /// about what the operator is reading out right now, not a preference the
+    /// app should still remember next shoot.
+    @State private var link: RemoteLink = .remote
 
     private var isOn: Bool { controller.settings.remoteEnabled == true }
 
@@ -25,9 +36,8 @@ struct RemoteSettingsSection: View {
             if isOn {
                 portRow
                 pinRow
+                pageRow
                 addressRow
-                scriptRow
-                multiviewRow
             }
         }
     }
@@ -58,15 +68,31 @@ struct RemoteSettingsSection: View {
         }
     }
 
+    /// Which page the address below is for.
+    private var pageRow: some View {
+        Picker(L("remote_page"), selection: $link) {
+            ForEach(RemoteLink.allCases) { target in
+                Text(L(target.labelKey)).tag(target)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    /// The addresses for the chosen page, and a code for the first of them.
+    ///
+    /// The addresses are the machine's own, filtered and ordered by
+    /// `RemoteAddress` — loopback, link-local, tunnels and virtual bridges
+    /// never appear, and the one a phone on the set network would use is
+    /// first.
     @ViewBuilder private var addressRow: some View {
-        let urls = controller.remoteURLs
+        let urls = controller.remoteURLs(for: link)
         LabeledContent(L("remote_address")) {
             VStack(alignment: .trailing, spacing: 4) {
                 if controller.remoteBoundPort == 0 {
-                    Text(L("remote_offline")).foregroundStyle(.secondary)
+                    Text(L("remote_not_listening")).foregroundStyle(.secondary)
                 } else if urls.isEmpty {
-                    // No non-loopback IPv4 at all: nothing to read out, and
-                    // saying so beats an empty row the operator reads as a bug.
+                    // No usable IPv4 at all: nothing to read out, and saying so
+                    // beats an empty row the operator reads as a bug.
                     Text(L("remote_no_network")).foregroundStyle(.secondary)
                 } else {
                     ForEach(urls, id: \.self) { url in
@@ -89,62 +115,6 @@ struct RemoteSettingsSection: View {
                     .interpolation(.none)
                     .accessibilityLabel(first)
                 Spacer()
-            }
-        }
-    }
-
-    /// The script supervisor's page, one row and one QR under the operator
-    /// remote's — the same addresses with the page's path on them. Shown only
-    /// while there is something to scan; the offline and no-network states are
-    /// already said once, in `addressRow`.
-    @ViewBuilder private var scriptRow: some View {
-        let urls = controller.remoteURLs.map { $0 + RemotePage.scriptPath }
-        if controller.remoteBoundPort > 0, !urls.isEmpty {
-            LabeledContent(L("remote_script")) {
-                VStack(alignment: .trailing, spacing: 4) {
-                    ForEach(urls, id: \.self) { url in
-                        Text(url)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            if let first = urls.first,
-               let code = RemoteAddress.qrImage(for: first, side: Self.qrSide) {
-                HStack {
-                    Spacer()
-                    Image(nsImage: code)
-                        .interpolation(.none)
-                        .accessibilityLabel(first)
-                    Spacer()
-                }
-            }
-        }
-    }
-
-    /// The camera grid, one row and one QR under the script page's — the
-    /// exact pattern that row set, path and all.
-    @ViewBuilder private var multiviewRow: some View {
-        let urls = controller.remoteURLs.map { $0 + RemotePage.multiviewPath }
-        if controller.remoteBoundPort > 0, !urls.isEmpty {
-            LabeledContent(L("remote_multiview")) {
-                VStack(alignment: .trailing, spacing: 4) {
-                    ForEach(urls, id: \.self) { url in
-                        Text(url)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            if let first = urls.first,
-               let code = RemoteAddress.qrImage(for: first, side: Self.qrSide) {
-                HStack {
-                    Spacer()
-                    Image(nsImage: code)
-                        .interpolation(.none)
-                        .accessibilityLabel(first)
-                    Spacer()
-                }
             }
         }
     }

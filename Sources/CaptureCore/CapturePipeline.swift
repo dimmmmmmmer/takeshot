@@ -111,7 +111,8 @@ public final class CapturePipeline: @unchecked Sendable {
     /// read releases the box under the reader's feet.
     let displayFrameLock = NSLock()
     var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
-    /// A second mirror of the same displayed frame, for the phone multiview.
+    /// A second mirror for the phone camera grid — of the CLEAN processed
+    /// frame, not of what the viewer draws (see `enqueuePreview`).
     /// Its own slot rather than a list: `displayFrameHandler` is owned by the
     /// hardware playout mirror and re-routed on every record/playback switch,
     /// and sharing it would take the operator's monitor output away. Behind
@@ -355,6 +356,11 @@ public final class CapturePipeline: @unchecked Sendable {
                                              qos: .userInteractive)
     let presentLock = NSLock()
     var pendingPresent: CVPixelBuffer?
+    /// The same frame before the operator's on-screen compositing — what the
+    /// camera grid is fed. Carried alongside `pendingPresent` rather than
+    /// pulled from `latestPreview` inside the hop so the grid and the viewer
+    /// are looking at one frame, not at two a moment apart.
+    var pendingClean: CVPixelBuffer?
     var presentScheduled = false
     /// When the pending frame stops being worth extra work, in uptime
     /// nanoseconds: one frame interval after it was handed over. The display

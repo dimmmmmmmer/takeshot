@@ -15,9 +15,13 @@ extension CapturePipeline {
         displayFrameHandler = handler
         displayFrameLock.unlock()
     }
-    /// The multiview mirror of the displayed frame (see the handler's own
-    /// comment in CapturePipeline). Called on the display queue, like the
-    /// playout mirror — never on the capture queue.
+    /// The multiview mirror (see the handler's own comment in CapturePipeline).
+    /// Called on the display queue, like the playout mirror — never on the
+    /// capture queue.
+    ///
+    /// It is handed the CLEAN processed frame, not what the viewer draws: the
+    /// camera grid on a phone is a monitoring surface, not an assist one. See
+    /// `enqueuePreview` for what that distinction costs and buys.
     public func setOnMultiviewFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
         displayFrameLock.lock()
         multiviewFrameHandler = handler
@@ -101,10 +105,10 @@ extension CapturePipeline {
         defer { latestPreviewLock.unlock() }
         return latestPreLUT
     }
-    /// `pixelBuffer` is the clean processed frame (compare provider, pinning);
-    /// `preLUT` the same frame before the preview LUT (difference measures on
-    /// it); `screen` is what the preview sinks draw (may carry the reference
-    /// wipe).
+    /// `pixelBuffer` is the clean processed frame (compare provider, pinning,
+    /// the multiview grid); `preLUT` the same frame before the preview LUT
+    /// (difference measures on it); `screen` is what the preview sinks draw
+    /// (may carry the reference wipe).
     func enqueuePreview(pixelBuffer: CVPixelBuffer,
                         preLUT: CVPixelBuffer? = nil,
                         screen: CVPixelBuffer? = nil) {
@@ -115,6 +119,7 @@ extension CapturePipeline {
         let presented = screen ?? pixelBuffer
         presentLock.lock()
         pendingPresent = presented
+        pendingClean = pixelBuffer
         pendingDeadline = displayDeadline()
         let schedule = !presentScheduled
         presentScheduled = true
@@ -124,8 +129,10 @@ extension CapturePipeline {
             guard let self else { return }
             self.presentLock.lock()
             let buffer = self.pendingPresent
+            let clean = self.pendingClean
             let deadline = self.pendingDeadline
             self.pendingPresent = nil
+            self.pendingClean = nil
             self.presentScheduled = false
             self.presentLock.unlock()
             guard let buffer else { return }
@@ -133,7 +140,7 @@ extension CapturePipeline {
             // see: `pixelBuffer` above is already published clean for the
             // compare provider, and the grab was served from the untouched
             // frame back on the capture queue. What is keyed here is what the
-            // MIRRORS get — the viewer, the hardware monitor, the multiview —
+            // OPERATOR'S surfaces get — the viewer and the hardware monitor —
             // which is the same rule the viewing LUT follows.
             let shown = self.chromaKeyed(buffer, deadline: deadline) ?? buffer
             self.displaySinks.present(shown)
@@ -142,7 +149,18 @@ extension CapturePipeline {
             let multiview = self.multiviewFrameHandler
             self.displayFrameLock.unlock()
             handler?(shown)
-            multiview?(shown)
+            // The camera grid on a phone gets the clean frame instead: it is a
+            // monitoring surface, and everything the operator switches on for
+            // themselves is wrong on it. The pinned-reference wipe would put
+            // half of a frame from an hour ago in a tile labelled A-cam, and
+            // the chroma-key preview would show the crew a composite of a
+            // background that is not in the shot. The aids applied further
+            // downstream — false colour, zebra, peaking, the punch-in crop —
+            // never got this far in the first place: those live in
+            // `MetalPreviewLayer`, per surface, and the grid is not one of its
+            // surfaces. Tapping `shown` here was the one way any of that could
+            // reach a phone, and it no longer does.
+            multiview?(clean ?? buffer)
         }
     }
 }

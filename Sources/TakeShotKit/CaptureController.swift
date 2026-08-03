@@ -441,7 +441,7 @@ final class CaptureController: ObservableObject {
     @Published var remoteBoundPort: Int = 0
     /// Feeds the remote its status; cancelled with the server.
     var remoteStatusTask: Task<Void, Never>?
-    /// Scales and JPEG-encodes preview frames for the multiview page. Exists
+    /// Scales and JPEG-encodes preview frames for the camera grid. Exists
     /// only while a phone is actually watching — the server reports demand
     /// and `setRemoteMultiviewActive` builds and drops it on that edge — so
     /// an idle set costs no encode work (see +RemoteMultiview).
@@ -450,6 +450,13 @@ final class CaptureController: ObservableObject {
     /// times a minute rather than per push: the status goes out four times a
     /// second and a volume query is a syscall on the MainActor.
     var remoteDiskFreeGB: Double = -1
+    /// Take posters already encoded, by take. The script page asks for one per
+    /// row, so the bytes are kept rather than re-encoded per request; the
+    /// image behind them never changes once decoded (see +RemoteStatus).
+    var remotePosterJPEG: [Take.ID: Data] = [:]
+    /// Insertion order for the cache above, oldest first — bounded like the
+    /// thumbnail cache it is built from.
+    var remotePosterOrder: [Take.ID] = []
 
     /// Freshly recorded take / saved still — the list flashes a border on it.
     @Published var recentlyAddedURL: URL?

@@ -6,14 +6,14 @@ import Foundation
 ///
 /// **Where it sits.** One stage after the viewing LUT, on the DISPLAY queue.
 /// The LUT's rule is that the display buffer is what mirrors the viewer —
-/// preview sinks, the hardware monitor and the phone multiview all draw it —
-/// while the deliverables (the writer's frame, the still grab, the scopes'
-/// measurement) are taken from the record/leveled branch before it. The key
-/// follows that rule exactly: it is composited into the frame the mirrors get
-/// and into nothing else. `enqueuePreview` publishes the CLEAN frame for the
-/// compare provider and hands the keyed one only to the surfaces, and
-/// `serveFrameGrab` has already run, on the untouched frame, by the time this
-/// is reached (see `+Frame` for the order).
+/// the preview sinks and the hardware monitor draw it — while the deliverables
+/// (the writer's frame, the still grab, the scopes' measurement) are taken from
+/// the record/leveled branch before it. The key follows that rule exactly: it
+/// is composited into the frame the OPERATOR'S surfaces get and into nothing
+/// else. `enqueuePreview` publishes the CLEAN frame for the compare provider
+/// and for the phone camera grid, and hands the keyed one only to the viewer
+/// and the playout; `serveFrameGrab` has already run, on the untouched frame,
+/// by the time this is reached (see `+Frame` for the order).
 ///
 /// **What it costs when off.** One `Bool` read per frame.
 extension CapturePipeline {

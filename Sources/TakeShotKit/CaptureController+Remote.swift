@@ -40,7 +40,7 @@ extension CaptureController {
         let server = RemoteServer(
             pin: pin, page: RemotePage.html(),
             scriptPage: RemotePage.scriptHTML(),
-            multiviewPage: RemotePage.multiviewHTML(),
+            camerasPage: RemotePage.camerasHTML(),
             handlers: RemoteServer.Handlers(
                 command: { [weak self] command in
                     // The server's queue must never touch the controller: every
@@ -54,12 +54,14 @@ extension CaptureController {
                 failed: { [weak self] message in
                     Task { @MainActor in self?.remoteFailed(message) }
                 },
-                poster: { [weak self] reply in
+                poster: { [weak self] takeID, reply in
                     // The thumbnails belong to the takes panel and live on the
                     // MainActor. The server's queue asks for one; it never
                     // reads controller state itself, here no more than anywhere
                     // else.
-                    Task { @MainActor in reply(self?.remoteTakePoster()) }
+                    Task { @MainActor in
+                        reply(self?.remoteTakePoster(id: takeID))
+                    }
                 },
                 multiviewDemand: { [weak self] active in
                     // The taps and the encoder are controller state; the
@@ -113,11 +115,15 @@ extension CaptureController {
         settings.remotePIN = fresh
     }
 
-    /// The addresses to read out or scan. Empty when the machine is on no
-    /// network at all, which is worth showing as such.
-    var remoteURLs: [String] {
+    /// The addresses to read out or scan for one page. Empty when the machine
+    /// is on no usable network at all, which is worth showing as such.
+    ///
+    /// The path goes through `RemoteAddress.joined`, which is what keeps the
+    /// host's trailing slash and the page's leading one from meeting.
+    func remoteURLs(for link: RemoteLink = .remote) -> [String] {
         RemoteAddress.urls(port: remoteBoundPort > 0
-                           ? remoteBoundPort : settings.remotePortEffective)
+                           ? remoteBoundPort : settings.remotePortEffective,
+                           path: link.path)
     }
 
     // MARK: - settings changes (called from applySettingsChange)
@@ -149,7 +155,7 @@ extension CaptureController {
             // restart.
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
-            remoteServer?.setMultiviewPage(RemotePage.multiviewHTML())
+            remoteServer?.setCamerasPage(RemotePage.camerasHTML())
         }
     }
 }
