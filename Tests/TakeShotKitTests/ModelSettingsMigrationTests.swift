@@ -96,6 +96,65 @@ import Testing
                 "a blob at the current version was migrated again")
     }
 
+    // MARK: - version 3: the legend's corner, the key's softness
+
+    /// The exposure legend moved from four corners to four edges (owner items
+    /// 39/40). Which SIDE the corner was on says nothing about a strip that now
+    /// spans the whole edge, so only top vs bottom carries over — and bottom is
+    /// the new default, which is stored as nil.
+    @Test func aStoredLegendCornerBecomesAnEdge() {
+        #expect(CaptureSettings.loaded(from: store(",\"legendCorner\":\"topLeading\""))
+            .legendPlacement == "top")
+        #expect(CaptureSettings.loaded(from: store(",\"legendCorner\":\"topTrailing\""))
+            .legendPlacement == "top")
+        #expect(CaptureSettings.loaded(
+            from: store(",\"legendCorner\":\"bottomLeading\"")).legendPlacement == nil)
+        #expect(CaptureSettings.loaded(
+            from: store(",\"legendCorner\":\"bottomTrailing\"")).legendPlacement == nil)
+        // nothing stored stays nothing stored — the default, bottom centre
+        #expect(CaptureSettings.loaded(from: store("")).legendPlacement == nil)
+    }
+
+    /// The chroma key's feather used to be an absolute chroma width hung
+    /// OUTSIDE the tolerance and is now a fraction of it, straddling it (owner
+    /// item 35). The value still decodes and would mean something else, so it
+    /// is converted on the width the operator actually dialled in: the old ramp
+    /// was `softness` wide, the new one is `2 · tolerance · softness`.
+    @Test func theChromaSoftnessBecomesAFractionOfTheTolerance() {
+        let settings = CaptureSettings.loaded(from: store("""
+            ,"chromaKeyTolerance":0.25,"chromaKeySoftness":0.1
+            """))
+        #expect(settings.chromaKeySoftness == 0.2,
+                "a 0.1-wide feather at tolerance 0.25 is 0.2 of it either side")
+        #expect(settings.chromaKeyTolerance == 0.25, "the tolerance moved")
+
+        // a stored feather with no stored tolerance is read against the default
+        let onDefault = CaptureSettings.loaded(
+            from: store(",\"chromaKeySoftness\":0.1"))
+        #expect(onDefault.chromaKeySoftness == 0.25)
+
+        // the widest old feather cannot come back wider than the new scale goes
+        let widest = CaptureSettings.loaded(from: store("""
+            ,"chromaKeyTolerance":0.05,"chromaKeySoftness":0.4
+            """))
+        #expect(widest.chromaKeySoftness == 1)
+
+        // a hard cut stays a hard cut, and nothing stored stays nothing stored
+        #expect(CaptureSettings.loaded(from: store(",\"chromaKeySoftness\":0"))
+            .chromaKeySoftness == 0)
+        #expect(CaptureSettings.loaded(from: store("")).chromaKeySoftness == nil)
+    }
+
+    /// …and a blob this build already wrote is left alone: converting a
+    /// fraction as if it were a width would halve the operator's feather on
+    /// every launch.
+    @Test func anAlreadyRelativeSoftnessIsNotConvertedAgain() {
+        let settings = CaptureSettings.loaded(
+            from: store(",\"chromaKeySoftness\":0.5",
+                        schemaVersion: CaptureSettings.currentSchemaVersion))
+        #expect(settings.chromaKeySoftness == 0.5)
+    }
+
     // MARK: - the removed field decodes harmlessly
 
     /// The whole point of removing a field rather than deprecating it: an old

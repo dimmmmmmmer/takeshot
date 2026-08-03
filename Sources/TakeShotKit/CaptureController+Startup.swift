@@ -150,6 +150,11 @@ extension CaptureController {
         // the framelines are settings rather than assist state, but they are
         // DRAWN with the aids now, so the drawn value has to be seeded too
         assist.guides = AssistGuides(settings: stored)
+        // clamped, not trusted: the blob may have been written by a build with
+        // a different ceiling, or hand-edited
+        assist.peakingIntensity = min(
+            ViewAssist.maxPeakingIntensity,
+            max(0, stored.peakingIntensity ?? ViewAssist().peakingIntensity))
         // the key comes back dialled in and switched OFF (see restoreChroma)
         restoreChroma(from: stored)
     }

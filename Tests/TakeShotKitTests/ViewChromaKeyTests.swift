@@ -111,6 +111,103 @@ struct ViewChromaKeyTests {
     @Test func theEyedropperSymbolResolves() {
         #expect(NSImage(systemSymbolName: "eyedropper",
                         accessibilityDescription: nil) != nil)
+        #expect(NSImage(systemSymbolName: "arrow.counterclockwise",
+                        accessibilityDescription: nil) != nil,
+                "the plate reset button has no glyph")
+    }
+
+    /// No SwiftUI `ColorPicker` anywhere in the key's rows (owner item 30).
+    ///
+    /// That control opens the system color panel, which takes key away from the
+    /// popover, and a popover that loses key dismisses — so picking the screen
+    /// color shut the panel every time. The structural check is the only one
+    /// that can fail if somebody puts one back: a headless render cannot open a
+    /// panel, so the dismissal itself is invisible to a test.
+    @Test func theKeysRowsHostNoSystemColorPanel() {
+        let rows = String(describing: ChromaKeyRows.Body.self)
+        let plate = String(describing: ChromaPlateControls.Body.self)
+        // the check can see inside: if a refactor hides the rows behind an
+        // opaque wrapper the assertions below go vacuously green, so each one
+        // is paired with something that must be visible
+        #expect(rows.contains("ChromaColorField"),
+                "the chroma rows are no longer introspectable: \(rows)")
+        #expect(!rows.contains("ColorPicker"),
+                "a ColorPicker is back in the chroma rows: \(rows)")
+        // and the plate's source menu is the shared picker (owner item 36)
+        #expect(plate.contains("MediaSourceMenuItems"),
+                "the plate no longer offers the app's own media: \(plate)")
+        #expect(!plate.contains("ColorPicker"))
+    }
+
+    /// The color field is the replacement: a swatch and the hex the rest of the
+    /// app speaks, both inside the popover.
+    @Test func theColorFieldShowsAndTakesAHex() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            controller.chromaKeyOn = true
+            controller.setChromaScreen(ChromaKey.blueScreen)
+            #expect(controller.chroma.keyColor.hexString == "#0000FF")
+
+            // what the field parses is what the keyer adopts, and nonsense is
+            // refused rather than adopted as black
+            #expect(ChromaKey.RGB(hex: "#123456") != nil)
+            #expect(ChromaKey.RGB(hex: "123456") != nil, "the hash is optional")
+            #expect(ChromaKey.RGB(hex: "#12345") == nil)
+
+            let field = probe.fittingSizes {
+                ChromaColorField(color: .constant(ChromaKey.greenScreen))
+            }
+            #expect(field.en == field.ru,
+                    "a hex field measured differently by language: \(field)")
+            #expect(field.en.width < AssistControlsPanel.contentWidth / 2,
+                    "the color field takes half the row on its own")
+        }
+    }
+
+    /// The plate section — a source menu, a fit picker, a scale and two offsets
+    /// (owner item 37) — inside the popover, in both languages, with the app's
+    /// own media in the menu.
+    @Test func thePlateRowsFitThePopoverWithMediaToOffer() async throws {
+        try await ViewProbe.run { probe in
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            try ViewFixtures.seedOtherFiles(probe.controller, in: probe.root)
+            probe.controller.chromaKeyOn = true
+            probe.controller.chromaBackground = .image
+
+            let box = AssistControlsPanel.contentWidth
+            let minimum = probe.minimumWidths { AssistControlsPanel() }
+            #expect(minimum.ru <= box,
+                    "the Russian panel with the plate rows wants \(minimum.ru)pt")
+            #expect(minimum.en <= box)
+
+            // the section really is on screen: it is a good deal taller than
+            // the checkerboard, which has no rows of its own at all
+            let withPlate = probe.fittingSizes { ChromaKeyRows() }
+            probe.controller.chromaBackground = .checkerboard
+            let without = probe.fittingSizes { ChromaKeyRows() }
+            #expect(withPlate.en.height > without.en.height + 80,
+                    "the plate rows did not open: \(without) → \(withPlate)")
+            #expect(withPlate.ru.height > without.ru.height + 80)
+        }
+    }
+
+    /// Every label the plate section adds is translated, and none of the fit
+    /// options collide in either language.
+    @Test func thePlateLabelsAreAllTranslated() {
+        let keys = ["chroma_plate_fit", "chroma_plate_scale",
+                    "chroma_plate_offset_x", "chroma_plate_offset_y",
+                    "chroma_plate_reset", "chroma_choose_file"]
+        for language in [AppLanguage.english, .russian] {
+            ViewRender.withLanguage(language) {
+                for key in keys {
+                    #expect(L(key) != key, "\(language) is missing \(key)")
+                }
+                let fits = ChromaKey.PlateFit.allCases.map { L($0.labelKey) }
+                #expect(Set(fits).count == 3, "\(language) fits collide: \(fits)")
+                #expect(fits.allSatisfy { !$0.hasPrefix("chroma_plate_fit_") },
+                        "\(language) is missing a fit label: \(fits)")
+            }
+        }
     }
 
     /// Every background mode has a label, and the four of them are four

@@ -49,10 +49,49 @@ struct ViewAssistToolsTests {
                     AssistLegend(tool: tool, size: .large)
                 }
                 let budget = ViewBudget.playerWidth
-                    - 2 * AssistLegendPlacement.sideInset
+                    - 2 * AssistLegendChrome.sideInset
                 #expect(ideal.ru.width <= budget,
                         "the large \(tool) legend wants \(ideal.ru.width)pt of \(budget)")
             }
+        }
+    }
+
+    /// The vertical legend is the same bands turned on their side (owner items
+    /// 39/40), and turning it must actually change its shape: taller than it is
+    /// wide, where the horizontal strip is the other way round.
+    @Test func theVerticalLegendIsAColumnAndTheHorizontalOneIsARow() async throws {
+        try await ViewProbe.run { probe in
+            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
+                let across = probe.fittingSizes { AssistLegend(tool: tool) }
+                let down = probe.fittingSizes {
+                    AssistLegend(tool: tool, vertical: true)
+                }
+                #expect(across.en.width > across.en.height,
+                        "the horizontal \(tool) legend is not a row: \(across.en)")
+                #expect(down.en.height > down.en.width,
+                        "the vertical \(tool) legend is not a column: \(down.en)")
+                #expect(down.en == down.ru,
+                        "the vertical \(tool) legend differs by language: \(down)")
+            }
+        }
+    }
+
+    /// Down the side of the player, the tall one (thirteen EL Zone bands at the
+    /// large size) still has to fit between the badge row and the transport —
+    /// centered vertically, it is clipped at BOTH ends if it does not.
+    @Test func theTallestVerticalLegendFitsBetweenTheChrome() async throws {
+        try await ViewProbe.run { probe in
+            /// The player in the narrowest window is not tall either; 380 is
+            /// the height the overlay suite lays it out at.
+            let playerHeight: CGFloat = 380
+            let insets = AssistLegendChrome.insets(placement: .left,
+                                                   fullscreen: false)
+            let budget = playerHeight - insets.top - insets.bottom
+            let ideal = probe.fittingSizes {
+                AssistLegend(tool: .elZone, size: .large, vertical: true)
+            }
+            #expect(ideal.ru.height <= budget,
+                    "the tall legend wants \(ideal.ru.height)pt of \(budget)")
         }
     }
 
@@ -76,12 +115,12 @@ struct ViewAssistToolsTests {
             }
             let tallest = max(footer.en.height, footer.ru.height,
                               transport.en.height, transport.ru.height)
-            let clearance = AssistLegendPlacement.fullscreenBottomInset
+            let clearance = AssistLegendChrome.fullscreenBottomInset
             #expect(clearance >= tallest + lift,
                     "the chrome band is \(tallest + lift)pt, the legend clears only \(clearance)pt")
 
             // and the windowed inset clears the transport the player floats
-            #expect(AssistLegendPlacement.bottomInset >= ViewBudget.transportHeight)
+            #expect(AssistLegendChrome.bottomInset >= ViewBudget.transportHeight)
         }
     }
 
@@ -106,29 +145,48 @@ struct ViewAssistToolsTests {
             let tallest = max(timecode.en.height, timecode.ru.height,
                               compare.en.height, compare.ru.height)
             let reach = tallest + rowPadding
-            #expect(AssistLegendPlacement.topInset >= reach,
-                    "the badge row reaches \(reach)pt, the legend clears only \(AssistLegendPlacement.topInset)pt")
+            #expect(AssistLegendChrome.topInset >= reach,
+                    "the badge row reaches \(reach)pt, the legend clears only \(AssistLegendChrome.topInset)pt")
         }
     }
 
-    /// A top corner has to clear the badge row instead, and a bottom corner must
-    /// not carry the top inset around with it.
-    @Test func theLegendInsetsFollowTheChosenCorner() {
-        for corner in AssistLegendCorner.allCases {
+    /// Four placements, four shapes (owner items 39/40): vertical down the left
+    /// or the right, horizontal centered along the top or the bottom.
+    @Test func theFourPlacementsFaceTheWayTheyAreNamed() {
+        #expect(AssistLegendPlacement.allCases.count == 4)
+        #expect(AssistLegendPlacement.left.isVertical)
+        #expect(AssistLegendPlacement.right.isVertical)
+        #expect(!AssistLegendPlacement.top.isVertical)
+        #expect(!AssistLegendPlacement.bottom.isVertical)
+        // a horizontal legend is centered along its edge, a vertical one down
+        // its side — that is what the alignment has to say
+        #expect(AssistLegendPlacement.top.alignment == .top)
+        #expect(AssistLegendPlacement.bottom.alignment == .bottom)
+        #expect(AssistLegendPlacement.left.alignment == .leading)
+        #expect(AssistLegendPlacement.right.alignment == .trailing)
+        // …and the default is the bottom, centered, at the medium size
+        #expect(AssistLegendPlacement.standard == .bottom)
+        #expect(AssistLegendPlacement(rawValue: "") ?? .standard == .bottom)
+    }
+
+    /// A top placement clears the badge row, a bottom one the transport, and a
+    /// vertical one is centered between BOTH — with only one of the two insets
+    /// a thirteen-band strip runs under the transport.
+    @Test func theLegendInsetsFollowTheChosenPlacement() {
+        for placement in AssistLegendPlacement.allCases {
             for fullscreen in [false, true] {
-                let insets = AssistLegendPlacement.insets(corner: corner,
-                                                          fullscreen: fullscreen)
-                #expect(insets.leading == AssistLegendPlacement.sideInset)
-                #expect(insets.trailing == AssistLegendPlacement.sideInset)
-                if corner.isTop {
-                    #expect(insets.top == AssistLegendPlacement.topInset)
-                    #expect(insets.bottom == 0)
-                } else {
-                    #expect(insets.top == 0)
-                    #expect(insets.bottom == (fullscreen
-                        ? AssistLegendPlacement.fullscreenBottomInset
-                        : AssistLegendPlacement.bottomInset))
-                }
+                let insets = AssistLegendChrome.insets(placement: placement,
+                                                       fullscreen: fullscreen)
+                let bottom = fullscreen
+                    ? AssistLegendChrome.fullscreenBottomInset
+                    : AssistLegendChrome.bottomInset
+                #expect(insets.leading == AssistLegendChrome.sideInset)
+                #expect(insets.trailing == AssistLegendChrome.sideInset)
+                #expect(insets.top == (placement == .bottom
+                                       ? 0 : AssistLegendChrome.topInset),
+                        "\(placement) top inset is \(insets.top)")
+                #expect(insets.bottom == (placement == .top ? 0 : bottom),
+                        "\(placement) bottom inset is \(insets.bottom)")
             }
         }
     }
@@ -142,17 +200,19 @@ struct ViewAssistToolsTests {
             probe.controller.assist.colorTool = .elZone
             probe.controller.settings.framelineRatio = 2.39
             probe.controller.settings.safeAreasOn = true
-            probe.controller.punchInLevel = 4
+            // the new ceiling, so the overlays are measured at what the zoom
+            // can actually reach (owner item 42)
+            probe.controller.punchInLevel = ViewAssist.maxPunchIn
             probe.controller.legendSize = .large
-            for corner in AssistLegendCorner.allCases {
-                probe.controller.legendCorner = corner
+            for placement in AssistLegendPlacement.allCases {
+                probe.controller.legendPlacement = placement
                 for fullscreen in [false, true] {
                     let size = ViewRender.laidOutSize(
                         probe.hosted(Color.clear.playerTopBadges(
                             showsModeSwitch: !fullscreen, autoHide: fullscreen)),
                         in: base)
                     #expect(size == base,
-                            "\(corner) legend stretched the player, fullscreen \(fullscreen)")
+                            "\(placement) legend stretched the player, fullscreen \(fullscreen)")
                 }
             }
         }
@@ -199,8 +259,15 @@ struct ViewAssistToolsTests {
                 "the assist badge is wearing a fullscreen icon again")
     }
 
-    // MARK: - settings
+}
 
+/// What the aids leave behind for the next launch: the legend's size and edge,
+/// the peaking tint and how hard it is driven, and the safe-area margins.
+///
+/// Its own suite rather than more rows in `ViewAssistToolsTests` — that one is
+/// about what is DRAWN and this one about what is stored.
+@MainActor
+struct ViewAssistSettingsTests {
     /// Old saved settings have none of these fields, and must still decode —
     /// with the standard 93/90 safe areas and a medium legend.
     @Test func theNewFieldsDecodeFromSettingsWrittenWithoutThem() throws {
@@ -213,8 +280,9 @@ struct ViewAssistToolsTests {
         let settings = try JSONDecoder().decode(
             CaptureSettings.self, from: Data(legacy.utf8))
         #expect(settings.legendSize == nil)
-        #expect(settings.legendCorner == nil)
+        #expect(settings.legendPlacement == nil)
         #expect(settings.peakingColor == nil)
+        #expect(settings.peakingIntensity == nil)
         #expect(settings.safeActionPercentEffective == 93)
         #expect(settings.safeTitlePercentEffective == 90)
         // SMPTE RP 218 / EBU R 95, and the ORDER is the point: title safe is
@@ -233,26 +301,80 @@ struct ViewAssistToolsTests {
         #expect(edited.safeTitlePercentEffective == 100)
     }
 
-    /// Legend size and corner persist, and the defaults are stored as nil so a
-    /// blob written by this build still decodes on an older one.
+    /// Legend size and placement persist, and the defaults are stored as nil so
+    /// a blob written by this build still decodes on an older one.
     @Test func theLegendChoicesPersist() async throws {
         try await ViewProbe.run { probe in
             probe.controller.legendSize = .large
-            probe.controller.legendCorner = .topLeading
+            probe.controller.legendPlacement = .left
             #expect(probe.controller.settings.legendSize == "l")
-            #expect(probe.controller.settings.legendCorner == "topLeading")
+            #expect(probe.controller.settings.legendPlacement == "left")
 
             let reloaded = CaptureSettings.loaded(from: probe.store)
             #expect(reloaded.legendSize == "l")
-            #expect(reloaded.legendCorner == "topLeading")
+            #expect(reloaded.legendPlacement == "left")
 
+            // the defaults — medium, bottom centre (owner item 40)
             probe.controller.legendSize = .medium
-            probe.controller.legendCorner = .bottomTrailing
+            probe.controller.legendPlacement = .bottom
             #expect(probe.controller.settings.legendSize == nil)
-            #expect(probe.controller.settings.legendCorner == nil)
+            #expect(probe.controller.settings.legendPlacement == nil)
             #expect(probe.controller.legendSize == .medium)
-            #expect(probe.controller.legendCorner == .bottomTrailing)
+            #expect(probe.controller.legendPlacement == .bottom)
         }
+    }
+
+    /// Focus peaking is dialled in percent and stored in the renderer's own
+    /// unit (owner item 41): the mapping has to round-trip, 0 has to mean no
+    /// edges at all, and a value written before the percentage existed has to
+    /// land somewhere sensible on the new slider rather than be reset.
+    @Test func thePeakingSensitivityIsAPercentageThatRoundTrips() async throws {
+        for percent in [0.0, 1, 25, 40, 50, 99, 100] {
+            let intensity = ViewAssist.peakingIntensity(forPercent: percent)
+            #expect(abs(ViewAssist.peakingPercent(forIntensity: intensity)
+                        - percent) < 0.000_001,
+                    "\(percent)% came back as a different percentage")
+        }
+        #expect(ViewAssist.peakingIntensity(forPercent: 0) == 0,
+                "0% still draws edges")
+        #expect(ViewAssist.peakingIntensity(forPercent: 100)
+                == ViewAssist.maxPeakingIntensity)
+        // out of range in either direction is clamped, not wrapped
+        #expect(ViewAssist.peakingIntensity(forPercent: -20) == 0)
+        #expect(ViewAssist.peakingIntensity(forPercent: 500)
+                == ViewAssist.maxPeakingIntensity)
+
+        // the values the OLD 2…30 slider could leave behind, on the new scale
+        #expect(abs(ViewAssist.peakingPercent(forIntensity: 2) - 20.0 / 3) < 0.001)
+        #expect(ViewAssist.peakingPercent(forIntensity: 12) == 40)
+        #expect(ViewAssist.peakingPercent(forIntensity: 30) == 100)
+        #expect(ViewAssist().peakingPercent == 40,
+                "the shipped default moved off what it renders as")
+    }
+
+    /// …and it survives a relaunch, through the controller, in both units.
+    @Test func thePeakingSensitivityPersistsAndComesBack() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.peakingPercent = 80
+            probe.controller.commitAssistDraft()
+            #expect(probe.controller.assist.peakingIntensity == 24)
+            #expect(probe.controller.settings.peakingIntensity == 24)
+            #expect(CaptureSettings.loaded(from: probe.store).peakingIntensity == 24)
+
+            probe.controller.peakingPercent = 40 // the default, stored as nil
+            probe.controller.commitAssistDraft()
+            #expect(probe.controller.settings.peakingIntensity == nil)
+        }
+        // a stored gain from the old range comes back as itself
+        try await ViewProbe.run(configure: { $0.peakingIntensity = 2 }, { probe in
+            #expect(probe.controller.assist.peakingIntensity == 2)
+            #expect(abs(probe.controller.peakingPercent - 20.0 / 3) < 0.001)
+        })
+        // …and a hand-edited nonsense value is clamped, not adopted
+        try await ViewProbe.run(configure: { $0.peakingIntensity = 900 }, { probe in
+            #expect(probe.controller.assist.peakingIntensity
+                    == ViewAssist.maxPeakingIntensity)
+        })
     }
 
     /// The peaking color is a crew convention like the marker color, so it

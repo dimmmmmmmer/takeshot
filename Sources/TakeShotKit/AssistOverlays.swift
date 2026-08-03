@@ -8,7 +8,7 @@ import SwiftUI
 // this is what the fullscreen windows and the main player share, and it is the
 // one that has to know where the rest of the chrome is.
 
-// MARK: - legend size and corner
+// MARK: - legend size and placement
 
 /// Legend size. It is read from behind the camera, across the room, by someone
 /// who is not wearing their glasses — one size does not fit every set, so the
@@ -35,16 +35,19 @@ enum AssistLegendSize: String, CaseIterable, Identifiable {
         case .small:
             return AssistLegendMetrics(swatchHeight: 8, falseColorWidth: 30,
                                        elZoneWidth: 22, fontSize: 7,
+                                       bandHeight: 11, bandWidth: 18,
                                        horizontalPadding: 8, verticalPadding: 4,
                                        cornerRadius: 6)
         case .medium:
             return AssistLegendMetrics(swatchHeight: 11, falseColorWidth: 40,
                                        elZoneWidth: 29, fontSize: 9,
+                                       bandHeight: 13, bandWidth: 24,
                                        horizontalPadding: 10, verticalPadding: 5,
                                        cornerRadius: 7)
         case .large:
             return AssistLegendMetrics(swatchHeight: 15, falseColorWidth: 52,
                                        elZoneWidth: 38, fontSize: 12,
+                                       bandHeight: 17, bandWidth: 32,
                                        horizontalPadding: 12, verticalPadding: 6,
                                        cornerRadius: 8)
         }
@@ -58,39 +61,55 @@ struct AssistLegendMetrics {
     var falseColorWidth: CGFloat
     var elZoneWidth: CGFloat
     var fontSize: CGFloat
+    /// Vertical legend: one band's height, and the width of its swatch. The
+    /// band is sized off the label rather than off the horizontal swatch —
+    /// thirteen EL Zone bands as tall as they are wide would be a strip longer
+    /// than the player is high.
+    var bandHeight: CGFloat
+    var bandWidth: CGFloat
     var horizontalPadding: CGFloat
     var verticalPadding: CGFloat
     var cornerRadius: CGFloat
 }
 
-/// Which corner of the player the legend sits in.
-enum AssistLegendCorner: String, CaseIterable, Identifiable {
-    case topLeading
-    case topTrailing
-    case bottomLeading
-    case bottomTrailing
+/// Which edge of the player the legend sits against.
+///
+/// Edges and not corners (which is what this was): the legend is a strip of
+/// bands, so the useful choice is which edge it runs along — down the left or
+/// the right, or across the top or the bottom — and the strip turns to match.
+/// A stored corner is carried over in `CaptureSettings.migrateToVersion3`.
+enum AssistLegendPlacement: String, CaseIterable, Identifiable {
+    case top
+    case bottom
+    case left
+    case right
 
     var id: String { rawValue }
 
+    /// The default, stated once: bottom, centered.
+    static let standard = AssistLegendPlacement.bottom
+
+    /// A left/right legend runs down the player and its labels sit beside the
+    /// swatches; a top/bottom one runs across it with the labels underneath.
+    var isVertical: Bool { self == .left || self == .right }
+
     var alignment: Alignment {
         switch self {
-        case .topLeading: return .topLeading
-        case .topTrailing: return .topTrailing
-        case .bottomLeading: return .bottomLeading
-        case .bottomTrailing: return .bottomTrailing
+        case .top: return .top
+        case .bottom: return .bottom
+        case .left: return .leading
+        case .right: return .trailing
         }
     }
 
     var labelKey: String {
         switch self {
-        case .topLeading: return "corner_top_left"
-        case .topTrailing: return "corner_top_right"
-        case .bottomLeading: return "corner_bottom_left"
-        case .bottomTrailing: return "corner_bottom_right"
+        case .top: return "legend_top"
+        case .bottom: return "legend_bottom"
+        case .left: return "legend_left"
+        case .right: return "legend_right"
         }
     }
-
-    var isTop: Bool { self == .topLeading || self == .topTrailing }
 }
 
 /// How far the legend stays off each edge of the player.
@@ -100,7 +119,7 @@ enum AssistLegendCorner: String, CaseIterable, Identifiable {
 /// moment the pointer goes near them — a legend tucked into the bottom of the
 /// screen there disappears under the controls exactly when the operator reaches
 /// for them, which is what item 2 was about.
-enum AssistLegendPlacement {
+enum AssistLegendChrome {
     /// Clears the badge row over the image (8pt inset + the badge itself).
     static let topInset: CGFloat = 44
     /// Clears the transport bar the player floats at its bottom edge.
@@ -113,13 +132,16 @@ enum AssistLegendPlacement {
     static let fullscreenBottomInset: CGFloat = 120
     static let sideInset: CGFloat = 12
 
-    static func insets(corner: AssistLegendCorner,
+    static func insets(placement: AssistLegendPlacement,
                        fullscreen: Bool) -> EdgeInsets {
         let bottom = fullscreen ? fullscreenBottomInset : bottomInset
+        // A vertical legend is centered between the two bands of chrome, so it
+        // carries BOTH insets: with only one of them a thirteen-band EL Zone
+        // strip is centered on the player and runs under the transport.
         return EdgeInsets(
-            top: corner.isTop ? topInset : 0,
+            top: placement == .bottom ? 0 : topInset,
             leading: sideInset,
-            bottom: corner.isTop ? 0 : bottom,
+            bottom: placement == .top ? 0 : bottom,
             trailing: sideInset)
     }
 }
@@ -132,6 +154,9 @@ struct AssistLegend: View {
     /// Defaulted: the size is an operator setting, and the callers that only
     /// care about the strip itself (the tests) should not have to state one.
     var size: AssistLegendSize = .medium
+    /// Runs down the player rather than across it — what a left/right
+    /// placement asks for.
+    var vertical = false
 
     private var entries: [(Color, String)] {
         switch tool {
@@ -170,10 +195,20 @@ struct AssistLegend: View {
     }
 
     var body: some View {
+        Group {
+            if vertical { verticalStrip } else { horizontalStrip }
+        }
+        .padding(.horizontal, size.metrics.horizontalPadding)
+        .padding(.vertical, size.metrics.verticalPadding)
+        .background(.black.opacity(0.65),
+                    in: RoundedRectangle(cornerRadius: size.metrics.cornerRadius))
+    }
+
+    private var horizontalStrip: some View {
         let metrics = size.metrics
         let swatchWidth = tool == .elZone
             ? metrics.elZoneWidth : metrics.falseColorWidth
-        HStack(spacing: 1) {
+        return HStack(spacing: 1) {
             ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
                 VStack(spacing: 2) {
                     Rectangle()
@@ -186,14 +221,32 @@ struct AssistLegend: View {
                 }
             }
         }
-        .padding(.horizontal, metrics.horizontalPadding)
-        .padding(.vertical, metrics.verticalPadding)
-        .background(.black.opacity(0.65),
-                    in: RoundedRectangle(cornerRadius: metrics.cornerRadius))
+    }
+
+    /// The same bands stacked, labels alongside. Top band first, so the strip
+    /// reads brightest-at-the-bottom exactly as the horizontal one reads
+    /// brightest-at-the-right — the stops still run in one direction.
+    private var verticalStrip: some View {
+        let metrics = size.metrics
+        // one label column for the whole strip, so the swatches line up
+        let labelWidth = metrics.fontSize * 3
+        return VStack(spacing: 1) {
+            ForEach(Array(entries.enumerated().reversed()), id: \.offset) { _, entry in
+                HStack(spacing: 3) {
+                    Rectangle()
+                        .fill(entry.0)
+                        .frame(width: metrics.bandWidth, height: metrics.bandHeight)
+                    Text(entry.1)
+                        .font(.system(size: metrics.fontSize).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(width: labelWidth, alignment: .leading)
+                }
+            }
+        }
     }
 }
 
-/// The legend in the corner the operator chose, clear of the chrome.
+/// The legend against the edge the operator chose, clear of the chrome.
 struct AssistLegendOverlay: View {
     @EnvironmentObject private var controller: CaptureController
     /// The fullscreen windows hide their chrome until the pointer asks for it.
@@ -202,12 +255,13 @@ struct AssistLegendOverlay: View {
     var body: some View {
         let tool = controller.assist.colorTool
         if tool != .off {
-            let corner = controller.legendCorner
-            ZStack(alignment: corner.alignment) {
+            let placement = controller.legendPlacement
+            ZStack(alignment: placement.alignment) {
                 Color.clear
-                AssistLegend(tool: tool, size: controller.legendSize)
-                    .padding(AssistLegendPlacement.insets(corner: corner,
-                                                          fullscreen: fullscreen))
+                AssistLegend(tool: tool, size: controller.legendSize,
+                             vertical: placement.isVertical)
+                    .padding(AssistLegendChrome.insets(placement: placement,
+                                                       fullscreen: fullscreen))
             }
             .allowsHitTesting(false)
         }

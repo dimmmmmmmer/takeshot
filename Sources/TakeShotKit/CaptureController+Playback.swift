@@ -80,6 +80,10 @@ extension CaptureController {
             playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
             playbackLUTSuppressed = false
             detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
+            // a clip that carries a loop range opens INSIDE it: a new item
+            // starts at zero, and the loop is only enforced at the out point
+            // (owner item 38 — see TransportModel.rangeStart)
+            transport.beginInsideRange()
             player.play()
             loadPlaybackInfo(for: item)
         }

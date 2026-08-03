@@ -133,22 +133,23 @@ struct ChromaKeyMathTests {
     }
 
     /// Widening the tolerance moves the boundary out past a shade, narrowing it
-    /// brings the boundary back in — and the ramp between the two is where the
-    /// softness lives.
+    /// brings the boundary back in — and the ramp straddles the boundary rather
+    /// than hanging off the outside of it.
     @Test func theToleranceMovesTheBoundaryPredictably() {
         var key = ChromaProbe.magentaKey()
         let shade = ChromaProbe.litCyc
         let distance = key.distance(of: shade)
 
+        // clear of the shade by more than half the feather: fully keyed
+        key.softness = 0
         key.tolerance = distance + 0.02
         #expect(key.matte(for: shade) == 0, "widening did not reach the shade")
 
         key.tolerance = distance - 0.02
-        key.softness = 0
         #expect(key.matte(for: shade) == 1, "narrowing did not let the shade go")
 
         // and with the feather back on, the same shade is partly there
-        key.softness = 0.1
+        key.softness = 0.5
         let partial = key.matte(for: shade)
         #expect(partial > 0 && partial < 1, "the feather is not ramping: \(partial)")
 
@@ -355,8 +356,11 @@ struct ChromaKeyDisplayTests {
                     && kept.r < 100,
                 "the default tolerance keyed a cyc it should not reach: \(kept)")
 
+        // far enough out that the cyc clears the whole feather, which now
+        // straddles the tolerance rather than sitting outside it
         var wide = narrowKey
-        wide.tolerance = 0.4
+        wide.tolerance = 0.45
+        wide.softness = 0.2
         let widened = PreviewProbe.makePipeline()
         widened.setChromaKey(wide)
         let keyed = ChromaProbe.pixel(

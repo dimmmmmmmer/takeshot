@@ -57,7 +57,10 @@ public struct ViewAssist: Equatable, Sendable {
     /// Zebra trigger level, 0.70…1.0 of full scale.
     public var zebraThreshold: Double = 0.95
     public var peakingOn = false
-    /// Edge gain for the peaking overlay.
+    /// Edge gain for the peaking overlay — the renderer's unit, which is the
+    /// `CIEdges` intensity. The panel shows it as a percentage instead (see
+    /// `peakingPercent`): 2…30 is a number out of the filter's documentation
+    /// and means nothing to an operator.
     public var peakingIntensity: Double = 12
     /// Color of the peaking edges.
     public var peakingColor: PeakingColor = .red
@@ -101,12 +104,44 @@ public struct ViewAssist: Equatable, Sendable {
 
     public init() {}
 
+    // MARK: - focus peaking
+
+    /// Edge gain at 100 %. The old slider's ceiling, kept: 30 is where every
+    /// grain of noise on an underexposed frame is already an "edge", so past it
+    /// the tool stops answering the question it is for.
+    public static let maxPeakingIntensity: Double = 30
+
+    /// The renderer's edge gain for a 0…100 % sensitivity.
+    ///
+    /// Straight proportion, and the floor is a real zero rather than the 2 the
+    /// slider used to stop at: `CIEdges` at 0 finds no edges, so 0 % means what
+    /// it says instead of "the faintest peaking there is".
+    public static func peakingIntensity(forPercent percent: Double) -> Double {
+        maxPeakingIntensity * min(100, max(0, percent)) / 100
+    }
+
+    /// The percentage a stored edge gain shows as — the inverse of the above,
+    /// which is what makes a value written by an older build (2…30) come back
+    /// as a sensible position on the new slider instead of being reset.
+    public static func peakingPercent(forIntensity intensity: Double) -> Double {
+        min(100, max(0, intensity)) / maxPeakingIntensity * 100
+    }
+
+    /// Focus-peaking sensitivity as the panel states it, 0…100 %.
+    public var peakingPercent: Double {
+        get { Self.peakingPercent(forIntensity: peakingIntensity) }
+        set { peakingIntensity = Self.peakingIntensity(forPercent: newValue) }
+    }
+
     // MARK: - punch-in
 
     /// Magnification bounds. The pinch gesture and the popover slider share
     /// them, so a trackpad cannot reach a level the panel is unable to show.
+    ///
+    /// 10 and not the 8 it shipped with: on a 4K signal in a windowed player a
+    /// focus check on an eyelash is still short of pixel-for-pixel at 8×.
     public static let minPunchIn: Double = 1
-    public static let maxPunchIn: Double = 8
+    public static let maxPunchIn: Double = 10
 
     /// How far the pan may travel before the punched-in view leaves the
     /// picture: at magnification s only 1/s of the frame is visible, so its

@@ -400,22 +400,22 @@
 /* i18n layout pass */
 "playback_volume" = "Громкость плейбека";
 
-/* assist tools + zoom (legend size/corner, safe-area margins) */
+/* assist tools + zoom (legend size/placement, safe-area margins) */
 "legend_size" = "Размер легенды";
 "legend_size_s" = "Маленькая";
 "legend_size_m" = "Средняя";
 "legend_size_l" = "Большая";
-"legend_corner" = "Угол легенды";
+"legend_placement" = "Легенда";
 "peaking_color" = "Цвет пикинга";
 "peaking_color_red" = "Красный";
 "peaking_color_green" = "Зелёный";
 "peaking_color_blue" = "Синий";
 "peaking_color_yellow" = "Жёлтый";
 "peaking_color_white" = "Белый";
-"corner_top_left" = "Сверху слева";
-"corner_top_right" = "Сверху справа";
-"corner_bottom_left" = "Снизу слева";
-"corner_bottom_right" = "Снизу справа";
+"legend_top" = "Сверху";
+"legend_bottom" = "Снизу";
+"legend_left" = "Слева";
+"legend_right" = "Справа";
 "safe_action" = "Зона действия";
 "safe_title" = "Зона титров";
 
@@ -746,7 +746,6 @@
 "chroma_key" = "Хромакей";
 "chroma_screen" = "Фон";
 "chroma_pick_help" = "Пипетка: кликните по картинке, чтобы взять цвет фона с неё";
-"chroma_pick_hint" = "Кликните по зелёнке в кадре — пипетка ещё раз, чтобы отменить";
 "chroma_picked" = "Цвет фона %@";
 "chroma_pick_failed" = "Нет кадра, чтобы взять цвет";
 "chroma_preset_green" = "Зелёный фон";
@@ -761,9 +760,19 @@
 "chroma_bg_matte" = "Маска";
 "chroma_background_color" = "Цвет подложки";
 "chroma_choose_image" = "Картинка...";
+"chroma_choose_file" = "Выбрать файл...";
 "chroma_no_image" = "нет файла";
 "chroma_clear_image" = "Убрать картинку подложки";
 "chroma_image_failed" = "Не удалось прочитать картинку подложки";
+"chroma_plate_fit" = "Вписать";
+"chroma_plate_fit_fit" = "Целиком";
+"chroma_plate_fit_fill" = "Заполнить";
+"chroma_plate_fit_stretch" = "Растянуть";
+"chroma_plate_scale" = "Масштаб";
+"chroma_plate_offset_x" = "Сдвиг X";
+"chroma_plate_offset_y" = "Сдвиг Y";
+"chroma_plate_reset" = "Вернуть по центру";
+"media_group_takes" = "Дубли";
 "chroma_preview_only" = "Только превью и выход на монитор — в дубли, кадры и экспорт идёт исходная картинка.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Держать TakeShot в строке меню";

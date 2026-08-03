@@ -8,7 +8,7 @@ import SwiftUI
 /// Its own file rather than another block inside `AssistMenu`: that view is the
 /// exposure/framing/zoom panel and was already the longest one in the app, and
 /// this section has a mode of its own (the eyedropper) that reaches out onto
-/// the picture.
+/// the picture. The plate's own rows are `ChromaPlateControls`.
 struct ChromaKeyRows: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -21,15 +21,19 @@ struct ChromaKeyRows: View {
             ChromaSliderRow(label: L("chroma_tolerance"),
                             value: Binding(get: { controller.chromaTolerance },
                                            set: { controller.chromaTolerance = $0 }),
-                            range: 0...ChromaKey.maxTolerance)
+                            range: 0...ChromaKey.maxTolerance,
+                            readout: percent(controller.chromaTolerance
+                                             / ChromaKey.maxTolerance))
             ChromaSliderRow(label: L("chroma_softness"),
                             value: Binding(get: { controller.chromaSoftness },
                                            set: { controller.chromaSoftness = $0 }),
-                            range: 0...ChromaKey.maxSoftness)
+                            range: 0...ChromaKey.maxSoftness,
+                            readout: percent(controller.chromaSoftness))
             ChromaSliderRow(label: L("chroma_spill"),
                             value: Binding(get: { controller.chromaSpill },
                                            set: { controller.chromaSpill = $0 }),
-                            range: 0...1)
+                            range: 0...1,
+                            readout: percent(controller.chromaSpill))
             backgroundRows
             // The one thing nobody may be left guessing about: this picture is
             // on the director's monitor too, and it is in no file anywhere.
@@ -40,8 +44,12 @@ struct ChromaKeyRows: View {
         }
     }
 
+    private func percent(_ fraction: Double) -> String {
+        "\(Int((fraction * 100).rounded()))"
+    }
+
     /// The screen color: what it is now, the eyedropper that takes it off the
-    /// picture, the two presets, and a well for typing one in.
+    /// picture, the two presets, and a field to type one in.
     private var screenColorRow: some View {
         HStack(spacing: 8) {
             Text(L("chroma_screen"))
@@ -61,10 +69,9 @@ struct ChromaKeyRows: View {
             .help(L("chroma_pick_help"))
             preset(ChromaKey.greenScreen, help: L("chroma_preset_green"))
             preset(ChromaKey.blueScreen, help: L("chroma_preset_blue"))
-            ColorPicker("", selection: Binding(
-                get: { controller.chromaKeyColor },
-                set: { controller.chromaKeyColor = $0 }))
-                .labelsHidden()
+            ChromaColorField(color: Binding(
+                get: { controller.chroma.keyColor },
+                set: { controller.setChromaScreen($0) }))
         }
     }
 
@@ -97,49 +104,163 @@ struct ChromaKeyRows: View {
         }
         switch controller.chromaBackground {
         case .color:
-            ColorPicker(L("chroma_background_color"), selection: Binding(
-                get: { controller.chromaBackgroundColor },
-                set: { controller.chromaBackgroundColor = $0 }))
+            HStack(spacing: 8) {
+                Text(L("chroma_background_color"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                ChromaColorField(color: Binding(
+                    get: { controller.chromaBackgroundRGB },
+                    set: { controller.chromaBackgroundRGB = $0 }))
+            }
         case .image:
-            plateRow
+            ChromaPlateControls()
         case .checkerboard, .matte:
             EmptyView()
         }
     }
+}
 
-    /// The plate: the file behind the actor, or the offer to go and find one.
-    private var plateRow: some View {
-        HStack(spacing: 6) {
-            Button(L("chroma_choose_image")) {
-                controller.chooseChromaBackgroundImage()
-            }
-            .controlSize(.small)
-            Text(controller.chromaBackgroundImageName ?? L("chroma_no_image"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if controller.chromaBackgroundImageName != nil {
-                Button {
-                    controller.clearChromaBackgroundImage()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+/// A color the operator can set without the popover closing under them.
+///
+/// This was a SwiftUI `ColorPicker`, and clicking it opened the system color
+/// panel — a window of its own, which takes key away from the popover, and a
+/// popover that loses key dismisses. So picking the screen color shut the panel
+/// every single time (owner item 30). There is no supported way to make a
+/// SwiftUI popover survive that, so the color well went instead: a swatch and
+/// the hex the rest of this app already speaks, both inside the popover, plus
+/// the eyedropper and the two presets beside them — which is how a screen color
+/// is actually chosen anyway.
+struct ChromaColorField: View {
+    @Binding var color: ChromaKey.RGB
+    /// What is being typed. Kept apart from the color so that a half-typed
+    /// "#0F" does not repaint the picture as it is entered.
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(color))
+                .frame(width: 22, height: 14)
+                .overlay(RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(Color.primary.opacity(0.25)))
+            TextField("", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+                .controlSize(.mini)
+                .frame(width: 64)
+                .focused($editing)
+                .onSubmit(commit)
+                .onChange(of: editing) { _, focused in
+                    if !focused { commit() }
                 }
-                .buttonStyle(.plain)
-                .help(L("chroma_clear_image"))
-            }
         }
+        .onAppear { text = color.hexString }
+        .onChange(of: color) { _, value in
+            // do not fight the operator's cursor: a pick or a preset landing
+            // while the field is being typed in is the only case that repaints
+            if !editing { text = value.hexString }
+        }
+    }
+
+    /// An unparseable hex is put back rather than swallowed — a field that
+    /// keeps a value nothing on screen matches is worse than one that reverts.
+    private func commit() {
+        if let parsed = ChromaKey.RGB(hex: text) {
+            color = parsed
+        }
+        text = color.hexString
     }
 }
 
-/// One dial: a label, a mini slider and the value it is on. The three chroma
-/// controls are the same row three times, and the readout width is what keeps
-/// the slider from jumping as the number grows a digit.
-private struct ChromaSliderRow: View {
+/// The plate rows: which file is behind the actor, and where it sits.
+///
+/// Split from `ChromaKeyRows` because it is a section rather than a row — the
+/// plate has a source, a fit, a scale and two offsets, and none of them mean
+/// anything unless the background is set to the image.
+struct ChromaPlateControls: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        plateRow
+        Picker(L("chroma_plate_fit"), selection: Binding(
+            get: { controller.chromaPlateFit },
+            set: { controller.chromaPlateFit = $0 })) {
+            ForEach(ChromaKey.PlateFit.allCases, id: \.self) { fit in
+                Text(L(fit.labelKey)).tag(fit)
+            }
+        }
+        ChromaSliderRow(
+            label: L("chroma_plate_scale"),
+            value: Binding(get: { controller.chromaPlateScale },
+                           set: { controller.chromaPlateScale = $0 }),
+            range: ChromaKey.PlateLayout.minScale...ChromaKey.PlateLayout.maxScale,
+            readout: String(format: "%.2f", controller.chromaPlateScale))
+        offsetRow(L("chroma_plate_offset_x"),
+                  value: Binding(get: { controller.chromaPlateOffsetX },
+                                 set: { controller.chromaPlateOffsetX = $0 }))
+        offsetRow(L("chroma_plate_offset_y"),
+                  value: Binding(get: { controller.chromaPlateOffsetY },
+                                 set: { controller.chromaPlateOffsetY = $0 }))
+    }
+
+    /// The plate: which file, chosen from the app's own media or off disk.
+    private var plateRow: some View {
+        HStack(spacing: 6) {
+            Menu {
+                Button(L("chroma_choose_file")) {
+                    controller.chooseChromaBackgroundImage()
+                }
+                if controller.chromaBackgroundImageName != nil {
+                    Button(L("chroma_clear_image")) {
+                        controller.clearChromaBackgroundImage()
+                    }
+                }
+                MediaSourceMenuItems(groups: controller.chromaPlateSources,
+                                     selection: nil) { url in
+                    controller.loadChromaBackground(mediaURL: url)
+                }
+            } label: {
+                Text(controller.chromaBackgroundImageName ?? L("chroma_no_image"))
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .menuStyle(.borderlessButton)
+            Spacer(minLength: 2)
+            Button {
+                controller.resetChromaPlate()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .disabled(!controller.chromaPlateIsAdjusted)
+            .help(L("chroma_plate_reset"))
+        }
+    }
+
+    /// An offset, in percent of the frame. Signed on purpose: the operator has
+    /// to be able to see which way it has gone without watching the picture.
+    private func offsetRow(_ label: String,
+                           value: Binding<Double>) -> some View {
+        let limit = ChromaKey.PlateLayout.maxOffset
+        return ChromaSliderRow(
+            label: label, value: value, range: -limit...limit,
+            readout: String(format: "%+d", Int((value.wrappedValue * 100).rounded())))
+    }
+}
+
+/// One dial: a label, a mini slider and the value it is on. The readout is
+/// given rather than derived — these rows carry percentages, multipliers and
+/// signed offsets, and the fixed width is what keeps the slider from jumping as
+/// the number grows a digit.
+struct ChromaSliderRow: View {
     let label: String
     @Binding var value: Double
     let range: ClosedRange<Double>
+    let readout: String
 
     var body: some View {
         HStack(spacing: 6) {
@@ -148,10 +269,10 @@ private struct ChromaSliderRow: View {
                 .foregroundStyle(.secondary)
             Slider(value: $value, in: range)
                 .controlSize(.mini)
-            Text(verbatim: "\(Int((value * 100).rounded()))")
+            Text(verbatim: readout)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 24, alignment: .trailing)
+                .frame(width: 30, alignment: .trailing)
         }
     }
 }
@@ -183,16 +304,6 @@ struct ChromaPickOverlay: View {
                             NSCursor.pop()
                         }
                     }
-                    .overlay(alignment: .top) {
-                        Text(L("chroma_pick_hint"))
-                            .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(.black.opacity(0.6),
-                                        in: Capsule())
-                            .foregroundStyle(.white)
-                            .padding(.top, 44)
-                    }
             }
         }
     }
@@ -207,6 +318,16 @@ extension ChromaKey.Background {
         case .color: return "chroma_bg_color"
         case .image: return "chroma_bg_image"
         case .matte: return "chroma_bg_matte"
+        }
+    }
+}
+
+extension ChromaKey.PlateFit {
+    var labelKey: String {
+        switch self {
+        case .fit: return "chroma_plate_fit_fit"
+        case .fill: return "chroma_plate_fit_fill"
+        case .stretch: return "chroma_plate_fit_stretch"
         }
     }
 }

@@ -48,9 +48,11 @@ extension ChromaKey {
         /// which has no direction to despill along.
         let unitCb: Double
         let unitCr: Double
-        let tolerance: Double
+        /// The chroma distance at which the matte reads exactly 0.5 — the
+        /// boundary the tolerance slider moves.
+        let boundary: Double
+        let featherStart: Double
         let featherEnd: Double
-        let softness: Double
         let spill: Double
 
         init(_ key: ChromaKey) {
@@ -61,9 +63,11 @@ extension ChromaKey {
                 + chroma.cr * chroma.cr).squareRoot()
             unitCb = magnitude > 1e-6 ? chroma.cb / magnitude : 0
             unitCr = magnitude > 1e-6 ? chroma.cr / magnitude : 0
-            tolerance = key.tolerance
-            softness = key.softness
-            featherEnd = key.tolerance + key.softness
+            boundary = key.tolerance
+            // The feather straddles the boundary instead of hanging off the
+            // outside of it. See `ChromaKey.softness`.
+            featherStart = key.tolerance * (1 - key.softness)
+            featherEnd = key.tolerance * (1 + key.softness)
             spill = key.spill
         }
 
@@ -72,12 +76,22 @@ extension ChromaKey {
         /// Smoothstep rather than a straight ramp — a linear feather leaves a
         /// visible corner at each end of the transition, which on hair reads as
         /// a second edge just outside the first.
+        ///
+        /// The ramp is CENTRED on the tolerance, which is what stops the two
+        /// controls from doing the same thing. With the feather added outside
+        /// the tolerance (`tolerance … tolerance + softness`) every turn of the
+        /// softness knob also pushed the outer edge of the key outward, so it
+        /// keyed more of the screen — which is the tolerance's job, and is
+        /// exactly why the two read as one control. Centred, the half-keyed
+        /// boundary stays at `tolerance` whatever the softness is: the
+        /// tolerance decides HOW MUCH is keyed, the softness only how abruptly
+        /// the matte gets there. Pinned by `ChromaKeyControlSeparationTests`.
         func matte(cb: Double, cr: Double) -> Double {
             let distance = ((cb - keyCb) * (cb - keyCb)
                 + (cr - keyCr) * (cr - keyCr)).squareRoot()
-            if distance <= tolerance { return 0 }
-            guard softness > 0, distance < featherEnd else { return 1 }
-            let t = (distance - tolerance) / softness
+            if distance <= featherStart { return 0 }
+            guard distance < featherEnd else { return 1 }
+            let t = (distance - featherStart) / (featherEnd - featherStart)
             return t * t * (3 - 2 * t)
         }
 
@@ -109,6 +123,27 @@ extension ChromaKey {
     public func matte(for color: RGB) -> Double {
         let pixel = Self.chroma(color)
         return kernel.matte(cb: pixel.cb, cr: pixel.cr)
+    }
+
+    /// The matte at a given chroma DISTANCE, without a color to carry it.
+    ///
+    /// The two controls are separated in distance, not in RGB, so this is the
+    /// axis the panel's readouts and the tests both want to talk about.
+    public func matte(atDistance distance: Double) -> Double {
+        let kernel = self.kernel
+        // Any direction answers the same thing — the matte is isotropic in the
+        // chroma plane — so an achromatic key, which has no direction of its
+        // own, is walked along Cb.
+        let unitCb = kernel.unitCb == 0 && kernel.unitCr == 0 ? 1 : kernel.unitCb
+        return kernel.matte(cb: kernel.keyCb + unitCb * distance,
+                            cr: kernel.keyCr + kernel.unitCr * distance)
+    }
+
+    /// Where the feather begins and ends, in chroma distance. The tolerance is
+    /// its midpoint; the softness is its width.
+    public var featherRange: ClosedRange<Double> {
+        let kernel = self.kernel
+        return kernel.featherStart...kernel.featherEnd
     }
 
     /// Spill suppression: the screen bouncing off the cyc onto the subject's

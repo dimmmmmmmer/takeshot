@@ -41,22 +41,78 @@ public struct ChromaKey: Equatable, Sendable {
         case matte
     }
 
+    /// How the plate is matched to the frame before the manual adjustment.
+    ///
+    /// Persisted by raw value (`CaptureSettings.chromaKeyPlateFit`), so renaming
+    /// a case silently resets the operator's choice.
+    public enum PlateFit: String, CaseIterable, Sendable {
+        /// The whole plate inside the frame; the rest is black.
+        case fit
+        /// The frame covered; whatever hangs over the edge is cropped.
+        case fill
+        /// The plate distorted to the frame exactly — an aspect the plate was
+        /// not made in, which is sometimes the point (a graphic plate authored
+        /// for the delivery aspect).
+        case stretch
+    }
+
+    /// How the plate is laid into the frame, when `background` is `.image`.
+    ///
+    /// Its own struct because it is the only part of the key that is not about
+    /// color at all: the plate arrives at whatever size the art department made
+    /// it, and none of the keying math cares where it lands.
+    public struct PlateLayout: Equatable, Sendable {
+        public var fit: PlateFit = .fit
+        /// Magnification ON TOP of the fit (1 = as fitted).
+        public var scale: Double = 1
+        /// Offset as a fraction of the FRAME, positive x right, positive y up.
+        /// In frame units and not plate units so that the slider means the same
+        /// thing whatever the plate's own size is.
+        public var offsetX: Double = 0
+        public var offsetY: Double = 0
+
+        public init() {}
+
+        public static let minScale = 0.25
+        public static let maxScale = 4.0
+        /// Half a frame either way: past that the plate is off screen and the
+        /// operator is dragging a slider with nothing on the other end of it.
+        public static let maxOffset = 0.5
+
+        public mutating func clamp() {
+            scale = min(Self.maxScale, max(Self.minScale, scale))
+            offsetX = min(Self.maxOffset, max(-Self.maxOffset, offsetX))
+            offsetY = min(Self.maxOffset, max(-Self.maxOffset, offsetY))
+        }
+
+        /// Back to the plain fit, which is what "reset" means here.
+        public static let identity = PlateLayout()
+    }
+
     /// OFF by default, and off costs nothing: the display stage checks this one
     /// flag before it touches a pixel.
     public var isOn = false
     /// The screen color. The presets are the digital primaries; a real cyc is
     /// never either of them, which is what the eyedropper is for.
     public var keyColor = RGB(0, 1, 0)
-    /// Chroma distance that counts as fully screen (the "similarity" control).
+    /// Chroma distance at which a pixel is half keyed — the boundary between
+    /// screen and subject, and the only control that decides HOW MUCH of the
+    /// screen is keyed at all.
     public var tolerance = 0.20
-    /// Chroma distance ABOVE the tolerance over which the matte ramps from
-    /// screen to subject — the feather.
-    public var softness = 0.10
+    /// Width of the feather across that boundary, as a fraction of the
+    /// tolerance: 0 is a hard cut exactly at the tolerance, 1 ramps all the way
+    /// from the screen color itself to twice the tolerance.
+    ///
+    /// Relative, and straddling the boundary rather than sitting outside it, so
+    /// that it does a job the tolerance does not — see `Kernel.matte`.
+    public var softness = 0.5
     /// How much of the screen's hue is pulled out of the subject, 0…1.
     public var spill = 0.5
     public var background: Background = .checkerboard
     /// The solid background, when `background` is `.color`.
     public var backgroundColor = RGB(0, 0, 0)
+    /// Where the plate sits, when `background` is `.image`.
+    public var plate = PlateLayout()
 
     public init() {}
 
@@ -70,7 +126,10 @@ public struct ChromaKey: Equatable, Sendable {
     /// sits 0.33 from a lit green cyc, 0.63 from digital green), so that is
     /// where the tolerance stops being a key and starts being a wipe.
     public static let maxTolerance = 0.6
-    public static let maxSoftness = 0.4
+    /// The feather is a FRACTION of the tolerance, so its ceiling is 1: at 1
+    /// the ramp runs from the screen color itself out to twice the boundary,
+    /// which is as gradual as a key can be and still have a boundary.
+    public static let maxSoftness = 1.0
 
     /// The two screens a unit actually turns up with. Digital primaries rather
     /// than a "typical" cyc color: they are a repeatable starting point, and
@@ -87,6 +146,7 @@ public struct ChromaKey: Equatable, Sendable {
         tolerance = min(Self.maxTolerance, max(0, tolerance))
         softness = min(Self.maxSoftness, max(0, softness))
         spill = min(1, max(0, spill))
+        plate.clamp()
     }
 }
 

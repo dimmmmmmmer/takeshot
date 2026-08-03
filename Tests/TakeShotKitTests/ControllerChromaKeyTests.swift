@@ -103,6 +103,92 @@ struct ControllerChromaKeyTests {
         }
     }
 
+    // MARK: - the panel survives a pick (owner item 30)
+
+    /// Arming the eyedropper closes the panel on purpose and the pick brings it
+    /// straight back.
+    ///
+    /// The pick is a click on the PICTURE, i.e. a click outside the popover. A
+    /// popover that is still open when it lands eats the click to dismiss
+    /// itself, so the operator's first click did nothing and the second picked
+    /// a color with the panel already gone. Closing it deliberately makes the
+    /// first click the pick; reopening puts the operator back in front of the
+    /// dials with the new key on the picture, which is when a key is judged.
+    @Test func theAssistPanelComesBackAfterAPick() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await pushSplitFrame(controller)
+            controller.showAssistPopover = true
+
+            controller.toggleChromaPick()
+            #expect(controller.chromaPickArmed)
+            #expect(!controller.showAssistPopover,
+                    "the popover would have swallowed the operator's first click")
+
+            controller.pickChromaKeyColor(at: CGPoint(x: 400, y: 450),
+                                          viewport: CGSize(width: 1600,
+                                                           height: 900))
+            #expect(!controller.chromaPickArmed)
+            #expect(controller.showAssistPopover,
+                    "the panel did not come back to judge the key on")
+        }
+    }
+
+    /// Cancelling the pick with a second click on the eyedropper puts the panel
+    /// back too — a mode that closed the panel has to be able to undo that.
+    @Test func cancellingThePickAlsoBringsThePanelBack() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            controller.showAssistPopover = true
+            controller.toggleChromaPick()
+            controller.toggleChromaPick()
+            #expect(!controller.chromaPickArmed)
+            #expect(controller.showAssistPopover)
+        }
+    }
+
+    /// A pick armed from somewhere the panel was NOT open (a hotkey, the remote)
+    /// must not open it afterwards — reopening is putting back what arming took
+    /// away, not a way for the eyedropper to raise a panel nobody asked for.
+    @Test func aPickWithNoPanelOpenDoesNotOpenOne() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await pushSplitFrame(controller)
+            #expect(!controller.showAssistPopover)
+
+            controller.toggleChromaPick()
+            controller.pickChromaKeyColor(at: CGPoint(x: 400, y: 450),
+                                          viewport: CGSize(width: 1600,
+                                                           height: 900))
+            #expect(!controller.showAssistPopover,
+                    "the pick opened a panel that had not been open")
+        }
+    }
+
+    /// A miss — a click on the letterbox — leaves the eyedropper armed and the
+    /// panel away, so the next click is another attempt rather than a dismissal.
+    @Test func aMissedPickKeepsThePanelAwayAndTheEyedropperArmed() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await pushSplitFrame(controller)
+            controller.showAssistPopover = true
+            controller.toggleChromaPick()
+
+            controller.pickChromaKeyColor(at: CGPoint(x: 800, y: 20),
+                                          viewport: CGSize(width: 1600,
+                                                           height: 1300))
+            #expect(controller.chromaPickArmed)
+            #expect(!controller.showAssistPopover,
+                    "the panel came back mid-pick and will eat the next click")
+
+            // …and it still comes back once the pick lands
+            controller.pickChromaKeyColor(at: CGPoint(x: 400, y: 450),
+                                          viewport: CGSize(width: 1600,
+                                                           height: 900))
+            #expect(controller.showAssistPopover)
+        }
+    }
+
     // MARK: - persistence
 
     /// The dial-in comes back after a relaunch; the switch does not.
@@ -115,7 +201,7 @@ struct ControllerChromaKeyTests {
             controller.chromaSoftness = 0.05
             controller.chromaSpill = 0.8
             controller.chromaBackground = .matte
-            controller.chromaBackgroundColor = Color(ChromaKey.RGB(1, 0, 0))
+            controller.chromaBackgroundRGB = ChromaKey.RGB(1, 0, 0)
             controller.commitAssistDraft() // the sliders are debounced
 
             #expect(controller.settings.chromaKeyColorHex == "#0000FF")
@@ -196,8 +282,27 @@ struct ControllerChromaKeyTests {
         }
     }
 
-    // MARK: - the plate
+    // MARK: - the aids badge
 
+    /// A remembered tolerance must not leave the assist badge lit for the rest
+    /// of the project — only something actually on the picture counts.
+    @Test func aStoredDialInDoesNotLightTheAssistBadge() {
+        var assist = ViewAssist()
+        assist.chroma.tolerance = 0.4
+        assist.chroma.background = .matte
+        #expect(!assist.isShowingAid)
+        assist.chroma.isOn = true
+        #expect(assist.isShowingAid)
+    }
+}
+
+/// The plate behind the actor: where it comes from, and where it sits.
+///
+/// Its own suite rather than more rows in the one above — the plate is chosen
+/// from the app's own media now (owner item 36) and placed by hand (item 37),
+/// which is a job of its own and has nothing to do with the keying.
+@MainActor
+struct ControllerChromaPlateTests {
     /// The plate is loaded the way a pinned reference still is, remembered by
     /// path, and cleared without leaving the path behind.
     @Test func theBackgroundPlateLoadsAndIsRemembered() async throws {
@@ -214,7 +319,7 @@ struct ControllerChromaKeyTests {
                 .representation(using: .png, properties: [:]))
             try png.write(to: url)
 
-            controller.loadChromaBackground(imageURL: url)
+            controller.loadChromaBackground(mediaURL: url)
             #expect(controller.settings.chromaKeyBackgroundImagePath == url.path)
             let loaded = await ControllerWait.until {
                 controller.chromaBackgroundImageName == "plate.png"
@@ -235,7 +340,7 @@ struct ControllerChromaKeyTests {
             let controller = probe.controller
             let url = probe.root.appendingPathComponent("not-an-image.png")
             try Data([0x00, 0x01]).write(to: url)
-            controller.loadChromaBackground(imageURL: url)
+            controller.loadChromaBackground(mediaURL: url)
             let reported = await ControllerWait.until {
                 controller.lastError != nil
             }
@@ -243,16 +348,70 @@ struct ControllerChromaKeyTests {
         }
     }
 
-    // MARK: - the aids badge
+    /// A CLIP is a plate too (owner item 36): the head frame of a take or an
+    /// Other-content movie goes behind the actor, so the unit that has the
+    /// plate as a QuickTime does not have to export a frame of it first.
+    @Test func aClipCanBeThePlate() async throws {
+        let media = try MediaFixtures.makeDirectory("chroma-plate-clip")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let clip = try await MediaFixtures.writeClip(
+            at: media.appendingPathComponent("A001C001.mov"), frames: 6)
 
-    /// A remembered tolerance must not leave the assist badge lit for the rest
-    /// of the project — only something actually on the picture counts.
-    @Test func aStoredDialInDoesNotLightTheAssistBadge() {
-        var assist = ViewAssist()
-        assist.chroma.tolerance = 0.4
-        assist.chroma.background = .matte
-        #expect(!assist.isShowingAid)
-        assist.chroma.isOn = true
-        #expect(assist.isShowingAid)
+        try await ViewProbe.run { probe in
+            probe.controller.loadChromaBackground(mediaURL: clip)
+            let loaded = await ControllerWait.until {
+                probe.controller.chromaBackgroundImageName == "A001C001.mov"
+            }
+            #expect(loaded, "the clip never yielded a plate")
+            #expect(probe.controller.settings.chromaKeyBackgroundImagePath
+                    == clip.path)
+        }
+    }
+
+    /// The plate's placement is dialled in like everything else on the key, and
+    /// comes back with it (owner item 37).
+    @Test func thePlateLayoutIsAdjustableAndPersists() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            #expect(!controller.chromaPlateIsAdjusted)
+
+            controller.chromaPlateFit = .fill
+            controller.chromaPlateScale = 1.5
+            controller.chromaPlateOffsetX = 0.2
+            controller.chromaPlateOffsetY = -0.1
+            controller.commitAssistDraft()
+            #expect(controller.chromaPlateIsAdjusted)
+
+            #expect(controller.settings.chromaKeyPlateFit == "fill")
+            #expect(controller.settings.chromaKeyPlateScale == 1.5)
+            #expect(controller.settings.chromaKeyPlateOffsetX == 0.2)
+            #expect(controller.settings.chromaKeyPlateOffsetY == -0.1)
+
+            let reloaded = CaptureSettings.loaded(from: probe.store)
+            controller.restoreChroma(from: reloaded)
+            #expect(controller.chromaPlate.fit == .fill)
+            #expect(controller.chromaPlate.scale == 1.5)
+            #expect(controller.chromaPlate.offsetX == 0.2)
+            #expect(controller.chromaPlate.offsetY == -0.1)
+
+            // the sliders cannot be pushed past what the math is defined on
+            controller.chromaPlateScale = 99
+            controller.chromaPlateOffsetX = 5
+            controller.chromaPlateOffsetY = -5
+            #expect(controller.chromaPlateScale == ChromaKey.PlateLayout.maxScale)
+            #expect(controller.chromaPlateOffsetX
+                    == ChromaKey.PlateLayout.maxOffset)
+            #expect(controller.chromaPlateOffsetY
+                    == -ChromaKey.PlateLayout.maxOffset)
+
+            // and reset really is the plain centered fit — stored as nil, so a
+            // blob this build writes still decodes on one without the fields
+            controller.resetChromaPlate()
+            #expect(!controller.chromaPlateIsAdjusted)
+            #expect(controller.settings.chromaKeyPlateFit == nil)
+            #expect(controller.settings.chromaKeyPlateScale == nil)
+            #expect(controller.settings.chromaKeyPlateOffsetX == nil)
+            #expect(controller.settings.chromaKeyPlateOffsetY == nil)
+        }
     }
 }
