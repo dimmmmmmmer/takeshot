@@ -200,6 +200,15 @@ import Testing
     /// Back in record mode the tap is disconnected: a still pushed into it does
     /// NOT reach the board. Deterministic rather than a wall-clock window — both
     /// queues are drained, so a frame that was going to arrive has arrived.
+    ///
+    /// The board is asked whether the TAP's frame arrived, not whether anything
+    /// did. In record mode a live frame reaching it is the feature: the display
+    /// stage re-publishes its last frame whenever an aid changes or a sink is
+    /// added (`redrawDisplayStage`), so `lastDisplaySource` legitimately lands on
+    /// the mirror with no signal running. Asserting an empty board passed on a
+    /// fast machine and went red on CI, where that hop had time to finish before
+    /// the drain — a stale assumption reading as a leak. The still's size is the
+    /// discriminator, and it is nothing like a 1080p raster.
     @Test func aStaleTapHandlerIsNotLeftFeedingTheMirror() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
@@ -209,12 +218,17 @@ import Testing
                 let board = try #require(requests.outputs.first)
 
                 controller.viewerMode = .record
-                controller.playbackTap.attachStill(
-                    MediaFixtures.pixelBuffer(level: 0x40, width: 320, height: 180))
+                let still = MediaFixtures.pixelBuffer(level: 0x40,
+                                                      width: 320, height: 180)
+                controller.playbackTap.attachStill(still)
                 controller.playbackTap.queue.sync {}
                 feeder.settle()
 
-                #expect(board.displayed.isEmpty,
+                let fromTheTap = board.displayed.filter {
+                    CVPixelBufferGetWidth($0) == 320
+                        && CVPixelBufferGetHeight($0) == 180
+                }
+                #expect(fromTheTap.isEmpty,
                         "the tap kept feeding the mirror after the viewer left review")
             }
         }
