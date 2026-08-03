@@ -1,4 +1,11 @@
-# Run the tests with coverage and upload the report to Codacy.
+# Run the tests with coverage, hold the number above the floor, and upload the
+# report to Codacy.
+#
+# The measurement, the lcov export and the floor check all live in
+# `scripts/coverage.sh`, so this job and the machine you develop on cannot
+# disagree about the number. The floor itself is stated in `.coverage-floor` and
+# nowhere else.
+#
 # The project token is stored in the CODACY_PROJECT_TOKEN repository secret
 # (never committed). Codacy runs static analysis on its own side once the repo
 # is connected on codacy.com — this workflow only handles coverage.
@@ -20,45 +27,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Tests with coverage
-        # --no-parallel matches scripts/test.sh: the suites' contract is serial
-        # execution — the view tests share UserDefaults.standard through
-        # @AppStorage, and parallel runs raced each other's keys. Every red
-        # this workflow ever showed traced back to that difference.
-        run: |
-          swift test --enable-code-coverage --no-parallel \
-            -Xswiftc -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
-            -Xlinker -F/Library/Developer/CommandLineTools/Library/Developer/Frameworks \
-            -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
-            -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
-
-      - name: Export coverage to lcov
-        run: |
-          BIN=$(swift build --show-bin-path)
-          PROF="$BIN/codecov/default.profdata"
-          # every test bundle counts: the first is positional, the rest are
-          # -object, otherwise a second test target drops out of the report
-          OBJECTS=()
-          while IFS= read -r XCTEST; do
-              BINARY="$XCTEST/Contents/MacOS/$(basename "$XCTEST" .xctest)"
-              if [ ${#OBJECTS[@]} -eq 0 ]; then
-                  OBJECTS+=("$BINARY")
-              else
-                  OBJECTS+=(-object "$BINARY")
-              fi
-          done < <(find "$BIN" -name '*.xctest' -maxdepth 2)
-          echo "test bundles: ${#OBJECTS[@]}"
-          xcrun llvm-cov export \
-            "${OBJECTS[@]}" \
-            -instr-profile "$PROF" \
-            -format=lcov \
-            -ignore-filename-regex='(Tests|\.build)/' \
-            > coverage.lcov
-          echo "lcov lines: $(wc -l < coverage.lcov)"
+      # Runs the suite, writes coverage.lcov and coverage-report.txt, then exits
+      # non-zero when line coverage has fallen below `.coverage-floor` — naming
+      # the measured number, the floor, and the files holding the most uncovered
+      # lines. THIS step is the gate, so it is deliberately not
+      # continue-on-error.
+      #
+      # The script drives the suite through `scripts/test.sh`, which passes
+      # --no-parallel and the Command Line Tools framework paths. The serial run
+      # is the suites' contract rather than a preference: the view tests share
+      # UserDefaults.standard through @AppStorage, and every red this workflow
+      # ever showed traced back to a parallel run racing those keys.
+      - name: Tests with coverage, and the coverage floor
+        run: scripts/coverage.sh
 
       - name: Upload to Codacy
         # don't fail CI: the upload only works once the repo is connected
-        # on codacy.com (otherwise 'Request URL not found')
+        # on codacy.com (otherwise 'Request URL not found'). The floor above is
+        # the gate; this step is only the dashboard.
         continue-on-error: true
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}

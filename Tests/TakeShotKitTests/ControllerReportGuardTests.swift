@@ -5,9 +5,11 @@ import Testing
 @testable import TakeShotKit
 
 /// The refusal guards in front of the three end-of-day exports. Each guard
-/// answers BEFORE the save panel — which is also why these are the only lines
-/// of the export flow a headless suite can drive: everything past the guard
-/// blocks on `NSSavePanel.runModal()`.
+/// answers BEFORE the save panel, so a day with nothing to write never puts a
+/// dialog in front of the operator to make the point.
+///
+/// The rest of the export flow is `ControllerExportDocumentTests`, which answers
+/// the panel through the `FilePanel` seam.
 @Suite @MainActor struct ControllerReportGuardTests {
     /// A day with takes but no circled ones exports no EDL — the selects EDL
     /// is the circled takes by definition, and an empty cut written anyway

@@ -1,0 +1,16 @@
+# The line-coverage floor, in percent. THE one place it is stated.
+#
+# `scripts/coverage.sh` reads this number and fails when the suite's measured
+# line coverage falls below it; CI runs that script (see
+# .github/workflows/codacy-coverage.yml). Raising it is a one-line diff and is
+# the intended way to ratchet — lower it only with a reason in the commit
+# message.
+#
+# Deliberately about a point and a half under the number actually achieved
+# (87.52 % at the time of writing). A floor set at the exact measurement goes red
+# on the first honest refactor that adds a guard clause nobody has a test for,
+# and a gate that is red the week it lands is a gate everybody learns to skip.
+#
+# docs/coverage.md carries the real number, what moved it, and the list of what
+# genuinely cannot be covered from a headless suite.
+86.0

@@ -55,14 +55,10 @@ extension CaptureController {
     }
     /// Change-record-folder dialog (used from both Settings and the bottom bar).
     func chooseDestinationFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = destinationRoot
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.destinationPath = url.path
-        }
+        guard let url = FilePanel.openOne(.init(
+            files: false, directories: true, createDirectories: true,
+            directory: destinationRoot)) else { return }
+        settings.destinationPath = url.path
     }
     /// Light polling of the record folder: video files not among our takes
     /// are shown in a separate Other content block.

@@ -114,6 +114,9 @@ so a card copied in by hand is one double-click from playback.
   to submit changes.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the app is put together
   and the hardware behaviour it depends on.
+- [`docs/coverage.md`](docs/coverage.md) — how coverage is measured and gated,
+  the seams that make hardware-bound code testable, and what genuinely cannot be
+  covered without a board or a UI session.
 
 ## License
 

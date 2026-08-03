@@ -77,14 +77,10 @@ extension CaptureController {
     /// picture either way, and a unit that has the plate as a QuickTime should
     /// not have to export a frame of it first.
     func chooseChromaBackgroundImage() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = (Self.imageExtensions
-            .union(Self.videoExtensions))
-            .compactMap { UTType(filenameExtension: $0) }
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.message = L("chroma_choose_image")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanel.openOne(.init(
+            contentTypes: (Self.imageExtensions.union(Self.videoExtensions))
+                .compactMap { UTType(filenameExtension: $0) },
+            message: L("chroma_choose_image"))) else { return }
         loadChromaBackground(mediaURL: url)
     }
 

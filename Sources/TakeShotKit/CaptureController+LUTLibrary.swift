@@ -55,16 +55,16 @@ extension CaptureController {
     }
     /// Import a look: copied into the app folder and selected right away.
     func importLUT() {
-        let panel = NSOpenPanel()
         // .cdl and .ccc have no registered type, so these are dynamic UTIs that
         // filter on the extension — which is what is wanted. .cc does have one
         // (C++ source), so the panel also offers .cpp files; picking one fails
         // to parse with a visible error rather than doing anything quietly.
-        panel.allowedContentTypes = Self.lookExtensions
-            .compactMap { UTType(filenameExtension: $0) }
-        panel.allowsMultipleSelection = true
-        guard panel.runModal() == .OK else { return }
-        adoptLooks(from: panel.urls)
+        let chosen = FilePanel.open(.init(
+            multiple: true,
+            contentTypes: Self.lookExtensions
+                .compactMap { UTType(filenameExtension: $0) }))
+        guard !chosen.isEmpty else { return }
+        adoptLooks(from: chosen)
     }
     /// Copy chosen look files into the library and select the last one.
     ///
