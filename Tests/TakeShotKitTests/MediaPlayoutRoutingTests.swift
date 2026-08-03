@@ -22,13 +22,13 @@ import Testing
     @Test func withNoOutputDeviceNothingIsMirrored() async throws {
         try await ControllerHarness.run { controller, _ in
             #expect(controller.settings.monitorDeviceID == nil)
-            #expect(controller.playoutFeeder == nil)
+            #expect(controller.mirrors.playout == nil)
 
             let collector = MediaFixtures.FrameCollector()
             controller.playbackTap.setOnDisplayFrame { collector.record($0) }
             controller.rebuildPlayout()
 
-            #expect(controller.playoutFeeder == nil)
+            #expect(controller.mirrors.playout == nil)
             #expect(controller.playbackTap.displayFrameHandler == nil,
                     "the tap is still feeding an output that does not exist")
 
@@ -47,7 +47,7 @@ import Testing
             // assigning the setting is what the picker does; it rebuilds itself
             controller.settings.monitorDeviceID = "builtin-speakers"
 
-            #expect(controller.playoutFeeder == nil)
+            #expect(controller.mirrors.playout == nil)
             #expect(controller.lastError == nil,
                     "a non-DeckLink output raised: \(controller.lastError ?? "")")
             #expect(controller.playbackTap.displayFrameHandler == nil)
@@ -65,7 +65,7 @@ import Testing
             controller.settings.monitorDeviceID =
                 "decklink:no-such-board-\(UUID().uuidString)"
 
-            #expect(controller.playoutFeeder == nil)
+            #expect(controller.mirrors.playout == nil)
             #expect(controller.lastError?.hasPrefix("Output:") == true,
                     "the dead output reported: \(controller.lastError ?? "nothing")")
             #expect(controller.playbackTap.displayFrameHandler == nil)

@@ -17,8 +17,12 @@ extension CaptureController {
             guard let self else { return }
             let changed = self.signalFormat != format
             self.signalFormat = format
-            if changed, format != nil, self.playoutFeeder != nil {
-                self.rebuildPlayout()
+            if changed, format != nil, self.mirrors.playout != nil {
+                self.rebuildPlayout() // re-wires the mirrors on its way out
+            } else if changed, format != nil, self.mirrors.ndi != nil {
+                // No hardware output, but the NDI frame states the source's
+                // frame rate and that rate is captured at wire time.
+                self.wireDisplayMirrors()
             }
             if changed { self.reportBitDepthShortfall(format) }
         }

@@ -27,6 +27,7 @@ extension CaptureController {
         applyAudioInputChange(from: oldValue)
         applyNamingChange(from: oldValue)
         applyRemoteChange(from: oldValue)
+        applyNDIChange(from: oldValue)
         applyCardWatchChange(from: oldValue)
         applyMenuBarChange(from: oldValue)
         applyGuideChange()
@@ -74,6 +75,11 @@ extension CaptureController {
         pipelineRelevant.remoteEnabled = settings.remoteEnabled
         pipelineRelevant.remotePort = settings.remotePort
         pipelineRelevant.remotePIN = settings.remotePIN
+        // The NDI output is a display mirror wired outside the capture config —
+        // the pipeline has never heard of it, and flicking the switch or typing
+        // in the name field must not rebuild capture mid-take.
+        pipelineRelevant.ndiEnabled = settings.ndiEnabled
+        pipelineRelevant.ndiSourceName = settings.ndiSourceName
         // the status item is a window-level affordance; the writer has never
         // heard of it, and toggling it must not rebuild the capture config
         pipelineRelevant.keepInMenuBar = settings.keepInMenuBar

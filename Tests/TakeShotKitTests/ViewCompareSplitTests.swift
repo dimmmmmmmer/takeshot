@@ -285,7 +285,7 @@ import Testing
     /// What the DeckLink monitor shows with A/B engaged, stated rather than
     /// assumed.
     ///
-    /// `wirePlayoutRouting` feeds the hardware output ONE composed buffer per
+    /// `wireDisplayMirrors` feeds the hardware output ONE composed buffer per
     /// frame, and a physical monitor cannot mount two SwiftUI panes. In
     /// sideBySide the tap's composite is off, so that buffer is the take under
     /// review — the B side, uncomposited, across the whole raster. Deliberately

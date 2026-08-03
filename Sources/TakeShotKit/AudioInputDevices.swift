@@ -29,7 +29,6 @@ struct AudioInputDeviceInfo: Identifiable, Equatable {
 /// NATIVE format plus the host-clock timestamp of the buffer's first frame,
 /// serially on the device's own queue; `ExternalAudioSource` converts from
 /// there. `onDeviceGone` fires when the hardware disappears mid-capture.
-/// One input device, opened.
 ///
 /// Threading contract, which every conformer owes its callers:
 /// - `onBuffer` fires on the device's own delivery queue, `onDeviceGone` on

@@ -40,7 +40,7 @@ extension CaptureController {
         updateAudioMonitorRouting()
         updateTapRunning()
         updateScopesRunning()
-        wirePlayoutRouting()
+        wireDisplayMirrors()
     }
 
     /// Polling playback frames is only needed when the view is actually visible.

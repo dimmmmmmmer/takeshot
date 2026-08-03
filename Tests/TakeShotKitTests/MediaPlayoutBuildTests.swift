@@ -65,7 +65,7 @@ import Testing
                 #expect(requests.modes.count == 1)
                 #expect(requests.modes.first?.board == "UltraStudio4KMini",
                         "the routing prefix was handed to the SDK")
-                #expect(controller.playoutFeeder != nil)
+                #expect(controller.mirrors.playout != nil)
                 #expect(controller.lastError == nil)
             }
         }
@@ -83,7 +83,7 @@ import Testing
                 #expect(asked.width == 1920)
                 #expect(asked.height == 1080)
                 #expect(asked.rate == 25)
-                let feeder = try #require(controller.playoutFeeder)
+                let feeder = try #require(controller.mirrors.playout)
                 #expect(feeder.outputSize == (1920, 1080))
             }
         }
@@ -104,7 +104,7 @@ import Testing
                 #expect(requests.modes.first?.width == 4096)
                 #expect(requests.modes.last?.width == 1920)
                 #expect(requests.modes.last?.rate == 25)
-                let feeder = try #require(controller.playoutFeeder)
+                let feeder = try #require(controller.mirrors.playout)
                 #expect(feeder.outputSize == (1920, 1080))
                 #expect(controller.lastError == nil,
                         "the fallback reported: \(controller.lastError ?? "")")
@@ -121,7 +121,7 @@ import Testing
                 controller.settings.monitorDeviceID = "decklink:board"
 
                 #expect(requests.modes.count == 2)
-                #expect(controller.playoutFeeder == nil)
+                #expect(controller.mirrors.playout == nil)
                 #expect(controller.lastError?.hasPrefix("Output:") == true,
                         "the dead output said: \(controller.lastError ?? "nothing")")
             }
@@ -182,7 +182,7 @@ import Testing
             try await ControllerHarness.run { controller, _ in
                 controller.settings.monitorDeviceID = "decklink:board"
                 controller.viewerMode = .playback
-                let feeder = try #require(controller.playoutFeeder)
+                let feeder = try #require(controller.mirrors.playout)
                 let board = try #require(requests.outputs.first)
                 #expect(board.displayed.isEmpty)
 
@@ -205,7 +205,7 @@ import Testing
             try await ControllerHarness.run { controller, _ in
                 controller.settings.monitorDeviceID = "decklink:board"
                 controller.viewerMode = .playback
-                let feeder = try #require(controller.playoutFeeder)
+                let feeder = try #require(controller.mirrors.playout)
                 let board = try #require(requests.outputs.first)
 
                 controller.viewerMode = .record
@@ -248,7 +248,7 @@ import Testing
                 controller.settings.monitorDeviceID = nil
 
                 #expect(board.stops == 1)
-                #expect(controller.playoutFeeder == nil)
+                #expect(controller.mirrors.playout == nil)
                 #expect(controller.playbackTap.displayFrameHandler == nil)
             }
         }

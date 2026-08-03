@@ -34,13 +34,26 @@ let package = Package(
                 .headerSearchPath("../../vendor/BRAWSDK/include")
             ]
         ),
+        // Obj-C++ bridge to the NDI SDK (sending the viewer over the set
+        // network). Headers go in vendor/NDISDK/include (see
+        // vendor/NDISDK/README.md); without them the target builds as a stub
+        // (CNDSender.isSDKAvailable == NO) and the feature reports itself
+        // unavailable, which is the shape of every build that has no SDK —
+        // CI included. The runtime libndi is opened with dlopen, so nothing
+        // links here either way.
+        .target(
+            name: "CNDI",
+            cxxSettings: [
+                .headerSearchPath("../../vendor/NDISDK/include")
+            ]
+        ),
         // The application layer. A library rather than part of the executable:
         // SwiftPM cannot import an executable target from tests, so everything
         // here — CaptureController, the session logic, the mock backend — was
         // untestable while it lived in the executable.
         .target(
             name: "TakeShotKit",
-            dependencies: ["CaptureCore", "CDeckLink", "CBraw"],
+            dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CNDI"],
             resources: [.process("Resources")],
             swiftSettings: swift5Mode
         ),
