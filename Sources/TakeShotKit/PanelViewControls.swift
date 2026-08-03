@@ -12,9 +12,10 @@ enum PanelChrome {
     /// further from the right edge than the title is from the left was inside
     /// the picker — a segmented control pinned to a 70pt frame it does not fill
     /// is centered in it, so ~14pt of its own box was empty. It hugs its icons
-    /// now (see `ViewModePicker`), and the two inked margins come out equal.
-    /// `ViewPanelTests.theSectionHeaderInsetsAreSymmetric` rasterizes the
-    /// header and fails if they drift apart by more than half a point.
+    /// now (see `ViewModePicker`), and the two margins come out equal.
+    /// `PanelHeaderMarginTests.theSectionHeaderInsetsAreSymmetric` measures
+    /// both off a laid-out header and fails if they drift apart by more than
+    /// half a point.
     static let contentMargin: CGFloat = 10
 }
 

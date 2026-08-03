@@ -28,6 +28,25 @@ import Testing
 //                  says whether a popover of fixed width clips its own rows.
 //   laidOutSize  — the frame an exact-size host ends up with; for "this overlay
 //                  must not stretch the player".
+//
+// SIZES ARE PORTABLE; INK IS NOT. Everything above answers with AppKit's own
+// text and control measurement and says the same thing on any machine. The
+// rasterizing calls below — brightColumns, drawnBounds, horizontalDetail,
+// meanBrightness — answer what THIS host actually drew, and two things about
+// that differ from machine to machine. A suite went red on both at once when
+// CI moved to a runner two OS releases behind the development Mac:
+//
+//   * the backing scale. 2x on a Retina Mac, 1x on a runner with no display.
+//     Absolute pixel counts are not comparable across it, and neither is a
+//     RATIO between two renders whose scale factors differ — the interpolator
+//     does a different job at each. `backingScale` is how a test that has to
+//     compare two renders sizes its boxes in device pixels instead of points.
+//   * whether an AppKit CONTROL draws to the edges of its bounds. It does not
+//     on every release — see `controlInkFillsItsBounds`. An ink margin read off
+//     a segmented picker is a fact about that release, not about the layout.
+//
+// Ink that SwiftUI draws ITSELF — a filled Color, a Path, a scope trace — is
+// subject to neither and needs no gate.
 
 /// Height proposed when only the width is under test. Not `.infinity`: SwiftUI
 /// hands that straight through to `maxHeight: .infinity` children and the
@@ -99,6 +118,41 @@ enum ViewRender {
         defer { withExtendedLifetime(host) {} }
         return try await body()
     }
+
+    /// Device pixels per point this host rasterizes at: 2 on a Retina Mac, 1 on
+    /// a runner with no display attached.
+    ///
+    /// A test that compares two RENDERS has to size its boxes through this, or
+    /// the two are scaled differently on the two machines and the comparison
+    /// measures the interpolator rather than the drawing.
+    static func backingScale(
+        in size: CGSize = CGSize(width: 200, height: 100)) -> Double {
+        let host = NSHostingView(rootView: AnyView(Color.clear))
+        host.frame = CGRect(origin: .zero, size: size)
+        guard size.width > 0,
+              let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        else { return 1 }
+        return Double(rep.pixelsWide) / Double(size.width)
+    }
+
+    /// Whether an ink measurement of an AppKit CONTROL can be held against the
+    /// frame the layout gave it.
+    ///
+    /// A segmented control does not draw to the edges of its bounds before
+    /// macOS 26: AppKit insets the cell to leave room for a focus ring, and
+    /// only the SELECTED segment carries a background bright enough to read
+    /// back at all. "The picker's ink reaches its right edge" is therefore
+    /// false on macOS 15 and says nothing about whether the picker was pinned
+    /// to a frame wider than itself — which is the thing worth guarding.
+    ///
+    /// Assertions that compare control ink against a frame or a margin go
+    /// behind this, with the reason written at the call site; the layout facts
+    /// around them stay ungated. A runtime check and not `#available`: this is
+    /// about how a release DRAWS, not about an API that appeared in it.
+    static let controlInkFillsItsBounds = ProcessInfo.processInfo
+        .isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 26,
+                                                         minorVersion: 0,
+                                                         patchVersion: 0))
 
     /// Rasterize a view offscreen and report, in points, which columns it drew
     /// something bright in.

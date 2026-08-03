@@ -114,8 +114,10 @@ extension MetalPreviewLayer {
         stateLock.lock()
         let letterbox = storedLetterboxColor
         stateLock.unlock()
-        let composed = image.composited(over:
-            CIImage(color: letterbox).cropped(to: bounds))
+        // the bars are painted, not left to what shows through beside a fitted
+        // picture: see `CIImage.letterboxed(in:with:)` — an extent alone is not
+        // enough to keep the picture's edge column out of the bar beside it
+        let composed = image.letterboxed(in: bounds, with: letterbox)
         // color management off on both ends: code values pass through unchanged,
         // and the layer's `colorspace` alone tells the compositor what they mean
         let destination = CIRenderDestination(mtlTexture: drawable.texture,

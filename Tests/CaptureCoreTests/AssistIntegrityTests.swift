@@ -65,18 +65,34 @@ struct AssistIntegrityTests {
     /// compiles kernels — on a loaded machine that first frame legitimately
     /// misses its 40 ms budget. A suite that asserted on it would be red for a
     /// reason that has nothing to do with the code under test.
+    ///
+    /// And not a fixed dozen frames either. Twelve times 40 ms is a wall-clock
+    /// window, which is the one thing this suite's waits are not allowed to be:
+    /// the CI runner went red on it with NOTHING presented at all, because
+    /// compiling that graph there costs more than the half second the window
+    /// allowed. This polls for the outcome on the same I/O-sized budget as
+    /// `TestWait.untilWritten`, and still returns the moment a decorated frame
+    /// arrives.
     private func presentedDecorated(_ pipeline: CapturePipeline,
                                     _ source: CVPixelBuffer) async throws
         -> CVPixelBuffer {
         let collector = PreviewCollector()
         pipeline.setOnDisplayFrame { collector.record($0) }
         defer { pipeline.setOnDisplayFrame(nil) }
-        for index in 1...12 {
+        // read first, push second: a poll that pushed and then answered would
+        // leave a frame in flight behind it, and the caller that goes on to
+        // stall the display queue needs it empty
+        var decorated: CVPixelBuffer?
+        var index = 0
+        await TestWait.untilWritten {
+            if let last = collector.last, last !== source { decorated = last }
+            guard decorated == nil else { return true }
+            index += 1
             PreviewProbe.push(pipeline, source, frame: index)
-            try? await Task.sleep(for: .milliseconds(40))
-            if let last = collector.last, last !== source { return last }
+            return false
         }
-        return try #require(collector.last, "nothing was presented at all")
+        return try #require(decorated ?? collector.last,
+                            "nothing was presented at all")
     }
 
     // MARK: - it reaches the mirrors
@@ -108,10 +124,15 @@ struct AssistIntegrityTests {
         pipeline.setOnMultiviewFrame { collector.record($0) }
         defer { pipeline.setOnMultiviewFrame(nil) }
 
+        // polled, not a fixed dozen frames: see `presentedDecorated` for the
+        // runner that presented nothing inside that window
         let source = PreviewProbe.frame(Self.flat)
-        for index in 1...12 where collector.last == nil {
+        var index = 0
+        await TestWait.untilWritten {
+            guard collector.last == nil else { return true }
+            index += 1
             PreviewProbe.push(pipeline, source, frame: index)
-            try? await Task.sleep(for: .milliseconds(40))
+            return false
         }
 
         let shown = try #require(collector.last, "nothing reached the grid")
@@ -162,10 +183,14 @@ struct AssistIntegrityTests {
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.grabNextFrame { grabs.append($0) }
 
+        // polled, not a fixed dozen frames: see `presentedDecorated`
         let source = PreviewProbe.frame(Self.flat)
-        for index in 1...12 where !shown.contains(true) {
+        var index = 0
+        await TestWait.untilWritten {
+            guard !shown.contains(true) else { return true }
+            index += 1
             PreviewProbe.push(pipeline, source, frame: index)
-            try? await Task.sleep(for: .milliseconds(40))
+            return false
         }
         await TestWait.until { !grabs.isEmpty && !shown.isEmpty }
 

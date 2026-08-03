@@ -61,15 +61,28 @@ struct ViewScopeGeometryTests {
     /// this box before the map was widened and the horizontal blur dropped, the
     /// waveform kept 0.35 of the parade's detail; it keeps about 1.05 now.
     ///
-    /// The margin is wide because the number depends on the backing scale (2x
-    /// on a Mac, 1x on a headless runner). The failure it exists to catch —
-    /// halving the map's width, or putting the horizontal softening back —
-    /// costs a factor of two to three, not a few per cent.
+    /// The margin is wide because the failure it exists to catch — halving the
+    /// map's width, or putting the horizontal softening back — costs a factor
+    /// of two to three, not a few per cent.
+    ///
+    /// The box is sized in DEVICE pixels rather than points, and that is not a
+    /// detail. A ratio between two renders is only portable if the two are
+    /// scaled the same way on every machine, and these are not: at 472 points
+    /// the waveform draws the 1024-column map across 944 pixels on a 2x display
+    /// and across 472 on a 1x runner — nearly native in one case and a
+    /// two-to-one downscale in the other, and `.interpolation(.medium)` does a
+    /// different job at each. Measured that way the ratio was 1.05 on the
+    /// development Mac and 0.71 on CI: a measurement of the runner's backing
+    /// scale, wearing the costume of a measurement of the drawing. Asking for
+    /// exactly `waveWidth` device pixels puts BOTH machines on the same raster
+    /// — one map column per pixel for the waveform, three per pixel for each
+    /// parade channel, which is the geometry the whole item is about.
     @Test func theWaveformKeepsAsMuchHorizontalDetailAsTheParade() async throws {
         let data = try Self.detailedScopeData()
         try await ViewProbe.run { probe in
-            // the scopes window's two-up layout: 980 pt of window, two boxes
-            let box = CGSize(width: 472, height: 300)
+            let scale = ViewRender.backingScale()
+            let box = CGSize(width: Double(ScopeData.waveWidth) / scale,
+                             height: Double(ScopeData.waveHeight) / scale)
             @MainActor func detail(_ view: some View) -> Double {
                 ViewRender.horizontalDetail(probe.hosted(
                     view.environment(\.scopeGridBrightness, 0.0001)
@@ -79,7 +92,7 @@ struct ViewScopeGeometryTests {
             let parade = detail(ParadeView(data: data))
             #expect(parade > 0, "the parade drew nothing to compare against")
             #expect(waveform >= parade * 0.75,
-                    "the waveform kept \(waveform) against the parade's \(parade)")
+                    "at \(scale)x the waveform kept \(waveform), parade \(parade)")
         }
     }
 
