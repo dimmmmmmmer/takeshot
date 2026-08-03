@@ -34,7 +34,7 @@ struct TakeShotCommands: Commands {
             PlaybackCommands(controller: controller, hotkeys: hotkeys)
         }
         CommandGroup(replacing: .help) {
-            HelpCommands()
+            HelpCommands(controller: controller)
         }
     }
 }
@@ -327,6 +327,7 @@ private struct AssistCommands: View {
 // MARK: - Help
 
 private struct HelpCommands: View {
+    @ObservedObject var controller: CaptureController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -334,6 +335,15 @@ private struct HelpCommands: View {
             AppWindows.present(.help, opening: openWindow)
         }
         .keyboardShortcut("?", modifiers: .command)
+
+        Divider()
+
+        // Never disabled. Every other item in this menu bar is greyed when the
+        // thing it acts on is absent; this one exists FOR the case where
+        // everything is absent — no board, no signal, no record folder — and a
+        // grey "Collect Diagnostics" on the day it is needed would be the
+        // funniest bug in the app.
+        Button(L("menu_diagnostics")) { controller.collectDiagnostics() }
     }
 }
 

@@ -71,6 +71,9 @@ extension CapturePipeline {
         }
         if let writer {
             if let toWrite { writer.append(audioSampleBuffer: toWrite) }
+            // Only takes the health lock when the tally actually moved, so an
+            // accepted packet costs one comparison.
+            noteAudioDrops(from: writer)
         } else if preRollFrames > 0 {
             // not recording: keep the sound of the pre-roll window, so the
             // take that starts in a moment has audio under its first frames

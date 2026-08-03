@@ -1,0 +1,83 @@
+import Foundation
+
+/// What the recorder has been doing, readable from any thread at any time.
+///
+/// Every counter here already existed on the pipeline, and every one of them is
+/// confined to the capture queue. Reading them from the main actor would mean a
+/// `queue.sync` — which parks the main thread behind whatever per-frame work is
+/// in flight, and would park it forever if that work is exactly what has gone
+/// wrong. A diagnostic that can hang the app on the day it is needed is worse
+/// than no diagnostic, so the handful of values worth asking about are MIRRORED
+/// under a lock of their own instead.
+///
+/// The mirror is written only at the moments a counter actually moves: a drop,
+/// a gap-fill, a take opening or closing. A take that records cleanly never
+/// touches the lock at all, so the per-frame path pays nothing for this.
+public struct PipelineHealth: Sendable, Equatable, Codable {
+    /// A writer is open — a take is rolling.
+    public var isRecording = false
+    /// File name of the open take; nil — none.
+    public var takeFileName: String?
+    /// Video frames the writer refused, in the CURRENT take.
+    public var droppedVideoFramesInTake = 0
+    /// …and since launch. A take-local counter resets on every start, so a rig
+    /// that drops two frames on every single take looks healthy in isolation.
+    public var droppedVideoFramesTotal = 0
+    /// Audio packets the writer refused, current take / since launch.
+    public var droppedAudioPacketsInTake = 0
+    public var droppedAudioPacketsTotal = 0
+    /// Silence written to keep a take's audio continuous after the external
+    /// (USB) source stopped delivering, current take / since launch.
+    public var gapFilledAudioPacketsInTake = 0
+    public var gapFilledAudioPacketsTotal = 0
+    /// Frames refused at ingress because the in-flight window was full — the
+    /// pipeline being outrun rather than the encoder being behind.
+    public var ingressDrops = 0
+    /// Frames shown WITHOUT the chroma key because they were already past
+    /// their frame interval. Not a recording fault: the display stage drops
+    /// the effect rather than the frame.
+    public var chromaLateDrops = 0
+    /// Takes whose writer was closed since launch, and how many of those could
+    /// not be finalized (the `_FAILED.mov` ones).
+    public var takesClosed = 0
+    public var takesFailedToFinalize = 0
+
+    public init() {}
+}
+
+extension CapturePipeline {
+    /// The current mirror, plus the two counters that already live behind locks
+    /// of their own. Safe from any thread, and it cannot block on the capture
+    /// queue — which is the whole reason this exists.
+    public var health: PipelineHealth {
+        var snapshot = healthLock.withLock { storedHealth }
+        inFlightLock.lock()
+        snapshot.ingressDrops = ingressDrops
+        inFlightLock.unlock()
+        chromaLock.lock()
+        snapshot.chromaLateDrops = chromaLateDropCount
+        chromaLock.unlock()
+        return snapshot
+    }
+
+    /// Update the mirror. Called from the capture queue, only when something
+    /// has actually changed.
+    func noteHealth(_ change: (inout PipelineHealth) -> Void) {
+        healthLock.withLock { change(&storedHealth) }
+    }
+
+    /// Mirror the writer's audio-drop tally, which lives on the writer and is
+    /// only ever bumped from the capture queue. The delta is tracked here so
+    /// the running session total survives the take that produced it, and so a
+    /// packet that was accepted costs no lock.
+    func noteAudioDrops(from writer: TakeWriter) {
+        let dropped = writer.droppedAudioPackets
+        guard dropped != mirroredAudioDrops else { return }
+        let delta = dropped - mirroredAudioDrops
+        mirroredAudioDrops = dropped
+        noteHealth {
+            $0.droppedAudioPacketsInTake = dropped
+            $0.droppedAudioPacketsTotal += delta
+        }
+    }
+}

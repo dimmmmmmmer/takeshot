@@ -437,6 +437,10 @@
 "menu_vanc" = "VANC monitor";
 "menu_help" = "TakeShot Help";
 "help_unavailable" = "The help page is missing from this build.";
+/* Collect diagnostics: a folder on the Desktop describing the app's state */
+"menu_diagnostics" = "Collect diagnostics";
+"diagnostics_saved" = "Diagnostics saved: %@";
+"diagnostics_failed" = "Diagnostics could not be written: %@";
 /* DIT offload: card to multiple SSDs, ASC MHL + summary report */
 "offload_title" = "Offload card";
 "offload_source_label" = "Card or folder";

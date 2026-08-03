@@ -19,6 +19,7 @@ struct ModelAppCommandsTests {
         "menu_skip_forward", "menu_in_point", "menu_out_point", "menu_rating",
         "menu_scopes_overlay", "menu_scopes_window", "menu_lut", "menu_assists",
         "menu_fullscreen_player", "menu_vanc", "menu_help",
+        "menu_diagnostics",
         // reused from elsewhere in the UI, because the menu item and the button
         // are the same action and should read the same
         "record", "stop", "grab_frame", "open_folder", "open_settings",

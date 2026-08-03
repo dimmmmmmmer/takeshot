@@ -30,6 +30,14 @@ extension CapturePipeline {
             takeNumber = config.takeNumber
             droppedFrames = 0
             gapFilledAudioPackets = 0
+            mirroredAudioDrops = 0
+            noteHealth {
+                $0.isRecording = true
+                $0.takeFileName = url.lastPathComponent
+                $0.droppedVideoFramesInTake = 0
+                $0.droppedAudioPacketsInTake = 0
+                $0.gapFilledAudioPacketsInTake = 0
+            }
             lastExternalAudioEnd = nil
             warnIfTakeHasNoAudioTrack(url: url)
             drainPreRoll(into: writer, startIndex: startIndex)
@@ -97,6 +105,15 @@ extension CapturePipeline {
     func finishTake() {
         guard let writer else { return }
         self.writer = nil
+        // Last chance to read the writer's audio tally on the queue that owns
+        // it: no more packets can arrive now, and the finalize below runs on a
+        // task of its own.
+        noteAudioDrops(from: writer)
+        noteHealth {
+            $0.isRecording = false
+            $0.takeFileName = nil
+            $0.takesClosed += 1
+        }
         let take = describeTake(from: writer)
         DispatchQueue.main.async {
             self.onRecStateChanged?(false)
@@ -114,31 +131,13 @@ extension CapturePipeline {
             defer { self?.prunePendingFinish(finishID) }
             do {
                 _ = try await writer.finish()
-                let droppedAudio = writer.droppedAudioPackets
                 // the callbacks are read here, on the task, and only the
                 // resulting values cross to main — sending `self` itself into a
                 // main-actor closure is what Swift 6 rightly objects to
-                let report = self?.takeReport
-                DispatchQueue.main.async {
-                    report?.finished(take)
-                    if droppedAudio > 0 {
-                        report?.failed("Take \(take.displayName): "
-                            + "\(droppedAudio) audio packet(s) dropped")
-                    }
-                    // stated like the drop totals: the sticky alarm fired the
-                    // moment the source was lost, this is the take's tally
-                    if gapFilledAudio > 0 {
-                        report?.failed("Take \(take.displayName): "
-                            + "\(gapFilledAudio) audio packet(s) gap-filled "
-                            + "with silence")
-                    }
-                    // the live alarm only fires on sustained loss, so the take's
-                    // real total is stated here — quietly, but never hidden
-                    if droppedVideo > 0 {
-                        report?.failed("Take \(take.displayName): "
-                            + "\(droppedVideo) video frame(s) dropped")
-                    }
-                }
+                Self.publish(take, report: self?.takeReport,
+                             droppedAudio: writer.droppedAudioPackets,
+                             gapFilledAudio: gapFilledAudio,
+                             droppedVideo: droppedVideo)
             } catch {
                 // The half-written file keeps the com.takeshot.origin tag from
                 // its initial moov, so the folder scan re-adopts it within
@@ -147,6 +146,7 @@ extension CapturePipeline {
                 // usually still recoverable — but it must not pass for good
                 // footage in the panel or in the log handed to post.
                 let marked = Self.markFailed(take.url)
+                self?.noteHealth { $0.takesFailedToFinalize += 1 }
                 let report = self?.takeReport
                 DispatchQueue.main.async {
                     report?.failed("TAKE LOST — failed to finalize "
@@ -161,6 +161,34 @@ extension CapturePipeline {
         if let pending = pendingAudioSourceSwitch {
             applyAudioSourceSwitch(pending.kind,
                                    expectedChannels: pending.expectedChannels)
+        }
+    }
+
+    /// A finalized take and its tallies, handed to the main queue.
+    ///
+    /// The counts are reported even when the live alarm already fired for them:
+    /// the alarm is a warning while the take is running (and the video one only
+    /// fires on SUSTAINED loss), and this is the take's total — quietly stated,
+    /// but never hidden. Static, and given only values, so nothing sends the
+    /// pipeline itself into a main-actor closure.
+    private static func publish(_ take: Take, report: TakeReport?,
+                                droppedAudio: Int, gapFilledAudio: Int,
+                                droppedVideo: Int) {
+        DispatchQueue.main.async {
+            report?.finished(take)
+            if droppedAudio > 0 {
+                report?.failed("Take \(take.displayName): "
+                    + "\(droppedAudio) audio packet(s) dropped")
+            }
+            if gapFilledAudio > 0 {
+                report?.failed("Take \(take.displayName): "
+                    + "\(gapFilledAudio) audio packet(s) gap-filled "
+                    + "with silence")
+            }
+            if droppedVideo > 0 {
+                report?.failed("Take \(take.displayName): "
+                    + "\(droppedVideo) video frame(s) dropped")
+            }
         }
     }
 

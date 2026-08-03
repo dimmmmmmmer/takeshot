@@ -241,6 +241,17 @@ public final class CapturePipeline: @unchecked Sendable {
     var inFlightFrames = 0
     var ingressDrops = 0
 
+    // MARK: - health mirror (see +Health)
+
+    /// Guards `storedHealth`, and nothing else. Deliberately not the capture
+    /// queue: the point of the mirror is that "how is the recorder doing" can
+    /// be answered without waiting on per-frame work.
+    let healthLock = NSLock()
+    var storedHealth = PipelineHealth()
+    /// The writer's audio-drop tally as last mirrored (queue-confined), so the
+    /// session total can be advanced by the delta rather than overwritten.
+    var mirroredAudioDrops = 0
+
     var trimFormatCache: CMAudioFormatDescription?
     var lastPublishedLevels: [Float] = []
     /// Input audio channel count (cached even during preview — so the writer
@@ -342,7 +353,11 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Suffix that marks a take whose finalize failed. Renaming is best-effort:
     /// if it does not work the original path is returned and the operator still
     /// gets the alarm.
-    static let failedTakeSuffix = "_FAILED"
+    ///
+    /// Public because the app layer has to RECOGNISE the marker as well as
+    /// write it — the diagnostic bundle flags such a take explicitly instead of
+    /// leaving the reader to notice a substring in a file name.
+    public static let failedTakeSuffix = "_FAILED"
 
     let latestPreviewLock = NSLock()
     var latestPreview: CVPixelBuffer?

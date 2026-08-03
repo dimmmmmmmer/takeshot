@@ -21,6 +21,20 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
+# Which commit this build IS. The running app has no git around it, so the
+# answer has to be baked in here — "Collect diagnostics" reads it back out of
+# Info.plist (CaptureController.gitSHAInfoKey) and a bundle that cannot say
+# which build produced it is most of the way to useless. Left absent rather
+# than faked outside a checkout; "unavailable" is a truthful report.
+GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || true)"
+if [ -n "$GIT_SHA" ]; then
+    if ! git diff --quiet HEAD 2>/dev/null; then
+        GIT_SHA="$GIT_SHA-dirty"
+    fi
+    /usr/libexec/PlistBuddy -c "Add :TakeShotGitSHA string $GIT_SHA" \
+        "$APP/Contents/Info.plist" >/dev/null
+fi
+
 # Ad-hoc signing is enough to launch locally, but its cdhash changes on every
 # build, so macOS treats each build as a new app and TCC grants do not stick.
 # Export CODESIGN_IDENTITY to a Developer ID ("Developer ID Application: Name

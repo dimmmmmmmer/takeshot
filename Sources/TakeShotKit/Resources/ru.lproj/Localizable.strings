@@ -442,6 +442,10 @@
 "menu_vanc" = "Монитор VANC";
 "menu_help" = "Справка TakeShot";
 "help_unavailable" = "В этой сборке нет файла справки.";
+/* Collect diagnostics: a folder on the Desktop describing the app's state */
+"menu_diagnostics" = "Собрать диагностику";
+"diagnostics_saved" = "Диагностика сохранена: %@";
+"diagnostics_failed" = "Не удалось записать диагностику: %@";
 /* DIT offload: card to multiple SSDs, ASC MHL + summary report */
 "offload_title" = "Офлоад карты";
 "offload_source_label" = "Карта или папка";
