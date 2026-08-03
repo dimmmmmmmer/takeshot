@@ -250,9 +250,17 @@ struct TenBitYUVRecordTests {
         let base = try #require(CVPixelBufferGetBaseAddress(split.display))
             .assumingMemoryBound(to: UInt8.self)
         let stride = CVPixelBufferGetBytesPerRow(split.display)
-        let live = (0..<Self.bands.count).map { band in
-            Int((base + stride * (Self.frameHeight / 2))[
-                Self.bandColumn(band) * 4 + 1]) // green
+        // Spelled out in steps rather than as one expression: the type checker
+        // gave up on the nested pointer arithmetic inside the closure on CI,
+        // where an older Swift on a slower runner hits its budget on what this
+        // machine solves without noticing. Same reading, mid-frame row, green.
+        let midRow: UnsafeMutablePointer<UInt8> =
+            base + stride * (Self.frameHeight / 2)
+        var live: [Int] = []
+        for band in 0..<Self.bands.count {
+            let column: Int = Self.bandColumn(band)
+            let green: UInt8 = midRow[column * 4 + 1]
+            live.append(Int(green))
         }
         CVPixelBufferUnlockBaseAddress(split.display, .readOnly)
         print("the same frame on the live monitor: \(live)")
