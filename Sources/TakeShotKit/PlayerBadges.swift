@@ -92,11 +92,19 @@ extension View {
 
 /// Record/playback switch over the player.
 ///
-/// The plate hugs the segmented control like every other plate in the family
-/// (owner item 10): the old fixed 190pt look reserved dead air either side of
-/// two short labels. The segment titles are localized and each language pays
-/// for its own — the switch sits in the chrome row's centered slot, so a
-/// locale-dependent width moves nothing else.
+/// The one control in the top row that wears NO plate (owner item 1). It does
+/// not need one: a segmented control draws its own opaque chrome, so unlike a
+/// bare text badge it is already legible over a blown highlight — the plate
+/// behind it was a second background under a control that has one, and it read
+/// as a slab. The other plates keep theirs and keep `PlayerChrome`'s shared
+/// opacity; nothing here touches them.
+///
+/// What it does keep is the family's HEIGHT, so the switch still lines up with
+/// the badges either side of it, and a drop shadow, which is what holds the
+/// control's edge against a white frame now that there is no dark plate to do
+/// it. The segment titles are localized and each language pays for its own —
+/// the switch sits in the row's centered slot, so a locale-dependent width
+/// moves nothing else.
 struct ViewerModeSwitch: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -109,7 +117,8 @@ struct ViewerModeSwitch: View {
         .labelsHidden()
         .controlSize(.small)
         .fixedSize()
-        .playerChromePlate()
+        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+        .frame(height: PlayerChrome.height)
     }
 }
 
@@ -131,7 +140,12 @@ struct PlayerTopBadgesModifier: ViewModifier {
             // punch-in pan/zoom lives on this mount because it is the ONE the
             // main player and both fullscreen windows share (see AssistZoom)
             .punchInZoom()
-            .overlay { AssistFramelines() }
+            // Framelines and safe areas are NOT here any more: an overlay is
+            // drawn on the surface it is mounted on, so the guides reached this
+            // window and neither the director's monitor nor the hardware output
+            // (owner item 7). They are drawn into the frame itself now — see
+            // `AssistGuides`. The legend stays an overlay on purpose: it is a
+            // key to the picture, not a mark ON it.
             .overlay { AssistLegendOverlay(fullscreen: autoHide) }
             .overlay(alignment: .bottomLeading) { scopesOverlay }
             .overlay(alignment: .top) { topChrome }

@@ -3,10 +3,15 @@ import Foundation
 
 /// The assist filter chains: the zebra mask cache and the stack that puts the
 /// exposure tools over a frame. The palettes the stack remaps through live in
-/// `+Palettes`.
+/// `AssistPalettes`, the framelines drawn over the result in `AssistGuides`.
 ///
-/// Split out of MetalPreviewLayer, whose body had grown past 380 lines.
-extension MetalPreviewLayer {
+/// A namespace of its own rather than an extension on `MetalPreviewLayer`,
+/// where this used to live. That placement WAS owner item 7: a chain owned by
+/// one preview layer runs once per SURFACE, so the aids reached the windows
+/// that mount a layer and nothing else — not the hardware playout, not the
+/// phone multiview. It runs once per FRAME now, in the display stage
+/// (`AssistStage`), and every mirror of that frame carries it.
+enum AssistFilters {
     /// Grayscale in BT.709 weights — the base for the luma-driven tools.
     static func grayscale(_ image: CIImage) -> CIImage {
         image.applyingFilter("CIColorMatrix", parameters: [
@@ -51,24 +56,24 @@ extension MetalPreviewLayer {
     /// (masks always come from the SOURCE image, so exposure reads true even
     /// over a false-color remap). Result is cropped to the source extent —
     /// filter spill outside the frame painted the letterbox red.
-    func applyAssist(_ source: CIImage, assist: ViewAssist) -> CIImage {
+    static func applied(_ source: CIImage, assist: ViewAssist) -> CIImage {
         var out = source
         switch assist.colorTool {
         case .off:
             break
         case .falseColor:
-            out = Self.remapped(source, through: Self.falseColorCube)
+            out = remapped(source, through: falseColorCube)
         case .elZone:
-            out = Self.remapped(source, through: Self.elZoneCube)
+            out = remapped(source, through: elZoneCube)
         }
         if assist.zebraOn {
-            out = Self.zebraStriped(out, source: source,
-                                    threshold: assist.zebraThreshold)
+            out = zebraStriped(out, source: source,
+                               threshold: assist.zebraThreshold)
         }
         if assist.peakingOn {
-            out = Self.peakingEdges(over: out, source: source,
-                                    intensity: assist.peakingIntensity,
-                                    color: assist.peakingColor)
+            out = peakingEdges(over: out, source: source,
+                               intensity: assist.peakingIntensity,
+                               color: assist.peakingColor)
         }
         return out.cropped(to: source.extent)
     }

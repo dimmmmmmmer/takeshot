@@ -16,13 +16,15 @@ import Testing
 /// because the three groups were three independent corner overlays.
 @MainActor
 struct ViewPlayerBadgeTests {
-    /// The record/playback switch hugs its labels like every other plate
-    /// (owner item 10) — the old fixed 190pt look reserved dead air either
-    /// side of them. Hugging is asserted literally: the plate is the bare
-    /// segmented control plus the family's own padding, nothing reserved. The
-    /// two languages pay for their own labels, and both stay in the centered
-    /// slot's budget.
-    @Test func modeSwitchHugsItsLabelsInBothLanguages() async throws {
+    /// The record/playback switch wears NO plate (owner item 1).
+    ///
+    /// It used to sit on the same dark slab as the badges either side of it,
+    /// which under a segmented control — a control that draws its own opaque
+    /// chrome — was a second background behind a background. Asserted as width:
+    /// the switch is the bare picker and nothing more, so it costs exactly the
+    /// control and not the family's 8pt-a-side padding. What it DOES keep is
+    /// the family's height, or it stops lining up with the badges beside it.
+    @Test func theModeSwitchSitsOnTheChromeWithNoPlate() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes { ViewerModeSwitch() }
             let bare = probe.fittingSizes {
@@ -35,13 +37,21 @@ struct ViewPlayerBadgeTests {
                 .controlSize(.small)
                 .fixedSize()
             }
-            for (language, plate, control) in [("en", ideal.en, bare.en),
-                                               ("ru", ideal.ru, bare.ru)] {
-                #expect(plate.width
-                        == control.width + 2 * PlayerChrome.horizontalPadding,
-                        "the \(language) plate reserves \(plate.width)pt for a \(control.width)pt control")
-                #expect(plate.width <= ViewBudget.playerCenterWidth)
+            // …and what a plated control of the same content would have cost,
+            // so "the plate is gone" fails if the plate comes back
+            let plated = probe.fittingSizes {
+                Text(verbatim: "x").playerChromePlate()
             }
+            for (language, switchSize, control) in [("en", ideal.en, bare.en),
+                                                    ("ru", ideal.ru, bare.ru)] {
+                #expect(switchSize.width == control.width,
+                        "the \(language) switch is \(switchSize.width)pt for a \(control.width)pt control")
+                #expect(switchSize.height == PlayerChrome.height,
+                        "the \(language) switch is \(switchSize.height)pt tall, the row is \(PlayerChrome.height)")
+                #expect(switchSize.width <= ViewBudget.playerCenterWidth)
+            }
+            #expect(plated.en.width > 2 * PlayerChrome.horizontalPadding,
+                    "the plate measurement itself is broken")
         }
     }
 

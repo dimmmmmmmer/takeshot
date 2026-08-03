@@ -110,9 +110,16 @@ public struct NamingEngine: Sendable {
         return components.joined(separator: "/")
     }
 
+    /// What a file name cannot contain. Public because the input filter reads
+    /// it too (`NameField`): the field that refuses a keystroke and the pass
+    /// that cleans a finished name have to mean the same set, or the operator
+    /// gets a character accepted in one place and rewritten in the other.
+    public static let forbiddenFilenameCharacters =
+        CharacterSet(charactersIn: "/\\:?*<>|\"\0")
+
     /// Strip characters that are invalid/awkward in filenames.
     public static func sanitize(_ value: String) -> String {
-        let forbidden = CharacterSet(charactersIn: "/\\:?*<>|\"\0")
+        let forbidden = forbiddenFilenameCharacters
         let cleaned = value.unicodeScalars
             .map { forbidden.contains($0) ? " " : Character($0) }
             .reduce(into: "") { $0.append($1) }

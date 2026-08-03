@@ -301,7 +301,7 @@ import Testing
                 L("offload_progress", 41, 128)
             }
             probe.controller.offloadStatus = status
-            // What the strip actually gets: the panel minus its own inset.
+            // What the readout actually gets: the panel minus its own inset.
             let budget = ViewBudget.panelMinWidth - 24
 
             let minimum = probe.minimumWidths {
@@ -309,14 +309,14 @@ import Testing
                                    verify: probe.controller.verify)
             }
             let panel = probe.minimumWidths(proposedHeight: 600) {
-                TakesPanelUtilityStrip()
+                PanelRunStatus()
             }
 
             #expect(minimum.ru <= budget,
                     "the status strip needs \(minimum.ru)pt of \(budget)")
             #expect(minimum.en <= budget)
             #expect(panel.ru <= ViewBudget.panelMinWidth,
-                    "a running job pushed the utility strip to \(panel.ru)pt")
+                    "a running job pushed the panel readout to \(panel.ru)pt")
         }
     }
 
@@ -395,7 +395,7 @@ struct ViewCardOfferTests {
                                       name: "CARD_A001", isRemovable: true),
                 files: 128, bytes: 61_000_000_000,
                 evidence: .cameraStructure("DCIM"))
-            // What the banner actually gets: the panel minus the strip's inset.
+            // What the banner actually gets: the panel minus the readout's inset.
             let budget = ViewBudget.panelMinWidth - 24
 
             let minimum = probe.minimumWidths { CardOfferBanner(card: card) }
@@ -405,10 +405,10 @@ struct ViewCardOfferTests {
 
             probe.controller.cardOffer = card
             let panel = probe.minimumWidths(proposedHeight: 600) {
-                TakesPanelUtilityStrip()
+                PanelRunStatus()
             }
             #expect(panel.ru <= ViewBudget.panelMinWidth,
-                    "a card prompt pushed the utility strip to \(panel.ru)pt")
+                    "a card prompt pushed the panel readout to \(panel.ru)pt")
         }
     }
 

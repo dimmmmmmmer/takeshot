@@ -61,6 +61,13 @@ extension CaptureController {
         return text.isEmpty ? "—" : text
     }
 
+    /// What the footer's TAKE field shows. An unlogged take number is an EMPTY
+    /// field, not a 0: blank is how the operator sees that numbering is still
+    /// following the clip counter.
+    var slateTakeFieldText: String {
+        slateTakeNumber > 0 ? String(slateTakeNumber) : ""
+    }
+
     /// Apply the TAKE field: digits become an explicit override, an emptied
     /// field hands numbering back to the clip counter.
     func commitSlateTakeText(_ text: String) {

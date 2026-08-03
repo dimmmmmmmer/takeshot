@@ -146,9 +146,20 @@ struct TileMetricBadge: View {
         }
     }
 
+    /// One line, always (owner item 43).
+    ///
+    /// A duration is four characters and a pixel size is nine ("6000×4000"), and
+    /// on the caption line of the smallest tile the long one wrapped into a
+    /// column — which does not just look wrong, it makes that tile taller than
+    /// its neighbours and breaks the grid's row. `lineLimit(1)` alone would
+    /// truncate it into "6000×…", so the badge keeps its full width
+    /// (`fixedSize`) and the FILE NAME beside it gives way instead: the name is
+    /// already middle-truncated and reads fine short, the size does not.
     private var label: some View {
         Text(text)
             .font(.caption2.monospacedDigit())
+            .lineLimit(1)
+            .fixedSize()
     }
 }
 

@@ -29,6 +29,18 @@ extension CaptureController {
         applyRemoteChange(from: oldValue)
         applyCardWatchChange(from: oldValue)
         applyMenuBarChange(from: oldValue)
+        applyGuideChange()
+    }
+
+    /// The framelines and the safe areas are stored as settings but DRAWN with
+    /// the operator aids (see `AssistGuides`), so a change to either has to
+    /// reach `assist` — that is the value every surface and the playout are
+    /// fed from. Guarded on a real difference: this runs on every settings
+    /// write, volume slider ticks included, and `assist` is @Published.
+    private func applyGuideChange() {
+        let guides = AssistGuides(settings: settings)
+        guard guides != assist.guides else { return }
+        setAssist { $0.guides = guides }
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.

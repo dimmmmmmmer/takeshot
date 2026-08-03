@@ -52,18 +52,23 @@ extension PlaybackFrameTap {
         }
         let output = composed(from: pixelBuffer) ?? pixelBuffer
         if analyzed {
+            // Before the aids, deliberately: the scopes measure the clip, not
+            // the false colour laid over it. Same rule the live path follows —
+            // the deliverable branch never sees an assist.
             analyzeScopes(of: output)
         }
-        sinks.present(output)
+        let shown = assistStage.rendered(output) ?? output
+        sinks.present(shown)
         // A/B side by side: the A pane is its own surface, so the compare source
-        // goes out uncomposited instead of into the wipe.
+        // goes out uncomposited instead of into the wipe — but it is a picture
+        // the operator is metering too, so it carries the aids as well.
         if !sidePanes.isEmpty, let side = lastCompareBuffer {
-            compareSinks.present(side)
+            compareSinks.present(assistStage.rendered(side) ?? side)
         }
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
-        handler?(output)
+        handler?(shown)
     }
 
     /// LUT + compare composite in raw code values (color management off — the

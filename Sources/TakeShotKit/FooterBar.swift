@@ -5,11 +5,11 @@ import SwiftUI
 /// on the left, REC dead center, the naming fields on the right.
 ///
 /// Settings, the VANC monitor and the offload copy used to sit here as well.
-/// They are setup, not shooting, and they moved to the takes panel's utility
-/// strip (`TakesPanelUtilityStrip`): at the app's minimum window width the
-/// footer has around 290pt on each side of the record button, and the codec and
-/// the destination folder — the two things a whole day can be shot wrong on —
-/// need that space more than a gear icon does.
+/// They are setup, not shooting, and they live on the window's top chrome now
+/// (`WindowUtilityButtons`): at the app's minimum window width the footer has
+/// around 290pt on each side of the record button, and the codec and the
+/// destination folder — the two things a whole day can be shot wrong on — need
+/// that space more than a gear icon does.
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
 

@@ -147,6 +147,9 @@ extension CaptureController {
         assist.desqueeze = stored.desqueezeFactor ?? 1
         assist.peakingColor = stored.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
+        // the framelines are settings rather than assist state, but they are
+        // DRAWN with the aids now, so the drawn value has to be seeded too
+        assist.guides = AssistGuides(settings: stored)
         // the key comes back dialled in and switched OFF (see restoreChroma)
         restoreChroma(from: stored)
     }

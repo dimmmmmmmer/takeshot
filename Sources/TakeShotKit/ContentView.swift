@@ -18,6 +18,16 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
+        // Settings, the VANC monitor and the offload, in the band the window
+        // keeps clear of the traffic lights (owner item 2). An overlay on the
+        // whole window and not a row in either column: the takes panel sits on
+        // the left or the right depending on a setting, and these belong in the
+        // top-right corner either way.
+        .overlay(alignment: .topTrailing) {
+            WindowUtilityButtons()
+                .frame(height: controller.windowTopInset)
+                .padding(.trailing, 14)
+        }
         .id(controller.settings.appLanguage)
         // The DIT offload runs as a sheet over the main window: it needs a
         // destination LIST, live per-destination progress and a verdict card
@@ -58,6 +68,8 @@ struct ContentView: View {
     private var mainColumn: some View {
         VStack(spacing: 0) {
             // strip under the window buttons — the actual height of their area
+            // (the utility buttons that sit in it are an overlay on the whole
+            // window, not a row of this column — see `body`)
             Color.clear.frame(height: controller.windowTopInset)
             PlayerArea()
             BottomBarView()
@@ -80,10 +92,6 @@ struct ContentView: View {
                         in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.07)))
-            // BELOW the panel's chrome, not inside it: the settings/VANC/
-            // offload strip is its own plate, centered on the panel's width
-            // (owner item 2).
-            .takesPanelUtilityStrip()
             // top edge flush with the player
             .padding(.top, controller.windowTopInset)
             .padding(.bottom, 10)

@@ -224,8 +224,7 @@ struct AssistGeometryTests {
         var assist = ViewAssist()
         assist.peakingOn = true
         assist.peakingIntensity = intensity
-        let layer = MetalPreviewLayer()
-        let output = layer.applyAssist(source, assist: assist)
+        let output = AssistFilters.applied(source, assist: assist)
         #expect(output.extent.equalTo(source.extent),
                 "the assist pass grew past the video rect: \(output.extent)")
 
@@ -306,12 +305,11 @@ struct AssistGeometryTests {
         let split = dark.composited(over: light).cropped(to: extent)
         let source = rendered(split)
 
-        let layer = MetalPreviewLayer()
         for color in ViewAssist.PeakingColor.allCases {
             var assist = ViewAssist()
             assist.peakingOn = true
             assist.peakingColor = color
-            let output = rendered(layer.applyAssist(split, assist: assist))
+            let output = rendered(AssistFilters.applied(split, assist: assist))
 
             let tint = [color.components.red, color.components.green,
                         color.components.blue]

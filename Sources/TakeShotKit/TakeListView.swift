@@ -50,21 +50,28 @@ struct TakeListView: View {
                 }
                 Button(L("cancel"), role: .cancel) {}
             }
-            // The settings/VANC/offload strip (owner item 48) is mounted by
-            // `ContentView.sidePanel`, BELOW this panel's chrome — it is its
-            // own plate, not a row of this list (owner item 2).
     }
 
+    /// The sections, with whatever is running underneath them.
+    ///
+    /// The settings/VANC/offload BUTTONS are not here and not under here any
+    /// more — they are on the window's top chrome (owner item 2, see
+    /// `WindowUtilityButtons`). What stayed is the live-run readout, because a
+    /// job whose status is only visible inside its own sheet cannot be checked
+    /// without reopening the sheet.
     @ViewBuilder private var sections: some View {
-        if controller.otherFiles.isEmpty {
-            TakesSection()
-        } else {
-            VSplitView {
+        VStack(spacing: 0) {
+            if controller.otherFiles.isEmpty {
                 TakesSection()
-                    .frame(minHeight: 160)
-                OtherContentSection()
-                    .frame(minHeight: 100, idealHeight: 180)
+            } else {
+                VSplitView {
+                    TakesSection()
+                        .frame(minHeight: 160)
+                    OtherContentSection()
+                        .frame(minHeight: 100, idealHeight: 180)
+                }
             }
+            PanelRunStatus()
         }
     }
 }
@@ -82,7 +89,7 @@ private struct TakesSection: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
-            HStack(spacing: 10) {
+            PanelSectionHeader(viewMode: $viewMode, tileSize: $tileSize) {
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
@@ -129,7 +136,7 @@ private struct TakesSection: View {
                         // has nothing to do with takes, so a menu disabled by
                         // "no takes yet" made card offload unreachable exactly
                         // when it is most needed — before anything was shot.
-                        // Its home is the utility strip below Other content.
+                        // Its home is the window's top chrome.
                     } label: {
                         Color.clear
                     }
@@ -141,15 +148,9 @@ private struct TakesSection: View {
                 .help(L("export_menu_help"))
                 // The offload status line used to sit here, squeezed between
                 // the export button and the view picker. It is a live job with
-                // a bar, a file name and a Stop button now, and it lives in the
-                // utility strip at the bottom of this panel — beside the button
-                // that started it (see OffloadStatusStrip).
-                Spacer()
-                PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
+                // a bar, a file name and a Stop button now, and it reads out at
+                // the bottom of this panel (see `PanelRunStatus`).
             }
-            // the header ends on the content margin so the view picker sits
-            // against the panel's right edge, not inside it (owner item 22)
-            .padding(.horizontal, PanelChrome.contentMargin)
             .padding(.top, 4)
             .padding(.bottom, 8)
             Divider()
@@ -186,6 +187,13 @@ func gridColumns(size: Double) -> [GridItem] {
 }
 
 /// List/thumbnail toggle (shared style for both sections).
+///
+/// Hugging its two icons rather than pinned to 70pt, which is what it used to
+/// be. The 70 belonged to the SLIDER beside it and was copied onto the picker;
+/// a segmented control narrower than its frame is CENTERED in it, so the
+/// picker's drawn right edge sat ~14pt inside the frame it was aligned by — the
+/// lopsidedness owner item 44 is about, which no amount of margin on the header
+/// could fix because the gap was inside the control's own box.
 struct ViewModePicker: View {
     @Binding var mode: String
 
@@ -197,9 +205,9 @@ struct ViewModePicker: View {
                 .help(L("view_grid"))
         }
         .pickerStyle(.segmented)
-        .frame(width: 70)
         .labelsHidden()
         .controlSize(.small)
+        .fixedSize()
     }
 }
 

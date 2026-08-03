@@ -1,12 +1,16 @@
 import Foundation
 
-/// Operator display aids applied inside the preview render (identically on
-/// every surface: live, playback, RAW, fullscreen, external).
+/// Operator display aids, applied identically on every surface: the viewer,
+/// the fullscreen windows, the director's monitor, the hardware playout and
+/// the phone multiview.
 ///
-/// One member is the exception and says so at its own declaration: `chroma`
-/// travels with the aids because it is dialled in the same popover and has to
-/// ride the same draft/debounce path a slider needs, but it is APPLIED a stage
-/// earlier, in the pipeline's display path. The renderer ignores it.
+/// The value is one bundle because it travels as one: the whole set is dialled
+/// in the same popover and has to ride the same draft/debounce path a slider
+/// needs. Where each member is APPLIED differs, and each says so at its own
+/// declaration — the colour tools and the guides in the shared display stage
+/// (`AssistStage`), the chroma key one stage before it, the desqueeze and the
+/// punch-in in the per-surface render, because those are geometry and a
+/// surface is the only thing that knows its own viewport.
 public struct ViewAssist: Equatable, Sendable {
     /// Color remap tools are mutually exclusive; zebra/peaking stack on top.
     public enum ColorTool: String, CaseIterable, Sendable {
@@ -57,6 +61,9 @@ public struct ViewAssist: Equatable, Sendable {
     public var peakingIntensity: Double = 12
     /// Color of the peaking edges.
     public var peakingColor: PeakingColor = .red
+    /// Framelines and safe areas. Drawn in the display stage beside the colour
+    /// tools, at the signal's own resolution (see `AssistGuides`).
+    public var guides = AssistGuides()
     /// Anamorphic desqueeze factor (1 = spherical).
     public var desqueeze: Double = 1
     /// Punch-in magnification (1 = off).
@@ -65,12 +72,16 @@ public struct ViewAssist: Equatable, Sendable {
     public var panX: Double = 0
     public var panY: Double = 0
     /// The chroma-key preview. Carried here, applied elsewhere: the pipeline
-    /// splits it out in `setViewAssist` and runs it in the display stage, where
-    /// it can reach the hardware monitor the way the viewing LUT does. It is
-    /// deliberately absent from `anyToolActive` below — that flag asks whether
-    /// the RENDERER has work to do, and for the key it never does.
+    /// splits it out in `setViewAssist` and runs it one stage BEFORE the aids,
+    /// so that a false colour meters the picture the key produced rather than
+    /// the green screen behind it. Deliberately absent from `anyToolActive`
+    /// below — that flag asks whether the assist stage has a filter pass to
+    /// run, and for the key it never does.
     public var chroma = ChromaKey()
 
+    /// Whether the assist stage has a FILTER pass to run. The guides are asked
+    /// for separately (`guides.isEmpty`): they are drawn, not computed, and a
+    /// frameline with no exposure tool must still cost a pass.
     public var anyToolActive: Bool {
         colorTool != .off || zebraOn || peakingOn
     }
@@ -84,7 +95,8 @@ public struct ViewAssist: Equatable, Sendable {
     /// project. Each aid is named here instead, and a stored value that nothing
     /// is showing counts for nothing.
     public var isShowingAid: Bool {
-        anyToolActive || desqueeze != 1 || punchIn > 1 || chroma.isOn
+        anyToolActive || !guides.isEmpty || desqueeze != 1 || punchIn > 1
+            || chroma.isOn
     }
 
     public init() {}
