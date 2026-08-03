@@ -26,9 +26,11 @@ import Testing
     /// runs ONCE, on the gamma-encoded codes. Running it twice crushes the
     /// shadows; not running it is the washed-out preview the setting exists for.
     ///
-    /// The window is the LEGAL swing 1–254, not the nominal 16–235: there is
-    /// one Limited and it is the one that keeps a camera's excursions, so
-    /// nominal black and white land just inside the ends rather than on them.
+    /// The window is the NOMINAL pair 16–235: black has to be black on the
+    /// monitor, and on this 8-bit path the display buffer is also what the
+    /// writer gets, so there is nowhere to keep the excursions anyway. The
+    /// 10-bit path keeps them — in the file, which the operator is not
+    /// judging exposure on.
     @Test func aLimitedRangeSourceIsExpandedOnTheDisplayFrame() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
@@ -36,27 +38,27 @@ import Testing
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setVideoLevels("limited")
 
-        // the ends of the legal range land on the ends of the full one, in
-        // place, on the frame that reaches the screen
-        let black = PreviewProbe.frame(1)
+        // nominal black and white land on the ends of the scale, in place, on
+        // the frame that reaches the screen
+        let black = PreviewProbe.frame(16)
         PreviewProbe.push(pipeline, black, frame: 1)
         await TestWait.until { collector.last === black }
         #expect(PreviewProbe.level(of: try #require(collector.last)) == 0,
-                "1 did not expand to 0")
+                "16 did not expand to 0")
 
-        let white = PreviewProbe.frame(254)
+        let white = PreviewProbe.frame(235)
         PreviewProbe.push(pipeline, white, frame: 2)
         await TestWait.until { collector.last === white }
         #expect(PreviewProbe.level(of: try #require(collector.last)) == 255,
-                "254 did not expand to 255")
+                "235 did not expand to 255")
 
-        // …and the sub-black a camera rides below nominal black is still its
-        // own value rather than clamped onto 0
+        // …and a sub-black is black, not a dark grey the operator has to
+        // second-guess
         let subBlack = PreviewProbe.frame(8)
         PreviewProbe.push(pipeline, subBlack, frame: 3)
         await TestWait.until { collector.last === subBlack }
         let below = PreviewProbe.level(of: try #require(collector.last))
-        #expect(below > 0 && below < 16, "the sub-black was clamped: \(below)")
+        #expect(below == 0, "the sub-black was not clipped onto black: \(below)")
 
         // …and a source that already carries full range is passed through
         pipeline.setVideoLevels("full")
@@ -75,9 +77,9 @@ import Testing
         pipeline.setOnDisplayFrame { collector.record($0) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
-        // 254 rather than a mid-grey: unexpanded it stays 254, so the assertion
-        // fails when auto quietly stops expanding
-        let white = PreviewProbe.frame(254)
+        // nominal white rather than a mid-grey: unexpanded it stays 235, so the
+        // assertion fails when auto quietly stops expanding
+        let white = PreviewProbe.frame(235)
         PreviewProbe.push(pipeline, white, frame: 1)
         await TestWait.until { collector.last === white }
         #expect(PreviewProbe.level(of: try #require(collector.last)) == 255,

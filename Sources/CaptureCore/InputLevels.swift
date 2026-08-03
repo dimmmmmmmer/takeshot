@@ -7,23 +7,35 @@ import Foundation
 /// it stays one so older saved JSON keeps decoding; this is the resolved form
 /// the pipeline and `TenBitConverter` actually branch on, so the decision is
 /// made once instead of by string comparison at four sites.
+///
+/// One decision, but it reaches three products that need different things from
+/// it, and this type only answers for the first:
+///
+/// - the PICTURE (here) — nominal black lands on 0 and nominal white on 1023,
+///   because an operator judges exposure against a black that is black;
+/// - the FILE (`TenBitConverter.precomp`) — the camera's codes as sent,
+///   footroom and headroom included, so nothing is destroyed in the
+///   deliverable;
+/// - the SCOPES (`ScopeWireLevels`) — the wire, unexpanded, with the
+///   excursions drawn outside the nominal lines where they can be seen.
 public enum InputLevels: String, Sendable, CaseIterable {
     /// Full swing: the codes already fill 0…1023 (0…255 in 8-bit) and nothing
     /// is done to them. A playout device set to Full output.
     case full
-    /// Studio swing, expanded so the camera's WHOLE legal swing survives: the
-    /// bottom of the 10-bit legal range (4) lands on 0 and the top (1019) on
-    /// 1023, so no code the camera sent is destroyed.
+    /// Studio swing, expanded to the display's full scale on the NOMINAL pair:
+    /// black 64 onto 0, white 940 onto 1023.
     ///
-    /// There used to be a second studio-swing mode that mapped nominal black
-    /// (64) and nominal white (940) onto the ends instead. It is gone, and the
-    /// stored value that named it (`limited_excursions`) now resolves here:
-    /// that reading CLAMPED, so the sub-blacks a camera rides below picture
-    /// black and the super-whites above reference white stopped existing — in
-    /// the display buffer and, because the record buffer is built from the
-    /// expanded value, in the deliverable as well. Reference white sits at
-    /// 1017 of 1023 rather than at 1023 in exchange, which is a hair of
-    /// contrast for a highlight the colourist still has.
+    /// The excursions a camera legally rides outside that pair — footroom down
+    /// to code 4, headroom up to 1019 — are clipped in the picture, and that is
+    /// the point rather than an oversight: expanding the whole legal swing
+    /// 4…1019 instead put nominal black at 60 of 1023, so every black on the
+    /// monitor sat 6 % up the scale and the operator was judging exposure
+    /// against a grey. Nothing is lost by clipping HERE: the excursions are in
+    /// the recorded file (the record buffer carries the wire codes, not this
+    /// expansion) and on the scopes (they read the wire).
+    ///
+    /// There used to be a second studio-swing mode; the stored value that named
+    /// it (`limited_excursions`) resolves here.
     case limited
 
     /// The setting string as the pipeline resolved it for this frame. Anything
@@ -34,26 +46,30 @@ public enum InputLevels: String, Sendable, CaseIterable {
         InputLevels(rawValue: setting ?? "") ?? .limited
     }
 
-    /// The 10-bit wire codes this mode maps onto 0 and 1023.
+    /// The 10-bit wire codes this mode maps onto 0 and 1023 IN THE DISPLAY
+    /// BUFFER — the preview, the LUT stage, the playout mirror, the multiview.
+    ///
+    /// Nominal (64/940), not legal (4/1019): see the case above. The recorded
+    /// file does not come through here at all — `TenBitConverter` builds it
+    /// from the wire code — so widening this window can no longer put a stretch
+    /// into a deliverable, and narrowing it can no longer take a code out of
+    /// one.
     public var wireWindow: (black: Int, white: Int) {
         switch self {
         case .full: return (0, 1023)
-        // 4…1019 is the legal 10-bit code range: 0-3 and 1020-1023 are
-        // reserved for sync words and never carry picture.
-        case .limited: return (4, 1019)
+        case .limited: return (64, 940)
         }
     }
 
     /// Whether the 8-bit path has to expand at all.
     public var expandsEightBit: Bool { self != .full }
 
-    /// The 8-bit expansion window, the same decision in the units the vImage
-    /// table works in. 1…254 rather than 4…1019/4: 0 and 255 are the 8-bit
-    /// reserved codes.
+    /// The display window again, in the units the 8-bit vImage table works in:
+    /// nominal black 16 onto 0 and nominal white 235 onto 255.
     public var eightBitWindow: (black: Int, white: Int) {
         switch self {
         case .full: return (0, 255)
-        case .limited: return (1, 254)
+        case .limited: return (16, 235)
         }
     }
 }

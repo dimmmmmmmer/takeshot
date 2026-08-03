@@ -55,6 +55,20 @@ extension CapturePipeline {
                 if lutRecord, let lutName {
                     meta[TakeWriter.lutKey] = lutName
                 }
+                // …and with what its code values mean, so the player expands
+                // the take exactly as the monitor expanded the wire. A baked
+                // LUT is rendered on the display buffer, so that take carries
+                // display values whatever the wire was doing.
+                //
+                // The answer comes from the levels stage, i.e. from frames that
+                // have already been through it. A take opened before the first
+                // frame of a session — REC pressed inside the 40 ms between
+                // format detection and frame one — cannot know, and says
+                // nothing rather than guessing: unexpanded is a slightly washed
+                // take, and expanding one that should not be crushes it.
+                if recordCarriesWireCodes, !lutRecord {
+                    meta[TakeWriter.levelsKey] = TakeWriter.wireValue
+                }
                 return meta
             }(),
             // the creative side, embedded so it survives a copy that leaves

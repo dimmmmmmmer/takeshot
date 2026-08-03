@@ -49,10 +49,12 @@ struct ForcedInputRGBToggle: View {
 /// What the source's code values mean on the wire.
 ///
 /// Three options, and one of them is Limited — there were two studio-swing
-/// entries for a while, and the one that survived is the one that expands the
-/// camera's WHOLE legal swing. The other clamped: the record buffer is built
-/// from the expanded value, so codes 4 and 1019 decoded to 0 and 1023 and the
-/// excursions were destroyed in the deliverable, not just on the glass.
+/// entries for a while, differing in what they did with a camera's excursions.
+/// The question they were arguing about is settled elsewhere now: the setting
+/// says what the SOURCE carries, the monitor gets the nominal expansion so that
+/// black is black, and the recorded file gets the wire codes whatever the
+/// monitor is doing. Neither reading can destroy anything in the deliverable
+/// any more, so there is one Limited.
 struct InputLevelsPicker: View {
     @EnvironmentObject private var controller: CaptureController
 

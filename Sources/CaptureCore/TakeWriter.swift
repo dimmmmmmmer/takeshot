@@ -69,6 +69,31 @@ public final class TakeWriter {
     /// Name of the LUT baked into the file (absent — the file is clean).
     public static let lutKey = "com.takeshot.lut"
 
+    /// What the picture codes in this file MEAN — `wireValue` when they are the
+    /// camera's studio-swing wire codes, absent when they are display values
+    /// that fill the scale.
+    ///
+    /// The distinction is not cosmetic and it is not guessable from the file:
+    /// both kinds decode to a full-range buffer, and shown without expanding it
+    /// a studio-swing one is 6 % of washed black. It is written per take rather
+    /// than assumed per app version because takes shot before the record path
+    /// started carrying wire codes are still on the operator's disk, and
+    /// expanding those a second time would crush the very shadows this exists
+    /// to protect.
+    public static let levelsKey = "com.takeshot.levels"
+    /// The one value `levelsKey` is ever written with.
+    public static let wireValue = "wire"
+
+    /// Whether a file's picture must be expanded from studio swing before it is
+    /// shown next to a live signal. Reads the metadata an asset was loaded
+    /// with; anything else — a foreign file, an older take — is left alone.
+    public static func carriesWireCodes(_ metadata: [AVMetadataItem]) async -> Bool {
+        guard let item = metadata.first(where: {
+            ($0.key as? String) == levelsKey
+        }) else { return false }
+        return (try? await item.load(.stringValue)) == wireValue
+    }
+
     // MARK: - creative (slate) keys
     //
     // QuickTime has no standard key for scene, shot or take — the mdta

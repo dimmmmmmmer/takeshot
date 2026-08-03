@@ -85,19 +85,20 @@ struct TenBitConverterTests {
         #expect(pixel >> 24 == 0xFF)                       // opaque alpha
     }
 
-    /// Limited expands the LEGAL swing 4-1019, not the nominal 64-940 — that is
-    /// the whole point of the one Limited that survived. So the ends of the
-    /// legal range land on the ends of the scale, and nominal black and white
-    /// land just inside them with room left for a camera's excursions.
-    @Test func limitedRangeSourceExpandsTheLegalSwingToTheFullScale() throws {
+    /// Limited expands the NOMINAL pair: black 64 onto 0 and white 940 onto
+    /// 1023, with the camera's excursions clipped against those ends. This is
+    /// the picture the operator judges exposure on, so black has to be black;
+    /// the codes outside the pair are kept where they are useful, in the file
+    /// and on the scopes, and neither reads this buffer.
+    @Test func limitedRangeSourceIsExpandedOnTheNominalPair() throws {
         let converter = TenBitConverter() // limited is the default
-        let codes = [4, 64, 940, 1019]
+        let codes = [4, 64, 500, 940, 1019]
         let source = makeR210(width: codes.count, height: 2) { x, _ in codes[x] }
         let result = try #require(converter.convert(source))
-        #expect(bgraPixel(result.display, x: 0, y: 0) & 0xFF == 0)
-        #expect(bgraPixel(result.display, x: 1, y: 0) & 0xFF == 15)
-        #expect(bgraPixel(result.display, x: 2, y: 0) & 0xFF == 235)
-        #expect(bgraPixel(result.display, x: 3, y: 0) & 0xFF == 255)
+        let shown = (0..<codes.count).map {
+            Int(bgraPixel(result.display, x: $0, y: 0) & 0xFF)
+        }
+        #expect(shown == [0, 0, 127, 255, 255], "display bytes: \(shown)")
     }
 
     @Test func recordValuesLandInsideVideoToolboxsWindow() throws {
@@ -105,26 +106,53 @@ struct TenBitConverterTests {
         converter.setLimitedRange(false)
         let source = makeR210(width: 4, height: 2) { x, _ in x == 0 ? 0 : 1023 }
         let result = try #require(converter.convert(source))
-        // full-scale black and white map onto the 64-960 window VideoToolbox
-        // expands back to 0-1023 inside the codec
+        // the ends of the wire map onto the 64-960 window VideoToolbox expands
+        // back to 0-1023 inside the codec
         #expect(r210Red(result.record, x: 0, y: 0) == 64)
         #expect(r210Red(result.record, x: 1, y: 0) == 960)
     }
 
+    /// The record buffer is the camera's wire codes, precompensated for the
+    /// codec and for nothing else — so the levels mode, which is a decision
+    /// about the MONITOR, cannot reach the deliverable. It used to: `precomp`
+    /// was built from the expanded value, and a display window that clipped
+    /// took those codes out of the file as well.
+    @Test func theRecordBufferIsTheSameWhateverTheDisplayIsDoing() throws {
+        let codes = [4, 64, 500, 940, 1019]
+        var recorded: [[Int]] = []
+        for levels in [InputLevels.limited, .full] {
+            let converter = TenBitConverter()
+            converter.setLevels(levels)
+            let source = makeR210(width: codes.count, height: 2) { x, _ in codes[x] }
+            let result = try #require(converter.convert(source))
+            recorded.append((0..<codes.count).map {
+                r210Red(result.record, x: $0, y: 0)
+            })
+        }
+        #expect(recorded[0] == recorded[1],
+                "the display mode changed the file: \(recorded)")
+        #expect(recorded[0] == [68, 120, 502, 887, 956],
+                "record codes: \(recorded[0])")
+    }
+
     /// The precompensation only pays off if the codec's expansion brings the
-    /// values back where they started — the documented claim is +-1 in 10-bit units.
-    @Test func precompensationRoundTripsWithinOneCode() throws {
-        let converter = TenBitConverter()
-        converter.setLimitedRange(false)
-        let codes = [0, 1, 64, 255, 512, 800, 1022, 1023]
-        let source = makeR210(width: codes.count, height: 2) { x, _ in codes[x] }
-        let result = try #require(converter.convert(source))
-        for (x, code) in codes.enumerated() {
-            let recorded = r210Red(result.record, x: x, y: 0)
-            // VideoToolbox reads r210 as video-range and expands 64-960 to 0-1023
-            let decoded = Int((Double(recorded) - 64) * 1023 / 896 + 0.5)
-            #expect(abs(decoded - code) <= 1,
-                    "code \(code) recorded as \(recorded), decoded back as \(decoded)")
+    /// values back where they started — and what has to come back now is the
+    /// WIRE code, footroom and headroom included, not an expanded value.
+    @Test func precompensationRoundTripsToTheWireCodeWithinOneCode() throws {
+        for levels in [InputLevels.limited, .full] {
+            let converter = TenBitConverter()
+            converter.setLevels(levels)
+            let codes = [0, 1, 4, 64, 255, 512, 800, 940, 1019, 1022, 1023]
+            let source = makeR210(width: codes.count, height: 2) { x, _ in codes[x] }
+            let result = try #require(converter.convert(source))
+            for (x, code) in codes.enumerated() {
+                let recorded = r210Red(result.record, x: x, y: 0)
+                // VideoToolbox reads r210 as video-range and expands 64-960 to 0-1023
+                let decoded = Int((Double(recorded) - 64) * 1023 / 896 + 0.5)
+                let detail = "recorded as \(recorded), decoded back as \(decoded)"
+                #expect(abs(decoded - code) <= 1,
+                        "\(levels): code \(code) \(detail)")
+            }
         }
     }
 

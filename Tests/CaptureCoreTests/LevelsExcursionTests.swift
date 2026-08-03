@@ -10,14 +10,15 @@ import Testing
 /// and the super-whites above 940 — on their way to the screen and into the
 /// file.
 ///
-/// The operator reported "slight clipping in the shadows and the highlights"
-/// and was right: a limited→full expansion onto 64–940 clamps, and because the
-/// record buffer is built FROM the expanded value the codes were gone from the
-/// deliverable as well, not just from the preview. `Limited` expands the whole
-/// legal swing instead, and there is only one Limited now — the clamping
-/// reading was removed rather than left in a menu for someone to pick by
-/// mistake. "Preserves the excursions" is a claim about numbers, so the numbers
-/// are pinned here.
+/// The two answers are deliberately different, and that is what this suite
+/// exists to hold in place. The SCREEN gets the nominal expansion and clips
+/// them: expanding the whole legal swing instead put nominal black at 60 of
+/// 1023, and an operator judging exposure against a black that sits 6 % up the
+/// scale is the complaint that started this. The FILE gets every code the
+/// camera sent, because the record buffer is no longer built from the expanded
+/// value — it carries the wire, precompensated for the codec and nothing else.
+/// Both halves are claims about numbers, so the numbers are pinned here, on the
+/// converter and then again on a real encoded file.
 struct LevelsExcursionTests {
     /// The four codes the whole question is about: the bottom and top of the
     /// legal 10-bit range, and nominal black and white between them.
@@ -79,27 +80,27 @@ struct LevelsExcursionTests {
 
     // MARK: - the converter, with no codec in the way
 
-    /// Limited. Every one of the four codes survives as its own value.
-    @Test func preservingExcursionsKeepsEveryCode() throws {
+    /// Limited, on the two products at once: the picture clips the excursions
+    /// onto black and white, the record buffer keeps all four codes apart.
+    @Test func thePictureClipsTheExcursionsAndTheFileKeepsThem() throws {
         let converter = TenBitConverter()
         converter.setLevels(.limited)
         let result = try #require(converter.convert(try bandedFrame()))
 
-        // 4 and 1019 are the ends of the scale now
+        // the sub-black is black and the super-white is white on the monitor…
         #expect(displayByte(result.display, band: 0) == 0)
         #expect(displayByte(result.display, band: 3) == 255)
-        // …and nominal black and white sit just inside them rather than on them
-        #expect(displayByte(result.display, band: 1) == 15)
-        #expect(displayByte(result.display, band: 2) == 235)
+        // …because nominal black and white are ON the ends, not inside them
+        #expect(displayByte(result.display, band: 1) == 0)
+        #expect(displayByte(result.display, band: 2) == 255)
 
         let codes = (0..<4).map { recordCode(result.record, band: $0) }
-        #expect(codes == [64, 117, 890, 960], "record codes: \(codes)")
+        #expect(codes == [68, 120, 887, 956], "record codes: \(codes)")
         #expect(Set(codes).count == 4, "two codes collapsed onto one")
     }
 
-    /// The two-state switch still means the same two modes. Same frame run
-    /// through it, because that is the call some of the settings plumbing
-    /// still makes.
+    /// The two-state switch still means the same two modes — checked on the
+    /// display buffer, which is the only product a levels mode reaches now.
     @Test func theBooleanSwitchStillMeansTheTwoModes() throws {
         let limited = TenBitConverter()
         limited.setLimitedRange(true)
@@ -107,10 +108,15 @@ struct LevelsExcursionTests {
         let named = TenBitConverter()
         named.setLevels(.limited)
         let viaEnum = try #require(named.convert(try bandedFrame()))
+        let full = TenBitConverter()
+        full.setLimitedRange(false)
+        let unexpanded = try #require(full.convert(try bandedFrame()))
         for band in 0..<4 {
-            #expect(recordCode(viaBool.record, band: band)
-                == recordCode(viaEnum.record, band: band))
+            #expect(displayByte(viaBool.display, band: band)
+                == displayByte(viaEnum.display, band: band))
         }
+        // …and the switch is doing something: Full leaves nominal black at 16
+        #expect(displayByte(unexpanded.display, band: 1) == 16)
     }
 
     /// The setting string resolves to the mode, including the values older
@@ -134,11 +140,17 @@ struct LevelsExcursionTests {
     /// this asks the harder question the operator asked — whether the codes at
     /// the ENDS still exist once the file has been written and read back.
     private func decodedBands(levels: InputLevels) async throws -> [Int] {
+        let root = TestMedia.scratchDirectory("LevelsExcursion")
+        defer { try? FileManager.default.removeItem(at: root) }
+        return try await Self.readBands(from: try await writeBands(levels: levels,
+                                                                   in: root))
+    }
+
+    /// The banded frame through the converter and a real ProRes HQ encode.
+    private func writeBands(levels: InputLevels, in root: URL) async throws -> URL {
         let converter = TenBitConverter()
         converter.setLevels(levels)
         let split = try #require(converter.convert(try bandedFrame()))
-        let root = TestMedia.scratchDirectory("LevelsExcursion")
-        defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("take.mov")
         let format = CaptureFormat(width: Self.frameWidth,
                                    height: Self.frameHeight, frameRate: 25,
@@ -154,8 +166,7 @@ struct LevelsExcursionTests {
                 try await Task.sleep(for: .milliseconds(5))
             }
         }
-        _ = try await writer.finish()
-        return try await Self.readBands(from: url)
+        return try await writer.finish()
     }
 
     /// First frame of the file, decoded into a 16-bit RGB buffer and reported
@@ -191,26 +202,66 @@ struct LevelsExcursionTests {
         }
     }
 
-    /// Limited: the four codes come back four different values, with the ends
-    /// where the expansion put them.
+    /// The whole point of the record half: the file gives back the codes the
+    /// CAMERA sent — including the footroom code and the headroom code, which
+    /// is what a colourist has left to pull a highlight out of.
     ///
     /// The tolerance is the codec's, measured: ProRes HQ is a DCT codec and
-    /// nothing here claims it is lossless. What is asserted is the property the
-    /// mode exists for — the codes are still TOLD APART — plus each band
-    /// landing near the value the converter wrote.
-    @Test func preservingExcursionsSurvivesTheEncodeDecodeRoundTrip() async throws {
+    /// nothing here claims it is lossless. The four bands came back exact when
+    /// this was written; what is asserted is that plus the property the record
+    /// path exists for — the excursions are still OUTSIDE the nominal pair
+    /// rather than flattened onto it.
+    @Test func theFileGivesBackTheWireCodesExcursionsIncluded() async throws {
         let decoded = try await decodedBands(levels: .limited)
-        print("LEVELS preserving decoded: \(decoded)")
-        // the converter wrote 0, 60, 943, 1023 as intended full-range values
-        let intended = [0, 60, 943, 1023]
-        for (band, expected) in intended.enumerated() {
-            let detail = "wrote \(expected), read \(decoded[band]); all \(decoded)"
-            #expect(abs(decoded[band] - expected) <= 12,
-                    "band \(band): \(detail)")
+        print("LEVELS decoded wire codes: \(decoded)")
+        for (band, wire) in Self.bands.enumerated() {
+            let detail = "sent \(wire), read \(decoded[band]); all \(decoded)"
+            #expect(abs(decoded[band] - wire) <= 4, "band \(band): \(detail)")
         }
-        #expect(decoded[1] - decoded[0] >= 30,
+        #expect(decoded[0] < decoded[1] - 30,
                 "the sub-black collapsed onto nominal black: \(decoded)")
-        #expect(decoded[3] - decoded[2] >= 30,
+        #expect(decoded[3] > decoded[2] + 30,
                 "the super-white collapsed onto nominal white: \(decoded)")
+    }
+
+    /// A file the display mode cannot change: the same codes come out of it
+    /// whatever the monitor was set to while it was recorded.
+    @Test func theFileDoesNotDependOnTheDisplayMode() async throws {
+        let limited = try await decodedBands(levels: .limited)
+        let full = try await decodedBands(levels: .full)
+        #expect(limited == full, "limited \(limited) vs full \(full)")
+    }
+
+    /// What the file says about itself, read off the video track rather than
+    /// off the settings dictionary that asked for it.
+    ///
+    /// Rec.709 on all three axes, and NO full-range flag: the picture is coded
+    /// video-range, which is what a ProRes track is, and the tags have to say
+    /// so or every tool downstream expands it a second time. Tagging a
+    /// writer-bound buffer with anything non-standard is a hard-won lesson in
+    /// this repo — the encoder colour-converts on a tag mismatch — so the file
+    /// carries the standard three and nothing else.
+    @Test func theFileIsTaggedRec709AndVideoRange() async throws {
+        let root = TestMedia.scratchDirectory("LevelsTags")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = try await writeBands(levels: .limited, in: root)
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.tracks(ofType: .video).first)
+        let description = try #require(
+            try await track.load(.formatDescriptions).first)
+        let extensions = CMFormatDescriptionGetExtensions(description)
+            as? [String: Any] ?? [:]
+        func tag(_ key: CFString) -> String? {
+            extensions[key as String] as? String
+        }
+        #expect(tag(kCMFormatDescriptionExtension_ColorPrimaries)
+            == (kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as String))
+        #expect(tag(kCMFormatDescriptionExtension_TransferFunction)
+            == (kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String))
+        #expect(tag(kCMFormatDescriptionExtension_YCbCrMatrix)
+            == (kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as String))
+        // absent, not false: a video-range track carries no full-range flag
+        #expect(extensions[kCMFormatDescriptionExtension_FullRangeVideo as String]
+            == nil, "the file claims full range: \(extensions)")
     }
 }
