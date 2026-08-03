@@ -23,9 +23,10 @@ review layer on top.
   board reports wrongly.
 - **Timecode source**: RP188 from the video stream, or LTC decoded from an
   embedded audio channel.
-- The demo source is hidden unless the app is launched with `--demo` (or
-  `TAKESHOT_DEMO=1`). It generates a 1080p25 signal with running timecode so the
-  whole take path can be exercised without a board.
+- The demo source is always in the device list. It generates a 1080p25 signal
+  with running timecode, so the whole take path can be exercised without a
+  board — and in a build made without the DeckLink SDK it is the only source
+  there is.
 
 ## Take detection
 
