@@ -39,6 +39,9 @@ public final class TenBitConverter: WireConverter {
     public var recordPixelFormat: OSType { Self.r210 }
     /// 'r210' is 32 bits per pixel, the same as the BGRA display buffer.
     public var recordBytesPerPixel: Int { 4 }
+    /// Yes: an RGB coded picture cannot state that its codes are studio swing,
+    /// so the take says so itself and playback expands it once.
+    public var recordNeedsPlaybackExpansion: Bool { true }
 
     /// wire code (0…1023) → the value that appears on the DISPLAY.
     private var expand = WireDisplayTable.expand(levels: .limited, bits: 10)

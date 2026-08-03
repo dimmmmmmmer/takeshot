@@ -128,6 +128,13 @@ struct ScopePerformanceTests {
         _ = time("1080p R12B (12-bit wire, limited)") {
             _ = ScopeAnalyzer.analyze(wire12, wireLevels: .limited)
         }
+        // the 10-bit YCbCr reader: one to two loads per sample plus a matrix,
+        // against the r210 reader's single load. Now the DEFAULT format for an
+        // SDI rig, so this is the number the ~23 ms budget has to be argued from.
+        let wire210 = try V210Fixtures.makeNoise(width: 1920, height: 1080)
+        _ = time("1080p v210 (10-bit YCbCr wire, limited)") {
+            _ = ScopeAnalyzer.analyze(wire210, wireLevels: .limited)
+        }
         let uhd = try bgraNoise(width: 3840, height: 2160)
         _ = time("UHD BGRA (display buffer)", runs: 9) {
             _ = ScopeAnalyzer.analyze(uhd)
@@ -138,24 +145,36 @@ struct ScopePerformanceTests {
     /// every frame, so its cost is against the frame interval (40 ms at 25 fps)
     /// rather than the scopes' stride interval.
     ///
-    /// The 10-bit and 12-bit converters are timed side by side because the
-    /// question a 12-bit option raises is exactly "what does it cost per
-    /// frame", and the honest answer is a measurement on the machine in hand.
+    /// All three converters are timed side by side because the question any new
+    /// wire format raises is exactly "what does it cost per frame", and the honest
+    /// answer is a measurement on the machine in hand.
+    ///
+    /// The 'v210' row is the one to read closely: it is the only split that does a
+    /// colour-space conversion and a chroma upsample, and it is also the only one
+    /// whose record product costs nothing at all (it is the wire frame), so the
+    /// two effects pull in opposite directions.
     @Test(.enabled(if: ScopePerformanceTests.enabled))
     func theWireSplitCostPerFrame() throws {
         let ten = TenBitConverter()
         let twelve = TwelveBitConverter()
+        let yuv = TenBitYUVConverter()
         let hd10 = try r210Noise(width: 1920, height: 1080)
         let hd12 = try R12BFixtures.makeNoise(width: 1920, height: 1080)
+        let hd210 = try V210Fixtures.makeNoise(width: 1920, height: 1080)
         _ = time("split 1080p r210 → BGRA + r210") { _ = ten.convert(hd10) }
         _ = time("split 1080p R12B → BGRA + 64RGBALE") { _ = twelve.convert(hd12) }
+        _ = time("split 1080p v210 → BGRA + v210") { _ = yuv.convert(hd210) }
         let uhd10 = try r210Noise(width: 3840, height: 2160)
         let uhd12 = try R12BFixtures.makeNoise(width: 3840, height: 2160)
+        let uhd210 = try V210Fixtures.makeNoise(width: 3840, height: 2160)
         _ = time("split UHD r210 → BGRA + r210", runs: 9) {
             _ = ten.convert(uhd10)
         }
         _ = time("split UHD R12B → BGRA + 64RGBALE", runs: 9) {
             _ = twelve.convert(uhd12)
+        }
+        _ = time("split UHD v210 → BGRA + v210", runs: 9) {
+            _ = yuv.convert(uhd210)
         }
     }
 

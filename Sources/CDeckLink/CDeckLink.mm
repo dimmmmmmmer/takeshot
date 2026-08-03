@@ -98,7 +98,8 @@ static int CDLBitDepthForPixelFormat(BMDPixelFormat pixelFormat) {
     switch (pixelFormat) {
         case bmdFormat12BitRGB: return 12;
         case bmdFormat10BitRGB: return 10;
-        default: return 8;
+        case bmdFormat10BitYUV: return 10; // 'v210'
+        default: return 8;                 // 'BGRA' or '2vuy'
     }
 }
 
@@ -119,6 +120,7 @@ static int CDLBitDepthForPixelFormat(BMDPixelFormat pixelFormat) {
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags;
 - (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode;
+- (BMDPixelFormat)yuvPixelFormatForMode:(BMDDisplayMode)mode;
 - (void)handleFrame:(IDeckLinkVideoInputFrame *)videoFrame
               audio:(IDeckLinkAudioInputPacket *)audioPacket;
 @end
@@ -400,10 +402,14 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         _currentMode = forced->GetDisplayMode();
         _currentPixelFormat = self.forcedRGB
             ? [self rgbPixelFormatForMode:_currentMode]
-            : bmdFormat8BitYUV;
+            : [self yuvPixelFormatForMode:_currentMode];
     } else {
+        // An arbitrary starting mode; detection corrects it. The pixel format
+        // comes from the same pure helper the callback uses, so if the signal
+        // turns out to be this mode the guard there settles with no restart at
+        // all instead of one.
         _currentMode = bmdModeHD1080p25;
-        _currentPixelFormat = bmdFormat8BitYUV;
+        _currentPixelFormat = [self yuvPixelFormatForMode:_currentMode];
     }
     HRESULT hr = _input->EnableVideoInput(
         _currentMode, _currentPixelFormat,
@@ -484,23 +490,28 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (!_input) {
         return;
     }
-    // RGB sources at the requested bit depth (the board does not convert
-    // RGB→YUV on input), everything else as 8-bit YUV (2vuy)
+    // Each sampling at its own requested bit depth (the board does not convert
+    // RGB→YUV on input): RGB 4:4:4 as BGRA/r210/R12B, YCbCr 4:2:2 as v210 or
+    // 2vuy.
     BOOL isRGB444 = (flags & bmdDetectedVideoInputRGB444) != 0;
     BMDDisplayMode mode = newMode->GetDisplayMode();
     BMDPixelFormat pixelFormat = isRGB444
         ? [self rgbPixelFormatForMode:mode]
-        : bmdFormat8BitYUV;
+        : [self yuvPixelFormatForMode:mode];
 
     // Restart streams only on an actual change. Restarting on every callback
     // re-arms format detection, which fires the callback again — an endless
     // pause/flush/start loop that pins stream time at 0 (all frames get PTS 0,
     // so recording dies on duplicate PTS), drops frames, and burns CPU.
     //
-    // The 12-bit request does NOT weaken this guard: rgbPixelFormatForMode is a
-    // pure function of the mode and the two preference flags, so it answers the
-    // same way every time the callback fires for the same signal, and the
-    // comparison below still settles after one restart.
+    // Neither depth request weakens this guard, and that is a requirement on the
+    // two helpers rather than a hope: both rgbPixelFormatForMode and
+    // yuvPixelFormatForMode are PURE functions of the mode and the preference
+    // flags. They therefore answer the same way every time the callback fires
+    // for the same signal, and the comparison below still settles after one
+    // restart. Anything in them that could answer differently on a second call —
+    // a retry counter, a cached probe, a fallback that remembers — would turn
+    // this guard back into the endless loop it exists to prevent.
     if (mode == _currentMode && pixelFormat == _currentPixelFormat) {
         return;
     }
@@ -548,6 +559,39 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     return self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA;
 }
 
+// The YCbCr pixel format to enable for `mode`: 10-bit 'v210' when it is wanted
+// AND the board says it can deliver it, 8-bit '2vuy' otherwise.
+//
+// This is the standard professional SDI case, and asking for 8-bit throws away
+// two bits the wire is already carrying — the driver drops them before the app
+// sees a frame. So 10-bit is what the app asks for by default.
+//
+// Checked against the hardware rather than simply requested, for the same reason
+// the 12-bit RGB request is: a format the board refuses is how a session ends up
+// with a black or torn picture — EnableVideoInput can return S_OK and then
+// deliver frames the pipeline cannot read. Falling back to '2vuy' keeps the
+// picture, and the depth actually enabled travels back on
+// CDLVideoFormat.bitDepth so the app can tell the operator their 10-bit request
+// was not met.
+//
+// Pure in (mode, preferTenBitYUV) — see the restart guard in
+// handleFormatChanged, which depends on that and says what depending on it
+// means.
+- (BMDPixelFormat)yuvPixelFormatForMode:(BMDDisplayMode)mode {
+    if (self.preferTenBitYUV && _input) {
+        bool supported = false;
+        BMDDisplayMode actualMode = mode;
+        HRESULT hr = _input->DoesSupportVideoMode(
+            bmdVideoConnectionUnspecified, mode, bmdFormat10BitYUV,
+            bmdNoVideoInputConversion, bmdSupportedVideoModeDefault,
+            &actualMode, &supported);
+        if (hr == S_OK && supported) {
+            return bmdFormat10BitYUV;
+        }
+    }
+    return bmdFormat8BitYUV;
+}
+
 - (CVPixelBufferRef)copyPixelBufferFromFrame:(IDeckLinkVideoInputFrame *)videoFrame {
     long width = videoFrame->GetWidth();
     long height = videoFrame->GetHeight();
@@ -563,6 +607,13 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                                // (288 bits per 8-pixel block), so the pool
                                // below gets the right stride with no format
                                // registration
+    } else if (sourceFormat == bmdFormat10BitYUV) {
+        cvFormat = kCVPixelFormatType_422YpCbCr10; // 'v210' — CoreVideo knows it
+                               // natively too (128 bits per 6-pixel block, rows
+                               // padded out to 48 pixels), so the pool gets the
+                               // right stride. Never compute that stride: the
+                               // row copy below already takes both sides from
+                               // the buffers themselves.
     } else {
         cvFormat = kCVPixelFormatType_422YpCbCr8; // '2vuy'
     }

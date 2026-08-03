@@ -18,6 +18,16 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     /// request the hardware refuses falls back (see `rgbPixelFormatForMode` in
     /// the bridge) — the depth that came back is on `CaptureFormat.bitDepth`.
     var preferTwelveBitRGB = false
+    /// YCbCr 4:2:2 sources captured as 10-bit v210 (vs 8-bit 2vuy). ON by
+    /// default, unlike the 12-bit RGB flag above, and the difference is
+    /// deliberate: 12-bit RGB is an exotic format that costs twice the record
+    /// bandwidth and that many boards and modes refuse, while v210 is the
+    /// BASELINE professional format — it is what an SDI wire carries, every
+    /// current Blackmagic board delivers it, and asking for 8-bit means the
+    /// driver drops two bits the signal already has. A board that still says no
+    /// falls back to 2vuy and the depth that came back is on
+    /// `CaptureFormat.bitDepth`.
+    var preferTenBitYUV = true
 
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
@@ -59,6 +69,7 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
         }
         capture.preferTenBitRGB = preferTenBitRGB
         capture.preferTwelveBitRGB = preferTwelveBitRGB
+        capture.preferTenBitYUV = preferTenBitYUV
         try capture.start(withDeviceID: deviceID)
         self.capture = capture
     }

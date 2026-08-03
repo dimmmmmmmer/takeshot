@@ -23,6 +23,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// What the board settled on, not what was asked for: a request the hardware or
 /// the mode cannot satisfy falls back, and the app compares the two so the
 /// operator is told rather than left with a quietly shallower capture.
+///
+/// Meaningful for BOTH samplings. RGB 4:4:4 can be 8 ('BGRA'), 10 ('r210') or
+/// 12 ('R12B'); YCbCr 4:2:2 can be 8 ('2vuy') or 10 ('v210'), and 10 is what a
+/// professional SDI source actually carries.
 @property (nonatomic) int bitDepth;
 @end
 
@@ -103,6 +107,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// 10- or 8-bit when it does not. The depth actually enabled is reported on
 /// CDLVideoFormat.bitDepth every time a format is announced.
 @property (nonatomic) BOOL preferTwelveBitRGB;
+/// Capture YCbCr 4:2:2 sources as 10-bit v210 (bmdFormat10BitYUV) instead of
+/// 8-bit 2vuy. This is the standard professional SDI case, and 8-bit capture of
+/// it means the driver drops two bits before the app ever sees a frame.
+///
+/// Requested, not guaranteed, exactly like the 12-bit RGB flag above: the board
+/// is asked (DoesSupportVideoMode) and the request falls back to 8-bit 2vuy when
+/// it says no, so a board or a mode that cannot deliver v210 keeps a picture
+/// instead of producing black or torn frames. The depth actually enabled travels
+/// back on CDLVideoFormat.bitDepth, so the app can tell the operator.
+@property (nonatomic) BOOL preferTenBitYUV;
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;

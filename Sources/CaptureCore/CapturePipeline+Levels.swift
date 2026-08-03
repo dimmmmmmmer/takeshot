@@ -20,8 +20,8 @@ extension CapturePipeline {
     }
 
     /// One frame after the levels stage: the 8-bit BGRA buffer everything
-    /// downstream reads, plus the record buffer carrying the wire codes when
-    /// the wire carried a high-bit-depth RGB format — 'r210' or 'R12B' (nil for
+    /// downstream reads, plus the record buffer carrying the wire codes when the
+    /// wire carried a high-bit-depth format — 'r210', 'R12B' or 'v210' (nil for
     /// every other format).
     struct LevelledFrame {
         let display: CVPixelBuffer
@@ -29,7 +29,7 @@ extension CapturePipeline {
         /// The frame the scopes should read INSTEAD of the display buffer, when
         /// the wire carries a signal the display buffer cannot represent.
         ///
-        /// A 10- or 12-bit RGB wire is exactly that case, twice over: the
+        /// Every high-bit-depth wire is exactly that case, twice over: the
         /// display buffer is 8-bit, so a scope reading it is quantized to 256
         /// levels however good the source was, and the limited→full expansion
         /// clamps everything outside the nominal pair — the sub-blacks and
@@ -45,13 +45,15 @@ extension CapturePipeline {
     }
 
     /// The converter for a wire format, or nil when the frame is one the 8-bit
-    /// path handles. The two high-bit-depth RGB formats differ in their pixel
-    /// packing and their record format, not in what the levels stage does with
-    /// them, so this is the only place the pipeline names them.
+    /// path handles. The three high-bit-depth formats differ in their pixel
+    /// packing, their colour space and their record format, not in what the
+    /// levels stage does with them, so this is the only place the pipeline names
+    /// them.
     func wireConverter(for pixelFormat: OSType) -> WireConverter? {
         switch pixelFormat {
         case TenBitConverter.r210: return tenBitConverter
         case TwelveBitConverter.r12b: return twelveBitConverter
+        case TenBitYUVConverter.v210: return tenBitYUVConverter
         default: return nil
         }
     }
@@ -61,22 +63,32 @@ extension CapturePipeline {
     /// this one is dropped — the same `guard` the inline code had.
     func levelledFrame(from pixelBuffer: CVPixelBuffer,
                        format: CaptureFormat) -> LevelledFrame? {
-        let inputLevels = effectiveInputLevels(for: format)
-        // 10- or 12-bit RGB wire ('r210'/'R12B'): one pass yields the
+        let inputLevels = autoResolvedLevels(for: format)
+        // A high-bit-depth wire ('r210'/'R12B'/'v210'): one pass yields the
         // full-range display BGRA AND the record buffer carrying the wire
         // codes; levels are applied inside the converter, so the 8-bit stage
         // below must not run again
         if let converter =
             wireConverter(for: CVPixelBufferGetPixelFormatType(pixelBuffer)) {
             let mode = InputLevels.resolved(inputLevels)
+            // the CONVERTER's reading, not the setting string: auto on a YCbCr
+            // signal leaves the setting nil and still resolves to studio swing
+            // here, which is what SDI and HDMI YCbCr always carry
+            logLevels(effective: mode.rawValue, rgb444: format.isRGB444)
             converter.setLevels(mode)
             guard let split = converter.convert(pixelBuffer) else { return nil }
             tagColorIfUntagged(split.display)
             // What the NEXT take will carry, so the file can say so (see
-            // `TakeWriter.levelsKey`). Only this branch records wire codes: the
-            // 8-bit path's record buffer IS the expanded display buffer, and on
-            // `full` the wire codes already are display values.
-            recordCarriesWireCodes = mode == .limited
+            // `TakeWriter.levelsKey`). Only this branch can record wire codes:
+            // the 8-bit path's record buffer IS the expanded display buffer, and
+            // on `full` the wire codes already are display values.
+            //
+            // The converter has the last word, and that is not a formality: a
+            // 'v210' take is a video-range YCbCr file whose own tags already say
+            // what its codes mean, so tagging it as wire would expand it a
+            // second time on the way back out.
+            recordCarriesWireCodes =
+                mode == .limited && converter.recordNeedsPlaybackExpansion
             recordBytesPerPixel = converter.recordBytesPerPixel
             // The graticule marks where NOMINAL black and white are, whatever
             // the expansion then does with the codes outside them — that is
@@ -89,12 +101,18 @@ extension CapturePipeline {
         }
         recordCarriesWireCodes = false
         recordBytesPerPixel = 4
-        // nil is auto on a signal that is not RGB 4:4:4 — nothing is expanded,
-        // and the mode enum has no case for "the question was never asked".
+        // nil is auto on a signal that is not RGB 4:4:4 — nothing is expanded
+        // HERE, and the mode enum has no case for "the question was never
+        // asked". An 8-bit '2vuy' frame goes through this branch and is handed
+        // on untouched: it is the preview layer's YCbCr matrix that expands it,
+        // which is why 10-bit YUV capture is the depth at which the app starts
+        // owning that conversion (see `TenBitYUVConverter`).
         guard let inputLevels else {
+            logLevels(effective: "passthrough", rgb444: format.isRGB444)
             return LevelledFrame(display: pixelBuffer, wireRecord: nil,
                                  scopeSource: nil)
         }
+        logLevels(effective: inputLevels, rgb444: format.isRGB444)
         let mode = InputLevels.resolved(inputLevels)
         let leveled = mode.expandsEightBit
             ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
@@ -103,7 +121,7 @@ extension CapturePipeline {
                              scopeSource: nil)
     }
 
-    /// The levels decision for this frame, logged whenever it changes.
+    /// The levels decision for this frame, as a setting string.
     ///
     /// input levels: the setting states what the SOURCE carries on the wire.
     /// "limited" (studio swing) is expanded once to the full-range BGRA the
@@ -112,18 +130,30 @@ extension CapturePipeline {
     /// assumes limited for RGB 4:4:4 HDMI (CTA-861 default). Conversion to
     /// legal-range YUV in the recorded file is the encoder's job — never
     /// done on pixels here, so it can't be applied twice.
-    private func effectiveInputLevels(for format: CaptureFormat) -> String? {
-        let inputLevels = levelsMode ?? (format.isRGB444 ? "limited" : nil)
-        let effective = inputLevels ?? "passthrough"
-        // one log line per decision change — settles "is expansion active" without
-        // guessing (a stale-settings app instance once recorded an unexpanded take)
-        if lastLoggedLevels != effective {
-            lastLoggedLevels = effective
-            os_log("levels: mode=%{public}s rgb444=%{public}d effective=%{public}s",
-                   log: Self.levelsLog, type: .default,
-                   levelsMode ?? "auto", format.isRGB444 ? 1 : 0, effective)
-        }
-        return inputLevels
+    ///
+    /// nil for a YCbCr signal on auto, and that nil still resolves to `limited`
+    /// wherever a mode is actually needed (`InputLevels.resolved`) — which is
+    /// right, because YCbCr is studio swing by SMPTE over SDI and by CTA-861
+    /// over HDMI. The 8-bit path has nothing to do about it; the 10-bit YCbCr
+    /// converter does the expansion itself.
+    private func autoResolvedLevels(for format: CaptureFormat) -> String? {
+        levelsMode ?? (format.isRGB444 ? "limited" : nil)
+    }
+
+    /// One log line per decision change — settles "is expansion active" without
+    /// guessing (a stale-settings app instance once recorded an unexpanded take).
+    ///
+    /// `effective` is what this frame's path is really about to do rather than
+    /// what the setting says: a high-bit-depth wire resolves auto INSIDE its
+    /// converter, so a line reading "passthrough" while a 'v210' frame was being
+    /// expanded on the nominal pair would be the log lying about the one thing
+    /// it exists for.
+    private func logLevels(effective: String, rgb444: Bool) {
+        guard lastLoggedLevels != effective else { return }
+        lastLoggedLevels = effective
+        os_log("levels: mode=%{public}s rgb444=%{public}d effective=%{public}s",
+               log: Self.levelsLog, type: .default,
+               levelsMode ?? "auto", rgb444 ? 1 : 0, effective)
     }
 
     /// Expand a studio-swing RGB frame for the screen, in place (vImage byte

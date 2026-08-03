@@ -159,6 +159,8 @@ enum DiagnosticsReport {
             out.append(pair("Timecode rate", "\(capture.timecodeFPS) fps"
                             + (capture.isDropFrame ? " drop-frame" : "")))
             out.append(pair("RGB 4:4:4", capture.isRGB444))
+            // what the board is DELIVERING, against the request below
+            out.append(pair("Wire bit depth", "\(capture.wireBitDepth)-bit"))
         } else {
             out.append(pair("Detected format", "none — no signal detected"))
         }

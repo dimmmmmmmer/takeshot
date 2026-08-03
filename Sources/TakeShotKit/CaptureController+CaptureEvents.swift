@@ -133,14 +133,40 @@ extension CaptureController {
     /// and the footage are still good, so this is a five-second notice rather
     /// than a sticky alarm — but it is never nothing.
     ///
-    /// Only asked of an RGB 4:4:4 signal: a YUV source is 8-bit '2vuy' by
-    /// design and was never a request that could fail.
+    /// Asked of BOTH samplings. It used to be RGB-only, on the grounds that a
+    /// YUV source was 8-bit '2vuy' by design and never a request that could
+    /// fail — that stopped being true when 10-bit YCbCr ('v210') became the
+    /// default request, and a v210 request that quietly fell back to 8-bit is
+    /// exactly the silent colour decision this exists to prevent.
+    ///
+    /// Only a BOARD can fall short of a request, which is why the demo source is
+    /// excluded rather than compared. It generates an 8-bit signal by
+    /// construction and nothing ever asked it for more, so measuring it against
+    /// the picker would put a notice in front of every operator running --demo
+    /// that they could do nothing about. (The RGB-only guard used to exclude it
+    /// by accident, the demo format not being flagged 4:4:4.)
     func reportBitDepthShortfall(_ format: CaptureFormat?) {
-        guard let format, format.isRGB444 else { return }
-        let requested = settings.resolvedCaptureBitDepth.bits
-        guard format.bitDepth < requested else { return }
+        guard let format, selectedDeviceID != nil, !isMockSelected,
+              let short = Self.bitDepthShortfall(
+                  format: format, requested: settings.resolvedCaptureBitDepth)
+        else { return }
         lastError = String(format: L("bit_depth_fallback"),
-                           requested, format.bitDepth)
+                           short.requested, short.delivered)
+    }
+
+    /// Which depth applies to a signal, and whether the board met it — the whole
+    /// rule as a value, nil when there is nothing to say.
+    ///
+    /// Separate from the reporting above because the two halves fail differently:
+    /// this one is arithmetic about samplings (one picker, two wire formats, and
+    /// 12 on a 4:2:2 wire means 10), and the caller's half is about which sources
+    /// the question can even be asked of.
+    static func bitDepthShortfall(format: CaptureFormat,
+                                  requested: CaptureBitDepth)
+        -> (requested: Int, delivered: Int)? {
+        let wanted = format.isRGB444 ? requested.bits : requested.yuvBits
+        guard format.bitDepth < wanted else { return nil }
+        return (requested: wanted, delivered: format.bitDepth)
     }
 
     func reportPipelineError(_ message: String) {

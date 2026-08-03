@@ -102,6 +102,11 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         var timecodeFPS = 0
         var isDropFrame = false
         var isRGB444 = false
+        /// Bits per component the board is really delivering, which is not
+        /// always what the setting asked for — a 12-bit RGB or 10-bit YCbCr
+        /// request the hardware refuses falls back, and the operator's five-second
+        /// notice is long gone by the time a bundle is collected.
+        var wireBitDepth = 8
         var currentTimecode: String?
         /// The setting as stored, and what the levels stage actually does with
         /// it for this signal. The two differ under "auto", which is the mode

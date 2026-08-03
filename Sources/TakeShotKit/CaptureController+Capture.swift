@@ -70,6 +70,9 @@ extension CaptureController {
             let depth = settings.resolvedCaptureBitDepth
             adapter.preferTenBitRGB = depth != .eight
             adapter.preferTwelveBitRGB = depth == .twelve
+            // One setting, two samplings: there is no 12-bit YCbCr wire format,
+            // so 12 asks for the deepest one there is (see `yuvBits`).
+            adapter.preferTenBitYUV = depth.yuvBits == 10
         }
         do {
             try backend.startCapture(deviceID: deviceID)

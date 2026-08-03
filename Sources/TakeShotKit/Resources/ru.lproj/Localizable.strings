@@ -256,9 +256,10 @@
 "input_mode_auto" = "Автоопределение";
 "input_mode_rgb" = "Сигнал RGB 4:4:4";
 "capture_bit_depth" = "Разрядность захвата";
-"bit_depth_8" = "8 бит RGB";
-"bit_depth_10" = "10 бит RGB (r210)";
-"bit_depth_12" = "12 бит RGB (R12B)";
+"bit_depth_8" = "8 бит (BGRA / 2vuy)";
+"bit_depth_10" = "10 бит (r210 / v210)";
+"bit_depth_12" = "12 бит RGB (R12B), 10 бит YCbCr";
+"capture_bit_depth_hint" = "И для RGB 4:4:4, и для YCbCr 4:2:2. Формата 12 бит YCbCr не существует — сигнал 4:2:2 захватывается как 10 бит v210.";
 "bit_depth_fallback" = "Захват %d бит недоступен — плата отдаёт %d бит";
 "scope_parade" = "Парад";
 "scope_vector" = "Вектор";

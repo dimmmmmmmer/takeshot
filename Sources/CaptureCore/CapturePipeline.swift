@@ -136,6 +136,11 @@ public final class CapturePipeline: @unchecked Sendable {
     /// board can change format mid-session and each converter owns pools and a
     /// levels table that are cheap to keep and expensive to rebuild.
     let twelveBitConverter = TwelveBitConverter()
+    /// 10-bit YCbCr 4:2:2 wire split (display BGRA + the 'v210' wire frame
+    /// itself as the record product). Held for the same reason as the other two,
+    /// and it is the cheapest of the three to keep: it owns no record pool,
+    /// because the frame the board delivered already is what the encoder wants.
+    let tenBitYUVConverter = TenBitYUVConverter()
     /// Bytes per pixel of the buffers currently going to the writer, so the
     /// pre-roll ring's memory cap is sized on what it is really holding —
     /// 12-bit record frames are twice a 10-bit one and would otherwise
