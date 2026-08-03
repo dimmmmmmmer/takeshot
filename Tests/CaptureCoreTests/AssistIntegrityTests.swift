@@ -95,9 +95,13 @@ struct AssistIntegrityTests {
                 "the frame reached the mirror unmetered: \(Self.rowDescription(of: shown))")
     }
 
-    /// The multiview mirror — the phone — is the second consumer of the same
-    /// frame, and it is a separate handler, so it gets its own question.
-    @Test func theAidsReachTheMultiviewMirror() async throws {
+    /// The camera grid on a phone is the ONE display consumer that must not get
+    /// the aids. It is what the crew watches, not what the operator judges
+    /// exposure on: false colour there tells a gaffer the scene is on fire, and
+    /// a frameline matte reads as the actual frame. The owner asked for them off
+    /// (item 13), so the grid is handed the clean frame while the viewer and the
+    /// hardware monitor — asserted just above — get the decorated one.
+    @Test func theAidsStayOffTheCameraGrid() async throws {
         let pipeline = PreviewProbe.makePipeline()
         pipeline.setViewAssist(loudAssist())
         let collector = PreviewCollector()
@@ -105,13 +109,14 @@ struct AssistIntegrityTests {
         defer { pipeline.setOnMultiviewFrame(nil) }
 
         let source = PreviewProbe.frame(Self.flat)
-        for index in 1...12 where collector.last.map({ $0 === source }) ?? true {
+        for index in 1...12 where collector.last == nil {
             PreviewProbe.push(pipeline, source, frame: index)
             try? await Task.sleep(for: .milliseconds(40))
         }
 
-        let shown = try #require(collector.last, "nothing reached the multiview")
-        #expect(shown !== source, "the multiview was handed the untouched frame")
+        let shown = try #require(collector.last, "nothing reached the grid")
+        #expect(!Self.isMetered(shown),
+                "the aids reached the crew's phones: \(Self.rowDescription(of: shown))")
     }
 
     /// Framelines on their own — no exposure tool — still cost a pass. They are
