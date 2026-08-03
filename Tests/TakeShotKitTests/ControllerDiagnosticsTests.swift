@@ -130,20 +130,46 @@ import Testing
 
     // MARK: - the PIN
 
+    /// Whether a PIN leaked, as opposed to merely occurring.
+    ///
+    /// A bare `contains` cannot tell the two apart, and the difference is not
+    /// academic: the app's PIN is FOUR DIGITS (`ensureRemotePIN` regenerates
+    /// anything else), macOS hands out ephemeral ports from 49152–65535, and
+    /// 54271 contains 4271. This test used to fail whenever the kernel picked
+    /// one of those and report a leaked credential that was really the port it
+    /// also asserts is present. Free space and file sizes in bytes are longer
+    /// numbers with the same hazard.
+    ///
+    /// A leak writes the PIN as a value — `PIN: 4271`, `"remotePIN":"4271"` —
+    /// so it has a non-digit on both sides. An accidental occurrence is inside
+    /// a longer run of digits. That is the whole distinction, and the fixture
+    /// stays four digits so the test keeps describing the real product.
+    private func leaks(_ pin: String, in text: String) -> Bool {
+        text.ranges(of: pin).contains { range in
+            let before = range.lowerBound > text.startIndex
+                ? text[text.index(before: range.lowerBound)] : " "
+            let after = range.upperBound < text.endIndex
+                ? text[range.upperBound] : " "
+            return !before.isNumber && !after.isNumber
+        }
+    }
+
     /// The bundle is made to be sent to someone. The PIN is the only
     /// credential this app has, and it must be in none of the files — while
     /// the port, which is what actually diagnoses a remote that will not come
     /// up, is in all the ones that mention the remote at all.
     @Test func thePINIsInNoFileAndThePortIsInThem() async throws {
+        // the matcher earns its keep only if a planted leak trips it — without
+        // this the boundary rule could quietly stop matching anything at all
+        #expect(leaks("4271", in: #""remotePIN" : "4271""#))
+        #expect(leaks("4271", in: "PIN: 4271"))
+        #expect(!leaks("4271", in: "boundPort : 54271"))
+        #expect(!leaks("4271", in: "Free space: 1427193856 bytes"))
+
         try await ControllerHarness.run { controller, root in
             let out = try scratch(in: root)
-            // Six digits, not four. A TCP port is at most five, so a six-digit
-            // PIN cannot be a substring of one — with a four-digit 4271 this test failed
-            // whenever the kernel happened to hand out 54271 or 64271, reporting
-            // a leaked credential that was really the port it also asserts is
-            // present. The app takes any length; the bundle's redaction works on
-            // key names, so the digits here are only the needle.
-            controller.settings.remotePIN = "427193"
+            // Four digits, like every PIN the app itself makes.
+            controller.settings.remotePIN = "4271"
             // Port 0: the listener picks an ephemeral one, so the suite never
             // claims a fixed port on the machine running it.
             controller.startRemoteServer(overridePort: 0)
@@ -158,7 +184,7 @@ import Testing
             #expect(files.count == 3)
             for file in files {
                 let text = try read(folder, file)
-                #expect(!text.contains("427193"), "the PIN is in \(file)")
+                #expect(!leaks("4271", in: text), "the PIN is in \(file)")
                 #expect(!text.lowercased().contains("remotepin"),
                         "the PIN's key is in \(file)")
             }
