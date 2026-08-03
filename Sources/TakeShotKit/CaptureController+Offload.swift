@@ -85,14 +85,14 @@ extension CaptureController {
     /// day, and re-picking them through a file panel each time is the part of
     /// the old flow people complained about.
     ///
-    /// The checksum is still recorded, and is still whatever the run actually
-    /// used — it is a fact about the day, not a preference any more (see
-    /// `OffloadSheetModel.algorithm`). The setting stays Optional and stays
-    /// written so a saved blob from an older build still decodes.
+    /// The destinations are the only thing worth carrying. The checksum used to
+    /// be stored beside them, from the days the sheet had a picker; it is a
+    /// constant now (`OffloadSheetModel.algorithm`), so the setting recorded a
+    /// value nothing read back and nothing ever did. Which checksum a given run
+    /// used is in that run's ASC MHL manifest, which is where post looks for it.
     func rememberOffloadChoices(destinations: [URL]) {
         settings.offloadDestinationPaths = destinations.isEmpty
             ? nil : destinations.map(\.path)
-        settings.offloadHashAlgorithm = OffloadSheetModel.algorithm.rawValue
     }
 
     /// A finished run, as the rest of the app sees it.

@@ -1,29 +1,21 @@
 /* Preview */
 "no_devices_found" = "Устройства не найдены";
 "sdk_not_connected" = "DeckLink SDK не подключён";
-"capture_not_running" = "Захват не запущен";
 "no_signal" = "Нет сигнала";
 "rec" = "REC";
 
 /* Controls */
 "device" = "Устройство";
 "no_devices" = "Нет устройств";
-"start_capture" = "Запустить захват";
-"stop_capture" = "Остановить захват";
 "scene" = "Сцена";
-"take_n" = "Дубль %d";
 "record" = "Запись";
 "stop" = "Стоп";
-"mock_rec" = "REC демо-камеры";
-"mock_rec_stop" = "Стоп демо-камеры";
-"mock_rec_help" = "Симулирует нажатие REC на камере: таймкод побежит, авто-детекция создаст дубль";
 "mock_device_name" = "Демо-источник (без платы)";
 
 /* Take list */
 "takes" = "Дубли";
 "no_takes_yet" = "Дублей пока нет";
 "show_in_finder" = "Показать в Finder";
-"circle_take_help" = "Circle take — пометить удачный дубль";
 
 /* Settings */
 "settings_recording" = "Запись";
@@ -31,18 +23,13 @@
 "destination_folder" = "Папка записи";
 "project" = "Проект";
 "camera" = "Камера";
-"settings_naming" = "Именование";
 "naming_template" = "Шаблон имени";
-"placeholders" = "Плейсхолдеры: %@";
 "settings_detection" = "Детекция дублей";
 "detection_mode" = "Режим";
 "mode_vanc" = "Только VANC-триггер";
 "mode_auto" = "Авто (VANC + таймкод)";
 "mode_timecode" = "Только бегущий таймкод";
 "mode_manual" = "Только вручную";
-"start_debounce" = "Старт: %d кадр(ов)";
-"stop_debounce" = "Стоп: %d кадр(ов)";
-"recrun_hint" = "Для авто-детекции по таймкоду камера должна писать TC в режиме Rec Run";
 "settings_interface" = "Интерфейс";
 "language" = "Язык";
 "lang_system" = "Системный";
@@ -50,19 +37,13 @@
 "lang_russian" = "Русский";
 
 /* Pre-roll */
-"pre_roll" = "Пре-ролл: %.1f с";
 
 /* Controls v2 */
 "open_settings" = "Настройки";
-"scene_help" = "Имя сцены — попадает в имена файлов ({scene}). С камерами, отдающими метадату в SDI, заполнится само";
-"take_help" = "Номер следующего дубля, автоинкремент после каждого дубля ({take})";
 
 /* Take panel v2 */
 "view_list" = "Список";
 "view_grid" = "Миниатюры";
-"reveal_csv_help" = "Показать CSV метадаты для DaVinci Resolve (Media Pool → Import Metadata; circle takes станут Good Takes)";
-"circle_take" = "Обвести дубль (Good Take в Резолве)";
-"uncircle_take" = "Снять отметку";
 
 "device_disconnected" = "Капчур-устройство отключено";
 
@@ -84,8 +65,6 @@
 "reserved_play_pause" = "Воспроизведение / пауза";
 "reserved_close_overlay" = "Закрыть оверлей";
 "hotkey_record" = "Запись / стоп";
-"hotkey_circle" = "Оценить последний дубль (good/bad)";
-"hotkey_demo_rec" = "REC демо-камеры";
 "press_keys" = "Нажмите клавиши…";
 "reset_hotkeys" = "Сбросить по умолчанию";
 "choose_folder" = "Выбрать папку";
@@ -109,8 +88,6 @@
 "theme_light" = "Светлая";
 "theme_dark" = "Тёмная";
 "player_background" = "Фон плеера";
-"prefix_label" = "PREFIX";
-"prefix_prompt" = "Проект";
 "cam_label" = "CAM";
 "roll_label" = "ROLL";
 "clip_label" = "CLIP";
@@ -126,11 +103,7 @@
 "description_label" = "Описание";
 "open_folder" = "Открыть папку дублей в Finder";
 "other_content" = "Другие файлы";
-"debounce_hint" = "Кадры подтверждения перед стартом/стопом; 0 = мгновенная реакция (один кадр движения таймкода всё равно нужен)";
-"pre_roll_hint" = "Кадры копятся в памяти до REC; дубль начнётся на столько секунд раньше, чем нажали запись на камере";
 
-"open" = "Открыть";
-"reveal_csv" = "Показать CSV метадаты для Resolve в Finder";
 
 /* Playback */
 "mode_record" = "Запись";
@@ -169,9 +142,6 @@
 "settings_audio" = "Аудио";
 "external_display" = "Вывод на внешний монитор";
 "external_off" = "Выкл";
-"record_channels" = "Аудиоканалы в запись";
-"channels_all" = "Все";
-"record_channels_hint" = "В файл пишутся первые N каналов; метры всегда показывают все входящие";
 "tile_size" = "Размер плитки";
 
 /* Round 6 */
@@ -210,13 +180,11 @@
 "hotkey_grab" = "Стоп-кадр";
 
 "monitor_device" = "Устройство мониторинга";
-"monitor_device_hint" = "Вывод мониторинга по SDI/HDMI через плату Blackmagic — включится с первой сборкой на живом железе";
 
 "wipe_vertical" = "Вертикальная шторка";
 "wipe_horizontal" = "Горизонтальная шторка";
 "wipe_diagonal" = "Диагональная шторка";
 
-"preset_sony" = "Стиль Sony";
 
 /* LUT */
 "lut_none" = "Без LUT";
@@ -229,11 +197,9 @@
 "lut_playback_toggle" = "LUT на этом клипе: выключите, если лук уже запечён камерой";
 
 /* Color tags */
-"color_tags" = "Цветовые теги видео";
 "video_levels" = "Уровни входа";
 "levels_limited" = "Limited";
 "levels_full" = "Full";
-"color_tags_hint" = "Дефолт — Rec.709 nclc 1-1-1, limited: то, чего ждут 99% HD-пайплайнов. Настройка уровней полноценно заработает с форматами живого железа";
 
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony";
@@ -245,10 +211,8 @@
 
 "preset_canon" = "Canon";
 
-"lut_intensity" = "Интенсивность: %d%%";
 
 /* Reset */
-"reset_colors" = "Сбросить цвета";
 "reset_all" = "Сбросить все настройки";
 
 "levels_auto" = "Авто";
@@ -316,7 +280,6 @@
 "marker_added" = "Маркер %@";
 "marker_needs_clip" = "Маркер ставится на клип из папки записи — у фото нет таймлайна";
 
-"export_edl_help" = "Экспорт EDL селектов (хорошие тейки + маркеры)";
 "edl_no_good_takes" = "Нет хороших тейков для экспорта";
 "edl_saved" = "EDL сохранён: %@";
 
@@ -372,7 +335,6 @@
 "marker_prev_help" = "Предыдущий маркер";
 "marker_next_help" = "Следующий маркер";
 
-"ten_bit_capture" = "10-битный захват RGB (r210)";
 
 "no_audio_short" = "нет аудио";
 

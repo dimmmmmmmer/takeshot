@@ -28,12 +28,6 @@ extension CapturePipeline {
         chromaLock.unlock()
     }
 
-    public func currentChromaKey() -> ChromaKey {
-        chromaLock.lock()
-        defer { chromaLock.unlock() }
-        return storedChromaKey
-    }
-
     /// The plate that shows through the key. Handed to the keyer on its own
     /// queue — the keyer belongs to the display stage and nothing else may
     /// touch it.

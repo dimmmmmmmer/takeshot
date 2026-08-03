@@ -71,13 +71,22 @@ extension CaptureController {
         }
     }
 
-    /// The short format badge — "1080p25", "2160p24".
+    /// The short format badge for PLAYBACK — "1080p25", "2160p24".
     ///
-    /// One spelling, because there were two: the RAW engine rounded the rate
-    /// unconditionally and the AVFoundation path rounded only within 0.05 of an
-    /// integer, so a rate further off than that read differently depending on
-    /// which engine opened the clip. The near-integer rates cameras actually
-    /// shoot (23.976, 29.97) round either way, which is why it went unnoticed.
+    /// One spelling across the playback engines, because there were two: the RAW
+    /// engine rounded the rate unconditionally and the AVFoundation path rounded
+    /// only within 0.05 of an integer, so a rate further off than that read
+    /// differently depending on which engine opened the clip. The near-integer
+    /// rates cameras actually shoot (23.976, 29.97) round either way, which is
+    /// why it went unnoticed.
+    ///
+    /// The LIVE badge is still a separate spelling (`playerShortFormat` /
+    /// `playerFPSText`), and it disagrees here: it keeps the decimals for
+    /// anything that is not an exact integer, so a 23.976 signal reads
+    /// "1080p23.98" live and "1080p24" once the take is played back. Which of
+    /// the two is right is a question for the operator — the board's own mode
+    /// name is "1080p23.98" and the ALE writes 23.976 — so it is left stated
+    /// rather than silently unified.
     nonisolated static func shortFormat(height: Int, fps: Double) -> String {
         guard fps > 0 else { return "\(height)p?" }
         let rate = abs(fps.rounded() - fps) < 0.05

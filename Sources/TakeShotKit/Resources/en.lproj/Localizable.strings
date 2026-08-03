@@ -1,29 +1,21 @@
 /* Preview */
 "no_devices_found" = "No devices found";
 "sdk_not_connected" = "DeckLink SDK not connected";
-"capture_not_running" = "Capture not running";
 "no_signal" = "No signal";
 "rec" = "REC";
 
 /* Controls */
 "device" = "Device";
 "no_devices" = "No devices";
-"start_capture" = "Start capture";
-"stop_capture" = "Stop capture";
 "scene" = "Scene";
-"take_n" = "Take %d";
 "record" = "Record";
 "stop" = "Stop";
-"mock_rec" = "Demo camera REC";
-"mock_rec_stop" = "Stop demo camera";
-"mock_rec_help" = "Simulates pressing REC on the camera: timecode starts running and auto-detection creates a take";
 "mock_device_name" = "Demo source (no hardware)";
 
 /* Take list */
 "takes" = "Takes";
 "no_takes_yet" = "No takes yet";
 "show_in_finder" = "Show in Finder";
-"circle_take_help" = "Circle take — mark a good take";
 
 /* Settings */
 "settings_recording" = "Recording";
@@ -31,18 +23,13 @@
 "destination_folder" = "Destination folder";
 "project" = "Project";
 "camera" = "Camera";
-"settings_naming" = "Naming";
 "naming_template" = "File name template";
-"placeholders" = "Placeholders: %@";
 "settings_detection" = "Take detection";
 "detection_mode" = "Mode";
 "mode_vanc" = "VANC trigger only";
 "mode_auto" = "Auto (VANC + timecode)";
 "mode_timecode" = "Running timecode only";
 "mode_manual" = "Manual only";
-"start_debounce" = "Start: %d frame(s)";
-"stop_debounce" = "Stop: %d frame(s)";
-"recrun_hint" = "For timecode-based auto-detection the camera must output Rec Run timecode";
 "settings_interface" = "Interface";
 "language" = "Language";
 "lang_system" = "System";
@@ -50,19 +37,13 @@
 "lang_russian" = "Русский";
 
 /* Pre-roll */
-"pre_roll" = "Pre-roll: %.1f s";
 
 /* Controls v2 */
 "open_settings" = "Settings";
-"scene_help" = "Scene name — used in file names ({scene}). With cameras that embed metadata in SDI it will be filled automatically";
-"take_help" = "Next take number, auto-increments after every take ({take})";
 
 /* Take panel v2 */
 "view_list" = "List";
 "view_grid" = "Thumbnails";
-"reveal_csv_help" = "Show metadata CSV for DaVinci Resolve (Media Pool → Import Metadata; circle takes become Good Takes)";
-"circle_take" = "Circle take (Good Take in Resolve)";
-"uncircle_take" = "Remove circle";
 
 "device_disconnected" = "Capture device disconnected";
 
@@ -84,8 +65,6 @@
 "reserved_play_pause" = "Play / pause";
 "reserved_close_overlay" = "Close overlay";
 "hotkey_record" = "Record / stop";
-"hotkey_circle" = "Rate last take (good/bad)";
-"hotkey_demo_rec" = "Demo camera REC";
 "press_keys" = "Press keys…";
 "reset_hotkeys" = "Reset to defaults";
 "choose_folder" = "Choose folder";
@@ -109,8 +88,6 @@
 "theme_light" = "Light";
 "theme_dark" = "Dark";
 "player_background" = "Player background";
-"prefix_label" = "PREFIX";
-"prefix_prompt" = "Project";
 "cam_label" = "CAM";
 "roll_label" = "ROLL";
 "clip_label" = "CLIP";
@@ -127,11 +104,7 @@
 "description_label" = "Description";
 "open_folder" = "Open takes folder in Finder";
 "other_content" = "Other content";
-"debounce_hint" = "Confirmation frames before start/stop is detected; 0 = react instantly (one frame of timecode movement is still required)";
-"pre_roll_hint" = "Frames are buffered in memory before REC; the take starts this many seconds before the camera did";
 
-"open" = "Open";
-"reveal_csv" = "Show Resolve metadata CSV in Finder";
 
 /* Playback */
 "mode_record" = "Record";
@@ -167,9 +140,6 @@
 "settings_audio" = "Audio";
 "external_display" = "External monitor output";
 "external_off" = "Off";
-"record_channels" = "Audio channels to record";
-"channels_all" = "All";
-"record_channels_hint" = "First N embedded channels are written to the file; meters always show all incoming channels";
 "tile_size" = "Tile size";
 
 /* Round 6 */
@@ -208,13 +178,11 @@
 "hotkey_grab" = "Grab frame";
 
 "monitor_device" = "Hardware monitor device";
-"monitor_device_hint" = "SDI/HDMI monitoring output through a Blackmagic device — activates with the first live-hardware build";
 
 "wipe_vertical" = "Vertical wipe";
 "wipe_horizontal" = "Horizontal wipe";
 "wipe_diagonal" = "Diagonal wipe";
 
-"preset_sony" = "Sony style";
 
 /* LUT */
 "lut_none" = "No LUT";
@@ -227,11 +195,9 @@
 "lut_playback_toggle" = "LUT on this clip: turn off if the look came baked from the camera";
 
 /* Color tags */
-"color_tags" = "Video color tags";
 "video_levels" = "Input levels";
 "levels_limited" = "Limited";
 "levels_full" = "Full";
-"color_tags_hint" = "Default is Rec.709 nclc 1-1-1, limited range — what 99% of HD delivery expects. Levels setting takes full effect with real hardware signal formats";
 
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony";
@@ -243,10 +209,8 @@
 
 "preset_canon" = "Canon";
 
-"lut_intensity" = "Intensity: %d%%";
 
 /* Reset */
-"reset_colors" = "Reset colors";
 "reset_all" = "Reset all settings";
 
 "levels_auto" = "Auto";
@@ -314,7 +278,6 @@
 "marker_added" = "Marker %@";
 "marker_needs_clip" = "Markers need a clip from the record folder — a photo has no timeline";
 
-"export_edl_help" = "Export selects EDL (good takes + markers)";
 "edl_no_good_takes" = "No good takes to export";
 "edl_saved" = "EDL saved: %@";
 
@@ -370,7 +333,6 @@
 "marker_prev_help" = "Previous marker";
 "marker_next_help" = "Next marker";
 
-"ten_bit_capture" = "10-bit RGB capture (r210)";
 
 "no_audio_short" = "no audio";
 

@@ -83,12 +83,6 @@ struct PlayerArea: View {
             .animation(.easeOut(duration: 0.2), value: controller.lastNotice)
             .padding(.horizontal, 12)
     }
-
-    static func fpsText(_ fps: Double) -> String { playerFPSText(fps) }
-
-    static func shortFormat(_ format: CaptureFormat) -> String {
-        playerShortFormat(format)
-    }
 }
 
 /// A toast over the bottom of the player.

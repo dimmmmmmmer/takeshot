@@ -136,10 +136,6 @@ extension CaptureController {
             behavior: [.fullScreenAuxiliary, .stationary],
             makeKey: false)
     }
-    /// System fullscreen of the main window (immersive mode).
-    func toggleFullscreen() {
-        NSApp.mainWindow?.toggleFullScreen(nil)
-    }
     /// Fullscreen for PLAYBACK ONLY: a borderless full-screen window;
     /// the app itself stays as it was (this isn't the green button).
     func togglePlaybackFullscreen() {

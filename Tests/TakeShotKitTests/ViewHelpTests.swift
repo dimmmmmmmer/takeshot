@@ -54,13 +54,24 @@ struct ViewHelpTests {
 
     /// An empty document is a build problem — the view has to say so rather than
     /// show a blank page.
+    ///
+    /// Measured against the explanation line itself, not against zero: the body
+    /// of an empty document IS that one line, so dropping the branch (a blank
+    /// page) and swapping the string for a different one both move the answer.
+    /// The "taller and wider than nothing" assertion this replaces passed
+    /// against either.
     @Test func aMissingGuideRendersAnExplanation() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes {
                 HelpBody(document: HelpDocument.parse(""))
             }
-            #expect(ideal.en.height > 0)
-            #expect(ideal.ru.width > 0)
+            let line = probe.fittingSizes {
+                Text(L("help_unavailable")).foregroundStyle(.secondary)
+            }
+            #expect(ideal.en.matches(line.en, slack: 1),
+                    "English: \(ideal.en) for a line that measures \(line.en)")
+            #expect(ideal.ru.matches(line.ru, slack: 1),
+                    "Russian: \(ideal.ru) for a line that measures \(line.ru)")
         }
     }
 }

@@ -513,11 +513,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// two or three SSDs come back every shooting day, and re-picking them
     /// through a file panel per card is the part of the old flow that hurt.
     public var offloadDestinationPaths: [String]?
-    /// Checksum the last offload ran with: "xxh64" (nil — the same) or
-    /// "sha256". A RECORD, not a preference — the picker is gone and every run
-    /// is xxHash64 now. Kept because it is written back on every run and an old
-    /// saved blob still has to decode.
-    public var offloadHashAlgorithm: String?
 
     // MARK: - dailies (see DailiesEngine and CaptureController+Dailies)
     //

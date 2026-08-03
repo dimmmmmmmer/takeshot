@@ -37,15 +37,13 @@ import Testing
     /// The same two or three SSDs come back every shooting day; re-picking them
     /// through a file panel per card is the part of the old flow that hurt.
     ///
-    /// The saved `sha256` is there on purpose: the checksum picker is gone
-    /// (owner item 19) and a build that once wrote SHA-256 into the settings
-    /// must not quietly bring the slow path back for the rest of that Mac's
-    /// life. The engine still supports both, and a manifest written in either
-    /// still verifies — what went is the question.
+    /// The rig is the destinations and nothing else. The checksum picker is gone
+    /// (owner item 19), so no saved value can bring the slow path back — the
+    /// engine still supports both and a manifest written in either still
+    /// verifies, but the question is no longer asked.
     @Test func theSheetSeedsItselfFromTheSavedRig() async throws {
         let rig: (inout CaptureSettings) -> Void = {
             $0.offloadDestinationPaths = ["/Volumes/SSD1", "/Volumes/SSD2"]
-            $0.offloadHashAlgorithm = "sha256"
         }
         try await ControllerHarness.run(configure: rig) { controller, _ in
             controller.showOffloadSheet()
@@ -53,7 +51,6 @@ import Testing
             #expect(controller.offloadSheetPresented)
             #expect(controller.offload.destinations.map(\.path)
                 == ["/Volumes/SSD1", "/Volumes/SSD2"])
-            #expect(OffloadSheetModel.algorithm == .xxh64)
         }
     }
 
@@ -188,7 +185,6 @@ import Testing
             // the destinations are remembered for the next card
             let saved = CaptureSettings.loaded(from: controller.defaults)
             #expect(saved.offloadDestinationPaths == [first.path, second.path])
-            #expect(saved.offloadHashAlgorithm == "xxh64")
         }
     }
 
