@@ -127,18 +127,24 @@ public final class ChromaKeyer: @unchecked Sendable {
     }
 
     /// The plate scaled and shifted per the operator's layout, cropped to the
-    /// frame and backed with black where it does not reach.
+    /// frame and letterboxed with black where it does not reach.
     ///
     /// Black and not a checkerboard: an uncovered edge here is the operator's
     /// own framing decision, not the "you have loaded nothing" state, and a
     /// pattern behind a deliberately inset plate reads as a broken key.
+    ///
+    /// The bars are painted rather than left to what shows through beside a
+    /// smaller image — see `CIImage.letterboxed(in:with:)`, which is where the
+    /// macOS 15 runner's smeared fit came from. Nothing to place is black for
+    /// the same reason: a frame-sized answer, not the unplaced plate.
     private static func placed(_ buffer: CVPixelBuffer,
                                layout: ChromaKey.PlateLayout,
                                in extent: CGRect) -> CIImage {
+        let black = passthrough(ChromaKey.RGB(0, 0, 0))
         let image = CIImage(cvPixelBuffer: buffer, options: [.colorSpace: NSNull()])
         let source = image.extent
         guard let target = layout.rect(forPlate: source.size, in: extent) else {
-            return image
+            return CIImage(color: black).cropped(to: extent)
         }
         let scaled = image
             .transformed(by: CGAffineTransform(
@@ -149,13 +155,12 @@ public final class ChromaKeyer: @unchecked Sendable {
         let positioned = scaled.transformed(by: CGAffineTransform(
             translationX: target.minX - scaled.extent.minX,
             y: target.minY - scaled.extent.minY))
+        // a covering plate has no bar to draw, and the crop to a rect strictly
+        // inside its own is a real boundary rather than a no-op
         guard !layout.covers(extent, plate: source.size) else {
             return positioned.cropped(to: extent)
         }
-        return positioned
-            .composited(over: CIImage(color: CIColor(red: 0, green: 0, blue: 0))
-                .cropped(to: extent))
-            .cropped(to: extent)
+        return positioned.letterboxed(in: extent, with: black)
     }
 
     /// The "is my key clean" background: two grays, squares sized off the frame

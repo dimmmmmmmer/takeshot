@@ -200,7 +200,29 @@ struct ChromaPlateRenderTests {
 
     /// What is at a fraction across the middle row: "black", "red", "blue".
     private func band(_ buffer: CVPixelBuffer, at fraction: Double) -> String {
-        let pixel = ChromaProbe.pixel(of: buffer, atFractionX: fraction)
+        Self.name(ChromaProbe.pixel(of: buffer, atFractionX: fraction))
+    }
+
+    /// The same reading on a named ROW, counted from the top. `ChromaProbe`
+    /// only ever reads the middle one, and the middle one cannot see a bar
+    /// above or below the plate.
+    private func band(_ buffer: CVPixelBuffer, at fraction: Double,
+                      row rowIndex: Int) -> String {
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return "none" }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+        let x = min(width - 1, max(0, Int(Double(width) * fraction)))
+        let row = base.assumingMemoryBound(to: UInt8.self)
+            + min(height - 1, max(0, rowIndex)) * rowBytes
+        return Self.name(ChromaProbe.Pixel(r: Int(row[x * 4 + 2]),
+                                           g: Int(row[x * 4 + 1]),
+                                           b: Int(row[x * 4])))
+    }
+
+    private static func name(_ pixel: ChromaProbe.Pixel) -> String {
         if pixel.r > 200 && pixel.b < 60 { return "red" }
         if pixel.b > 200 && pixel.r < 60 { return "blue" }
         if pixel.r < 40 && pixel.g < 40 && pixel.b < 40 { return "black" }
@@ -241,6 +263,32 @@ struct ChromaPlateRenderTests {
         #expect(band(shown, at: 0.98) == "blue", "fill left a gap on the right")
         #expect(band(shown, at: 0.35) == "red")
         #expect(band(shown, at: 0.65) == "blue")
+    }
+
+    /// The letterbox is on all four sides, not just left and right.
+    ///
+    /// A plate pushed in to half size leaves a bar above and below it as well,
+    /// and nothing else in this suite reads a row other than the middle one —
+    /// so nothing else would notice the top and bottom bars going the way the
+    /// left and right ones did on a macOS 15 runner: filled with the plate's
+    /// own edge row instead of with black, because an image composited over a
+    /// colour states where it stops with its extent and with nothing in its
+    /// pixels (see `CIImage.letterboxed(in:with:)`).
+    @Test func aPlatePushedInIsLetterboxedOnAllFourSides() async throws {
+        var layout = ChromaKey.PlateLayout()
+        layout.fit = .fit
+        layout.scale = 0.5
+        let shown = try await rendered(layout)
+        // fitted the square plate is the frame's full height; at half scale it
+        // is the middle 16x16 of a 64x32 frame, with its seam still centred
+        #expect(band(shown, at: 0.42) == "red")
+        #expect(band(shown, at: 0.58) == "blue")
+        #expect(band(shown, at: 0.05) == "black")
+        #expect(band(shown, at: 0.95) == "black")
+        #expect(band(shown, at: 0.42, row: 2) == "black",
+                "the plate's top row was smeared into the bar above it")
+        #expect(band(shown, at: 0.58, row: 29) == "black",
+                "the plate's bottom row was smeared into the bar below it")
     }
 
     /// And the offset slides it: a quarter of a frame to the right puts the

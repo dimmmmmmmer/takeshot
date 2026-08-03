@@ -101,29 +101,6 @@ struct ViewPanelTests {
         }
     }
 
-    /// Both sections share the list/grid toggle: two icons in a segmented
-    /// control, so no translation may resize it — and it hugs them, because a
-    /// control smaller than its frame is centered in it and the empty half of
-    /// that frame is what made the header look lopsided (owner item 44).
-    @Test func viewModePickerHugsItsIconsInBothLanguages() async throws {
-        try await ViewProbe.run { probe in
-            let ideal = probe.fittingSizes {
-                ViewModePicker(mode: .constant("list"))
-            }
-            #expect(ideal.ru == ideal.en,
-                    "the icon toggle changed size with the language: \(ideal)")
-            #expect(ideal.en.width > 0 && ideal.en.width < 70,
-                    "the picker is \(ideal.en.width)pt — it is padding again")
-            // and the drawing fills the frame: whatever slack is left inside it
-            // reappears as the asymmetry item 44 reported
-            let ink = try #require(ViewRender.drawnBounds(
-                probe.hosted(ViewModePicker(mode: .constant("list"))),
-                in: CGSize(width: ideal.en.width, height: 24)))
-            #expect(ink.minX <= 0.5 && ink.maxX >= ideal.en.width - 0.5,
-                    "the picker draws \(ink) inside a \(ideal.en.width)pt box")
-        }
-    }
-
     /// The audio panel's width is set by the channel count and nothing else
     /// (`channels * 30 + 84`), which is precisely why the localized title and
     /// hint inside it must not be able to change it.
@@ -301,40 +278,6 @@ struct ViewPanelTests {
         }
     }
 
-    /// Owner item 44: the list/tile pickers have to finish as close to the
-    /// panel's right edge as the section title starts from its left.
-    ///
-    /// Both are on the same 10pt margin and it still looked lopsided, which is
-    /// why this measures INK rather than frames: a title's frame is its glyphs,
-    /// a segmented control's is not — AppKit draws the cell inset inside its
-    /// bounds to leave room for a focus ring, and that inset is the whole
-    /// asymmetry. Rasterized and read back, so the compensating constant cannot
-    /// drift away from what the control actually renders as.
-    @Test func theSectionHeaderInsetsAreSymmetric() async throws {
-        try await ViewProbe.run { probe in
-            let width = ViewBudget.panelMinWidth
-            for mode in ["list", "grid"] {
-                let header = probe.hosted(
-                    PanelSectionHeader(viewMode: .constant(mode),
-                                       tileSize: .constant(150)) {
-                        Text(L("other_content"))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    })
-                let box = try #require(
-                    ViewRender.drawnBounds(header,
-                                           in: CGSize(width: width, height: 28)),
-                    "the \(mode) header drew nothing")
-                let leading = box.minX
-                let trailing = width - box.maxX
-                #expect(abs(leading - trailing) <= 0.5,
-                        "\(mode) header: \(leading)pt left, \(trailing)pt right")
-                #expect(abs(leading - PanelChrome.contentMargin) <= 0.5,
-                        "\(mode) header sits \(leading)pt in, margin is \(PanelChrome.contentMargin)")
-            }
-        }
-    }
-
     /// Take rows carry the comment and rating controls; both are icon buttons
     /// with localized tooltips only, so they must stay a fixed 18pt square.
     @Test func takeRowControlsAreLocaleIndependent() async throws {
@@ -347,6 +290,126 @@ struct ViewPanelTests {
             #expect(comment.ru == comment.en)
             #expect(rating.en == CGSize(width: 18, height: 18))
             #expect(rating.ru == rating.en)
+        }
+    }
+}
+
+/// Owner item 44: the two margins of a takes-panel section header.
+///
+/// The title starts on the content margin and the list/tile pickers have to
+/// finish on the same one. They did not look like it, and the gap was inside
+/// the picker's own box — a segmented control pinned to the slider's 70pt
+/// frame is centered in it, so a seventh of its box was empty on each side.
+///
+/// Its own suite because the two tests below share one subject and one trap.
+/// Both used to read the answer out of a bitmap, and half of what they read
+/// was the host's: AppKit does not draw a segmented control to the edges of
+/// its bounds before macOS 26, and only the selected segment is bright enough
+/// to register at all. What is measured here is layout — sizes, and the ink of
+/// a filled rectangle, which is the same on every machine. The ink comparisons
+/// that genuinely cannot be are kept, behind
+/// `ViewRender.controlInkFillsItsBounds`.
+@MainActor
+struct PanelHeaderMarginTests {
+    /// Both sections share the list/grid toggle: two icons in a segmented
+    /// control, so no translation may resize it — and it hugs them, because a
+    /// control smaller than its frame is centered in it and the empty half of
+    /// that frame is what made the header look lopsided.
+    @Test func viewModePickerHugsItsIconsInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let ideal = probe.fittingSizes {
+                ViewModePicker(mode: .constant("list"))
+            }
+            #expect(ideal.ru == ideal.en,
+                    "the icon toggle changed size with the language: \(ideal)")
+            // 70 is the SLIDER's width, which is where the picker's frame was
+            // copied from and what item 44 was; the picker itself is 42.
+            #expect(ideal.en.width > 0 && ideal.en.width < 70,
+                    "the picker is \(ideal.en.width)pt — it is padding again")
+            // …and that width is its own content's, not a frame's: offered a
+            // whole panel it takes none of it, squeezed to a point it gives
+            // none of it back. Layout, so it holds on any host.
+            let offered = probe.size(ViewModePicker(mode: .constant("list")),
+                                     proposedWidth: ViewBudget.panelMinWidth)
+            let squeezed = probe.size(ViewModePicker(mode: .constant("list")),
+                                      proposedWidth: 1)
+            #expect(offered.width == ideal.en.width,
+                    "the picker stretched to \(offered.width) when offered room")
+            #expect(squeezed.width == ideal.en.width,
+                    "the picker compressed to \(squeezed.width)")
+            // and the drawing fills the frame: whatever slack is left inside it
+            // reappears as the asymmetry item 44 reported. Ink off an AppKit
+            // control, so it is a fact about the host's drawing and not about
+            // this layout — the widths above are the portable half of it.
+            guard ViewRender.controlInkFillsItsBounds else { return }
+            let ink = try #require(ViewRender.drawnBounds(
+                probe.hosted(ViewModePicker(mode: .constant("list"))),
+                in: CGSize(width: ideal.en.width, height: 24)))
+            #expect(ink.minX <= 0.5 && ink.maxX >= ideal.en.width - 0.5,
+                    "the picker draws \(ink) inside a \(ideal.en.width)pt box")
+        }
+    }
+
+    /// The pickers finish as close to the panel's right edge as the section
+    /// title starts from its left.
+    ///
+    /// Both margins are measured, neither is read off the source. The LEADING
+    /// one comes off ink, and portably: the leading view here is a filled
+    /// rectangle, which rasterizes to exactly its frame on any host, where a
+    /// glyph's ink starts a fraction inside its own box and a segmented
+    /// control's ink is whatever that release of AppKit felt like drawing.
+    /// The TRAILING one is derived from sizes, which are portable too —
+    /// squeezed to its minimum the header is
+    ///
+    ///     margin | block | 10 | 4 | 10 | controls | margin
+    ///
+    /// (`PanelSectionHeader`'s `HStack(spacing: 10)` and its `Spacer`), and
+    /// every term but the last is measured, so the last one falls out. Those
+    /// are the same two numbers the ink version compared — 10 and 10, exactly,
+    /// in both modes — without asking the host to draw a control to the edge
+    /// of its bounds.
+    @Test func theSectionHeaderInsetsAreSymmetric() async throws {
+        try await ViewProbe.run { probe in
+            let width = ViewBudget.panelMinWidth
+            let block = CGSize(width: 40, height: 12)
+            // the spacings PanelSectionHeader puts between its three children
+            let inner: CGFloat = 10 + 4 + 10
+            @MainActor func header(_ mode: String) -> some View {
+                PanelSectionHeader(viewMode: .constant(mode),
+                                   tileSize: .constant(150)) {
+                    Color.white.frame(width: block.width, height: block.height)
+                }
+            }
+            for mode in ["list", "grid"] {
+                let box = try #require(
+                    ViewRender.drawnBounds(probe.hosted(header(mode)),
+                                           in: CGSize(width: width, height: 28)),
+                    "the \(mode) header drew nothing")
+                let leading = box.minX
+                let controls = probe.fittingSize(
+                    HStack(spacing: 10) {
+                        PanelViewControls(viewMode: .constant(mode),
+                                          tileSize: .constant(150))
+                    })
+                let minimum = probe.size(header(mode), proposedWidth: 1,
+                                         proposedHeight: 28).width
+                let trailing = minimum - leading - block.width - inner
+                    - controls.width
+                #expect(abs(leading - trailing) <= 0.5,
+                        "\(mode) header: \(leading)pt left, \(trailing)pt right")
+                #expect(abs(leading - PanelChrome.contentMargin) <= 0.5,
+                        "\(mode) header sits \(leading)pt in, margin is \(PanelChrome.contentMargin)")
+
+                // …and on a host that draws a control to its own bounds, that
+                // same trailing margin is there to be read straight off the
+                // ink: the statement above, without the arithmetic
+                guard ViewRender.controlInkFillsItsBounds else { continue }
+                let inked = width - box.maxX
+                #expect(abs(leading - inked) <= 0.5,
+                        "\(mode) header ink: \(leading)pt left, \(inked)pt right")
+                #expect(abs(inked - PanelChrome.contentMargin) <= 0.5,
+                        "\(mode) header ends \(inked)pt in, margin \(PanelChrome.contentMargin)")
+            }
         }
     }
 }

@@ -102,6 +102,10 @@ public enum CompareCompositor {
 
     /// Aspect-fit `image` into `extent`, letterboxed with black — an
     /// anamorphic stretch would make the geometric comparison meaningless.
+    ///
+    /// The bars are painted rather than left to what shows through beside the
+    /// fitted picture: see `CIImage.letterboxed(in:with:)` for the runner that
+    /// smeared a picture's edge column across the bar next to it instead.
     public static func fitted(_ image: CIImage, into extent: CGRect) -> CIImage {
         let source = image.extent
         guard source.width > 0, source.height > 0 else { return image }
@@ -115,7 +119,6 @@ public enum CompareCompositor {
         return image
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale)
                 .concatenating(CGAffineTransform(translationX: tx, y: ty)))
-            .composited(over: CIImage(color: CIColor(red: 0, green: 0, blue: 0))
-                .cropped(to: extent))
+            .letterboxed(in: extent, with: CIColor(red: 0, green: 0, blue: 0))
     }
 }
