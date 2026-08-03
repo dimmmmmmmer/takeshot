@@ -279,11 +279,14 @@ struct ModelR3DClipTests {
 
     // MARK: - the format badge
 
-    /// One spelling of the short format for every engine. There were two — the
-    /// RAW engine rounded unconditionally, the AVFoundation path rounded only
-    /// within 0.05 — so a rate far enough off an integer read one way for a take
-    /// and another for a RED clip. The near-integer rates cameras actually shoot
-    /// (23.976, 29.97) round to what an operator says out loud.
+    /// One spelling of the short format for every PLAYBACK engine. There were
+    /// two — the RAW engine rounded unconditionally, the AVFoundation path
+    /// rounded only within 0.05 — so a rate far enough off an integer read one
+    /// way for a take and another for a RED clip. The near-integer rates cameras
+    /// actually shoot (23.976, 29.97) round to what an operator says out loud.
+    ///
+    /// The live badge is a third spelling and is deliberately not asserted here;
+    /// see the note on `CaptureController.shortFormat`.
     @Test func theShortFormatBadgeHasOneSpelling() {
         #expect(CaptureController.shortFormat(height: 1080, fps: 25) == "1080p25")
         #expect(CaptureController.shortFormat(height: 2160, fps: 23.976)

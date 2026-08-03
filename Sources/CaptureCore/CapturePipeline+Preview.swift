@@ -167,27 +167,18 @@ extension CapturePipeline {
         }
     }
 
-    /// The last display-only stages, and the ones the deliverables never see.
+    /// The last display-only stages, and the surfaces that get their result.
     ///
     /// By the time this runs the frame has already been written, grabbed and
     /// measured: `enqueuePreview` published the CLEAN buffer for the compare
     /// provider, and the writer, the grab and the scopes were all served back
     /// on the capture queue (see `+Frame` for the order). What is decorated
     /// here is what the MIRRORS get — the viewer, the director's monitor, the
-    /// hardware output, the multiview — which is the rule the viewing LUT and
-    /// the chroma key already follow.
+    /// hardware output — which is the rule the viewing LUT and the chroma key
+    /// already follow. The deliverables never see any of it.
     ///
     /// Key first, aids second: a false colour has to meter the picture the
     /// monitor is actually showing, background and all.
-    ///
-    /// Display-queue only.
-    /// The display-only stages, and the surfaces that get their result.
-    ///
-    /// `buffer` is what the OPERATOR looks at — the viewer and the hardware
-    /// monitor, which is the same rule the viewing LUT follows. The
-    /// deliverables never see any of it: the compare provider was published
-    /// clean upstream and the grab was served from the untouched frame back on
-    /// the capture queue.
     ///
     /// `clean` is that same frame before the key and the aids, and it is what
     /// the phone's camera grid gets. The grid is a MONITORING surface, so
@@ -195,6 +186,8 @@ extension CapturePipeline {
     /// pinned-reference wipe would put half of an hour-old frame in a tile
     /// labelled A-cam, the chroma key would show the crew a background that is
     /// not in the shot, and false colour would tell them the scene is on fire.
+    ///
+    /// Display-queue only.
     func publishDisplayFrame(_ buffer: CVPixelBuffer, clean: CVPixelBuffer,
                              deadline: UInt64) {
         lastDisplaySource = buffer

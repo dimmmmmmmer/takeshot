@@ -128,16 +128,13 @@ extension CaptureController {
         }
         rawPlayer = model
         model.setViewAssist(assist)
-        // the mirrors follow the RAW player too (renamed from
-        // wirePlayoutRouting when NDI joined the hardware output on one slot)
-        wireDisplayMirrors()
         playbackFormatText = Self.shortFormat(height: model.height,
                                               fps: model.frameRate)
         playbackStartTC = model.startTimecode
         playbackFPS = model.frameRate
-        // After the rate, not before it: the mirrors state the rate of the
-        // source they are pointed at, and the NDI frame carries it (see
-        // `wireDisplayMirrors`).
+        // The mirrors follow the RAW player too, and they are wired AFTER the
+        // rate, not before it: they state the rate of the source they are
+        // pointed at, and the NDI frame carries it (see `wireDisplayMirrors`).
         wireDisplayMirrors()
         playbackAspect = model.height > 0
             ? CGFloat(model.width) / CGFloat(model.height) : nil

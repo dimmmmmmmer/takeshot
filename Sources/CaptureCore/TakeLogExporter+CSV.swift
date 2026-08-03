@@ -18,11 +18,6 @@ extension TakeLogExporter {
             : value
     }
 
-    /// Public variant for other writers (offload manifest).
-    public static func escapedField(_ value: String) -> String {
-        escape(flattened(value))
-    }
-
     /// RFC 4180 escaping: quote values that contain commas/quotes/newlines.
     /// Values starting with =, +, - or @ are prefixed with an apostrophe —
     /// production opens these CSVs in Excel, where such cells execute as
