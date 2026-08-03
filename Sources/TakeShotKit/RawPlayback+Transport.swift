@@ -48,6 +48,10 @@ extension RawPlayerModel {
     /// instead of snapping back to the in point under their hand.
     func startPlaying(at frame: Int) {
         guard !isPlaying, frameCount > 0 else { return }
+        // A new attempt clears the last failure: the operator pressing play is
+        // asking again, and a stale message beside a running picture is worse
+        // than none.
+        playbackError = nil
         isPlaying = true
         playGeneration += 1
         let generation = playGeneration

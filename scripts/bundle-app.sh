@@ -21,6 +21,33 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
+# RED's R3D runtime, when this build was made against the SDK. Unlike DeckLink
+# and Blackmagic RAW — installed system-wide by the vendor's own software and
+# loaded from there — RED's libraries are redistributables that have to travel
+# INSIDE the app: "do not install them in a central location", per the SDK's own
+# instructions, because they would collide with another R3D application's copy.
+# Contents/Frameworks is the only place a shipped app looks (see CR3D.mm).
+#
+# Only REDR3D.dylib: the bridge initializes with OPTION_RED_NONE (CPU decode),
+# so REDMetal/REDOpenCL/REDDecoder would be ~28 MB of dead weight.
+#
+# NOT re-signed: RED signs it themselves (team 4ER5V66EKT) and `codesign` on the
+# bundle without --deep leaves nested code alone, which is what we want. It is
+# another team's library, so the same library-validation rule as the Blackmagic
+# frameworks applies — see the signing comment below.
+#
+# Redistributing it is governed by RED's licence (SDK License Agreement.pdf in
+# the vendor drop). A build made without the SDK simply has no R3D playback and
+# says so in the player.
+R3D_RUNTIME="vendor/R3DSDK/Redistributable/mac/REDR3D.dylib"
+if [ -f "$R3D_RUNTIME" ]; then
+    mkdir -p "$APP/Contents/Frameworks"
+    cp "$R3D_RUNTIME" "$APP/Contents/Frameworks/"
+    echo "Bundled R3D runtime: $(basename "$R3D_RUNTIME")"
+else
+    echo "No R3D runtime bundled — .r3d clips will report the SDK as missing"
+fi
+
 # Which commit this build IS. The running app has no git around it, so the
 # answer has to be baked in here — "Collect diagnostics" reads it back out of
 # Info.plist (CaptureController.gitSHAInfoKey) and a bundle that cannot say

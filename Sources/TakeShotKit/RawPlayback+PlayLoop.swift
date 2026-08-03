@@ -24,6 +24,13 @@ extension RawPlayerModel {
             var index = startFrame
             while !Task.isCancelled {
                 guard let buffer = clip.copyFrame(at: index) else {
+                    // A failed decode is not the end of the clip, and pausing
+                    // silently makes the two look identical. Frames the recorder
+                    // dropped, a corrupt block, a volume that went away — the
+                    // decoder knows which, and the operator gets told.
+                    await self?.reportDecodeFailure(clip.lastDecodeError,
+                                                    at: index,
+                                                    generation: generation)
                     break
                 }
                 guard let self else { return }
@@ -122,5 +129,17 @@ extension RawPlayerModel {
     private func finishLoop(generation: Int) {
         guard playGeneration == generation else { return }
         isPlaying = false
+    }
+
+    /// A decode failed mid-clip. Only the current generation may report it —
+    /// a loop orphaned by a seek can fail on a frame nobody is waiting for.
+    /// The last frame the clip reached matters more than the reason for an
+    /// operator deciding whether the card is bad, so both are said.
+    private func reportDecodeFailure(_ reason: String?, at index: Int,
+                                     generation: Int) {
+        guard playGeneration == generation, index < frameCount - 1 else { return }
+        let text = reason ?? L("raw_decode_stopped")
+        playbackError = text
+        onPlaybackError?(text)
     }
 }

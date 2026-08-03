@@ -52,6 +52,12 @@ extension CaptureController {
         let isVideo = videoExtensions.contains(ext)
         guard isVideo || imageExtensions.contains(ext),
               !ownPaths.contains(url.path) else { return .ignore }
+        // An R3D clip past 4 GB is a hundred files that are all one clip — the
+        // SDK opens the first part and pulls the rest in itself. Listing every
+        // part would fill the panel with rows that open identical footage, and
+        // the 3-second settle rule would keep the folder "busy" for the whole
+        // duration of a card copy because some part of it was always fresh.
+        if R3DSource.isContinuationPart(url) { return .ignore }
         // only videos wait out the write: image writes are single atomic
         // calls, and a freshly grabbed still must show up immediately
         guard isVideo else { return .clip }

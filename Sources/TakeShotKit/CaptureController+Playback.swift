@@ -95,12 +95,21 @@ extension CaptureController {
     /// clip itself — there is no AVAsset to load them from.
     private func openRawClip(url: URL) {
         var openError: String?
-        guard let model = RawPlayerModel(url: url, error: &openError) else {
+        // The R3D options are read here, not inside the engine: the engine is
+        // built per clip and has no business reaching into settings, and the
+        // decode scale has to be fixed before the first frame is asked for.
+        guard let model = RawPlayerModel(
+            url: url, scale: settings.r3dDecodeScaleEffective,
+            applyCameraLUT: settings.r3dApplyCameraLUT ?? false,
+            error: &openError) else {
             rawPlayerError = openError
             return
         }
         model.onScopeData = { [weak self] data in
             self?.scopes.data = data
+        }
+        model.onPlaybackError = { [weak self] text in
+            self?.lastError = text
         }
         // A RAW engine is built from scratch per clip, so it starts with no
         // range at all; what was marked on THIS clip earlier in the session is
@@ -120,7 +129,8 @@ extension CaptureController {
         rawPlayer = model
         model.setViewAssist(assist)
         wirePlayoutRouting()
-        playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
+        playbackFormatText = Self.shortFormat(height: model.height,
+                                              fps: model.frameRate)
         playbackStartTC = model.startTimecode
         playbackFPS = model.frameRate
         playbackAspect = model.height > 0

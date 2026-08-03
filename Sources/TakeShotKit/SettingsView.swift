@@ -158,6 +158,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            R3DSettingsSection()
             OutputSettingsSection()
             Section(L("settings_detection")) {
                 DetectionModePicker()

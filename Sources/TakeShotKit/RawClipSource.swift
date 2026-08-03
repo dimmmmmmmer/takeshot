@@ -5,16 +5,75 @@ import CoreVideo
 import Foundation
 import QuartzCore
 
-/// A decodable RAW clip: BRAW file, CinemaDNG folder (R3D once its SDK is
-/// integrated). Decode is blocking; the player calls it off the main thread.
+/// What the operator is looking at, for a format that develops its own colour.
+///
+/// The app told nobody a colour space before R3D arrived: every other source
+/// either IS Rec.709 on the wire or was already developed to it. R3D is the
+/// first one where the decoder had a real choice, so the choice is stated rather
+/// than left for someone to infer from the picture — including the fact that the
+/// clip may carry a look which is deliberately not being shown.
+struct RawColorNote: Sendable, Equatable {
+    /// What the decoded pixels are, e.g. "Rec.709 / BT.1886".
+    let transform: String
+    /// The vendor pipeline that produced them, e.g. "IPP2".
+    let pipeline: String
+    /// 1, 2, 4 or 8 — the decode reduction actually in use.
+    let scaleDivisor: Int
+    /// The clip's in-camera creative LUT, when it carries one.
+    let cameraLUTName: String?
+    let cameraLUTApplied: Bool
+
+    /// What the operator is told, one line per fact, in the order they ask them:
+    /// what am I looking at, at what resolution, and is a look involved.
+    ///
+    /// Here rather than in the badge that renders it so it can be checked
+    /// without a clip — there is no way to synthesize an .r3d, and "the viewer
+    /// says which colour space it is showing" is exactly the promise that must
+    /// not quietly rot.
+    var operatorLines: [String] {
+        var lines = ["\(L("raw_color_showing")) \(transform) (\(pipeline))"]
+        if scaleDivisor > 1 {
+            lines.append(String(format: L("raw_decode_scale"), scaleDivisor))
+        }
+        if let cameraLUTName {
+            lines.append(String(
+                format: L(cameraLUTApplied
+                    ? "raw_camera_lut_applied" : "raw_camera_lut_skipped"),
+                cameraLUTName))
+        }
+        return lines
+    }
+}
+
+/// A decodable RAW clip: BRAW file, CinemaDNG folder, R3D. Decode is blocking;
+/// the player calls it off the main thread.
 protocol RawClipSource: Sendable {
-    var formatBadge: String { get } // "BRAW" / "DNG" in the transport
+    var formatBadge: String { get } // "BRAW" / "DNG" / "R3D" in the transport
     var frameCount: Int { get }
     var frameRate: Double { get }
+    /// Rate the clip's TIMECODE track runs at, which is not always the video
+    /// rate — R3D halves it above 30 fps, so a running timecode extrapolated at
+    /// the video rate would run twice as fast as the camera's.
+    var timecodeFrameRate: Double { get }
     var width: Int { get }
     var height: Int { get }
     var startTimecodeText: String? { get }
+    /// nil when there is nothing to say beyond the codec badge.
+    var colorNote: RawColorNote? { get }
+    /// Camera-reported facts, already worded — reel, body, REDCODE, exposure.
+    /// Empty for a format that carries none.
+    var infoLines: [String] { get }
     func copyFrame(at index: Int) -> CVPixelBuffer?
+    /// Why the last `copyFrame` returned nil. Read after it did, on the same
+    /// thread that called it.
+    var lastDecodeError: String? { get }
+}
+
+extension RawClipSource {
+    var timecodeFrameRate: Double { frameRate }
+    var colorNote: RawColorNote? { nil }
+    var infoLines: [String] { [] }
+    var lastDecodeError: String? { nil }
 }
 
 /// Blackmagic RAW via the CBraw bridge.
