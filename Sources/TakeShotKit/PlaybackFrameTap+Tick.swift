@@ -46,7 +46,9 @@ extension PlaybackFrameTap {
         idleDelivered = false // playing again: idle state re-arms
         guard let pixelBuffer = output.copyPixelBuffer(
             forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
-        deliver(pixelBuffer,
+        // levels first, then everything downstream — the LUT, the compare and
+        // the scopes all measure the picture, not the file's coding (`+Levels`)
+        deliver(displayReady(pixelBuffer, wireCodes: sourceCarriesWireCodes),
                 analyzed: scopesEnabled && tickCount % Self.scopeTickStride == 0)
     }
 
@@ -62,7 +64,9 @@ extension PlaybackFrameTap {
     /// either way.
     private func tickPaused(_ output: AVPlayerItemVideoOutput, at itemTime: CMTime) {
         tickIdle {
-            output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil)
+            output.copyPixelBuffer(forItemTime: itemTime,
+                                   itemTimeForDisplay: nil)
+                .map { displayReady($0, wireCodes: sourceCarriesWireCodes) }
         }
     }
 

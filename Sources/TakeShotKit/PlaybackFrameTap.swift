@@ -111,6 +111,18 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var lastBuffer: CVPixelBuffer?
     /// Static source (a still in the player): composited/analyzed like video.
     var stillBuffer: CVPixelBuffer?
+
+    // MARK: - levels (tap-queue confined; see `+Levels`)
+
+    /// Whether the clip under review carries the camera's wire codes and has to
+    /// be expanded for the screen, the way the live path expands the wire.
+    var sourceCarriesWireCodes = false
+    /// The same question for the compare clip — two takes in a wipe must be
+    /// expanded the same way or the seam is a contrast step.
+    var compareCarriesWireCodes = false
+    /// Where the expanded copy goes. A decoder's buffer is not ours to modify:
+    /// it can share an IOSurface with a frame the decoder still holds.
+    let levelsPool = PixelBufferPool()
     /// Idle output already delivered — with compare off, a paused/still frame
     /// is re-rendered only when the LUT/compare/scopes inputs change.
     var idleDelivered = false
@@ -150,6 +162,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
     var comparePlayer: AVPlayer?
     var compareOutput: AVPlayerItemVideoOutput?
     var lastCompareBuffer: CVPixelBuffer?
+    /// Which clip the B side is on — the levels answer arrives after a load and
+    /// must not be applied to whatever the operator switched to meanwhile.
+    var compareURL: URL?
     weak var syncPlayer: AVPlayer?
 
     let ciContext = CIContext(options: [.cacheIntermediates: false])
@@ -196,6 +211,8 @@ final class PlaybackFrameTap: @unchecked Sendable {
         queue.async {
             self.detachLocked()
             self.idleDelivered = false
+            // a still is a picture, not a signal: its codes are display values
+            self.sourceCarriesWireCodes = false
             self.stillBuffer = buffer
             self.lastBuffer = buffer
             self.deliver(buffer, analyzed: self.scopesEnabled)
@@ -219,6 +236,10 @@ final class PlaybackFrameTap: @unchecked Sendable {
             self.output = output
             self.item = item
             self.lastBuffer = nil
+            // until the file has said otherwise it is treated as a picture, so
+            // a foreign clip is never expanded on a guess
+            self.sourceCarriesWireCodes = false
+            self.detectLevels(of: item)
             self.startTimerIfNeeded()
         }
     }

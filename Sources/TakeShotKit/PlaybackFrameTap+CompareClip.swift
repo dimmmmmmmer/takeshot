@@ -22,7 +22,10 @@ extension PlaybackFrameTap {
             self.compareOutput = nil
             self.lastCompareBuffer = nil
             self.syncPlayer = nil
+            self.compareURL = url
+            self.compareCarriesWireCodes = false
             if let url {
+                self.detectCompareLevels(of: url)
                 let item = AVPlayerItem(url: url)
                 let attrs: [String: Any] = [
                     kCVPixelBufferPixelFormatTypeKey as String:
@@ -85,7 +88,8 @@ extension PlaybackFrameTap {
               let buffer = compareOutput.copyPixelBuffer(
                   forItemTime: time, itemTimeForDisplay: nil)
         else { return }
-        lastCompareBuffer = buffer
+        lastCompareBuffer = displayReady(buffer,
+                                         wireCodes: compareCarriesWireCodes)
     }
 
     /// The compare back half: the B clip when one is set, else the live frame.

@@ -1,4 +1,3 @@
-@preconcurrency import Accelerate
 @preconcurrency import CoreVideo
 import Foundation
 import os.log
@@ -58,6 +57,11 @@ extension CapturePipeline {
             tenBitConverter.setLevels(mode)
             guard let split = tenBitConverter.convert(pixelBuffer) else { return nil }
             tagColorIfUntagged(split.display)
+            // What the NEXT take will carry, so the file can say so (see
+            // `TakeWriter.levelsKey`). Only this branch records wire codes: the
+            // 8-bit path's record buffer IS the expanded display buffer, and on
+            // `full` the wire codes already are display values.
+            recordCarriesWireCodes = mode == .limited
             // The graticule marks where NOMINAL black and white are, which is
             // 64/940 whatever the expansion then does with the codes outside
             // them — that is what makes the excursion visible as an excursion.
@@ -67,6 +71,7 @@ extension CapturePipeline {
                     buffer: pixelBuffer,
                     levels: mode == .full ? .full : .limited))
         }
+        recordCarriesWireCodes = false
         // nil is auto on a signal that is not RGB 4:4:4 — nothing is expanded,
         // and the mode enum has no case for "the question was never asked".
         guard let inputLevels else {
@@ -104,35 +109,17 @@ extension CapturePipeline {
         return inputLevels
     }
 
-    /// Expand a limited-range RGB frame to full range, in place (vImage byte
-    /// lookup — no CoreImage pass, no extra buffer). BGRA only: this is the
-    /// single levels operation in the pipeline; the encoder handles full-RGB →
-    /// legal-YUV for the file, and YUV sources are legal-range by definition.
+    /// Expand a studio-swing RGB frame for the screen, in place (vImage byte
+    /// lookup — no CoreImage pass, no extra buffer). BGRA only, and the buffer
+    /// is one the capture path owns, which is what makes in place safe here.
     ///
-    /// The window is the legal swing 1–254, not 16–235: a camera's sub-blacks
-    /// and super-whites are codes it deliberately sent, and clamping them here
-    /// takes them out of the recorded file as well as off the screen.
+    /// The window is the nominal pair 16–235: on this path the display buffer
+    /// is also what the writer gets, so the excursions cannot be kept — an
+    /// 8-bit wire has fifteen codes of footroom, and a black that sits 6 % up
+    /// the scale on the monitor costs the operator an exposure judgement every
+    /// time. The 10-bit path above keeps them, in the file, where they matter.
     private func expandLimitedRGB(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-        guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA
-        else { return nil }
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
-        var image = vImage_Buffer(
-            data: base,
-            height: vImagePixelCount(CVPixelBufferGetHeight(pixelBuffer)),
-            width: vImagePixelCount(CVPixelBufferGetWidth(pixelBuffer)),
-            rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer))
-        // byte order is B G R A: remap the three color channels, keep alpha
-        let error = Self.levelsLimitedTable.withUnsafeBufferPointer { lut in
-            Self.levelsTableIdentity.withUnsafeBufferPointer { identity in
-                vImageTableLookUp_ARGB8888(&image, &image,
-                                           lut.baseAddress!, lut.baseAddress!,
-                                           lut.baseAddress!, identity.baseAddress!,
-                                           vImage_Flags(kvImageNoFlags))
-            }
-        }
-        return error == kvImageNoError ? pixelBuffer : nil
+        StudioSwing.expand(pixelBuffer, into: pixelBuffer) ? pixelBuffer : nil
     }
 
     /// Tag a frame with colorimetry from settings if the backend didn't report it.

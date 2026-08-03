@@ -2,33 +2,43 @@
 import Foundation
 
 /// Converter for 10-bit RGB capture ('r210', big-endian 2:10:10:10 as the
-/// board delivers it). One pass produces both products the pipeline needs:
+/// board delivers it). One pass produces both products the pipeline needs,
+/// and they answer to DIFFERENT rules — the picture and the deliverable want
+/// opposite things from the same wire codes:
 ///
-/// - a full-range 8-bit BGRA **display** buffer (preview/LUT/scopes/grabs
-///   keep their existing 8-bit path), and
-/// - a **record** r210 buffer precompensated for VideoToolbox's convention:
-///   VT interprets r210 content as video-range RGB 64–960 and expands it to
-///   full scale inside the codec (measured — see the docs in the repo), so we
-///   map our intended full-range values into that window. The decoded file
-///   then comes back to the intended values within ±1 in 10-bit units,
-///   unbiased — versus the systematic +0.4 8-bit codes of the BGRA path that
-///   steep viewing LUTs amplified into a visible lift.
+/// - a full-range 8-bit BGRA **display** buffer (preview/LUT/scopes/grabs),
+///   expanded on the nominal pair for the levels mode: studio swing puts 64 on
+///   0 and 940 on 1023 and clips the excursions, so black is black on the
+///   monitor;
+/// - a **record** r210 buffer carrying the WIRE codes — every code the camera
+///   sent, footroom and headroom included, with no expansion of any kind
+///   applied to the picture. It is precompensated for VideoToolbox's measured
+///   convention and nothing else: VT reads r210 content as video-range RGB
+///   64–960 and expands it to full scale inside the codec, so the wire code is
+///   mapped into that window and the decoded file gives it back within ±1 in
+///   10-bit units, unbiased.
 ///
-/// Levels follow the same policy as the 8-bit path: `full` passes wire codes
-/// through, `limited` expands the camera's whole legal swing 4–1019 onto the
-/// full scale, so no code is destroyed on the way to either product.
+/// The two tables are therefore built from different inputs, and that is the
+/// whole design: `expand` from the levels mode, `precomp` from the wire code
+/// alone. `precomp` used to be built FROM the expanded value, which meant a
+/// display decision reached the deliverable — clip the excursions for the
+/// monitor and they were gone from the file as well.
 ///
-/// The expansion is one table either way — the mode picks its two ends. That
-/// matters for the recorded file as much as for the screen: `precomp` is built
-/// FROM the expanded value, so a code the expansion clamps is gone from the
-/// file too, not just from the preview.
+/// A file written this way carries studio-swing codes, so the app expands it
+/// again on the way back out (see `TakeWriter.levelsKey`): playback of a take
+/// shows exactly what the monitor showed while it was recorded.
 public final class TenBitConverter {
     public static let r210 = OSType(0x7232_3130) // 'r210'
 
-    /// wire code (0…1023) → intended full-range value.
+    /// wire code (0…1023) → the value that appears on the DISPLAY.
     private var expand = [UInt16](repeating: 0, count: 1024)
-    /// wire code → VT-coded record value (precompensated).
-    private var precomp = [UInt16](repeating: 0, count: 1024)
+    /// wire code → the r210 value to hand the encoder so that the decoded file
+    /// returns that same wire code. Free of the levels mode by construction:
+    /// the file carries what the camera sent, whatever the monitor is doing.
+    private static let precomp: [UInt16] = (0..<1024).map { code in
+        // VT window: video-range RGB 64–960 expands to 0–1023 in the codec
+        UInt16(64 + Int(Double(code) * 896 / 1023 + 0.5))
+    }
     private var levels = InputLevels.limited
 
     private let displayPool = PixelBufferPool()
@@ -52,16 +62,15 @@ public final class TenBitConverter {
         rebuildTables()
     }
 
+    /// Only the display table has a mode to rebuild for; the record table is a
+    /// constant, which is the same statement as "levels never reach the file".
     private func rebuildTables() {
         let window = levels.wireWindow
         let span = Double(window.white - window.black)
         for code in 0..<1024 {
-            let full = levels == .full ? code
+            expand[code] = UInt16(levels == .full ? code
                 : min(1023, max(0, Int((Double(code - window.black)) * 1023
-                                       / span + 0.5)))
-            expand[code] = UInt16(full)
-            // VT window: video-range RGB 64–960 expands to 0–1023 in the codec
-            precomp[code] = UInt16(64 + Int(Double(full) * 896 / 1023 + 0.5))
+                                       / span + 0.5))))
         }
     }
 
@@ -101,7 +110,7 @@ public final class TenBitConverter {
         // its frame budget back
         let bands = min(8, max(1, height / 270))
         expand.withUnsafeBufferPointer { expandTable in
-            precomp.withUnsafeBufferPointer { precompTable in
+            Self.precomp.withUnsafeBufferPointer { precompTable in
                 // read-only for the whole pass — see the note above
                 nonisolated(unsafe) let exp = expandTable
                 nonisolated(unsafe) let pre = precompTable

@@ -99,38 +99,44 @@ up for it. Measured on an M-series laptop, release build: 1.5 ms a frame at
 ## Color pipeline
 
 RGB 4:4:4 sources are captured as 10-bit `r210` by default. `TenBitConverter`
-splits each wire frame in one pass into two products:
+splits each wire frame in one pass into two products, built from two different
+tables because the picture and the deliverable want opposite things:
 
-- a full-range 8-bit BGRA **display** buffer, which feeds preview, LUTs, scopes
-  and grabs;
-- a **record** `r210` buffer precompensated for VideoToolbox's measured
-  convention — it treats `r210` content as video-range 64–960 and expands it
-  inside the codec.
+- a full-range 8-bit BGRA **display** buffer (preview, LUTs, scopes, grabs,
+  playout mirror, multiview), expanded on the NOMINAL pair — studio swing puts
+  wire 64 on 0 and 940 on 1023, and the excursions clip;
+- a **record** `r210` buffer carrying the WIRE codes, precompensated for
+  VideoToolbox's measured convention and nothing else — VT treats `r210`
+  content as video-range 64–960 and expands it inside the codec, so the table
+  is `64 + code · 896/1023`.
 
-Measured result: decoded files return to the intended values within ±1 in
-10-bit units, unbiased. The old 8-bit BGRA path carried a systematic +0.4-code
-lift, which steep viewing LUTs amplified into a visible mismatch between what
-the operator saw live and what came back on playback.
+Measured result: the decoded file returns the camera's codes within ±1 in
+10-bit units, unbiased — exact on the five probe codes, footroom and headroom
+included. The levels mode cannot reach the file at all, so a display decision
+can no longer destroy a code in the deliverable.
 
-### Input levels, and what the expansion costs
+Because the file carries studio swing, the player expands it again: takes are
+written with a `com.takeshot.levels = wire` metadata key and
+`PlaybackFrameTap+Levels` applies the same 8-bit table the live path uses
+(`StudioSwing`). Foreign clips, stills and takes recorded before that key
+existed are left alone. `PlaybackLevelsParityTests` records a synthetic frame,
+plays it back and compares the two pictures code for code.
 
-`InputLevels` resolves the `videoLevels` setting into the three readings the
-pipeline and `TenBitConverter` branch on:
+### Input levels, and where each answer lands
 
-| Mode | Wire window mapped onto 0–1023 | Excursions |
-| --- | --- | --- |
-| `full` | 0–1023 (identity) | n/a |
-| `limited` (default) | 64–940 | **clamped away** |
-| `limited_excursions` | 4–1019 | preserved |
+`InputLevels` resolves the `videoLevels` setting into what the DISPLAY does;
+`auto` means limited for RGB 4:4:4.
 
-The default clamps, and because the record buffer is built from the expanded
-value the clamp reaches the file as well as the screen: a camera riding its
-blacks to code 4 or its highlights to 1019 loses those codes in the
-deliverable. That is the industry-normal reading and it stays the default —
-`limited_excursions` is the operator's explicit choice, and it costs a slightly
-flatter picture (reference white lands at 1017 of 1023) in exchange for
-destroying nothing. `LevelsExcursionTests` pins both, numerically and through a
-real encode/decode round trip.
+| Mode | Wire window onto 0–1023 (display) | In the file | On the scopes |
+| --- | --- | --- | --- |
+| `full` | 0–1023 (identity) | wire codes | as sent |
+| `limited` (default) | 64–940, excursions clipped | wire codes | as sent |
+
+An operator judges exposure against a black that is black, which is why the
+picture clips; the codes outside the nominal pair are kept where they are
+useful — in the deliverable and on the scopes, neither of which reads the
+display buffer. `LevelsExcursionTests` pins both halves, numerically and
+through a real encode/decode round trip.
 
 ### What the scopes measure
 
@@ -141,8 +147,9 @@ both as symptoms:
 
 - the display buffer is 8-bit, so a scope reading it is quantized to 256 levels
   however good the source is — the "8-bit, undetailed" parade;
-- the expansion has already clipped everything outside 64–940, so the
-  sub-blacks and super-whites a scope exists to reveal are gone before it looks.
+- the display expansion clips everything outside 64–940 on purpose, so the
+  sub-blacks and super-whites a scope exists to reveal are not in that buffer
+  at all.
 
 `ScopeData.nominal` says where 0% and 100% sit on the trace map, and every
 graticule, value number and histogram mark is placed through it — so on a wire

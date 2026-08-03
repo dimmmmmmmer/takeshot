@@ -130,6 +130,10 @@ public final class CapturePipeline: @unchecked Sendable {
     var levelsMode: String?
     /// 10-bit RGB wire split (display BGRA + precompensated r210 record).
     let tenBitConverter = TenBitConverter()
+    /// Whether the frames the writer is being handed carry the camera's wire
+    /// codes rather than display values — decided per frame by the levels stage
+    /// and read when a take opens, so the file can state it (queue-confined).
+    var recordCarriesWireCodes = false
     /// Scope analysis runs here, never on the capture-critical queue.
     let scopeQueue = DispatchQueue(label: "takeshot.scopes", qos: .utility)
     var scopeBusy = false // pipeline-queue confined
@@ -334,27 +338,6 @@ public final class CapturePipeline: @unchecked Sendable {
     /// if it does not work the original path is returned and the operator still
     /// gets the alarm.
     static let failedTakeSuffix = "_FAILED"
-
-    /// Expansion table for limited-range RGB inputs — the legal 8-bit swing
-    /// 1-254 onto 0-255, so the sub-blacks and super-whites a camera rides
-    /// outside 16-235 survive. Defined on gamma-encoded code values, so it must
-    /// run on raw bytes — a CIColorMatrix in CI's linear working space crushes
-    /// shadows and dulls highlights.
-    ///
-    /// Built once at first use: a table per frame would be 256 divisions on the
-    /// capture queue for a value that never changes.
-    static let levelsLimitedTable = expansionTable(for: .limited)
-
-    private static func expansionTable(for levels: InputLevels) -> [UInt8] {
-        let window = levels.eightBitWindow
-        let span = Double(window.white - window.black)
-        return (0...255).map {
-            UInt8(min(255, max(0, Int(Double($0 - window.black) * 255 / span
-                                      + 0.5))))
-        }
-    }
-
-    static let levelsTableIdentity: [UInt8] = (0...255).map { UInt8($0) }
 
     let latestPreviewLock = NSLock()
     var latestPreview: CVPixelBuffer?

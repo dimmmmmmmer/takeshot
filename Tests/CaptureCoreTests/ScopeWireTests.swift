@@ -13,10 +13,11 @@ import Testing
 /// slightly clipped because they were: the expansion onto 64…940 clamped
 /// everything outside it before the scopes ever saw it.
 ///
-/// The clamp is gone — `Limited` expands the whole legal swing now — but the
-/// tap is not redundant, and the tests below say why in numbers: a full-range
-/// display buffer cannot tell a scope WHERE nominal black and white are, and
-/// what is left of a camera's footroom in 8 bits is fifteen codes.
+/// The display buffer still clamps them, and now deliberately: it is expanded
+/// on the nominal pair so that black is black on the monitor. That decision is
+/// exactly why the tap is not redundant, and the tests below say so in numbers
+/// — off the display buffer the footroom does not exist at all, and a
+/// full-range buffer cannot tell a scope WHERE nominal black and white are.
 struct ScopeWireTests {
     private func r210(width: Int = 320, height: Int = 180,
                       code: (_ x: Int) -> Int) throws -> CVPixelBuffer {
@@ -88,15 +89,15 @@ struct ScopeWireTests {
         #expect(subBlack.nominal.showsExcursions)
     }
 
-    /// What the display buffer can still not do — which is the reason the tap
-    /// stays, stated as a measurement rather than as a claim in a comment.
+    /// Why the tap exists at all, stated as a measurement rather than as a
+    /// claim in a comment: the display buffer does not contain the excursions.
     ///
-    /// It no longer throws the excursions away (Limited keeps them), but it is
-    /// a FULL-RANGE buffer: it carries no nominal reference, so a scope reading
-    /// it draws no 0 % and 100 % lines and the operator cannot see that a
-    /// shadow is below picture black rather than merely dark. And what survives
-    /// of the footroom is 15 of 256 codes against 60 of 1024 on the wire.
-    @Test func theDisplayBufferCannotPlaceTheNominalLines() throws {
+    /// It is expanded on the nominal pair, so code 4 and code 64 are the same
+    /// pixel in it — a scope reading the display buffer would show the operator
+    /// a clean black where the camera is riding sixty codes below picture
+    /// black. It also carries no nominal reference, so such a scope could draw
+    /// no 0 % and 100 % lines to judge against.
+    @Test func theDisplayBufferHasNoExcursionsLeftToMeasure() throws {
         let converter = TenBitConverter() // limited is the default
         let atFour = try #require(converter.convert(try r210 { _ in 4 }))
         let atSixtyFour = try #require(converter.convert(try r210 { _ in 64 }))
@@ -106,13 +107,18 @@ struct ScopeWireTests {
         #expect(!low.nominal.showsExcursions,
                 "a full-range buffer must not claim excursion room")
         #expect(low.nominal.black == black.nominal.black)
-        // the two codes are told apart, but by a sliver: sub-black to nominal
-        // black is the bottom 6 % of the trace, where the wire tap gives the
-        // same span 60 of its 1024 codes to draw in
-        let separation = abs(traceUnit(low) - traceUnit(black))
-        #expect(separation > 0, "the display buffer clamped 4 onto 64")
-        #expect(separation < 0.08,
-                "the footroom is \(separation) of the trace, not a sliver")
+        let shown = "\(traceUnit(low)) vs \(traceUnit(black))"
+        #expect(traceUnit(low) == traceUnit(black),
+                "the display buffer still holds the footroom: \(shown)")
+        // …while the wire, which is what the scopes actually read, keeps the
+        // whole 60 codes of it
+        let wireLow = try #require(ScopeAnalyzer.analyze(try r210 { _ in 4 },
+                                                         wireLevels: .limited))
+        let wireBlack = try #require(ScopeAnalyzer.analyze(try r210 { _ in 64 },
+                                                           wireLevels: .limited))
+        let measured = "\(traceUnit(wireLow)) vs \(traceUnit(wireBlack))"
+        #expect(traceUnit(wireLow) > traceUnit(wireBlack) + 0.02,
+                "the wire lost the footroom too: \(measured)")
     }
 
     // MARK: - the detail that was quantized away
