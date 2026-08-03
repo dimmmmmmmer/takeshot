@@ -116,10 +116,11 @@ private struct AssistControlRows: View {
                     set: { controller.zebraThreshold = $0 }),
                     in: 0.7...1.0)
                     .controlSize(.mini)
-                Text("\(Int((controller.zebraThreshold * 100).rounded()))%")
+                Text(zebraReadout)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(width: 34, alignment: .trailing)
+                    .frame(width: 50, alignment: .trailing)
+                    .help(L("assist_zebra_hint"))
             }
         }
 
@@ -174,6 +175,26 @@ private struct AssistControlRows: View {
                 .help(L(color.labelKey))
             }
         }
+    }
+
+    /// What the zebra threshold means, in the units the current signal is in.
+    ///
+    /// The tool itself is unchanged under HDR and that is a measurement rather
+    /// than an omission: the display transform leaves everything below its knee
+    /// as an exact ratio to diffuse white, so a zebra set at a display level
+    /// still fires on the same fraction of white it always did. What DOES
+    /// change is the answer to "how bright is that" — under PQ or HLG the
+    /// operator wants cd/m², and 95 % of an SDR scale is not a luminance at
+    /// all. So the slider keeps its position and the number beside it starts
+    /// naming nits, computed by inverting the very transform the picture went
+    /// through.
+    private var zebraReadout: String {
+        let level = controller.zebraThreshold
+        guard let nits = controller.signalColorimetry.transfer
+            .nits(forDisplaySignal: level) else {
+            return "\(Int((level * 100).rounded()))%"
+        }
+        return "\(Int(nits.rounded()))\u{00A0}cd/m²"
     }
 
     /// Legend size and placement — only while a legend is on screen.

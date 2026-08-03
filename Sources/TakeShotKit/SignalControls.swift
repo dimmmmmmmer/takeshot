@@ -110,6 +110,38 @@ struct InputLevelsPicker: View {
     }
 }
 
+/// What the app does with a source that reports PQ or HLG.
+///
+/// Two options and not three, and the missing one is "force HDR". A transfer
+/// function is not something an operator can be right about against the wire:
+/// a Rec.709 signal tone mapped as if it were PQ is a picture a hundred times
+/// too dark, and this app does not make colour decisions on a guess. What the
+/// operator CAN be right about is that the flag itself is wrong — a converter
+/// in the chain passing HDR metadata through from a source it has already
+/// converted — and Off is the answer to that: the whole app goes back to
+/// behaving exactly as it did before HDR existed.
+///
+/// The current signal's own reading sits under the picker rather than in a
+/// tooltip: whether the board is seeing HDR at all is the first question this
+/// control raises, and it is not answerable from the picture.
+struct HDRModePicker: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Picker(L("hdr_mode"), selection: Binding(
+            get: { HDRMode.resolved(controller.settings.hdrMode) },
+            set: { controller.settings.hdrMode = $0.rawValue })) {
+            Text(L("hdr_mode_auto")).tag(HDRMode.auto)
+            Text(L("hdr_mode_off")).tag(HDRMode.off)
+        }
+        .help(L("hdr_mode_hint"))
+        LabeledContent(L("hdr_signal")) {
+            Text(controller.signalColorimetry.badge ?? L("hdr_signal_sdr"))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 /// What starts a take. The default is VANC-only on purpose: running timecode
 /// alone is not evidence a camera is rolling (a Resolve playout feeding the
 /// board runs timecode too), and it must never start a take.

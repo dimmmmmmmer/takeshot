@@ -28,6 +28,13 @@ final class CaptureController: ObservableObject {
     @Published var isRecording = false
     @Published var signalPresent = true
     @Published var signalFormat: CaptureFormat?
+    /// What the live signal says its code values mean, after the operator's HDR
+    /// setting has had its say. `.sdr` for everything that is not a PQ or HLG
+    /// source, so nothing in the UI changes for a signal that is not HDR.
+    ///
+    /// @Published rather than on `live`: it changes when the CAMERA changes,
+    /// which is a handful of times a shift, not per frame.
+    @Published var signalColorimetry = WireColorimetry.sdr
     /// Per-frame values (TC/meters) — deliberately NOT @Published here; views
     /// that show them observe `live` so the rest of the UI stays still.
     let live = LiveSignal()
@@ -537,16 +544,14 @@ final class CaptureController: ObservableObject {
         self.defaults = defaults
         self.audioInputs = audioInputs ?? SystemAudioInputProvider()
         self.volumeWatch = volumeWatch ?? WorkspaceVolumeWatch()
-        let backend = AggregateBackend(children: backends ?? Self.shippingBackends())
-        self.backend = backend
-
+        self.backend = AggregateBackend(children: backends ?? Self.shippingBackends())
         let stored = CaptureSettings.loaded(from: defaults)
         self.settings = stored
         self.panelSide = defaults.string(forKey: "panelSide") ?? "right"
         self.pipeline = CapturePipeline(config: .init(
             settings: stored, roll: "001", takeNumber: 1))
 
-        backend.delegate = self
+        self.backend.delegate = self
         completeStartup(stored: stored)
     }
 

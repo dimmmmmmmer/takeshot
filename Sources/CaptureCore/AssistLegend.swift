@@ -137,6 +137,10 @@ public struct AssistLegend: Equatable, Sendable {
 
     public var size: AssistLegendSize = .medium
     public var placement: AssistLegendPlacement = .standard
+    /// What the signal being metered is encoded with — the only thing HDR
+    /// changes about the exposure aids, and it changes two labels rather than
+    /// any behaviour. See `falseColorLabels(for:)`.
+    public var transfer: SignalTransfer = .sdr
 
     public init(size: AssistLegendSize = .medium,
                 placement: AssistLegendPlacement = .standard) {
@@ -173,14 +177,55 @@ public struct AssistLegend: Equatable, Sendable {
     static let falseColorLabels = ["<2", "2-8", "", "18%", "", "skin", "",
                                    "92-97", "clip"]
 
+    /// The same nine, for the signal actually being metered.
+    ///
+    /// Only the top TWO change under HDR, and that is a measurement rather than
+    /// a decision to leave the rest alone. The display transform is an exact
+    /// ratio to diffuse white everywhere below its knee, so every band from
+    /// crushed black through skin covers the same fraction of white it covers
+    /// in SDR: the "18 %" band spans 17.5…28 cd/m² under PQ, and ITU-R
+    /// BT.2408's 18 % grey card is 26 — inside it. The two bands above the knee
+    /// are the ones that stop meaning what they say: "92-97" and "clip" are
+    /// percentages of an SDR scale, and under PQ the same swatches cover
+    /// roughly 172…281 cd/m² and everything past 281, i.e. the specular range
+    /// rather than a clip. They are relabelled in cd/m², computed from the very
+    /// same band boundaries the palette is painted from, so the number on the
+    /// swatch cannot drift from the colour beside it.
+    static func falseColorLabels(for transfer: SignalTransfer) -> [String] {
+        guard transfer.isHDR else { return falseColorLabels }
+        var labels = falseColorLabels
+        let bands = AssistFilters.falseColorBands
+        let lastGraded = bands.count - 2
+        guard labels.count == bands.count, lastGraded >= 1 else { return labels }
+        let knee = bands[lastGraded - 1].upTo
+        let clip = bands[lastGraded].upTo
+        let clipNits = Int(HDRTransfer.nits(forDisplaySignal: clip).rounded())
+        labels[lastGraded] = Self.nitsLabel(from: knee, to: clip)
+        labels[lastGraded + 1] = "\(clipNits)+"
+        return labels
+    }
+
+    /// "172-281", from two display levels. Whole cd/m² — a legend read across
+    /// the room has no room for a decimal point.
+    private static func nitsLabel(from low: Double, to high: Double) -> String {
+        let lower = Int(HDRTransfer.nits(forDisplaySignal: low).rounded())
+        let upper = Int(HDRTransfer.nits(forDisplaySignal: high).rounded())
+        return "\(lower)-\(upper)"
+    }
+
     /// The bands for a tool, darkest first.
-    static func entries(for tool: ViewAssist.ColorTool) -> [Entry] {
+    static func entries(for tool: ViewAssist.ColorTool,
+                        transfer: SignalTransfer = .sdr) -> [Entry] {
         switch tool {
         case .off:
             return []
         case .falseColor:
-            return falseColorEntries()
+            return falseColorEntries(transfer: transfer)
         case .elZone:
+            // EL Zone is a STOP scale around 18 % grey, and a stop is a ratio.
+            // The display transform preserves ratios below its knee, so the
+            // zone numbers mean exactly what they mean in SDR and there is
+            // nothing here for HDR to change.
             return AssistFilters.elZoneRamp.enumerated().map { index, color in
                 let stop = index - 6
                 return Entry(color: color,
@@ -192,15 +237,16 @@ public struct AssistLegend: Equatable, Sendable {
     /// Each false-colour band sampled at the MIDDLE of the range it covers, so
     /// a gray-ramp gap shows the gray the picture would actually be there
     /// instead of a colour invented for the legend.
-    private static func falseColorEntries() -> [Entry] {
+    private static func falseColorEntries(
+        transfer: SignalTransfer) -> [Entry] {
+        let labels = falseColorLabels(for: transfer)
         var lower: Double = 0
         return AssistFilters.falseColorBands.enumerated().map { index, band in
             // the open top end stands for "clipped", i.e. full scale
             let upper = band.upTo.isFinite ? band.upTo : 1
             let color = AssistFilters.band((lower + upper) / 2)
             lower = upper
-            let label = index < falseColorLabels.count
-                ? falseColorLabels[index] : ""
+            let label = index < labels.count ? labels[index] : ""
             return Entry(color: color, label: label)
         }
     }

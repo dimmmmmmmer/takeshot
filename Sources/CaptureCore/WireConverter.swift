@@ -46,6 +46,16 @@ public protocol WireConverter: AnyObject {
     /// The resolved input-levels mode for the current source. Reaches the
     /// DISPLAY product only; see `WireDisplayTable`.
     func setLevels(_ levels: InputLevels)
+    /// What the source says its codes MEAN — the transfer function and the
+    /// primaries (see `WireColorimetry`).
+    ///
+    /// A second setter rather than a wider `setLevels`, because the two answer
+    /// to different questions and change at different times: levels is an
+    /// operator setting resolved per format, colorimetry is what the board
+    /// reports per FRAME. Like `setLevels` it reaches the DISPLAY product only
+    /// — an HDR signal's record buffer carries the same wire codes an SDR one
+    /// does, because the wire-code rule does not care what the codes mean.
+    func setColorimetry(_ colorimetry: WireColorimetry)
     /// Split a wire frame into (display BGRA8, record).
     func convert(_ source: CVPixelBuffer)
         -> (display: CVPixelBuffer, record: CVPixelBuffer)?
@@ -65,6 +75,19 @@ public protocol WireConverter: AnyObject {
 /// code alone and never from this table) and on the scopes (they read the wire,
 /// before the split). Those two are the reason this table may be opinionated.
 enum WireDisplayTable {
+    /// The table for a source, whatever it is encoding with.
+    ///
+    /// One entry point, so a converter cannot pick up the SDR table for an HDR
+    /// signal by forgetting to ask. `sdr` returns `expand` UNCHANGED — not an
+    /// equivalent computation, the same function — which is what makes "an SDR
+    /// signal behaves exactly as it did before HDR existed" a fact about one
+    /// line rather than a claim about a diff.
+    static func table(levels: InputLevels, bits: Int,
+                      transfer: SignalTransfer) -> [UInt16] {
+        guard transfer.isHDR else { return expand(levels: levels, bits: bits) }
+        return toneMapped(levels: levels, bits: bits, transfer: transfer)
+    }
+
     /// wire code → the value that appears on the DISPLAY, on the wire's own
     /// scale. The caller shifts it down to the 8 bits the BGRA buffer holds.
     ///
@@ -80,6 +103,32 @@ enum WireDisplayTable {
             guard levels != .full else { return UInt16(code) }
             let scaled = Double(code - window.black) * Double(top) / span + 0.5
             return UInt16(min(top, max(0, Int(scaled))))
+        }
+    }
+
+    /// The HDR half: the very same shape of table, built through
+    /// `HDRTransfer`'s display transform instead of a linear stretch.
+    ///
+    /// It is a table and not a per-pixel computation on purpose. The whole
+    /// point of `WireDisplayTable` is that the display policy is a function of
+    /// the wire CODE, and a PQ or HLG tone map is exactly that too — so HDR
+    /// costs the converters nothing at all: the same one lookup per component
+    /// they already did, over a table built once when the signal changes.
+    ///
+    /// The levels window still decides where the signal's 0 and 1 are, because
+    /// PQ and HLG over SDI and HDMI are narrow-range coded like everything
+    /// else. Codes outside it clip against the ends of the picture, which is
+    /// the same rule the SDR table follows and for the same reason: the
+    /// excursions are in the file and on the scopes, which read the wire.
+    private static func toneMapped(levels: InputLevels, bits: Int,
+                                   transfer: SignalTransfer) -> [UInt16] {
+        let top = (1 << bits) - 1
+        let window = levels.wireWindow(bits: bits)
+        let span = Double(window.white - window.black)
+        return (0...top).map { code in
+            let signal = (Double(code) - Double(window.black)) / span
+            let display = transfer.displaySignal(forSignal: signal)
+            return UInt16(min(top, max(0, Int(display * Double(top) + 0.5))))
         }
     }
 }

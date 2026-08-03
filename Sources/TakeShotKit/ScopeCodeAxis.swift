@@ -30,12 +30,17 @@ import SwiftUI
 /// same thing, and that is how Resolve and Baselight draw a histogram too.
 struct ScopeCodeAxisMarks: View {
     let nominal: ScopeNominalRange
+    /// The traced frame's transfer — see `ScopeLevelGraticule`.
+    var transfer: SignalTransfer = .sdr
     @Environment(\.scopeGridBrightness) private var brightness
     @Environment(\.scopeScaleMode) private var mode
 
     var body: some View {
         GeometryReader { geo in
-            let axis = ScopeAxis(nominal: nominal, mode: mode)
+            let axis = ScopeAxis(
+                nominal: nominal,
+                mode: ScopeScaleMode.resolved(mode, transfer: transfer),
+                transfer: transfer)
             ZStack(alignment: .topLeading) {
                 lines(axis, in: geo.size)
                 numbers(axis, in: geo.size)

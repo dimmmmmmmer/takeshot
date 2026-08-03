@@ -342,8 +342,15 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var lutRecordEnabled: Bool?
     /// LUT intensity 0…1 (mix with the original); nil — 1.
     public var lutIntensity: Double?
-    /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020".
+    /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020". An HDR
+    /// source overrides this for its own takes — the file has to state the
+    /// transfer the camera really sent (see `WireColorimetry.filePreset`).
     public var colorTagPreset: String?
+    /// What the app does with a source reporting PQ or HLG: nil/"auto" — follow
+    /// the signal; "off" — treat every source as SDR, which is exactly how the
+    /// app behaved before HDR existed. `HDRMode` raw values; Optional like every
+    /// added field so settings JSON written by an older build still decodes.
+    public var hdrMode: String?
     /// Input levels of the source signal: nil/"auto" — RGB 4:4:4 assumed
     /// limited; "limited" — studio swing, the whole legal swing expanded to
     /// full range so a camera's sub-blacks and super-whites survive into the

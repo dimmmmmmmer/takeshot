@@ -106,7 +106,7 @@ extension AssistLegend {
                 metrics: size.metrics.scaled(by: layout.scale),
                 labels: layout.showsLabels)
             canvas.fillPanel()
-            let entries = Self.entries(for: tool)
+            let entries = Self.entries(for: tool, transfer: transfer)
             if placement.isVertical {
                 canvas.drawColumn(entries)
             } else {

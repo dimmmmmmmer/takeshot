@@ -126,10 +126,37 @@ extension CaptureController {
         capture.currentTimecode = currentTimecode?.description
         capture.levelsSetting = settings.videoLevels ?? "auto"
         capture.levelsEffective = diagnosticsLevelsInEffect()
+        capture.hdrSetting = HDRMode.resolved(settings.hdrMode).rawValue
+        capture.hdrSignal = signalColorimetry.badge ?? "SDR (Rec.709)"
+        capture.hdrDisplayMetadata = diagnosticsDisplayMetadata()
         capture.tenBitCapture = settings.tenBitCapture ?? true
         capture.detectionMode = settings.detectionMode.rawValue
         capture.preRollFrames = settings.preRollFramesEffective
         return capture
+    }
+
+    /// The static HDR metadata the board reported, in one line — the numbers
+    /// that go into the file's `mdcv` and `clli` boxes and nowhere near the
+    /// picture. Empty when the signal carried none, which is not a fault: many
+    /// cameras send an EOTF and stop there.
+    private func diagnosticsDisplayMetadata() -> String {
+        guard let displayMetadata = signalColorimetry.displayMetadata else { return "" }
+        var parts: [String] = []
+        if displayMetadata.maxContentLightLevel > 0 {
+            parts.append("MaxCLL \(Int(displayMetadata.maxContentLightLevel)) cd/m²")
+        }
+        if displayMetadata.maxFrameAverageLightLevel > 0 {
+            parts.append("MaxFALL "
+                + "\(Int(displayMetadata.maxFrameAverageLightLevel)) cd/m²")
+        }
+        if displayMetadata.maxDisplayLuminance > 0 {
+            parts.append("displayMetadata display "
+                + "\(Int(displayMetadata.maxDisplayLuminance)) cd/m² max")
+        }
+        if displayMetadata.displayPrimaries != nil {
+            parts.append("displayMetadata primaries present")
+        }
+        return parts.joined(separator: ", ")
     }
 
     /// What the levels stage is actually doing to this signal.

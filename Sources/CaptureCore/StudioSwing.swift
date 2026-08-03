@@ -29,6 +29,41 @@ public enum StudioSwing {
     /// Alpha is not a level: the lookup leaves it alone.
     static let identityTable: [UInt8] = (0...255).map { UInt8($0) }
 
+    /// The table a DECODED take needs to look like the monitor did while it was
+    /// recorded, for a file that is `wireCodes` studio swing and encoded with
+    /// `transfer`. nil when neither applies, which is every SDR take that has
+    /// no levels key — i.e. every YCbCr take there has ever been.
+    ///
+    /// The two operations are composed into ONE table rather than applied one
+    /// after the other. Not for speed: two passes over a UHD frame would also
+    /// be two roundings, and the second one would be rounding a value the first
+    /// one had already quantized. One table is one rounding, from the code the
+    /// decoder gave to the code the screen gets.
+    public static func playbackTable(wireCodes: Bool,
+                                     transfer: SignalTransfer) -> [UInt8]? {
+        guard wireCodes || transfer.isHDR else { return nil }
+        let swing = wireCodes ? expansionTable : identityTable
+        guard transfer.isHDR else { return swing }
+        let tone = toneTable(for: transfer)
+        return swing.map { tone[Int($0)] }
+    }
+
+    /// wire level (0…255, the scale the decoder hands back) → the tone-mapped
+    /// display value, through the same `HDRTransfer` the live path uses.
+    ///
+    /// Measured: a v210 ProRes file tagged PQ decodes to BGRA with its codes
+    /// merely video-range expanded — AVFoundation does not tone map on the way
+    /// out, and the PQ tag changes nothing about the pixels it returns. So the
+    /// app has to do it, and doing it from the decoder's own 8-bit output is
+    /// exact enough to land within a code or two of the live display table
+    /// (`PlaybackLevelsParityTests`).
+    static func toneTable(for transfer: SignalTransfer) -> [UInt8] {
+        (0...255).map { code in
+            let display = transfer.displaySignal(forSignal: Double(code) / 255)
+            return UInt8(min(255, max(0, Int(display * 255 + 0.5))))
+        }
+    }
+
     /// Expand `source` into `destination`; pass the same buffer for both to do
     /// it in place. False when either buffer is not 32BGRA or cannot be
     /// addressed, in which case nothing has been written.
@@ -40,6 +75,21 @@ public enum StudioSwing {
     @discardableResult
     public static func expand(_ source: CVPixelBuffer,
                               into destination: CVPixelBuffer) -> Bool {
+        map(source, into: destination, table: expansionTable)
+    }
+
+    /// The same byte lookup for ANY 256-entry table.
+    ///
+    /// Extracted because playback of an HDR take needs a second one: the
+    /// decoder hands back the wire's codes on an SDR scale, and the tone map
+    /// that puts them where the live monitor put them is also a function of one
+    /// byte. Two lookups composed into one table is one pass, and it keeps the
+    /// rule that a frame is levelled exactly once.
+    @discardableResult
+    public static func map(_ source: CVPixelBuffer,
+                           into destination: CVPixelBuffer,
+                           table: [UInt8]) -> Bool {
+        guard table.count == 256 else { return false }
         let inPlace = source === destination
         guard CVPixelBufferGetPixelFormatType(source) == kCVPixelFormatType_32BGRA,
               CVPixelBufferGetPixelFormatType(destination)
@@ -67,7 +117,7 @@ public enum StudioSwing {
             width: vImagePixelCount(width),
             rowBytes: CVPixelBufferGetBytesPerRow(destination))
         // byte order is B G R A: remap the three color channels, keep alpha
-        let error = expansionTable.withUnsafeBufferPointer { lut in
+        let error = table.withUnsafeBufferPointer { lut in
             identityTable.withUnsafeBufferPointer { identity in
                 vImageTableLookUp_ARGB8888(&input, &output,
                                            lut.baseAddress!, lut.baseAddress!,

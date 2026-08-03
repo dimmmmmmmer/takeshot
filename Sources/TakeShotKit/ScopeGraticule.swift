@@ -8,8 +8,24 @@ enum ScopeScaleMode: String, CaseIterable {
     case percent = "100"
     /// 10-bit code values, the scale an engineer judges a signal on.
     case tenBitCode = "1023"
+    /// Absolute luminance, cd/m². The only honest reading of a PQ or HLG
+    /// signal, and the reason this case exists at all: "100 %" on a PQ scale
+    /// is a number with no referent — PQ has no reference white built into its
+    /// range, so the same trace height means 203 cd/m² or 4000 depending on
+    /// nothing the scale can show. Offered ONLY on an HDR frame (see
+    /// `resolved`), so an SDR session's toolbar is exactly what it was.
+    case nits
 
     init(setting: String) { self = ScopeScaleMode(rawValue: setting) ?? .percent }
+
+    /// The mode that can actually be drawn for a frame. `nits` on an SDR frame
+    /// falls back to percent rather than drawing a scale it cannot compute —
+    /// which is what happens for one refresh every time an HDR camera is
+    /// unplugged while the toolbar is set to nits.
+    static func resolved(_ mode: ScopeScaleMode,
+                         transfer: SignalTransfer) -> ScopeScaleMode {
+        mode == .nits && !transfer.isHDR ? .percent : mode
+    }
 }
 
 /// One graticule line and the number that belongs to it.
@@ -68,6 +84,26 @@ struct ScopeTick: Identifiable {
 struct ScopeAxis {
     let nominal: ScopeNominalRange
     let mode: ScopeScaleMode
+    /// What the traced codes mean as luminance — `.sdr` for every signal that
+    /// is not PQ or HLG, in which case nothing below uses it at all.
+    var transfer: SignalTransfer = .sdr
+
+    /// Where the reference marks go in nits mode, lowest first.
+    ///
+    /// Not a decade ladder and not evenly spaced: these are the levels an
+    /// operator and a colourist actually name out loud, and two of them are
+    /// ITU-R BT.2408's references rather than round numbers — 26 cd/m² is the
+    /// 18 % grey card and 203 is diffuse white. A PQ waveform with those two
+    /// marked is readable in the way an SDR one with 0 and 100 marked is; the
+    /// decades around them are there so the operator can see how far into the
+    /// specular range a highlight has gone.
+    ///
+    /// Anything above the transfer's own peak is dropped — an HLG signal's
+    /// scale stops at its reference display's 1000 cd/m², and printing 4000 on
+    /// it would put a number where the trace can never reach.
+    static let nitsMarks: [Double] = [1, 10, HDRTransfer.referenceGreyNits, 100,
+                                      HDRTransfer.referenceWhiteNits, 1000,
+                                      4000, 10_000]
 
     /// Position down the canvas of a signal level (0 = black, 1 = white).
     /// Levels outside 0…1 are the excursions, and they land outside the
@@ -99,7 +135,42 @@ struct ScopeAxis {
     /// any other way would put "0" somewhere other than the bottom of a map
     /// whose bottom row IS code 0.
     var ticks: [ScopeTick] {
-        mode == .percent ? percentTicks : codeTicks
+        switch mode {
+        case .percent: return percentTicks
+        case .tenBitCode: return codeTicks
+        case .nits: return nitsTicks
+        }
+    }
+
+    /// The nits ladder. Each mark sits where its luminance sits on the wire's
+    /// own signal scale, which for PQ is emphatically not a linear position:
+    /// diffuse white at 203 cd/m² lands at 58 % of the code range and 1000 at
+    /// 75 %, and drawing it any other way would be drawing a curve PQ does not
+    /// have.
+    ///
+    /// The two reference levels are the loud ones, and 0 keeps the weight it
+    /// has on every other scale: black is black under PQ too.
+    private var nitsTicks: [ScopeTick] {
+        guard let peak = transfer.peakNits else { return percentTicks }
+        var out = [ScopeTick(unit: unit(ofLevel: 0), label: "0",
+                             weight: .nominal)]
+        for nits in Self.nitsMarks where nits <= peak {
+            guard let signal = transfer.signal(forNits: nits) else { continue }
+            let weight: ScopeTick.Weight =
+                nits == HDRTransfer.referenceWhiteNits ? .nominal
+                    : (nits == HDRTransfer.referenceGreyNits ? .major : .minor)
+            out.append(ScopeTick(unit: unit(ofLevel: signal),
+                                 label: Self.nitsLabel(nits), weight: weight))
+        }
+        // top of the canvas first, like every other ladder here
+        return out.sorted { $0.unit < $1.unit }
+    }
+
+    /// A luminance as the scale prints it — whole cd/m², no unit suffix (the
+    /// scale picker already says "nits" and a box this small has no room to
+    /// say it eleven more times).
+    static func nitsLabel(_ nits: Double) -> String {
+        String(Int(nits.rounded()))
     }
 
     private var percentTicks: [ScopeTick] {
@@ -167,7 +238,29 @@ struct ScopeAxis {
     /// 940 on every wire frame — a number on the wrong tick, which is the exact
     /// fault this type was extracted to make impossible.
     var horizontalTicks: [ScopeTick] {
-        mode == .percent ? horizontalPercentTicks : horizontalCodeTicks
+        switch mode {
+        case .percent: return horizontalPercentTicks
+        case .tenBitCode: return horizontalCodeTicks
+        case .nits: return horizontalNitsTicks
+        }
+    }
+
+    /// The histogram's version of the nits ladder: four marks rather than nine,
+    /// because a histogram is 256 bins wide in a box a couple of hundred points
+    /// across and the ladder is what turns it into a picket fence.
+    private var horizontalNitsTicks: [ScopeTick] {
+        guard let peak = transfer.peakNits else { return horizontalPercentTicks }
+        var out = [ScopeTick(unit: x(ofLevel: 0), label: "0", weight: .nominal)]
+        for nits in [HDRTransfer.referenceGreyNits,
+                     HDRTransfer.referenceWhiteNits, 1000.0, 10_000.0]
+        where nits <= peak {
+            guard let signal = transfer.signal(forNits: nits) else { continue }
+            out.append(ScopeTick(
+                unit: x(ofLevel: signal), label: Self.nitsLabel(nits),
+                weight: nits == HDRTransfer.referenceWhiteNits
+                    ? .nominal : .minor))
+        }
+        return out
     }
 
     private var horizontalPercentTicks: [ScopeTick] {
@@ -208,12 +301,19 @@ let scopeLabelHeight: CGFloat = 10
 /// the numbers, all placed by `ScopeAxis`.
 struct ScopeLevelGraticule: View {
     let nominal: ScopeNominalRange
+    /// The traced frame's transfer. A property of the DATA and not of the
+    /// panel: a pass analyzed before the camera switched to PQ must not be
+    /// labelled in nits for one refresh.
+    var transfer: SignalTransfer = .sdr
     @Environment(\.scopeGridBrightness) private var brightness
     @Environment(\.scopeScaleMode) private var mode
 
     var body: some View {
         GeometryReader { geo in
-            let axis = ScopeAxis(nominal: nominal, mode: mode)
+            let axis = ScopeAxis(
+                nominal: nominal,
+                mode: ScopeScaleMode.resolved(mode, transfer: transfer),
+                transfer: transfer)
             ZStack(alignment: .topLeading) {
                 bands(axis, in: geo.size)
                 lines(axis, in: geo.size)

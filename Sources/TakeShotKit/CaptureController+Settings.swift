@@ -51,9 +51,21 @@ extension CaptureController {
     /// is what every surface is fed. Guarded on a real difference for the
     /// reason above — every settings write lands here.
     private func applyLegendChange() {
-        let legend = AssistLegend(settings: settings)
+        var legend = AssistLegend(settings: settings)
+        // …plus the one thing about it that is not a setting: what the signal
+        // is encoded with, which decides whether the two top bands are labelled
+        // as percentages of an SDR scale or in cd/m² (see `AssistLegend`).
+        legend.transfer = signalColorimetry.transfer
         guard legend != assist.legend else { return }
         setAssist { $0.legend = legend }
+    }
+
+    /// The signal changed what it says its codes mean: the legend's labels
+    /// follow it. Called from the colorimetry callback, not from a settings
+    /// write, and it goes through the same guarded path so a signal that was
+    /// already SDR costs nothing.
+    func applyColorimetryToLegend() {
+        applyLegendChange()
     }
 
     /// Bundle lookups hit the disk — only on an actual language change.

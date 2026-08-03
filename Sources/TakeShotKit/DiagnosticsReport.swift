@@ -167,6 +167,11 @@ enum DiagnosticsReport {
         out.append(pair("Timecode", capture.currentTimecode ?? "none"))
         out.append(pair("Levels setting", capture.levelsSetting))
         out.append(pair("Levels in effect", capture.levelsEffective))
+        out.append(pair("HDR setting", capture.hdrSetting))
+        out.append(pair("HDR signal", capture.hdrSignal))
+        if !capture.hdrDisplayMetadata.isEmpty {
+            out.append(pair("HDR displayMetadata", capture.hdrDisplayMetadata))
+        }
         out.append(pair("10-bit capture", capture.tenBitCapture))
         out.append(pair("Detection mode", capture.detectionMode))
         out.append(pair("Pre-roll", "\(capture.preRollFrames) frames"))

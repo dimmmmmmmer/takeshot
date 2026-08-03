@@ -17,6 +17,10 @@ extension CapturePipeline {
     struct ScopeSourceFrame {
         let buffer: CVPixelBuffer
         let levels: ScopeWireLevels
+        /// What the wire codes mean — so the scopes can matrix a Rec.2020
+        /// signal with Rec.2020's weights and label their scale in cd/m²
+        /// instead of in a percentage of a scale PQ does not have.
+        let colorimetry: WireColorimetry
     }
 
     /// One frame after the levels stage: the 8-bit BGRA buffer everything
@@ -76,6 +80,12 @@ extension CapturePipeline {
             // here, which is what SDI and HDMI YCbCr always carry
             logLevels(effective: mode.rawValue, rgb444: format.isRGB444)
             converter.setLevels(mode)
+            // …and what those codes MEAN. Separate from levels on purpose: a
+            // PQ signal is still studio swing, so the levels answer above is
+            // unchanged and only the display TABLE differs. Both setters are
+            // no-ops when nothing changed, so an SDR session does one
+            // comparison per frame and rebuilds nothing.
+            converter.setColorimetry(signalColorimetry)
             guard let split = converter.convert(pixelBuffer) else { return nil }
             tagColorIfUntagged(split.display)
             // What the NEXT take will carry, so the file can say so (see
@@ -97,7 +107,8 @@ extension CapturePipeline {
                 display: split.display, wireRecord: split.record,
                 scopeSource: ScopeSourceFrame(
                     buffer: pixelBuffer,
-                    levels: mode == .full ? .full : .limited))
+                    levels: mode == .full ? .full : .limited,
+                    colorimetry: signalColorimetry))
         }
         recordCarriesWireCodes = false
         recordBytesPerPixel = 4
@@ -175,9 +186,32 @@ extension CapturePipeline {
     /// NOTE: the buffer handed to the writer must keep standard tags — the
     /// encoder color-converts pixels when buffer tags mismatch the file tags
     /// (verified on device: a display-gamma tag here darkened recorded shadows).
+    ///
+    /// An HDR source overrides the operator's preset for the DISPLAY buffer,
+    /// with the tag that says what that buffer really holds: the camera's
+    /// Rec.2020 primaries and, because the tone map has already happened, a
+    /// Rec.709 transfer. Tagging it PQ would ask ColorSync to apply the PQ
+    /// curve to something that is no longer PQ. See `WireColorimetry`.
     func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferCopyAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                      nil) == nil else { return }
-        ColorTags.tag(pixelBuffer, preset: config.settings.colorTagPreset)
+        ColorTags.tag(pixelBuffer,
+                      preset: signalColorimetry.displayPreset
+                          ?? config.settings.colorTagPreset)
+    }
+
+    /// Adopt what the board says this frame's codes mean, filtered through the
+    /// operator's HDR setting.
+    ///
+    /// One comparison per frame in the common case, and nothing else: the
+    /// value is the same object frame after frame, so an SDR session never
+    /// reaches the body at all. On a change the converters rebuild their
+    /// tables the next time they are asked (they compare too), and the main
+    /// actor is told once so the badge and the scopes' scale can follow.
+    func adoptColorimetry(_ reported: WireColorimetry) {
+        let resolved = hdrMode.applied(to: reported)
+        guard resolved != signalColorimetry else { return }
+        signalColorimetry = resolved
+        DispatchQueue.main.async { self.onColorimetry?(resolved) }
     }
 }

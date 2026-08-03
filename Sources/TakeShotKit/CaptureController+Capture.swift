@@ -36,6 +36,7 @@ extension CaptureController {
             settings: settings, slate: slate, roll: roll,
             takeNumber: nextTakeNumber))
         pipeline.setVideoLevels(settings.videoLevels)
+        pipeline.setHDRMode(settings.hdrMode)
         for channel in extraChannels {
             // the slate is the SHOT, not the camera: every channel records the
             // same scene/shot/take, only the cam label differs

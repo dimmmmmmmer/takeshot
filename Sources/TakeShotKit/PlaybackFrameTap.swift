@@ -134,6 +134,13 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// The same question for the compare clip — two takes in a wipe must be
     /// expanded the same way or the seam is a contrast step.
     var compareCarriesWireCodes = false
+    /// What the clip under review says it is encoded with — `.sdr` for
+    /// everything that is not a PQ or HLG file, which is every take this app
+    /// has ever written before HDR and every foreign clip that says nothing.
+    var sourceTransfer = SignalTransfer.sdr
+    /// The same for the compare clip: two takes in a wipe must be tone mapped
+    /// the same way or the seam is a contrast step.
+    var compareTransfer = SignalTransfer.sdr
     /// Where the expanded copy goes. A decoder's buffer is not ours to modify:
     /// it can share an IOSurface with a frame the decoder still holds.
     let levelsPool = PixelBufferPool()
@@ -230,6 +237,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
             self.idleDelivered = false
             // a still is a picture, not a signal: its codes are display values
             self.sourceCarriesWireCodes = false
+            self.sourceTransfer = .sdr
             self.stillBuffer = buffer
             self.lastBuffer = buffer
             self.deliver(buffer, analyzed: self.scopesEnabled)
@@ -256,6 +264,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
             // until the file has said otherwise it is treated as a picture, so
             // a foreign clip is never expanded on a guess
             self.sourceCarriesWireCodes = false
+            self.sourceTransfer = .sdr
             self.detectLevels(of: item)
             self.startTimerIfNeeded()
         }

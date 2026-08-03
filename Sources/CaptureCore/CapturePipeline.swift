@@ -45,6 +45,9 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onTimecode: ((Timecode?) -> Void)?
     public var onRecStateChanged: ((Bool) -> Void)?
     public var onSignal: ((Bool) -> Void)?
+    /// The signal's colorimetry, whenever it changes — what lights the HDR
+    /// badge and switches the scopes' scale into nits. Delivered on main.
+    public var onColorimetry: ((WireColorimetry) -> Void)?
 
     /// These two are the only callbacks read away from the main queue: the
     /// detached finalize task snapshots them on its own thread (see
@@ -129,6 +132,18 @@ public final class CapturePipeline: @unchecked Sendable {
     let lutBufferPool = PixelBufferPool()
     /// Source input levels ("limited"/"full"; nil — auto by signal type).
     var levelsMode: String?
+    /// How the app treats a signal that reports PQ or HLG: `auto` follows the
+    /// signal, `off` treats every source as SDR exactly as the app did before
+    /// HDR existed (queue-confined, set from the main actor).
+    var hdrMode = HDRMode.auto
+    /// What the signal last said its codes mean, AFTER `hdrMode` has had its
+    /// say — so `off` pins this at `.sdr` and every table, tag and scale
+    /// downstream is the one that shipped (queue-confined).
+    var signalColorimetry = WireColorimetry.sdr
+    /// The colorimetry latched when the current take opened, like the audio
+    /// channel mask and the slate: a camera that switches to HDR mid-take must
+    /// not retag the SDR frames already in the file.
+    var takeColorimetry = WireColorimetry.sdr
     /// 10-bit RGB wire split (display BGRA + precompensated r210 record).
     let tenBitConverter = TenBitConverter()
     /// 12-bit RGB wire split (display BGRA + 64RGBALE record carrying the wire

@@ -35,6 +35,11 @@ extension ScopeAnalyzer {
         /// and for the vectorscope's chroma gain.
         private let levels: ScopeWireLevels
         private let chromaGain: Double
+        /// What those codes mean as luminance. Carried through untouched — the
+        /// accumulator does no transfer arithmetic at all, because a scope
+        /// plots the codes that arrived. It only has to hand the transfer on so
+        /// the AXIS can be labelled in the units those codes are in.
+        private let transfer: SignalTransfer
 
         // Trace densities as difference maps (row-major, `height + 1` rows).
         private let diffY: UnsafeMutablePointer<Int32>
@@ -62,8 +67,10 @@ extension ScopeAnalyzer {
         private var prevLuma = -1
         private var prevR = -1, prevG = -1, prevB = -1
 
-        init(levels: ScopeWireLevels = .full) {
+        init(levels: ScopeWireLevels = .full,
+             transfer: SignalTransfer = .sdr) {
             self.levels = levels
+            self.transfer = transfer
             chromaGain = levels.chromaGain
             func zeroed(_ count: Int) -> UnsafeMutablePointer<Int32> {
                 let buffer = UnsafeMutablePointer<Int32>.allocate(capacity: count)
@@ -337,6 +344,7 @@ extension ScopeAnalyzer {
                     size: Self.vectorSize)),
                 nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
                                            black: Self.unit(of: codes.black)),
+                transfer: transfer,
                 sequence: ScopeAnalyzer.nextSequence())
         }
 

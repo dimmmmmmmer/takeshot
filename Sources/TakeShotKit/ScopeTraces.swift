@@ -31,7 +31,8 @@ struct WaveformView: View {
                         .interpolation(.medium)
                 }
             }
-            ScopeLevelGraticule(nominal: data.nominal)
+            ScopeLevelGraticule(nominal: data.nominal,
+                                transfer: data.transfer)
         }
     }
 
@@ -89,7 +90,8 @@ struct ParadeView: View {
             }
             // one set of numbers across all three columns: the axis is shared,
             // and three copies of it is three chances to read the wrong one
-            ScopeLevelGraticule(nominal: data.nominal)
+            ScopeLevelGraticule(nominal: data.nominal,
+                                transfer: data.transfer)
         }
     }
 
@@ -129,7 +131,8 @@ struct HistogramView: View {
             // the graticule and its numbers come from the same ScopeAxis the
             // traces are drawn through, so the brightness slider reaches them
             // like everything else
-            ScopeCodeAxisMarks(nominal: data.nominal)
+            ScopeCodeAxisMarks(nominal: data.nominal,
+                               transfer: data.transfer)
         }
     }
 

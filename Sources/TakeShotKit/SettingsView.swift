@@ -144,6 +144,9 @@ struct SettingsView: View {
                 // shared with the badge menu over the player — see
                 // `SignalControls`
                 InputLevelsPicker()
+                // beside the levels picker on purpose: the two are the same
+                // question one range apart — what the wire's codes mean
+                HDRModePicker()
             }
             Section(L("settings_luts")) {
                 LabeledContent(L("luts_folder")) {

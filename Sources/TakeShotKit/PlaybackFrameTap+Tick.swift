@@ -48,7 +48,8 @@ extension PlaybackFrameTap {
             forItemTime: itemTime, itemTimeForDisplay: nil) else { return }
         // levels first, then everything downstream — the LUT, the compare and
         // the scopes all measure the picture, not the file's coding (`+Levels`)
-        deliver(displayReady(pixelBuffer, wireCodes: sourceCarriesWireCodes),
+        deliver(displayReady(pixelBuffer, wireCodes: sourceCarriesWireCodes,
+                             transfer: sourceTransfer),
                 analyzed: scopesEnabled && tickCount % Self.scopeTickStride == 0)
     }
 
@@ -66,7 +67,8 @@ extension PlaybackFrameTap {
         tickIdle {
             output.copyPixelBuffer(forItemTime: itemTime,
                                    itemTimeForDisplay: nil)
-                .map { displayReady($0, wireCodes: sourceCarriesWireCodes) }
+                .map { displayReady($0, wireCodes: sourceCarriesWireCodes,
+                                     transfer: sourceTransfer) }
         }
     }
 
