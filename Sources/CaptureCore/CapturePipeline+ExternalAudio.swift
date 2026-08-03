@@ -154,6 +154,14 @@ extension CapturePipeline {
         }
         if padded {
             lastExternalAudioEnd = cursor
+            // Mirrored once per padding burst rather than per packet — the
+            // count is what a diagnostic reads, not the individual writes.
+            let inTake = gapFilledAudioPackets
+            noteHealth {
+                let added = inTake - $0.gapFilledAudioPacketsInTake
+                $0.gapFilledAudioPacketsInTake = inTake
+                $0.gapFilledAudioPacketsTotal += max(0, added)
+            }
             // the meters say what the file gets: silence at the floor
             publishLevels([Float](repeating: -100, count: sourceAudioChannels))
         }

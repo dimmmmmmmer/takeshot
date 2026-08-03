@@ -91,6 +91,11 @@ extension CapturePipeline {
             }
         } else {
             droppedFrames += 1
+            let inTake = droppedFrames
+            noteHealth {
+                $0.droppedVideoFramesInTake = inTake
+                $0.droppedVideoFramesTotal += 1
+            }
             // The encoder is still swallowing the pre-roll burst when the
             // first live frame arrives, so virtually every take drops one
             // frame. Alarming on that trains the operator to ignore the
