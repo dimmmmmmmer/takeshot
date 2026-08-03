@@ -8,7 +8,8 @@ import Foundation
 import SwiftUI
 import os.log
 
-/// Fullscreen surfaces and the hardware playout mirror.
+/// Fullscreen surfaces and the mirrors of the viewer — the hardware playout and
+/// the NDI source.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
@@ -31,11 +32,11 @@ extension CaptureController {
     }
 
     func rebuildPlayout() {
-        playoutFeeder?.stop()
-        playoutFeeder = nil
+        mirrors.playout?.stop()
+        mirrors.playout = nil
         guard let deviceID = settings.monitorDeviceID,
               deviceID.hasPrefix("decklink:") else {
-            wirePlayoutRouting()
+            wireDisplayMirrors()
             return
         }
         // output mode follows the live signal; 1080p25 until one is known
@@ -43,32 +44,52 @@ extension CaptureController {
         let height = signalFormat?.height ?? 1080
         let rate = signalFormat?.frameRate ?? 25
         do {
-            playoutFeeder = try PlayoutFeeder(
+            mirrors.playout = try PlayoutFeeder(
                 deviceID: String(deviceID.dropFirst("decklink:".count)),
                 width: width, height: height, frameRate: rate)
         } catch {
             // fall back to the universal 1080p25 raster (frames are scaled)
             do {
-                playoutFeeder = try PlayoutFeeder(
+                mirrors.playout = try PlayoutFeeder(
                     deviceID: String(deviceID.dropFirst("decklink:".count)),
                     width: 1920, height: 1080, frameRate: 25)
             } catch {
                 lastError = "Output: \(error.localizedDescription)"
             }
         }
-        wirePlayoutRouting()
+        wireDisplayMirrors()
     }
-    /// The output mirrors whatever the viewer shows.
-    func wirePlayoutRouting() {
-        guard let feeder = playoutFeeder else {
+    /// The mirrors show whatever the viewer shows: the hardware output, and the
+    /// NDI source when it is switched on.
+    ///
+    /// Both take the SAME frame — the decorated one, aids and key included,
+    /// which is what a director watches — so they share one handler slot per
+    /// source rather than each claiming its own. That is only true because they
+    /// want the same picture: the phone camera grid has a slot of its own
+    /// precisely because it wants the CLEAN frame (see
+    /// `CapturePipeline.publishDisplayFrame`).
+    ///
+    /// With neither mirror present the slots go back to nil, so an app with no
+    /// hardware output and NDI off calls nothing per frame.
+    func wireDisplayMirrors() {
+        let feeder = mirrors.playout
+        let mirror = mirrors.ndi
+        guard feeder != nil || mirror != nil else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
             return
         }
         let routeLive = viewerMode == .record
+        // The rate is stated per sender, not per frame: it is captured here
+        // because the handler runs on the display queue and the frame rate is
+        // MainActor state. Every route change re-wires — a signal format change,
+        // a viewer mode switch, a clip opening — so it follows the source.
+        let rate = NDIFrameRate(fps: routeLive
+            ? (signalFormat?.frameRate ?? 0) : playbackFPS)
         let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
-            feeder.submit(buffer)
+            feeder?.submit(buffer)
+            mirror?.offer(buffer, rate: rate)
         }
         pipeline.setOnDisplayFrame(routeLive ? handler : nil)
         playbackTap.setOnDisplayFrame(routeLive ? nil : handler)

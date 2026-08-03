@@ -119,10 +119,13 @@ extension CaptureController {
         }
         rawPlayer = model
         model.setViewAssist(assist)
-        wirePlayoutRouting()
         playbackFormatText = "\(model.height)p\(Int(model.frameRate.rounded()))"
         playbackStartTC = model.startTimecode
         playbackFPS = model.frameRate
+        // After the rate, not before it: the mirrors state the rate of the
+        // source they are pointed at, and the NDI frame carries it (see
+        // `wireDisplayMirrors`).
+        wireDisplayMirrors()
         playbackAspect = model.height > 0
             ? CGFloat(model.width) / CGFloat(model.height) : nil
         applyLetterboxColor()

@@ -793,3 +793,14 @@
 "menubar_status_idle" = "TakeShot — нет сигнала";
 "menubar_status_ready" = "TakeShot — готов";
 "menubar_status_recording" = "TakeShot — идёт запись";
+
+/* === NDI output: the viewer sent out as a source on the set network === */
+"settings_ndi" = "Выход NDI";
+"ndi_enable" = "Отдавать картинку как источник NDI";
+"ndi_source_name" = "Имя источника";
+"ndi_status" = "Состояние";
+"ndi_sending" = "Отдаёт";
+"ndi_not_sending" = "Не отдаёт";
+"ndi_unavailable" = "Недоступно";
+"ndi_failed_short" = "Не запустилось";
+"ndi_failed" = "NDI: %@";

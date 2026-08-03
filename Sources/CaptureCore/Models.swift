@@ -362,6 +362,31 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         return remotePort
     }
 
+    // MARK: - NDI output (see CNDSender and CaptureController+NDI)
+
+    /// The viewer is sent out as an NDI source; nil/false — off, which is the
+    /// default. Off for the same reason `remoteEnabled` is: a capture tool does
+    /// not announce itself on the set network until someone asks it to.
+    /// Optional, like every added field, so settings written by an older build
+    /// still decode.
+    public var ndiEnabled: Bool?
+    /// Name the source is announced under; nil — `ndiSourceNameEffective`.
+    public var ndiSourceName: String?
+
+    /// The name NDI announces. NDI presents a source to receivers as
+    /// "MACHINE (name)" and supplies the machine half itself, so this carries
+    /// the project and the camera and nothing else — putting the host in here
+    /// too would print it twice in every source list on the shoot.
+    public var ndiSourceNameEffective: String {
+        let chosen = ndiSourceName?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !chosen.isEmpty { return chosen }
+        let parts = [projectName, cameraLabel]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? "TakeShot" : parts.joined(separator: " ")
+    }
+
     // MARK: - assist tools and zoom (see ViewAssist and the assist popover)
 
     /// Exposure-legend size: "s" / "m" / "l"; nil — medium. The legend is read

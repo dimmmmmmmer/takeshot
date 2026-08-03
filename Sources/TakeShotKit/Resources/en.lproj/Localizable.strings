@@ -791,3 +791,14 @@
 "menubar_status_idle" = "TakeShot — no signal";
 "menubar_status_ready" = "TakeShot — ready";
 "menubar_status_recording" = "TakeShot — recording";
+
+/* === NDI output: the viewer sent out as a source on the set network === */
+"settings_ndi" = "NDI output";
+"ndi_enable" = "Send the viewer as an NDI source";
+"ndi_source_name" = "Source name";
+"ndi_status" = "Status";
+"ndi_sending" = "Sending";
+"ndi_not_sending" = "Not sending";
+"ndi_unavailable" = "Unavailable";
+"ndi_failed_short" = "Could not start";
+"ndi_failed" = "NDI: %@";

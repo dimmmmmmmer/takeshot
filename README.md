@@ -61,6 +61,10 @@ instead of a double-click; macOS then remembers the choice.
   is burned into the picture, so the hardware monitor gets it too.
 - Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
+- NDI output: the same mirrored viewer as a source on the set network, for a
+  director's iPad or a client feed, with no second cable and no second board
+  output. Off by default; needs the NDI SDK at build time
+  (`vendor/NDISDK/README.md`) and an NDI runtime installed.
 - Markers with timecode while recording and while reviewing.
 - Keyboard shortcuts for everything on the shot floor, all remappable.
 

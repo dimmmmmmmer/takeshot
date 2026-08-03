@@ -115,33 +115,20 @@ enum ControllerHarness {
         // whatever they last plugged in.
         controller.offloadedCards.fileURL =
             root.appendingPathComponent("offloaded-cards.json")
+        // The NDI sender is faked for every controller the harness builds, not
+        // only for the suites that care. The real one ANNOUNCES A SOURCE on the
+        // network the machine is on, which on a shoot is the set network: a suite
+        // that reached it would put a phantom camera in every receiver's source
+        // list, once per test. It cannot happen today because no build here has
+        // the SDK, and this is what keeps it from starting to happen the day the
+        // headers are dropped in. Suites that want to look at the frames install
+        // their own factory over this one.
+        controller.mirrors.ndiSenderFactory = { FakeNDISender(name: $0) }
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false
         controller.audioMonitor.stop()
-        defer {
-            controller.monitorOn = false
-            controller.audioMonitor.stop()
-            // The volume and LUT sliders and the DIM hold persist on a 400 ms
-            // debounce. A task still pending when a test ends would write this
-            // controller's whole settings blob into the shared scratch
-            // preferences part-way through the next one.
-            controller.volumePersistTask?.cancel()
-            controller.lutPersistTask?.cancel()
-            controller.assistPersistTask?.cancel()
-            controller.dimPersistTask?.cancel()
-            controller.mutePersistTask?.cancel()
-            // the watcher re-creates the record folder when it sees it vanish,
-            // so it has to go before the folder does
-            controller.folderWatcher?.cancel()
-            controller.folderWatcher = nil
-            // A listener left behind holds a port and a status pump for the
-            // rest of the suite. Harmless when the remote was never started.
-            controller.stopRemoteServer()
-            controller.stopCapture()
-            // a fake USB device keeps its delivery timer otherwise
-            controller.externalAudioSource?.stop()
-        }
+        defer { quiesce(controller) }
         if !live { controller.stopCapture() }
         // The kernel folder watcher turns every write into a rescan at an
         // unpredictable moment, and a rescan retires takes it cannot find on
@@ -154,6 +141,38 @@ enum ControllerHarness {
         // retiring takes the body is about to seed.
         controller.libraryGeneration += 1
         try await body(controller, root)
+    }
+
+    /// Everything a finished test has to leave switched off. Its own function
+    /// rather than a long `defer` body: `run` is at the function-length ceiling,
+    /// and this list grows every time the app gains something that keeps running
+    /// on a timer.
+    private static func quiesce(_ controller: CaptureController) {
+        controller.monitorOn = false
+        controller.audioMonitor.stop()
+        // The volume and LUT sliders and the DIM hold persist on a 400 ms
+        // debounce. A task still pending when a test ends would write this
+        // controller's whole settings blob into the shared scratch preferences
+        // part-way through the next one.
+        controller.volumePersistTask?.cancel()
+        controller.lutPersistTask?.cancel()
+        controller.assistPersistTask?.cancel()
+        controller.dimPersistTask?.cancel()
+        controller.mutePersistTask?.cancel()
+        // The NDI name field re-announces the source on a 600 ms debounce; a
+        // task still pending would build a sender for a controller the next test
+        // has finished with. This also drops the mirror itself.
+        controller.stopNDIOutput()
+        // the watcher re-creates the record folder when it sees it vanish, so it
+        // has to go before the folder does
+        controller.folderWatcher?.cancel()
+        controller.folderWatcher = nil
+        // A listener left behind holds a port and a status pump for the rest of
+        // the suite. Harmless when the remote was never started.
+        controller.stopRemoteServer()
+        controller.stopCapture()
+        // a fake USB device keeps its delivery timer otherwise
+        controller.externalAudioSource?.stop()
     }
 }
 
