@@ -24,10 +24,11 @@ extension CapturePipeline {
         let displayBuffer = lutPreview
             ? (applyLUT(to: display) ?? display) : display
         // LUT baking is an 8-bit creative decision — it keeps the BGRA record
-        // path; otherwise the 10-bit record buffer goes to the writer verbatim
+        // path; otherwise the wire-code record buffer (10- or 12-bit) goes to
+        // the writer verbatim
         let recordBuffer = lutRecord
             ? (lutPreview ? displayBuffer : (applyLUT(to: display) ?? display))
-            : (leveled.tenBitRecord ?? display)
+            : (leveled.wireRecord ?? display)
         return FrameProducts(display: displayBuffer, record: recordBuffer)
     }
 

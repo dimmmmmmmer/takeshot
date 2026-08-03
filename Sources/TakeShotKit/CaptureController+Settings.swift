@@ -96,7 +96,8 @@ extension CaptureController {
         }
         if oldValue.forcedInputMode != settings.forcedInputMode
             || oldValue.forcedInputRGB != settings.forcedInputRGB
-            || oldValue.tenBitCapture != settings.tenBitCapture {
+            || oldValue.tenBitCapture != settings.tenBitCapture
+            || oldValue.captureBitDepth != settings.captureBitDepth {
             restartCapture()
         }
     }

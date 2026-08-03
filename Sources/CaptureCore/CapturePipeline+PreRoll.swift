@@ -20,7 +20,12 @@ extension CapturePipeline {
     private var preRollCapacity: Int {
         let wanted = preRollFrames + config.settings.startDebounceFrames + 3
         guard let format, format.width > 0, format.height > 0 else { return wanted }
-        let bytesPerFrame = format.width * format.height * 4
+        // the ring holds what the WRITER gets, so the frame size is the RECORD
+        // buffer's — 4 bytes a pixel for BGRA and 'r210', 8 for the 12-bit
+        // path's 64RGBALE. Assuming 4 would let a 12-bit UHD pre-roll reach
+        // ~3 GB against a 1.5 GB budget.
+        let bytesPerPixel = lutRecord ? 4 : recordBytesPerPixel
+        let bytesPerFrame = format.width * format.height * bytesPerPixel
         let budgetBytes = 1_500_000_000 // ~1.5 GB
         let byteCap = max(config.settings.startDebounceFrames + 5,
                           budgetBytes / max(1, bytesPerFrame))
@@ -34,11 +39,12 @@ extension CapturePipeline {
     /// pre-roll frames and jumps in contrast when live leveled frames follow
     func bufferPreRollFrame(_ leveled: LevelledFrame, pts: CMTime) {
         guard writer == nil else { return }
-        // the pre-roll must hold what the WRITER gets: 10-bit when active,
-        // but BGRA when a LUT is baked into the recording — beginTake runs
-        // applyLUT over these frames and CoreImage cannot read r210
+        // the pre-roll must hold what the WRITER gets: the wire-code record
+        // buffer when active, but BGRA when a LUT is baked into the recording —
+        // beginTake runs applyLUT over these frames and CoreImage cannot read
+        // 'r210' or 'R12B'
         let preRollFrameBuffer = lutRecord
-            ? leveled.display : (leveled.tenBitRecord ?? leveled.display)
+            ? leveled.display : (leveled.wireRecord ?? leveled.display)
         preRollBuffer.append(PreRollFrame(index: frameIndex,
                                           pixelBuffer: preRollFrameBuffer,
                                           pts: pts))

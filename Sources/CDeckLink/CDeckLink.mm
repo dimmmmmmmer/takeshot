@@ -82,6 +82,7 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
         format.frameRate = 25.0;
     }
     format.timecodeFPS = (int)lround(format.frameRate);
+    format.bitDepth = 8; // overwritten by the caller, which knows the format
     CFStringRef name = NULL;
     if (mode->GetName(&name) == S_OK && name) {
         format.modeName = (__bridge_transfer NSString *)name;
@@ -89,6 +90,16 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
         format.modeName = [NSString stringWithFormat:@"%ldx%ld", format.width, format.height];
     }
     return format;
+}
+
+// Bits per component a capture pixel format carries — what the app is told the
+// board actually delivered, so a fallback is visible rather than silent.
+static int CDLBitDepthForPixelFormat(BMDPixelFormat pixelFormat) {
+    switch (pixelFormat) {
+        case bmdFormat12BitRGB: return 12;
+        case bmdFormat10BitRGB: return 10;
+        default: return 8;
+    }
 }
 
 #pragma mark - DeckLink callback
@@ -107,6 +118,7 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
 }
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags;
+- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode;
 - (void)handleFrame:(IDeckLinkVideoInputFrame *)videoFrame
               audio:(IDeckLinkAudioInputPacket *)audioPacket;
 @end
@@ -387,7 +399,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (forced) {
         _currentMode = forced->GetDisplayMode();
         _currentPixelFormat = self.forcedRGB
-            ? (self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA)
+            ? [self rgbPixelFormatForMode:_currentMode]
             : bmdFormat8BitYUV;
     } else {
         _currentMode = bmdModeHD1080p25;
@@ -429,6 +441,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         // no detection callback will come — report the format right away
         CDLVideoFormat *format = CDLFormatFromDisplayMode(forced);
         format.isRGB444 = self.forcedRGB;
+        format.bitDepth = CDLBitDepthForPixelFormat(_currentPixelFormat);
         forced->Release();
         id<CDLCaptureDelegate> delegate = self.delegate;
         [delegate capture:self didDetectFormat:format];
@@ -471,18 +484,23 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (!_input) {
         return;
     }
-    // RGB sources as BGRA (the board does not convert RGB→YUV on input),
-    // everything else as 8-bit YUV (2vuy)
+    // RGB sources at the requested bit depth (the board does not convert
+    // RGB→YUV on input), everything else as 8-bit YUV (2vuy)
     BOOL isRGB444 = (flags & bmdDetectedVideoInputRGB444) != 0;
+    BMDDisplayMode mode = newMode->GetDisplayMode();
     BMDPixelFormat pixelFormat = isRGB444
-        ? (self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA)
+        ? [self rgbPixelFormatForMode:mode]
         : bmdFormat8BitYUV;
 
     // Restart streams only on an actual change. Restarting on every callback
     // re-arms format detection, which fires the callback again — an endless
     // pause/flush/start loop that pins stream time at 0 (all frames get PTS 0,
     // so recording dies on duplicate PTS), drops frames, and burns CPU.
-    BMDDisplayMode mode = newMode->GetDisplayMode();
+    //
+    // The 12-bit request does NOT weaken this guard: rgbPixelFormatForMode is a
+    // pure function of the mode and the two preference flags, so it answers the
+    // same way every time the callback fires for the same signal, and the
+    // comparison below still settles after one restart.
     if (mode == _currentMode && pixelFormat == _currentPixelFormat) {
         return;
     }
@@ -497,9 +515,37 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
     CDLVideoFormat *format = CDLFormatFromDisplayMode(newMode);
     format.isRGB444 = isRGB444;
+    format.bitDepth = CDLBitDepthForPixelFormat(pixelFormat);
     id<CDLCaptureDelegate> delegate = self.delegate;
     [delegate capture:self didDetectFormat:format];
     }
+}
+
+// The RGB pixel format to enable for `mode`, honouring the requested bit depth
+// but never asking the board for one it says it cannot deliver.
+//
+// 12-bit is checked against the hardware rather than simply requested: a format
+// the board refuses is how a session ends up with a black or torn picture —
+// EnableVideoInput can return S_OK and then deliver frames the pipeline cannot
+// read. Dropping to 10- (or 8-) bit here keeps the picture, and the depth
+// actually enabled travels back on CDLVideoFormat.bitDepth so the app can tell
+// the operator their 12-bit request was not met.
+//
+// Pure in (mode, preferTwelveBitRGB, preferTenBitRGB) — see the restart guard
+// in handleFormatChanged, which depends on that.
+- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode {
+    if (self.preferTwelveBitRGB && _input) {
+        bool supported = false;
+        BMDDisplayMode actualMode = mode;
+        HRESULT hr = _input->DoesSupportVideoMode(
+            bmdVideoConnectionUnspecified, mode, bmdFormat12BitRGB,
+            bmdNoVideoInputConversion, bmdSupportedVideoModeDefault,
+            &actualMode, &supported);
+        if (hr == S_OK && supported) {
+            return bmdFormat12BitRGB;
+        }
+    }
+    return self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA;
 }
 
 - (CVPixelBufferRef)copyPixelBufferFromFrame:(IDeckLinkVideoInputFrame *)videoFrame {
@@ -512,6 +558,11 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     } else if (sourceFormat == bmdFormat10BitRGB) {
         cvFormat = 0x72323130; // 'r210' — labeled truthfully or the pipeline
                                // reads 10-bit RGB words as YUV (green mush)
+    } else if (sourceFormat == bmdFormat12BitRGB) {
+        cvFormat = 0x52313242; // 'R12B' — CoreVideo knows this FourCC natively
+                               // (288 bits per 8-pixel block), so the pool
+                               // below gets the right stride with no format
+                               // registration
     } else {
         cvFormat = kCVPixelFormatType_422YpCbCr8; // '2vuy'
     }

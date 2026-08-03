@@ -291,6 +291,11 @@
 "input_mode" = "Формат входа";
 "input_mode_auto" = "Автоопределение";
 "input_mode_rgb" = "Сигнал RGB 4:4:4";
+"capture_bit_depth" = "Разрядность захвата";
+"bit_depth_8" = "8 бит RGB";
+"bit_depth_10" = "10 бит RGB (r210)";
+"bit_depth_12" = "12 бит RGB (R12B)";
+"bit_depth_fallback" = "Захват %d бит недоступен — плата отдаёт %d бит";
 "scope_parade" = "Парад";
 "scope_vector" = "Вектор";
 "scope_none_hint" = "Все скопы выключены";

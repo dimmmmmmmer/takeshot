@@ -141,6 +141,15 @@ public enum ScopeAnalyzer {
                 analyzed(R210Reader(plane: $0), region: region,
                          levels: wireLevels)
             }
+        case R12BPacking.pixelFormat: // 'R12B', 12-bit RGB
+            return PackedPlane(pixelBuffer).flatMap {
+                // a stride too short for whole 36-byte blocks would be read
+                // past the end of each row — refuse the frame instead
+                guard CVPixelBufferGetBytesPerRow(pixelBuffer)
+                    >= R12BPacking.blockRowBytes(width: $0.width) else { return nil }
+                return analyzed(R12BReader(plane: $0), region: region,
+                                levels: wireLevels)
+            }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
             return PackedPlane(pixelBuffer).flatMap {
                 analyzed(TwoVUYReader(plane: $0), region: region, levels: .full)
@@ -268,6 +277,42 @@ public enum ScopeAnalyzer {
                           g: Int((word >> 10) & 0x3FF),
                           b: Int(word & 0x3FF))
         }
+    }
+
+    /// 'R12B' — Blackmagic's 12-bit RGB wire format, eight pixels to 36 bytes.
+    /// The sibling of `R210Reader`: same job, same place in the pipeline
+    /// (before the split, so nothing has been quantized to 256 levels and
+    /// nothing outside the nominal pair has been clamped away), one bit depth
+    /// up. The bit layout itself is not repeated here — both readers of this
+    /// format go through `R12BPacking`.
+    private struct R12BReader: PackedPlaneReader {
+        let plane: PackedPlane
+
+        func sample(x: Int, y: Int) -> Sample {
+            let pixel = R12BPacking.pixel(plane.row(y), x: x)
+            return Sample(r: narrowed(pixel.r), g: narrowed(pixel.g),
+                          b: narrowed(pixel.b))
+        }
+    }
+
+    /// 12-bit code → the analyzer's 10-bit sample scale, ROUNDED rather than
+    /// truncated, so the mapping is unbiased and the reference codes are exact:
+    /// nominal black 256 → 64 and nominal white 3760 → 940, which is what the
+    /// graticule needs if a 12-bit source's 0 % line is to sit where a 10-bit
+    /// source's does.
+    ///
+    /// The two bits dropped here are a deliberate limit, not an oversight, and
+    /// it is worth being plain about it: the trace maps are `waveHeight` = 512
+    /// rows and the histograms are 256 bins, so the analyzer cannot DISPLAY
+    /// more than about nine bits of distinct levels however many it is given.
+    /// A 12-bit sample scale would move every graticule, every histogram bin
+    /// and the scopes window's "1023" code axis for no visible detail. What the
+    /// wire tap is for — precision beyond the 8-bit display buffer, and the
+    /// excursions outside the nominal pair — is intact at 10 bits. The full 12
+    /// bits do reach the FILE, which is where they are worth something.
+    @inline(__always)
+    static func narrowed(_ code: Int) -> Int {
+        min(sampleLevels - 1, (code + 2) >> 2)
     }
 
     /// '2vuy' — one Cb Y0 Cr Y1 macropixel covers two columns.

@@ -20,18 +20,19 @@ extension CapturePipeline {
     }
 
     /// One frame after the levels stage: the 8-bit BGRA buffer everything
-    /// downstream reads, plus the precompensated 10-bit record buffer when the
-    /// wire carried r210 (nil for every other format).
+    /// downstream reads, plus the record buffer carrying the wire codes when
+    /// the wire carried a high-bit-depth RGB format — 'r210' or 'R12B' (nil for
+    /// every other format).
     struct LevelledFrame {
         let display: CVPixelBuffer
-        let tenBitRecord: CVPixelBuffer?
+        let wireRecord: CVPixelBuffer?
         /// The frame the scopes should read INSTEAD of the display buffer, when
         /// the wire carries a signal the display buffer cannot represent.
         ///
-        /// A 10-bit RGB wire is exactly that case, twice over: the display
-        /// buffer is 8-bit, so a scope reading it is quantized to 256 levels
-        /// however good the source was, and the limited→full expansion clamps
-        /// everything below code 64 and above 940 — the sub-blacks and
+        /// A 10- or 12-bit RGB wire is exactly that case, twice over: the
+        /// display buffer is 8-bit, so a scope reading it is quantized to 256
+        /// levels however good the source was, and the limited→full expansion
+        /// clamps everything outside the nominal pair — the sub-blacks and
         /// super-whites a camera legally sends, which is what the operator
         /// opens a scope to look for. The retained wire buffer is the ONLY work
         /// this adds to the capture queue: the analysis itself already runs on
@@ -43,46 +44,62 @@ extension CapturePipeline {
         let scopeSource: ScopeSourceFrame?
     }
 
-    /// Levels and, for a 10-bit wire, the split into display + record buffers.
-    /// nil means the converter could not produce a frame and this one is
-    /// dropped — the same `guard` the inline code had.
+    /// The converter for a wire format, or nil when the frame is one the 8-bit
+    /// path handles. The two high-bit-depth RGB formats differ in their pixel
+    /// packing and their record format, not in what the levels stage does with
+    /// them, so this is the only place the pipeline names them.
+    func wireConverter(for pixelFormat: OSType) -> WireConverter? {
+        switch pixelFormat {
+        case TenBitConverter.r210: return tenBitConverter
+        case TwelveBitConverter.r12b: return twelveBitConverter
+        default: return nil
+        }
+    }
+
+    /// Levels and, for a high-bit-depth RGB wire, the split into display +
+    /// record buffers. nil means the converter could not produce a frame and
+    /// this one is dropped — the same `guard` the inline code had.
     func levelledFrame(from pixelBuffer: CVPixelBuffer,
                        format: CaptureFormat) -> LevelledFrame? {
         let inputLevels = effectiveInputLevels(for: format)
-        // 10-bit RGB wire ('r210'): one pass yields the full-range display
-        // BGRA AND the precompensated 10-bit record buffer; levels are applied
-        // inside the converter, so the 8-bit stage below must not run again
-        if CVPixelBufferGetPixelFormatType(pixelBuffer) == TenBitConverter.r210 {
+        // 10- or 12-bit RGB wire ('r210'/'R12B'): one pass yields the
+        // full-range display BGRA AND the record buffer carrying the wire
+        // codes; levels are applied inside the converter, so the 8-bit stage
+        // below must not run again
+        if let converter =
+            wireConverter(for: CVPixelBufferGetPixelFormatType(pixelBuffer)) {
             let mode = InputLevels.resolved(inputLevels)
-            tenBitConverter.setLevels(mode)
-            guard let split = tenBitConverter.convert(pixelBuffer) else { return nil }
+            converter.setLevels(mode)
+            guard let split = converter.convert(pixelBuffer) else { return nil }
             tagColorIfUntagged(split.display)
             // What the NEXT take will carry, so the file can say so (see
             // `TakeWriter.levelsKey`). Only this branch records wire codes: the
             // 8-bit path's record buffer IS the expanded display buffer, and on
             // `full` the wire codes already are display values.
             recordCarriesWireCodes = mode == .limited
-            // The graticule marks where NOMINAL black and white are, which is
-            // 64/940 whatever the expansion then does with the codes outside
-            // them — that is what makes the excursion visible as an excursion.
+            recordBytesPerPixel = converter.recordBytesPerPixel
+            // The graticule marks where NOMINAL black and white are, whatever
+            // the expansion then does with the codes outside them — that is
+            // what makes the excursion visible as an excursion.
             return LevelledFrame(
-                display: split.display, tenBitRecord: split.record,
+                display: split.display, wireRecord: split.record,
                 scopeSource: ScopeSourceFrame(
                     buffer: pixelBuffer,
                     levels: mode == .full ? .full : .limited))
         }
         recordCarriesWireCodes = false
+        recordBytesPerPixel = 4
         // nil is auto on a signal that is not RGB 4:4:4 — nothing is expanded,
         // and the mode enum has no case for "the question was never asked".
         guard let inputLevels else {
-            return LevelledFrame(display: pixelBuffer, tenBitRecord: nil,
+            return LevelledFrame(display: pixelBuffer, wireRecord: nil,
                                  scopeSource: nil)
         }
         let mode = InputLevels.resolved(inputLevels)
         let leveled = mode.expandsEightBit
             ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
             : pixelBuffer
-        return LevelledFrame(display: leveled, tenBitRecord: nil,
+        return LevelledFrame(display: leveled, wireRecord: nil,
                              scopeSource: nil)
     }
 

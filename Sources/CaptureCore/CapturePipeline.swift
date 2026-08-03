@@ -131,6 +131,16 @@ public final class CapturePipeline: @unchecked Sendable {
     var levelsMode: String?
     /// 10-bit RGB wire split (display BGRA + precompensated r210 record).
     let tenBitConverter = TenBitConverter()
+    /// 12-bit RGB wire split (display BGRA + 64RGBALE record carrying the wire
+    /// codes). Held alongside the 10-bit one rather than swapped for it: the
+    /// board can change format mid-session and each converter owns pools and a
+    /// levels table that are cheap to keep and expensive to rebuild.
+    let twelveBitConverter = TwelveBitConverter()
+    /// Bytes per pixel of the buffers currently going to the writer, so the
+    /// pre-roll ring's memory cap is sized on what it is really holding —
+    /// 12-bit record frames are twice a 10-bit one and would otherwise
+    /// overshoot the ring's budget by 2x at UHD (queue-confined).
+    var recordBytesPerPixel = 4
     /// Whether the frames the writer is being handed carry the camera's wire
     /// codes rather than display values — decided per frame by the levels stage
     /// and read when a take opens, so the file can state it (queue-confined).

@@ -30,8 +30,8 @@ instead of a double-click; macOS then remembers the choice.
   timecode or manual as alternatives.
 - Pre-roll buffer: every take opens with picture *and* sound from before the
   REC press, so nothing is lost to trigger latency.
-- 10-bit RGB capture for RGB 4:4:4 sources; ProRes Proxy/LT/422/HQ, H.264 and
-  HEVC.
+- 10-bit RGB capture for RGB 4:4:4 sources, with 12-bit (`R12B`) as an opt-in
+  choice; ProRes Proxy/LT/422/HQ/4444, H.264 and HEVC.
 - Timecode track per take, with a second anchor written when the camera's
   Rec Run starts mid-take, so the overlap conforms frame-accurately against
   the camera original.

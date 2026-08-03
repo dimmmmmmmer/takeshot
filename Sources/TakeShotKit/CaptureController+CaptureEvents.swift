@@ -20,6 +20,7 @@ extension CaptureController {
             if changed, format != nil, self.playoutFeeder != nil {
                 self.rebuildPlayout()
             }
+            if changed { self.reportBitDepthShortfall(format) }
         }
         pipeline.onTimecode = { [weak self] timecode in
             guard let self, self.live.currentTimecode != timecode else { return }
@@ -120,6 +121,24 @@ extension CaptureController {
     /// to toast: the two cases where footage is missing outright, announced more
     /// quietly than a dropped frame. An operator watching the slate rather than
     /// the screen had no way to learn about them.
+    /// Say so when the board did not give us the bit depth that was asked for.
+    ///
+    /// A silent fallback is a colour decision made behind the operator's back:
+    /// they selected 12-bit, the board or the mode could not do it, and the
+    /// takes come out 10-bit with nothing on screen saying which. The picture
+    /// and the footage are still good, so this is a five-second notice rather
+    /// than a sticky alarm — but it is never nothing.
+    ///
+    /// Only asked of an RGB 4:4:4 signal: a YUV source is 8-bit '2vuy' by
+    /// design and was never a request that could fail.
+    func reportBitDepthShortfall(_ format: CaptureFormat?) {
+        guard let format, format.isRGB444 else { return }
+        let requested = settings.resolvedCaptureBitDepth.bits
+        guard format.bitDepth < requested else { return }
+        lastError = String(format: L("bit_depth_fallback"),
+                           requested, format.bitDepth)
+    }
+
     func reportPipelineError(_ message: String) {
         let sticky = ["TAKE LOST", "AUDIO LOST", "Dropped", "ingress",
                       "Failed to start recording", "Take closed:",

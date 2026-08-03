@@ -289,6 +289,11 @@
 "input_mode" = "Input format";
 "input_mode_auto" = "Auto detect";
 "input_mode_rgb" = "Signal is RGB 4:4:4";
+"capture_bit_depth" = "Capture bit depth";
+"bit_depth_8" = "8-bit RGB";
+"bit_depth_10" = "10-bit RGB (r210)";
+"bit_depth_12" = "12-bit RGB (R12B)";
+"bit_depth_fallback" = "%d-bit capture unavailable — the board is delivering %d-bit";
 "scope_parade" = "Parade";
 "scope_vector" = "Vector";
 "scope_none_hint" = "All scopes are off";
