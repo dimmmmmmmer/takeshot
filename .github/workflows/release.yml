@@ -1,8 +1,18 @@
-# Release on a vX.Y.Z tag: build TakeShot.app, zip it, create a GitHub Release.
+# Release on a vX.Y.Z tag: build TakeShot.app, wrap it in a .dmg, publish it
+# with the operator notes from CHANGELOG.md.
 #
-# Ad-hoc signing (no Developer ID), so on first launch of a downloaded build
-# macOS shows a Gatekeeper warning — open via right-click → Open, or:
-# xattr -d com.apple.quarantine TakeShot.app
+# Two things about the artifact this produces, both deliberate and both stated
+# on the release page itself by scripts/release-notes.sh:
+#
+#   * A GitHub runner has none of the vendor SDKs — they are not redistributable
+#     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D and
+#     NDI bridges are compiled as stubs. In particular the published build sees
+#     NO capture device: it plays back, it exports, it runs the demo source, and
+#     it cannot record from a board. Anyone who needs capture builds from source
+#     with the DeckLink SDK (CONTRIBUTING.md).
+#   * Ad-hoc signing, no Developer ID, no notarization. First launch of a
+#     download therefore needs right-click → Open, or
+#     `xattr -d com.apple.quarantine /Applications/TakeShot.app`.
 name: Release
 
 on:
@@ -17,12 +27,59 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags and full history: the notes link back to the previous release,
+          # and `git describe` cannot find it in a shallow clone.
+          fetch-depth: 0
+
+      # Before anything expensive. A tag that disagrees with the VERSION file
+      # would publish a download whose About panel, diagnostics bundle and MHL
+      # manifests all name a different build from the one on the release page —
+      # the exact ambiguity the single VERSION file exists to prevent.
+      - name: Tag and VERSION agree
+        run: |
+          VERSION="$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' VERSION \
+            | head -1 | tr -d '[:space:]')"
+          if [ "${{ github.ref_name }}" != "v$VERSION" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match VERSION" \
+                 "($VERSION). Bump VERSION and add its CHANGELOG.md section," \
+                 "commit, then tag v$VERSION."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # Fails when CHANGELOG.md has no section for this version, so a release
+      # cannot go out with an empty body.
+      - name: Release notes exist
+        run: ./scripts/release-notes.sh "$VERSION" > /dev/null
 
       - name: Test
         run: ./scripts/test.sh
 
       - name: Build TakeShot.app
         run: ./scripts/bundle-app.sh
+
+      # The bundle script is the only thing that stamps the version. Read it
+      # back off the artifact rather than trusting that it ran.
+      - name: Bundle states the same version
+        run: |
+          PLIST="build/TakeShot.app/Contents/Info.plist"
+          BUILT="$(/usr/libexec/PlistBuddy -c \
+            'Print :CFBundleShortVersionString' "$PLIST")"
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "::error::built bundle says $BUILT, VERSION says $VERSION"
+            exit 1
+          fi
+          echo "TakeShot.app reports $BUILT"
+
+      # After the build, because the notes read the architectures off the
+      # binary rather than asserting them. Into build/ (git-ignored) so nothing
+      # the release writes can make the checkout dirty.
+      - name: Release notes
+        run: |
+          ./scripts/release-notes.sh "$VERSION" build/TakeShot.app \
+            > build/notes.md
+          cat build/notes.md
 
       - name: App DMG
         run: |
@@ -36,7 +93,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # No --generate-notes: the body is the operator notes from
+          # CHANGELOG.md, and a commit list appended under them buries the two
+          # or three lines somebody has to read before installing. The commits
+          # stay one link away instead.
+          PREVIOUS="$(git describe --tags --abbrev=0 \
+            "${{ github.ref_name }}^" 2>/dev/null || true)"
+          REPO="${{ github.server_url }}/${{ github.repository }}"
+          if [ -n "$PREVIOUS" ]; then
+            printf '\n**Every commit since %s:** %s/compare/%s...%s\n' \
+              "$PREVIOUS" "$REPO" "$PREVIOUS" "${{ github.ref_name }}" \
+              >> build/notes.md
+          fi
           gh release create "${{ github.ref_name }}" \
             --title "TakeShot ${{ github.ref_name }}" \
-            --generate-notes \
+            --notes-file build/notes.md \
             "build/TakeShot-${{ github.ref_name }}.dmg"

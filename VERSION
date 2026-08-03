@@ -1,0 +1,25 @@
+# The app's version, in the style of .coverage-floor: THE one place it is
+# stated. Everything that has to agree reads it from here.
+#
+#   scripts/bundle-app.sh   stamps CFBundleShortVersionString and
+#                           CFBundleVersion into the bundle's Info.plist, so
+#                           the About panel, the diagnostics bundle
+#                           (DiagnosticsSnapshot.AppSection.version) and the
+#                           ASC MHL creatorinfo all report this number.
+#   scripts/release-notes.sh  picks the matching CHANGELOG.md section.
+#   .github/workflows/release.yml  refuses to publish unless the tag that
+#                           triggered it is exactly "v" + this number.
+#
+# Releasing: bump this, add the matching "## <version>" section to
+# CHANGELOG.md, commit, then tag v<version>. The workflow fails loudly rather
+# than shipping a bundle whose plist disagrees with the tag on the download.
+#
+# MAJOR.MINOR.PATCH, digits only — bundle-app.sh rejects anything else, because
+# CFBundleShortVersionString has to be a plain version string for macOS.
+#
+# Still pre-1.0 deliberately: the v210 (10-bit YCbCr) capture path has never
+# run against a board, and NDI and R3D are only real in a build made against
+# their vendor SDKs. 0.1.0 was the never-tagged number the plist carried
+# through development; the first published build takes its own so a
+# diagnostics bundle can never be ambiguous about which is which.
+0.2.0

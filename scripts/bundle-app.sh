@@ -21,6 +21,22 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
+# The version, from the one file that states it. Resources/Info.plist carries
+# placeholders precisely so that a bundle whose version came from anywhere else
+# is recognisable — the About panel, the diagnostics bundle and the ASC MHL
+# creatorinfo all read these two keys, and a build that reports a number nobody
+# can map back to a tag makes every bug report from the field ambiguous.
+VERSION="$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' VERSION \
+    | head -1 | tr -d '[:space:]')"
+if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "VERSION must be MAJOR.MINOR.PATCH, digits only — got '$VERSION'" >&2
+    exit 1
+fi
+/usr/libexec/PlistBuddy \
+    -c "Set :CFBundleShortVersionString $VERSION" \
+    -c "Set :CFBundleVersion $VERSION" \
+    "$APP/Contents/Info.plist"
+
 # RED's R3D runtime, when this build was made against the SDK. Unlike DeckLink
 # and Blackmagic RAW — installed system-wide by the vendor's own software and
 # loaded from there — RED's libraries are redistributables that have to travel
@@ -85,7 +101,7 @@ else
     echo "Signed with: $IDENTITY"
 fi
 
-echo "Done: $APP"
+echo "Done: $APP — version $VERSION${GIT_SHA:+ ($GIT_SHA)}"
 
 # An app INSIDE ~/Documents (or Desktop/Downloads) needs the Documents TCC
 # permission just to read its own resource bundle, and an ad-hoc signature
