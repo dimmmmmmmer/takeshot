@@ -57,6 +57,49 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSData *data;
 @end
 
+/// What a frame says its code values MEAN, as the board reports it.
+///
+/// Deliberately on the FRAME and not on CDLVideoFormat, because that is where
+/// the hardware puts it. BMDDetectedVideoInputFormatFlags — the argument the
+/// format-detection callback is handed — carries sampling (RGB 4:4:4 vs YCbCr),
+/// bit depth and dual-stream 3D, and nothing about transfer functions or
+/// primaries at all. HDR arrives instead as per-frame metadata: the CTA-861.3
+/// Dynamic Range and Mastering InfoFrame over HDMI, the ST 352 payload
+/// identifier over SDI, both surfaced through
+/// IDeckLinkVideoFrameMetadataExtensions. So a signal's HDR state is learned
+/// from a frame or not at all, and a camera that changes it mid-shot is seen.
+///
+/// All zero / eotf 0 when the frame carried no HDR metadata, which is every
+/// frame of every SDR signal and every frame at all when the bridge is a stub.
+@interface CDLFrameColorimetry : NSObject
+/// Whether the board flagged this frame as carrying HDR metadata
+/// (bmdFrameContainsHDRMetadata). Everything below is meaningless without it.
+@property (nonatomic) BOOL hasHDRMetadata;
+/// CTA-861.3 EOTF field: 0 — SDR (traditional gamma), 1 — HDR (traditional
+/// gamma), 2 — PQ (SMPTE ST 2084), 3 — HLG (ARIB STD-B67). A plain integer
+/// from the InfoFrame, so it is passed through as one.
+@property (nonatomic) int eotf;
+/// Colour primaries, normalized away from the SDK's FourCC values so the Swift
+/// side never has to know them: 0 — unknown, 1 — Rec.601, 2 — Rec.709,
+/// 3 — Rec.2020.
+@property (nonatomic) int colorspace;
+/// Static HDR metadata, cd/m². Zero means the board reported nothing.
+@property (nonatomic) double maxContentLightLevel;      // MaxCLL
+@property (nonatomic) double maxFrameAverageLightLevel; // MaxFALL
+@property (nonatomic) double maxDisplayLuminance;
+@property (nonatomic) double minDisplayLuminance;
+/// Mastering display primaries and white point, CIE xy. All eight are zero
+/// when the board reported none.
+@property (nonatomic) double redX;
+@property (nonatomic) double redY;
+@property (nonatomic) double greenX;
+@property (nonatomic) double greenY;
+@property (nonatomic) double blueX;
+@property (nonatomic) double blueY;
+@property (nonatomic) double whiteX;
+@property (nonatomic) double whiteY;
+@end
+
 /// One captured frame with everything the bridge knows about it. The
 /// timecode arrives as components because the bridge has no Swift types; the
 /// adapter folds them into a `Timecode` on the other side.
@@ -70,6 +113,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) int tcFrames;
 @property (nonatomic) BOOL tcDropFrame;
 @property (nonatomic, copy) NSArray<CDLAncillaryPacket *> *ancillaryPackets;
+/// Never nil; `hasHDRMetadata` is NO for an SDR frame.
+@property (nonatomic, strong) CDLFrameColorimetry *colorimetry;
 @end
 
 @class CDLCapture;

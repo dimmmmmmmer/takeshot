@@ -74,6 +74,12 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     /// picture is already on the frame when it arrives (see `AssistStage`).
     /// Read under renderLock; use setAssist from any thread.
     var assist = ViewAssist()
+    /// The primaries the layer's colorspace is currently built for. Compared
+    /// against every presented frame's own tag so a Rec.2020 source can be
+    /// converted to the display profile by ColorSync instead of being shown as
+    /// if it were Rec.709 (see `adoptColorSpace`). Render-queue confined.
+    var installedPrimaries: CFString =
+        kCVImageBufferColorPrimaries_ITU_R_709_2
 
     public func setAssist(_ newValue: ViewAssist) {
         renderLock.lock()

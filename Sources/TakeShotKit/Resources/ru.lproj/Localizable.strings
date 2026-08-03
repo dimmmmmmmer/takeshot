@@ -201,6 +201,15 @@
 "levels_limited" = "Limited";
 "levels_full" = "Full";
 
+/* HDR */
+"hdr_mode" = "HDR-сигнал";
+"hdr_mode_auto" = "По сигналу";
+"hdr_mode_off" = "Считать SDR";
+"hdr_mode_hint" = "Камера, отдающая PQ (ST 2084) или HLG, приводится к монитору тональной компрессией: диффузный белый на 203 кд/м², прицелы читают в нитах, а тейк тегируется той передаточной функцией, которую прислала камера. «Считать SDR» отключает всё это — пригодится, когда конвертер в тракте пропускает HDR-метаданные через уже сконвертированный сигнал.";
+"hdr_signal" = "Сигнал";
+"hdr_signal_sdr" = "SDR (Rec.709)";
+"scope_hdr_hint" = "Сигнал HDR: шкала в кд/м², опорные метки — 26 (серая карта 18%) и 203 (диффузный белый) по ITU-R BT.2408.";
+
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony";
 "preset_sony_alpha" = "Sony (Legacy)";
@@ -355,6 +364,7 @@
 "assist_off" = "Выкл";
 "assist_false_color" = "False color";
 "assist_zebra" = "Зебра";
+"assist_zebra_hint" = "Уровень, с которого идут полосы. На HDR-сигнале показывается в кд/м²: полосы срабатывают на той же доле диффузного белого, что и в SDR, а число говорит, сколько это в яркости.";
 "assist_peaking" = "Focus peaking";
 "framelines" = "Framelines";
 "safe_areas" = "Безопасные зоны";

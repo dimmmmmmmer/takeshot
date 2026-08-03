@@ -103,6 +103,7 @@ extension MetalPreviewLayer {
         defer { renderLock.unlock() }
         lastBuffer = pixelBuffer
         logProbeIfTagged(pixelBuffer)
+        adoptColorSpace(of: pixelBuffer)
         applyPendingDrawableSize()
         let size = drawableSize
         // one chain: no drawable yet, or nothing to place in it, and the frame
@@ -127,6 +128,44 @@ extension MetalPreviewLayer {
                                                   to: destination) else { return }
         _ = try? task.waitUntilCompleted()
         drawable.present()
+    }
+
+    /// Follow the frame's own primaries, when they are not the ones the layer
+    /// is already built for.
+    ///
+    /// The layer renders unmanaged and its `colorspace` is the whole statement
+    /// of what the codes reaching the compositor mean, so a Rec.2020 frame
+    /// shown through a Rec.709 layer is a real error: ColorSync would map the
+    /// wrong gamut to the display and every saturated colour would land short.
+    /// Reading it off the buffer rather than from a setting is what lets one
+    /// layer serve live, playback and RAW without any of them telling it
+    /// anything.
+    ///
+    /// Costs one attachment lookup and one `CFEqual` per presented frame; the
+    /// body runs only when the source's primaries actually change, which for an
+    /// SDR session is never. Assigning `colorspace` reallocates the drawable
+    /// pool, so it must not happen per frame — that is what the comparison is
+    /// for, not an optimisation.
+    ///
+    /// Call under renderLock, before `nextDrawable()`.
+    func adoptColorSpace(of pixelBuffer: CVPixelBuffer) {
+        let tagged = CVBufferCopyAttachment(
+            pixelBuffer, kCVImageBufferColorPrimariesKey, nil)
+        // an untagged buffer keeps whatever the layer has: it makes no claim,
+        // and re-deriving a space from nothing would flip the layer back and
+        // forth on a source that tags some frames and not others
+        guard let primaries = tagged as? NSString as CFString?,
+              !CFEqual(primaries, installedPrimaries) else { return }
+        let attachments = [
+            kCVImageBufferColorPrimariesKey: primaries,
+            kCVImageBufferTransferFunctionKey:
+                kCVImageBufferTransferFunction_ITU_R_709_2,
+            kCVImageBufferYCbCrMatrixKey: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+        ] as CFDictionary
+        guard let space = CVImageBufferCreateColorSpaceFromAttachments(
+            attachments)?.takeRetainedValue() else { return }
+        installedPrimaries = primaries
+        colorspace = space
     }
 
     /// The frame placed into a `size` drawable: desqueezed, fitted, punched in.

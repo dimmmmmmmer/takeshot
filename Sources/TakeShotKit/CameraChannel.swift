@@ -95,6 +95,10 @@ final class CameraChannel: ObservableObject, Identifiable {
         self.takeNumber = takeNumber
         pipeline.update(config: .init(settings: camSettings, slate: slate,
                                       roll: roll, takeNumber: takeNumber))
+        // the HDR setting is not read out of the config — it is resolved per
+        // frame — so a channel has to be told it separately or a second camera
+        // would keep tone mapping after the operator forced SDR on the first
+        pipeline.setHDRMode(camSettings.hdrMode)
     }
 
     /// What REC has asked of this channel. Deliberately NOT `isRecording`: that

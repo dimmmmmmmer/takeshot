@@ -80,13 +80,15 @@ extension CapturePipeline {
     public func handleFrame(_ frame: CapturedFrame) {
         handleFrame(pixelBuffer: frame.pixelBuffer, pts: frame.pts,
                     timecode: frame.timecode, vancTrigger: frame.vancTrigger,
-                    ancillaryPackets: frame.ancillaryPackets)
+                    ancillaryPackets: frame.ancillaryPackets,
+                    colorimetry: frame.colorimetry)
     }
 
     public func handleFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                             timecode rawTimecode: Timecode?,
                             vancTrigger: VancTrigger? = nil,
-                            ancillaryPackets: [AncillaryPacket] = []) {
+                            ancillaryPackets: [AncillaryPacket] = [],
+                            colorimetry: WireColorimetry = .sdr) {
         // backpressure: a stalled destination (NAS waking up) piles retained
         // UHD buffers into the queue — drop at ingress past a small window
         guard admitFrameAtIngress() else { return }
@@ -98,7 +100,8 @@ extension CapturePipeline {
             }
             self.processFrame(pixelBuffer: pixelBuffer, pts: pts,
                               timecode: rawTimecode, vancTrigger: vancTrigger,
-                              ancillaryPackets: ancillaryPackets)
+                              ancillaryPackets: ancillaryPackets,
+                              colorimetry: colorimetry)
         }
     }
 

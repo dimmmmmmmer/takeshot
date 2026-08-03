@@ -24,8 +24,23 @@ static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 @implementation CDLAncillaryPacket
 @end
 
+@implementation CDLFrameColorimetry
+@end
+
 @implementation CDLCapturedFrame
 @end
+
+// The frame-metadata read below needs SDK 11 or newer: that is where
+// IDeckLinkVideoFrameMetadataExtensions and the bmdDeckLinkFrameMetadataHDR*
+// identifiers were introduced. An older header set still builds — the bridge
+// simply reports every frame as SDR, which is what it did before HDR existed.
+// The runtime half is Desktop Video, which has shipped these since 11.x.
+#if TAKESHOT_HAS_DECKLINK_SDK && defined(BLACKMAGIC_DECKLINK_API_VERSION) \
+    && BLACKMAGIC_DECKLINK_API_VERSION >= 0x0b000000
+#define TAKESHOT_HAS_DECKLINK_HDR 1
+#else
+#define TAKESHOT_HAS_DECKLINK_HDR 0
+#endif
 
 #if TAKESHOT_HAS_DECKLINK_SDK
 
@@ -101,6 +116,112 @@ static int CDLBitDepthForPixelFormat(BMDPixelFormat pixelFormat) {
         case bmdFormat10BitYUV: return 10; // 'v210'
         default: return 8;                 // 'BGRA' or '2vuy'
     }
+}
+
+// What a frame says its codes mean, or an all-zero value when it says nothing.
+//
+// Gated on bmdFrameContainsHDRMetadata, and that gate is the whole cost of HDR
+// on the per-frame path for an SDR signal: one bit test against a flags word
+// the callback already reads for bmdFrameHasNoInputSource. Nothing is queried,
+// no interface is obtained and no metadata is touched until a frame says it
+// carries some.
+//
+// The deliberate gap that leaves: a Rec.2020 SDR signal — legal, and rare on a
+// set — is not detected here, because its colorspace lives behind the same
+// interface and asking for it would cost every SDR frame a QueryInterface. The
+// app already has an operator setting for that case (the "2020" colour-tag
+// preset), which is the right place for a decision no signal announces.
+static CDLFrameColorimetry *CDLColorimetryOfFrame(
+    IDeckLinkVideoInputFrame *videoFrame) {
+    CDLFrameColorimetry *out = [[CDLFrameColorimetry alloc] init];
+#if TAKESHOT_HAS_DECKLINK_HDR
+    if ((videoFrame->GetFlags() & bmdFrameContainsHDRMetadata) == 0) {
+        return out;
+    }
+    IDeckLinkVideoFrameMetadataExtensions *metadata = NULL;
+    if (videoFrame->QueryInterface(IID_IDeckLinkVideoFrameMetadataExtensions,
+                                   (void **)&metadata) != S_OK || !metadata) {
+        return out;
+    }
+    out.hasHDRMetadata = YES;
+
+    int64_t integerValue = 0;
+    if (metadata->GetInt(bmdDeckLinkFrameMetadataHDRElectroOpticalTransferFunc,
+                         &integerValue) == S_OK) {
+        out.eotf = (int)integerValue;
+    }
+    if (metadata->GetInt(bmdDeckLinkFrameMetadataColorspace,
+                         &integerValue) == S_OK) {
+        // the SDK's values are FourCCs; the Swift side gets a small enum so it
+        // never has to carry Blackmagic's spelling of "Rec.709"
+        switch ((BMDColorspace)integerValue) {
+            case bmdColorspaceRec601: out.colorspace = 1; break;
+            case bmdColorspaceRec709: out.colorspace = 2; break;
+            case bmdColorspaceRec2020: out.colorspace = 3; break;
+            default: out.colorspace = 0; break;
+        }
+    }
+
+    // Every one of these is optional: a camera may send an EOTF and nothing
+    // else, and a GetFloat that fails leaves its field at zero, which is how
+    // the Swift side spells "the board said nothing".
+    double value = 0;
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRMaximumContentLightLevel,
+                           &value) == S_OK) {
+        out.maxContentLightLevel = value;
+    }
+    if (metadata->GetFloat(
+            bmdDeckLinkFrameMetadataHDRMaximumFrameAverageLightLevel,
+            &value) == S_OK) {
+        out.maxFrameAverageLightLevel = value;
+    }
+    if (metadata->GetFloat(
+            bmdDeckLinkFrameMetadataHDRMaxDisplayMasteringLuminance,
+            &value) == S_OK) {
+        out.maxDisplayLuminance = value;
+    }
+    if (metadata->GetFloat(
+            bmdDeckLinkFrameMetadataHDRMinDisplayMasteringLuminance,
+            &value) == S_OK) {
+        out.minDisplayLuminance = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesRedX,
+                           &value) == S_OK) {
+        out.redX = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesRedY,
+                           &value) == S_OK) {
+        out.redY = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesGreenX,
+                           &value) == S_OK) {
+        out.greenX = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesGreenY,
+                           &value) == S_OK) {
+        out.greenY = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesBlueX,
+                           &value) == S_OK) {
+        out.blueX = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRDisplayPrimariesBlueY,
+                           &value) == S_OK) {
+        out.blueY = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRWhitePointX,
+                           &value) == S_OK) {
+        out.whiteX = value;
+    }
+    if (metadata->GetFloat(bmdDeckLinkFrameMetadataHDRWhitePointY,
+                           &value) == S_OK) {
+        out.whiteY = value;
+    }
+    metadata->Release();
+#else
+    (void)videoFrame;
+#endif
+    return out;
 }
 
 #pragma mark - DeckLink callback
@@ -774,6 +895,7 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                 frame.tcFrames = f;
                 frame.tcDropFrame = dropFrame;
                 frame.ancillaryPackets = ancPackets;
+                frame.colorimetry = CDLColorimetryOfFrame(videoFrame);
                 [delegate capture:self didReceiveVideoFrame:frame];
                 CVPixelBufferRelease(pixelBuffer);
             }

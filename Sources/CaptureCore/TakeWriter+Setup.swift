@@ -67,7 +67,9 @@ extension TakeWriter {
     }
 
     static func videoSettings(format: CaptureFormat, codec: CaptureCodec,
-                              colorTagPreset: String?) -> [String: Any] {
+                              colorTagPreset: String?,
+                              displayMetadata: HDRStaticMetadata? = nil)
+        -> [String: Any] {
         var videoSettings: [String: Any] = [
             AVVideoCodecKey: codec.avCodecType,
             AVVideoWidthKey: format.width,
@@ -75,13 +77,29 @@ extension TakeWriter {
             // explicit colorimetry (nclc): file and preview are interpreted the same
             AVVideoColorPropertiesKey: ColorTags.videoColorProperties(for: colorTagPreset),
         ]
+        var compression: [String: Any] = [:]
         if codec.needsBitrate {
             // visibly good H.264/HEVC for on-set viewing: ~0.12 bpp
             let bitrate = Int(Double(format.width * format.height) * format.frameRate * 0.12)
-            videoSettings[AVVideoCompressionPropertiesKey] = [
-                AVVideoAverageBitRateKey: bitrate,
-                AVVideoExpectedSourceFrameRateKey: Int(format.frameRate.rounded()),
-            ]
+            compression[AVVideoAverageBitRateKey] = bitrate
+            compression[AVVideoExpectedSourceFrameRateKey] =
+                Int(format.frameRate.rounded())
+        }
+        // Static HDR metadata, when the board reported any. These are
+        // VideoToolbox property keys rather than AVFoundation ones: AVFoundation
+        // publishes no output-settings key for the mastering display or the
+        // content light level, and the compression dictionary is the documented
+        // route through to the compression session. The nclc tags above say
+        // what CURVE the file is in; these say how bright the display it was
+        // graded on could go, which is what a colourist needs in order to
+        // finish the job the way the DP started it.
+        if let displayMetadata, !displayMetadata.isEmpty {
+            compression.merge(hdrCompressionProperties(displayMetadata)) { current, _ in
+                current
+            }
+        }
+        if !compression.isEmpty {
+            videoSettings[AVVideoCompressionPropertiesKey] = compression
         }
         return videoSettings
     }

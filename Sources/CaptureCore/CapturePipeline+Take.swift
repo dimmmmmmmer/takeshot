@@ -10,6 +10,7 @@ extension CapturePipeline {
     func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil) {
         guard writer == nil, let format else { return }
         recordingMask = config.settings.audioChannelMask // latched for the take
+        takeColorimetry = signalColorimetry            // …and so is this
         let startIndex = recStartIndex ?? frameIndex
         let timecode = preRollShiftedTimecode(rawTimecode, startIndex: startIndex)
         // takes are never overwritten: on a name collision — suffix _2, _3…
@@ -82,7 +83,17 @@ extension CapturePipeline {
             // the creative side, embedded so it survives a copy that leaves
             // the sidecars behind — see TakeWriter's key documentation
             slate: config.slate,
-            colorTagPreset: config.settings.colorTagPreset,
+            // An HDR source overrides the operator's colorimetry preset, and
+            // that is the FILE stating what it carries rather than a setting
+            // being ignored: the record buffer holds the wire's PQ or HLG codes
+            // (the wire-code rule is untouched by HDR), so a file tagged
+            // Rec.709 would be read a hundred times too dark or too bright by
+            // every tool downstream. Latched with the take, so a camera that
+            // switches transfer mid-take cannot retag the frames already
+            // written.
+            colorTagPreset: takeColorimetry.filePreset
+                ?? config.settings.colorTagPreset,
+            displayMetadata: takeColorimetry.displayMetadata,
             audioChannelCount: recordChannelCount)
     }
 

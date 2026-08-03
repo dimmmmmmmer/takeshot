@@ -24,6 +24,7 @@ extension PlaybackFrameTap {
             self.syncPlayer = nil
             self.compareURL = url
             self.compareCarriesWireCodes = false
+            self.compareTransfer = .sdr
             if let url {
                 self.detectCompareLevels(of: url)
                 let item = AVPlayerItem(url: url)
@@ -89,7 +90,8 @@ extension PlaybackFrameTap {
                   forItemTime: time, itemTimeForDisplay: nil)
         else { return }
         lastCompareBuffer = displayReady(buffer,
-                                         wireCodes: compareCarriesWireCodes)
+                                         wireCodes: compareCarriesWireCodes,
+                                         transfer: compareTransfer)
     }
 
     /// The compare back half: the B clip when one is set, else the live frame.

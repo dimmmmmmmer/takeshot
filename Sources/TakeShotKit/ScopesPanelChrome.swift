@@ -86,6 +86,40 @@ extension ScopesPanel {
         }
     }
 
+    /// The transfer of the frame currently on the scopes. `.sdr` when nothing
+    /// has been analyzed yet, which is what keeps the toolbar unchanged until
+    /// an HDR frame has actually arrived.
+    var analyzedTransfer: SignalTransfer { scopes.data?.transfer ?? .sdr }
+
+    /// Which value scales the picker offers. `nits` joins ONLY on a PQ or HLG
+    /// frame, because there is nothing for it to compute on any other one —
+    /// and because a third chip in that row on every SDR session would be
+    /// paying for HDR with the toolbar of the ninety-nine shoots that are not.
+    var scaleOptions: [String] {
+        let base = [ScopeScaleMode.percent.rawValue,
+                    ScopeScaleMode.tenBitCode.rawValue]
+        guard analyzedTransfer.isHDR else { return base }
+        return base + [ScopeScaleMode.nits.rawValue]
+    }
+
+    /// What the scopes are reading, when it is not Rec.709 SDR.
+    ///
+    /// Beside the wire badge and for the same reason it exists: the operator
+    /// has to be able to answer "what am I looking at" without leaving the
+    /// picture. A PQ trace at two thirds of the box is a correctly exposed
+    /// face, and on an SDR scale it reads as blown.
+    @ViewBuilder var hdrBadge: some View {
+        if analyzedTransfer.isHDR {
+            Text(analyzedTransfer.rawValue.uppercased())
+                .font(.system(size: 8, weight: .semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(controller.accentColor.opacity(0.55), in: Capsule())
+                .foregroundStyle(.white.opacity(0.95))
+                .help(L("scope_hdr_hint"))
+        }
+    }
+
     @ViewBuilder var toggleRow: some View {
         ForEach(order) { kind in
             scopeToggle(L(kind.titleKey), isOn: isOn(kind))
@@ -95,7 +129,8 @@ extension ScopesPanel {
     /// Value scale, graticule/trace brightness, and the reorder hint.
     @ViewBuilder var displayControls: some View {
         wireBadge
-        ChannelPicker(selection: $scaleMode, options: ["100", "1023"])
+        hdrBadge
+        ChannelPicker(selection: $scaleMode, options: scaleOptions)
         HStack(spacing: 3) {
             Image(systemName: "grid")
                 .font(.system(size: 8))

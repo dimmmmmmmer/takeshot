@@ -113,6 +113,15 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         /// most rigs are on.
         var levelsSetting = "auto"
         var levelsEffective = ""
+        /// The HDR setting as stored, and what the signal is actually being
+        /// treated as. The two differ whenever the operator has forced SDR on a
+        /// source that IS reporting PQ or HLG, which is exactly the state
+        /// somebody reading a bundle needs to be able to see.
+        var hdrSetting = "auto"
+        var hdrSignal = "SDR (Rec.709)"
+        /// MaxCLL / MaxFALL / mastering-display luminance, as the board reported
+        /// them and as the file was tagged. Empty when the signal carried none.
+        var hdrDisplayMetadata = ""
         var tenBitCapture = true
         var detectionMode = ""
         var preRollFrames = 0

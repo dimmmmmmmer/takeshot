@@ -1,6 +1,6 @@
 import Foundation
 
-/// BT.709 YCbCr wire codes → R'G'B' wire codes, with the SWING left alone.
+/// YCbCr wire codes → R'G'B' wire codes, with the SWING left alone.
 ///
 /// This is the one piece of colorimetry a YCbCr wire format needs that an RGB
 /// one does not, and it is deliberately NOT a levels stage. The distinction is
@@ -45,7 +45,19 @@ import Foundation
 /// A neutral pixel (both chroma channels at 512) comes out `R = G = B = Y`
 /// EXACTLY, at every code and in both modes: the offsets are zero and nothing is
 /// scaled. That is not a coincidence to be grateful for, it is the property the
-/// three-way display-agreement test rests on.
+/// three-way display-agreement test rests on. It holds for BOTH sets of
+/// primaries below, which is what lets a Rec.2020 signal join the same display
+/// table as everything else.
+///
+/// ## The second set of coefficients
+///
+/// BT.2100 requires Rec.2020 primaries of a PQ or HLG signal, and non-constant
+/// -luminance Rec.2020 codes luma with different weights: 0.2627 / 0.6780 /
+/// 0.0593 rather than 709's 0.2126 / 0.7152 / 0.0722. Matrixing a 2020 signal
+/// with 709's coefficients is not a rounding difference — it is a hue error
+/// that grows with saturation, and it would be invisible on a grey chart and
+/// obvious on a face. So the matrix is chosen by the signal's primaries, and
+/// `rec709` remains what every existing caller gets by default.
 struct WireYCbCr: Sendable {
     /// The code both chroma channels sit on when there is no colour.
     static let chromaZero = 512
@@ -65,30 +77,57 @@ struct WireYCbCr: Sendable {
     /// accumulator a colour difference and it applies its own gain on top.
     let chromaGain: Double
 
+    /// The four inverse-matrix coefficients for one set of primaries, before
+    /// the swing gain. Named rather than four bare Doubles: they are all
+    /// multipliers of a chroma difference and swapping two of them silently
+    /// produces a plausible-looking wrong picture.
+    private struct Coefficients {
+        let crToRed: Double
+        let cbToGreen: Double
+        let crToGreen: Double
+        let cbToBlue: Double
+
+        /// BT.709: Kr 0.2126, Kg 0.7152, Kb 0.0722.
+        static let rec709 = Coefficients(
+            crToRed: 1.5748, cbToGreen: -0.187324,
+            crToGreen: -0.468124, cbToBlue: 1.8556)
+        /// BT.2020 non-constant luminance: Kr 0.2627, Kg 0.6780, Kb 0.0593,
+        /// so Cb spans 2(1−Kb) = 1.8814 and Cr spans 2(1−Kr) = 1.4746, and the
+        /// green terms are −(Kb/Kg)·1.8814 and −(Kr/Kg)·1.4746.
+        static let rec2020 = Coefficients(
+            crToRed: 1.4746, cbToGreen: -0.164553,
+            crToGreen: -0.571353, cbToBlue: 1.8814)
+
+        static func forPrimaries(_ primaries: SignalPrimaries) -> Coefficients {
+            primaries == .rec2020 ? .rec2020 : .rec709
+        }
+    }
+
     /// `studioSwing` states what the SOURCE carries, exactly as `InputLevels`
     /// does: true for the 64…940 / 64…960 coding SDI and HDMI YCbCr always use,
     /// false for a playout device set to Full output.
-    init(studioSwing: Bool) {
+    init(studioSwing: Bool, primaries: SignalPrimaries = .rec709) {
         let gain = studioSwing ? 876.0 / 896.0 : 1.0
+        let coefficients = Coefficients.forPrimaries(primaries)
         func fixed(_ coefficient: Double) -> Int {
             Int((coefficient * gain * Double(1 << Self.fractionBits)).rounded())
         }
-        crToRed = fixed(1.5748)
-        cbToGreen = fixed(-0.187324)
-        crToGreen = fixed(-0.468124)
-        cbToBlue = fixed(1.8556)
+        crToRed = fixed(coefficients.crToRed)
+        cbToGreen = fixed(coefficients.cbToGreen)
+        crToGreen = fixed(coefficients.crToGreen)
+        cbToBlue = fixed(coefficients.cbToBlue)
         chromaGain = gain
     }
 
     /// The matrix for a resolved input-levels mode — the capture path's spelling
     /// of the same question.
-    init(levels: InputLevels) {
-        self.init(studioSwing: levels != .full)
+    init(levels: InputLevels, primaries: SignalPrimaries = .rec709) {
+        self.init(studioSwing: levels != .full, primaries: primaries)
     }
 
     /// …and the scopes' spelling of it.
-    init(levels: ScopeWireLevels) {
-        self.init(studioSwing: levels != .full)
+    init(levels: ScopeWireLevels, primaries: SignalPrimaries = .rec709) {
+        self.init(studioSwing: levels != .full, primaries: primaries)
     }
 
     /// One pixel's R'G'B' on the wire's own scale, clamped into it.

@@ -56,6 +56,9 @@ public final class TwelveBitConverter: WireConverter {
     /// wire code (0…4095) → the value that appears on the DISPLAY.
     private var expand = WireDisplayTable.expand(levels: .limited, bits: 12)
     private var levels = InputLevels.limited
+    /// What the source says its codes mean. Reaches the display table only —
+    /// the record product is the wire, at every depth.
+    private var colorimetry = WireColorimetry.sdr
 
     private let displayPool = PixelBufferPool()
     private let recordPool =
@@ -69,7 +72,23 @@ public final class TwelveBitConverter: WireConverter {
     public func setLevels(_ newLevels: InputLevels) {
         guard newLevels != levels else { return }
         levels = newLevels
-        expand = WireDisplayTable.expand(levels: newLevels, bits: 12)
+        rebuildDisplayTable()
+    }
+
+    /// The signal's transfer function and primaries — the display table's other
+    /// input. A 12-bit HDR table is 4096 entries built at the wire's own
+    /// precision, exactly as the SDR one is.
+    public func setColorimetry(_ newColorimetry: WireColorimetry) {
+        guard newColorimetry != colorimetry else { return }
+        let sameTable = newColorimetry.transfer == colorimetry.transfer
+        colorimetry = newColorimetry
+        guard !sameTable else { return }
+        rebuildDisplayTable()
+    }
+
+    private func rebuildDisplayTable() {
+        expand = WireDisplayTable.table(levels: levels, bits: 12,
+                                        transfer: colorimetry.transfer)
     }
 
     /// Split an 'R12B' wire frame into (display BGRA8, record 64RGBALE).

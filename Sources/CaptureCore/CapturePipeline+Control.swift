@@ -29,6 +29,22 @@ extension CapturePipeline {
         }
     }
 
+    /// What the app does with a signal reporting PQ or HLG (see `HDRMode`).
+    ///
+    /// A change re-resolves what the CURRENT signal means, so switching to
+    /// `off` mid-shot takes effect on the next frame instead of waiting for the
+    /// camera to re-announce its transfer — which it may never do.
+    public func setHDRMode(_ mode: String?) {
+        queue.async {
+            let resolved = HDRMode.resolved(mode)
+            guard resolved != self.hdrMode else { return }
+            self.hdrMode = resolved
+            // `off` pins SDR; `auto` cannot re-derive what the board said from
+            // here, so it clears to SDR and the next frame restores the truth.
+            self.adoptColorimetry(.sdr)
+        }
+    }
+
     /// Set the LUT (nil — off), apply modes, and intensity (0…1).
     public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool,
                        intensity: Double = 1) {

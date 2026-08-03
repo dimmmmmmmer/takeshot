@@ -87,6 +87,12 @@ public final class TenBitYUVConverter: WireConverter {
     /// genuinely ambiguous here.
     private var matrix = WireYCbCr(levels: InputLevels.limited)
     private var levels = InputLevels.limited
+    /// What the source says its codes mean. This is the one converter both
+    /// halves of it reach: the TRANSFER rebuilds the display table, and the
+    /// PRIMARIES rebuild the matrix, because Rec.2020 codes luma with different
+    /// weights (see `WireYCbCr`). The record product is the wire frame itself
+    /// and neither can touch it.
+    private var colorimetry = WireColorimetry.sdr
 
     private let displayPool = PixelBufferPool()
 
@@ -105,8 +111,26 @@ public final class TenBitYUVConverter: WireConverter {
     public func setLevels(_ newLevels: InputLevels) {
         guard newLevels != levels else { return }
         levels = newLevels
-        expand = WireDisplayTable.expand(levels: newLevels, bits: 10)
-        matrix = WireYCbCr(levels: newLevels)
+        rebuild()
+    }
+
+    /// The signal's transfer function and primaries — both halves of the
+    /// display product, and neither of the record one.
+    public func setColorimetry(_ newColorimetry: WireColorimetry) {
+        guard newColorimetry != colorimetry else { return }
+        // the static metadata rides along in the same value and changes nothing
+        // here: it is for the file and the readouts, never for a curve
+        let unchanged = newColorimetry.transfer == colorimetry.transfer
+            && newColorimetry.primaries == colorimetry.primaries
+        colorimetry = newColorimetry
+        guard !unchanged else { return }
+        rebuild()
+    }
+
+    private func rebuild() {
+        expand = WireDisplayTable.table(levels: levels, bits: 10,
+                                        transfer: colorimetry.transfer)
+        matrix = WireYCbCr(levels: levels, primaries: colorimetry.primaries)
     }
 
     /// Split a `'v210'` wire frame into (display BGRA8, record `'v210'`), where

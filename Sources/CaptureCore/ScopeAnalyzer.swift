@@ -75,6 +75,14 @@ public struct ScopeData: Sendable {
     /// Where 0 % and 100 % sit on the trace maps. `.full` for an already
     /// expanded frame; a wire frame leaves room for the excursions.
     public let nominal: ScopeNominalRange
+    /// What the traced codes MEAN. `.sdr` for everything that is not a PQ or
+    /// HLG wire frame, and the scales are then exactly what they always were.
+    ///
+    /// Carried on the DATA rather than read from settings by the views, because
+    /// a scope's axis has to describe the frame it is drawn from: a pass that
+    /// was analyzed before the camera switched to PQ must not be labelled in
+    /// nits for one refresh.
+    public let transfer: SignalTransfer
     /// Monotonic frame counter — views cache derived images against it so a
     /// window resize doesn't rebuild them.
     public let sequence: Int
@@ -128,9 +136,15 @@ public enum ScopeAnalyzer {
     /// 'v210' — those being the formats that reach the analyzer before the levels
     /// stage has touched them. Every other format arrives already expanded and is
     /// read as `.full`.
+    /// `colorimetry` likewise only means anything for a wire frame: it picks the
+    /// YCbCr matrix (Rec.2020 codes luma with different weights) and rides out
+    /// on `ScopeData.transfer` so the axis can be labelled in cd/m². It changes
+    /// no trace and no sample — an instrument plots the codes that arrived,
+    /// whatever curve they were encoded with.
     public static func analyze(_ pixelBuffer: CVPixelBuffer,
                                region: ScopeRegion = .full,
-                               wireLevels: ScopeWireLevels = .full) -> ScopeData? {
+                               wireLevels: ScopeWireLevels = .full,
+                               colorimetry: WireColorimetry = .sdr) -> ScopeData? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
@@ -142,7 +156,7 @@ public enum ScopeAnalyzer {
         case TenBitConverter.r210:
             return PackedPlane(pixelBuffer).flatMap {
                 analyzed(R210Reader(plane: $0), region: region,
-                         levels: wireLevels)
+                         levels: wireLevels, transfer: colorimetry.transfer)
             }
         case R12BPacking.pixelFormat: // 'R12B', 12-bit RGB
             return PackedPlane(pixelBuffer).flatMap {
@@ -151,7 +165,8 @@ public enum ScopeAnalyzer {
                 guard CVPixelBufferGetBytesPerRow(pixelBuffer)
                     >= R12BPacking.blockRowBytes(width: $0.width) else { return nil }
                 return analyzed(R12BReader(plane: $0), region: region,
-                                levels: wireLevels)
+                                levels: wireLevels,
+                                transfer: colorimetry.transfer)
             }
         case V210Packing.pixelFormat: // 'v210', 10-bit YCbCr 4:2:2
             return PackedPlane(pixelBuffer).flatMap {
@@ -159,8 +174,10 @@ public enum ScopeAnalyzer {
                 // past the end of each row — refuse the frame instead
                 guard CVPixelBufferGetBytesPerRow(pixelBuffer)
                     >= V210Packing.blockRowBytes(width: $0.width) else { return nil }
-                return analyzed(V210Reader(plane: $0, levels: wireLevels),
-                                region: region, levels: wireLevels)
+                return analyzed(V210Reader(plane: $0, levels: wireLevels,
+                                           primaries: colorimetry.primaries),
+                                region: region, levels: wireLevels,
+                                transfer: colorimetry.transfer)
             }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
             return PackedPlane(pixelBuffer).flatMap {
@@ -214,11 +231,11 @@ public enum ScopeAnalyzer {
     /// over changes with `region`, so a punched-in scope has exactly the same
     /// trace density as a full-frame one.
     private static func analyzed<Reader: FrameReader>(
-        _ reader: Reader, region: ScopeRegion,
-        levels: ScopeWireLevels) -> ScopeData? {
+        _ reader: Reader, region: ScopeRegion, levels: ScopeWireLevels,
+        transfer: SignalTransfer = .sdr) -> ScopeData? {
         guard reader.width > 1, reader.height > 0 else { return nil }
         let window = region.pixels(width: reader.width, height: reader.height)
-        let acc = Accumulator(levels: levels)
+        let acc = Accumulator(levels: levels, transfer: transfer)
         for gy in 0..<gridRows {
             let y = window.y + gy * window.height / gridRows
             for gx in 0..<gridCols {
@@ -349,9 +366,10 @@ public enum ScopeAnalyzer {
         /// not a pipeline.
         let matrix: WireYCbCr
 
-        init(plane: PackedPlane, levels: ScopeWireLevels) {
+        init(plane: PackedPlane, levels: ScopeWireLevels,
+             primaries: SignalPrimaries = .rec709) {
             self.plane = plane
-            matrix = WireYCbCr(levels: levels)
+            matrix = WireYCbCr(levels: levels, primaries: primaries)
         }
 
         func sample(x: Int, y: Int) -> Sample {

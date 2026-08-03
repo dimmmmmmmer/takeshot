@@ -39,6 +39,11 @@ extension CaptureController {
         pipeline.onSignal = { [weak self] present in
             self?.signalPresent = present
         }
+        pipeline.onColorimetry = { [weak self] colorimetry in
+            guard let self else { return }
+            self.signalColorimetry = colorimetry
+            self.applyColorimetryToLegend()
+        }
         pipeline.onScopeData = { [weak self] data in
             self?.scopes.data = data
         }

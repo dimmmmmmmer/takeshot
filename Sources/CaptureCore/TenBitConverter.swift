@@ -45,6 +45,11 @@ public final class TenBitConverter: WireConverter {
 
     /// wire code (0…1023) → the value that appears on the DISPLAY.
     private var expand = WireDisplayTable.expand(levels: .limited, bits: 10)
+    /// What the source says its codes mean. Reaches `expand` and nothing else:
+    /// `precomp` below is built from the wire code alone, so a PQ take carries
+    /// the same wire codes an SDR one would and the file states the transfer
+    /// through its tags rather than through its pixels.
+    private var colorimetry = WireColorimetry.sdr
     /// wire code → the r210 value to hand the encoder so that the decoded file
     /// returns that same wire code. Free of the levels mode by construction:
     /// the file carries what the camera sent, whatever the monitor is doing.
@@ -72,7 +77,23 @@ public final class TenBitConverter: WireConverter {
     public func setLevels(_ newLevels: InputLevels) {
         guard newLevels != levels else { return }
         levels = newLevels
-        expand = WireDisplayTable.expand(levels: newLevels, bits: 10)
+        rebuildDisplayTable()
+    }
+
+    /// The signal's transfer function and primaries. Only the transfer matters
+    /// here — an RGB wire needs no matrix, so the primaries only reach the tags
+    /// on the buffer.
+    public func setColorimetry(_ newColorimetry: WireColorimetry) {
+        guard newColorimetry != colorimetry else { return }
+        let sameTable = newColorimetry.transfer == colorimetry.transfer
+        colorimetry = newColorimetry
+        guard !sameTable else { return }
+        rebuildDisplayTable()
+    }
+
+    private func rebuildDisplayTable() {
+        expand = WireDisplayTable.table(levels: levels, bits: 10,
+                                        transfer: colorimetry.transfer)
     }
 
     /// Split an r210 wire frame into (display BGRA8, record r210).

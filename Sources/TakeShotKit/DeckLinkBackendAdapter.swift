@@ -115,7 +115,57 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
         delegate?.backend(self, didReceive: CapturedFrame(
             pixelBuffer: frame.pixelBuffer,
             pts: CMTime(seconds: frame.ptsSeconds, preferredTimescale: 240_000),
-            timecode: timecode, ancillaryPackets: packets))
+            timecode: timecode, ancillaryPackets: packets,
+            colorimetry: Self.colorimetry(frame.colorimetry)))
+    }
+
+    /// The board's HDR report, as the pipeline's own value.
+    ///
+    /// Two decisions worth stating rather than reading out of the mapping:
+    ///
+    /// - EOTF 1 ("HDR, traditional gamma" in CTA-861.3) is treated as SDR. It
+    ///   names no transfer function anyone can invert — it is a hint that the
+    ///   content is bright, not a curve — so tone mapping on it would be
+    ///   guessing, and guessing is the one thing this path must not do.
+    /// - a PQ or HLG signal whose colorspace the board did not report is taken
+    ///   as Rec.2020, because BT.2100 defines PQ and HLG only on Rec.2020
+    ///   primaries. Assuming Rec.709 there would silently desaturate every
+    ///   HDR source whose camera happens not to fill that field.
+    static func colorimetry(
+        _ reported: CDLFrameColorimetry?) -> WireColorimetry {
+        guard let reported, reported.hasHDRMetadata else { return .sdr }
+        let transfer: SignalTransfer
+        switch reported.eotf {
+        case 2: transfer = .pq
+        case 3: transfer = .hlg
+        default: transfer = .sdr
+        }
+        guard transfer.isHDR else { return .sdr }
+        let primaries: SignalPrimaries =
+            reported.colorspace == 1 || reported.colorspace == 2
+                ? .rec709 : .rec2020
+        return WireColorimetry(transfer: transfer, primaries: primaries,
+                               displayMetadata: displayMetadata(reported))
+    }
+
+    /// The static metadata, or nil when the board filled none of it in.
+    private static func displayMetadata(
+        _ reported: CDLFrameColorimetry) -> HDRStaticMetadata? {
+        let hasPrimaries = reported.redX > 0 && reported.greenX > 0
+            && reported.blueX > 0 && reported.whiteX > 0
+        let value = HDRStaticMetadata(
+            maxContentLightLevel: reported.maxContentLightLevel,
+            maxFrameAverageLightLevel: reported.maxFrameAverageLightLevel,
+            maxDisplayLuminance: reported.maxDisplayLuminance,
+            minDisplayLuminance: reported.minDisplayLuminance,
+            displayPrimaries: hasPrimaries
+                ? HDRStaticMetadata.Chromaticities(
+                    redX: reported.redX, redY: reported.redY,
+                    greenX: reported.greenX, greenY: reported.greenY,
+                    blueX: reported.blueX, blueY: reported.blueY,
+                    whiteX: reported.whiteX, whiteY: reported.whiteY)
+                : nil)
+        return value.isEmpty ? nil : value
     }
 
     func capture(_ capture: CDLCapture, didReceiveAudioBytes bytes: UnsafeRawPointer,

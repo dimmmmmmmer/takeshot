@@ -199,6 +199,15 @@
 "levels_limited" = "Limited";
 "levels_full" = "Full";
 
+/* HDR */
+"hdr_mode" = "HDR signal";
+"hdr_mode_auto" = "Follow signal";
+"hdr_mode_off" = "Treat as SDR";
+"hdr_mode_hint" = "A camera sending PQ (ST 2084) or HLG is tone mapped to the monitor with diffuse white at 203 cd/m², the scopes read in nits, and the take is tagged with the transfer the camera sent. Treat as SDR turns all of that off — use it when a converter in the chain is passing HDR metadata through a signal it has already converted.";
+"hdr_signal" = "Signal";
+"hdr_signal_sdr" = "SDR (Rec.709)";
+"scope_hdr_hint" = "The signal is HDR: the scale reads in cd/m² and the reference marks are 26 (18% grey) and 203 (diffuse white), per ITU-R BT.2408.";
+
 "preset_arri35" = "ARRI Alexa 35";
 "preset_sony_venice" = "Sony";
 "preset_sony_alpha" = "Sony (Legacy)";
@@ -350,6 +359,7 @@
 "assist_off" = "Off";
 "assist_false_color" = "False color";
 "assist_zebra" = "Zebra";
+"assist_zebra_hint" = "The level the stripes start at. On an HDR signal it reads in cd/m²: the stripes fire on the same fraction of diffuse white they do in SDR, and the number says what that is in luminance.";
 "assist_peaking" = "Focus peaking";
 "framelines" = "Framelines";
 "safe_areas" = "Safe areas";

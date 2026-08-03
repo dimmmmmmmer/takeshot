@@ -29,17 +29,45 @@ extension PlaybackFrameTap {
         Task { [weak self, weak item] in
             let metadata = (try? await asset.load(.metadata)) ?? []
             let wire = await TakeWriter.carriesWireCodes(metadata)
+            let transfer = await Self.transfer(of: asset)
             guard let self, let item else { return }
             self.queue.async {
                 guard self.item === item else { return }
                 self.sourceCarriesWireCodes = wire
+                self.sourceTransfer = transfer
                 self.idleDelivered = false
                 // a paused clip pushes nothing: re-deliver so the answer lands
-                if let buffer = self.lastBuffer, wire {
-                    self.deliver(self.displayReady(buffer, wireCodes: true),
-                                 analyzed: self.scopesEnabled)
+                if let buffer = self.lastBuffer, wire || transfer.isHDR {
+                    self.deliver(
+                        self.displayReady(buffer, wireCodes: wire,
+                                          transfer: transfer),
+                        analyzed: self.scopesEnabled)
                 }
             }
+        }
+    }
+
+    /// What a file says it is encoded with, read from its video track's format
+    /// description — the tag `TakeWriter` wrote for an HDR take, and the tag a
+    /// foreign HDR clip dropped in the record folder carries too.
+    ///
+    /// Anything that is not PQ or HLG is `.sdr`, including a file that states
+    /// nothing: an untagged clip is left exactly as it always was.
+    static func transfer(of asset: AVAsset) async -> SignalTransfer {
+        guard let track = try? await asset.loadTracks(withMediaType: .video)
+            .first,
+            let description = try? await track.load(.formatDescriptions).first
+        else { return .sdr }
+        let extensions = CMFormatDescriptionGetExtensions(description)
+            as? [String: Any] ?? [:]
+        let tag = extensions[
+            kCMFormatDescriptionExtension_TransferFunction as String] as? String
+        let pq = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String
+        let hlg = kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String
+        switch tag {
+        case pq: return .pq
+        case hlg: return .hlg
+        default: return .sdr
         }
     }
 
@@ -50,10 +78,12 @@ extension PlaybackFrameTap {
             let asset = AVURLAsset(url: url)
             let metadata = (try? await asset.load(.metadata)) ?? []
             let wire = await TakeWriter.carriesWireCodes(metadata)
+            let transfer = await Self.transfer(of: asset)
             guard let self else { return }
             self.queue.async {
                 guard self.compareURL == url else { return }
                 self.compareCarriesWireCodes = wire
+                self.compareTransfer = transfer
             }
         }
     }
@@ -75,12 +105,24 @@ extension PlaybackFrameTap {
     ///
     /// Falls back to the untouched frame whenever the copy cannot be made: a
     /// slightly washed picture is a bad frame, no picture at all is a bug.
-    func displayReady(_ buffer: CVPixelBuffer, wireCodes: Bool) -> CVPixelBuffer {
-        guard wireCodes else { return buffer }
+    /// An HDR take needs a second operation here, and it needs it for the same
+    /// reason the first one exists. Measured on this project's own files: a
+    /// ProRes take tagged SMPTE ST 2084 decodes to BGRA with its codes merely
+    /// video-range expanded — AVFoundation does NOT tone map on the way out,
+    /// and the PQ tag changes not one pixel it returns. Left alone, a PQ take
+    /// under review would show diffuse white at 149 of 255 where the live
+    /// monitor showed it at 242: the same footage, a stop and a half apart,
+    /// which is exactly the kind of disagreement this app exists not to have.
+    /// The two operations compose into one table (`StudioSwing.playbackTable`).
+    func displayReady(_ buffer: CVPixelBuffer, wireCodes: Bool,
+                      transfer: SignalTransfer = .sdr) -> CVPixelBuffer {
+        guard let table = StudioSwing.playbackTable(wireCodes: wireCodes,
+                                                    transfer: transfer)
+        else { return buffer }
         guard let expanded = levelsPool.buffer(
                 width: CVPixelBufferGetWidth(buffer),
                 height: CVPixelBufferGetHeight(buffer)),
-              StudioSwing.expand(buffer, into: expanded)
+              StudioSwing.map(buffer, into: expanded, table: table)
         else { return buffer }
         CVBufferPropagateAttachments(buffer, expanded)
         return expanded

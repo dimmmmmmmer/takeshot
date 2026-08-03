@@ -21,8 +21,10 @@ extension CapturePipeline {
 
     func processFrame(pixelBuffer: CVPixelBuffer, pts: CMTime,
                       timecode rawTimecode: Timecode?, vancTrigger: VancTrigger?,
-                      ancillaryPackets: [AncillaryPacket]) {
+                      ancillaryPackets: [AncillaryPacket],
+                      colorimetry: WireColorimetry = .sdr) {
         guard let format else { return }
+        adoptColorimetry(colorimetry)
         tagColorIfUntagged(pixelBuffer)
         frameIndex += 1
         updateVancStats(ancillaryPackets)
@@ -139,10 +141,15 @@ extension CapturePipeline {
         scopeBusy = true
         let frame = wire?.buffer ?? display // retained: the pool won't recycle it
         let levels = wire?.levels ?? .full
+        // the display buffer has already been tone mapped, so only a WIRE frame
+        // is still in the source's own transfer — reading nits off the other
+        // one would be measuring this app's tone map instead of the camera
+        let colorimetry = wire?.colorimetry ?? .sdr
         let region = scopeRegion
         scopeQueue.async { [weak self] in
             let data = ScopeAnalyzer.analyze(frame, region: region,
-                                             wireLevels: levels)
+                                             wireLevels: levels,
+                                             colorimetry: colorimetry)
             guard let pipeline = self else { return }
             pipeline.queue.async { pipeline.scopeBusy = false }
             if let data {

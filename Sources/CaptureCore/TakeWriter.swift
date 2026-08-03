@@ -115,6 +115,7 @@ public final class TakeWriter {
                 markerMetadata: [String: String] = [:],
                 slate: SlateMetadata = .empty,
                 colorTagPreset: String? = nil,
+                displayMetadata: HDRStaticMetadata? = nil,
                 audioChannelCount: Int = 0) throws {
         self.url = url
         self.format = format
@@ -134,7 +135,8 @@ public final class TakeWriter {
         videoInput = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: Self.videoSettings(format: format, codec: codec,
-                                               colorTagPreset: colorTagPreset))
+                                               colorTagPreset: colorTagPreset,
+                                               displayMetadata: displayMetadata))
         videoInput.expectsMediaDataInRealTime = true
         pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput, sourcePixelBufferAttributes: nil)
