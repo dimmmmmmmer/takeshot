@@ -61,15 +61,32 @@ public enum InputLevels: String, Sendable, CaseIterable {
         }
     }
 
+    /// The same window on an arbitrary wire depth.
+    ///
+    /// Studio swing is defined as a FRACTION of the scale, not as a pair of
+    /// absolute codes, so the pair scales with the depth and the three
+    /// spellings the app uses are one rule: 8-bit 16/235, 10-bit 64/940,
+    /// 12-bit 256/3760. Stating it once is what keeps a 12-bit source's black
+    /// on the same place on the monitor as a 10-bit one's.
+    ///
+    /// `full` is NOT that rule and must not be scaled the same way: its white
+    /// is the top of the scale rather than a nominal code, so it is `1 << bits`
+    /// minus one and shifting 1023 up by two would put it at 4092 — three codes
+    /// of white quietly missing.
+    public func wireWindow(bits: Int) -> (black: Int, white: Int) {
+        guard self != .full else { return (0, (1 << bits) - 1) }
+        let window = wireWindow
+        let shift = bits - 10
+        guard shift != 0 else { return window }
+        return shift > 0
+            ? (window.black << shift, window.white << shift)
+            : (window.black >> -shift, window.white >> -shift)
+    }
+
     /// Whether the 8-bit path has to expand at all.
     public var expandsEightBit: Bool { self != .full }
 
     /// The display window again, in the units the 8-bit vImage table works in:
     /// nominal black 16 onto 0 and nominal white 235 onto 255.
-    public var eightBitWindow: (black: Int, white: Int) {
-        switch self {
-        case .full: return (0, 255)
-        case .limited: return (16, 235)
-        }
-    }
+    public var eightBitWindow: (black: Int, white: Int) { wireWindow(bits: 8) }
 }

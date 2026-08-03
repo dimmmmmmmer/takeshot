@@ -46,6 +46,27 @@ struct ForcedInputRGBToggle: View {
     }
 }
 
+/// Bits per component to ask the board for on an RGB 4:4:4 source.
+///
+/// 12-bit is offered but never the default. It costs twice the record bandwidth
+/// of 10-bit, only ProRes 4444 can carry it, and not every board or mode
+/// delivers it — a request that cannot be met falls back and says so
+/// (`reportBitDepthShortfall`), which is the honest behaviour but not one to
+/// hand an operator who never asked for it.
+struct CaptureBitDepthPicker: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Picker(L("capture_bit_depth"), selection: Binding(
+            get: { controller.settings.resolvedCaptureBitDepth },
+            set: { controller.settings.captureBitDepth = $0.rawValue })) {
+            Text(L("bit_depth_8")).tag(CaptureBitDepth.eight)
+            Text(L("bit_depth_10")).tag(CaptureBitDepth.ten)
+            Text(L("bit_depth_12")).tag(CaptureBitDepth.twelve)
+        }
+    }
+}
+
 /// What the source's code values mean on the wire.
 ///
 /// Three options, and one of them is Limited — there were two studio-swing

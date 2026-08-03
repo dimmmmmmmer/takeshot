@@ -67,7 +67,9 @@ extension CaptureController {
             adapter.forcedMode = settings.forcedInputMode.map {
                 (name: $0, rgb: settings.forcedInputRGB ?? false)
             }
-            adapter.preferTenBitRGB = settings.tenBitCapture ?? true
+            let depth = settings.resolvedCaptureBitDepth
+            adapter.preferTenBitRGB = depth != .eight
+            adapter.preferTwelveBitRGB = depth == .twelve
         }
         do {
             try backend.startCapture(deviceID: deviceID)

@@ -19,6 +19,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// The source is RGB 4:4:4 (frames arrive as BGRA); HDMI cameras usually send
 /// limited-range RGB, which needs level expansion for correct contrast.
 @property (nonatomic) BOOL isRGB444;
+/// Bits per component the input was actually ENABLED with — 8, 10 or 12.
+/// What the board settled on, not what was asked for: a request the hardware or
+/// the mode cannot satisfy falls back, and the app compares the two so the
+/// operator is told rather than left with a quietly shallower capture.
+@property (nonatomic) int bitDepth;
 @end
 
 /// Access to the DeckLink API. If the project is built without the SDK headers
@@ -90,6 +95,14 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) BOOL forcedRGB;
 /// Capture RGB 4:4:4 sources as 10-bit r210 instead of 8-bit BGRA.
 @property (nonatomic) BOOL preferTenBitRGB;
+/// Capture RGB 4:4:4 sources as 12-bit R12B (bmdFormat12BitRGB) instead of
+/// 10-bit r210. Takes precedence over preferTenBitRGB when both are set.
+///
+/// Requested, not guaranteed: the board is asked whether it supports the format
+/// in the detected mode (DoesSupportVideoMode) and the request is dropped to
+/// 10- or 8-bit when it does not. The depth actually enabled is reported on
+/// CDLVideoFormat.bitDepth every time a format is announced.
+@property (nonatomic) BOOL preferTwelveBitRGB;
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;

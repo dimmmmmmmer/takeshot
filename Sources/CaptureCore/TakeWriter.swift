@@ -276,6 +276,7 @@ extension CaptureCodec {
         case .proResLT: return .proRes422LT
         case .proRes422: return .proRes422
         case .proResHQ: return .proRes422HQ
+        case .proRes4444: return .proRes4444
         case .h264: return .h264
         case .hevc: return .hevc
         }

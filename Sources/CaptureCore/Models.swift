@@ -11,9 +11,18 @@ public struct CaptureFormat: Equatable, Sendable {
     /// The source is RGB 4:4:4 delivered as full-range BGRA. HDMI cameras
     /// usually send limited-range RGB — levels "auto" expands it to full.
     public var isRGB444: Bool
+    /// Bits per component the board is ACTUALLY delivering — 8, 10 or 12.
+    ///
+    /// What the backend settled on, not what the settings asked for, so the app
+    /// can tell the operator when a request could not be met (a board or a
+    /// source that cannot do 12-bit falls back, and silence there is a colour
+    /// decision made behind their back). Only meaningful for RGB 4:4:4; YUV
+    /// capture is 8-bit '2vuy'.
+    public var bitDepth: Int
 
     public init(width: Int, height: Int, frameRate: Double, timecodeFPS: Int,
-                isDropFrame: Bool = false, name: String, isRGB444: Bool = false) {
+                isDropFrame: Bool = false, name: String, isRGB444: Bool = false,
+                bitDepth: Int = 8) {
         self.width = width
         self.height = height
         self.frameRate = frameRate
@@ -21,6 +30,7 @@ public struct CaptureFormat: Equatable, Sendable {
         self.isDropFrame = isDropFrame
         self.name = name
         self.isRGB444 = isRGB444
+        self.bitDepth = bitDepth
     }
 }
 
@@ -30,10 +40,33 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     case proResLT = "ProRes 422 LT"
     case proRes422 = "ProRes 422"
     case proResHQ = "ProRes 422 HQ"
+    /// The only 4:4:4 codec here, and the only one that carries 12 bits — a
+    /// 12-bit RGB capture recorded as 422 is subsampled to 4:2:2 on the way in.
+    case proRes4444 = "ProRes 4444"
     case h264 = "H.264"
     case hevc = "HEVC"
 
     public var id: String { rawValue }
+
+    /// Whether the codec can carry a 12-bit RGB source without throwing the
+    /// sampling away. Used to warn, never to override the operator's choice.
+    public var isRGB444Capable: Bool { self == .proRes4444 }
+}
+
+/// Bits per component to ask the board for on an RGB 4:4:4 source.
+///
+/// A setting rather than a constant because the three are real trade-offs: 8
+/// is BGRA and cheapest, 10 is 'r210' and has been the default since the
+/// pipeline learned to split wire frames, 12 is 'R12B' and costs twice the
+/// record bandwidth for two more bits that only ProRes 4444 can carry.
+public enum CaptureBitDepth: String, CaseIterable, Codable, Sendable, Identifiable {
+    case eight = "8"
+    case ten = "10"
+    case twelve = "12"
+
+    public var id: String { rawValue }
+
+    public var bits: Int { Int(rawValue) ?? 10 }
 }
 
 /// Take rating: good (Good Take in Resolve) / bad / unmarked.
@@ -179,7 +212,19 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var ltcChannel: Int?
     /// Capture RGB 4:4:4 sources as 10-bit r210 (nil = on; verified on the
     /// UltraStudio 4K Mini — every current Blackmagic board is 10-bit capable).
+    ///
+    /// Superseded by `captureBitDepth`, which can also say 12. Kept as the
+    /// stored fallback so settings saved before that field existed still
+    /// resolve to the depth the operator had chosen — see
+    /// `resolvedCaptureBitDepth`. Nothing writes it any more.
     public var tenBitCapture: Bool?
+    /// Bits per component to request for RGB 4:4:4 capture ("8"/"10"/"12");
+    /// nil — fall back to `tenBitCapture`, i.e. 10-bit.
+    ///
+    /// Optional like every added field, so old saved JSON still decodes — and
+    /// that nil is also what makes 12-bit OFF by default: nobody gets moved to
+    /// a format their board may not deliver by installing an update.
+    public var captureBitDepth: String?
     /// Live audio monitor on/off (nil = on) — the footer speaker state.
     public var monitorEnabled: Bool?
     /// Frameline aspect (2.39, 1.85…); nil — off.
@@ -437,6 +482,20 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// before this field existed still decodes.
     public var offerMountedCards: Bool?
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
+
+    /// Bits per component to request for RGB 4:4:4 capture: the explicit
+    /// choice, else the legacy boolean, else 10.
+    ///
+    /// Reading the retired `tenBitCapture` here rather than rewriting it in a
+    /// migration keeps the fallback in one expression and leaves the stored
+    /// blob alone — an operator who downgrades still finds their 8-bit choice
+    /// intact.
+    public var resolvedCaptureBitDepth: CaptureBitDepth {
+        if let captureBitDepth, let depth = CaptureBitDepth(rawValue: captureBitDepth) {
+            return depth
+        }
+        return (tenBitCapture ?? true) ? .ten : .eight
+    }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy
     /// seconds (at 25 fps), else 5.

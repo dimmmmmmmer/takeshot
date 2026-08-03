@@ -13,6 +13,11 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     var forcedMode: (name: String, rgb: Bool)?
     /// RGB 4:4:4 sources captured as 10-bit r210 (vs 8-bit BGRA).
     var preferTenBitRGB = true
+    /// RGB 4:4:4 sources captured as 12-bit R12B. Off by default: it is only
+    /// worth the bandwidth on a board and a source that both deliver it, and a
+    /// request the hardware refuses falls back (see `rgbPixelFormatForMode` in
+    /// the bridge) — the depth that came back is on `CaptureFormat.bitDepth`.
+    var preferTwelveBitRGB = false
 
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
@@ -53,6 +58,7 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
             capture.forcedRGB = forcedMode.rgb
         }
         capture.preferTenBitRGB = preferTenBitRGB
+        capture.preferTwelveBitRGB = preferTwelveBitRGB
         try capture.start(withDeviceID: deviceID)
         self.capture = capture
     }
@@ -78,7 +84,7 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
             width: format.width, height: format.height,
             frameRate: fps, timecodeFPS: Int(format.timecodeFPS),
             isDropFrame: fractional, name: format.modeName,
-            isRGB444: format.isRGB444))
+            isRGB444: format.isRGB444, bitDepth: Int(format.bitDepth)))
     }
 
     // This is the boundary where the bridge's plain values become domain types.

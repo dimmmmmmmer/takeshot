@@ -27,11 +27,21 @@ import Foundation
 /// A file written this way carries studio-swing codes, so the app expands it
 /// again on the way back out (see `TakeWriter.levelsKey`): playback of a take
 /// shows exactly what the monitor showed while it was recorded.
-public final class TenBitConverter {
+///
+/// `TwelveBitConverter` is the 'R12B' sibling. The display half of the policy
+/// is shared with it (`WireDisplayTable`); the record half cannot be, because
+/// the two record formats have different measured VideoToolbox conventions —
+/// see that type for the numbers.
+public final class TenBitConverter: WireConverter {
     public static let r210 = OSType(0x7232_3130) // 'r210'
 
+    public var wireFormat: OSType { Self.r210 }
+    public var recordPixelFormat: OSType { Self.r210 }
+    /// 'r210' is 32 bits per pixel, the same as the BGRA display buffer.
+    public var recordBytesPerPixel: Int { 4 }
+
     /// wire code (0…1023) → the value that appears on the DISPLAY.
-    private var expand = [UInt16](repeating: 0, count: 1024)
+    private var expand = WireDisplayTable.expand(levels: .limited, bits: 10)
     /// wire code → the r210 value to hand the encoder so that the decoded file
     /// returns that same wire code. Free of the levels mode by construction:
     /// the file carries what the camera sent, whatever the monitor is doing.
@@ -44,9 +54,7 @@ public final class TenBitConverter {
     private let displayPool = PixelBufferPool()
     private let recordPool = PixelBufferPool(format: TenBitConverter.r210)
 
-    public init() {
-        rebuildTables()
-    }
+    public init() {}
 
     /// `limited` mirrors the 8-bit levels setting (auto → limited for RGB444).
     /// Kept because it says exactly what the choice is; the named form below is
@@ -56,22 +64,12 @@ public final class TenBitConverter {
     }
 
     /// The resolved input-levels mode for the current source.
+    /// Only the display table has a mode to rebuild for; the record table is a
+    /// constant, which is the same statement as "levels never reach the file".
     public func setLevels(_ newLevels: InputLevels) {
         guard newLevels != levels else { return }
         levels = newLevels
-        rebuildTables()
-    }
-
-    /// Only the display table has a mode to rebuild for; the record table is a
-    /// constant, which is the same statement as "levels never reach the file".
-    private func rebuildTables() {
-        let window = levels.wireWindow
-        let span = Double(window.white - window.black)
-        for code in 0..<1024 {
-            expand[code] = UInt16(levels == .full ? code
-                : min(1023, max(0, Int((Double(code - window.black)) * 1023
-                                       / span + 0.5))))
-        }
+        expand = WireDisplayTable.expand(levels: newLevels, bits: 10)
     }
 
     /// Split an r210 wire frame into (display BGRA8, record r210).

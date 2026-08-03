@@ -124,6 +124,40 @@ Measured result: the decoded file returns the camera's codes within ±1 in
 included. The levels mode cannot reach the file at all, so a display decision
 can no longer destroy a code in the deliverable.
 
+### 12-bit RGB (`R12B`)
+
+`bmdFormat12BitRGB` is offered as a capture bit depth (`captureBitDepth`,
+default 10-bit — 12 is opt-in). `TwelveBitConverter` is the sibling of
+`TenBitConverter` and produces the same two products; the display half of the
+policy is shared (`WireDisplayTable`), so a 12-bit black lands exactly where a
+10-bit black does. Studio swing at 12 bits is 256/3760, which is the same
+fraction of the scale as 64/940 at 10.
+
+The bit layout lives in exactly one place, `R12BPacking`: eight pixels in 36
+bytes, and the rule is that the 24 components sit at 12-bit offsets into the
+little-endian concatenation of nine big-endian words. Six of them straddle a
+word boundary. `R12BPackingTests` pins every component against Blackmagic's
+published byte table, transcribed independently in `R12BFixtures`.
+
+The record half is where this path beats the 10-bit one. The buffer is
+`kCVPixelFormatType_64RGBALE`, which VideoToolbox treats as **full range** — no
+window, no clamp, no precompensation, so the record table is the identity
+`code << 4`. Measured through a real ProRes 4444 encode and decode: codes 16,
+256, 2048, 3760 and 4079 come back **exactly**, and the range ends 0 and 4095
+survive as 0 and 4095. The 10-bit file is wire-*referred*; the 12-bit file is
+wire-*exact*.
+
+ProRes 4444 (`ap4h`) was added for it and is the only codec that can carry the
+sampling: on a grey ramp ProRes 422 HQ measures identically, but on alternating
+colour columns the red swing between neighbours is 3506 codes through 4444
+against 1761 through 422 HQ — the 4:2:2 average, measured.
+
+Measured cost, release, 1080p/UHD noise: the split is 1.50 ms / 3.03 ms against
+0.65 ms / 1.27 ms for 10-bit, so roughly 2.3x — comfortably inside a 40 ms frame
+interval. The record buffer is 8 bytes per pixel rather than 4, which the
+pre-roll ring's memory cap accounts for (`recordBytesPerPixel`); without that a
+3 s UHD pre-roll would reach ~3 GB against a 1.5 GB budget.
+
 Because the file carries studio swing, the player expands it again: takes are
 written with a `com.takeshot.levels = wire` metadata key and
 `PlaybackFrameTap+Levels` applies the same 8-bit table the live path uses
@@ -149,16 +183,28 @@ through a real encode/decode round trip.
 
 ### What the scopes measure
 
-For a 10-bit RGB wire the analyzer reads the **wire frame**, not the display
-buffer (`CapturePipeline.LevelledFrame.scopeSource`; the only cost on the
-capture queue is retaining the buffer). Two reasons, and the operator reported
-both as symptoms:
+For a 10- or 12-bit RGB wire the analyzer reads the **wire frame**, not the
+display buffer (`CapturePipeline.LevelledFrame.scopeSource`; the only cost on
+the capture queue is retaining the buffer). Two reasons, and the operator
+reported both as symptoms:
 
 - the display buffer is 8-bit, so a scope reading it is quantized to 256 levels
   however good the source is — the "8-bit, undetailed" parade;
 - the display expansion clips everything outside 64–940 on purpose, so the
   sub-blacks and super-whites a scope exists to reveal are not in that buffer
   at all.
+
+A 12-bit wire is read by the same tap (`ScopeAnalyzer.R12BReader`, sharing
+`R12BPacking` with the converter) and rounded onto the analyzer's 10-bit sample
+scale by `ScopeAnalyzer.narrowed` — rounded, not truncated, so nominal black and
+white stay exactly 64 and 940 and the graticule does not move. Those two dropped
+bits are a stated limit rather than an oversight: the trace maps are 512 rows and
+the histograms 256 bins, so the analyzer cannot display more than about nine bits
+however many it is handed. The full 12 reach the file, which is where they are
+worth something. Measured cost: 23.4 ms per 1080p pass, the same as `r210`
+(23.5 ms) and BGRA (23.6 ms) — the pass is dominated by the accumulator, not the
+pixel fetch — and the delivered rate is unchanged at 12.5 Hz live, 20 of 20
+offered passes landing.
 
 `ScopeData.nominal` says where 0% and 100% sit on the trace map, and every
 graticule, value number and histogram mark is placed through it — so on a wire

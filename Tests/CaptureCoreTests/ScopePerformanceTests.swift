@@ -121,9 +121,41 @@ struct ScopePerformanceTests {
         _ = time("1080p r210 (10-bit wire, limited)") {
             _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited)
         }
+        // the 12-bit sibling reader: same sampling grid, one to two loads per
+        // component instead of one per pixel, so this is the number that says
+        // whether 12-bit capture costs the scopes anything
+        let wire12 = try R12BFixtures.makeNoise(width: 1920, height: 1080)
+        _ = time("1080p R12B (12-bit wire, limited)") {
+            _ = ScopeAnalyzer.analyze(wire12, wireLevels: .limited)
+        }
         let uhd = try bgraNoise(width: 3840, height: 2160)
         _ = time("UHD BGRA (display buffer)", runs: 9) {
             _ = ScopeAnalyzer.analyze(uhd)
+        }
+    }
+
+    /// The wire split itself — the one stage that runs on the capture queue for
+    /// every frame, so its cost is against the frame interval (40 ms at 25 fps)
+    /// rather than the scopes' stride interval.
+    ///
+    /// The 10-bit and 12-bit converters are timed side by side because the
+    /// question a 12-bit option raises is exactly "what does it cost per
+    /// frame", and the honest answer is a measurement on the machine in hand.
+    @Test(.enabled(if: ScopePerformanceTests.enabled))
+    func theWireSplitCostPerFrame() throws {
+        let ten = TenBitConverter()
+        let twelve = TwelveBitConverter()
+        let hd10 = try r210Noise(width: 1920, height: 1080)
+        let hd12 = try R12BFixtures.makeNoise(width: 1920, height: 1080)
+        _ = time("split 1080p r210 → BGRA + r210") { _ = ten.convert(hd10) }
+        _ = time("split 1080p R12B → BGRA + 64RGBALE") { _ = twelve.convert(hd12) }
+        let uhd10 = try r210Noise(width: 3840, height: 2160)
+        let uhd12 = try R12BFixtures.makeNoise(width: 3840, height: 2160)
+        _ = time("split UHD r210 → BGRA + r210", runs: 9) {
+            _ = ten.convert(uhd10)
+        }
+        _ = time("split UHD R12B → BGRA + 64RGBALE", runs: 9) {
+            _ = twelve.convert(uhd12)
         }
     }
 
