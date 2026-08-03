@@ -14,15 +14,58 @@
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Both version keys are PLACEHOLDERS. scripts/bundle-app.sh overwrites
+	     them with the number in the root VERSION file, which is the one place
+	     the version is stated; release.yml then refuses to publish unless the
+	     tag agrees with it. A bundle still reporting 0.0.0 was assembled by
+	     hand rather than by the script, and its version means nothing — which
+	     is exactly what a diagnostics bundle should say about it. -->
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.0.0</string>
+	<!-- Same number as the short string, not a separate build counter: there
+	     is no updater and no App Store submission to order builds for, and two
+	     numbers that can disagree are two numbers a bug report can get wrong.
+	     Which build it is, exactly, is TakeShotGitSHA (added by the script). -->
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>0.0.0</string>
+	<!-- Matches Package.swift's platforms: [.macOS(.v14)]. The two have to
+	     agree: the deployment target decides what the binary will run on and
+	     this key decides what the Finder will let a user try. -->
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT License. Copyright (c) 2026 enrvate.</string>
+	<!-- REQUIRED, not decoration. The external audio input opens the device
+	     through AVCaptureDeviceInput (SystemAudioCaptureDevice), which is a
+	     microphone-TCC API: without this key macOS TERMINATES the process the
+	     moment it is touched, and CaptureController+Startup reopens a
+	     remembered USB interface during launch — so a bundle without it would
+	     have died on startup for every operator who had ever chosen one.
+	     Nothing here reaches a camera, so no NSCameraUsageDescription: the
+	     capture board is opened through the DeckLink SDK, not AVFoundation.
+
+	     English only. TCC reads these strings from the app bundle's own
+	     Info.plist, localized through Contents/Resources/*.lproj/
+	     InfoPlist.strings — a different mechanism from the in-app L("key")
+	     tables, which live inside the SwiftPM resource bundle and follow the
+	     app's own language setting rather than the system's. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TakeShot records the sound for your takes from the audio interface you choose in Settings.</string>
+	<!-- The DIT offload reads camera cards, which are removable volumes, and
+	     the takes panel notices one being plugged in. Unlike the microphone
+	     key this one does not gate the feature — macOS asks either way — it
+	     decides whether the operator is told WHY before they answer. -->
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>TakeShot reads camera cards to offload them, and watches for a card being plugged in so it can offer to.</string>
+	<!-- The web remote serves phones on the set network. A listener is not
+	     what macOS 15's local-network gate is aimed at, so this may never be
+	     shown; when it is, it is the difference between a prompt that explains
+	     itself and one that looks like the app phoning home. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TakeShot serves its phone remote to devices on the same network as this Mac.</string>
 </dict>
 </plist>

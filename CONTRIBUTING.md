@@ -30,31 +30,65 @@ startup.
 
 ### Vendored SDKs
 
-No vendored SDK is committed — most are not redistributable — so everything
-under `vendor/` is ignored except each directory's `README.md`. Both Blackmagic
-bridges build as stubs without their SDK and the app still runs against its
-demo source, which is enough for most UI and logic work.
+No vendored SDK is committed — none of them may be redistributed — so
+everything under `vendor/` is ignored except each directory's `README.md`.
+Every bridge builds as a stub without its SDK and the app still runs against
+its demo source, which is enough for most UI and logic work. **This is also
+what every published release is**: the workflow builds on a GitHub runner,
+which has none of them, so the DMG on the releases page can play back and
+export but cannot see a capture board. If you want to change that, that is the
+thing to change.
 
-The first two are wired up. The rest are slots: the SDK has somewhere to go and
-its terms are written down, but no code reads them yet.
+Four of these are wired up; the last is a slot — the SDK has somewhere to go
+and its terms are written down, but no code reads it yet.
 
 | SDK | Goes in | State |
 | --- | --- | --- |
 | [DeckLink](https://www.blackmagicdesign.com/developer/) | `vendor/DeckLinkSDK/` | in use; without it there are no capture devices (`CDLDeviceManager.isSDKAvailable == false`) |
 | [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/` | in use; without it `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
-| [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | slot only — `.r3d` is recognized and reported as unsupported |
-| [NDI](https://ndi.video/for-developers/ndi-sdk/) | `vendor/NDISDK/` | slot only — network output is planned, not built |
+| [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | in use; without it `.r3d` is recognized and reported as unsupported (`CR3DClip.isSDKAvailable == NO`) |
+| [NDI](https://ndi.video/for-developers/ndi-sdk/) | `vendor/NDISDK/` | in use; without it network output reports itself unavailable (`CNDSender.isSDKAvailable == NO`) |
 | [AJA NTV2](https://github.com/aja-video/libajantv2) | `vendor/AJANTV2/` | slot only — an AJA `CaptureBackend` is planned, not built |
 
 Each `vendor/*/README.md` says exactly which files to copy where, and what the
 licence lets you ship.
 
-Neither runtime is linked at build time — `DeckLinkAPIDispatch.cpp` is included
-directly in the bridge and the RAW framework is loaded dynamically — so a build
-made without the SDKs still runs on a machine that has them.
+Only R3D is linked at build time, and only when its archive is really on disk
+(see the comment in `Package.swift`). The rest are opened at runtime —
+`DeckLinkAPIDispatch.cpp` is compiled into the bridge, and the RAW and NDI
+runtimes are `dlopen`ed — so a build made without those SDKs still runs on a
+machine that has them.
 
 For how the pieces fit together, and the hardware behaviour the capture path
 depends on, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Cutting a release
+
+The version is stated in exactly one place, the root `VERSION` file, and
+everything else reads it from there: `scripts/bundle-app.sh` stamps it into the
+bundle's `Info.plist` (so the About panel, the diagnostics report and the ASC
+MHL manifests all agree), `scripts/release-notes.sh` looks up the matching
+`CHANGELOG.md` section, and `.github/workflows/release.yml` refuses to publish
+unless the tag is exactly `v` + that number. Nothing about a release is typed
+into a web form.
+
+1. Bump `VERSION`.
+2. Add the matching `## <version>` section to `CHANGELOG.md`. Write it for the
+   operator: what they will see, what changed under a workflow they already
+   have, what is known not to work. `scripts/release-notes.sh` prints exactly
+   what the release page will say — read it before you tag.
+3. Commit, then `git tag v<version>` and push the tag.
+
+The workflow builds the app, checks that the bundle really reports that
+version, wraps it in a `.dmg` and publishes it with those notes plus a
+description of the artifact measured off the artifact — which SDKs it was built
+against and which architectures it carries.
+
+Signing is ad hoc: no Developer ID, no notarization, so a downloaded build
+needs a right-click → **Open** on first launch, and its cdhash changes with
+every build, so TCC grants do not survive a rebuild. That is a known state, and
+it is stated on the release page and in the README rather than left for
+somebody to discover.
 
 ## Before you open a pull request
 
