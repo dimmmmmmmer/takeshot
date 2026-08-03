@@ -13,6 +13,7 @@ through SwiftPM:
 swift build                    # build
 scripts/test.sh                # both test suites
 scripts/test.sh --sanitize=thread   # the same suites under ThreadSanitizer
+scripts/coverage.sh            # the suites with coverage, against the floor
 scripts/lint.sh                # SwiftLint (brew install swiftlint first)
 scripts/bundle-app.sh          # build/TakeShot.app
 swift run takeshot-devices     # CLI smoke test: list capture devices
@@ -69,6 +70,15 @@ depends on, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   --sanitize=thread`. CI runs it too, but finding a race locally costs
   minutes and finding it in CI costs a day — the last one hid behind a green
   local suite for a week.
+- Line coverage stays above the floor in `.coverage-floor`. CI fails the build
+  below it and names the files holding the most uncovered lines;
+  `scripts/coverage.sh` gives you the same answer locally. If the code you added
+  can only be reached with hardware, a device or a UI session, put a seam in
+  front of it the way the rest of the codebase does — `docs/coverage.md` lists
+  the existing ones — or add it to the ceiling list in that file with the reason.
+  Do not raise the number with assertions that restate the implementation: a line
+  exercised without a behaviour pinned to it defends nothing and makes the next
+  refactor more expensive.
 
 **Tests keep to themselves.** A test must not reach anything outside its own
 scratch directory: no writing the operator's real `UserDefaults` keys, no

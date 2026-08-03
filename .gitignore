@@ -1,6 +1,10 @@
 .build/
 build/
 .DS_Store
+# Coverage output (scripts/coverage.sh). The FLOOR is committed
+# (.coverage-floor); the measurement is not — it is a fact about one run.
+coverage.lcov
+coverage-report.txt
 *.xcodeproj
 .swiftpm/
 # Local tooling state: throwaway worktrees and machine-specific settings.

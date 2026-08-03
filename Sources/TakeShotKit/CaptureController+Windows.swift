@@ -42,16 +42,13 @@ extension CaptureController {
         let width = signalFormat?.width ?? 1920
         let height = signalFormat?.height ?? 1080
         let rate = signalFormat?.frameRate ?? 25
+        let board = String(deviceID.dropFirst("decklink:".count))
         do {
-            playoutFeeder = try PlayoutFeeder(
-                deviceID: String(deviceID.dropFirst("decklink:".count)),
-                width: width, height: height, frameRate: rate)
+            playoutFeeder = try PlayoutFeeder.factory(board, width, height, rate)
         } catch {
             // fall back to the universal 1080p25 raster (frames are scaled)
             do {
-                playoutFeeder = try PlayoutFeeder(
-                    deviceID: String(deviceID.dropFirst("decklink:".count)),
-                    width: 1920, height: 1080, frameRate: 25)
+                playoutFeeder = try PlayoutFeeder.factory(board, 1920, 1080, 25)
             } catch {
                 lastError = "Output: \(error.localizedDescription)"
             }

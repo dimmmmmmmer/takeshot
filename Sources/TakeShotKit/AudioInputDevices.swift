@@ -216,7 +216,13 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
 
     /// The delegate's CMSampleBuffer as an AVAudioPCMBuffer in the device's
     /// native format — the shape the converter downstream works in.
-    private static func pcmBuffer(
+    ///
+    /// Internal rather than private, and the layout helper below it too: they are
+    /// the only part of this file that does not need a device, and the multichannel
+    /// rule underneath them was a silent nil for every USB interface past two
+    /// channels. `ModelAudioPCMConversionTests` drives them directly — everything
+    /// else here opens hardware and cannot be reached from a suite at all.
+    static func pcmBuffer(
         from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
         guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
               var asbd = CMAudioFormatDescriptionGetStreamBasicDescription(
@@ -238,7 +244,7 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
     /// plain initializer returns nil — a multichannel format needs a layout,
     /// and for a device's interleaved PCM the channels are positional, so
     /// discrete-in-order says exactly that.
-    private static func format(
+    static func format(
         for asbd: inout AudioStreamBasicDescription) -> AVAudioFormat? {
         let channels = asbd.mChannelsPerFrame
         guard channels > 2 else {

@@ -8,9 +8,11 @@ import Foundation
 /// establishes a constant offset onto the render synchronizer's timeline;
 /// continuity of the source PTS keeps playback gapless. A PTS jump (device
 /// restart, source switch) outside the tolerance window resyncs.
+///
+/// The renderer and its timeline sit behind `AudioRenderRoute` so the whole of
+/// the above can be driven without an output device — see the note there.
 final class AudioMonitor: @unchecked Sendable {
-    private var renderer = AVSampleBufferAudioRenderer()
-    private let sync = AVSampleBufferRenderSynchronizer()
+    private let route: AudioRenderRoute
     private let queue = DispatchQueue(label: "takeshot.audio-monitor")
     private var offset: CMTime?
     private let deviceLock = NSLock()
@@ -22,12 +24,12 @@ final class AudioMonitor: @unchecked Sendable {
     private var pending: [CMSampleBuffer] = []
     /// Half a second of backlog is a stalled output, not jitter; beyond it the
     /// oldest packets are the least useful thing in the room.
-    private static let pendingLimit = 12
+    static let pendingLimit = 12
     /// A drain request is armed on the renderer.
     private var draining = false
 
-    init() {
-        sync.addRenderer(renderer)
+    init(route: AudioRenderRoute = SystemAudioRoute()) {
+        self.route = route
     }
 
     /// The renderer pulls the backlog itself — but the request is armed ONLY
@@ -38,24 +40,24 @@ final class AudioMonitor: @unchecked Sendable {
     private func armDrainIfNeeded() {
         guard !pending.isEmpty, !draining else { return }
         draining = true
-        renderer.requestMediaDataWhenReady(on: queue) { [weak self] in
+        route.requestMediaDataWhenReady(on: queue) { [weak self] in
             self?.drainLocked()
         }
     }
 
     private func drainLocked() {
-        while renderer.isReadyForMoreMediaData, !pending.isEmpty {
-            renderer.enqueue(pending.removeFirst())
+        while route.isReadyForMoreMediaData, !pending.isEmpty {
+            route.enqueue(pending.removeFirst())
         }
         if pending.isEmpty, draining {
-            renderer.stopRequestingMediaData()
+            route.stopRequestingMediaData()
             draining = false
         }
     }
 
     /// The renderer object itself is replaced on `queue` when the output device
     /// changes, so the level is kept here and applied on that same queue —
-    /// touching `renderer` straight from a slider callback on the main thread
+    /// touching the route straight from a slider callback on the main thread
     /// raced the swap and left the new output at the old level.
     private let volumeLock = NSLock()
     private var storedVolume: Float = 1
@@ -70,13 +72,11 @@ final class AudioMonitor: @unchecked Sendable {
             volumeLock.lock()
             storedVolume = newValue
             volumeLock.unlock()
-            queue.async { [self] in renderer.volume = newValue }
+            queue.async { [self] in route.volume = newValue }
         }
     }
 
     /// Output device UID (nil — system default); shares the playback picker.
-    /// The renderer rejects a nil assignment (NSException), so "back to system
-    /// default" is implemented by swapping in a fresh renderer.
     ///
     /// The UID is locked for the same reason as the volume above, and the store
     /// happens on the caller's thread rather than on `queue`: the getter used to
@@ -97,20 +97,19 @@ final class AudioMonitor: @unchecked Sendable {
             deviceLock.unlock()
             guard !unchanged else { return }
             queue.async { [self] in
-                if let newValue {
-                    renderer.audioOutputDeviceUniqueID = newValue
-                } else {
-                    volumeLock.lock()
-                    let level = storedVolume
-                    volumeLock.unlock()
-                    if draining {
-                        renderer.stopRequestingMediaData()
-                        draining = false
-                    }
-                    sync.removeRenderer(renderer, at: .zero)
-                    renderer = AVSampleBufferAudioRenderer()
-                    renderer.volume = level
-                    sync.addRenderer(renderer)
+                // A drain request belongs to the renderer it was armed on, and
+                // going back to the system default throws that renderer away
+                // (see `SystemAudioRoute.route`), so the request comes down
+                // first. Naming a device keeps the renderer, and with it a
+                // request that is still valid — tearing it down there would
+                // stall the backlog until the next packet re-armed it.
+                if newValue == nil, draining {
+                    route.stopRequestingMediaData()
+                    draining = false
+                }
+                if route.route(to: newValue) {
+                    // fresh renderer: the timeline it was synced to and the
+                    // packets queued for the old one are both meaningless now
                     offset = nil
                     pending.removeAll()
                 }
@@ -119,14 +118,14 @@ final class AudioMonitor: @unchecked Sendable {
     }
 
     func stop() {
-        queue.async {
-            self.sync.setRate(0, time: .zero)
-            self.renderer.flush()
-            self.offset = nil
-            self.pending.removeAll()
-            if self.draining {
-                self.renderer.stopRequestingMediaData()
-                self.draining = false
+        queue.async { [self] in
+            route.setRate(0, at: .zero)
+            route.flush()
+            offset = nil
+            pending.removeAll()
+            if draining {
+                route.stopRequestingMediaData()
+                draining = false
             }
         }
     }
@@ -134,6 +133,14 @@ final class AudioMonitor: @unchecked Sendable {
     /// Enqueue a capture packet (called from the pipeline queue).
     func enqueue(_ sampleBuffer: CMSampleBuffer) {
         queue.async { self.enqueueLocked(sampleBuffer) }
+    }
+
+    /// Run `body` after everything already handed to the monitor has been
+    /// handled. The queue is private and every public entry point is async onto
+    /// it, so this is the only way a caller can know a packet has landed —
+    /// which is what the suite waits on instead of a wall-clock window.
+    func settle() {
+        queue.sync {}
     }
 
     // MARK: - on queue
@@ -144,9 +151,9 @@ final class AudioMonitor: @unchecked Sendable {
         if let offset {
             // resync on PTS discontinuity: adjusted time far from the clock
             let adjusted = CMTimeAdd(pts, offset)
-            let drift = CMTimeSubtract(adjusted, sync.currentTime()).seconds
+            let drift = CMTimeSubtract(adjusted, route.currentTime).seconds
             if drift < -0.05 || drift > 1.0 {
-                renderer.flush()
+                route.flush()
                 self.offset = nil
                 pending.removeAll()
             }
@@ -155,7 +162,7 @@ final class AudioMonitor: @unchecked Sendable {
             // start the clock slightly behind the first packet to absorb jitter
             let lead = CMTime(value: 60, timescale: 1000)
             offset = CMTimeSubtract(lead, pts)
-            sync.setRate(1, time: .zero)
+            route.setRate(1, at: .zero)
         }
         guard let offset,
               let retimed = Self.retimed(sampleBuffer, by: offset) else { return }

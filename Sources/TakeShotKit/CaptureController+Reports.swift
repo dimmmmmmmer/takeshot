@@ -8,7 +8,22 @@ import Foundation
 /// Split out of `+Markers`. All three are the same shape — build the file, put
 /// a save panel in front of the operator, write it — and all three are the end
 /// of the day rather than part of running one.
+///
+/// The panel itself is `FilePanel`, not `NSSavePanel`: see the note there for
+/// why the dialog is a seam. Everything below the panel — the offered name, the
+/// offered folder, the bytes, and what the operator is told when the write fails
+/// — is then reachable from a test.
 extension CaptureController {
+    /// The date stamp both A4 documents put in their file name. `en_US_POSIX`
+    /// so the digits are the same in every locale the app runs in — a report
+    /// named in Hindi numerals sorts nowhere.
+    static func reportDateStamp(_ date: Date = Date()) -> String {
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyMMdd"
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        return stamp.string(from: date)
+    }
+
     /// Selects EDL: good takes back to back, markers as Resolve locators, and
     /// the day's grade as `*ASC_SOP`/`*ASC_SAT` when the active look is an ASC
     /// CDL. `currentCDL` is nil for a .cube look, which is the point — the EDL
@@ -22,11 +37,10 @@ extension CaptureController {
             lastError = L("edl_no_good_takes")
             return
         }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = NamingEngine.sanitize(
+        let name = NamingEngine.sanitize(
             "\(settings.projectName)_selects") + ".edl"
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return }
         do {
             try edl.write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("edl_saved", url.lastPathComponent)
@@ -47,11 +61,9 @@ extension CaptureController {
             lastError = L("ale_no_takes")
             return
         }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_log") + ".ale"
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let name = NamingEngine.sanitize("\(settings.projectName)_log") + ".ale"
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return }
         do {
             try ale.write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("ale_saved", url.lastPathComponent)
@@ -65,15 +77,11 @@ extension CaptureController {
             lastError = L("report_no_takes")
             return
         }
-        let panel = NSSavePanel()
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyMMdd"
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_report_\(stamp.string(from: Date()))")
+        let name = NamingEngine.sanitize(
+            "\(settings.projectName)_report_\(Self.reportDateStamp())")
             + (pdf ? ".pdf" : ".csv")
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return }
         do {
             if pdf {
                 guard let data = ShiftReport.pdfData(
@@ -103,24 +111,23 @@ extension CaptureController {
     /// cache: the cache holds only what the grid scrolled past, and a sheet
     /// whose cells depend on scroll history is wrong. The decode is awaited,
     /// so the save panel closes first and the toast reports the finished file.
-    func exportContactSheet() {
+    @discardableResult
+    func exportContactSheet() -> Task<Void, Never>? {
         guard !takes.isEmpty else {
             lastError = L("report_no_takes")
-            return
+            return nil
         }
-        let panel = NSSavePanel()
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyMMdd"
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        panel.nameFieldStringValue = NamingEngine.sanitize(
-            "\(settings.projectName)_contacts_\(stamp.string(from: Date()))")
+        let name = NamingEngine.sanitize(
+            "\(settings.projectName)_contacts_\(Self.reportDateStamp())")
             + ".pdf"
-        panel.directoryURL = destinationRoot
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return nil }
         let takes = takes
         let project = settings.projectName
         let camera = settings.cameraLabel
-        Task { [weak self] in
+        // Handed back so a test can await the decode instead of polling for a
+        // file that a background decode has not written yet. The app ignores it.
+        return Task { [weak self] in
             let posters = await ContactSheet.exportThumbnails(for: takes)
             guard let data = ContactSheet.pdfData(
                 takes: takes, thumbnails: posters,

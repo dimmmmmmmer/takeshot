@@ -231,18 +231,14 @@ struct OffloadSheetFooter: View {
     }
 }
 
-/// The file panels the sheet opens. Kept out of the model so everything the
-/// model does stays reachable from a test.
+/// The folder browser the sheet opens. Kept out of the model so everything the
+/// model does stays reachable from a test; the dialog itself is `FilePanel`, so
+/// the call sites are reachable too.
 enum OffloadPanels {
     @MainActor
     static func pickFolder(message: String, prompt: String) -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.message = message
-        panel.prompt = prompt
-        guard panel.runModal() == .OK else { return nil }
-        return panel.url
+        FilePanel.openOne(.init(files: false, directories: true,
+                                createDirectories: true,
+                                message: message, prompt: prompt))
     }
 }
