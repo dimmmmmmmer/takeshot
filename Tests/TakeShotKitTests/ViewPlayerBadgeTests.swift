@@ -293,15 +293,9 @@ struct ViewPlayerBadgeTests {
         }
     }
 
-    /// The exposure legend under the image is a fixed strip of color swatches
-    /// with English stop labels; no translation may resize it.
-    @Test func assistLegendIsLocaleIndependent() async throws {
-        try await ViewProbe.run { probe in
-            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
-                let ideal = probe.fittingSizes { AssistLegend(tool: tool) }
-                #expect(ideal.ru == ideal.en, "\(tool) legend: \(ideal)")
-                #expect(ideal.ru.width > 0)
-            }
-        }
-    }
+    // The exposure legend used to be measured here as a view. It is not one any
+    // more — it is burned into the display frame (`AssistLegend` in
+    // CaptureCore), so its size is measured against the SIGNAL in
+    // `AssistLegendTests`, and its labels are stop marks that no translation
+    // can resize.
 }

@@ -36,6 +36,13 @@ struct AssistIntegrityTests {
     /// Everything switched on that paints on the picture. False colour alone
     /// would prove the point; all of them together is what an operator actually
     /// has on, and it is the combination that has to stay off the deliverable.
+    ///
+    /// The legend is in here too, at the bottom of the frame, since the owner
+    /// ruled it has to be burned in with the rest (see `AssistLegend`). It is
+    /// the one aid that paints where nothing else does — a matte and a false
+    /// colour repaint the whole picture, a legend puts nine saturated swatches
+    /// in one band of it — so the take and the grab are read there as well as
+    /// in the middle.
     private func loudAssist() -> ViewAssist {
         var assist = ViewAssist()
         assist.colorTool = .falseColor
@@ -43,7 +50,24 @@ struct AssistIntegrityTests {
         assist.zebraThreshold = 0.5
         assist.peakingOn = true
         assist.guides = AssistGuides(ratio: 2.39, safeAreas: true)
+        assist.legend = AssistLegend(size: .large, placement: .bottom)
         return assist
+    }
+
+    /// The frame the legend tests shoot: big enough that a legend is drawn on
+    /// it at all (a 64x32 probe frame has no room for one), small enough to
+    /// encode in real time.
+    private static let width = 640
+    private static let height = 360
+
+    /// A pipeline whose format is the size above — `PreviewProbe.makePipeline`
+    /// announces 64x32, which is smaller than the smallest legend there is.
+    private func legendPipeline() -> CapturePipeline {
+        let pipeline = PreviewProbe.makePipeline()
+        pipeline.handleFormat(CaptureFormat(width: Self.width,
+                                            height: Self.height, frameRate: 25,
+                                            timecodeFPS: 25, name: "test"))
+        return pipeline
     }
 
     /// The flat level the suite shoots.
@@ -111,14 +135,43 @@ struct AssistIntegrityTests {
                 "the frame reached the mirror unmetered: \(Self.rowDescription(of: shown))")
     }
 
+    /// The legend goes with it. It was left behind as a SwiftUI overlay when
+    /// the rest of the aids moved into the display stage, on the reasoning that
+    /// a key to the picture is chrome rather than a mark on it; the owner
+    /// overruled that, and the case is this one — a director's monitor showing
+    /// nine flat colours with no key to them.
+    ///
+    /// A flat frame under false colour is ONE colour everywhere, so a swatch
+    /// from the other end of the palette can only have come from the legend.
+    @Test func theLegendReachesTheHardwarePlayoutMirror() async throws {
+        let pipeline = legendPipeline()
+        var assist = ViewAssist()
+        assist.colorTool = .falseColor
+        assist.legend = AssistLegend(size: .large, placement: .bottom)
+        pipeline.setViewAssist(assist)
+        let source = LegendProbe.frame(Self.flat, width: Self.width,
+                                     height: Self.height)
+        let shown = try await presentedDecorated(pipeline, source)
+
+        let grid = LegendProbe.pixels(of: shown)
+        for band in [AssistFilters.band(0.01), AssistFilters.band(1)] {
+            #expect(LegendProbe.contains(band, in: grid),
+                    "the playout mirror has no \(band) swatch on it")
+        }
+    }
+
     /// The camera grid on a phone is the ONE display consumer that must not get
     /// the aids. It is what the crew watches, not what the operator judges
     /// exposure on: false colour there tells a gaffer the scene is on fire, and
     /// a frameline matte reads as the actual frame. The owner asked for them off
     /// (item 13), so the grid is handed the clean frame while the viewer and the
     /// hardware monitor — asserted just above — get the decorated one.
+    /// The legend is on that list too, and it is drawn at a size the grid
+    /// cannot hide: the frame here is 640x360 rather than the 64x32 probe
+    /// frame, because a legend needs room to exist before its absence proves
+    /// anything.
     @Test func theAidsStayOffTheCameraGrid() async throws {
-        let pipeline = PreviewProbe.makePipeline()
+        let pipeline = legendPipeline()
         pipeline.setViewAssist(loudAssist())
         let collector = PreviewCollector()
         pipeline.setOnMultiviewFrame { collector.record($0) }
@@ -126,7 +179,8 @@ struct AssistIntegrityTests {
 
         // polled, not a fixed dozen frames: see `presentedDecorated` for the
         // runner that presented nothing inside that window
-        let source = PreviewProbe.frame(Self.flat)
+        let source = LegendProbe.frame(Self.flat, width: Self.width,
+                                     height: Self.height)
         var index = 0
         await TestWait.untilWritten {
             guard collector.last == nil else { return true }
@@ -138,6 +192,8 @@ struct AssistIntegrityTests {
         let shown = try #require(collector.last, "nothing reached the grid")
         #expect(!Self.isMetered(shown),
                 "the aids reached the crew's phones: \(Self.rowDescription(of: shown))")
+        #expect(LegendProbe.firstColoredPixel(of: shown) == nil,
+                "a legend swatch reached the crew's phones")
     }
 
     /// Framelines on their own — no exposure tool — still cost a pass. They are
@@ -174,8 +230,12 @@ struct AssistIntegrityTests {
 
     /// The still grab is a deliverable: it comes off the frame before the
     /// display stage exists, so the grey is still grey in the PNG.
+    ///
+    /// Shot at 640x360 rather than on the 64x32 probe frame: the legend is one
+    /// of the aids switched on here, and a frame too small to hold one would
+    /// make its absence from the grab mean nothing.
     @Test func aGrabTakenWithTheAidsOnHoldsTheOriginalPixels() async throws {
-        let pipeline = PreviewProbe.makePipeline()
+        let pipeline = legendPipeline()
         pipeline.setViewAssist(loudAssist())
         let grabs = EventCollector<Data?>()
         let shown = EventCollector<Bool>()
@@ -184,7 +244,8 @@ struct AssistIntegrityTests {
         pipeline.grabNextFrame { grabs.append($0) }
 
         // polled, not a fixed dozen frames: see `presentedDecorated`
-        let source = PreviewProbe.frame(Self.flat)
+        let source = LegendProbe.frame(Self.flat, width: Self.width,
+                                     height: Self.height)
         var index = 0
         await TestWait.untilWritten {
             guard !shown.contains(true) else { return true }
@@ -213,6 +274,13 @@ struct AssistIntegrityTests {
             #expect(abs(pixel.g - Int(Self.flat)) <= 20,
                     "the grab is at \(pixel.g), not the \(Self.flat) that was shot")
         }
+        // The legend is not on the middle row and never will be, so it is read
+        // for over the WHOLE still: every band of it is saturated, and nothing
+        // in a flat grey frame is.
+        let colored = try #require(LegendProbe.coloredPixels(inPNG: png),
+                                   "the grab could not be decoded")
+        #expect(colored.isEmpty,
+                "a legend swatch was baked into the grab: \(colored.prefix(3))")
     }
 
     /// The recorded take, the same question, through a real encoder.
@@ -229,7 +297,7 @@ struct AssistIntegrityTests {
         pipeline.setOnDisplayFrame { shown.append(Self.isMetered($0)) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
-        let source = Self.flatFrame(Self.flat, width: 320, height: 180)
+        let source = LegendProbe.frame(Self.flat, width: 320, height: 180)
         let driver = SignalDriver(pipeline: pipeline)
         var timecode = Timecode(hours: 10, minutes: 0, seconds: 0, frames: 0, fps: 25)
         pipeline.toggleManualRecord()
@@ -258,6 +326,11 @@ struct AssistIntegrityTests {
         let top = Self.level(of: frame, atFractionX: 0.5, row: 4)
         #expect(abs(top - Int(Self.flat)) < 10,
                 "the frameline matte was baked into the take: \(top)")
+        // …and the band along the bottom where the legend is drawn. Read as
+        // colour rather than as level: ProRes moves a flat grey by a code or
+        // two, and a swatch by a hundred in one channel.
+        #expect(LegendProbe.firstColoredPixel(of: frame) == nil,
+                "a legend swatch was encoded into the take")
     }
 
     /// The frame published for the compare provider — what a pinned reference
@@ -302,9 +375,13 @@ struct AssistIntegrityTests {
         #expect(pipeline.assistStage.lateDrops == settledDrops + 1,
                 "the drop was not counted: \(pipeline.assistStage.lateDrops)")
     }
+}
 
-    // MARK: - reading pixels
-
+/// How this suite reads a frame back. In an extension rather than in the
+/// suite's own body: the tests above are what the file is about, and a page
+/// of pixel arithmetic between them is what pushed the type past the length
+/// at which nobody reads one top to bottom.
+extension AssistIntegrityTests {
     /// Whether a pixel is still the flat level the frame was shot at.
     private static func isFlat(_ pixel: ChromaProbe.Pixel,
                                tolerance: Int) -> Bool {
@@ -349,26 +426,9 @@ struct AssistIntegrityTests {
         return (0..<width).map { Int(start[$0 * 4]) }
     }
 
-    /// A solid opaque BGRA frame at an arbitrary size (PreviewProbe's is 64x32).
-    private static func flatFrame(_ level: UInt8, width: Int,
-                                  height: Int) -> CVPixelBuffer {
-        let buffer = TestMedia.pixelBuffer(width: width, height: height)
-        CVPixelBufferLockBaseAddress(buffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return buffer }
-        let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
-        let bytes = base.assumingMemoryBound(to: UInt8.self)
-        for y in 0..<height {
-            let row = bytes + y * rowBytes
-            for x in 0..<width {
-                row[x * 4] = level
-                row[x * 4 + 1] = level
-                row[x * 4 + 2] = level
-                row[x * 4 + 3] = 255
-            }
-        }
-        return buffer
-    }
+    // A flat frame at an arbitrary size is `LegendProbe.frame` (PreviewProbe's
+    // is 64x32, which is too small to hold a legend), and so are the two
+    // colour readings this suite makes of a take and a grab.
 
     /// The blue channel at `fraction` across a named ROW, counted from the top.
     /// `PreviewProbe.level` always reads the middle row; the frameline matte is

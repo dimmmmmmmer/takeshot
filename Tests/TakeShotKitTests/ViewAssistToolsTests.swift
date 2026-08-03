@@ -5,195 +5,49 @@ import Testing
 
 @testable import TakeShotKit
 
-/// The operator aids as the player shows them: the exposure legend (its size,
-/// its corner, and staying clear of the chrome), the overlays it shares the
-/// picture with, and the popover that drives all of them. What the aids do when
-/// they are dragged is `ViewAssistZoomTests`.
+/// The operator aids as the player shows them: what is still drawn over the
+/// picture, and the popover that drives all of them. What the aids do when they
+/// are dragged is `ViewAssistZoomTests`.
+///
+/// The exposure legend is NOT here any more. It used to be a SwiftUI overlay
+/// measured against the player and inset to dodge the badge row and the
+/// transport; the owner ruled that it has to reach the hardware monitor with
+/// the false colour it explains, so it is burned into the display frame and
+/// measured against the SIGNAL in `AssistLegendTests`. What is left of it in
+/// this layer is the pair of pickers below and the settings they write.
 @MainActor
 struct ViewAssistToolsTests {
     // MARK: - the legend
 
-    /// The complaint was that the legend is tiny with no way to change it. The
-    /// three sizes have to be genuinely different, and none of them may depend
-    /// on the language — it is a strip of swatches with English stop labels.
-    @Test func theLegendGrowsWithItsSizeSettingInBothLanguages() async throws {
-        try await ViewProbe.run { probe in
-            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
-                var widths: [CGFloat] = []
-                var heights: [CGFloat] = []
-                for size in AssistLegendSize.allCases {
-                    let ideal = probe.fittingSizes {
-                        AssistLegend(tool: tool, size: size)
-                    }
-                    #expect(ideal.ru == ideal.en,
-                            "\(tool) at \(size) differs by language: \(ideal)")
-                    widths.append(ideal.en.width)
-                    heights.append(ideal.en.height)
-                }
-                #expect(widths == widths.sorted(),
-                        "\(tool) legend widths are not in size order: \(widths)")
-                #expect(heights == heights.sorted(),
-                        "\(tool) legend heights are not in size order: \(heights)")
-                // the default (medium) has to be bigger than what shipped
-                #expect(widths[1] > widths[0] && heights[1] > heights[0])
-            }
-        }
-    }
-
-    /// Even the large legend has to fit the player in the narrowest window the
-    /// app allows — EL Zone is thirteen bands wide.
-    @Test func theLargestLegendFitsTheNarrowestPlayer() async throws {
-        try await ViewProbe.run { probe in
-            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
-                let ideal = probe.fittingSizes {
-                    AssistLegend(tool: tool, size: .large)
-                }
-                let budget = ViewBudget.playerWidth
-                    - 2 * AssistLegendChrome.sideInset
-                #expect(ideal.ru.width <= budget,
-                        "the large \(tool) legend wants \(ideal.ru.width)pt of \(budget)")
-            }
-        }
-    }
-
-    /// The vertical legend is the same bands turned on their side (owner items
-    /// 39/40), and turning it must actually change its shape: taller than it is
-    /// wide, where the horizontal strip is the other way round.
-    @Test func theVerticalLegendIsAColumnAndTheHorizontalOneIsARow() async throws {
-        try await ViewProbe.run { probe in
-            for tool in [ViewAssist.ColorTool.falseColor, .elZone] {
-                let across = probe.fittingSizes { AssistLegend(tool: tool) }
-                let down = probe.fittingSizes {
-                    AssistLegend(tool: tool, vertical: true)
-                }
-                #expect(across.en.width > across.en.height,
-                        "the horizontal \(tool) legend is not a row: \(across.en)")
-                #expect(down.en.height > down.en.width,
-                        "the vertical \(tool) legend is not a column: \(down.en)")
-                #expect(down.en == down.ru,
-                        "the vertical \(tool) legend differs by language: \(down)")
-            }
-        }
-    }
-
-    /// Down the side of the player, the tall one (thirteen EL Zone bands at the
-    /// large size) still has to fit between the badge row and the transport —
-    /// centered vertically, it is clipped at BOTH ends if it does not.
-    @Test func theTallestVerticalLegendFitsBetweenTheChrome() async throws {
-        try await ViewProbe.run { probe in
-            /// The player in the narrowest window is not tall either; 380 is
-            /// the height the overlay suite lays it out at.
-            let playerHeight: CGFloat = 380
-            let insets = AssistLegendChrome.insets(placement: .left,
-                                                   fullscreen: false)
-            let budget = playerHeight - insets.top - insets.bottom
-            let ideal = probe.fittingSizes {
-                AssistLegend(tool: .elZone, size: .large, vertical: true)
-            }
-            #expect(ideal.ru.height <= budget,
-                    "the tall legend wants \(ideal.ru.height)pt of \(budget)")
-        }
-    }
-
-    /// In fullscreen the footer and the transport hide until the pointer asks
-    /// for them, and they come back in the same place: a legend tucked into the
-    /// bottom of the screen there vanishes under the controls exactly when the
-    /// operator reaches for them. The inset is checked against the bars the
-    /// fullscreen windows actually float, so a taller bar fails this instead of
-    /// silently covering the legend.
-    @Test func theFullscreenInsetClearsTheAutoHidingChrome() async throws {
-        try await ViewProbe.run { probe in
-            /// Both fullscreen windows lift their bar by 18pt (see
-            /// LiveFullscreenView / PlaybackFullscreenView).
-            let lift: CGFloat = 18
-            let footer = probe.sizes(proposedWidth: 1280 - 120) {
-                BottomBarView()
-            }
-            let transport = probe.sizes(proposedWidth: 1280 - 120) {
-                TransportBar(player: ViewFixtures.idlePlayer(),
-                             model: probe.controller.transport)
-            }
-            let tallest = max(footer.en.height, footer.ru.height,
-                              transport.en.height, transport.ru.height)
-            let clearance = AssistLegendChrome.fullscreenBottomInset
-            #expect(clearance >= tallest + lift,
-                    "the chrome band is \(tallest + lift)pt, the legend clears only \(clearance)pt")
-
-            // and the windowed inset clears the transport the player floats
-            #expect(AssistLegendChrome.bottomInset >= ViewBudget.transportHeight)
-        }
-    }
-
-    /// The top chrome auto-hides in fullscreen too, and it is the badge row that
-    /// comes back there — so a legend in a TOP corner has the same problem the
-    /// bottom one had. Measured against the tallest thing the row can hold
-    /// rather than against 44: the number only means something if a badge that
-    /// grows fails this.
-    @Test func theTopInsetClearsTheBadgeRow() async throws {
-        try await ViewProbe.run { probe in
-            /// `PlayerBadges.topChrome` insets the whole row by this.
-            let rowPadding: CGFloat = 8
-            // The timecode badge is the tallest in the row — it is the only one
-            // carrying .body text (LiveTimecodeText); the rest are 13pt icons.
-            let timecode = probe.fittingSizes {
-                playerOverlayBadge {
-                    Text(verbatim: "00:00:00:00").font(.body).monospacedDigit()
-                }
-            }
-            // in fullscreen the mode switch is gone but compare can still show
-            let compare = probe.fittingSizes { CompareControls() }
-            let tallest = max(timecode.en.height, timecode.ru.height,
-                              compare.en.height, compare.ru.height)
-            let reach = tallest + rowPadding
-            #expect(AssistLegendChrome.topInset >= reach,
-                    "the badge row reaches \(reach)pt, the legend clears only \(AssistLegendChrome.topInset)pt")
-        }
-    }
-
-    /// Four placements, four shapes (owner items 39/40): vertical down the left
-    /// or the right, horizontal centered along the top or the bottom.
+    /// Four placements, four shapes (owner items 39/40): a column down the left
+    /// or the right, a row along the top or the bottom.
     @Test func theFourPlacementsFaceTheWayTheyAreNamed() {
         #expect(AssistLegendPlacement.allCases.count == 4)
         #expect(AssistLegendPlacement.left.isVertical)
         #expect(AssistLegendPlacement.right.isVertical)
         #expect(!AssistLegendPlacement.top.isVertical)
         #expect(!AssistLegendPlacement.bottom.isVertical)
-        // a horizontal legend is centered along its edge, a vertical one down
-        // its side — that is what the alignment has to say
-        #expect(AssistLegendPlacement.top.alignment == .top)
-        #expect(AssistLegendPlacement.bottom.alignment == .bottom)
-        #expect(AssistLegendPlacement.left.alignment == .leading)
-        #expect(AssistLegendPlacement.right.alignment == .trailing)
         // …and the default is the bottom, centered, at the medium size
         #expect(AssistLegendPlacement.standard == .bottom)
         #expect(AssistLegendPlacement(rawValue: "") ?? .standard == .bottom)
     }
 
-    /// A top placement clears the badge row, a bottom one the transport, and a
-    /// vertical one is centered between BOTH — with only one of the two insets
-    /// a thirteen-band strip runs under the transport.
-    @Test func theLegendInsetsFollowTheChosenPlacement() {
-        for placement in AssistLegendPlacement.allCases {
-            for fullscreen in [false, true] {
-                let insets = AssistLegendChrome.insets(placement: placement,
-                                                       fullscreen: fullscreen)
-                let bottom = fullscreen
-                    ? AssistLegendChrome.fullscreenBottomInset
-                    : AssistLegendChrome.bottomInset
-                #expect(insets.leading == AssistLegendChrome.sideInset)
-                #expect(insets.trailing == AssistLegendChrome.sideInset)
-                #expect(insets.top == (placement == .bottom
-                                       ? 0 : AssistLegendChrome.topInset),
-                        "\(placement) top inset is \(insets.top)")
-                #expect(insets.bottom == (placement == .top ? 0 : bottom),
-                        "\(placement) bottom inset is \(insets.bottom)")
+    /// Both pickers say something in both languages. The strip itself carries
+    /// stop marks and no words at all, so these labels are the only part of the
+    /// legend a translation can reach.
+    @Test func theLegendPickersAreTranslated() {
+        for language in [AppLanguage.english, .russian] {
+            for key in AssistLegendSize.allCases.map(\.labelKey)
+                + AssistLegendPlacement.allCases.map(\.labelKey) {
+                let value = ViewRender.withLanguage(language) { L(key) }
+                #expect(value != key,
+                        "\(key) renders as its raw key in \(language.rawValue)")
             }
         }
     }
 
-    /// The aids are an overlay: whatever they draw — a legend in any corner at
-    /// any size, framelines and safe areas magnified four times over — the
-    /// player underneath must come out the size it was asked for.
+    /// Whatever the aids draw — framelines and safe areas magnified ten times
+    /// over — the player underneath must come out the size it was asked for.
     @Test func theAssistOverlaysNeverStretchThePlayer() async throws {
         try await ViewProbe.run { probe in
             let base = CGSize(width: ViewBudget.playerWidth, height: 380)
@@ -203,17 +57,13 @@ struct ViewAssistToolsTests {
             // the new ceiling, so the overlays are measured at what the zoom
             // can actually reach (owner item 42)
             probe.controller.punchInLevel = ViewAssist.maxPunchIn
-            probe.controller.legendSize = .large
-            for placement in AssistLegendPlacement.allCases {
-                probe.controller.legendPlacement = placement
-                for fullscreen in [false, true] {
-                    let size = ViewRender.laidOutSize(
-                        probe.hosted(Color.clear.playerTopBadges(
-                            showsModeSwitch: !fullscreen, autoHide: fullscreen)),
-                        in: base)
-                    #expect(size == base,
-                            "\(placement) legend stretched the player, fullscreen \(fullscreen)")
-                }
+            for fullscreen in [false, true] {
+                let size = ViewRender.laidOutSize(
+                    probe.hosted(Color.clear.playerTopBadges(
+                        showsModeSwitch: !fullscreen, autoHide: fullscreen)),
+                    in: base)
+                #expect(size == base,
+                        "the aids stretched the player, fullscreen \(fullscreen)")
             }
         }
     }
@@ -309,6 +159,11 @@ struct ViewAssistSettingsTests {
             probe.controller.legendPlacement = .left
             #expect(probe.controller.settings.legendSize == "l")
             #expect(probe.controller.settings.legendPlacement == "left")
+            // …and the picker reaches the RENDERER, which is the half that
+            // makes it to the hardware monitor: the legend is burned into the
+            // display frame off `assist`, not drawn from the settings blob.
+            #expect(probe.controller.assist.legend
+                == AssistLegend(size: .large, placement: .left))
 
             let reloaded = CaptureSettings.loaded(from: probe.store)
             #expect(reloaded.legendSize == "l")
@@ -321,7 +176,22 @@ struct ViewAssistSettingsTests {
             #expect(probe.controller.settings.legendPlacement == nil)
             #expect(probe.controller.legendSize == .medium)
             #expect(probe.controller.legendPlacement == .bottom)
+            #expect(probe.controller.assist.legend == AssistLegend())
         }
+    }
+
+    /// …and they come BACK at launch on the value the renderer reads. A stored
+    /// choice that only reappeared in the picker would leave the monitor
+    /// drawing last session's legend somewhere else.
+    @Test func theLegendChoicesAreRestoredAtStartup() async throws {
+        try await ViewProbe.run(configure: {
+            $0.legendSize = "s"
+            $0.legendPlacement = "right"
+        }, { probe in
+            #expect(probe.controller.legendPlacement == .right)
+            #expect(probe.controller.assist.legend
+                == AssistLegend(size: .small, placement: .right))
+        })
     }
 
     /// Focus peaking is dialled in percent and stored in the renderer's own

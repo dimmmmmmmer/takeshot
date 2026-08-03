@@ -67,6 +67,11 @@ public struct ViewAssist: Equatable, Sendable {
     /// Framelines and safe areas. Drawn in the display stage beside the colour
     /// tools, at the signal's own resolution (see `AssistGuides`).
     public var guides = AssistGuides()
+    /// Size and edge of the exposure legend — the key to what `colorTool` is
+    /// painting. Drawn in the display stage on top of everything else, so it
+    /// reaches the hardware monitor with the aid it explains (see
+    /// `AssistLegend`); with no colour tool on there is no legend to draw.
+    public var legend = AssistLegend()
     /// Anamorphic desqueeze factor (1 = spherical).
     public var desqueeze: Double = 1
     /// Punch-in magnification (1 = off).

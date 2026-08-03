@@ -140,13 +140,12 @@ struct PlayerTopBadgesModifier: ViewModifier {
             // punch-in pan/zoom lives on this mount because it is the ONE the
             // main player and both fullscreen windows share (see AssistZoom)
             .punchInZoom()
-            // Framelines and safe areas are NOT here any more: an overlay is
-            // drawn on the surface it is mounted on, so the guides reached this
-            // window and neither the director's monitor nor the hardware output
-            // (owner item 7). They are drawn into the frame itself now — see
-            // `AssistGuides`. The legend stays an overlay on purpose: it is a
-            // key to the picture, not a mark ON it.
-            .overlay { AssistLegendOverlay(fullscreen: autoHide) }
+            // Neither the framelines nor the exposure legend are here any
+            // more: an overlay is drawn on the surface it is mounted on, so
+            // both reached this window and neither the director's monitor nor
+            // the hardware output (owner item 7). They are drawn into the frame
+            // itself now — `AssistGuides` and `AssistLegend` — which is why
+            // there is no legend view left to double the burned-in one.
             .overlay(alignment: .bottomLeading) { scopesOverlay }
             .overlay(alignment: .top) { topChrome }
     }

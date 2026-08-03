@@ -8,6 +8,14 @@
 <meta name="theme-color" content="#0b0b0d">
 <title>TakeShot</title>
 <style>
+/* The app's own face, embedded rather than linked: these pages are opened on
+   a phone over a set Wi-Fi network that need not have any internet behind it,
+   so a page that fetched a font would render in the system face exactly when
+   it matters. The @font-face rules with the bytes in them are injected here at
+   serve time — the font is a bundle resource, and an .html file cannot reach
+   into the app bundle. Two weights only (400 and 700); the 600 and 800 below
+   snap to the bold. See NOTICE for the licence. */
+__TAKESHOT_FONT__
 :root {
   --bg: #0b0b0d;
   --panel: #17171b;
@@ -22,12 +30,11 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   background: var(--bg); color: var(--text);
-  /* "Resist Sans Display" is the app's own face and is NOT shipped with
-     these pages: it is a commercial licence (Groteskly Yours, all rights
-     reserved) and this repository is public, so embedding it as a base64
-     web font would redistribute it. Named first anyway — a Mac that has it
-     installed renders in it, and every phone on set falls straight through
-     to the system face. */
+  /* "Resist Sans Display" is the app's own face, embedded above under the
+     licence the owner holds (Groteskly Yours — see NOTICE). The system stack
+     stays behind it: a build served without the resource, or a browser that
+     refuses a woff2, falls straight through to the platform face instead of
+     showing nothing. */
   font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
                "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;

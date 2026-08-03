@@ -23,3 +23,20 @@ prepared slots; no code reads them yet.
 
 Runtime frameworks installed by Blackmagic Desktop Video and Blackmagic RAW are
 loaded dynamically at run time and are likewise not redistributed here.
+
+Bundled fonts
+-------------
+
+  Resist Sans Display — Groteskly Yours (Eugene Tantsurin)
+  <https://grotesklyyours.com>
+
+  Copyright (c) 2020 Eugene Tantsurin. Resist Sans is a trademark of Groteskly
+  Yours. Included here under a licence held by the project owner; it is NOT
+  covered by the MIT License above and is not licensed onward to users of this
+  repository.
+
+  Two weights (Regular and Bold) ship as WOFF2 under
+  Sources/TakeShotKit/Resources/, converted from the licensed OpenType/CFF
+  originals. They are embedded into the pages the web remote serves
+  (`RemotePage.fontCSS`) so a phone on a set network with no internet renders
+  in the app's own face.

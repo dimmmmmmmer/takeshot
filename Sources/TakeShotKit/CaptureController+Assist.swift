@@ -181,6 +181,11 @@ extension CaptureController {
 
     // MARK: - the legend
 
+    /// Size and edge are stored as settings and DRAWN with the aids (the
+    /// legend is burned into the display frame — see `AssistLegend`), so both
+    /// setters write `settings` and the settings observer pushes the value on
+    /// to `assist` (`applyLegendChange`). One direction only: a picker that
+    /// wrote `assist` directly would leave the stored choice behind.
     var legendSize: AssistLegendSize {
         get { AssistLegendSize(rawValue: settings.legendSize ?? "") ?? .medium }
         set { settings.legendSize = newValue == .medium ? nil : newValue.rawValue }
