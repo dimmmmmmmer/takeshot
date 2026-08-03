@@ -11,16 +11,14 @@ struct OtherContentSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            // the pickers finish as close to the right edge as this title
+            // starts from the left (owner items 22 and 44 — see
+            // `PanelChrome.viewPickerEdgeInset`)
+            PanelSectionHeader(viewMode: $viewMode, tileSize: $tileSize) {
                 Text(L("other_content"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Spacer()
-                PanelViewControls(viewMode: $viewMode, tileSize: $tileSize)
             }
-            // the header ends on the content margin so the view picker sits
-            // against the panel's right edge, not inside it (owner item 22)
-            .padding(.horizontal, PanelChrome.contentMargin)
             .padding(.vertical, 6)
             Divider()
             if viewMode == "grid" {

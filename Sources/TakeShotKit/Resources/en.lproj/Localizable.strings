@@ -117,15 +117,12 @@
 "clip_help" = "Next clip number, auto-increments after every recording";
 
 /* Slate — the creative metadata (scene/shot/take) embedded in the recording.
-   "slate_label" is latin in both languages on purpose: it sits in the footer
-   row beside CAM/ROLL/CLIP, which must measure the same whatever the UI
-   language is. */
-"slate_label" = "SLATE";
+   These are field captions on the footer's second naming row, under CAM/ROLL/
+   CLIP. The chip and its popover they replaced are gone (owner item 27), and
+   so are their strings. */
 "slate_shot" = "Shot";
 "slate_take" = "Take";
-"slate_help" = "Scene, shot and take of the NEXT recording — written into the .mov itself and into every export";
 "slate_take_help" = "Take number inside the scene. Left empty it follows the clip counter; type one and it takes over, restarting at 1 whenever the scene changes";
-"slate_next_hint" = "Applies to the next take. Scene, shot and take are embedded in the recorded file.";
 "slate_sidecar_note" = "A recorded file is never rewritten: corrections are saved to takeshot-slate.csv beside the footage and travel through the log, the ALE and the reports.";
 "description_label" = "Description";
 "open_folder" = "Open takes folder in Finder";
@@ -385,7 +382,6 @@
 "compare_b_live" = "vs Live";
 "compare_b_help" = "What the compare shows on the other side: the live signal or another take (synced transport)";
 
-"punch_pan_hint" = "Drag or scroll to pan, pinch or ⌘-scroll to zoom";
 "offload_menu" = "Verified copy of a folder...";
 "offload_pick_source" = "Folder to copy (camera card, sound, etc.)";
 "offload_source_prompt" = "Copy this";

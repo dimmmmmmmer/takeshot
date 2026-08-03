@@ -68,9 +68,23 @@ final class PlaybackFrameTap: @unchecked Sendable {
         compareSinks.remove(layer)
     }
 
+    /// The aids. Two destinations, because the value has two halves: the
+    /// exposure tools and the guides are drawn into the delivered FRAME (which
+    /// is what carries them to the hardware playout — owner item 7), and the
+    /// sinks get the whole value for the geometry they place with.
+    ///
+    /// A paused clip is re-delivered on the spot: nothing else would put the
+    /// change on screen, the same reason `setLUT` re-delivers.
     func setViewAssist(_ assist: ViewAssist) {
+        assistStage.setAssist(assist)
         sinks.setAssist(assist)
         compareSinks.setAssist(assist)
+        queue.async {
+            self.idleDelivered = false
+            if let buffer = self.lastBuffer {
+                self.deliver(buffer, analyzed: false)
+            }
+        }
     }
 
     func setLetterbox(_ color: CIColor) {
@@ -154,6 +168,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
 
     let ciContext = CIContext(options: [.cacheIntermediates: false])
     let composePool = PixelBufferPool()
+    /// The operator aids, drawn into the delivered frame (see `AssistStage`).
+    /// Tap-queue confined on the render side, like the compositor above it.
+    let assistStage = AssistStage()
 
     func setScopesEnabled(_ on: Bool) {
         queue.async {

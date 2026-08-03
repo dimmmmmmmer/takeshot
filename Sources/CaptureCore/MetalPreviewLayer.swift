@@ -18,9 +18,8 @@ import Metal
 /// settings) and producer queues (frames). Everything shared is behind
 /// renderLock (the render itself) or stateLock (the values main hands over).
 ///
-/// The draw path lives in `+Render`, the display aids in `+Assist`. The state
-/// below is internal rather than private for exactly that reason — never wider
-/// than the module.
+/// The draw path lives in `+Render`. The state below is internal rather than
+/// private for exactly that reason — never wider than the module.
 public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     var ciContext: CIContext?
     let renderLock = NSLock()
@@ -70,7 +69,10 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     /// unified log — parity debugging between surfaces (rec vs playback).
     public var debugTag: String?
     var presentCount = 0
-    /// Display aids (read under renderLock; use setAssist from any thread).
+    /// The aids, for the GEOMETRY half only — the desqueeze and the punch-in
+    /// this surface places its picture with. Everything that paints on the
+    /// picture is already on the frame when it arrives (see `AssistStage`).
+    /// Read under renderLock; use setAssist from any thread.
     var assist = ViewAssist()
 
     public func setAssist(_ newValue: ViewAssist) {

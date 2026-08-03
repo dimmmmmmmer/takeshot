@@ -1,13 +1,13 @@
 import Foundation
 
 /// The exposure palettes: the two 64³ color cubes the false-color and EL Zone
-/// tools remap luma through, and the ramps that define them. Static and shared
-/// across every layer — the cubes are built once for the process.
+/// tools remap luma through, and the ramps that define them. Static and built
+/// once for the process.
 ///
-/// Split out of `+Assist`, which held both the palettes (this file: what the
-/// colors ARE) and the filter stack that puts them over a frame (that file: how
-/// they are applied). The two changed for different reasons every time.
-extension MetalPreviewLayer {
+/// Split out of `AssistFilters`, which held both the palettes (this file: what
+/// the colors ARE) and the filter stack that puts them over a frame (that file:
+/// how they are applied). The two changed for different reasons every time.
+extension AssistFilters {
     /// One entry of an exposure palette. A named type rather than a triple:
     /// three unlabelled Doubles read the same whatever order they are in.
     struct BandColor {
@@ -68,14 +68,14 @@ extension MetalPreviewLayer {
         return band.color ?? gray
     }
 
-    static let falseColorCube: Data = lumaCube(size: 64) { MetalPreviewLayer.band($0) }
+    static let falseColorCube: Data = lumaCube(size: 64) { AssistFilters.band($0) }
 
     /// EL Zone-style stops around 18% gray: display luma is linearized with
     /// the inverse BT.709 OETF, zones colored per stop (approximation of the
     /// Ed Lachman scale).
     static let elZoneCube: Data = lumaCube(size: 64) { v in
-        let linear = max(1e-6, MetalPreviewLayer.bt709Linear(v))
-        return MetalPreviewLayer.zoneColor(log2(linear / 0.18))
+        let linear = max(1e-6, AssistFilters.bt709Linear(v))
+        return AssistFilters.zoneColor(log2(linear / 0.18))
     }
 
     /// Inverse BT.709 OETF.

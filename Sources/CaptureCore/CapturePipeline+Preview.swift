@@ -30,6 +30,10 @@ extension CapturePipeline {
         // of the previous source (playback) stick around
         if let buffer = currentPreviewBuffer() {
             layer.present(buffer)
+            // …and then the same frame decorated: a window opened while a
+            // false colour is on must not sit on the plain picture until the
+            // next frame arrives, and a paused signal has no next frame.
+            redrawDisplayStage()
         } else {
             layer.clearToBlack()
         }
@@ -37,12 +41,31 @@ extension CapturePipeline {
     public func removeDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.remove(layer)
     }
-    /// The operator aids, to every surface — and the chroma key out of the same
-    /// value to the display stage, which is where it is applied (see
-    /// `+ChromaKey` for why it cannot ride along inside the sinks).
+    /// The operator aids. The value goes three ways out of one call, because
+    /// its three halves are applied at three different stages: the chroma key
+    /// before the aids, the exposure tools and the guides into the display
+    /// frame itself (which is what carries them to the playout and the
+    /// multiview — owner item 7), and the whole value on to the sinks, which
+    /// use only the geometry in it.
     public func setViewAssist(_ assist: ViewAssist) {
-        displaySinks.setAssist(assist)
         setChromaKey(assist.chroma)
+        assistStage.setAssist(assist)
+        displaySinks.setAssist(assist)
+        // A paused or signal-less surface gets no new frame to carry the
+        // change, so the sinks re-render the one they are holding themselves
+        // (`MetalPreviewLayer.setAssist`) — but that redraw would now show the
+        // aids from BEFORE this call, because they are baked upstream. Push the
+        // last display frame through the stage again instead.
+        redrawDisplayStage()
+    }
+
+    /// Re-run the display stage over the frame already on screen. Used when an
+    /// aid changes while nothing new is arriving.
+    func redrawDisplayStage() {
+        displayQueue.async { [weak self] in
+            guard let self, let buffer = self.lastDisplaySource else { return }
+            self.publishDisplayFrame(buffer, deadline: .max)
+        }
     }
     public func setPreviewLetterbox(_ color: CIColor) {
         displaySinks.setLetterbox(color)
@@ -129,20 +152,34 @@ extension CapturePipeline {
             self.presentScheduled = false
             self.presentLock.unlock()
             guard let buffer else { return }
-            // The last display-only stage, and the one the deliverables never
-            // see: `pixelBuffer` above is already published clean for the
-            // compare provider, and the grab was served from the untouched
-            // frame back on the capture queue. What is keyed here is what the
-            // MIRRORS get — the viewer, the hardware monitor, the multiview —
-            // which is the same rule the viewing LUT follows.
-            let shown = self.chromaKeyed(buffer, deadline: deadline) ?? buffer
-            self.displaySinks.present(shown)
-            self.displayFrameLock.lock()
-            let handler = self.displayFrameHandler
-            let multiview = self.multiviewFrameHandler
-            self.displayFrameLock.unlock()
-            handler?(shown)
-            multiview?(shown)
+            self.publishDisplayFrame(buffer, deadline: deadline)
         }
+    }
+
+    /// The last display-only stages, and the ones the deliverables never see.
+    ///
+    /// By the time this runs the frame has already been written, grabbed and
+    /// measured: `enqueuePreview` published the CLEAN buffer for the compare
+    /// provider, and the writer, the grab and the scopes were all served back
+    /// on the capture queue (see `+Frame` for the order). What is decorated
+    /// here is what the MIRRORS get — the viewer, the director's monitor, the
+    /// hardware output, the multiview — which is the rule the viewing LUT and
+    /// the chroma key already follow.
+    ///
+    /// Key first, aids second: a false colour has to meter the picture the
+    /// monitor is actually showing, background and all.
+    ///
+    /// Display-queue only.
+    func publishDisplayFrame(_ buffer: CVPixelBuffer, deadline: UInt64) {
+        lastDisplaySource = buffer
+        let keyed = self.chromaKeyed(buffer, deadline: deadline) ?? buffer
+        let shown = assistStage.rendered(keyed, deadline: deadline) ?? keyed
+        displaySinks.present(shown)
+        displayFrameLock.lock()
+        let handler = displayFrameHandler
+        let multiview = multiviewFrameHandler
+        displayFrameLock.unlock()
+        handler?(shown)
+        multiview?(shown)
     }
 }

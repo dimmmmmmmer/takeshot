@@ -10,7 +10,7 @@ import Testing
 /// replaced could not compile with a band missing.
 struct CorePaletteTests {
     private func band(_ v: Double) -> [Double] {
-        let color = MetalPreviewLayer.band(v)
+        let color = AssistFilters.band(v)
         return [color.red, color.green, color.blue]
     }
 
@@ -36,26 +36,26 @@ struct CorePaletteTests {
     }
 
     @Test func elZoneClampsBothOpenEndsOntoTheRamp() {
-        #expect(MetalPreviewLayer.zoneColor(-99).red == 0.04) // ≤ -6: black
-        #expect(MetalPreviewLayer.zoneColor(-6).red == 0.04)
-        #expect(MetalPreviewLayer.zoneColor(0).red == 0.50)   // 18% — mid gray
-        #expect(MetalPreviewLayer.zoneColor(6).red == 1)      // ≥ +6: white
-        #expect(MetalPreviewLayer.zoneColor(99).red == 1)
+        #expect(AssistFilters.zoneColor(-99).red == 0.04) // ≤ -6: black
+        #expect(AssistFilters.zoneColor(-6).red == 0.04)
+        #expect(AssistFilters.zoneColor(0).red == 0.50)   // 18% — mid gray
+        #expect(AssistFilters.zoneColor(6).red == 1)      // ≥ +6: white
+        #expect(AssistFilters.zoneColor(99).red == 1)
     }
 
     /// The inverse BT.709 OETF, with its linear segment below the knee: 18%
     /// scene linear encodes to ~0.409 display, which is what puts 18% gray on
     /// the zone-0 entry above.
     @Test func bt709LinearInvertsTheTransferFunction() {
-        #expect(MetalPreviewLayer.bt709Linear(0.045) == 0.045 / 4.5)
-        #expect(abs(MetalPreviewLayer.bt709Linear(0.409) - 0.18) < 0.001)
-        #expect(abs(MetalPreviewLayer.bt709Linear(1) - 1) < 1e-9)
+        #expect(AssistFilters.bt709Linear(0.045) == 0.045 / 4.5)
+        #expect(abs(AssistFilters.bt709Linear(0.409) - 0.18) < 0.001)
+        #expect(abs(AssistFilters.bt709Linear(1) - 1) < 1e-9)
     }
 
     /// The shared cube builder: shape (64³ RGBA floats) and the first lattice
     /// point, which is black and must therefore come out crushed-purple.
     @Test func falseColorCubeIsAFullLatticeStartingAtTheCrushedBand() {
-        let cube = MetalPreviewLayer.falseColorCube
+        let cube = AssistFilters.falseColorCube
         #expect(cube.count == 64 * 64 * 64 * 4 * 4)
         let first = cube.withUnsafeBytes { raw in
             (0..<3).map { raw.loadUnaligned(fromByteOffset: $0 * 4, as: Float.self) }
@@ -64,6 +64,6 @@ struct CorePaletteTests {
     }
 
     @Test func elZoneCubeIsAFullLattice() {
-        #expect(MetalPreviewLayer.elZoneCube.count == 64 * 64 * 64 * 4 * 4)
+        #expect(AssistFilters.elZoneCube.count == 64 * 64 * 64 * 4 * 4)
     }
 }

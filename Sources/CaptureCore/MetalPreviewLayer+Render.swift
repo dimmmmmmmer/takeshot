@@ -127,17 +127,22 @@ extension MetalPreviewLayer {
         drawable.present()
     }
 
-    /// The frame with the assists applied, scaled and translated into a
-    /// `size` drawable. nil when the image has no extent to place.
+    /// The frame placed into a `size` drawable: desqueezed, fitted, punched in.
+    /// nil when the image has no extent to place.
+    ///
+    /// The exposure tools and the guides are NOT applied here any more. They
+    /// arrive already on the frame, drawn once in the shared display stage, so
+    /// that the surfaces which are pixel buffers rather than layers — the
+    /// hardware playout, the multiview — carry them too (owner item 7; see
+    /// `AssistStage`). What is left is the geometry, which cannot move: only a
+    /// surface knows its own viewport.
+    ///
     /// Call under renderLock — `assist` is read here.
     private func placedImage(from pixelBuffer: CVPixelBuffer,
                              in size: CGSize) -> CIImage? {
         var image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
         let currentAssist = assist
-        if currentAssist.anyToolActive {
-            image = applyAssist(image, assist: currentAssist)
-        }
         if currentAssist.desqueeze != 1 {
             image = image.transformed(by: CGAffineTransform(
                 scaleX: currentAssist.desqueeze, y: 1))

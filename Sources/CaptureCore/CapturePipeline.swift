@@ -168,6 +168,10 @@ public final class CapturePipeline: @unchecked Sendable {
     // `chromaLock`, which is deliberately not the capture queue — the whole
     // point of this feature is that it never touches per-frame capture work.
     let chromaKeyer = ChromaKeyer()
+    /// The operator aids (see `AssistStage`): the stage AFTER the key, so a
+    /// false colour meters the keyed picture the monitor is showing. Confined
+    /// to `displayQueue` like the keyer; the settings cross under its own lock.
+    public let assistStage = AssistStage()
     let chromaLock = NSLock()
     var storedChromaKey = ChromaKey()
     /// Frames that reached the display queue past their own frame interval and
@@ -378,5 +382,10 @@ public final class CapturePipeline: @unchecked Sendable {
     /// stage drops the chroma key on a frame that is already past it rather
     /// than dropping the frame (see `chromaKeyed`).
     var pendingDeadline: UInt64 = 0
+    /// The last frame handed to the display stage, BEFORE the key and the aids
+    /// were drawn on it. Display-queue confined; kept so that switching an aid
+    /// on while the signal is paused (or gone) re-decorates what is on screen
+    /// instead of waiting for a frame that is not coming.
+    var lastDisplaySource: CVPixelBuffer?
 
 }

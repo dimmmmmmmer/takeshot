@@ -53,17 +53,17 @@ struct ViewPanelTests {
 
     /// The offload status is the one free-text string in this panel. It used to
     /// be a single line in the takes header; since the sheet learned to close
-    /// over a live run (owner item 16) it is a whole readout in the utility
-    /// strip — a status line, a percentage, a bar, the file in flight and Stop.
-    /// This measures the panel WITH the strip mounted under it, which is the
-    /// composition the operator actually gets (`ContentView.sidePanel` applies
-    /// the modifier); `ViewOffloadTests` measures the strip on its own.
-    /// Neither the status nor the file name may widen the panel — they truncate.
+    /// over a live run (owner item 16) it is a whole readout — a status line, a
+    /// percentage, a bar, the file in flight and Stop — at the bottom of the
+    /// panel, which is where it stays with every sheet closed (owner item 2).
+    /// This measures the panel as the operator gets it; `ViewOffloadTests`
+    /// measures the readout on its own. Neither the status nor the file name
+    /// may widen the panel — they truncate.
     @Test func offloadStatusDoesNotWidenTheTakesPanel() async throws {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             let quiet = probe.minimumWidths(proposedHeight: 600) {
-                TakeListView().takesPanelUtilityStrip()
+                TakeListView()
             }
             probe.controller.offload.isRunning = true
             probe.controller.offload.progress = OffloadProgress(
@@ -74,7 +74,7 @@ struct ViewPanelTests {
                 L("offload_progress", 41, 128)
             }
             let busy = probe.minimumWidths(proposedHeight: 600) {
-                TakeListView().takesPanelUtilityStrip()
+                TakeListView()
             }
             #expect(busy.ru <= max(quiet.ru, ViewBudget.panelMinWidth),
                     "the offload status pushed the panel to \(busy.ru)pt")
@@ -101,15 +101,26 @@ struct ViewPanelTests {
         }
     }
 
-    /// Both sections share the list/grid toggle: two icons in a fixed 70pt
-    /// segmented control, so no translation may resize it.
-    @Test func viewModePickerKeepsItsFixedWidth() async throws {
+    /// Both sections share the list/grid toggle: two icons in a segmented
+    /// control, so no translation may resize it — and it hugs them, because a
+    /// control smaller than its frame is centered in it and the empty half of
+    /// that frame is what made the header look lopsided (owner item 44).
+    @Test func viewModePickerHugsItsIconsInBothLanguages() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes {
                 ViewModePicker(mode: .constant("list"))
             }
-            #expect(ideal.en.width == 70)
-            #expect(ideal.ru == ideal.en)
+            #expect(ideal.ru == ideal.en,
+                    "the icon toggle changed size with the language: \(ideal)")
+            #expect(ideal.en.width > 0 && ideal.en.width < 70,
+                    "the picker is \(ideal.en.width)pt — it is padding again")
+            // and the drawing fills the frame: whatever slack is left inside it
+            // reappears as the asymmetry item 44 reported
+            let ink = try #require(ViewRender.drawnBounds(
+                probe.hosted(ViewModePicker(mode: .constant("list"))),
+                in: CGSize(width: ideal.en.width, height: 24)))
+            #expect(ink.minX <= 0.5 && ink.maxX >= ideal.en.width - 0.5,
+                    "the picker draws \(ink) inside a \(ideal.en.width)pt box")
         }
     }
 
@@ -252,41 +263,75 @@ struct ViewPanelTests {
         }
     }
 
-    /// The utility strip below the takes panel (owner items 48 and 2) is
-    /// three icons — two buttons and the offload/verify menu — carrying localized
-    /// tooltips and, in the menu's case, localized ITEMS. Neither may reach the
-    /// strip's own width: "Проверить диск..." is many times wider than the icon
-    /// it hangs off, and a menu that sized itself to its longest item would push
-    /// the whole strip out of the narrowest panel.
-    @Test func utilityStripFitsTheNarrowestSidePanel() async throws {
+    /// Settings, the VANC monitor and the offload are three icons on the
+    /// window's top chrome now (owner item 2), and that band is only as tall as
+    /// the traffic lights beside it. They carry localized TOOLTIPS and nothing
+    /// else, so no translation may resize them, and the row has to fit inside
+    /// `windowTopInset` without pushing the player down.
+    @Test func theUtilityButtonsFitTheWindowsTopChromeBand() async throws {
         try await ViewProbe.run { probe in
-            let ideal = probe.fittingSizes { TakesPanelUtilityStrip() }
+            let ideal = probe.fittingSizes { WindowUtilityButtons() }
             #expect(ideal.ru == ideal.en,
-                    "a localized label reached the utility strip: \(ideal)")
-            #expect(ideal.ru.width <= ViewBudget.panelMinWidth,
-                    "the strip wants \(ideal.ru.width)pt of \(ViewBudget.panelMinWidth)")
-            #expect(ideal.ru.height > 0 && ideal.ru.height <= 40,
-                    "the strip is \(ideal.ru.height)pt tall — it is meant to be compact")
+                    "a localized label reached the utility buttons: \(ideal)")
+            let band = probe.controller.windowTopInset
+            #expect(ideal.en.height <= band,
+                    "the buttons are \(ideal.en.height)pt tall, the band is \(band)")
+            #expect(ideal.en.width > 0)
         }
     }
 
-    /// The mount modifier puts the strip UNDER whatever it is applied to — its
-    /// own plate below the panel's chrome (owner item 2) — and takes its width
-    /// from the panel, not from the strip.
-    @Test func theStripMountsBelowThePanelWithoutWideningIt() async throws {
+    /// They are on the MAIN COLUMN, not in the takes panel: the panel is where
+    /// they used to be, in a plate of their own, and that plate is what owner
+    /// item 2 asked to be rid of. With nothing running the panel must therefore
+    /// be exactly the sections — no strip, no readout, no extra height.
+    @Test func anIdlePanelCarriesNoUtilityBlockAtAll() async throws {
         try await ViewProbe.run { probe in
-            let strip = probe.fittingSizes { TakesPanelUtilityStrip() }
-            let content = CGSize(width: ViewBudget.panelMinWidth, height: 120)
-            let mounted = probe.fittingSizes {
-                Color.clear
-                    .frame(width: content.width, height: content.height)
-                    .takesPanelUtilityStrip()
+            let idle = probe.fittingSizes { PanelRunStatus() }
+            #expect(idle.en == .zero,
+                    "the idle panel still pays for a status block: \(idle.en)")
+            #expect(idle.ru == idle.en)
+
+            // …and a running job puts a readout there without widening it
+            probe.controller.offloadStatus = "copying"
+            let busy = probe.minimumWidths(proposedHeight: 200) { PanelRunStatus() }
+            #expect(busy.ru <= ViewBudget.panelMinWidth,
+                    "the running readout wants \(busy.ru)pt of \(ViewBudget.panelMinWidth)")
+            #expect(probe.fittingSizes { PanelRunStatus() }.en.height > 0,
+                    "the readout did not render at all")
+        }
+    }
+
+    /// Owner item 44: the list/tile pickers have to finish as close to the
+    /// panel's right edge as the section title starts from its left.
+    ///
+    /// Both are on the same 10pt margin and it still looked lopsided, which is
+    /// why this measures INK rather than frames: a title's frame is its glyphs,
+    /// a segmented control's is not — AppKit draws the cell inset inside its
+    /// bounds to leave room for a focus ring, and that inset is the whole
+    /// asymmetry. Rasterized and read back, so the compensating constant cannot
+    /// drift away from what the control actually renders as.
+    @Test func theSectionHeaderInsetsAreSymmetric() async throws {
+        try await ViewProbe.run { probe in
+            let width = ViewBudget.panelMinWidth
+            for mode in ["list", "grid"] {
+                let header = probe.hosted(
+                    PanelSectionHeader(viewMode: .constant(mode),
+                                       tileSize: .constant(150)) {
+                        Text(L("other_content"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    })
+                let box = try #require(
+                    ViewRender.drawnBounds(header,
+                                           in: CGSize(width: width, height: 28)),
+                    "the \(mode) header drew nothing")
+                let leading = box.minX
+                let trailing = width - box.maxX
+                #expect(abs(leading - trailing) <= 0.5,
+                        "\(mode) header: \(leading)pt left, \(trailing)pt right")
+                #expect(abs(leading - PanelChrome.contentMargin) <= 0.5,
+                        "\(mode) header sits \(leading)pt in, margin is \(PanelChrome.contentMargin)")
             }
-            #expect(mounted.en.width == content.width,
-                    "the strip widened the panel to \(mounted.en.width)pt")
-            #expect(mounted.en.height >= content.height + strip.en.height,
-                    "the strip did not mount: \(mounted.en.height)pt")
-            #expect(mounted.ru == mounted.en)
         }
     }
 

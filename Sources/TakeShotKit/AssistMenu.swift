@@ -19,11 +19,10 @@ struct AssistMenu: View {
         } label: {
             Image(systemName: Self.symbol)
                 .font(.system(size: 13))
-                .foregroundStyle(
-                    controller.liveAssist.isShowingAid
-                        || controller.settings.framelineRatio != nil
-                        || controller.settings.safeAreasOn == true
-                    ? controller.accentColor : .white)
+                // one question, not four: the framelines ride `assist` now, so
+                // `isShowingAid` covers them (see AssistGuides)
+                .foregroundStyle(controller.liveAssist.isShowingAid
+                                 ? controller.accentColor : .white)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -262,11 +261,8 @@ private struct AssistControlRows: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 34, alignment: .trailing)
         }
-        if controller.liveAssist.punchIn > 1 {
-            Text(L("punch_pan_hint"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
+        // (the "drag to pan, pinch to zoom" line that used to sit here is gone:
+        // dragging a punched-in image is not something an operator needs told)
     }
 }
 

@@ -156,22 +156,28 @@ struct ModelNamingPresetTests {
 }
 
 /// The camera label is typed by hand and lands verbatim in filenames that travel
-/// to other people's machines, so the field sanitizes as you type.
+/// to other people's machines, so the field refuses anything else as you type.
+/// The rule itself is `NameField.camera` now, and `NameFieldTests` in the core
+/// suite owns it; this is the app layer asking the same questions it always did.
 struct ModelCameraLabelTests {
+    private func sanitized(_ text: String) -> String {
+        NameField.camera.normalized(text)
+    }
+
     @Test func keepsOnlyUppercaseLatinLetters() {
-        #expect(NamingFieldsView.camSanitized("a") == "A")
-        #expect(NamingFieldsView.camSanitized("Cam B") == "CAMB")
-        #expect(NamingFieldsView.camSanitized("A1") == "A")
-        #expect(NamingFieldsView.camSanitized("A-B") == "AB")
+        #expect(sanitized("a") == "A")
+        #expect(sanitized("Cam B") == "CAMB")
+        #expect(sanitized("A1") == "A")
+        #expect(sanitized("A-B") == "AB")
     }
 
     /// A Cyrillic "А" looks identical to a Latin "A" on the keycap and is the
     /// realistic way a non-ASCII character reaches a filename here.
     @Test func stripsLookalikeAndNonLatinCharacters() {
-        #expect(NamingFieldsView.camSanitized("А") == "")       // Cyrillic А
-        #expect(NamingFieldsView.camSanitized("Кам") == "")
-        #expect(NamingFieldsView.camSanitized("Aк") == "A")
-        #expect(NamingFieldsView.camSanitized("") == "")
-        #expect(NamingFieldsView.camSanitized("  ") == "")
+        #expect(sanitized("А") == "")       // Cyrillic А
+        #expect(sanitized("Кам") == "")
+        #expect(sanitized("Aк") == "A")
+        #expect(sanitized("") == "")
+        #expect(sanitized("  ") == "")
     }
 }

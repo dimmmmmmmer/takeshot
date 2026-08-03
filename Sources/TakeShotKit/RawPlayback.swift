@@ -59,6 +59,11 @@ final class RawPlayerModel: ObservableObject {
 
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
     private let sinks = PreviewSinkRegistry()
+    /// The operator aids, drawn into the frame on its way out (see
+    /// `AssistStage`). Confined to whichever thread `present` runs on — the
+    /// decode task, or main when a paused clip is re-presented; both are
+    /// serialized by the play generation.
+    private let assistStage = AssistStage()
     /// Every presented frame — hardware playout mirror. Set from the main
     /// actor, read on the decode task; a tiny lock keeps it honest.
     private let displayFrameLock = NSLock()
@@ -113,7 +118,7 @@ final class RawPlayerModel: ObservableObject {
     func addSink(_ layer: MetalPreviewLayer) {
         sinks.add(layer)
         if let buffer = lastBuffer {
-            layer.present(buffer)
+            layer.present(assistStage.rendered(buffer) ?? buffer)
         } else {
             showFrame(currentFrame) // first mount: decode the poster frame
         }
@@ -123,20 +128,29 @@ final class RawPlayerModel: ObservableObject {
         sinks.remove(layer)
     }
 
+    /// The aids: drawn into the presented frame (which is what reaches the
+    /// hardware playout — owner item 7) and handed to the sinks for the
+    /// geometry half. A paused clip is re-presented so the change lands.
     func setViewAssist(_ assist: ViewAssist) {
+        assistStage.setAssist(assist)
         sinks.setAssist(assist)
+        if let buffer = lastBuffer { present(buffer) }
     }
 
     func setLetterbox(_ color: CIColor) {
         sinks.setLetterbox(color)
     }
 
+    /// `lastBuffer` keeps the CLEAN decoded frame — that is what a still grab
+    /// out of a RAW clip is taken from — and only the copy on its way to the
+    /// surfaces carries the aids.
     nonisolated func present(_ buffer: CVPixelBuffer) {
-        sinks.present(buffer)
+        let shown = assistStage.rendered(buffer) ?? buffer
+        sinks.present(shown)
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
-        handler?(buffer)
+        handler?(shown)
     }
 }
 
