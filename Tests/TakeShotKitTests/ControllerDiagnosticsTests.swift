@@ -31,9 +31,16 @@ import Testing
         FinderOpen.handler = { _ in }
         defer { FinderOpen.handler = previous }
         controller.collectDiagnostics(into: parent)
+        // Wait for the OUTCOME, not for the files. `collectDiagnostics` writes
+        // the bundle inside its task and only then reports — so a wait that
+        // stops at "the folder is not empty" returns while the task is still
+        // running, and a caller that goes on to read `lastNotice` reads it
+        // before it is set. That is what it did: green here for months, then red
+        // on a loaded run and again under ThreadSanitizer, both of which widen
+        // the window rather than create it. Either branch settles this wait, so
+        // a failure to write is a failed assertion below rather than a hang.
         await ControllerWait.untilWritten {
-            (try? FileManager.default.contentsOfDirectory(atPath: parent.path))?
-                .isEmpty == false
+            controller.lastNotice != nil || controller.lastError != nil
         }
         let entries = try FileManager.default
             .contentsOfDirectory(atPath: parent.path)
