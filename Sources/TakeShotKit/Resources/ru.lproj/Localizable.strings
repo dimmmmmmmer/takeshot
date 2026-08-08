@@ -474,6 +474,23 @@
 "offload_result_cancelled" = "Остановлено: сверено %d из %d файлов";
 "offload_report_saved" = "Отчёт: %@";
 "offload_open_dest" = "Показать в Finder";
+/* продолжение прогона, прерванного отвалившимся диском (см. OffloadResume) */
+"offload_resume_checking" = "Проверяю, что уже есть на приёмниках...";
+"offload_resume_title" = "Эта карта сюда уже частично скопирована";
+"offload_resume_dest" = "%@ — файлов уже на месте: %d из %d (%@), они перечислены в списке контрольных сумм этого диска.";
+"offload_resume_dest_nothing" = "%@ — использовать здесь нечего, всё будет скопировано заново.";
+"offload_resume_dest_full" = "%@ — всё будет скопировано заново: %@.";
+"offload_resume_gate" = "Ничего не пропускается на доверии: каждый такой файл читается с диска обратно, и его контрольная сумма сверяется с тем списком — только тогда он считается готовым. Что не сошлось или чего нет, копируется с карты заново.";
+"offload_resume_cost" = "Это чтение диска вместо чтения карты и повторной записи диска: на медленном диске выигрыш большой, на быстром диске с быстрой картой — меньше.";
+"offload_resume_accept" = "Продолжить (пропустить до %d файлов)";
+"offload_resume_decline" = "Копировать карту целиком";
+"offload_resume_why_new" = "в эту папку ещё ничего не копировали";
+"offload_resume_why_unstamped" = "копия здесь не говорит, с какой карты она сделана";
+"offload_resume_why_other_card" = "копия здесь сделана с другой карты";
+"offload_resume_why_card_changed" = "на карте сейчас не столько же, сколько было при копировании сюда";
+"offload_resume_why_other_hash" = "список контрольных сумм здесь использует %@";
+"offload_resume_why_unreadable" = "не удалось прочитать список контрольных сумм (%@)";
+"offload_result_resumed" = "Файлов уже было на месте и перепроверено, а не скопировано: %d (%@); скопировано поверх прерванного прогона: %d";
 "offload_source_problems" = "Не удалось прочитать файлов с карты: %d";
 "offload_done_multi" = "Офлоад сверен: файлов — %d, копий — %d";
 "offload_alert_problem" = "Офлоад: дисков с проблемами — %d (%@). Карту не стирать.";
@@ -642,6 +659,9 @@
 "offload_report_average" = "Средняя";
 "offload_report_manifest" = "Манифест";
 "offload_report_manifest_missing" = "НЕ ЗАПИСАН";
+"offload_report_resumed" = "Продолжение";
+"offload_report_resumed_fmt" = "%d файлов (%@) уже были здесь и сверены заново, перекопировано: %d";
+"offload_report_replaced" = "ПЕРЕКОПИРОВАНО ПОВЕРХ ПРЕРВАННОГО ПРОГОНА";
 "offload_report_written_by" = "Записано";
 "offload_report_written_by_fmt" = "%@ %@ на %@";
 "offload_report_files_verified_fmt" = "%d из %d проверено";

@@ -64,6 +64,20 @@ struct OffloadSheet: View {
                     .offloadText(.body, tint: .orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Between the form and the run, which is where it happens: Start has
+            // been pressed, the destinations have been asked what they already
+            // hold, and nothing copies until this is answered.
+            if let review = model.resumeReview {
+                Divider()
+                OffloadResumePanel(review: review,
+                                   resume: { model.resumeRun() },
+                                   copyEverything: { model.copyEverything() })
+            }
+            if model.isSurveying {
+                Divider()
+                Label(L("offload_resume_checking"), systemImage: "clock")
+                    .offloadText(.body)
+            }
             if let progress = model.progress {
                 Divider()
                 OffloadProgressPanel(progress: progress,

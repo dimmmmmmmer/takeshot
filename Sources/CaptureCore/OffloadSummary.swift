@@ -75,6 +75,16 @@ public enum OffloadSummary {
                                                     labels: labels)),
             (labels.average, OffloadFormat.rate(result.totals.megabytesPerSecond)),
         ]
+        // Only on a run that was ASKED to resume, which is what keeps every
+        // other summary byte-identical to the one this file has always written.
+        // A run that asked and was refused says so here too: "everything was
+        // copied" without the reason is the line that gets a tool distrusted.
+        if let resume = result.resume {
+            rows.append((labels.resumed, resume.refusal
+                ?? String(format: labels.resumedFormat, resume.reused,
+                          OffloadFormat.shortBytes(resume.reusedBytes),
+                          resume.replaced.count)))
+        }
         if let manifest = result.manifestURL {
             rows.append((labels.manifest,
                          OffloadEngine.relativePath(of: manifest, under: result.url)))
@@ -102,6 +112,10 @@ public enum OffloadSummary {
         if let failure = result.failure {
             lines += [labels.destinationFailedHeading, "  \(failure)", ""]
         }
+        // Not a problem — the feature working — but it is a set of files that
+        // were on this disk and are not the ones on it now, and that is never
+        // something to leave unsaid.
+        lines += section(labels.replacedHeading, result.resume?.replaced ?? [])
         lines += section(labels.mismatchesHeading, result.mismatches)
         lines += section(labels.sourceProblemsHeading, run.problems.source)
         // Not "folders": the scan also lands a symlink or a device node here,

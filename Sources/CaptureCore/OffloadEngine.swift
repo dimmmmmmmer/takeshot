@@ -103,6 +103,12 @@ private final class OffloadRun {
     private var currentFile = ""
     private var filesProcessed = 0
     private var lastPublished = Date.distantPast
+    /// Which card this run is reading, as a later run would have to recognise it.
+    /// Stamped beside every manifest so that a run interrupted by a lost disk can
+    /// be resumed — and so that a run of a DIFFERENT card into the same folder
+    /// cannot be mistaken for one (see `OffloadResume`).
+    private var identity = OffloadCardIdentity(volumeUUID: nil, source: "",
+                                               files: 0, bytes: 0)
     /// Cancel that actually cut the run short — see `execute`.
     private var stoppedShort = false
 
@@ -118,10 +124,22 @@ private final class OffloadRun {
         files = scan.files
         scanFailures = scan.failures
         bytesTotal = files.reduce(0) { $0 + $1.size }
+        identity = OffloadCardIdentity.of(
+            source: plan.source,
+            card: OffloadVolume(files: files.count, bytes: bytesTotal))
         targets = plan.destinations.enumerated().map {
             OffloadTarget(index: $0.offset, root: $0.element)
         }
-        for target in targets { target.prepare(bytesNeeded: bytesTotal) }
+        // Surveyed BEFORE the space check, because it changes the answer: a disk
+        // that already holds 400 GB of a 500 GB card needs room for 100 GB, and
+        // a preflight that asked for the whole card would refuse the very
+        // destination resume exists to rescue. A claimed file that later fails
+        // the hash gate is removed before it is rewritten, so its space is not
+        // needed twice.
+        adoptPreviousRuns()
+        for target in targets {
+            target.prepare(bytesNeeded: bytesTotal - target.claimedBytes)
+        }
         report(force: true)
 
         for file in files {
@@ -148,11 +166,35 @@ private final class OffloadRun {
                              wasCancelled: stoppedShort, destinations: results)
     }
 
+    // MARK: - resume
+
+    /// Ask every destination what an earlier interrupted run of this same card
+    /// left on it.
+    ///
+    /// One manifest parse per destination and no file contents read — the proof
+    /// is per file, in `OffloadTarget.reuse`, as each file comes up. Independent
+    /// per destination by construction: the disk that finished and the disk that
+    /// died are surveyed separately and neither's answer reaches the other.
+    private func adoptPreviousRuns() {
+        guard plan.resume else { return }
+        for target in targets {
+            target.adopt(OffloadResume.survey(
+                card: files, identity: identity, destination: target.root,
+                algorithm: plan.algorithm))
+        }
+    }
+
     // MARK: - one file, N destinations
 
     private func copy(_ file: OffloadSourceFile) {
         var open: [OffloadTarget] = []
         for target in targets where target.isAlive {
+            // A destination that already holds this file — re-read off its own
+            // disk and matching its own manifest — is neither read for nor
+            // written to. It is not in `open`, so if every destination has it the
+            // card is never even opened.
+            if target.reuse(file, algorithm: plan.algorithm,
+                            chunkBytes: plan.chunkBytes) { continue }
             if target.begin(file.relativePath) { open.append(target) }
         }
         guard !open.isEmpty else { return }
@@ -219,6 +261,7 @@ private final class OffloadRun {
                 OffloadDestinationProgress(
                     id: $0.index, url: $0.root, filesDone: $0.filesDone,
                     bytesWritten: $0.bytesWritten,
+                    bytesReused: $0.bytesReused,
                     mismatches: $0.mismatches.count, failure: $0.failure,
                     megabytesPerSecond: OffloadMetrics.megabytesPerSecond(
                         bytes: $0.bytesWritten, seconds: $0.elapsed))
@@ -254,11 +297,19 @@ private final class OffloadRun {
                 filesVerified: target.verifiedCount, filesTotal: files.count,
                 bytesWritten: target.bytesWritten, elapsed: target.elapsed),
             mismatches: target.mismatches, failure: target.failure,
-            wasCancelled: stoppedShort)
+            wasCancelled: stoppedShort, resume: target.resumeFacts)
         do {
-            result.manifestURL = try OffloadMHL.write(
+            let manifest = try OffloadMHL.write(
                 entries: target.entries, into: target.root,
                 algorithm: plan.algorithm, creator: plan.creator, date: stamp)
+            result.manifestURL = manifest
+            // Which card that generation came from, so a run interrupted by a
+            // lost disk can be resumed and a run of a DIFFERENT card into this
+            // folder cannot be mistaken for one. Best-effort on purpose: a stamp
+            // that could not be written costs a later run its shortcut, which is
+            // the safe direction — it copies everything instead.
+            _ = try? OffloadResume.stamp(identity, manifest: manifest,
+                                         into: target.root)
         } catch {
             // "A vanished destination must not report offload done": an offload
             // without its manifest is not a verified offload, whatever the

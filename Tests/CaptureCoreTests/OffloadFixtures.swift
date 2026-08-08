@@ -127,6 +127,74 @@ enum OffloadFixtures {
         return result
     }
 
+    /// Everything the card above holds, in bytes.
+    static var cardBytes: Int64 { Int64(card.map(\.bytes).reduce(0, +)) }
+
+    // MARK: - the resume suites' starting points
+
+    /// One card, one destination, the small chunk — with or without resume.
+    static func plan(_ source: URL, _ dest: URL,
+                     resume: Bool = false) -> OffloadPlan {
+        OffloadPlan(source: source, destinations: [dest], chunkBytes: chunk,
+                    resume: resume)
+    }
+
+    /// The card copied once, in full, to a destination that then holds all of
+    /// it: the state every "and then it was resumed" test starts from.
+    static func cardAlreadyOffloaded(from source: URL, to dest: URL) throws {
+        try makeCard(at: source)
+        #expect(OffloadEngine.run(plan(source, dest)).isFullyVerified,
+                "the fixture's own first offload did not verify")
+    }
+
+    // MARK: - killing one destination part way through
+
+    /// How many of the card's files land before the interruption below. The card
+    /// is copied in sorted order — `.metadata`, `CLIPS/index.xml`, then the three
+    /// under `DCIM/` — so a `DCIM` that cannot be created stops it at the third.
+    static let filesBeforeDCIM = 2
+
+    /// Make this destination die part way through the next run, the way an
+    /// unplugged disk does: a REGULAR FILE where the card's `DCIM` folder has to
+    /// be created. The first two files land and verify, the third cannot be
+    /// opened, and the destination takes itself out of the run with the reason on
+    /// record — which is exactly the state a resume has to pick up from.
+    ///
+    /// A blocked folder rather than a real unplug because a test must never touch
+    /// a real volume, and because the failure has to land at a KNOWN file: the
+    /// manifest the interrupted run leaves behind is what the next run reads.
+    static func interrupt(_ dest: URL, at folder: String = "DCIM") throws {
+        let url = dest.appendingPathComponent(folder)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try content(1).write(to: url)
+    }
+
+    /// The disk is back.
+    static func reconnect(_ dest: URL, at folder: String = "DCIM") throws {
+        try FileManager.default.removeItem(
+            at: dest.appendingPathComponent(folder))
+    }
+
+    /// Which file on disk this is, so "untouched" can be asserted as a fact
+    /// rather than inferred from bytes: a re-copy is a new file with a new inode,
+    /// and it would carry the same contents and the same modification date as the
+    /// original (the copy stamps the card's own dates onto it).
+    static func inode(of url: URL) throws -> UInt64 {
+        let attributes = try FileManager.default
+            .attributesOfItem(atPath: url.path)
+        return (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
+    }
+
+    static func inodes(under root: URL) throws -> [String: UInt64] {
+        var found: [String: UInt64] = [:]
+        for file in card {
+            found[file.path] = try inode(of: root.appendingPathComponent(file.path))
+        }
+        return found
+    }
+
     /// Corrupt one byte in place — the fault the verify pass exists to catch.
     static func flipFirstByte(of url: URL) {
         guard let handle = try? FileHandle(forUpdating: url),
