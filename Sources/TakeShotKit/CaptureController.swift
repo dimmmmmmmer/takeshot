@@ -239,46 +239,42 @@ final class CaptureController: ObservableObject {
     }
 
     /// Operator display aids (false color/zebra/peaking, desqueeze, punch-in).
+    /// The observer's work is `applyAssistChange` in `+Assist` — where the aids
+    /// live — rather than twenty lines inline here: this file is the type's
+    /// stored-state inventory, and behaviour belongs in the domain extension
+    /// named for it (the same split `settings` already has with
+    /// `applySettingsChange`).
     @Published var assist = ViewAssist() {
-        didSet {
-            pipeline.setViewAssist(assist)
-            playbackTap.setViewAssist(assist)
-            rawPlayer?.setViewAssist(assist)
-            // a write from anywhere else supersedes a draft the debounce has not
-            // folded in yet: the pending timer must not put the old slider value
-            // back over the change that just arrived
-            assistPersistTask?.cancel()
-            assistPersistTask = nil
-            assistLive.settle(assist)
-            // the scopes measure what the viewer SHOWS, so a punch-in or a pan
-            // moves the region they sample (see updateScopeRegion)
-            updateScopeRegion()
-            if oldValue.desqueeze != assist.desqueeze {
-                settings.desqueezeFactor = assist.desqueeze == 1
-                    ? nil : assist.desqueeze
-            }
-            // the peaking color is a crew convention, like the marker color:
-            // stored as nil at the default so old builds still decode the blob
-            if oldValue.peakingColor != assist.peakingColor {
-                settings.peakingColor = assist.peakingColor == .red
-                    ? nil : assist.peakingColor.rawValue
-            }
-            // …and so is how hard it is driven. Stored in the renderer's unit,
-            // shown as a percentage (see CaptureSettings.peakingIntensity).
-            if oldValue.peakingIntensity != assist.peakingIntensity {
-                settings.peakingIntensity =
-                    assist.peakingIntensity == ViewAssist().peakingIntensity
-                    ? nil : assist.peakingIntensity
-            }
-            // the chroma key's dial-in is persisted the same way, in one place
-            // rather than a line per parameter (see persistChromaSettings)
-            if oldValue.chroma != assist.chroma { persistChromaSettings() }
-        }
+        didSet { applyAssistChange(from: oldValue) }
     }
     /// The chroma-key eyedropper is waiting for a click on the picture (see
     /// `+ChromaKey`). Published because it changes the pointer and puts a
     /// pick surface over the player.
     @Published var chromaPickArmed = false
+
+    // MARK: - the taught REC indicator (see +VisualRec)
+
+    /// What the operator taught the visual REC trigger. The observer is the one
+    /// door to the pipeline and to the settings blob, so a row in the panel
+    /// cannot forget either half.
+    /// The observer's work is `applyVisualRecChange` in `+VisualRec`, for the
+    /// reason `assist` and `settings` do the same.
+    @Published var visualRecTeaching = VisualRecTeaching() {
+        didSet { applyVisualRecChange(from: oldValue) }
+    }
+    /// Teaching mode: the box is drawn over the picture and a click moves it.
+    ///
+    /// Unlike the chroma eyedropper this does NOT disarm on the click — a colour
+    /// is one value and a box has a size, so the operator keeps adjusting while
+    /// they watch the reading underneath.
+    @Published var visualRecTeachArmed = false
+    /// The trigger's live reading, at a few hertz and only on change. What makes
+    /// the teaching honest: the operator can see the box answer `rolling` while
+    /// the camera rolls before they trust a take to it.
+    @Published var visualRecReading: VisualRecReading?
+    /// What opened the take that is rolling; nil while idle. Shown beside REC on
+    /// the picture, so a spurious roll can be diagnosed where it happens.
+    @Published var recTrigger: RecTrigger?
     /// The assist popover is open.
     ///
     /// Here rather than in `AssistMenu`'s own `@State` because the eyedropper

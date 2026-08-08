@@ -39,6 +39,49 @@ final class AssistLiveState: ObservableObject {
 /// the value reaches every preview surface immediately (a redraw, not a filter
 /// rebuild) and is folded into the published state once the gesture settles.
 extension CaptureController {
+    /// Every write to `assist` lands here (from its didSet): the value goes out
+    /// to the three frame sources, the draft state is settled, the scopes follow
+    /// the punch-in, and the members that outlive a session are persisted.
+    ///
+    /// Lifted out of the property's own observer, where it was twenty lines of
+    /// behaviour inside the type's stored-state inventory. `settings` already
+    /// had this shape (`applySettingsChange`), and this is the file the aids
+    /// belong to.
+    func applyAssistChange(from oldValue: ViewAssist) {
+        pipeline.setViewAssist(assist)
+        playbackTap.setViewAssist(assist)
+        rawPlayer?.setViewAssist(assist)
+        // a write from anywhere else supersedes a draft the debounce has not
+        // folded in yet: the pending timer must not put the old slider value
+        // back over the change that just arrived
+        assistPersistTask?.cancel()
+        assistPersistTask = nil
+        assistLive.settle(assist)
+        // the scopes measure what the viewer SHOWS, so a punch-in or a pan
+        // moves the region they sample (see updateScopeRegion)
+        updateScopeRegion()
+        if oldValue.desqueeze != assist.desqueeze {
+            settings.desqueezeFactor = assist.desqueeze == 1
+                ? nil : assist.desqueeze
+        }
+        // the peaking color is a crew convention, like the marker color:
+        // stored as nil at the default so old builds still decode the blob
+        if oldValue.peakingColor != assist.peakingColor {
+            settings.peakingColor = assist.peakingColor == .red
+                ? nil : assist.peakingColor.rawValue
+        }
+        // …and so is how hard it is driven. Stored in the renderer's unit,
+        // shown as a percentage (see CaptureSettings.peakingIntensity).
+        if oldValue.peakingIntensity != assist.peakingIntensity {
+            settings.peakingIntensity =
+                assist.peakingIntensity == ViewAssist().peakingIntensity
+                ? nil : assist.peakingIntensity
+        }
+        // the chroma key's dial-in is persisted the same way, in one place
+        // rather than a line per parameter (see persistChromaSettings)
+        if oldValue.chroma != assist.chroma { persistChromaSettings() }
+    }
+
     /// Debounce window. Long enough that a drag or a pinch publishes once, short
     /// enough that the popover's own controls catch up before the operator can
     /// look away from them.

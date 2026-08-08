@@ -16,6 +16,13 @@ import Foundation
 public struct PipelineHealth: Sendable, Equatable, Codable {
     /// A writer is open — a take is rolling.
     public var isRecording = false
+    /// What opened the most recent take (see `RecTrigger`); nil until one has
+    /// started.
+    ///
+    /// Deliberately NOT cleared when the take closes: a bundle collected after a
+    /// spurious roll has to be able to say what fired, and by then `isRecording`
+    /// is already false. It is overwritten by the next take and by nothing else.
+    public var startTrigger: RecTrigger?
     /// File name of the open take; nil — none.
     public var takeFileName: String?
     /// Video frames the writer refused, in the CURRENT take.

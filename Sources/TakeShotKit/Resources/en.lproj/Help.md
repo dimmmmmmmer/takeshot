@@ -44,6 +44,30 @@ Two settings temper the detector: the **debounce** frames confirm a start or
 stop before it is acted on, and **pre-roll** keeps frames in memory so the take
 begins before the camera did.
 
+**REC indicator on the picture** is a third trigger, and it is a switch beside
+the mode rather than another entry in it: it composes with all four, and it is
+the one that works on a camera which sends no VANC at all. Cameras put their own
+UI on the monitoring output, so the record indicator on screen can drive the
+take. Nothing recognises anything — you teach it, in four steps:
+
+- **Mark on picture** draws the box on the live image; a click moves it onto the
+  indicator. The box is stored in the signal's own coordinates, so punching in
+  or desqueezing cannot move it off the thing it is watching.
+- **Box size** sets how much around the indicator is watched. Keep it tight: the
+  smaller the box, the less of the frame can walk into it.
+- **Learn rolling** while the camera is rolling, **Learn idle** while it is not.
+  The panel then shows how far apart the two came out and what the box is reading
+  right now — check it says *rolling* while the camera rolls before you trust it.
+- **On.** It refuses to switch on until the two references are far enough apart
+  to be told apart, and it is never on by default.
+
+A blinking indicator needs no special setting: the stop confirm frames above are
+counted in the readings the watcher takes, a few per second, so the confirm the
+detector already uses rides out the dark half of a flash. Nothing about the box
+reaches a file, a grab or an export — it is measured and nothing else. While a
+take rolls, the REC mark over the player says which trigger started it, and the
+diagnostics bundle reports the same.
+
 While recording, the footage is protected: the file is written in fragments so a
 crash or a power loss cannot cost the whole take, a mid-take format change or a
 signal loss closes the take with an alarm that stays on screen until you clear

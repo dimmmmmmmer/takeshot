@@ -102,6 +102,8 @@ struct PreviewView: View {
                         // over the picture only while the eyedropper is armed;
                         // it draws and hit-tests nothing otherwise
                         ChromaPickOverlay()
+                        // …and the same again for the taught REC indicator's box
+                        VisualRecTeachOverlay()
                     }
                 }
             }
@@ -119,7 +121,12 @@ struct PreviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomLeading) {
             if controller.isRecording, controller.viewerMode == .record {
-                Label(L("rec"), systemImage: "record.circle.fill")
+                // …and WHICH trigger rolled it. On the picture rather than in a
+                // panel because a spurious roll has to be diagnosable by the
+                // person who notices it, and what they are looking at is the
+                // frame. The suffix is absent for a take with no recorded
+                // trigger rather than guessed at.
+                Label(controller.recBadgeText, systemImage: "record.circle.fill")
                     .font(.headline.bold())
                     .foregroundStyle(.red)
                     .padding(10)
