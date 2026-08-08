@@ -24,11 +24,33 @@ The one place that cannot be settled that way is
 `NS_SWIFT_NONISOLATED` and macOS 15 leaves inside the class's
 `NS_SWIFT_UI_ACTOR`; the tap sends those two messages dynamically from its own
 queue, at one site, with the reasoning written out there
-(`PlaybackFrameTap.swift`). When an older SDK is installed beside the current
-one, checking the other half of that is
-`swift build -Xswiftc -sdk -Xswiftc "$(xcrun --sdk macosx15.4 --show-sdk-path)"`
-— worth doing before touching anything that awaits AVFoundation, because the
-newer SDK does not diagnose what the older one will.
+(`PlaybackFrameTap.swift`).
+
+When an older SDK is installed beside the current one — the Command Line Tools
+keep both under `/Library/Developer/CommandLineTools/SDKs/` — the other half
+can be checked here rather than on CI:
+
+```sh
+SDK=$(xcrun --sdk macosx15.4 --show-sdk-path)
+swift build --scratch-path .build-sdk15 \
+    -Xswiftc -sdk -Xswiftc "$SDK" -Xcc -isysroot -Xcc "$SDK"
+```
+
+All three parts matter. `-Xcc -isysroot` is not decoration: without it the
+clang importer keeps the default sysroot while Swift uses the old one, and the
+build dies on `cannot load underlying module for '_errno'` long before it
+reaches anything interesting. The separate scratch path is needed because a
+`.build` holding artifacts from the current SDK fails the same way. Worth doing
+before touching anything that awaits AVFoundation — the newer SDK does not
+diagnose what the older one will.
+
+**It is evidence, not proof.** The SDK is only half of what CI differs by: the
+runner is also on an older Swift, and the compiler is what enforces
+concurrency. Measured on the commit this paragraph was written for — CI (Swift
+6.1) rejected eight sites; the same tree here (Swift 6.3.3) against the same
+macOS 15.4 SDK rejected three, in three of the same files, with different
+wording. So a clean run here means "nothing this configuration can see",
+which is worth a great deal and is not the same as green.
 
 | Target | What it is |
 | --- | --- |

@@ -28,11 +28,11 @@
 	     Which build it is, exactly, is TakeShotGitSHA (added by the script). -->
 	<key>CFBundleVersion</key>
 	<string>0.0.0</string>
-	<!-- Matches Package.swift's platforms: [.macOS(.v14)]. The two have to
+	<!-- Matches Package.swift's platforms: [.macOS(.v15)]. The two have to
 	     agree: the deployment target decides what the binary will run on and
 	     this key decides what the Finder will let a user try. -->
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

@@ -134,7 +134,16 @@ if hasR3DSDK {
 let package = Package(
     name: "TakeShot",
     defaultLocalization: "en",
-    platforms: [.macOS(.v14)],
+    // The floor, and the reason CI runs on macos-15: a runner should be the
+    // OLDEST system the app claims to support, so what it proves is what a
+    // user will actually get. Owner's call — current and previous release.
+    // Resources/Info.plist's LSMinimumSystemVersion has to say the same.
+    //
+    // 15.0, not 15.4: `isolated deinit` lands in 15.4 and is still out of
+    // reach here. That matters because the compiler does NOT diagnose the
+    // availability problem for a @MainActor class — it would build, pass, and
+    // fail at launch on a system this line says is supported.
+    platforms: [.macOS(.v15)],
     targets: targets,
     cxxLanguageStandard: .cxx17
 )

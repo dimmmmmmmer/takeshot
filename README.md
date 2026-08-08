@@ -157,7 +157,7 @@ network with no route out. Settings shows a QR code for each.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or newer. The published DMG is Apple Silicon; an Intel Mac
+- macOS 15 (Sequoia) or newer. The published DMG is Apple Silicon; an Intel Mac
   has to build from source.
 - To capture: a Blackmagic DeckLink or UltraStudio with
   [Desktop Video](https://www.blackmagicdesign.com/support/) installed, **and a
