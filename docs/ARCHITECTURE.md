@@ -5,9 +5,16 @@ Read this before changing anything on the capture path.
 
 ## Targets
 
+Every Swift target is compiled in **Swift 6 language mode**, so the threading
+rules below are checked rather than merely written down. What stays deliberately
+unchecked says so at the site: `Sendability.swift` for the CoreVideo and
+CoreMedia buffer types, the `@unchecked Sendable` classes that each name the
+queue they are confined to, and a handful of `nonisolated(unsafe)` declarations
+with the invariant on the line above them.
+
 | Target | What it is |
 | --- | --- |
-| `CaptureCore` | The SDK-free core, compiled in **Swift 6 language mode** |
+| `CaptureCore` | The SDK-free core |
 | `CDeckLink` | Obj-C++ bridge to the DeckLink SDK: `CDLCapture` (input), `CDLPlayout` (hardware monitor output) |
 | `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
 | `TakeShotKit` | The application layer, as a library so tests can reach it |

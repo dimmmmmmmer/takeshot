@@ -50,7 +50,7 @@ final class SyncPlayModel: ObservableObject {
             player.actionAtItemEnd = .pause
             player.isMuted = true
             self.player = player
-            tap.attach(to: item)
+            tap.attach(to: item, url: source.url)
             tap.setRunning(true)
         }
 
@@ -369,10 +369,16 @@ extension SyncPlayModel {
             forName: AVPlayerItem.didPlayToEndTimeNotification,
             object: nil, queue: .main
         ) { [weak self] note in
+            // Only WHICH item ended crosses to the main actor, never the
+            // notification: it belongs to the thread that posted it, and the
+            // check needs an identity, which is a value. `===` on the far side
+            // asked the same question of the same two pointers.
+            let ended = note.object.map { ObjectIdentifier($0 as AnyObject) }
             Task { @MainActor [weak self] in
                 guard let self,
-                      (note.object as? AVPlayerItem)
-                        === self.tiles[self.anchorIndex].player.currentItem
+                      let ended,
+                      self.tiles[self.anchorIndex].player.currentItem
+                        .map(ObjectIdentifier.init) == ended
                 else { return }
                 self.reachedEnd()
             }

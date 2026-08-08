@@ -78,6 +78,12 @@ struct NameTextField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(owner: self) }
 
+    /// Main-actor: it is a text field's delegate and its target, and AppKit
+    /// calls both on the main thread. Stated on the class rather than on the
+    /// action alone — the delegate methods get it from the protocol, and having
+    /// `submitted` be the one nonisolated member was the only reason it looked
+    /// as if it were reaching main-actor state from somewhere else.
+    @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var owner: NameTextField
         let formatter: NameFieldFormatter

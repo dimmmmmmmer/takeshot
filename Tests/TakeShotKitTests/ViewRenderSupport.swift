@@ -440,6 +440,11 @@ extension CGSize {
 /// the frames in the production views rather than invented here. A test that
 /// hard-codes 726 says nothing; a test that says "the footer has to fit the
 /// narrowest main column" fails for a reason someone can act on.
+///
+/// Main-actor because that is where the numbers come from: several of these
+/// read a constant off a production view, and a view's constants belong to the
+/// actor the view does.
+@MainActor
 enum ViewBudget {
     /// `TakeShotApp`: the main window cannot be made narrower than this.
     static let windowMinWidth: CGFloat = 1080

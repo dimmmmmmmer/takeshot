@@ -15,7 +15,16 @@ import Network
 /// itself, what goes out on it, and the app protocol it carries. The state
 /// below is module-internal rather than private for that reason — the two
 /// extensions are the only readers, and it goes no wider than the module.
-final class RemoteClient {
+///
+/// `@unchecked Sendable` for the same reason `RemoteServer` is, and under the
+/// same rule: every member here — the buffer, the flags, the byte and answer
+/// ledgers, the pending frames — is touched only on the server's serial queue.
+/// The connection is started on it, `NWConnection` delivers its receive, send
+/// and state callbacks on it because that is the queue it was started with, and
+/// the two places where an answer comes back from somewhere else (the tarpit's
+/// held answers, the poster reply) hop onto it before touching anything. There
+/// is no lock here because there is nothing for a second thread to reach.
+final class RemoteClient: @unchecked Sendable {
     /// Wrong codes tolerated on ONE socket before it is dropped.
     ///
     /// This is the cheap half and never was the defence: reconnecting costs
@@ -271,7 +280,11 @@ final class RemoteClient {
     /// stop the timecode on every other phone on the set for as long as someone
     /// is guessing — which is the denial of service the tarpit is supposed to
     /// prevent, aimed the other way.
-    func holdForTarpit(_ delay: TimeInterval, _ answer: @escaping () -> Void) {
+    /// `answer` is `@Sendable` because it is carried across an `asyncAfter` —
+    /// onto the same serial queue it was made on, which is what makes writing
+    /// it that way honest rather than merely accepted.
+    func holdForTarpit(_ delay: TimeInterval,
+                       _ answer: @escaping @Sendable () -> Void) {
         guard delay > 0, let queue else {
             answer()
             return

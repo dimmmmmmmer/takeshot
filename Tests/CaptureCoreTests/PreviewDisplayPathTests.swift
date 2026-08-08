@@ -331,8 +331,12 @@ enum PreviewProbe {
         PreviewProbe.push(pipeline, source, frame: 1)
         await TestWait.until { screen.count > 0 && grid.count > 0 }
 
-        #expect(try #require(screen.last) === source)
-        #expect(try #require(grid.last) === source)
+        // Unwrapped first: `===` takes optionals, so a `#require` inlined into
+        // the `#expect` is inferred against `AnyObject?` and unwraps nothing.
+        let shown = try #require(screen.last)
+        let tile = try #require(grid.last)
+        #expect(shown === source)
+        #expect(tile === source)
     }
 
     /// Clearing the grid's handler stops deliveries, like the display one:

@@ -28,12 +28,8 @@ extension PlaybackFrameTap {
             if let url {
                 self.detectCompareLevels(of: url)
                 let item = AVPlayerItem(url: url)
-                let attrs: [String: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey as String:
-                        kCVPixelFormatType_32BGRA,
-                    kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-                ]
-                let output = AVPlayerItemVideoOutput(pixelBufferAttributes: attrs)
+                let output = AVPlayerItemVideoOutput(
+                    pixelBufferAttributes: Self.displayBufferAttributes)
                 item.add(output)
                 let bPlayer = AVPlayer(playerItem: item)
                 bPlayer.volume = 0

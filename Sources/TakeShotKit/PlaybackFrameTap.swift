@@ -160,19 +160,24 @@ final class PlaybackFrameTap: @unchecked Sendable {
 
     var compare: Compare = .off
     /// Pulls the latest live preview frame (assigned via setLiveBufferProvider).
-    var liveBufferProvider: (() -> CVPixelBuffer?)?
+    ///
+    /// `@Sendable` because it is installed from the main actor and called on
+    /// the tap queue — the same crossing as every other handler here, and the
+    /// pipeline's own frame accessors it forwards to are lock-guarded.
+    var liveBufferProvider: (@Sendable () -> CVPixelBuffer?)?
     /// Pulls the same live frame at the pre-LUT stage — the difference compare
     /// measures code values, so its back half must not carry the preview LUT.
     /// Falls back to `liveBufferProvider` when unset.
-    var livePreLUTBufferProvider: (() -> CVPixelBuffer?)?
+    var livePreLUTBufferProvider: (@Sendable () -> CVPixelBuffer?)?
 
     /// Queue-confined setter — the provider is read on the tap queue.
-    func setLiveBufferProvider(_ provider: @escaping () -> CVPixelBuffer?) {
+    func setLiveBufferProvider(_ provider: @escaping @Sendable () -> CVPixelBuffer?) {
         queue.async { self.liveBufferProvider = provider }
     }
 
     /// Queue-confined setter for the pre-LUT half (see the property above).
-    func setLivePreLUTBufferProvider(_ provider: @escaping () -> CVPixelBuffer?) {
+    func setLivePreLUTBufferProvider(
+        _ provider: @escaping @Sendable () -> CVPixelBuffer?) {
         queue.async { self.livePreLUTBufferProvider = provider }
     }
     var lutFilter: CIFilter?
@@ -245,18 +250,29 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
     }
 
+    /// What both video outputs ask the decoder for.
+    ///
+    /// BGRA full range: MetalPreviewLayer passes code values through unmanaged,
+    /// and full-range RGB is the exact same representation the live path draws
+    /// — playback and rec render identically. Typed as `any Sendable` rather
+    /// than `Any` because the dictionary is built on the main actor and used on
+    /// the tap queue: every value in it is a number or an empty dictionary.
+    static let displayBufferAttributes: [String: any Sendable] = [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: any Sendable](),
+    ]
+
     /// Attach to a new clip (the old output is removed).
-    func attach(to item: AVPlayerItem) {
+    ///
+    /// The `url` is the item's own, and it is asked for rather than read back
+    /// off the item: `AVPlayerItem.asset` belongs to the main actor and the
+    /// levels question is answered on the tap queue, so the file is opened for
+    /// its metadata the same way the compare clip's is (see `+Levels`).
+    func attach(to item: AVPlayerItem, url: URL) {
         queue.async {
             self.detachLocked()
-            // BGRA full range: MetalPreviewLayer passes code values through
-            // unmanaged, and full-range RGB is the exact same representation
-            // the live path draws — playback and rec render identically
-            let attrs: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-            ]
-            let output = AVPlayerItemVideoOutput(pixelBufferAttributes: attrs)
+            let output = AVPlayerItemVideoOutput(
+                pixelBufferAttributes: Self.displayBufferAttributes)
             item.add(output)
             self.output = output
             self.item = item
@@ -265,7 +281,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
             // a foreign clip is never expanded on a guess
             self.sourceCarriesWireCodes = false
             self.sourceTransfer = .sdr
-            self.detectLevels(of: item)
+            self.detectLevels(of: item, at: url)
             self.startTimerIfNeeded()
         }
     }

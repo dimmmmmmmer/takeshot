@@ -292,6 +292,11 @@ extension View {
 
 /// Badge chrome shared by the player overlays — the same plate the mode switch
 /// and the compare bar sit on (see `PlayerChrome`).
+///
+/// A free function rather than a `View` extension, so it does not pick up the
+/// protocol's isolation and has to say it: everything it builds is view chrome
+/// and every caller is a view body.
+@MainActor
 func playerOverlayBadge(@ViewBuilder content: () -> some View) -> some View {
     content().playerChromePlate()
 }

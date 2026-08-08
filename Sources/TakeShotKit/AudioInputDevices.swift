@@ -133,8 +133,17 @@ final class SystemAudioInputProvider: AudioInputDeviceProviding {
 /// AVCaptureSession around one input device. Buffers arrive on the session's
 /// delegate queue already stamped with the host clock, and the per-device
 /// disconnect notification is the device-gone signal the controller needs.
+///
+/// `@unchecked Sendable`, and the protocol's threading contract above is what
+/// makes it true: the two closure slots — the only mutable state anything off
+/// this thread can reach — are behind `callbackLock`; `device`, `session`,
+/// `queue` and the two counts are `let`; and `disconnectObserver` is written
+/// only by `start`/`stop`, which the controller calls from the main actor and
+/// nothing else calls at all. The delegate callback below reads a slot through
+/// the lock and never writes one.
 final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
-                                      AVCaptureAudioDataOutputSampleBufferDelegate {
+                                      AVCaptureAudioDataOutputSampleBufferDelegate,
+                                      @unchecked Sendable {
     enum StartError: Error {
         case cannotBuildSession
     }
@@ -193,8 +202,10 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
             let gone = self.onDeviceGone
             gone?()
         }
-        // startRunning blocks while the session spins up — never on main
-        queue.async { [session] in session.startRunning() }
+        // startRunning blocks while the session spins up — never on main.
+        // Reached through `self` rather than captured out of it: the session is
+        // this object's own state, and this object states its thread safety.
+        queue.async { self.session.startRunning() }
     }
 
     func stop() {
@@ -202,7 +213,7 @@ final class SystemAudioCaptureDevice: NSObject, AudioCaptureDevice,
             NotificationCenter.default.removeObserver(disconnectObserver)
             self.disconnectObserver = nil
         }
-        queue.async { [session] in session.stopRunning() }
+        queue.async { self.session.stopRunning() }
     }
 
     func captureOutput(_ output: AVCaptureOutput,

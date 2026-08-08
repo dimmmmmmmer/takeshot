@@ -181,7 +181,14 @@ final class MockCaptureBackend: CaptureBackend {
     /// "attempt to insert nil object from objects[0]". It is rare enough to
     /// look like bad luck and it is the shipping `--demo` path, with multicam
     /// running two of these sources at once.
-    private static let badgeFont: CTFont =
+    ///
+    /// `nonisolated(unsafe)`: a `CTFont` is an immutable Core Foundation object
+    /// that predates `Sendable`, built once and thereafter only read — by
+    /// `CTLineCreateWithAttributedString`, on the source's own queue. The
+    /// static is the fix rather than the risk: what killed the process was the
+    /// font machinery being reached FIRST from a background thread, and
+    /// `swift_once` around this line is what stops that.
+    nonisolated(unsafe) private static let badgeFont: CTFont =
         CTFontCreateWithName("Menlo-Bold" as CFString, 72, nil)
 
     private func drawBadgeText(_ text: String, in context: CGContext,

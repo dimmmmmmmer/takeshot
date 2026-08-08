@@ -76,7 +76,7 @@ extension CaptureController {
         } else {
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
-            playbackTap.attach(to: item)
+            playbackTap.attach(to: item, url: url)
             playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
             playbackLUTSuppressed = false
             detectBakedLUT(for: item) // applies the LUT itself once it learns the tag

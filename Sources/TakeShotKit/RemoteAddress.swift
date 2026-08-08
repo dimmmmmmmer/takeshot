@@ -83,9 +83,15 @@ enum RemoteAddress {
                                      &host, socklen_t(host.count),
                                      nil, 0, NI_NUMERICHOST)
             guard status == 0 else { continue }
+            // Through the pointer rather than the array: Swift 6 deprecates the
+            // array overload of `String(cString:)`, and `getnameinfo` wrote a
+            // terminated string into a buffer NI_MAXHOST long.
+            guard let dotted = host.withUnsafeBufferPointer({
+                $0.baseAddress.map { String(cString: $0) }
+            }) else { continue }
             found.append(Candidate(
                 interface: String(cString: pointer.pointee.ifa_name),
-                address: String(cString: host),
+                address: dotted,
                 isRunning: flags & IFF_RUNNING != 0,
                 isPointToPoint: flags & IFF_POINTOPOINT != 0))
         }

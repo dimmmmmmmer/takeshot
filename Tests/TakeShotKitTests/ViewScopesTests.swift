@@ -296,7 +296,7 @@ struct ViewScopesTests {
     /// repeating the name of the only scope on screen.
     @Test func aScopeBoxWithNothingToSayDropsItsHeader() async throws {
         try await ViewProbe.run { probe in
-            func box(title: String, handle: Bool) -> some View {
+            @MainActor func box(title: String, handle: Bool) -> some View {
                 ScopeBox(title: title, showsDragHandle: handle) {
                     EmptyView()
                 } content: {

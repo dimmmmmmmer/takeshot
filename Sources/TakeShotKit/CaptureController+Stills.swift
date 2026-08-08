@@ -60,8 +60,8 @@ extension CaptureController {
             // screen instead of silently arming a LIVE-camera grab
             if let raw = rawPlayer, let buffer = raw.currentBuffer() {
                 saveGrab(buffer: buffer)
-            } else if let item = player.currentItem {
-                grabPlaybackFrame(item: item)
+            } else if player.currentItem != nil, let url = playbackURL {
+                grabPlaybackFrame(url: url)
             } else if let buffer = playbackTap.currentBuffer() {
                 saveGrab(buffer: buffer)
             } else {
@@ -86,22 +86,35 @@ extension CaptureController {
             }
         }
     }
-    private func grabPlaybackFrame(item: AVPlayerItem) {
-        let generator = AVAssetImageGenerator(asset: item.asset)
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
-        generator.appliesPreferredTrackTransform = true
+    private func grabPlaybackFrame(url: URL) {
         let time = player.currentTime()
         // stills are deliverables like the recording: the preview LUT is never
         // baked in — a look appears in a still only when it is in the clip itself
         Task { [weak self] in
-            let cg = try? await generator.image(at: time).image
+            let cg = await Self.decodeStill(from: url, at: time)
             await MainActor.run {
                 guard let cg else { self?.lastError = "Frame grab failed"; return }
                 self?.saveGrab(NSBitmapImageRep(cgImage: cg)
                     .representation(using: .png, properties: [:]))
             }
         }
+    }
+
+    /// One frame out of a clip on disk, decoded off the main actor.
+    ///
+    /// The asset and the generator are built HERE rather than handed in from
+    /// the player's item. Neither type is Sendable, and the decode has always
+    /// run off the main actor — so instead of asserting that a main-actor
+    /// object may be carried onto another thread, the pair is created on the
+    /// thread that uses it and dies there. It costs one extra open of a file
+    /// the player already has open, once per grab, on an operator's keypress.
+    private nonisolated static func decodeStill(from url: URL,
+                                                at time: CMTime) async -> CGImage? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+        return try? await generator.image(at: time).image
     }
     private func saveGrab(_ png: Data?) {
         guard let png else { lastError = "Frame grab failed"; return }

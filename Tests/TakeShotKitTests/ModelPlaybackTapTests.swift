@@ -122,8 +122,7 @@ struct ModelPlaybackTapTests {
     /// show LUT and seeing log.
     @Test func aLUTIsBakedIntoWhatTheViewerGets() throws {
         let (tap, collector) = tapWithCollector()
-        let invert = CIFilter(name: "CIColorInvert")
-        tap.setLUT(invert, intensity: 1)
+        tap.setLUT({ CIFilter(name: "CIColorInvert") }, intensity: 1)
         let source = buffer(40)
         tap.attachStill(source)
         drain(tap)
@@ -141,7 +140,7 @@ struct ModelPlaybackTapTests {
     /// back — the slider's left stop is how an operator checks the clean signal.
     @Test func lutIntensityZeroLeavesTheImageAlone() throws {
         let (tap, collector) = tapWithCollector()
-        tap.setLUT(CIFilter(name: "CIColorInvert"), intensity: 0)
+        tap.setLUT({ CIFilter(name: "CIColorInvert") }, intensity: 0)
         tap.attachStill(buffer(40))
         drain(tap)
 
@@ -156,7 +155,7 @@ struct ModelPlaybackTapTests {
     /// screen; a paused player pushes nothing new, so nothing would update.
     @Test func changingIntensityRedeliversThePausedFrame() throws {
         let (tap, collector) = tapWithCollector()
-        tap.setLUT(CIFilter(name: "CIColorInvert"), intensity: 0)
+        tap.setLUT({ CIFilter(name: "CIColorInvert") }, intensity: 0)
         tap.attachStill(buffer(40))
         drain(tap)
         let before = collector.all.count
@@ -172,7 +171,7 @@ struct ModelPlaybackTapTests {
     /// an identity render in the path forever.
     @Test func clearingTheLUTRestoresThePassThrough() {
         let (tap, collector) = tapWithCollector()
-        tap.setLUT(CIFilter(name: "CIColorInvert"), intensity: 1)
+        tap.setLUT({ CIFilter(name: "CIColorInvert") }, intensity: 1)
         let source = buffer(40)
         tap.attachStill(source)
         drain(tap)
@@ -256,7 +255,7 @@ struct ModelPlaybackTapTests {
     /// output is numbers, and the look must not bend them.
     @Test func differenceIgnoresTheActiveLUT() throws {
         let (tap, collector) = tapWithCollector()
-        tap.setLUT(CIFilter(name: "CIColorInvert"), intensity: 1)
+        tap.setLUT({ CIFilter(name: "CIColorInvert") }, intensity: 1)
         let live = buffer(0x2A)
         tap.setLiveBufferProvider { live }
         tap.setCompare(.difference(gain: 1))

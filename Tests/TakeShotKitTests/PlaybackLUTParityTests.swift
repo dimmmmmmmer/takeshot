@@ -77,13 +77,12 @@ import Testing
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
         tap.setOnDisplayFrame { collector.record($0) }
-        let filter: CIFilter = try #require(cube.makeFilter())
-        tap.setLUT(filter, intensity: 1)
+        tap.setLUT({ cube.makeFilter() }, intensity: 1)
         let item = AVPlayerItem(url: clip)
         let player = AVPlayer(playerItem: item)
         player.volume = 0
         player.isMuted = true
-        tap.attach(to: item)
+        tap.attach(to: item, url: clip)
         tap.setRunning(true)
         player.play()
         defer {

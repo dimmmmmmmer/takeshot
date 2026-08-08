@@ -77,7 +77,10 @@ final class PunchEventView: NSView {
     /// cares: this view draws nothing and declines every hit test.
     override var isFlipped: Bool { true }
 
-    private var monitor: Any?
+    /// Held by an object of its own so the monitor is given back when the view
+    /// is released, without the view's nonisolated `deinit` having to reach
+    /// main-actor state to do it — see `EventMonitorToken`.
+    private let monitor = EventMonitorToken()
     /// The cursor half's own state (`AssistZoomCursor`) — module-internal
     /// rather than private for that reason, and touched nowhere else.
     var trackingArea: NSTrackingArea?
@@ -92,21 +95,15 @@ final class PunchEventView: NSView {
     }
 
     private func startMonitoring() {
-        guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(
+        guard !monitor.isActive else { return }
+        monitor.set(NSEvent.addLocalMonitorForEvents(
             matching: [.scrollWheel, .magnify]) { [weak self] event in
             self?.handle(event) ?? event
-        }
+        })
     }
 
     func stopMonitoring() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
-    }
-
-    deinit {
-        // deinit is nonisolated; the monitor is a plain object either way
-        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor.remove()
     }
 
     /// nil consumes the event, the event itself passes it on.

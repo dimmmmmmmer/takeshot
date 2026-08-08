@@ -368,10 +368,10 @@ final class CaptureController: ObservableObject {
     @Published var scopesWindowOpen = false {
         didSet { updateScopesRunning() }
     }
-    /// Move/resize observers on the scopes window (see +Windows). Held so a
-    /// window that is closed and reopened replaces them instead of stacking
-    /// another pair on the same window.
-    var scopesFrameObservers: [NSObjectProtocol] = []
+    /// Move/resize watch on the scopes window (see `+ScopesWindow`). Held so a
+    /// window that is closed and reopened replaces it instead of stacking
+    /// another pair of observers on the same window.
+    let scopesFrame = ScopesFrameWatch()
     /// The digital slate window's state (the sync flash/freeze and the card
     /// fields, all read off this controller — see `SlateModel`). Owned here so
     /// a hold in progress survives the window closing and reopening, and so

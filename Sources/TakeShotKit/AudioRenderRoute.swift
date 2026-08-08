@@ -24,8 +24,11 @@ protocol AudioRenderRoute: AnyObject {
     var currentTime: CMTime { get }
 
     func enqueue(_ sampleBuffer: CMSampleBuffer)
+    /// `block` is `@Sendable` because the renderer calls it on `queue`, which is
+    /// the caller's and not the one that armed it — the same crossing the
+    /// underlying `AVSampleBufferAudioRenderer` already declares.
     func requestMediaDataWhenReady(on queue: DispatchQueue,
-                                   using block: @escaping () -> Void)
+                                   using block: @escaping @Sendable () -> Void)
     func stopRequestingMediaData()
     func flush()
     func setRate(_ rate: Float, at time: CMTime)
@@ -66,7 +69,7 @@ final class SystemAudioRoute: AudioRenderRoute {
     }
 
     func requestMediaDataWhenReady(on queue: DispatchQueue,
-                                   using block: @escaping () -> Void) {
+                                   using block: @escaping @Sendable () -> Void) {
         renderer.requestMediaDataWhenReady(on: queue, using: block)
     }
 

@@ -173,7 +173,12 @@ enum DiagnosticsMachine {
         else { return nil }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buffer)
+        // Through the pointer rather than the array: Swift 6 deprecates the
+        // array overload of `String(cString:)`, and sysctl reports a length
+        // that includes the terminator it wrote.
+        return buffer.withUnsafeBufferPointer {
+            $0.baseAddress.map { String(cString: $0) }
+        }
     }
 
     private static func label(for state: ProcessInfo.ThermalState) -> String {
