@@ -25,7 +25,14 @@ import Testing
     }
 
     /// One namespaced metadata value off a finished file.
-    private func embedded(_ key: String, of url: URL) async throws -> String? {
+    ///
+    /// `nonisolated` so that the `[AVMetadataItem]` never leaves this scope —
+    /// it is not Sendable, and returning it to the main-actor suite is a
+    /// crossing the macOS 15 SDK rejects and the macOS 26 one allows. Only the
+    /// `String?` comes back. Same reduction as the `Sources` side
+    /// (docs/ARCHITECTURE.md).
+    private nonisolated func embedded(_ key: String,
+                                      of url: URL) async throws -> String? {
         let items = try await AVURLAsset(url: url).load(.metadata)
         guard let item = items.first(where: { ($0.key as? String) == key })
         else { return nil }

@@ -109,9 +109,16 @@ enum ViewRender {
     /// already collected" become the same green.
     /// `body` is async because what a mounted surface is FED only arrives after
     /// a decoder has run; the host outlives the wait.
+    ///
+    /// `body` is `@MainActor` rather than nonisolated, and has to be: an
+    /// unisolated closure returning an unconstrained `T` sends that value back
+    /// across an isolation boundary, which the macOS 15 SDK rejects and the
+    /// macOS 26 one permits. Every caller is already a main-actor test looking
+    /// at a hosted view, so this states where the work was happening anyway.
     static func mounted<T>(_ view: some View,
                            in size: CGSize = CGSize(width: 1280, height: 720),
-                           _ body: () async throws -> T) async rethrows -> T {
+                           _ body: @MainActor () async throws -> T)
+        async rethrows -> T {
         let host = NSHostingView(rootView: AnyView(view))
         host.frame = CGRect(origin: .zero, size: size)
         host.layoutSubtreeIfNeeded()
@@ -387,7 +394,8 @@ struct ViewProbe {
     /// (see `ViewRender.mounted` for why the host has to stay alive).
     func mounted<T>(_ view: some View,
                     in size: CGSize = CGSize(width: 1280, height: 720),
-                    _ body: () async throws -> T) async rethrows -> T {
+                    _ body: @MainActor () async throws -> T)
+        async rethrows -> T {
         try await ViewRender.mounted(hosted(view), in: size, body)
     }
 

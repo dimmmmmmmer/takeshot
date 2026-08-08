@@ -13,6 +13,21 @@ import Testing
 /// inside the test's own scratch directory. Nothing here mounts a disk, opens a
 /// device, or puts a window on anybody's screen.
 @Suite @MainActor struct ControllerHardwareSurfaceTests {
+    /// What a decode attempt produced, as three Sendable facts.
+    ///
+    /// `nonisolated`, and it exists only to be: `OtherPreview` carries an
+    /// `NSImage`, so handing the struct itself back to this main-actor suite
+    /// sends a non-Sendable value across an isolation boundary. The macOS 26
+    /// SDK does not complain and the macOS 15 one does — the same disagreement
+    /// the `Sources` side is written around (docs/ARCHITECTURE.md). Reducing
+    /// inside the nonisolated scope is right under either.
+    private nonisolated static func previewFacts(
+        for url: URL) async -> (hasImage: Bool, duration: Double?,
+                                pixelSize: CGSize?) {
+        let preview = await CaptureController.otherThumbnail(for: url)
+        return (preview.image != nil, preview.duration, preview.pixelSize)
+    }
+
     private func scratch(_ name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("takeshot-surface-\(name)-\(UUID().uuidString)")
@@ -203,9 +218,9 @@ import Testing
             let url = dir.appendingPathComponent("A001_0001.\(ext)")
             try Data(repeating: 0x5A, count: 8192).write(to: url)
 
-            let preview = await CaptureController.otherThumbnail(for: url)
+            let preview = await Self.previewFacts(for: url)
 
-            #expect(preview.image == nil, ".\(ext) decoded a picture out of noise")
+            #expect(!preview.hasImage, ".\(ext) decoded a picture out of noise")
             #expect(preview.duration == nil, ".\(ext) reported a length")
             #expect(preview.pixelSize == nil)
         }
@@ -220,9 +235,9 @@ import Testing
         let url = dir.appendingPathComponent("not-really.png")
         try Data(repeating: 0x11, count: 4096).write(to: url)
 
-        let preview = await CaptureController.otherThumbnail(for: url)
+        let preview = await Self.previewFacts(for: url)
 
-        #expect(preview.image == nil)
+        #expect(!preview.hasImage)
         #expect(preview.pixelSize == nil)
         #expect(preview.duration == nil)
     }

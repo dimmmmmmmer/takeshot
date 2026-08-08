@@ -44,6 +44,18 @@ reaches anything interesting. The separate scratch path is needed because a
 before touching anything that awaits AVFoundation — the newer SDK does not
 diagnose what the older one will.
 
+**It covers `Sources` and NOT the tests, which is where this bit next.** `swift
+build` does not compile the test target, and the test target cannot be built
+against the old SDK here at all: `Testing.framework` ships with the Command
+Line Tools built for the current one, and asking for 15.4 fails on its own
+interface before reaching a line of ours. So the two-SDK check above proves
+nothing about `Tests/`, and CI is the only place that is checked. It has
+already caught four sites there that this command called clean — a
+`@MainActor` suite receiving an `NSImage`-carrying struct, an
+`[AVMetadataItem]`, and a generic `T` out of an unisolated closure. The fix is
+always the same one the app uses: reduce to Sendable values inside the
+nonisolated scope, or state the isolation the closure was really running in.
+
 **It is evidence, not proof.** The SDK is only half of what CI differs by: the
 runner is also on an older Swift, and the compiler is what enforces
 concurrency. Measured on the commit this paragraph was written for — CI (Swift
