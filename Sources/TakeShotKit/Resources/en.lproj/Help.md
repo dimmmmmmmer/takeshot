@@ -218,6 +218,21 @@ times, speed and the one verdict line. The **checksum list** (`ascmhl/…mhl`, a
 ASC MHL manifest) sits in its own folder beside it, which is where Silverstack,
 OffShoot and `ascmhl` look for it when they re-verify the disk months later.
 
+**If a disk is lost mid-copy**, the ones still connected finish and that disk's
+own report says what happened to it. Plug it back in, pick the same card and the
+same destinations, and press Start: TakeShot reads the checksum list already on
+that disk, tells you how much of this card it holds — "400 of 900 files are
+already there" — and waits for you to agree before it skips anything. Agreeing
+does not take the list on trust: each of those files is read back off the disk
+and its checksum compared before it counts as done, and anything short, wrong or
+missing is copied from the card again. A disk that already finished is not
+written to at all, and the checksum list every disk ends up with describes
+everything on it, not only what moved that time. The other answer — copy the
+whole card — is always on the same panel. Resuming reads the disk instead of
+reading the card and writing the disk, so it is roughly three times less work;
+on a card that has been shot on since, or a disk whose copy came from a
+different card, it is refused and says which.
+
 The sheet can be closed while a copy runs. The job carries on and reports
 itself in the takes-panel strip — percentage, the file in flight and Stop —
 and clicking that strip brings the sheet back. The sheet also opens showing the

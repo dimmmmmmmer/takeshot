@@ -27,6 +27,23 @@ final class OffloadTarget {
     private var handle: FileHandle?
     /// Where the file being copied is landing (nil between files).
     private var openTarget: URL?
+    /// What an earlier interrupted run of THIS card left here, by the card's own
+    /// relative path. Empty unless the plan asked to resume and the stamp beside
+    /// this folder's newest manifest attests it to this card.
+    private var claimed: [String: OffloadEntry] = [:]
+    /// Non-nil once the run has asked this destination what it holds, which is
+    /// also what makes the resume block appear in its summary.
+    private var resume: OffloadResumeFacts?
+    private var isResuming = false
+    /// What the claimed files occupy on this disk already — the preflight's space
+    /// check subtracts it, or a nearly full disk that holds most of the card
+    /// would be refused for wanting room it does not need.
+    private(set) var claimedBytes: Int64 = 0
+    private var reused = 0
+    private(set) var bytesReused: Int64 = 0
+    /// Copies that were sitting where this run had to write and were replaced
+    /// from the card rather than trusted.
+    private var replaced: [String] = []
     private let startedAt = Date()
     /// When this destination stopped, if it did — the clock has to stop with it,
     /// or a disk that died in the first minute of an hour-long run reports a
@@ -39,9 +56,75 @@ final class OffloadTarget {
     }
     var verifiedCount: Int { entries.count }
 
+    /// What resuming did here, or nil if it was never asked for.
+    var resumeFacts: OffloadResumeFacts? {
+        guard var facts = resume else { return nil }
+        facts.reused = reused
+        facts.reusedBytes = bytesReused
+        facts.replaced = replaced
+        return facts
+    }
+
     init(index: Int, root: URL) {
         self.index = index
         self.root = root
+    }
+
+    // MARK: - resume
+
+    /// Take on what a survey found here (see `OffloadResume`).
+    ///
+    /// A refused offer is adopted too, with nothing claimed: the destination's
+    /// own summary then states WHY everything was copied, which is the
+    /// difference between a tool that was careful and one that ignored the
+    /// question.
+    func adopt(_ offer: OffloadResumeOffer) {
+        isResuming = offer.isUsable
+        resume = OffloadResumeFacts(claimed: offer.files,
+                                    refusal: offer.refusal?.reason)
+        guard isResuming else { return }
+        for entry in offer.claimed { claimed[entry.relativePath] = entry }
+        claimedBytes = offer.bytes
+    }
+
+    /// Is this file already here, and provably the right bytes?
+    ///
+    /// The gate is the HASH and never the size. A truncated file has a plausible
+    /// size and the wrong hash — this codebase already treats a length that
+    /// changed mid-copy as reason not to wipe a card — so the copy is re-read off
+    /// the disk with the cache bypassed and hashed against the manifest that
+    /// claimed it. Anything else at all (gone, short, unreadable, one bit out)
+    /// returns false and is copied from the card again.
+    ///
+    /// A match joins `entries`, so the manifest this run writes lists the WHOLE
+    /// set on the disk rather than only what moved this time. A manifest that
+    /// omitted files which are present would be worse than none for whoever
+    /// receives the drive, and the generations are how the verify tool decides
+    /// what to check.
+    func reuse(_ file: OffloadSourceFile, algorithm: OffloadHashAlgorithm,
+               chunkBytes: Int) -> Bool {
+        guard let entry = claimed[file.relativePath] else { return false }
+        let url = root.appendingPathComponent(file.relativePath)
+        guard Self.regularFileSize(at: url) == entry.size,
+              let digest = try? OffloadHasher.hashFile(
+                at: url, algorithm: algorithm, bypassCache: true,
+                chunkBytes: chunkBytes),
+              digest == entry.hash
+        else { return false }
+        filesDone += 1
+        reused += 1
+        bytesReused += entry.size
+        entries.append(entry)
+        return true
+    }
+
+    /// The size of a regular file, or nil for anything that is not one — a
+    /// directory standing where a movie should be is not a movie.
+    private static func regularFileSize(at url: URL) -> Int64? {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
+        guard let values = try? url.resourceValues(forKeys: keys),
+              values.isRegularFile == true else { return nil }
+        return Int64(values.fileSize ?? 0)
     }
 
     // MARK: - preflight
@@ -81,6 +164,7 @@ final class OffloadTarget {
             try FileManager.default.createDirectory(
                 at: candidate.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
+            replaceStaleCopy(at: candidate, of: relativePath)
             // Never clobber: two cards with the same DCIM layout are the normal
             // case. The reservation is the process-wide one the take writer
             // uses, so an offload into the record folder cannot land on the
@@ -101,6 +185,29 @@ final class OffloadTarget {
             fail(error.localizedDescription, at: relativePath)
             return false
         }
+    }
+
+    /// On a RESUMED destination only: a file sitting where this run is about to
+    /// write goes, rather than being written beside as `…_2`.
+    ///
+    /// The never-clobber rule above exists because two cards with the same DCIM
+    /// layout are normal — the file already there might be another card's
+    /// footage. Here it cannot be: the stamp beside this folder's manifest
+    /// attests the copy to THIS card, and the file has already failed the hash
+    /// gate (or was never in the manifest at all, which is what the write the
+    /// disk died in the middle of leaves behind). Keeping it would leave a
+    /// truncated .mov next to the good copy under a `_2` name, and a truncated
+    /// file on an SSD is the outcome this codebase calls worse than a missing
+    /// one — it looks like footage.
+    ///
+    /// Never silent: every path taken this way is listed in this destination's
+    /// summary and counted in its resume facts.
+    private func replaceStaleCopy(at candidate: URL, of relativePath: String) {
+        guard isResuming, Self.regularFileSize(at: candidate) != nil else {
+            return
+        }
+        replaced.append(relativePath)
+        try? FileManager.default.removeItem(at: candidate)
     }
 
     func write(_ chunk: UnsafeRawBufferPointer) {

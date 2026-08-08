@@ -37,6 +37,17 @@ final class OffloadSheetModel: ObservableObject {
     @Published var isRunning = false
     /// Cancel has been pressed: the file in flight finishes, then the run stops.
     @Published var isCancelling = false
+    /// What the destinations already hold from an interrupted run of this card,
+    /// waiting for the operator's answer. nil means there is nothing to answer —
+    /// either no destination holds one, or the question has been answered.
+    ///
+    /// A run that skips files is a run the operator agreed to skip them in. The
+    /// engine's own comment says a skipped folder is how footage goes missing;
+    /// this is that rule applied to the feature whose whole job is skipping.
+    @Published var resumeReview: OffloadResumeReview?
+    /// The survey is out. It walks the card, so it is off the main thread, and
+    /// Start is not offered again until it comes back.
+    @Published var isSurveying = false
 
     /// Stamped into every manifest.
     var creator: OffloadCreatorInfo = .current()
@@ -62,6 +73,7 @@ final class OffloadSheetModel: ObservableObject {
             progress = nil
             report = nil
             isCancelling = false
+            resumeReview = nil
         }
         guard rows.isEmpty else { return }
         // The operator's saved destination list. The folder the retired verified
@@ -132,19 +144,72 @@ final class OffloadSheetModel: ObservableObject {
     }
 
     var canStart: Bool {
-        !isRunning && source != nil && !rows.isEmpty && validationMessage == nil
+        !isRunning && !isSurveying && resumeReview == nil && source != nil
+            && !rows.isEmpty && validationMessage == nil
+    }
+
+    // MARK: - resuming an interrupted run
+
+    /// Start, which now means: ask the destinations what they already hold, and
+    /// only run once that question has an answer.
+    ///
+    /// The survey is cheap — one manifest parse per destination — but it walks
+    /// the card to compare paths and sizes, so it goes on the offload queue.
+    /// When nothing is reusable it runs straight through, which is every
+    /// ordinary card.
+    func start() {
+        guard let source, canStart else { return }
+        isSurveying = true
+        controller?.offloadStatus = L("offload_resume_checking")
+        let folders = destinationFolders
+        // Read on the main actor and sent in: `algorithm` is main-actor state,
+        // and reaching for it from inside the Sendable closure is the race the
+        // Swift 6 mode exists to catch.
+        let algorithm = Self.algorithm
+        CaptureController.offloadQueue.async { [weak self] in
+            let review = OffloadResume.review(source: source,
+                                              destinations: folders,
+                                              algorithm: algorithm)
+            DispatchQueue.main.async { self?.answer(review) }
+        }
+    }
+
+    /// The survey is back. Something to reuse means a question; nothing to reuse
+    /// means the run the operator already asked for.
+    private func answer(_ review: OffloadResumeReview) {
+        isSurveying = false
+        guard review.isUsable else {
+            begin(resume: false)
+            return
+        }
+        resumeReview = review
+        controller?.offloadStatus = nil
+    }
+
+    /// Reuse what is already there — each file re-read off the disk and hashed
+    /// against that disk's own manifest before it is trusted.
+    func resumeRun() {
+        resumeReview = nil
+        begin(resume: true)
+    }
+
+    /// Copy the whole card again. The way out of a resume the operator does not
+    /// trust, and the reason the question is a question.
+    func copyEverything() {
+        resumeReview = nil
+        begin(resume: false)
     }
 
     // MARK: - the run
 
-    func start() {
-        guard let source, canStart else { return }
+    private func begin(resume: Bool) {
+        guard let source, !isRunning else { return }
         // The report labels are read here, once, in the operator's current UI
         // language: the summary and the card of THIS run speak one language
         // even if the switch is flipped while it copies (owner item 21).
         let plan = OffloadPlan(source: source, destinations: destinationFolders,
                                algorithm: Self.algorithm, creator: creator,
-                               reportLabels: .current())
+                               resume: resume, reportLabels: .current())
         let token = OffloadCancellation()
         cancellation = token
         isRunning = true

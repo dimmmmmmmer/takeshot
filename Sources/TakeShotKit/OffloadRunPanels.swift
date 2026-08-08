@@ -62,9 +62,13 @@ struct OffloadProgressPanel: View {
         }
     }
 
+    /// Both halves count: a resumed destination that already held nine tenths of
+    /// the card would otherwise show an empty bar while it verifies them, which
+    /// reads as "it is copying everything again" — the one thing resume is for.
     private func fraction(_ destination: OffloadDestinationProgress) -> Double {
         guard progress.bytesTotal > 0 else { return 0 }
-        return min(1, Double(destination.bytesWritten) / Double(progress.bytesTotal))
+        let done = destination.bytesWritten + destination.bytesReused
+        return min(1, Double(done) / Double(progress.bytesTotal))
     }
 }
 
@@ -106,6 +110,17 @@ struct OffloadResultPanel: View {
             Text(verdict(result))
                 .offloadText(.body, tint: color(result.outcome))
                 .fixedSize(horizontal: false, vertical: true)
+            // What was NOT copied, and how much of it was replaced instead of
+            // trusted. The verdict above counts reused files as verified —
+            // because they were, off this disk, this run — so without this line
+            // the operator cannot tell an hour of copying from four minutes.
+            if let resume = result.resume, resume.reused > 0 {
+                Text(L("offload_result_resumed", resume.reused,
+                       OffloadFormat.shortBytes(resume.reusedBytes),
+                       resume.replaced.count))
+                    .offloadText(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // the duration's unit WORDS follow the UI language, like the report
             Text("\(OffloadFormat.bytes(result.totals.bytesWritten)) · "
                 + "\(OffloadFormat.duration(result.totals.elapsed, labels: .current())) · "

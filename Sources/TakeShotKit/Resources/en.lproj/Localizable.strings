@@ -469,6 +469,23 @@
 "offload_result_cancelled" = "Stopped: %d of %d files verified";
 "offload_report_saved" = "Report: %@";
 "offload_open_dest" = "Show in Finder";
+/* resuming a run a lost disk cut short (see OffloadResume) */
+"offload_resume_checking" = "Checking what the destinations already hold...";
+"offload_resume_title" = "This card has already been copied here in part";
+"offload_resume_dest" = "%@ — %d of %d files are already there (%@), listed in that disk's own checksum list.";
+"offload_resume_dest_nothing" = "%@ — nothing on it can be reused; everything will be copied.";
+"offload_resume_dest_full" = "%@ — everything will be copied: %@.";
+"offload_resume_gate" = "Nothing is skipped on trust: each of those files is read back off the disk and its checksum compared with that list before it counts as done. Anything that does not match, or is not there, is copied from the card again.";
+"offload_resume_cost" = "This reads the disk instead of reading the card and writing the disk again — a large saving on a slow disk, a smaller one on a fast disk and a fast card.";
+"offload_resume_accept" = "Resume (skip up to %d files)";
+"offload_resume_decline" = "Copy the whole card";
+"offload_resume_why_new" = "nothing has been copied into this folder before";
+"offload_resume_why_unstamped" = "the copy here does not say which card it was made from";
+"offload_resume_why_other_card" = "the copy here was made from a different card";
+"offload_resume_why_card_changed" = "there is not the same amount on the card now as when it was copied here";
+"offload_resume_why_other_hash" = "the checksum list here uses %@";
+"offload_resume_why_unreadable" = "the checksum list here could not be read (%@)";
+"offload_result_resumed" = "%d files (%@) were already there and were re-checked, not copied; %d were copied over an interrupted run";
 "offload_source_problems" = "%d file(s) could not be read from the card";
 "offload_done_multi" = "Offload verified: %d files, %d copies";
 "offload_alert_problem" = "Offload: %d destination(s) with problems — %@. Do not wipe the card.";
@@ -640,6 +657,9 @@
 "offload_report_average" = "Average";
 "offload_report_manifest" = "Manifest";
 "offload_report_manifest_missing" = "NOT WRITTEN";
+"offload_report_resumed" = "Resumed";
+"offload_report_resumed_fmt" = "%d files (%@) already here and re-verified, %d re-copied";
+"offload_report_replaced" = "RE-COPIED OVER AN INTERRUPTED RUN";
 "offload_report_written_by" = "Written by";
 "offload_report_written_by_fmt" = "%@ %@ on %@";
 "offload_report_files_verified_fmt" = "%d of %d verified";

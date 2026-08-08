@@ -18,6 +18,13 @@ public struct OffloadPlan: Sendable {
     /// Read/write chunk size. Configurable for the tests, which need the
     /// multi-chunk path without writing gigabytes.
     public var chunkBytes: Int
+    /// Reuse what a destination already holds from an interrupted run of this
+    /// same card (see `OffloadResume`).
+    ///
+    /// Off by default, and that is not just caution about old callers: a run
+    /// that skips files is a run the operator has to have agreed to. The sheet
+    /// asks — with the count and the reason — and only then sets this.
+    public var resume: Bool
     /// The language the run's summary .txt and report-card PNG are labelled in.
     /// Part of the plan because the reports are part of what a run is asked to
     /// produce; the app fills it from the UI language, and the default keeps
@@ -36,6 +43,7 @@ public struct OffloadPlan: Sendable {
                 algorithm: OffloadHashAlgorithm = .xxh64,
                 creator: OffloadCreatorInfo = .current(),
                 chunkBytes: Int = OffloadIO.defaultChunkBytes,
+                resume: Bool = false,
                 reportLabels: OffloadReportLabels = .english,
                 didWriteCopy: (@Sendable (URL) -> Void)? = nil) {
         self.source = source
@@ -43,6 +51,7 @@ public struct OffloadPlan: Sendable {
         self.algorithm = algorithm
         self.creator = creator
         self.chunkBytes = max(4096, chunkBytes)
+        self.resume = resume
         self.reportLabels = reportLabels
         self.didWriteCopy = didWriteCopy
     }
@@ -215,6 +224,11 @@ public struct OffloadDestinationProgress: Sendable, Identifiable, Equatable {
     public let url: URL
     public var filesDone: Int
     public var bytesWritten: Int64
+    /// Bytes this destination already held, verified in place and not written
+    /// again (see `OffloadResume`). Separate from `bytesWritten` because the
+    /// rate is about writing — but the progress BAR has to count both, or a
+    /// destination that is nine tenths done shows an empty bar.
+    public var bytesReused: Int64
     public var mismatches: Int
     /// Set once this destination has fallen over; it stops receiving files and
     /// the others carry on.
@@ -222,11 +236,13 @@ public struct OffloadDestinationProgress: Sendable, Identifiable, Equatable {
     public var megabytesPerSecond: Double
 
     public init(id: Int, url: URL, filesDone: Int, bytesWritten: Int64,
+                bytesReused: Int64 = 0,
                 mismatches: Int, failure: String?, megabytesPerSecond: Double) {
         self.id = id
         self.url = url
         self.filesDone = filesDone
         self.bytesWritten = bytesWritten
+        self.bytesReused = bytesReused
         self.mismatches = mismatches
         self.failure = failure
         self.megabytesPerSecond = megabytesPerSecond
@@ -309,6 +325,9 @@ public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
     /// Why this destination stopped, if it did.
     public var failure: String?
     public var wasCancelled: Bool
+    /// What resuming did here, and nil when the run was not asked to resume —
+    /// which is what keeps an ordinary run's summary exactly as it was.
+    public var resume: OffloadResumeFacts?
 
     // The three report files, filled in afterwards rather than passed in. They
     // cannot be initializer parameters: the engine writes the manifest, folds
@@ -324,13 +343,15 @@ public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
 
     public init(id: Int, url: URL, totals: OffloadDestinationTotals,
                 mismatches: [String] = [], failure: String? = nil,
-                wasCancelled: Bool = false) {
+                wasCancelled: Bool = false,
+                resume: OffloadResumeFacts? = nil) {
         self.id = id
         self.url = url
         self.totals = totals
         self.mismatches = mismatches
         self.failure = failure
         self.wasCancelled = wasCancelled
+        self.resume = resume
     }
 
     public var outcome: OffloadOutcome {

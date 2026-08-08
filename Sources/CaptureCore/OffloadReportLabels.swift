@@ -32,6 +32,12 @@ public struct OffloadReportLabels: Sendable, Equatable {
     public var average = "Average"
     public var manifest = "Manifest"
     public var manifestMissing = "NOT WRITTEN"
+    /// The row a RESUMED run adds, and only such a run (see `OffloadResume`).
+    public var resumed = "Resumed"
+    /// Files reused, how much that was, and how many were copied again instead
+    /// of trusted — "400 files (61.0 GB) already here and re-verified, 1 re-copied".
+    public var resumedFormat
+        = "%d files (%@) already here and re-verified, %d re-copied"
     public var writtenBy = "Written by"
     /// Tool, version, host — "TakeShot 1.0 on studio-mac.local".
     public var writtenByFormat = "%@ %@ on %@"
@@ -47,6 +53,9 @@ public struct OffloadReportLabels: Sendable, Equatable {
     // MARK: - problem sections (shared by the .txt and the card)
 
     public var destinationFailedHeading = "DESTINATION FAILED"
+    /// Copies that were already on this disk where a file had to be written, and
+    /// were replaced from the card rather than trusted.
+    public var replacedHeading = "RE-COPIED OVER AN INTERRUPTED RUN"
     public var mismatchesHeading = "CHECKSUM MISMATCHES"
     public var sourceProblemsHeading = "SOURCE PROBLEMS"
     public var scanProblemsHeading = "CARD ENTRIES THAT COULD NOT BE COPIED"

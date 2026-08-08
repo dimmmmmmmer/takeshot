@@ -166,9 +166,14 @@ struct OffloadManifestTests {
             .hasPrefix("0001_") == true)
         #expect(second.destinations.first?.manifestURL?.lastPathComponent
             .hasPrefix("0002_") == true)
+        // Counted by extension: `ascmhl/` also holds the stamp that says which
+        // card the newest generation was made from (see `OffloadResume`), and
+        // this assertion is about GENERATIONS — which is also how
+        // `OffloadMHL.fileName` numbers them.
         let manifests = try FileManager.default.contentsOfDirectory(
             at: dest.appendingPathComponent("ascmhl"),
             includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == OffloadMHL.fileExtension }
         #expect(manifests.count == 2)
     }
 
