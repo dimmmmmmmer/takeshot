@@ -164,6 +164,16 @@ enum TestWait {
         await until(condition, timeout: .seconds(45))
     }
 
+    /// The same poll, but it ANSWERS. `until` is for getting to a state before
+    /// the assertions run; this is for the cases where the arrival itself is
+    /// the outcome, so the test fails on the wait rather than on a confusing
+    /// assertion three lines later. Mirrors `ControllerWait.until`.
+    static func becomesTrue(timeout: Duration = .seconds(45),
+                            _ condition: () -> Bool) async -> Bool {
+        await until(condition, timeout: timeout)
+        return condition()
+    }
+
     static func fileExists(at url: URL, timeout: Duration = .seconds(45)) async {
         // The generous default is the same I/O budget as untilWritten: this is
         // only ever awaited for files the pipeline is finalizing, and it costs

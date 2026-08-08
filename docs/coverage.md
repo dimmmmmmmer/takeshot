@@ -43,8 +43,8 @@ the week it lands teaches everyone to ignore it.
 
 | | |
 | --- | --- |
-| Floor | **86.0 %** lines |
-| Measured | **87.52 %** lines, 78.9 % regions (4 400 of 35 258 lines uncovered) |
+| Floor | **87.5 %** lines |
+| Measured | **89.01 %** lines (4 166 of 37 909 lines uncovered) |
 
 ## What holds the number up: seams, not more tests
 
@@ -71,11 +71,33 @@ covered and that is the point: what is left uncovered there is `runModal()` and
 the two lines that read its result, while the four exporters behind it went from
 16 % to 94 %.
 
+## The interruption wave
+
+The wave that took the number from 87.95 % to 89.01 % went after the branches that
+only run when a shooting day goes wrong, on the grounds that a bug in one costs
+a take rather than a click. What it added, and what each one pins:
+
+| Suite | The failure it exercises |
+| --- | --- |
+| `TakeInterruptionTests` | The cable out mid-take, the camera changing format mid-take, and a finalize that fails: the take is closed rather than left starving, the alarm is sticky, the file survives, the next take is a file of its own, and a take that could not be finalized never joins the list. |
+| `PipelineTimecodeSourceTests` | A timecode arriving with no frame rate, and a camera that starts Rec Run after the take does — read back as the tc32 samples in the finished .mov, not off the writer. |
+| `PipelineVancStatsTests` | The VANC monitor's tallies, the once-a-second publish rate, and the reset on capture stop. |
+| `ControllerDestinationFailureTests` | The record folder moved out from under the app, a destination whose volume cannot be interrogated, a fresh folder that is created rather than alarmed about, quitting mid-take, and a board appearing on the backend callback. |
+| `ControllerHardwareSurfaceTests` | The scopes window's placement, `WorkspaceVolumeWatch` driven by a hand-posted notification, and a decode of a file that only looks like BRAW/R3D. |
+| `ModelHotkeyActionTests` | Every arm of the hotkey fan-out, asserted through the state the on-screen button changes. |
+| `ControllerLookLibraryFailureTests` | A look that cannot be imported, clearing the library without taking bystanders, and a director's monitor that is no longer attached. |
+
+Two production changes came with it, both stated in the code:
+`CaptureController.diskVerdict` splits the two free-space thresholds out of the
+watchdog tick that nothing can drive (the same split `bitDepthShortfall` already
+had from its reporter), and `TestWait.becomesTrue` gives the CaptureCore suites
+the answering poll `ControllerWait.until` already had.
+
 ## The honest ceiling
 
-Roughly **1 000 lines — about 2.9 points — cannot be covered by a headless
+Roughly **1 000 lines — about 2.7 points — cannot be covered by a headless
 suite at all.** That puts the arithmetic ceiling near 97 %, and the gap between
-that and the measured 87.5 % is not unreachable code: it is a long tail of view
+that and the measured 89 % is not unreachable code: it is a long tail of view
 bodies, AppKit window paths and error branches that are reachable with more work.
 95 % is a question of how many more waves, not of whether it is possible.
 
@@ -93,6 +115,20 @@ What is genuinely out of reach, and why:
 | ~29 | `SingleInstanceGuard.swift` | Hands off to another running copy of the app via `NSRunningApplication`. |
 | ~41 | `FilePanel`, `AudioRenderRoute`, `PlayoutOutput` | The far side of the three new seams: `runModal()`, `audioOutputDeviceUniqueID` on a live renderer, and the `CDLPlayout` conformance. |
 | ~200 | `RawPlayback+*`, `RawClipSource` | The BRAW decode paths. `vendor/BRAWSDK/include` is not committed and is absent on CI, so `CBRClip.isSDKAvailable` is false and those branches cannot execute. The CinemaDNG half is reachable and partly covered. |
+
+And the ones the interruption wave went looking for and could not reach. Each
+was tried, so these are measurements rather than guesses:
+
+| Where | Why |
+| --- | --- |
+| `CapturePipeline+Frame.appendToTake`, the `writer.hasFailed` arm (~8 lines), and `TakeWriter.failureReason` | **There is no deterministic way to fail an `AVAssetWriter` from a test.** Measured on macOS 26: a grayscale or 16-bit-grey buffer into a ProRes writer is accepted, an off-size buffer is accepted, unlinking the whole output directory and then writing 400 more frames is accepted, `cancelWriting` leaves `.cancelled` and not `.failed`, and `AVAssetWriter(outputURL:)` no longer throws on an existing file. The *decision* the branch guards is covered from the other side (`routineDropsAreNotReportedAsWriterFailure`) and the failure itself is covered on device. Reaching it headlessly needs a protocol in front of `TakeWriter`, which is a bigger change than the branch is worth. |
+| `CaptureController.availableScreens` | Reads `NSApp.mainWindow`. `NSApp` is an implicitly unwrapped global that is nil until an `NSApplication` exists, and a test binary has none — touching it traps. Harmless in the app (the property is only ever read from a view inside a running application) and not worth instantiating `NSApplication` in the suite to reach. |
+| `makeBorderlessWindow` and the three fullscreen surfaces in `CaptureController+Windows` (~40 lines) | They put a black `.statusBar`-level window over the whole screen of whoever runs the suite and take the keyboard focus with it. The half that decides — a stored display that is no longer attached builds nothing — is covered. |
+| `HotkeyManager.install` (~45 lines) | An `NSEvent` local monitor. Driving it means posting real events into an application event queue there is none of; the two decidable parts (`typingKeepsTheKey`, and `perform` behind it) are covered. |
+| `PunchEventView.handle` (~30 lines) | Same shape: a local monitor over synthesized `.magnify` and `.scrollWheel` events, which cannot be built with a window number that matches. Reaching it needs the decision pulled out into a function over (type, modifiers, pointer, bounds, deltas) — worth doing, not done here. |
+| `CaptureController.setMulticam`, the hardware arm (~22 lines) | Constructing the `DeckLinkBackendAdapter` it needs is the thing `ControllerHarness` exists to avoid: on a machine with the SDK dropped in it adopts whatever board is attached. Safe on a runner with no SDK and unsafe on the developer's, which is not a difference a suite may depend on. |
+| `CapturePipeline.uniqueURL`'s 1000-attempt fallback (4 lines) | Needs a thousand colliding files in the record folder. |
+| `CaptureController.askDuplicateLUT` (~13 lines) | An `NSAlert.runModal()`. Everything either side of it is covered; making the choice injectable the way `FilePanel` is would unlock it. |
 
 Two more, worth naming because they look coverable and are not:
 
