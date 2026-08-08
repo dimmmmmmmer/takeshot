@@ -99,16 +99,33 @@ extension CaptureController {
         playbackTap.setLUT({ cube.makeFilter() }, intensity: live.lutIntensity)
     }
     /// Check the loaded clip's baked-LUT tag (asynchronously).
-    func detectBakedLUT(for item: AVPlayerItem) {
+    ///
+    /// The file is opened for its metadata rather than the item's own asset
+    /// being read, the same way `PlaybackFrameTap.detectLevels` asks the same
+    /// file the neighbouring question — and here for a second reason as well:
+    /// an `AVMetadataItem` is not `Sendable` in any macOS SDK, so the answer
+    /// has to become a `Bool` inside the load's own nonisolated scope before
+    /// it can come back to the main actor. Only one SDK enforces that (the
+    /// macOS 26 overlay's `load` inherits the caller's isolation, the macOS 15
+    /// one hops), which is why obeying it by construction is the point.
+    func detectBakedLUT(for item: AVPlayerItem, at url: URL) {
         playbackFileHasBakedLUT = false
         Task { [weak self] in
-            let metadata = (try? await item.asset.load(.metadata)) ?? []
-            let baked = metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
+            let baked = await Self.fileCarriesBakedLUT(at: url)
             await MainActor.run { [weak self] in
                 guard let self, self.player.currentItem === item else { return }
                 self.playbackFileHasBakedLUT = baked
                 self.applyPlaybackLUT()
             }
         }
+    }
+
+    /// Whether the file was written with a look already in the picture.
+    /// Nonisolated: the metadata items are read and answered here, and only
+    /// the answer leaves (see `detectBakedLUT`).
+    nonisolated private static func fileCarriesBakedLUT(
+        at url: URL) async -> Bool {
+        let metadata = (try? await AVURLAsset(url: url).load(.metadata)) ?? []
+        return metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
     }
 }

@@ -20,6 +20,26 @@ extension CaptureController {
         var slates: [String: TakeLogExporter.SlateRow] = [:]
     }
 
+    /// What the file itself carries, reduced to values that can leave the
+    /// load. The counterpart of `StoredSidecars`: that is what the day's CSVs
+    /// say about a take, this is what the .mov says about itself.
+    ///
+    /// A named Sendable type rather than the items themselves, because an
+    /// `AVMetadataItem` is not `Sendable` in any macOS SDK and so cannot cross
+    /// back to the main actor at all. Reading them where they are produced and
+    /// answering there is the only shape that is right under every SDK's
+    /// annotations — and it costs the scan one suspension per file instead of
+    /// eight.
+    struct EmbeddedMetadata: Sendable {
+        var roll: String
+        var takeNumber: Int
+        var scene: String?
+        var shot: String?
+        var take: String?
+        var durationSeconds: Double
+        var startTimecode: Timecode?
+    }
+
     /// Identify one candidate, restoring its take metadata when it is ours.
     func classify(_ url: URL,
                   stored: StoredSidecars) async -> ScanOutcome {
@@ -33,29 +53,21 @@ extension CaptureController {
             scannedPaths.insert(url.path)
             return .foreign
         }
-        let asset = AVURLAsset(url: url)
-        let metadata = (try? await asset.load(.metadata)) ?? []
-        func value(_ key: String) async -> String? {
-            guard let item = metadata.first(where: { ($0.key as? String) == key })
-            else { return nil }
-            return try? await item.load(.stringValue)
-        }
+        let embedded = await Self.embeddedMetadata(of: url)
         scannedPaths.insert(url.path)
-        guard await value(TakeWriter.markerKey) != nil else {
+        guard let embedded else {
             return .foreign
         }
-        let duration = (try? await asset.load(.duration))?.seconds ?? 0
         let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?
             .creationDate ?? Date.distantPast
-        let startTC = await TimecodeReader.startTimecode(of: asset)
         let name = url.lastPathComponent
         var take = Take(
             url: url,
             scene: "",
-            roll: await value(TakeWriter.rollKey) ?? "",
-            takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
-            startTimecode: startTC,
-            durationSeconds: duration,
+            roll: embedded.roll,
+            takeNumber: embedded.takeNumber,
+            startTimecode: embedded.startTimecode,
+            durationSeconds: embedded.durationSeconds,
             recordedAt: created)
         // the operator's own work, restored from the sidecars rather than read
         // off the file
@@ -68,15 +80,40 @@ extension CaptureController {
         // CaptureController+Slate); the file's own keys are the fallback, and
         // they are what makes a .mov copied away from its sidecars still know
         // which scene it is — the whole point of embedding them.
-        take.slate = embeddedSlate(
-            scene: await value(TakeWriter.sceneKey),
-            shot: await value(TakeWriter.shotKey),
-            take: await value(TakeWriter.takeKey))
+        take.slate = embeddedSlate(scene: embedded.scene, shot: embedded.shot,
+                                   take: embedded.take)
         if let row = stored.slates[name] {
             take.slate = row.slate
             take.logDescription = row.logDescription
         }
         return .take(take)
+    }
+
+    /// Everything one candidate file says about itself, in one nonisolated
+    /// pass. `nil` means it is not ours: the marker key is what a TakeShot
+    /// recording is identified by, and a file without it is Other content and
+    /// is not read any further — the same early out this had when the keys
+    /// were pulled one await at a time.
+    nonisolated private static func embeddedMetadata(
+        of url: URL) async -> EmbeddedMetadata? {
+        let asset = AVURLAsset(url: url)
+        let metadata = (try? await asset.load(.metadata)) ?? []
+        func value(_ key: String) async -> String? {
+            guard let item = metadata.first(where: { ($0.key as? String) == key })
+            else { return nil }
+            return try? await item.load(.stringValue)
+        }
+        guard await value(TakeWriter.markerKey) != nil else { return nil }
+        let duration = (try? await asset.load(.duration))?.seconds ?? 0
+        let startTC = await TimecodeReader.startTimecode(of: asset)
+        return EmbeddedMetadata(
+            roll: await value(TakeWriter.rollKey) ?? "",
+            takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
+            scene: await value(TakeWriter.sceneKey),
+            shot: await value(TakeWriter.shotKey),
+            take: await value(TakeWriter.takeKey),
+            durationSeconds: duration,
+            startTimecode: startTC)
     }
 
     /// The slate as the file itself carries it. A take key of 0 or nonsense is

@@ -44,31 +44,52 @@ extension CaptureController {
         return Timecode(frameNumber: frames, fps: fpsInt).description
     }
 
-    func loadPlaybackInfo(for item: AVPlayerItem) {
+    /// What the clip turned out to be, reduced to values that can leave the
+    /// load. An `AVAssetTrack` is not `Sendable` in any macOS SDK, so the
+    /// tracks are read and asked their questions inside one nonisolated pass
+    /// and only this crosses back to the main actor.
+    struct ClipInfo: Sendable {
+        var size: CGSize
+        var fps: Double
+        var startTimecode: Timecode?
+    }
+
+    /// The file is opened for its raster and rate rather than the item's own
+    /// asset being read: an `AVPlayerItem` is main-actor state, and the tracks
+    /// have to be walked off it (see `ClipInfo`, and the same decision in
+    /// `PlaybackFrameTap.detectLevels`).
+    func loadPlaybackInfo(for item: AVPlayerItem, at url: URL) {
         Task { [weak self] in
-            let asset = item.asset
-            guard let track = try? await asset.tracks(ofType: .video).first
-            else { return }
-            let size = (try? await track.load(.naturalSize)) ?? .zero
-            let fps = Double((try? await track.load(.nominalFrameRate)) ?? 25)
-            var startTC: Timecode?
-            if let tcTrack = try? await asset.tracks(ofType: .timecode).first,
-               let (frame, fdesc) = try? await Self.firstTimecodeSample(of: tcTrack) {
-                let quanta = Int(CMTimeCodeFormatDescriptionGetFrameQuanta(fdesc))
-                let flags = CMTimeCodeFormatDescriptionGetTimeCodeFlags(fdesc)
-                startTC = Timecode(frameNumber: Int(frame), fps: max(1, quanta),
-                                   isDropFrame: flags & kCMTimeCodeFlag_DropFrame != 0)
-            }
+            guard let info = await Self.clipInfo(of: url) else { return }
             await MainActor.run { [weak self] in
                 guard let self, self.player.currentItem === item else { return }
                 self.playbackFormatText = Self.shortFormat(
-                    height: Int(size.height), fps: fps)
-                self.playbackStartTC = startTC
-                self.playbackFPS = fps > 0 ? fps : 25
-                self.playbackAspect = size.height > 0
-                    ? size.width / size.height : nil
+                    height: Int(info.size.height), fps: info.fps)
+                self.playbackStartTC = info.startTimecode
+                self.playbackFPS = info.fps > 0 ? info.fps : 25
+                self.playbackAspect = info.size.height > 0
+                    ? info.size.width / info.size.height : nil
             }
         }
+    }
+
+    /// Raster, rate and start timecode of one file. Nonisolated: no track and
+    /// no format description ever leaves this scope.
+    nonisolated private static func clipInfo(of url: URL) async -> ClipInfo? {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.tracks(ofType: .video).first
+        else { return nil }
+        let size = (try? await track.load(.naturalSize)) ?? .zero
+        let fps = Double((try? await track.load(.nominalFrameRate)) ?? 25)
+        var startTC: Timecode?
+        if let tcTrack = try? await asset.tracks(ofType: .timecode).first,
+           let (frame, fdesc) = try? await firstTimecodeSample(of: tcTrack) {
+            let quanta = Int(CMTimeCodeFormatDescriptionGetFrameQuanta(fdesc))
+            let flags = CMTimeCodeFormatDescriptionGetTimeCodeFlags(fdesc)
+            startTC = Timecode(frameNumber: Int(frame), fps: max(1, quanta),
+                               isDropFrame: flags & kCMTimeCodeFlag_DropFrame != 0)
+        }
+        return ClipInfo(size: size, fps: fps, startTimecode: startTC)
     }
 
     /// The short format badge for PLAYBACK — "1080p25", "2160p24".
