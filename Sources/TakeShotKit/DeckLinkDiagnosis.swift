@@ -60,6 +60,46 @@ enum DeckLinkDiagnosis: String, Codable, Sendable {
     }
 }
 
+/// The same four answers as something to SHOW the operator, beside the device
+/// picker and over the picture.
+///
+/// Separate from `explanation` above rather than a translation of it, because
+/// the two are read by different people. The bundle is read by whoever the
+/// operator sends it to: it names header directories and re-signing flags. What
+/// the operator gets is the one fact they cannot deduce from the device list in
+/// front of them, and the one thing that would change it.
+///
+/// `.loaded` deliberately says NOTHING. This app's users are professionals —
+/// "the build works" is not news, and an empty list of boards on a build that
+/// can see boards already means exactly what it says.
+extension DeckLinkDiagnosis {
+    /// Localization keys for the notice, or nil when there is nothing
+    /// non-obvious to say. Internal so a test can hold them against both
+    /// .strings files rather than against whatever this machine happens to be.
+    var noticeKeys: (title: String, detail: String)? {
+        switch self {
+        case .loaded:
+            return nil
+        case .stub:
+            return ("decklink_stub_title", "decklink_stub_detail")
+        case .runtimeMissing:
+            return ("decklink_runtime_missing_title",
+                    "decklink_runtime_missing_detail")
+        case .signatureSuspect:
+            return ("decklink_signature_suspect_title",
+                    "decklink_signature_suspect_detail")
+        }
+    }
+
+    /// One line naming what is wrong with this build or this machine.
+    var noticeTitle: String? { noticeKeys.map { L($0.title) } }
+
+    /// …and one saying what would change it. Always present when the title is:
+    /// a fault an operator can do nothing about is a fault worth naming the
+    /// remedy for, and for a downloaded stub build the remedy IS the story.
+    var noticeDetail: String? { noticeKeys.map { L($0.detail) } }
+}
+
 /// The live answers, read off this machine. Kept apart from the reasoning above
 /// so the reasoning stays testable.
 enum DeckLinkProbe {
@@ -87,5 +127,33 @@ enum DeckLinkProbe {
         .of(compiledWithSDK: CDLDeviceManager.isCompiledWithSDK(),
             runtimeLoaded: CDLDeviceManager.isSDKAvailable(),
             frameworkPresent: frameworkPresent)
+    }
+
+    /// The verdict the app shows, and the seam a test uses to show the states
+    /// this machine is not in.
+    ///
+    /// It lives here rather than on `CaptureController` because it is not app
+    /// state: none of the three facts behind it can change without an install
+    /// and a relaunch, so a `@Published` property would be one that never
+    /// publishes. Read once per process, because `isSDKAvailable()` creates and
+    /// releases a DeckLink iterator and a view body must not.
+    ///
+    /// `nonisolated(unsafe)`: written only by a test, before the views that read
+    /// it exist, and never while anything else is running — the same contract
+    /// the backend list and the volume watch are injected under.
+    nonisolated(unsafe) private static var cached: DeckLinkDiagnosis?
+
+    static var current: DeckLinkDiagnosis {
+        if let cached { return cached }
+        let answer = diagnosis
+        cached = answer
+        return answer
+    }
+
+    /// Put the UI into a state this build is not in. The alternative is owning
+    /// four differently signed builds, and a test that asserted against the host
+    /// would claim one thing here and another on a runner with no SDK.
+    static func overrideDiagnosis(_ value: DeckLinkDiagnosis?) {
+        cached = value
     }
 }

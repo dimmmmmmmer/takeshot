@@ -8,9 +8,13 @@ import Foundation
 /// size at which nobody reads it top to bottom any more. What the pipeline
 /// reports back — and the disk watchdog that reports on its own — is
 /// `+CaptureEvents`; the extra boards are `+Multicam`.
+/// `backendAvailable` used to live here — "any child backend is available",
+/// which the demo source makes unconditionally true (its own `isAvailable` is
+/// `true` and it is in `shippingBackends()` on purpose), so the one message it
+/// gated was unreachable in every shipping build. The honest question is
+/// whether this build can see HARDWARE, and that is `DeckLinkProbe.current`; it had
+/// exactly one reader and that reader asks the honest question now.
 extension CaptureController {
-    var backendAvailable: Bool { backend.isAvailable }
-
     /// Whether the demo source is selected (to show the "REC demo camera" button).
     var isMockSelected: Bool {
         selectedDeviceID?.hasPrefix("mock:") ?? false

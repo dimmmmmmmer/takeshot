@@ -27,6 +27,10 @@ review layer on top.
   with running timecode, so the whole take path can be exercised without a
   board — and in a build made without the DeckLink SDK it is the only source
   there is.
+- If a board is connected and never appears, Settings says why under the device
+  picker: this build has no DeckLink SDK in it, Desktop Video is not installed,
+  or the framework was refused at load. Nothing is said when the build can see
+  boards — an empty list then means what it says.
 
 ## Take detection
 

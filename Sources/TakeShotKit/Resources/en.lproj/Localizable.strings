@@ -1,6 +1,5 @@
 /* Preview */
 "no_devices_found" = "No devices found";
-"sdk_not_connected" = "DeckLink SDK not connected";
 "no_signal" = "No signal";
 "rec" = "REC";
 
@@ -11,6 +10,16 @@
 "record" = "Record";
 "stop" = "Stop";
 "mock_device_name" = "Demo source (no hardware)";
+
+/* Why this build cannot see a board — DeckLinkDiagnosis, shown under the
+   device picker in Settings and over the live picture. Nothing is said when
+   the build CAN see boards. */
+"decklink_stub_title" = "No DeckLink support in this build";
+"decklink_stub_detail" = "Built without the DeckLink SDK: no board can be seen, whatever is connected. Only a build made with the SDK can capture from hardware.";
+"decklink_runtime_missing_title" = "Desktop Video is not installed";
+"decklink_runtime_missing_detail" = "Blackmagic Desktop Video carries the DeckLink runtime. Install it and relaunch TakeShot.";
+"decklink_signature_suspect_title" = "The DeckLink framework did not load";
+"decklink_signature_suspect_detail" = "Desktop Video is installed and its framework was refused: the hardened runtime blocks a library signed by another team. Re-sign the app ad hoc, or with the com.apple.security.cs.disable-library-validation entitlement.";
 
 /* Take list */
 "takes" = "Takes";
