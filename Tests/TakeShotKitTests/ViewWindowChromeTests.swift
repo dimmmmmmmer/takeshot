@@ -205,4 +205,39 @@ struct ViewWindowChromeTests {
         #expect(window.firstResponder !== window,
                 "the second install re-armed the release")
     }
+
+    // MARK: - the inset under the window buttons
+
+    /// The inset belongs to ONE window, and the app has five.
+    ///
+    /// This is the defect the measurement carried: it waited 0.2 s and then took
+    /// `NSApp.windows.first(where: { $0.styleMask.contains(.titled) })`, so with
+    /// the help or the scopes window already open the main window could inset
+    /// its content by whichever window AppKit happened to list first. The two
+    /// windows below answer differently, which is what makes "ask the right
+    /// one" a claim a test can hold rather than a tidier spelling of the same
+    /// thing.
+    @Test func theInsetIsMeasuredFromTheWindowItIsAskedAbout() {
+        let titled = windowWithFields().window
+        let stripless = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+
+        #expect(WindowChrome.titlebarInset(of: titled)
+            > WindowChrome.titlebarInset(of: stripless),
+                "two windows with different chrome measured the same")
+    }
+
+    /// A window that reports no strip at all still reserves room for the
+    /// buttons. Both cases are real: a borderless window has no title bar, and
+    /// a window whose style mask has not settled yet reports its two heights as
+    /// equal — which is why the measurement is taken twice rather than once
+    /// after a delay.
+    @Test func aWindowWithNoStripStillReservesRoomForTheButtons() {
+        let stripless = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+
+        #expect(WindowChrome.titlebarInset(of: stripless) == 20)
+    }
 }

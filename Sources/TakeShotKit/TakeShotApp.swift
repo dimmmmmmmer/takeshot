@@ -41,18 +41,12 @@ public struct TakeShotApp: App {
                 .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
                 .registersAppWindow(.main)
+                // inset under the window buttons — measured on THIS window,
+                // when there is one (see measuresTitlebarInset)
+                .measuresTitlebarInset { controller.windowTopInset = $0 }
                 .onAppear {
                     AppDelegate.shared?.controller = controller
                     hotkeys.install(controller: controller)
-                    // inset under the window buttons — measured, not a constant
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        @MainActor in
-                        if let window = NSApp.windows.first(where: {
-                            $0.styleMask.contains(.titled) }) {
-                            controller.windowTopInset =
-                                AppDelegate.titlebarInset(of: window)
-                        }
-                    }
                 }
         }
         // window buttons over the content, no separate title-bar strip
@@ -224,8 +218,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WindowChrome.makeMonolithic(window)
     }
 
-    /// Actual height of the window-button area: window height minus contentLayoutRect.
-    static func titlebarInset(of window: NSWindow) -> CGFloat {
-        max(20, window.frame.height - window.contentLayoutRect.height + 2)
-    }
 }

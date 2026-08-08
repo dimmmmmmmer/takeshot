@@ -76,6 +76,19 @@ enum WindowChrome {
         window.toolbar = nil
     }
 
+    /// Actual height of the window-button area: window height minus
+    /// `contentLayoutRect`. Measured rather than a constant, because the strip
+    /// is not one — it differs between a standard title bar and a hidden one,
+    /// and Apple has changed it between releases.
+    ///
+    /// Floored at 20 so that a window which cannot answer yet (the two heights
+    /// are equal before the style mask is settled, and for a borderless window
+    /// they always are) still reserves room for the buttons instead of putting
+    /// the content under them.
+    static func titlebarInset(of window: NSWindow) -> CGFloat {
+        max(20, window.frame.height - window.contentLayoutRect.height + 2)
+    }
+
     /// Drop the focus AppKit handed the window when it opened.
     ///
     /// AppKit gives a freshly keyed window a first responder off its key-view
@@ -183,6 +196,38 @@ extension View {
     func monolithicWindowChrome() -> some View {
         background(WindowReporter { window in
             WindowChrome.makeMonolithic(window)
+        })
+    }
+
+    /// Keep `report` supplied with the height this window's title-bar buttons
+    /// occupy, so the content can inset itself under them
+    /// (see `WindowChrome.titlebarInset`).
+    ///
+    /// Measured from the window this view is IN. That replaced a 0.2 s
+    /// `asyncAfter` that then took
+    /// `NSApp.windows.first(where: { $0.styleMask.contains(.titled) })`, and
+    /// both halves were wrong. The delay was a guess at when a window would
+    /// exist at all: long enough to show the content at the default inset first
+    /// on a quick launch, and no guarantee whatever on a slow one. The search
+    /// then took the FIRST titled window in AppKit's list, which is the help or
+    /// scopes window whenever one of those is already open — so the main window
+    /// could inset its content by a different window's title bar. The reporter
+    /// hands over the right window the moment there is one, so neither the wait
+    /// nor the search is needed.
+    ///
+    /// Measured again on the next runloop turn, for the same reason
+    /// `releasesInitialFocus` acts twice: SwiftUI is still applying the scene's
+    /// `.hiddenTitleBar` when the backing view lands, and a window whose style
+    /// mask has not settled reports the two heights as equal — the floor, not
+    /// the real strip. This is a second measurement of the same window rather
+    /// than a longer guess at when to take the first.
+    func measuresTitlebarInset(
+        _ report: @escaping @MainActor (CGFloat) -> Void) -> some View {
+        background(WindowReporter { window in
+            report(WindowChrome.titlebarInset(of: window))
+            DispatchQueue.main.async { @MainActor in
+                report(WindowChrome.titlebarInset(of: window))
+            }
         })
     }
 
