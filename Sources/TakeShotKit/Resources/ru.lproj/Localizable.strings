@@ -1,6 +1,5 @@
 /* Preview */
 "no_devices_found" = "Устройства не найдены";
-"sdk_not_connected" = "DeckLink SDK не подключён";
 "no_signal" = "Нет сигнала";
 "rec" = "REC";
 
@@ -11,6 +10,16 @@
 "record" = "Запись";
 "stop" = "Стоп";
 "mock_device_name" = "Демо-источник (без платы)";
+
+/* Why this build cannot see a board — DeckLinkDiagnosis, shown under the
+   device picker in Settings and over the live picture. Nothing is said when
+   the build CAN see boards. */
+"decklink_stub_title" = "В этой сборке нет поддержки DeckLink";
+"decklink_stub_detail" = "Сборка собрана без DeckLink SDK: плата не видна, что бы ни было подключено. Захват с платы возможен только в сборке с SDK.";
+"decklink_runtime_missing_title" = "Desktop Video не установлен";
+"decklink_runtime_missing_detail" = "Рантайм DeckLink входит в Blackmagic Desktop Video. Установите его и перезапустите TakeShot.";
+"decklink_signature_suspect_title" = "Фреймворк DeckLink не загрузился";
+"decklink_signature_suspect_detail" = "Desktop Video установлен, но его фреймворк отклонён: hardened runtime блокирует библиотеку, подписанную другой командой. Переподпишите приложение ad hoc или с правом com.apple.security.cs.disable-library-validation.";
 
 /* Take list */
 "takes" = "Дубли";

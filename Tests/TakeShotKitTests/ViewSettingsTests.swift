@@ -10,6 +10,14 @@ import Testing
 /// so nothing about the rendered form's height gives the truncation away. What
 /// does is measuring the rows that are their own views and the label strings the
 /// form puts in them, and checking they still fit the width the window has.
+///
+/// Every test here that measures the WHOLE form pins `DeckLinkProbe.current` to
+/// `.loaded` first. The device section carries a notice whose height depends on
+/// whether the machine running the suite has the DeckLink headers and Desktop
+/// Video — this Mac does, a worktree checkout and the CI runner do not — and a
+/// form whose size is a fact about the runner is a size nobody can assert
+/// against. The notice has its own suite (`ViewDeckLinkNoticeTests`), which
+/// measures it in every state.
 @MainActor
 struct ViewSettingsTests {
     /// The form renders and reports the fixed width in both languages. The
@@ -17,6 +25,7 @@ struct ViewSettingsTests {
     /// missing key throwing off a `ForEach`, say) shows up here.
     @Test func settingsFormRendersAtItsFixedWidth() async throws {
         try await ViewProbe.run { probe in
+            DeckLinkProbe.overrideDiagnosis(.loaded)
             let ideal = probe.fittingSizes { SettingsView() }
             #expect(ideal.ru.width == SettingsView.width + 32,
                     "settings window width moved: \(ideal.ru.width)")
@@ -338,6 +347,7 @@ struct ViewSettingsTests {
     /// row in it: a section that fell out of the Russian build shows up here.
     @Test func theSettingsFormStillMatchesWithTheMenuBarRow() async throws {
         try await ViewProbe.run { probe in
+            DeckLinkProbe.overrideDiagnosis(.loaded)
             probe.controller.settings.keepInMenuBar = nil
             let off = probe.fittingSizes { SettingsView() }
             #expect(off.ru.matches(off.en, slack: 8),
@@ -354,6 +364,7 @@ struct ViewSettingsTests {
     /// form must still measure the same.
     @Test func settingsFormWhileRecordingKeepsItsSize() async throws {
         try await ViewProbe.run { probe in
+            DeckLinkProbe.overrideDiagnosis(.loaded)
             let idle = probe.fittingSizes { SettingsView() }
             probe.controller.isRecording = true
             probe.controller.settings.forcedInputMode = "1080p25"

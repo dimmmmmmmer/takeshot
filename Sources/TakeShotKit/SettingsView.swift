@@ -53,6 +53,12 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(controller.isRecording)
+                // directly under the list it explains: a list holding only the
+                // demo source is the whole symptom of a stub build, and it is
+                // indistinguishable from a machine with no Desktop Video and
+                // from a framework the signature refused. Nothing at all when
+                // this build can see boards.
+                DeckLinkNoticeRow()
                 // shared with the badge menu over the player — see
                 // `SignalControls`; both restart capture
                 InputModePicker()

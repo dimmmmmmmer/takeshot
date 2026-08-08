@@ -48,6 +48,92 @@ import Testing
             .contains("Desktop Video"))
     }
 
+    // MARK: - what the OPERATOR is told
+
+    /// The same four answers as four different messages — which is the whole
+    /// defect this pins. `backendAvailable` used to choose between two, the
+    /// demo source pinned it to one, and every fault came out as "no devices
+    /// found": the words a loose cable earns.
+    ///
+    /// Hand-set states, never `DeckLinkProbe.diagnosis`: the development Mac
+    /// has the SDK headers and Desktop Video, a worktree checkout has neither,
+    /// and a test that reported whichever it was running on would mean nothing
+    /// on either.
+    @Test @MainActor func everyDiagnosisGetsItsOwnMessage() {
+        // A working build says nothing at all: "this build can see boards" is
+        // not news to a professional, and the device list already says whether
+        // one is attached.
+        #expect(DeckLinkDiagnosis.loaded.noticeKeys == nil)
+        #expect(DeckLinkDiagnosis.loaded.noticeTitle == nil)
+        #expect(DeckLinkDiagnosis.loaded.noticeDetail == nil)
+
+        for language in [AppLanguage.english, .russian] {
+            ViewRender.withLanguage(language) {
+                var titles: Set<String> = []
+                var details: Set<String> = []
+                for fault in DeckLinkDiagnosis.faults {
+                    let keys = fault.noticeKeys
+                    let title = fault.noticeTitle ?? ""
+                    let detail = fault.noticeDetail ?? ""
+                    #expect(keys != nil, "\(fault.rawValue) says nothing")
+                    // A key missing from the .strings file comes back AS the
+                    // key — the failure mode that renders raw identifiers all
+                    // over the UI instead of throwing.
+                    #expect(title != keys?.title,
+                            "\(keys?.title ?? "-") is untranslated")
+                    #expect(detail != keys?.detail,
+                            "\(keys?.detail ?? "-") is untranslated")
+                    titles.insert(title)
+                    details.insert(detail)
+                }
+                #expect(titles.count == 3,
+                        "two faults share a headline in \(language.rawValue)")
+                #expect(details.count == 3,
+                        "two faults share a remedy in \(language.rawValue)")
+            }
+        }
+    }
+
+    /// The one that cost a day on set has to be the one that names the trap.
+    /// Told "install Desktop Video" by a machine that already has it, the
+    /// operator goes and installs it again — which is the day.
+    @Test @MainActor func onlyTheSignatureNoticeNamesTheEntitlement() {
+        // Both languages: the entitlement is a literal that has to survive
+        // translation, and the other two must not acquire it.
+        for language in [AppLanguage.english, .russian] {
+            ViewRender.withLanguage(language) {
+                let entitlement = "com.apple.security.cs.disable-library-validation"
+                #expect((DeckLinkDiagnosis.signatureSuspect.noticeDetail ?? "")
+                    .contains(entitlement))
+                for other in [DeckLinkDiagnosis.stub, .runtimeMissing] {
+                    #expect(!(other.noticeDetail ?? "")
+                        .contains("disable-library-validation"),
+                            "\(other.rawValue) blames the signature")
+                }
+            }
+        }
+        // …and each of the other two names its own remedy, which is a different
+        // one: a build with the SDK for the stub, an install for the runtime.
+        ViewRender.withLanguage(.english) {
+            #expect((DeckLinkDiagnosis.stub.noticeDetail ?? "").contains("SDK"))
+            #expect((DeckLinkDiagnosis.runtimeMissing.noticeDetail ?? "")
+                .contains("Desktop Video"))
+        }
+    }
+
+    /// The retired key must not come back. `sdk_not_connected` was chosen by
+    /// `backendAvailable` and was therefore never once on screen; a string left
+    /// in the file is how a dead branch gets re-added by whoever finds it.
+    @Test func theUnreachableSDKStringIsGoneFromBothLanguages() throws {
+        for language in ["en", "ru"] {
+            let path = try #require(Bundle.module.path(forResource: language,
+                                                       ofType: "lproj"))
+            let strings = try #require(NSDictionary(
+                contentsOfFile: path + "/Localizable.strings") as? [String: String])
+            #expect(strings["sdk_not_connected"] == nil)
+        }
+    }
+
     // MARK: - redaction
 
     /// The account name is what a home-directory path gives away, and it is in

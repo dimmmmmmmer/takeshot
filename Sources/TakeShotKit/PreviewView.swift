@@ -220,6 +220,15 @@ struct LivePreviewContent: View {
 }
 
 /// Status text over the live image (no devices / no signal).
+///
+/// "No devices found" is the whole story only when the binary can SEE boards.
+/// It used to be chosen by `backendAvailable`, which the demo source pinned to
+/// true, so the alternative was unreachable and this surface told a stub build
+/// the same thing it tells a loose cable. It asks `DeckLinkProbe.current` now: with
+/// `.loaded` the old wording stands and now means what it says, and the other
+/// three name themselves. The permanent home of that message is the Settings
+/// device row (`DeckLinkNoticeRow`) — this is where the picture would be, and
+/// nothing here is on screen while a source is feeding it.
 struct LiveStatusOverlay: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -228,10 +237,18 @@ struct LiveStatusOverlay: View {
             VStack(spacing: 8) {
                 Image(systemName: "cable.connector.slash")
                     .font(.system(size: 40))
-                Text(controller.backendAvailable
-                     ? L("no_devices_found")
-                     : L("sdk_not_connected"))
+                Text(DeckLinkProbe.current.noticeTitle
+                     ?? L("no_devices_found"))
                     .font(.headline)
+                if let detail = DeckLinkProbe.current.noticeDetail {
+                    Text(detail)
+                        .font(.callout)
+                        .multilineTextAlignment(.center)
+                        // wrap inside the picture rather than run off it; the
+                        // player is at least ViewBudget.playerWidth wide
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 420)
+                }
             }
             .foregroundStyle(.secondary)
         } else if !controller.signalPresent {
