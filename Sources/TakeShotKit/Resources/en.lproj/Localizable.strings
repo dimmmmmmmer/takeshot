@@ -848,3 +848,32 @@
 "trigger_timecode" = "TC";
 "trigger_visual" = "INDICATOR";
 "trigger_manual" = "MANUAL";
+
+/* Recording-integrity alarms. Ten of these are the sticky banner: the paths
+   where footage is lost or the rolling take is at risk. WHICH register a line
+   lands in is decided by PipelineAlarm.severity in CaptureCore, never by these
+   words — see AlarmLocalization — so they can be reworded and translated
+   freely. The %@ reasons arrive already localized by the system. */
+"alarm_take_lost_writer" = "TAKE LOST — recording stopped, writer failed: %@";
+"alarm_frames_dropped" = "Dropped %d recording frame(s) — encoder/disk can't keep up";
+"alarm_preroll_incomplete" = "Pre-roll incomplete: %d frame(s) before the REC point were not written";
+"alarm_take_closed_format" = "Take closed: input format changed mid-take";
+"alarm_take_closed_signal" = "Take closed: input signal lost mid-take";
+"alarm_ingress_overload" = "Pipeline overloaded — %d frame(s) dropped at ingress";
+"alarm_usb_audio_lost" = "USB AUDIO LOST — take continues, audio padded with silence";
+"alarm_recording_start_failed" = "Failed to start recording: %@";
+"alarm_take_lost_no_audio" = "TAKE LOST audio — %1$@ started before the audio format was known and has no audio track";
+"alarm_take_lost_finalize" = "TAKE LOST — failed to finalize %1$@: %2$@";
+/* …and the three that toast: a finalized take's closing tallies, stated after
+   the live alarm for them has already been and gone. */
+"alarm_take_audio_dropped" = "Take %1$@: %2$d audio packet(s) dropped";
+"alarm_take_audio_gap_filled" = "Take %1$@: %2$d audio packet(s) gap-filled with silence";
+"alarm_take_video_dropped" = "Take %1$@: %2$d video frame(s) dropped";
+
+/* The free-space and destination watchdog. Sticky by direct assignment (the
+   app owns this watch; nothing crosses the CaptureCore boundary), so only the
+   words needed localizing. */
+"alarm_volume_unreachable" = "RECORD VOLUME UNREACHABLE — recording stopped";
+"alarm_folder_unreachable" = "Record folder unreachable: %@";
+"alarm_disk_full" = "DISK FULL (%.1f GB) — recording stopped";
+"alarm_disk_low" = "Record disk low: %.1f GB free";

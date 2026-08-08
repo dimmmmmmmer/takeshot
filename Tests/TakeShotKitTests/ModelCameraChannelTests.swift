@@ -105,7 +105,7 @@ struct ModelCameraChannelTests {
                                     settings: settings(destination: root.path),
                                     roll: "007")
         var takes: [Take] = []
-        var errors: [String] = []
+        var errors: [PipelineAlarm] = []
         channel.onTakeFinished = { takes.append($0) }
         channel.onError = { errors.append($0) }
         try channel.start()
@@ -124,9 +124,12 @@ struct ModelCameraChannelTests {
         await channel.pipeline.finishPendingWrites()
 
         // a video-only feed legitimately warns about the missing audio track;
-        // whatever it reports has to name the channel it came from
-        #expect(errors.allSatisfy { $0.hasPrefix("B: ") },
-                "untagged: \(errors.joined(separator: "; "))")
+        // whatever it reports has to reach the callback rather than die on the
+        // channel (the camera's letter is added by the controller — see
+        // ControllerCaptureTests.multicamAddsAndRemovesTheSecondDemoCamera)
+        let reported = errors.map(\.message).joined(separator: "; ")
+        #expect(errors.allSatisfy { $0.severity == .integrity },
+                "a B-cam integrity failure came up as a notice: \(reported)")
         let take = try #require(takes.first)
         #expect(take.displayName.hasPrefix("B007C"),
                 "named \(take.displayName) — the main camera's label leaked in")
@@ -216,14 +219,16 @@ struct ModelCameraChannelTests {
 
     /// A recording failure on an extra channel used to be discarded outright:
     /// a take joins the list only on success, so a failed B-cam take left no
-    /// trace at all. It now surfaces, tagged with the camera it came from.
-    @Test func recordingErrorsSurfaceTaggedWithTheCameraLabel() async throws {
+    /// trace at all. It now surfaces — as the alarm the pipeline raised, with
+    /// its severity intact, which is what decides whether the operator gets a
+    /// banner or a toast they can miss.
+    @Test func recordingFailuresSurfaceFromAnExtraChannel() async throws {
         let backend = StubBackend(devices: [CaptureDeviceInfo(id: "x", name: "X")])
         // a destination no writer can create a file in
         let channel = CameraChannel(
             camLabel: "C", backend: backend, deviceID: "x",
             settings: settings(destination: "/dev/null/nowhere"), roll: "001")
-        var errors: [String] = []
+        var errors: [PipelineAlarm] = []
         var takes: [Take] = []
         channel.onError = { errors.append($0) }
         channel.onTakeFinished = { takes.append($0) }
@@ -241,7 +246,14 @@ struct ModelCameraChannelTests {
         await channel.pipeline.finishPendingWrites()
 
         #expect(takes.isEmpty)
-        let message = try #require(errors.first)
-        #expect(message.hasPrefix("C: "), "untagged channel error: \(message)")
+        let alarm = try #require(errors.first)
+        // the case, not the reason — the reason is whatever the filesystem
+        // says about /dev/null/nowhere on the machine running this
+        guard case .recordingStartFailed = alarm else {
+            Issue.record("an unexpected alarm: \(alarm.message)")
+            return
+        }
+        #expect(alarm.severity == .integrity,
+                "a take that never started came up as a toast")
     }
 }

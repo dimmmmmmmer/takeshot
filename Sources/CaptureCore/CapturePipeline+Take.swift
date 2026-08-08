@@ -53,7 +53,8 @@ extension CapturePipeline {
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
         } catch {
             DispatchQueue.main.async {
-                self.onError?("Failed to start recording: \(error.localizedDescription)")
+                self.onError?(.recordingStartFailed(
+                    reason: error.localizedDescription))
             }
         }
     }
@@ -115,9 +116,7 @@ extension CapturePipeline {
     private func warnIfTakeHasNoAudioTrack(url: URL) {
         guard recordChannelCount == 0 else { return }
         DispatchQueue.main.async {
-            self.onError?("TAKE LOST audio — \(url.lastPathComponent) "
-                + "started before the audio format was known and has no "
-                + "audio track")
+            self.onError?(.takeLostNoAudioTrack(file: url.lastPathComponent))
         }
     }
 
@@ -168,9 +167,9 @@ extension CapturePipeline {
                 self?.noteHealth { $0.takesFailedToFinalize += 1 }
                 let report = self?.takeReport
                 DispatchQueue.main.async {
-                    report?.failed("TAKE LOST — failed to finalize "
-                        + "\(marked.deletingPathExtension().lastPathComponent): "
-                        + error.localizedDescription)
+                    report?.failed(.takeLostFinalizeFailed(
+                        file: marked.deletingPathExtension().lastPathComponent,
+                        reason: error.localizedDescription))
                 }
             }
         }
@@ -196,17 +195,16 @@ extension CapturePipeline {
         DispatchQueue.main.async {
             report?.finished(take)
             if droppedAudio > 0 {
-                report?.failed("Take \(take.displayName): "
-                    + "\(droppedAudio) audio packet(s) dropped")
+                report?.failed(.takeDroppedAudioPackets(
+                    take: take.displayName, count: droppedAudio))
             }
             if gapFilledAudio > 0 {
-                report?.failed("Take \(take.displayName): "
-                    + "\(gapFilledAudio) audio packet(s) gap-filled "
-                    + "with silence")
+                report?.failed(.takeGapFilledAudio(
+                    take: take.displayName, count: gapFilledAudio))
             }
             if droppedVideo > 0 {
-                report?.failed("Take \(take.displayName): "
-                    + "\(droppedVideo) video frame(s) dropped")
+                report?.failed(.takeDroppedVideoFrames(
+                    take: take.displayName, count: droppedVideo))
             }
         }
     }
@@ -227,6 +225,13 @@ extension CapturePipeline {
             // the take's log row says what happened to its sound — a padded
             // take found only in the edit is exactly the silent failure the
             // integrity rules exist to prevent
+            //
+            // English, and staying English even though the alarm beside it is
+            // now localized: this is not a message to the operator, it is the
+            // Comments column of `takeshot-log.csv` and of the ALE, whose
+            // schema is frozen and whose reader is post-production. A row that
+            // said "Звук USB потерян" because the operator had the UI in
+            // Russian would be a different value in a machine-read column.
             take.comment = "USB audio lost — \(gapFilledAudioPackets) "
                 + "packet(s) padded with silence"
         }

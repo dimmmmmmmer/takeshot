@@ -424,3 +424,26 @@ enum ControllerFixtures {
         return url
     }
 }
+
+@MainActor
+extension CaptureController {
+    /// True when the alarm banner is showing one of the three take-LOST alarms
+    /// — a file is gone — as opposed to a take that merely dropped frames on a
+    /// busy machine. That distinction is why the checks that use this were
+    /// never simply `persistentAlert == nil`.
+    ///
+    /// Matched on the fixed head of each alarm's format string rather than on
+    /// the English words: the banner is localized, and a check written against
+    /// "TAKE LOST" would go quietly true the moment the suite ran in another
+    /// language. A check that cannot fail is worse than no check. `contains`
+    /// rather than `hasPrefix`, so a multicam channel's letter does not hide it.
+    var showsATakeLostAlarm: Bool {
+        guard let alert = persistentAlert else { return false }
+        let heads = ["alarm_take_lost_writer", "alarm_take_lost_no_audio",
+                     "alarm_take_lost_finalize"]
+            .map { key in L(key).prefix { character in character != "%" } }
+        return heads.contains { head in
+            !head.isEmpty && alert.contains(head)
+        }
+    }
+}

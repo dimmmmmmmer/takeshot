@@ -71,7 +71,7 @@ import Testing
             #expect(controller.recentlyAddedURL == take.url)
             // whatever the machine's timing did to the frame budget, the take
             // itself must not have been lost
-            #expect(controller.persistentAlert?.contains("TAKE LOST") != true)
+            #expect(!controller.showsATakeLostAlarm)
         }
     }
 
@@ -269,25 +269,32 @@ import Testing
     /// Recording-integrity failures stick in the banner; everything else is a
     /// five-second toast. Getting this backwards is how a lost take gets
     /// announced more quietly than a dropped frame.
+    /// Four samples; `ControllerAlarmSeverityTests` holds the full inventory
+    /// and the proof that the typed severity kept every one of them where the
+    /// old substring classifier had it.
     @Test func integrityFailuresStickAndTheRestJustToast() async throws {
         try await ControllerHarness.run { controller, _ in
             let onError = try #require(controller.pipeline.onError)
+            L10n.apply(.english)
+            defer { L10n.apply(.english) }
 
-            onError("TAKE LOST: A001C01 (writer failed)")
+            onError(.takeLostWriterFailed(reason: "the volume went away"))
             #expect(controller.persistentAlert?.hasPrefix("TAKE LOST") == true)
             #expect(controller.lastError == nil)
 
-            onError("Take closed: input format changed")
-            #expect(controller.persistentAlert == "Take closed: input format changed")
+            onError(.takeClosedFormatChanged)
+            #expect(controller.persistentAlert
+                        == "Take closed: input format changed mid-take")
 
-            onError("Failed to start recording")
-            #expect(controller.persistentAlert == "Failed to start recording")
+            onError(.recordingStartFailed(reason: "no such folder"))
+            #expect(controller.persistentAlert
+                        == "Failed to start recording: no such folder")
 
-            onError("Pre-roll incomplete: 2 of 5 frames")
+            onError(.preRollIncomplete(frames: 2))
             #expect(controller.persistentAlert?.hasPrefix("Pre-roll") == true)
 
-            onError("Playout output stalled")
-            #expect(controller.lastError == "Playout output stalled")
+            onError(.takeDroppedVideoFrames(take: "A001C01", count: 3))
+            #expect(controller.lastError == "Take A001C01: 3 video frame(s) dropped")
             // and the sticky one is still up underneath the toast
             #expect(controller.persistentAlert?.hasPrefix("Pre-roll") == true)
         }
@@ -306,6 +313,16 @@ import Testing
             #expect(controller.multicamOn)
             #expect(controller.extraChannels.count == 1)
             #expect(controller.allCameraLabels == ["A", "B"])
+
+            // …and what that channel reports reaches the operator wearing the
+            // channel's letter. The channel forwards the alarm untouched; the
+            // letter is put on here, where the words are chosen.
+            let channel = try #require(controller.extraChannels.first)
+            let report = try #require(channel.onError)
+            report(.takeClosedSignalLost)
+            let banner = controller.persistentAlert ?? "nothing at all"
+            #expect(banner.hasPrefix("B: "),
+                    "an extra camera's alarm arrived unattributed: \(banner)")
 
             controller.toggleMulticam()
             #expect(!controller.multicamOn)

@@ -35,7 +35,9 @@ extension CaptureController {
                 camLabel: nextLetter, backend: mock,
                 deviceID: MockCaptureBackend.deviceID, settings: settings, roll: roll)
             channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-            channel.onError = { [weak self] message in self?.reportPipelineError(message) }
+            channel.onError = { [weak self] alarm in
+                self?.reportPipelineError(alarm, camera: nextLetter)
+            }
             try? channel.start() // the mock cannot fail
             extraChannels = [channel]
         } else {
@@ -52,7 +54,11 @@ extension CaptureController {
                     backend: DeckLinkBackendAdapter(watchesDevices: false),
                     deviceID: rawID, settings: settings, roll: roll)
                 channel.onTakeFinished = { [weak self] take in self?.appendChannelTake(take) }
-                channel.onError = { [weak self] message in self?.reportPipelineError(message) }
+                // `letter` by value: capturing the channel in its own callback
+                // would be a retain cycle, and it is the label we want anyway
+                channel.onError = { [weak self, letter] alarm in
+                    self?.reportPipelineError(alarm, camera: letter)
+                }
                 do {
                     try channel.start()
                     channels.append(channel)

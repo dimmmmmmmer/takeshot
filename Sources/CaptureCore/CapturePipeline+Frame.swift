@@ -106,7 +106,7 @@ extension CapturePipeline {
             let reason = writer.failureReason
             finishTake() // clears the writer, so this branch fires once
             DispatchQueue.main.async {
-                self.onError?("TAKE LOST — recording stopped, writer failed: \(reason)")
+                self.onError?(.takeLostWriterFailed(reason: reason))
             }
         } else {
             droppedFrames += 1
@@ -125,8 +125,7 @@ extension CapturePipeline {
                 || droppedFrames % 100 == 0 {
                 let count = droppedFrames
                 DispatchQueue.main.async {
-                    self.onError?("Dropped \(count) recording frame(s) "
-                        + "— encoder/disk can't keep up")
+                    self.onError?(.recordingFramesDropped(count: count))
                 }
             }
         }

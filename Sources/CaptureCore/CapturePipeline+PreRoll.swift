@@ -119,8 +119,7 @@ extension CapturePipeline {
         if lostPreRoll > 0 {
             let count = lostPreRoll
             DispatchQueue.main.async {
-                self.onError?("Pre-roll incomplete: \(count) frame(s) "
-                    + "before the REC point were not written")
+                self.onError?(.preRollIncomplete(frames: count))
             }
         }
     }

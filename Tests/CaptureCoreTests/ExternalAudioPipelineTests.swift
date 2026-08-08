@@ -140,7 +140,7 @@ struct ExternalAudioPipelineTests {
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         let finished = TakeCollector()
-        let errors = EventCollector<String>()
+        let errors = EventCollector<PipelineAlarm>()
         let recStates = EventCollector<Bool>()
         pipeline.onTakeFinished = { finished.append($0) }
         pipeline.onError = { errors.append($0) }
@@ -166,17 +166,22 @@ struct ExternalAudioPipelineTests {
         await TestWait.fileExists(at: take.url)
 
         // the alarm names the loss; the tally is stated like dropped audio
+        await TestWait.until { errors.contains(.externalAudioPadded) }
+        #expect(errors.contains(.externalAudioPadded),
+                "no alarm for the silent stretch")
+        // …and it is the sticky register, not a toast: the take is still
+        // rolling and its sound is being invented
+        #expect(PipelineAlarm.externalAudioPadded.severity == .integrity)
         await TestWait.until {
-            errors.all.contains { $0.contains("USB AUDIO LOST") }
+            errors.all.contains { $0.message.contains("gap-filled") }
         }
-        #expect(errors.all.contains { $0.contains("USB AUDIO LOST") },
-                "no sticky alarm for the silent stretch")
-        await TestWait.until {
-            errors.all.contains { $0.contains("gap-filled") }
-        }
-        #expect(errors.all.contains { $0.contains("gap-filled") },
-                "the padded packets were never counted out loud")
-        // the log row is marked
+        let tally = try #require(
+            errors.all.first { $0.message.contains("gap-filled") },
+            "the padded packets were never counted out loud")
+        // the tally arrives after a take that finalized, so it toasts
+        #expect(tally.severity == .notice)
+        // the log row is marked — in English, whatever the UI is set to: this
+        // is the Comments column of the frozen Resolve CSV, not a message
         #expect(take.comment.contains("silence"))
 
         // and the file's audio runs to the end of the picture

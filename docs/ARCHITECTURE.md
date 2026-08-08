@@ -358,6 +358,29 @@ Make new settings fields **Optional** — otherwise saved JSON from an older
 build will not decode. Core errors (`CaptureCore`, `CDeckLink`) are English and
 not localized. Add every new string to both tables.
 
+### What crosses the CaptureCore boundary, and what does not
+
+Core stays localization-free, so anything it reports has to arrive as a value
+the app can put words to. Two bridges do that, and they are the same shape:
+`ReportLocalization` fills the label structs the report writers take, and
+`AlarmLocalization` turns a `PipelineAlarm` into the sentence in the banner.
+
+The alarms are the case worth knowing about. The app decides between the sticky
+banner and the five-second toast by reading `PipelineAlarm.severity`, which
+CaptureCore states with the event. It used to read it off the message instead,
+by matching English substrings ("TAKE LOST", "Dropped", "ingress"), which meant
+the wording was load bearing: those messages could not be translated, and
+translating them anyway would have quietly demoted every take-loss alarm to a
+toast. Severity and prose are now separate answers to separate questions, and
+the split is pinned message by message in `ControllerAlarmSeverityTests`
+against the substring list it replaced.
+
+What does **not** get translated is anything post-production reads. The
+`takeshot-log.csv` and ALE `Comments` column carries a take's audio-padding
+note (`CapturePipeline+Take.describeTake`), and it is written in English
+whatever the UI is set to — a frozen machine-read schema whose values must not
+depend on the operator's language setting.
+
 The help page is the exception: it is prose, several pages of it, so it lives as
 `Help.md` in each `.lproj` rather than as escaped one-line strings. `HelpDocument`
 reads it from the bundle L10n currently holds — `Bundle.module` would give the

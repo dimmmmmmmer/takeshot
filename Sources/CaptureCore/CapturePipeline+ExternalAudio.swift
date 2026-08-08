@@ -143,8 +143,7 @@ extension CapturePipeline {
             guard let silence = silencePacket(at: cursor) else { break }
             if gapFilledAudioPackets == 0 {
                 DispatchQueue.main.async {
-                    self.onError?("USB AUDIO LOST — take continues, "
-                        + "audio padded with silence")
+                    self.onError?(.externalAudioPadded)
                 }
             }
             recordAudio(silence)

@@ -121,7 +121,7 @@ import Testing
             // the take survives: video keeps recording, the sticky alarm names
             // the loss, and the drop counter path is the pad counter's
             await ControllerWait.until {
-                controller.persistentAlert?.contains("USB AUDIO LOST") == true
+                controller.persistentAlert == L("alarm_usb_audio_lost")
             }
             #expect(controller.isRecording, "the take died with the device")
             let padded = Date().addingTimeInterval(1.0)
