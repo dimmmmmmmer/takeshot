@@ -475,8 +475,8 @@
 "offload_resume_dest" = "%@ — %d of %d files are already there (%@), listed in that disk's own checksum list.";
 "offload_resume_dest_nothing" = "%@ — nothing on it can be reused; everything will be copied.";
 "offload_resume_dest_full" = "%@ — everything will be copied: %@.";
-"offload_resume_gate" = "Nothing is skipped on trust: each of those files is read back off the disk and its checksum compared with that list before it counts as done. Anything that does not match, or is not there, is copied from the card again.";
-"offload_resume_cost" = "This reads the disk instead of reading the card and writing the disk again — a large saving on a slow disk, a smaller one on a fast disk and a fast card.";
+"offload_resume_gate" = "Skipping is decided by checksum, not by size: each file is read back off the disk and compared. Anything that does not match is copied again.";
+"offload_resume_cost" = "The disk is still read in full — the card is not, and nothing is written twice.";
 "offload_resume_accept" = "Resume (skip up to %d files)";
 "offload_resume_decline" = "Copy the whole card";
 "offload_resume_why_new" = "nothing has been copied into this folder before";
