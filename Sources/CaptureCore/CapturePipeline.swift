@@ -64,14 +64,18 @@ public final class CapturePipeline: @unchecked Sendable {
     /// on every push for a week.
     private let takeCallbackLock = NSLock()
     private var storedOnTakeFinished: ((Take) -> Void)?
-    private var storedOnError: ((String) -> Void)?
+    private var storedOnError: ((PipelineAlarm) -> Void)?
 
     public var onTakeFinished: ((Take) -> Void)? {
         get { takeCallbackLock.withLock { storedOnTakeFinished } }
         set { takeCallbackLock.withLock { storedOnTakeFinished = newValue } }
     }
 
-    public var onError: ((String) -> Void)? {
+    /// Something went wrong, as a `PipelineAlarm` rather than as prose: the
+    /// consumer reads `severity` to decide how loudly to say it, and picks its
+    /// own wording from the case. See `PipelineAlarm` for why it is not a
+    /// String any more.
+    public var onError: ((PipelineAlarm) -> Void)? {
         get { takeCallbackLock.withLock { storedOnError } }
         set { takeCallbackLock.withLock { storedOnError = newValue } }
     }
@@ -102,7 +106,7 @@ public final class CapturePipeline: @unchecked Sendable {
     /// pipeline itself across isolation.
     struct TakeReport: @unchecked Sendable {
         let finished: (Take) -> Void
-        let failed: (String) -> Void
+        let failed: (PipelineAlarm) -> Void
     }
 
     /// Both callbacks copied out under one lock, so the task holds values

@@ -54,8 +54,8 @@ extension CaptureController {
         // and must not touch the MainActor-isolated controller
         let monitor = audioMonitor
         pipeline.onMonitorAudio = { monitor.enqueue($0) }
-        pipeline.onError = { [weak self] message in
-            self?.reportPipelineError(message)
+        pipeline.onError = { [weak self] alarm in
+            self?.reportPipelineError(alarm)
         }
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
@@ -182,14 +182,30 @@ extension CaptureController {
         return (requested: wanted, delivered: format.bitDepth)
     }
 
-    func reportPipelineError(_ message: String) {
-        let sticky = ["TAKE LOST", "AUDIO LOST", "Dropped", "ingress",
-                      "Failed to start recording", "Take closed:",
-                      "Pre-roll incomplete"]
-        if sticky.contains(where: message.contains) {
-            persistentAlert = message
-        } else {
-            lastError = message
+    /// Put a pipeline alarm in front of the operator, in the register the alarm
+    /// itself declares and in the language the app is set to.
+    ///
+    /// This used to read the register off the prose — a list of English
+    /// substrings ("TAKE LOST", "Dropped", "ingress") matched against the
+    /// message — which made the wording load-bearing and the messages
+    /// untranslatable: localizing them would have quietly demoted every
+    /// take-loss alarm to a five-second toast. The severity now travels with
+    /// the event (`PipelineAlarm.severity`) and the words are chosen separately
+    /// (`AlarmLocalization`), so the two can move independently.
+    ///
+    /// `camera` is a multicam channel's letter. The label is added here rather
+    /// than in `CameraChannel` because it is presentation: a B-cam take is a
+    /// take, and prefixing must not be able to change what register it lands
+    /// in — which, under a substring classifier, is exactly the kind of thing
+    /// that could.
+    func reportPipelineError(_ alarm: PipelineAlarm, camera: String? = nil) {
+        let text = camera.map { "\($0): \(alarm.localizedText)" }
+            ?? alarm.localizedText
+        switch alarm.severity {
+        case .integrity:
+            persistentAlert = text
+        case .notice:
+            lastError = text
         }
     }
 
@@ -224,23 +240,26 @@ extension CaptureController {
             else { return }
             if isRecording {
                 pipeline.toggleManualRecord()
-                persistentAlert = "RECORD VOLUME UNREACHABLE — recording stopped"
+                persistentAlert = L("alarm_volume_unreachable")
             } else {
-                persistentAlert = "Record folder unreachable: "
-                    + destinationRoot.path
+                persistentAlert = L("alarm_folder_unreachable",
+                                    destinationRoot.path)
             }
             return
         }
+        // These four assign the sticky register directly, so unlike a pipeline
+        // alarm their severity was never inferred from the words and nothing
+        // here had to change but the words themselves. The watchdog is the app's
+        // own: it watches a volume, which is not something CaptureCore knows
+        // about, so there is no boundary to carry a severity across.
         switch Self.diskVerdict(freeBytes: free, isRecording: isRecording) {
         case .fine:
             break
         case .full(let freeGB):
             pipeline.toggleManualRecord() // close the take while it can finalize
-            persistentAlert = String(format:
-                "DISK FULL (%.1f GB) — recording stopped", freeGB)
+            persistentAlert = L("alarm_disk_full", freeGB)
         case .low(let freeGB):
-            persistentAlert = String(format:
-                "Record disk low: %.1f GB free", freeGB)
+            persistentAlert = L("alarm_disk_low", freeGB)
         }
     }
 

@@ -148,7 +148,7 @@ import Testing
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
             #expect(take.markers.count == 1)
-            #expect(controller.persistentAlert?.contains("TAKE LOST") != true)
+            #expect(!controller.showsATakeLostAlarm)
         }
     }
 

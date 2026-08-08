@@ -292,7 +292,7 @@ import Testing
             let size = try FileManager.default
                 .attributesOfItem(atPath: take.url.path)[.size] as? NSNumber
             #expect((size?.int64Value ?? 0) > 0)
-            #expect(controller.persistentAlert?.contains("TAKE LOST") != true)
+            #expect(!controller.showsATakeLostAlarm)
             // the mirror agrees: one take closed, none lost
             let after = controller.pipeline.health
             #expect(!after.isRecording)

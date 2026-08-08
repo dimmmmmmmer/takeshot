@@ -36,7 +36,7 @@ import Testing
     /// Everything the pipeline reports, collected behind locks — the callbacks
     /// land on the main queue while the test polls from a worker thread.
     private struct Ears {
-        let errors = EventCollector<String>()
+        let errors = EventCollector<PipelineAlarm>()
         let recStates = EventCollector<Bool>()
         let takes = TakeCollector()
         let signals = EventCollector<Bool>()
@@ -50,8 +50,17 @@ import Testing
             pipeline.onFormatChanged = { formats.append($0) }
         }
 
+        /// Read through `message`, the English prose CaptureCore states for
+        /// itself: what the operator sees is the app's translation of the same
+        /// alarm, and this module is where the English is pinned.
         func said(_ fragment: String) -> Bool {
-            errors.all.contains { $0.contains(fragment) }
+            errors.all.contains { $0.message.contains(fragment) }
+        }
+
+        /// …and the register the alarm declares, which is the half a
+        /// substring match could never have checked.
+        func severity(of fragment: String) -> PipelineAlarm.Severity? {
+            errors.all.first { $0.message.contains(fragment) }?.severity
         }
     }
 
@@ -99,6 +108,8 @@ import Testing
         // closed, not lost: the frames that were already recorded are on disk
         #expect(pipeline.health.takesFailedToFinalize == 0)
         #expect(ears.said("Take closed: input signal lost mid-take"))
+        #expect(ears.severity(of: "input signal lost") == .integrity,
+                "a closed take was reported as a passing notice")
         #expect(ears.signals.last == false)
 
         await TestWait.fileExists(at: take.url)
@@ -171,6 +182,8 @@ import Testing
         #expect(!pipeline.health.isRecording)
         #expect(pipeline.health.takesClosed == 1)
         #expect(ears.said("Take closed: input format changed mid-take"))
+        #expect(ears.severity(of: "input format changed") == .integrity,
+                "a closed take was reported as a passing notice")
         // and the new format still reaches the UI — the close must not swallow it
         #expect(ears.formats.last == switched)
 
@@ -243,6 +256,8 @@ import Testing
         #expect(ears.takes.isEmpty,
                 "an unfinalized take was published to the list anyway")
         #expect(ears.said("TAKE LOST — failed to finalize"))
+        #expect(ears.severity(of: "failed to finalize") == .integrity,
+                "a take that never finalized was reported as a notice")
         #expect(!pipeline.health.isRecording)
     }
 
@@ -291,6 +306,8 @@ import Testing
 
         #expect(await TestWait.becomesTrue { ears.said("TAKE LOST audio") },
                 "a take with no audio track went unannounced")
+        #expect(ears.severity(of: "TAKE LOST audio") == .integrity,
+                "silent scratch audio was reported as a passing notice")
 
         pipeline.toggleManualRecord()
         await TestWait.untilWritten { ears.recStates.last == false }

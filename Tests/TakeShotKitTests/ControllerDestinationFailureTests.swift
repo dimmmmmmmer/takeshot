@@ -98,12 +98,15 @@ import Testing
             controller.startDiskWatch()
 
             #expect(await ControllerWait.until {
-                controller.persistentAlert?.contains("unreachable") == true
+                controller.persistentAlert
+                    == L("alarm_folder_unreachable",
+                         controller.destinationRoot.path)
             }, "a vanished record volume went unannounced")
             // sticky, not a toast: an operator watching the slate has to still
             // find it there when they look up
             #expect(controller.persistentAlert?.contains(
                 controller.destinationRoot.path) == true)
+            #expect(controller.lastError == nil)
         }
     }
 
@@ -119,8 +122,7 @@ import Testing
             controller.startDiskWatch()
 
             #expect(await ControllerWait.until {
-                controller.persistentAlert?.contains("RECORD VOLUME UNREACHABLE")
-                    == true
+                controller.persistentAlert == L("alarm_volume_unreachable")
             }, "a take onto a vanished volume was left rolling")
             #expect(await ControllerWait.untilWritten { !controller.isRecording })
 
@@ -142,9 +144,12 @@ import Testing
             #expect(await ControllerWait.until {
                 FileManager.default.fileExists(atPath: fresh.path)
             }, "a fresh destination folder was not created")
-            let alarm = controller.persistentAlert ?? ""
-            #expect(!alarm.contains("unreachable"),
-                    "an ordinary new folder raised an alarm: \(alarm)")
+            let alarm = controller.persistentAlert
+            #expect(alarm != L("alarm_folder_unreachable",
+                               controller.destinationRoot.path),
+                    "an ordinary new folder raised an alarm: \(alarm ?? "")")
+            #expect(alarm != L("alarm_volume_unreachable"),
+                    "an ordinary new folder stopped a take: \(alarm ?? "")")
         }
     }
 

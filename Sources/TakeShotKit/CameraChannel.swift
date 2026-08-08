@@ -29,7 +29,11 @@ final class CameraChannel: ObservableObject, Identifiable {
     /// integrity message of the extra cameras — writer death, dropped frames,
     /// a take that never finalized — was discarded, and since a take joins the
     /// list only on success, a failed B-cam take left no trace at all.
-    var onError: ((String) -> Void)?
+    ///
+    /// The alarm goes up untouched, `camLabel` and all — the controller adds
+    /// the letter when it renders the text, because which camera it was is a
+    /// presentation detail and the alarm's severity is not.
+    var onError: ((PipelineAlarm) -> Void)?
 
     init(camLabel: String, backend: CaptureBackend, deviceID: String,
          settings: CaptureSettings, roll: String) {
@@ -63,9 +67,8 @@ final class CameraChannel: ObservableObject, Identifiable {
             self.takeNumber += 1
             self.onTakeFinished?(take)
         }
-        pipeline.onError = { [weak self] message in
-            guard let self else { return }
-            self.onError?("\(self.camLabel): \(message)")
+        pipeline.onError = { [weak self] alarm in
+            self?.onError?(alarm)
         }
     }
 

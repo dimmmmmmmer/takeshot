@@ -21,7 +21,7 @@ extension CapturePipeline {
             if self.writer != nil {
                 self.finishTake()
                 DispatchQueue.main.async {
-                    self.onError?("Take closed: input format changed mid-take")
+                    self.onError?(.takeClosedFormatChanged)
                 }
             }
             self.format = newFormat
@@ -57,7 +57,7 @@ extension CapturePipeline {
         if writer != nil {
             finishTake()
             DispatchQueue.main.async {
-                self.onError?("Take closed: input signal lost mid-take")
+                self.onError?(.takeClosedSignalLost)
             }
         }
         detector.reset()
@@ -115,8 +115,7 @@ extension CapturePipeline {
             inFlightLock.unlock()
             if drops == 1 || drops % 100 == 0 {
                 DispatchQueue.main.async {
-                    self.onError?("Pipeline overloaded — \(drops) frame(s) "
-                        + "dropped at ingress")
+                    self.onError?(.ingressOverload(drops: drops))
                 }
             }
             return false
