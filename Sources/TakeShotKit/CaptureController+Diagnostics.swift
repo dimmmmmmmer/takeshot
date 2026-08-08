@@ -132,7 +132,31 @@ extension CaptureController {
         capture.tenBitCapture = settings.tenBitCapture ?? true
         capture.detectionMode = settings.detectionMode.rawValue
         capture.preRollFrames = settings.preRollFramesEffective
+        capture.visualRec = diagnosticsVisualRec()
         return capture
+    }
+
+    /// The taught REC indicator, in one line: whether it can fire, where it is
+    /// watching, how far apart the two references came out, and what it reads
+    /// right now.
+    ///
+    /// All four, because a bundle sent from set has to answer "could this have
+    /// rolled the take" without the sender being asked follow-up questions — and
+    /// three of the four are the ones that say WHY it did or did not. An
+    /// untaught trigger says so in as many words rather than printing zeros.
+    private func diagnosticsVisualRec() -> String {
+        let teaching = pipeline.visualRec
+        guard let separation = teaching.separation else { return "not taught" }
+        let region = teaching.region
+        let box = String(format: "centre %.0f%%,%.0f%% size %.0f%%",
+                         region.centerX * 100, region.centerY * 100,
+                         region.size * 100)
+        let state = teaching.isArmed
+            ? "armed" : (teaching.isTaught ? "taught, off" : "taught, too alike")
+        let reading = pipeline.visualRecReading?.rawValue ?? "no evidence"
+        return String(format: "%@ — %@, separation %.1f codes, margin %.0f%%, "
+                      + "reading %@", state, box, separation,
+                      teaching.margin * 100, reading)
     }
 
     /// The static HDR metadata the board reported, in one line — the numbers

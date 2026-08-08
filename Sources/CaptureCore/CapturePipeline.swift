@@ -86,6 +86,16 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Stereo monitor feed (first two enabled channels) while audio monitoring
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
+    /// What the taught record indicator reads, whenever it CHANGES — at most a
+    /// few times a second, and never while the trigger is disarmed. Delivered on
+    /// the main queue; it is what lets the operator see the box working before
+    /// trusting a take to it (see `+VisualRec`).
+    ///
+    /// A plain property, like `onScopeData` beside it and unlike the two above:
+    /// it is assigned once when the controller binds the pipeline and read from
+    /// the watcher's queue thereafter, never re-routed while frames are in
+    /// flight, which is the condition the two locked ones fail.
+    public var onVisualRecReading: ((VisualRecReading?) -> Void)?
 
     /// The two callbacks a finalizing take needs, snapshotted so the detached
     /// finish task can hand results to the main queue without sending the
@@ -174,6 +184,29 @@ public final class CapturePipeline: @unchecked Sendable {
     var scopeRegion = ScopeRegion.full
     /// Frame index of the last pass offered to the analyzer (queue-confined).
     var lastScopeFrame = 0
+
+    // The taught record indicator (see `+VisualRec`): a third REC trigger, which
+    // like the scopes runs on a queue of its own with latest-wins coalescing and
+    // never on the capture-critical one. The teaching and the latched reading
+    // cross under `visualRecLock`, deliberately not the capture queue — the main
+    // actor writes them on every slider tick while the operator teaches.
+    let visualRecQueue = DispatchQueue(label: "takeshot.recwatch", qos: .utility)
+    let visualRecLock = NSLock()
+    /// Guarded by `visualRecLock`.
+    var storedVisualRec = VisualRecTeaching()
+    /// The latest reading, guarded by `visualRecLock`; nil for "no evidence".
+    var storedVisualRecReading: VisualRecReading?
+    /// Where the latest measured frame sat on the taught axis — the teaching
+    /// readout. Guarded by `visualRecLock`.
+    var storedVisualRecPosition: (along: Double, residual: Double)?
+    var visualRecBusy = false // capture-queue confined
+    /// Frame index of the last pass offered to the watcher (queue-confined).
+    var lastVisualRecFrame = 0
+    /// Whether the trigger is armed, mirrored onto the capture queue once per
+    /// stride by `watchVisualRec`. Queue-confined, and it exists so the pre-roll
+    /// ring can be sized for the visual confirm's span without taking
+    /// `visualRecLock` on every single frame.
+    var visualRecArmed = false
 
     // Pinned reference compare (all access on queue): the reference frame is
     // composited over the live preview with the shared wipe/blend math.

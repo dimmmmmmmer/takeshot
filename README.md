@@ -48,6 +48,11 @@ build is any use to you:
 
 - Auto-takes from the camera's REC state — VANC trigger by default, running
   timecode or manual as alternatives.
+- …and from the camera's own **record indicator on the monitoring output**, for
+  a camera that sends no VANC at all: mark a small box on the live picture,
+  capture it once rolling and once idle, and the take follows the dot. A switch
+  beside the modes rather than one of them, opt-in only, and the REC mark over
+  the player says which of the three triggers rolled the take.
 - Pre-roll buffer: every take opens with picture *and* sound from before the
   REC press, so nothing is lost to trigger latency.
 - 10-bit capture by default, at whatever the wire is carrying: `v210` for the

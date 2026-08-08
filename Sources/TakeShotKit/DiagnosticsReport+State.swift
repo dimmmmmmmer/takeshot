@@ -58,6 +58,12 @@ enum DiagnosticsStateReport {
     private static func counters(_ health: PipelineHealth) -> [String] {
         [
             pair("Take rolling", health.isRecording),
+            // What rolled it. The single line that turns "it started on its own"
+            // into a question with an answer, and it survives the take closing
+            // (see `PipelineHealth.startTrigger`) — which is when a bundle
+            // usually gets collected.
+            pair("Started by", health.startTrigger?.rawValue
+                 ?? "nothing yet this session"),
             pair("Open take", health.takeFileName ?? "none"),
             pair("Dropped video frames", "\(health.droppedVideoFramesInTake) "
                  + "in this take, \(health.droppedVideoFramesTotal) since launch"),

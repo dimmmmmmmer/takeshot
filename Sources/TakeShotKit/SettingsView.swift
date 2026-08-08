@@ -183,6 +183,11 @@ struct SettingsView: View {
                         controller.settings.preRollFrames = $0
                         controller.settings.preRollSeconds = nil
                     }), range: 0...100)
+                // The third trigger, under the two confirm-frame fields it
+                // shares its numbers with — it has no debounce of its own (see
+                // RecDetector+Visual) and it is a switch orthogonal to the mode
+                // above, not a fifth entry in it.
+                VisualRecRows()
             }
             OffloadSettingsSection()
             RemoteSettingsSection()

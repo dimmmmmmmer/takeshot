@@ -48,6 +48,12 @@ extension CapturePipeline {
             appendToTake(products.record, pts: pts)
         }
         analyzeScopes(wire: leveled.scopeSource, display: products.display)
+        // Beside the scopes because it is the same kind of thing: a read-only
+        // measurement offered to another queue at a few hertz, after the writer
+        // has already been served. Handed the PRE-LUT display buffer — the stage
+        // the operator's references were captured from, so a viewing LUT cannot
+        // move a take (see `+VisualRec`).
+        watchVisualRec(leveled.display)
         serveFrameGrab(record: products.record, leveled: leveled.display)
         presentProcessedFrame(products.display, preLUT: leveled.display)
         DispatchQueue.main.async { self.onTimecode?(timecode) }
@@ -59,17 +65,28 @@ extension CapturePipeline {
     private func runDetector(timecode: Timecode?,
                              vancTrigger: VancTrigger?) -> Bool {
         let mode = config.settings.detectionMode
-        guard mode != .manual else { return false }
+        // The taught indicator is ORTHOGONAL to the mode: it composes with all
+        // four rather than being a fifth. That is why it is read before the mode
+        // is consulted — including in Manual, where the operator has said "no
+        // inference from the signal" about VANC and timecode and has separately
+        // armed a box on the picture. With nothing armed the latch is nil and
+        // this is the code that shipped, line for line.
+        let visualRec = latchedVisualRecReading()
+        guard mode != .manual || visualRec != nil else { return false }
         // .vanc is enforced inside the detector (vancOnly): TC is passed
-        // through so the take still records its start timecode
+        // through so the take still records its start timecode. Manual starves
+        // the timecode machine instead — the `.noData` row starts nothing while
+        // idle, so the indicator is the only trigger left in that mode.
         let sample = FrameSample(
             index: frameIndex,
-            timecode: timecode,
-            vancTrigger: mode.actsOnVancTrigger ? vancTrigger : nil)
+            timecode: mode == .manual ? nil : timecode,
+            vancTrigger: mode.actsOnVancTrigger ? vancTrigger : nil,
+            visualRec: visualRec)
         guard let event = detector.process(sample) else { return false }
         switch event {
         case .started(let atIndex, let startTC):
-            beginTake(timecode: startTC ?? timecode, recStartIndex: atIndex)
+            beginTake(timecode: startTC ?? timecode, recStartIndex: atIndex,
+                      trigger: detector.activeTrigger ?? .manual)
             return true // current frame already written from the buffer
         case .stopped:
             finishTake()

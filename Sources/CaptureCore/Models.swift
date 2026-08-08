@@ -521,6 +521,32 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var chromaKeyPlateOffsetX: Double?
     public var chromaKeyPlateOffsetY: Double?
 
+    // MARK: - the taught REC indicator (see VisualRecTrigger)
+    //
+    // The TEACHING persists and the switch deliberately does not — the same
+    // split the chroma key has, and here for a stronger reason: the references
+    // are a photograph of one camera's overlay in one framing, and a trigger
+    // that re-arms itself at launch on a rig it was never taught on is the
+    // false start this feature is most able to cause. Marking the box and
+    // capturing two references is the expensive part, so that is what survives.
+    // All Optional, like every added field, so settings written by an older
+    // build still decode.
+
+    /// Centre of the watched box, in SIGNAL fractions (y down); nil — centre of
+    /// frame, which is where an untaught box sits.
+    public var visualRecCenterX: Double?
+    public var visualRecCenterY: Double?
+    /// Box extent as a fraction of each axis; nil — `VisualRecRegion.defaultSize`.
+    public var visualRecSize: Double?
+    /// Required margin against the other reference, as a fraction of the taught
+    /// separation; nil — `VisualRecTeaching.defaultMargin`.
+    public var visualRecMargin: Double?
+    /// The two references, base64 of one byte per signature component (see
+    /// `VisualRecSignature.encoded`); nil — not taught. 256 characters each,
+    /// which is why they are not stored as arrays of JSON numbers.
+    public var visualRecRolling: String?
+    public var visualRecIdle: String?
+
     /// Action-safe area as a percentage of the frame; nil — 93.
     ///
     /// 93/90 and in that order, per SMPTE RP 218 (EBU R 95 states the same two

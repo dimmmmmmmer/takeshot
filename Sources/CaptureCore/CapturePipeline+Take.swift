@@ -7,7 +7,14 @@ import Foundation
 ///
 /// Split out of CapturePipeline, which had grown past 1300 lines.
 extension CapturePipeline {
-    func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil) {
+    /// `trigger` is what opened the take, recorded so a spurious roll can be
+    /// diagnosed on set: it goes into the health mirror, and from there onto the
+    /// REC indicator over the player and into the diagnostics bundle. Manual by
+    /// default because the button, the hotkey and the remote all come through
+    /// `toggleManualRecord`; the detector's own answer is passed in by
+    /// `runDetector`.
+    func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil,
+                   trigger: RecTrigger = .manual) {
         guard writer == nil, let format else { return }
         recordingMask = config.settings.audioChannelMask // latched for the take
         takeColorimetry = signalColorimetry            // …and so is this
@@ -34,6 +41,7 @@ extension CapturePipeline {
             mirroredAudioDrops = 0
             noteHealth {
                 $0.isRecording = true
+                $0.startTrigger = trigger
                 $0.takeFileName = url.lastPathComponent
                 $0.droppedVideoFramesInTake = 0
                 $0.droppedAudioPacketsInTake = 0

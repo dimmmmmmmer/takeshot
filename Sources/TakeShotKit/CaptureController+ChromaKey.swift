@@ -102,6 +102,10 @@ extension CaptureController {
     func toggleChromaPick() {
         chromaPickArmed.toggle()
         if chromaPickArmed {
+            // the taught REC indicator's box is waiting for a click on the same
+            // pixels; two crosshairs is one mode too many (see
+            // `toggleVisualRecTeach`) and the newer request wins
+            visualRecTeachArmed = false
             chromaPickReopensAssist = showAssistPopover
             showAssistPopover = false
         } else {

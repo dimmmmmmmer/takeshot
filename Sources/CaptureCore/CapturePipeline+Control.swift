@@ -155,6 +155,13 @@ extension CapturePipeline {
             self.latestPreviewLock.unlock()
             self.rawVancStats.removeAll()
             self.vancStatsLastPublish = 0
+            // the taught indicator's latch describes a frame from the session
+            // that just ended; the next one must earn its own reading
+            self.lastVisualRecFrame = 0
+            self.visualRecLock.lock()
+            self.storedVisualRecReading = nil
+            self.storedVisualRecPosition = nil
+            self.visualRecLock.unlock()
             DispatchQueue.main.async {
                 self.onFormatChanged?(nil)
                 self.onTimecode?(nil)

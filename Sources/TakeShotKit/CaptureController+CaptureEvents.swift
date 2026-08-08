@@ -63,9 +63,17 @@ extension CaptureController {
         pipeline.onAudioLevels = { [weak self] levels in
             self?.live.audioLevels = levels
         }
+        pipeline.onVisualRecReading = { [weak self] reading in
+            self?.visualRecReading = reading
+        }
     }
     private func handleRecState(_ recording: Bool) {
         isRecording = recording
+        // Which trigger fired, read from the health mirror rather than carried on
+        // this callback: `beginTake` writes the mirror before it hops to main, so
+        // it is already there — and a bundle collected later still finds it,
+        // which a callback argument could not provide.
+        recTrigger = recording ? pipeline.health.startTrigger : nil
         if recording {
             recordingStartDate = Date()
             recordingMarkers = []

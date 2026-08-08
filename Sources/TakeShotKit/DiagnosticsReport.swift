@@ -175,6 +175,9 @@ enum DiagnosticsReport {
         out.append(pair("10-bit capture", capture.tenBitCapture))
         out.append(pair("Detection mode", capture.detectionMode))
         out.append(pair("Pre-roll", "\(capture.preRollFrames) frames"))
+        // The third trigger — a switch orthogonal to the mode above, so it is
+        // reported whatever that mode says.
+        out.append(pair("REC indicator", capture.visualRec))
         return out
     }
 

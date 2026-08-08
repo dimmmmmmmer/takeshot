@@ -19,6 +19,13 @@ import Foundation
 ///    redacted them would not diagnose anything. So they are kept and the top
 ///    of the report says plainly that they are there, which is the decision the
 ///    owner has to be given rather than made for.
+/// 4. **Bulk opaque values are summarised.** Some settings are data rather than
+///    a choice — the taught REC indicator's two references are 256 characters of
+///    base64 each. The bundle exists to be READ, and a screen of base64 in it
+///    buries the lines next to it. Anything past `maxValueLength` is replaced by
+///    its length, generically, so the same happens to whatever is stored that
+///    way next. What such a setting is actually DOING is reported in words
+///    elsewhere (see `CaptureController.diagnosticsVisualRec`).
 ///
 /// Not covered here because they are simply never collected: the machine's
 /// name, the logged-in user, IP addresses, and any footage.
@@ -31,6 +38,20 @@ enum DiagnosticsRedaction {
     static func isSecretKey(_ key: String) -> Bool {
         let lowered = key.lowercased()
         return secretKeyMarkers.contains { lowered.contains($0) }
+    }
+
+    /// How long a settings value may be before it is summarised instead of
+    /// printed (rule 4). Generous enough for every path, template and hex colour
+    /// in the blob — the longest real one is a destination path — and well under
+    /// the 256 characters an encoded reference takes.
+    static let maxValueLength = 120
+
+    /// A value as the bundle prints it: itself, or its size when it is bulk data
+    /// nobody can read. By LENGTH rather than by key name, so the rule applies to
+    /// whatever is stored that way next without anyone having to remember it.
+    static func summarised(_ value: String) -> String {
+        guard value.count > maxValueLength else { return value }
+        return "<\(value.count) characters of data>"
     }
 
     /// Every occurrence of the home directory replaced by `~`. Applied to
@@ -71,7 +92,7 @@ enum DiagnosticsRedaction {
     private static func describe(_ value: Any) -> String {
         switch value {
         case let string as String:
-            return abbreviate(string)
+            return summarised(abbreviate(string))
         case let array as [Any]:
             return array.map(describe).joined(separator: ", ")
         case let number as NSNumber:

@@ -125,6 +125,14 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         var tenBitCapture = true
         var detectionMode = ""
         var preRollFrames = 0
+        /// The taught REC indicator, in one line — state, box, separation,
+        /// margin and its current reading. "not taught" when there is nothing
+        /// to say, which is the common case.
+        ///
+        /// One string rather than five fields because it is read, not queried:
+        /// what a bundle needs is a line someone can look at and say "yes, that
+        /// could have rolled the take" or "no, it was never armed".
+        var visualRec = "not taught"
     }
 
     struct RecordingSection: Codable, Sendable {

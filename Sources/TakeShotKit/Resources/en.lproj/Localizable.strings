@@ -800,3 +800,31 @@
 "ndi_unavailable" = "Unavailable";
 "ndi_failed_short" = "Could not start";
 "ndi_failed" = "NDI: %@";
+
+/* the taught REC indicator — a third trigger beside VANC and running timecode */
+"visual_rec" = "REC indicator on the picture";
+"visual_rec_hint" = "Rolls a take when the camera's own record indicator lights up inside a box you teach. Opt-in, and never a default: it can only be switched on once both references are captured and far enough apart.";
+"visual_rec_teach" = "Mark on picture";
+"visual_rec_teach_help" = "Click the record indicator on the live image to put the box on it; adjust the size below.";
+"visual_rec_teach_armed" = "Click the picture to place the box";
+"visual_rec_size" = "Box size";
+"visual_rec_margin" = "Margin";
+"visual_rec_learn_rolling" = "Learn rolling";
+"visual_rec_learn_idle" = "Learn idle";
+"visual_rec_forget" = "Forget";
+"visual_rec_reading" = "Reading now";
+"visual_rec_reading_rolling" = "rolling";
+"visual_rec_reading_idle" = "idle";
+"visual_rec_reading_none" = "no evidence";
+"visual_rec_status_untaught" = "Not taught. Mark the indicator, then capture it once while the camera rolls and once while it does not.";
+"visual_rec_status_half" = "One reference captured. Capture the other one.";
+"visual_rec_status_ready" = "Taught: the two references are %@ code values apart.";
+"visual_rec_status_weak" = "The two references are only %@ code values apart — too alike to tell them apart. Put a tighter box on the indicator and capture both again.";
+"visual_rec_analysis_only" = "Measured only — the box reaches no file, grab or export.";
+"visual_rec_learn_failed" = "No live picture to learn from";
+"visual_rec_learned_one" = "Reference captured";
+"visual_rec_taught" = "Taught — %@ code values apart";
+"trigger_vanc" = "VANC";
+"trigger_timecode" = "TC";
+"trigger_visual" = "INDICATOR";
+"trigger_manual" = "MANUAL";

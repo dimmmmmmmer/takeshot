@@ -163,6 +163,10 @@ extension CaptureController {
             max(0, stored.peakingIntensity ?? ViewAssist().peakingIntensity))
         // the key comes back dialled in and switched OFF (see restoreChroma)
         restoreChroma(from: stored)
+        // …and so does the taught REC indicator, for a stronger reason: its
+        // references are a photograph of one camera's overlay (see
+        // restoreVisualRec)
+        restoreVisualRec(from: stored)
     }
 
     /// The compare mode and its gain come back like every other working

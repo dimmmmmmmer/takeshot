@@ -18,7 +18,7 @@ extension CapturePipeline {
     /// cap. Without the cap, 3 s of pre-roll at 4K60 holds ~6 GB of uncompressed
     /// frames in RAM (OOM); at high resolution the pre-roll quietly shortens.
     private var preRollCapacity: Int {
-        let wanted = preRollFrames + config.settings.startDebounceFrames + 3
+        let wanted = preRollFrames + startConfirmSpan + 3
         guard let format, format.width > 0, format.height > 0 else { return wanted }
         // the ring holds what the WRITER gets, so the frame size is the RECORD
         // buffer's — 4 bytes a pixel for BGRA and 'r210', 8 for the 12-bit
@@ -27,9 +27,25 @@ extension CapturePipeline {
         let bytesPerPixel = lutRecord ? 4 : recordBytesPerPixel
         let bytesPerFrame = format.width * format.height * bytesPerPixel
         let budgetBytes = 1_500_000_000 // ~1.5 GB
-        let byteCap = max(config.settings.startDebounceFrames + 5,
+        let byteCap = max(startConfirmSpan + 5,
                           budgetBytes / max(1, bytesPerFrame))
         return min(wanted, byteCap)
+    }
+
+    /// How many frames pass between the camera's actual start and the detector
+    /// declaring one — the detection latency the ring has to hold.
+    ///
+    /// For the timecode and VANC machines that is the confirm count itself, one
+    /// frame per frame. The taught indicator confirms over the same COUNT but
+    /// against frames it has measured, and it measures a few times a second (see
+    /// `CapturePipeline+VisualRec`), so its confirm run spans the count times the
+    /// watcher's stride. Sized for it while the trigger is armed, and not a frame
+    /// larger otherwise: a ring five times deeper costs real memory at UHD and
+    /// buys nothing for a trigger nobody switched on.
+    private var startConfirmSpan: Int {
+        let confirm = config.settings.startDebounceFrames
+        guard visualRecArmed else { return confirm }
+        return confirm * Self.visualRecStride(atFrameRate: format?.frameRate ?? 25)
     }
 
     /// while not recording — accumulate frames into the pre-roll buffer (current
