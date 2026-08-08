@@ -26,7 +26,7 @@ import Testing
     private func addChannels(_ count: Int, to controller: CaptureController) {
         var channels: [CameraChannel] = []
         for index in 0..<count {
-            let backend = StubCaptureBackend()
+            let backend = StubBackend()
             backend.deviceList = [CaptureDeviceInfo(id: "stub-\(index)",
                                                     name: "Stub \(index)")]
             channels.append(CameraChannel(

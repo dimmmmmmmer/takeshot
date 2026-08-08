@@ -77,7 +77,7 @@ import Testing
             await record(controller, seconds: 1.2)
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
-            await TestWaitKit.fileExists(at: take.url)
+            await ControllerWait.fileExists(at: take.url)
 
             // the file carries the fake's constant 9000 — the embedded feed is
             // near-silence (every sample 1), so this cannot pass by accident
@@ -133,7 +133,7 @@ import Testing
             await ControllerWait.until { !controller.isRecording }
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
-            await TestWaitKit.fileExists(at: take.url)
+            await ControllerWait.fileExists(at: take.url)
 
             // the log row is marked — a padded take must not read as clean
             #expect(take.comment.contains("silence"),
@@ -184,7 +184,7 @@ import Testing
             await ControllerWait.until { !controller.isRecording }
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
-            await TestWaitKit.fileExists(at: take.url)
+            await ControllerWait.fileExists(at: take.url)
 
             // embedded audio was recorded — never a take with no sound at all
             let ranges = try await TestAudioKit.trackRanges(of: take.url)
@@ -215,18 +215,6 @@ import Testing
             #expect(device.started)
             // the panel names the live source honestly
             #expect(controller.audioSourceStatusText.contains(device.name))
-        }
-    }
-}
-
-/// File waits for this target (CaptureCoreTests has its own TestWait; the two
-/// targets cannot share a file, and the audio suites here need the same
-/// I/O-sized budget for finalized takes).
-@MainActor
-enum TestWaitKit {
-    static func fileExists(at url: URL) async {
-        await ControllerWait.untilWritten {
-            FileManager.default.fileExists(atPath: url.path)
         }
     }
 }

@@ -200,6 +200,14 @@ enum ControllerWait {
     static func untilWritten(_ condition: () -> Bool) async -> Bool {
         await until(condition, timeout: .seconds(45))
     }
+
+    /// The commonest I/O wait there is: a take's file has landed. Named the
+    /// same as `TestWait.fileExists` in the CaptureCore suite deliberately —
+    /// the two targets cannot share code, so the least a reader should have to
+    /// carry between them is one name per idea.
+    static func fileExists(at url: URL) async {
+        await untilWritten { FileManager.default.fileExists(atPath: url.path) }
+    }
 }
 
 /// Stand-in for the demo source: the same device ID, the same 1080p25 format
@@ -332,24 +340,55 @@ final class FakeVolumeWatch: VolumeWatching {
 /// A backend whose device list the test owns, standing in for a board being
 /// plugged in and pulled out. It produces no signal — only the device list and
 /// the start/stop bookkeeping matter here.
-final class StubCaptureBackend: CaptureBackend {
+///
+/// **The one stand-in for a backend in this target.** There were two, and they
+/// disagreed about the thing a double most needs to get right: this one
+/// refused to start a device it did not list, the other accepted anything. A
+/// test written against the lenient one and read against the strict one is a
+/// test whose author was misled, so they are now a single class with the
+/// strict behaviour — which is also the truthful one, because a real board
+/// that has been unplugged does fail.
+final class StubBackend: CaptureBackend, @unchecked Sendable {
     weak var delegate: CaptureBackendDelegate?
-    var isAvailable: Bool { true }
-    var deviceList: [CaptureDeviceInfo] = []
+    var isAvailable: Bool
+    var embeddedAudioChannels: Int
+    var deviceList: [CaptureDeviceInfo]
+    /// Set to make `startCapture` fail the way a board held by another app does.
+    var startError: Error?
+
+    /// Every device ever started, in order — for the tests that ask WHERE a
+    /// start was routed.
+    private(set) var startedDeviceIDs: [String] = []
+    /// The device running right now, nil once stopped — for the tests that ask
+    /// WHAT this backend is doing. Deliberately not the same question as the
+    /// history above; keeping both is why the merge cost no assertions.
     private(set) var startedDeviceID: String?
+    private(set) var stopCount = 0
 
     struct NotThere: Error {}
+
+    init(devices: [CaptureDeviceInfo] = [], audioChannels: Int = 0,
+         available: Bool = true) {
+        self.deviceList = devices
+        self.embeddedAudioChannels = audioChannels
+        self.isAvailable = available
+    }
 
     func devices() -> [CaptureDeviceInfo] { deviceList }
 
     func startCapture(deviceID: String) throws {
+        if let startError { throw startError }
         guard deviceList.contains(where: { $0.id == deviceID }) else {
             throw NotThere()
         }
+        startedDeviceIDs.append(deviceID)
         startedDeviceID = deviceID
     }
 
-    func stopCapture() { startedDeviceID = nil }
+    func stopCapture() {
+        stopCount += 1
+        startedDeviceID = nil
+    }
 }
 
 /// A counter a pipeline-queue callback can bump.

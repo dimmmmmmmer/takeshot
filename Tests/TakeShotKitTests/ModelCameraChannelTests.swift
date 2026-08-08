@@ -61,14 +61,6 @@ struct ModelCameraChannelTests {
         return frame
     }
 
-    private func waitUntil(_ condition: () -> Bool,
-                           timeout: Duration = .seconds(5)) async {
-        let steps = Int(timeout / .milliseconds(50))
-        for _ in 0..<steps where !condition() {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-    }
-
     /// A board already held by another app used to fail completely silently.
     @Test func startSurfacesABackendFailure() {
         struct Busy: Error {}
@@ -119,7 +111,7 @@ struct ModelCameraChannelTests {
         channel.setRecording(false)
         _ = try await feed(backend, buffer: buffer, count: 2, startingAt: index)
 
-        await waitUntil { !takes.isEmpty }
+        await ControllerWait.untilWritten { !takes.isEmpty }
         channel.stopStreams()
         await channel.pipeline.finishPendingWrites()
 
@@ -163,7 +155,7 @@ struct ModelCameraChannelTests {
         channel.setRecording(false) // …and a repeated stop must not open one
         _ = try await feed(backend, buffer: buffer, count: 3, startingAt: index)
 
-        await waitUntil { !takes.isEmpty }
+        await ControllerWait.untilWritten { !takes.isEmpty }
         channel.stopStreams()
         await channel.pipeline.finishPendingWrites()
         #expect(takes.count == 1, "expected one take, got \(takes.count)")
@@ -196,7 +188,7 @@ struct ModelCameraChannelTests {
             channel.setRecording(false)
             index = try await feed(backend, buffer: buffer, count: 3,
                                    startingAt: index)
-            await waitUntil { takes.count >= take }
+            await ControllerWait.untilWritten { takes.count >= take }
             // the channel bumps its own clip number after each finished take
             channel.update(settings: settings(destination: root.path),
                            roll: "001", takeNumber: take + 1)
@@ -236,7 +228,7 @@ struct ModelCameraChannelTests {
         channel.setRecording(true)
         _ = try await feed(backend, buffer: buffer, count: 3, startingAt: 2)
 
-        await waitUntil { !errors.isEmpty }
+        await ControllerWait.until { !errors.isEmpty }
         channel.stopStreams()
         await channel.pipeline.finishPendingWrites()
 

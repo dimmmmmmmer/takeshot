@@ -227,7 +227,7 @@ import Testing
     /// has to move to it by itself, or a shoot starts recording the test
     /// pattern.
     @Test func arrivingHardwareTakesOverFromTheDemoSource() async throws {
-        let board = StubCaptureBackend()
+        let board = StubBackend()
         let stub = [("stub", board as CaptureBackend)]
         try await ControllerHarness.run(extraBackends: stub) { controller, _ in
             #expect(controller.isMockSelected)
@@ -245,7 +245,7 @@ import Testing
     /// The board being pulled must not leave the UI pointed at a device that
     /// is gone — that combination showed "capturing" over a dead input.
     @Test func anUnpluggedDeviceIsNotLeftSelected() async throws {
-        let board = StubCaptureBackend()
+        let board = StubBackend()
         board.deviceList = [CaptureDeviceInfo(id: "cam1", name: "One"),
                             CaptureDeviceInfo(id: "cam2", name: "Two")]
         let stub = [("stub", board as CaptureBackend)]

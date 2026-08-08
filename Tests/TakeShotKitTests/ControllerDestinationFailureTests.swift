@@ -229,7 +229,7 @@ import Testing
     /// controller has to adopt it on the main actor. A real board appearing wins
     /// over the demo source, and capture follows it without a button.
     @Test func aBoardAppearingIsAdoptedFromTheBackendCallback() async throws {
-        let board = StubCaptureBackend()
+        let board = StubBackend()
         try await ControllerHarness.run(
             extraBackends: [("decklink", board)]) { controller, _ in
             try #require(controller.isMockSelected,

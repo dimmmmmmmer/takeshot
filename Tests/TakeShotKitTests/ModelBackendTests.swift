@@ -7,34 +7,8 @@ import Testing
 
 // MARK: - fixtures
 
-/// A capture backend that does nothing but record what it was asked to do.
-final class StubBackend: CaptureBackend, @unchecked Sendable {
-    weak var delegate: CaptureBackendDelegate?
-    var isAvailable: Bool
-    var embeddedAudioChannels: Int
-    var deviceList: [CaptureDeviceInfo]
-    /// Set to make `startCapture` fail the way a board held by another app does.
-    var startError: Error?
-
-    private(set) var startedDeviceIDs: [String] = []
-    private(set) var stopCount = 0
-
-    init(devices: [CaptureDeviceInfo], audioChannels: Int = 0,
-         available: Bool = true) {
-        self.deviceList = devices
-        self.embeddedAudioChannels = audioChannels
-        self.isAvailable = available
-    }
-
-    func devices() -> [CaptureDeviceInfo] { deviceList }
-
-    func startCapture(deviceID: String) throws {
-        if let startError { throw startError }
-        startedDeviceIDs.append(deviceID)
-    }
-
-    func stopCapture() { stopCount += 1 }
-}
+// StubBackend lives in ControllerTestSupport.swift: it is the ONE stand-in for
+// a capture backend in this target, and it used to be two that disagreed.
 
 /// Thread-safe delegate: the mock source calls back from its own queue.
 final class RecordingBackendDelegate: CaptureBackendDelegate, @unchecked Sendable {
@@ -145,8 +119,13 @@ struct ModelAggregateBackendTests {
     /// Board IDs are opaque strings; only the FIRST colon separates the prefix,
     /// so a device whose own ID contains one still resolves.
     @Test func onlyTheFirstColonSeparatesThePrefix() throws {
-        let rig = makeAggregate()
-        let (aggregate, deck) = (rig.aggregate, rig.deck)
+        // Its own rig rather than makeAggregate(): the device this starts has
+        // to EXIST on the child, because the stub rejects one it was never
+        // given — the same way a real board does. Relying on a lenient stub
+        // was how the two stand-ins in this target came to disagree.
+        let deck = StubBackend(
+            devices: [CaptureDeviceInfo(id: "00:11:22", name: "UltraStudio")])
+        let aggregate = AggregateBackend(children: [("deck", deck)])
         try aggregate.startCapture(deviceID: "deck:00:11:22")
         #expect(deck.startedDeviceIDs == ["00:11:22"])
     }
@@ -262,17 +241,12 @@ struct ModelAggregateBackendTests {
 /// running-timecode detector open takes on its own, which is precisely the false
 /// positive the VANC-only default exists to prevent.
 struct ModelMockBackendTests {
-    private func waitUntil(_ condition: () -> Bool,
-                           timeout: Duration = .seconds(5)) async {
-        let steps = Int(timeout / .milliseconds(20))
-        for _ in 0..<steps where !condition() {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-    }
-
+    /// Frames come straight off the backend with no file behind them, so the
+    /// interactive budget is the right one (`ControllerWait.untilWritten` is
+    /// for anything that has to encode and finalize).
     private func waitForFrames(_ delegate: RecordingBackendDelegate,
                                atLeast count: Int) async {
-        await waitUntil { delegate.snapshot.frames.count >= count }
+        await ControllerWait.until { delegate.snapshot.frames.count >= count }
     }
 
     @Test func advertisesExactlyOneDeviceUnderTheDemoID() {
@@ -357,7 +331,7 @@ struct ModelMockBackendTests {
 
         #expect(backend.embeddedAudioChannels == MockCaptureBackend.audioChannels)
         try backend.startCapture(deviceID: MockCaptureBackend.deviceID)
-        await waitUntil { delegate.snapshot.audioPackets >= 3 }
+        await ControllerWait.until { delegate.snapshot.audioPackets >= 3 }
         let state = delegate.snapshot
         #expect(state.audioPackets >= 3, "the demo source produced no audio")
         #expect(Set(state.audioChannelCounts) == [backend.embeddedAudioChannels])
