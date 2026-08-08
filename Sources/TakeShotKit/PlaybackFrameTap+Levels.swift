@@ -24,9 +24,14 @@ extension PlaybackFrameTap {
     /// the same resolution: the clip is checked for identity before the answer
     /// is applied, so a fast switch cannot leave the previous clip's decision
     /// behind.
-    func detectLevels(of item: AVPlayerItem) {
-        let asset = item.asset
+    ///
+    /// The file is opened for its metadata rather than the player's own asset
+    /// being read off the item: this runs on the tap queue and an
+    /// `AVPlayerItem` is main-actor state. It is the same file and the same
+    /// answer, asked the same way the compare clip below asks it.
+    func detectLevels(of item: AVPlayerItem, at url: URL) {
         Task { [weak self, weak item] in
+            let asset = AVURLAsset(url: url)
             let metadata = (try? await asset.load(.metadata)) ?? []
             let wire = await TakeWriter.carriesWireCodes(metadata)
             let transfer = await Self.transfer(of: asset)

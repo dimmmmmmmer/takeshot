@@ -51,9 +51,14 @@ extension TransportModel {
             forName: AVPlayerItem.didPlayToEndTimeNotification,
             object: nil, queue: .main
         ) { [weak self] note in
+            // Only WHICH item ended crosses to the main actor, never the
+            // notification: it belongs to the thread that posted it, and the
+            // check needs an identity, which is a value. `===` on the far side
+            // asked the same question of the same two pointers.
+            let ended = note.object.map { ObjectIdentifier($0 as AnyObject) }
             Task { @MainActor [weak self] in
-                guard let self, let player = self.player,
-                      (note.object as? AVPlayerItem) === player.currentItem,
+                guard let self, let player = self.player, let ended,
+                      player.currentItem.map(ObjectIdentifier.init) == ended,
                       self.isLooping else { return }
                 let start = self.inPoint ?? 0
                 player.seek(to: CMTime(seconds: start, preferredTimescale: 600),

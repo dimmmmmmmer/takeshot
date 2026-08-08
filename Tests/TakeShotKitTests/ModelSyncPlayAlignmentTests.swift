@@ -133,7 +133,8 @@ struct ModelSyncPlayAlignmentTests {
     }
 
     /// Two takes sit side by side; three and four fill a 2×2.
-    @Test func gridColumnsMatchTheTileCount() {
+    /// `@MainActor` because the rule lives on the view that lays the grid out.
+    @Test @MainActor func gridColumnsMatchTheTileCount() {
         #expect(SyncPlayView.columns(for: 2) == 2)
         #expect(SyncPlayView.columns(for: 3) == 2)
         #expect(SyncPlayView.columns(for: 4) == 2)

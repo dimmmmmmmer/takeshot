@@ -139,7 +139,14 @@ final class ExternalAudioSource {
         guard let out = AVAudioPCMBuffer(pcmFormat: converter.outputFormat,
                                          frameCapacity: capacity)
         else { return nil }
-        var fed = false
+        // `nonisolated(unsafe)`: the input block is declared `@Sendable` by the
+        // SDK, but `convert(to:error:withInputFrom:)` calls it SYNCHRONOUSLY,
+        // on this thread, and has returned before this function does — the
+        // flag and the buffer never leave the call they were made for. The
+        // whole conversion is confined to the device's delivery queue anyway
+        // (see the threading note at the top of this file).
+        nonisolated(unsafe) var fed = false
+        nonisolated(unsafe) let input = buffer
         var conversionError: NSError?
         let status = converter.convert(to: out, error: &conversionError) { _, outStatus in
             if fed {
@@ -151,7 +158,7 @@ final class ExternalAudioSource {
             }
             fed = true
             outStatus.pointee = .haveData
-            return buffer
+            return input
         }
         guard status != .error else { return nil }
         return out

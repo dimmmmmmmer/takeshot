@@ -82,7 +82,7 @@ extension CaptureController {
     func applyPlaybackLUT() {
         guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
               !playbackLUTSuppressed,
-              let cube = currentCube, let filter = cube.makeFilter() else {
+              let cube = currentCube else {
             os_log("playback LUT OFF: preview=%d baked=%d suppressed=%d cube=%d",
                    log: CapturePipeline.levelsLog, type: .default,
                    (settings.lutPreviewEnabled ?? false) ? 1 : 0,
@@ -95,7 +95,8 @@ extension CaptureController {
         os_log("playback LUT ON: %{public}s intensity=%.2f",
                log: CapturePipeline.levelsLog, type: .default,
                settings.lutFileName ?? "?", live.lutIntensity)
-        playbackTap.setLUT(filter, intensity: live.lutIntensity)
+        // the cube crosses, and the filter is built on the tap's own queue
+        playbackTap.setLUT({ cube.makeFilter() }, intensity: live.lutIntensity)
     }
     /// Check the loaded clip's baked-LUT tag (asynchronously).
     func detectBakedLUT(for item: AVPlayerItem) {

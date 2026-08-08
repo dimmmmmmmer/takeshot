@@ -16,11 +16,12 @@ public struct TakeShotApp: App {
     /// before the scene graph — and the capture controller inside it — exists.
     /// See `SingleInstanceGuard` for what it does and does not cover.
     ///
-    /// Not `@MainActor` itself: the executable's top-level code runs on the
-    /// main thread but is not main-actor isolated in Swift 5 language mode, and
-    /// this must be callable from the first line of it.
+    /// `@MainActor`, which under Swift 6 is what the executable's top-level
+    /// code already is — so the first line of `main.swift` can call this
+    /// directly and the isolation is checked rather than asserted at runtime.
+    @MainActor
     public static func handOffToRunningInstance() -> Bool {
-        MainActor.assumeIsolated { SingleInstanceGuard.handOffToRunningInstance() }
+        SingleInstanceGuard.handOffToRunningInstance()
     }
 
     public var body: some Scene {
@@ -45,6 +46,7 @@ public struct TakeShotApp: App {
                     hotkeys.install(controller: controller)
                     // inset under the window buttons — measured, not a constant
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        @MainActor in
                         if let window = NSApp.windows.first(where: {
                             $0.styleMask.contains(.titled) }) {
                             controller.windowTopInset =
@@ -135,6 +137,12 @@ public struct TakeShotApp: App {
 /// written on the way out, and the three rules that keep the app to ONE main
 /// window — no tabbing, a dock click that restores rather than duplicates, and
 /// a last-window-close that does not end the session.
+///
+/// Main-actor by declaration. AppKit calls every one of these on the main
+/// thread and always has — the annotation only states it, and it is what lets
+/// `shared` be shared state the compiler can account for rather than a global
+/// var nothing guards.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
     weak var controller: CaptureController?
@@ -191,16 +199,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         // content up to the very top of the window: without this SwiftUI reserves
         // title-bar height and leaves an empty strip on top
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { @MainActor in
             for window in NSApp.windows { Self.makeMonolithic(window) }
             NSApp.mainWindow?.makeFirstResponder(nil)
         }
-        // settings and other windows are created later — style them on activation
+        // Settings and other windows are created later — style them on
+        // activation. The pass is over every window rather than over the one
+        // named in the notification: `makeMonolithic` is idempotent and is
+        // already run across the whole set above, so which window woke it does
+        // not have to leave the posting thread to be acted on.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
-        ) { note in
-            if let window = note.object as? NSWindow {
-                Self.makeMonolithic(window)
+        ) { _ in
+            MainActor.assumeIsolated {
+                for window in NSApp.windows { Self.makeMonolithic(window) }
             }
         }
     }

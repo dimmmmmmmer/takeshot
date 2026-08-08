@@ -2,10 +2,21 @@
 import Foundation
 import PackageDescription
 
-// CaptureCore is on Swift 6 (see its target below). The app layer is still
-// Swift 5: SwiftUI/AppKit isolation there needs a pass of its own — 61 errors
-// at last count, mostly main-actor sending and app-level global state.
-let swift5Mode: [SwiftSetting] = [.swiftLanguageMode(.v5)]
+// Every target is on Swift 6, so the compiler checks the threading rules this
+// codebase used to state only in comments — the queue confinement in
+// `CapturePipeline`, `RemoteServer` and `PlaybackFrameTap`, and the main-actor
+// discipline everywhere above them. `tools-version:6.0` already defaults to
+// this mode; it is spelled out because the mode is a decision, not a default
+// the package happens to inherit.
+//
+// What stays deliberately unchecked is written down at each site rather than
+// counted here: `Sendability.swift` for the CoreVideo and CoreMedia buffer
+// types, the `@unchecked Sendable` classes that each name the queue they are
+// confined to, and the `nonisolated(unsafe)` declarations that each carry the
+// invariant on the line above them. Anything new that needs one owes the same
+// sentence — an escape hatch without a stated reason is the thing this mode
+// was turned on to find.
+let swift6Mode: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 
 // RED's R3D SDK is the odd one out. DeckLink and Blackmagic RAW ship headers
 // plus a dispatch file that dlopens the vendor's framework at runtime, so
@@ -29,7 +40,7 @@ var targets: [Target] = [
     // Core: REC detection, naming, take writing. No DeckLink SDK dependency.
     .target(
         name: "CaptureCore",
-        swiftSettings: [.swiftLanguageMode(.v6)]
+        swiftSettings: swift6Mode
     ),
     // Obj-C++ bridge to the Blackmagic DeckLink SDK.
     // SDK headers go in vendor/DeckLinkSDK/include (see vendor/DeckLinkSDK/README.md).
@@ -78,19 +89,19 @@ var targets: [Target] = [
         name: "TakeShotKit",
         dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CNDI"],
         resources: [.process("Resources")],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
     // The executable is the entry point and nothing else.
     .executableTarget(
         name: "TakeShot",
         dependencies: ["TakeShotKit"],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
     // CLI smoke test: list DeckLink devices.
     .executableTarget(
         name: "takeshot-devices",
         dependencies: ["CDeckLink"],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
     // CLI smoke test: open an .r3d clip, print its metadata and measure the
     // decode rate at each scale. The one thing the suite cannot do for itself —
@@ -99,20 +110,20 @@ var targets: [Target] = [
     .executableTarget(
         name: "takeshot-r3d",
         dependencies: ["CR3D"],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
     // Without Xcode, tests run via scripts/test.sh (see the comment there).
     .testTarget(
         name: "CaptureCoreTests",
         dependencies: ["CaptureCore"],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
     // Application-layer tests: the take session driven end to end through
     // the mock backend, with no hardware and no window.
     .testTarget(
         name: "TakeShotKitTests",
         dependencies: ["TakeShotKit"],
-        swiftSettings: swift5Mode
+        swiftSettings: swift6Mode
     ),
 ]
 

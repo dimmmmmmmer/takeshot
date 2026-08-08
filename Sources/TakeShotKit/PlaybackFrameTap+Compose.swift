@@ -13,8 +13,15 @@ import os.log
 extension PlaybackFrameTap {
     /// Playback LUT (replaces AVVideoComposition: its render pipeline shifted
     /// contrast even on clips it did not visibly change).
-    func setLUT(_ filter: CIFilter?, intensity: Double) {
+    ///
+    /// What crosses is the WAY to build the filter, never the filter: a
+    /// `CIFilter` is a mutable CoreImage object and the render that uses it
+    /// runs on the tap queue, so it is made there and exists nowhere else.
+    /// `CapturePipeline.setLUT` reaches the same place from the other end, by
+    /// taking the cube and calling `makeFilter` on its own queue. `nil` clears.
+    func setLUT(_ makeFilter: (@Sendable () -> CIFilter?)?, intensity: Double) {
         queue.async {
+            let filter = makeFilter?()
             os_log("tap setLUT: filter=%d intensity=%.2f",
                    log: CapturePipeline.levelsLog, type: .default,
                    filter != nil ? 1 : 0, intensity)

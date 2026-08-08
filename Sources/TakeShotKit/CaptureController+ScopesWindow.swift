@@ -31,20 +31,19 @@ extension CaptureController {
         if let frame = savedScopesWindowFrame() {
             window.setFrame(frame, display: false)
         }
-        for token in scopesFrameObservers {
-            NotificationCenter.default.removeObserver(token)
-        }
-        scopesFrameObservers = [NSWindow.didMoveNotification,
-                                NSWindow.didEndLiveResizeNotification].map { name in
-            NotificationCenter.default.addObserver(
-                forName: name, object: window, queue: .main
-            ) { [weak self] note in
-                guard let moved = note.object as? NSWindow else { return }
-                let frame = moved.frame
-                // AppKit posts this on the main thread; the hop is only for the
-                // main-actor isolation the compiler cannot see through a
-                // notification block
-                Task { @MainActor in self?.saveScopesWindowFrame(frame) }
+        let moves = [NSWindow.didMoveNotification,
+                     NSWindow.didEndLiveResizeNotification]
+        scopesFrame.aim(at: window, observing: moves) { [weak self] in
+            // AppKit posts these on the main thread; the hop is only for the
+            // main-actor isolation the compiler cannot see through a
+            // notification block. The frame is read on the far side of it,
+            // where the window lives — a window is not a value and has no
+            // business travelling out of a notification.
+            Task { @MainActor in
+                guard let self, let moved = self.scopesFrame.window else {
+                    return
+                }
+                self.saveScopesWindowFrame(moved.frame)
             }
         }
     }
@@ -77,4 +76,31 @@ extension CaptureController {
         return visible ? frame : nil
     }
 
+}
+
+/// The scopes window's frame watch: the move/resize observers and the window
+/// they are on.
+///
+/// One object because they are one fact — a set of observers means nothing
+/// without the window it watches, and re-aiming has to replace both. The window
+/// is weak (SwiftUI owns it) and the observers are given back when this is
+/// re-aimed or released (see `NotificationTokens`).
+@MainActor
+final class ScopesFrameWatch {
+    /// Read back here on the main actor rather than taken out of the
+    /// notification: the observers are registered for THIS window and no other,
+    /// so what the notification carries is only that it moved.
+    private(set) weak var window: NSWindow?
+    private let observers = NotificationTokens()
+
+    /// Watch `window` for `names`, dropping whatever was watched before.
+    func aim(at window: NSWindow, observing names: [Notification.Name],
+             onChange: @escaping @Sendable () -> Void) {
+        observers.removeAll()
+        self.window = window
+        for name in names {
+            observers.add(NotificationCenter.default.addObserver(
+                forName: name, object: window, queue: .main) { _ in onChange() })
+        }
+    }
 }

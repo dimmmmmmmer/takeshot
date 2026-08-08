@@ -25,7 +25,7 @@ import Testing
         let player = AVPlayer(playerItem: item)
         player.volume = 0
         player.isMuted = true
-        tap.attach(to: item)
+        tap.attach(to: item, url: url)
         tap.setRunning(true)
         player.play()
         return player
@@ -243,8 +243,7 @@ import Testing
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
         tap.setOnDisplayFrame { collector.record($0) }
-        let filter: CIFilter = try #require(cube.makeFilter())
-        tap.setLUT(filter, intensity: 1)
+        tap.setLUT({ cube.makeFilter() }, intensity: 1)
         let player = startPlayback(of: clip, through: tap)
         defer { stop(player, tap) }
 
@@ -273,8 +272,7 @@ import Testing
         let tap = PlaybackFrameTap()
         let scopes = ScopeCollector()
         tap.onScopeData = { scopes.record($0) }
-        let filter: CIFilter = try #require(cube.makeFilter())
-        tap.setLUT(filter, intensity: 1)
+        tap.setLUT({ cube.makeFilter() }, intensity: 1)
         tap.setScopesEnabled(true)
         let player = startPlayback(of: clip, through: tap)
         defer { stop(player, tap) }

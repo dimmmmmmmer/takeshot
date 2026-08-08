@@ -143,7 +143,7 @@ import Testing
         let player = AVPlayer(playerItem: item)
         player.volume = 0
         player.isMuted = true
-        tap.attach(to: item)
+        tap.attach(to: item, url: recorded.take.url)
         tap.setRunning(true)
         player.play()
         defer {

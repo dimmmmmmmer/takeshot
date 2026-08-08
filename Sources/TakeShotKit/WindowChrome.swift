@@ -9,7 +9,10 @@ import SwiftUI
 /// keeper, the VANC title suppression and the focus release rather than
 /// re-implemented three times.
 struct WindowReporter: NSViewRepresentable {
-    let report: (NSWindow) -> Void
+    /// Main-actor by declaration, because that is where it is called from and
+    /// what it is for: every reporter hands the window to something that goes
+    /// on to touch AppKit state (chrome, first responder, frame).
+    let report: @MainActor (NSWindow) -> Void
 
     func makeNSView(context: Context) -> NSView {
         ReporterView(report: report)
@@ -22,10 +25,10 @@ struct WindowReporter: NSViewRepresentable {
     /// that never repeats leaves that window without whatever the callback was
     /// supposed to do to it (its chrome, its focus keeper).
     final class ReporterView: NSView {
-        private let report: (NSWindow) -> Void
+        private let report: @MainActor (NSWindow) -> Void
         private weak var reportedWindow: NSWindow?
 
-        init(report: @escaping (NSWindow) -> Void) {
+        init(report: @escaping @MainActor (NSWindow) -> Void) {
             self.report = report
             super.init(frame: .zero)
         }
@@ -43,6 +46,10 @@ struct WindowReporter: NSViewRepresentable {
 }
 
 /// Window-level chrome the SwiftUI scene modifiers cannot express.
+///
+/// Main-actor throughout: every member here reads or writes `NSWindow` state,
+/// which AppKit owns on the main thread and the SDK now says so.
+@MainActor
 enum WindowChrome {
     /// The app's window chrome: buttons over the content, no title strip, and
     /// the title STRING kept.
@@ -128,39 +135,45 @@ final class InitialFocusKeeper {
     /// birth (the first key event is the first open) and re-armed by every
     /// close; disarmed by firing.
     private var pendingRelease = true
-    private var observers: [NSObjectProtocol] = []
+    /// The window this keeper was installed on. Weak, and read back on the main
+    /// actor rather than taken out of the notification: both observers below are
+    /// registered for THIS window and no other, so the notification carries no
+    /// information beyond the fact that it fired — and the window itself is
+    /// AppKit state that belongs on the main actor, not in a `@Sendable` block.
+    private weak var window: NSWindow?
+    /// See `NotificationTokens`: the keeper is main-actor isolated, so it hands
+    /// the observers to something whose `deinit` can give them back.
+    private let observers = NotificationTokens()
 
     private init(window: NSWindow) {
+        self.window = window
         // queue nil — the blocks run synchronously on the posting thread, and
         // AppKit posts both of these from the main thread: the release happens
         // BEFORE the key event that triggered it is followed by anything else
         let center = NotificationCenter.default
-        observers.append(center.addObserver(
+        observers.add(center.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
-            object: window, queue: nil) { [weak self] note in
+            object: window, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.pendingRelease,
-                      let window = note.object as? NSWindow else { return }
+                      let window = self.window else { return }
                 self.pendingRelease = false
                 WindowChrome.releaseInitialFocus(of: window)
                 // …and again on the next turn: SwiftUI installs the field's
                 // focus after the window is already key
-                DispatchQueue.main.async {
+                // `@MainActor in` rather than a bare block: the queue is the
+                // main one by name, and saying so is what lets the hop carry
+                // the window — which is AppKit state, not a value.
+                DispatchQueue.main.async { @MainActor in
                     WindowChrome.releaseInitialFocus(of: window)
                 }
             }
         })
-        observers.append(center.addObserver(
+        observers.add(center.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.pendingRelease = true }
         })
-    }
-
-    deinit {
-        for observer in observers {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
 }
 
@@ -184,7 +197,7 @@ extension View {
     func releasesInitialFocus() -> some View {
         background(WindowReporter { window in
             WindowChrome.releaseInitialFocus(of: window)
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { @MainActor in
                 WindowChrome.releaseInitialFocus(of: window)
             }
             InitialFocusKeeper.install(on: window)

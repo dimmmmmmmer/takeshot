@@ -74,36 +74,32 @@ final class WorkspaceVolumeWatch: VolumeWatching {
     var onMount: ((MountedVolume) -> Void)?
     var onUnmount: ((URL) -> Void)?
 
-    private var observers: [NSObjectProtocol] = []
+    /// Held by an object of its own so the watch can give the observers back
+    /// when it is released — see `NotificationTokens`.
+    private let observers =
+        NotificationTokens(center: NSWorkspace.shared.notificationCenter)
 
     func start() {
         guard observers.isEmpty else { return }
         let center = NSWorkspace.shared.notificationCenter
-        observers = [
+        observers.add(
             center.addObserver(forName: NSWorkspace.didMountNotification,
                                object: nil, queue: .main) { [weak self] note in
                 guard let url = Self.volumeURL(from: note) else { return }
                 // The notification arrives on the main queue and the handler is
                 // MainActor work, but the closure itself is not isolated.
                 MainActor.assumeIsolated { self?.deliverMount(url) }
-            },
+            })
+        observers.add(
             center.addObserver(forName: NSWorkspace.didUnmountNotification,
                                object: nil, queue: .main) { [weak self] note in
                 guard let url = Self.volumeURL(from: note) else { return }
                 MainActor.assumeIsolated { self?.onUnmount?(url) }
-            },
-        ]
+            })
     }
 
     func stop() {
-        let center = NSWorkspace.shared.notificationCenter
-        for observer in observers { center.removeObserver(observer) }
-        observers = []
-    }
-
-    deinit {
-        let center = NSWorkspace.shared.notificationCenter
-        for observer in observers { center.removeObserver(observer) }
+        observers.removeAll()
     }
 
     private func deliverMount(_ url: URL) {

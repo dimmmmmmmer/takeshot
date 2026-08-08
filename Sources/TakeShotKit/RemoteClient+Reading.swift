@@ -133,10 +133,15 @@ extension RemoteClient {
         // object may be carried through another thread untouched.
         let id = ObjectIdentifier(self)
         server.handlers.poster(take) { [weak server] jpeg in
+            // Resolved HERE, once. A weak capture is a VARIABLE in the closure
+            // that holds it, and reading it again from inside the queue hop
+            // below would be two threads reading one variable — which is what
+            // the compiler objects to, and it is right that it does.
+            guard let server else { return }
             // The app builds the image where it keeps it, which is not this
             // queue. Everything in this class is queue-confined, so the reply
             // hops back before it touches any of it.
-            queue.async {
+            queue.async { [weak server] in
                 guard let client = server?.clients[id], !client.closed else {
                     return
                 }
