@@ -79,13 +79,14 @@ extension CaptureController {
             playbackTap.attach(to: item, url: url)
             playbackTap.setCompareClip(url: compareClipURL, syncTo: player)
             playbackLUTSuppressed = false
-            detectBakedLUT(for: item) // applies the LUT itself once it learns the tag
+            // applies the LUT itself once it learns the tag
+            detectBakedLUT(for: item, at: url)
             // a clip that carries a loop range opens INSIDE it: a new item
             // starts at zero, and the loop is only enforced at the out point
             // (owner item 38 — see TransportModel.rangeStart)
             transport.beginInsideRange()
             player.play()
-            loadPlaybackInfo(for: item)
+            loadPlaybackInfo(for: item, at: url)
         }
         viewerMode = .playback
         updateTapRunning()

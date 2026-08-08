@@ -30,7 +30,7 @@ extension PlaybackFrameTap {
                 let item = AVPlayerItem(url: url)
                 let output = AVPlayerItemVideoOutput(
                     pixelBufferAttributes: Self.displayBufferAttributes)
-                item.add(output)
+                item.attachOutput(output)
                 let bPlayer = AVPlayer(playerItem: item)
                 bPlayer.volume = 0
                 self.comparePlayer = bPlayer

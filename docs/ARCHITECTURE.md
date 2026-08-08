@@ -12,6 +12,24 @@ CoreMedia buffer types, the `@unchecked Sendable` classes that each name the
 queue they are confined to, and a handful of `nonisolated(unsafe)` declarations
 with the invariant on the line above them.
 
+It has to hold under two SDKs, which is a real constraint rather than a
+formality: CI builds against the macOS 15 SDK and the development machine has
+the macOS 26 one, and Apple's AVFoundation concurrency annotations are not the
+same in both. Where they differ the code obeys the STRICTER of the two, and by
+construction rather than by annotation — an `AVMetadataItem` or an
+`AVAssetTrack` is reduced to Sendable data inside the nonisolated scope that
+loaded it and never crosses at all, which is right whichever SDK is compiling.
+The one place that cannot be settled that way is
+`AVPlayerItem.addOutput:`/`removeOutput:`, which macOS 26 declares
+`NS_SWIFT_NONISOLATED` and macOS 15 leaves inside the class's
+`NS_SWIFT_UI_ACTOR`; the tap sends those two messages dynamically from its own
+queue, at one site, with the reasoning written out there
+(`PlaybackFrameTap.swift`). When an older SDK is installed beside the current
+one, checking the other half of that is
+`swift build -Xswiftc -sdk -Xswiftc "$(xcrun --sdk macosx15.4 --show-sdk-path)"`
+— worth doing before touching anything that awaits AVFoundation, because the
+newer SDK does not diagnose what the older one will.
+
 | Target | What it is |
 | --- | --- |
 | `CaptureCore` | The SDK-free core |

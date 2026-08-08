@@ -273,7 +273,7 @@ final class PlaybackFrameTap: @unchecked Sendable {
             self.detachLocked()
             let output = AVPlayerItemVideoOutput(
                 pixelBufferAttributes: Self.displayBufferAttributes)
-            item.add(output)
+            item.attachOutput(output)
             self.output = output
             self.item = item
             self.lastBuffer = nil
@@ -321,10 +321,60 @@ final class PlaybackFrameTap: @unchecked Sendable {
         timer?.cancel()
         timer = nil
         if let output, let item {
-            item.remove(output)
+            item.detachOutput(output)
         }
         output = nil
         item = nil
         stillBuffer = nil
     }
+}
+
+/// The two `AVPlayerItem` messages the tap sends, as it has to send them:
+/// from `PlaybackFrameTap.queue`, which is not the main actor.
+///
+/// Both SDKs declare the whole of `AVPlayerItem` `NS_SWIFT_UI_ACTOR`. The
+/// macOS 26 SDK then takes exactly these two methods back out of it —
+/// `- (void)addOutput:(AVPlayerItemOutput *)output NS_SWIFT_NONISOLATED` —
+/// and marks `AVPlayerItemOutput` itself `NS_SWIFT_SENDABLE`. The macOS 15 SDK
+/// does neither, so there the same two lines read as a main-actor call made
+/// off the main actor, with a non-Sendable value crossing into it. The newer
+/// annotation is Apple's own statement that attaching an output is a call any
+/// thread may make; it is how this tap has always used them, and nothing has
+/// ever misbehaved.
+///
+/// Obeying the stricter of the two annotations is not open to us, and that is
+/// a threading fact rather than a preference. Attach and detach are ordered
+/// against frame delivery BY being on the tap queue: hopping them to the main
+/// actor would let a removal run while `tick` is copying a buffer out of the
+/// very output being removed, and doing it synchronously would deadlock — the
+/// opposite hop already exists, `currentBuffer()` and the tests both call
+/// `queue.sync` from the main actor.
+///
+/// So the message is sent dynamically. It is the same `objc_msgSend` with the
+/// same argument on the same thread that `item.add(output)` compiles to; the
+/// only thing it does not carry is the isolation annotation the two SDKs
+/// disagree about. `MainActor.assumeIsolated` would be the lie here — this
+/// really is not the main actor, and it would trap on the first clip opened.
+extension AVPlayerItem {
+    /// `addOutput:` from the tap queue (see above).
+    nonisolated func attachOutput(_ output: AVPlayerItemOutput) {
+        _ = perform(PlayerItemOutputMessage.add, with: output)
+    }
+
+    /// `removeOutput:` from the tap queue (see above).
+    nonisolated func detachOutput(_ output: AVPlayerItemOutput) {
+        _ = perform(PlayerItemOutputMessage.remove, with: output)
+    }
+}
+
+/// The two selectors, formed from the SDK's own declarations rather than
+/// spelled as strings: a rename on Apple's side is then a build error here
+/// instead of an unrecognised selector on set. Both names are overloaded on
+/// `AVPlayerItem` — the other pair takes an `AVPlayerItemMediaDataCollector`
+/// — which is what the explicit function type picks between.
+private enum PlayerItemOutputMessage {
+    static let add = #selector(
+        AVPlayerItem.add(_:) as (AVPlayerItem) -> (AVPlayerItemOutput) -> Void)
+    static let remove = #selector(
+        AVPlayerItem.remove(_:) as (AVPlayerItem) -> (AVPlayerItemOutput) -> Void)
 }

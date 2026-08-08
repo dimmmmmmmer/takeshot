@@ -89,18 +89,32 @@ final class DailiesQueueModel: ObservableObject {
         controller.rememberDailiesChoices(from: self)
         controller.dailiesStatus = L("dailies_status", 0, items.count)
         let burnins = burnins
+        // Both ways back are built HERE, on the main actor, and the task is
+        // handed nothing else of ours. A reference the task captured belongs
+        // to the task's own region, and passing THAT to a closure that will
+        // run on the main actor is what the older Swift compiler rejects
+        // ("sending 'self' risks causing data races" — this is a toolchain
+        // difference, not an SDK one; Dispatch is declared identically in
+        // both). Captured on this side the reference is the main actor's from
+        // the start, which is also the truer description of what it is.
+        //
+        // FIFO onto the main queue, like the offload's progress: a Task per
+        // snapshot could land out of order, and the report has to arrive
+        // behind the last snapshot rather than beside it.
+        let publish: @Sendable (DailiesProgress) -> Void = { [weak self] snapshot in
+            DispatchQueue.main.async { self?.apply(snapshot) }
+        }
+        let complete: @Sendable (DailiesReport) -> Void = { [weak self] result in
+            DispatchQueue.main.async { self?.finish(result) }
+        }
         // Utility priority, off the main actor: the encode must never compete
         // with the capture path for the machine (the pause gate guards the
         // disk and encoder; this guards the CPU).
-        Task.detached(priority: .utility) { [weak self] in
+        Task.detached(priority: .utility) {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
-                control: token) { snapshot in
-                // FIFO onto the main queue, like the offload's progress: a
-                // Task per snapshot could land out of order.
-                DispatchQueue.main.async { self?.apply(snapshot) }
-            }
-            DispatchQueue.main.async { self?.finish(result) }
+                control: token, progress: publish)
+            complete(result)
         }
     }
 
