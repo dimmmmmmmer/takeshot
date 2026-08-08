@@ -231,14 +231,43 @@ extension CaptureController {
             }
             return
         }
-        let freeGB = Double(free) / 1_000_000_000
-        if freeGB < 0.5, isRecording {
+        switch Self.diskVerdict(freeBytes: free, isRecording: isRecording) {
+        case .fine:
+            break
+        case .full(let freeGB):
             pipeline.toggleManualRecord() // close the take while it can finalize
             persistentAlert = String(format:
                 "DISK FULL (%.1f GB) — recording stopped", freeGB)
-        } else if freeGB < 5 {
+        case .low(let freeGB):
             persistentAlert = String(format:
                 "Record disk low: %.1f GB free", freeGB)
         }
+    }
+
+    /// What a free-space reading means, as a value.
+    ///
+    /// Split from the watchdog that acts on it for the same reason
+    /// `bitDepthShortfall` is split from `reportBitDepthShortfall`: the two
+    /// halves fail differently. This one is a rule about two thresholds and can
+    /// be stated exactly; the caller's half is about a volume that may not
+    /// answer the question at all, and only a real disk can put it in either of
+    /// these states. The thresholds ARE the recording-integrity promise — warn
+    /// under 5 GB, close the take under 0.5 — so they belong somewhere that can
+    /// be read and checked rather than inline in a tick nothing can drive.
+    enum DiskVerdict: Equatable {
+        /// Room to keep recording.
+        case fine
+        /// Under 5 GB: say so, and leave the take alone.
+        case low(gigabytes: Double)
+        /// Under 0.5 GB with a take rolling: close it while it still can
+        /// finalize. Only ever while recording — an idle app on a nearly full
+        /// disk gets the warning, not an intervention.
+        case full(gigabytes: Double)
+    }
+
+    static func diskVerdict(freeBytes: Int64, isRecording: Bool) -> DiskVerdict {
+        let freeGB = Double(freeBytes) / 1_000_000_000
+        if freeGB < 0.5, isRecording { return .full(gigabytes: freeGB) }
+        return freeGB < 5 ? .low(gigabytes: freeGB) : .fine
     }
 }

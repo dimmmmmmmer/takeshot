@@ -7,10 +7,10 @@
 # message.
 #
 # Deliberately about a point and a half under the number actually achieved
-# (87.52 % at the time of writing). A floor set at the exact measurement goes red
+# (89.01 % at the time of writing). A floor set at the exact measurement goes red
 # on the first honest refactor that adds a guard clause nobody has a test for,
 # and a gate that is red the week it lands is a gate everybody learns to skip.
 #
 # docs/coverage.md carries the real number, what moved it, and the list of what
 # genuinely cannot be covered from a headless suite.
-86.0
+87.5
