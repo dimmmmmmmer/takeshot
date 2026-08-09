@@ -62,4 +62,54 @@ struct PreRollAudioTests {
         #expect(audio.seconds > videoDuration - 0.25,
                 "only \(audio.seconds) s of audio for \(videoDuration) s of picture")
     }
+
+    /// The ring's memory budget is a CEILING, and the case that made it one is
+    /// 12-bit UHD arriving without anybody choosing it.
+    ///
+    /// The rule used to be `max(startConfirmSpan + 5, budgetFrames)`: the
+    /// detection latency was guaranteed room whatever a frame cost, because
+    /// a ring shorter than that loses the head of every take. That was
+    /// affordable while the deepest capture needed a deliberate click. Bit depth
+    /// follows the signal now, so the arithmetic below is reachable by a camera
+    /// changing its output between setups, and it does not hold — with the
+    /// taught REC indicator armed the confirm count is multiplied by the
+    /// watcher's stride, so a start debounce of 12 asks for 65 frames of a
+    /// 66 MB record buffer: 4.3 GB, against a 1.5 GB budget.
+    ///
+    /// Checked as arithmetic rather than through a pipeline because no synthetic
+    /// signal in this suite is a UHD 12-bit one, and a wrong answer here is
+    /// measured in gigabytes rather than in a failed assertion.
+    @Test func theRingStaysInsideItsBudgetAtTwelveBitUHD() {
+        // 3840x2160, 8 bytes a pixel — the 12-bit path's '64RGBALE' record frame
+        let bytesPerFrame: Int = 3840 * 2160 * 8
+        #expect(bytesPerFrame == 66_355_200, "the UHD frame size moved")
+        // wanted = preRoll 5 + confirm span 60 (debounce 12 x stride 5) + 3
+        let capacity: Int = CapturePipeline.preRollCapacity(
+            wanted: 68, bytesPerFrame: bytesPerFrame)
+        #expect(capacity * bytesPerFrame <= CapturePipeline.preRollBudgetBytes,
+                "\(capacity) frames is \(capacity * bytesPerFrame) bytes")
+        #expect(capacity == 22, "the UHD 12-bit ring holds \(capacity) frames")
+
+        // …and the same rig at 10-bit, which the old floor also blew through
+        let tenBit: Int = 3840 * 2160 * 4
+        let tenCapacity: Int = CapturePipeline.preRollCapacity(
+            wanted: 68, bytesPerFrame: tenBit)
+        #expect(tenCapacity * tenBit <= CapturePipeline.preRollBudgetBytes)
+    }
+
+    /// Nothing changes for the rasters the budget was never tight on: at 1080p
+    /// the ring holds everything that was asked for, at every depth.
+    @Test func theBudgetDoesNotShortenAnHDRing() {
+        for bytesPerPixel: Int in [3, 4, 8] {
+            let bytesPerFrame: Int = 1920 * 1080 * bytesPerPixel
+            #expect(CapturePipeline.preRollCapacity(
+                wanted: 68, bytesPerFrame: bytesPerFrame) == 68,
+                "1080p at \(bytesPerPixel) bytes a pixel was shortened")
+        }
+        // and a frame so large that the budget holds none of it still keeps a
+        // ring rather than dividing to zero
+        #expect(CapturePipeline.preRollCapacity(
+            wanted: 68, bytesPerFrame: 2_000_000_000)
+            == CapturePipeline.minimumPreRollFrames)
+    }
 }

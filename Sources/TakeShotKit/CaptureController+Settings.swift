@@ -118,10 +118,17 @@ extension CaptureController {
             startFolderWatcher()
         }
         if oldValue.capture.forcedInputMode != settings.capture.forcedInputMode
-            || oldValue.capture.forcedInputRGB != settings.capture.forcedInputRGB
-            || oldValue.capture.tenBitCapture != settings.capture.tenBitCapture
-            || oldValue.capture.captureBitDepth != settings.capture.captureBitDepth {
+            || oldValue.capture.forcedInputRGB != settings.capture.forcedInputRGB {
             restartCapture()
+        }
+        // The bit-depth picker used to restart capture from here. It is gone —
+        // depth follows the signal — but the CODEC still has something to say
+        // about a 12-bit one: 4:2:2 subsamples it on the way into the file, and
+        // that used to be a consequence of the operator's own 12-bit click.
+        // Nothing restarts; the notice is simply re-asked, because the signal
+        // that would otherwise have carried it has not changed.
+        if oldValue.capture.codec != settings.capture.codec {
+            reportBitDepth(signalFormat)
         }
     }
 

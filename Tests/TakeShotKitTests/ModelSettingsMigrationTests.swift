@@ -178,6 +178,38 @@ import Testing
         #expect(!round.contains("limited_excursions"))
     }
 
+    /// A blob carrying `captureBitDepth` still decodes, and everything else in
+    /// it survives.
+    ///
+    /// That key was the bit-depth picker, and the picker is gone: depth follows
+    /// the signal now. It is the one key ever removed from this record, and the
+    /// failure it could have caused is the worst one this file exists for — a
+    /// decode that throws hands `loaded(from:)` a fresh default object, so the
+    /// operator's destination folder, naming template, calibrated thresholds and
+    /// taught REC references are silently replaced by defaults, on a shooting
+    /// day, with no error anywhere.
+    ///
+    /// Nothing carries the stored depth across, deliberately: there is no
+    /// setting left for it to mean anything to, and an operator who had picked
+    /// 8-bit to save bandwidth is moved onto what their camera is actually
+    /// sending. So this checks the two halves that ARE contracts — the blob
+    /// decodes, and this build writes it back without the key.
+    @Test func anOldBlobWithARetiredBitDepthStillDecodes() throws {
+        let settings = CaptureSettings.loaded(from: store("""
+            ,"captureBitDepth":"12","tenBitCapture":false,"ltcChannel":3
+            """))
+        #expect(settings.capture.destinationPath == "/tmp/shoot")
+        #expect(settings.naming.projectName == "Nightfall")
+        #expect(settings.capture.ltcChannel == 3)
+        #expect(settings.capture.startDebounceFrames == 3)
+        #expect(settings.schemaVersion == CaptureSettings.currentSchemaVersion)
+
+        let round: String = try #require(String(
+            data: try JSONEncoder().encode(settings), encoding: .utf8))
+        #expect(!round.contains("captureBitDepth"),
+                "the retired key was written back")
+    }
+
     /// A blob written before `schemaVersion` existed is version 0: it still has
     /// to reach the current version, running every step on the way.
     @Test func aVersionlessBlobRunsTheWholeChain() {

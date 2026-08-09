@@ -20,7 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// limited-range RGB, which needs level expansion for correct contrast.
 @property (nonatomic) BOOL isRGB444;
 /// Bits per component the input was actually ENABLED with — 8, 10 or 12.
-/// What the board settled on, not what was asked for: a request the hardware or
+/// What the board settled on, not what the signal said: a format the hardware or
 /// the mode cannot satisfy falls back, and the app compares the two so the
 /// operator is told rather than left with a quietly shallower capture.
 ///
@@ -28,6 +28,20 @@ NS_ASSUME_NONNULL_BEGIN
 /// 12 ('R12B'); YCbCr 4:2:2 can be 8 ('2vuy') or 10 ('v210'), and 10 is what a
 /// professional SDI source actually carries.
 @property (nonatomic) int bitDepth;
+/// Bits per component the SOURCE is sending — 8, 10 or 12, or 0 when the board
+/// did not say.
+///
+/// The other depth, and the reason there are two. This one is read off
+/// BMDDetectedVideoInputFormatFlags, which is the signal describing itself;
+/// `bitDepth` above is the app describing what it managed to open. They differ
+/// whenever a format is refused, and on a 12-bit YCbCr source they differ by
+/// definition — there is no 12-bit 4:2:2 wire format to enable.
+///
+/// Zero rather than a guess in three cases, all of them honest: a forced input
+/// mode (no detection callback fires at all), a header set older than the SDK
+/// that added the depth flags, and the stub build. Zero means "unknown", never
+/// "eight".
+@property (nonatomic) int sourceBitDepth;
 @end
 
 /// Access to the DeckLink API. If the project is built without the SDK headers
@@ -142,26 +156,32 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *forcedModeName;
 /// With a forced mode: treat the signal as RGB 4:4:4 (BGRA) instead of YUV.
 @property (nonatomic) BOOL forcedRGB;
-/// Capture RGB 4:4:4 sources as 10-bit r210 instead of 8-bit BGRA.
-@property (nonatomic) BOOL preferTenBitRGB;
-/// Capture RGB 4:4:4 sources as 12-bit R12B (bmdFormat12BitRGB) instead of
-/// 10-bit r210. Takes precedence over preferTenBitRGB when both are set.
+/// Bit depth FOLLOWS THE SIGNAL and there is no preference to set. The three
+/// prefer* flags that used to live here are gone with the setting behind them:
+/// the format-detection callback already carries the source's depth, so an
+/// operator being asked to state it was the app asking a question the wire had
+/// already answered.
 ///
-/// Requested, not guaranteed: the board is asked whether it supports the format
-/// in the detected mode (DoesSupportVideoMode) and the request is dropped to
-/// 10- or 8-bit when it does not. The depth actually enabled is reported on
-/// CDLVideoFormat.bitDepth every time a format is announced.
-@property (nonatomic) BOOL preferTwelveBitRGB;
-/// Capture YCbCr 4:2:2 sources as 10-bit v210 (bmdFormat10BitYUV) instead of
-/// 8-bit 2vuy. This is the standard professional SDI case, and 8-bit capture of
-/// it means the driver drops two bits before the app ever sees a frame.
+/// What the bridge does with that, stated once here because it is a contract
+/// and not an implementation detail:
 ///
-/// Requested, not guaranteed, exactly like the 12-bit RGB flag above: the board
-/// is asked (DoesSupportVideoMode) and the request falls back to 8-bit 2vuy when
-/// it says no, so a board or a mode that cannot deliver v210 keeps a picture
-/// instead of producing black or torn frames. The depth actually enabled travels
-/// back on CDLVideoFormat.bitDepth, so the app can tell the operator.
-@property (nonatomic) BOOL preferTenBitYUV;
+/// - RGB 4:4:4 — 12-bit 'R12B' when the signal says 12 AND the board says it
+///   can (DoesSupportVideoMode), otherwise 10-bit 'r210'.
+/// - YCbCr 4:2:2 — 10-bit 'v210' when the board says it can, otherwise 8-bit
+///   '2vuy'. The source's depth cannot change that answer: there are only two
+///   4:2:2 formats and the deeper one is always the right ask.
+/// - Ten is a FLOOR, never a ceiling. A source that says 8 is still opened at
+///   10, because the 8-bit path has no wire-record buffer — its record frames
+///   are the expanded display frames, so a limited-range source's sub-blacks
+///   and super-whites would be clipped into the file. Following the signal down
+///   would be the app throwing away the excursions the wire record path exists
+///   to protect; following it up costs bandwidth and loses nothing.
+///
+/// Requested, not guaranteed, as it always was: a format the hardware refuses is
+/// how a session ends up with a black or torn picture, so it is checked and
+/// falls back. Both depths are reported on every announced format —
+/// CDLVideoFormat.sourceBitDepth for the signal and .bitDepth for what was
+/// actually enabled.
 /// Start with format auto-detection. deviceID is the persistentID from CDLDeviceManager.
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error;
 - (void)stop;

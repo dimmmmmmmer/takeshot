@@ -10,24 +10,12 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
     weak var delegate: CaptureBackendDelegate?
 
     /// Forced input mode (name + RGB flag); nil — autodetect. Set before start.
+    ///
+    /// The only thing this adapter still states about the input format. The
+    /// three bit-depth preferences that used to sit beside it are gone with the
+    /// setting behind them: the bridge follows the source's own depth off the
+    /// detection flags, so there is nothing for the app layer to pass down.
     var forcedMode: (name: String, rgb: Bool)?
-    /// RGB 4:4:4 sources captured as 10-bit r210 (vs 8-bit BGRA).
-    var preferTenBitRGB = true
-    /// RGB 4:4:4 sources captured as 12-bit R12B. Off by default: it is only
-    /// worth the bandwidth on a board and a source that both deliver it, and a
-    /// request the hardware refuses falls back (see `rgbPixelFormatForMode` in
-    /// the bridge) — the depth that came back is on `CaptureFormat.bitDepth`.
-    var preferTwelveBitRGB = false
-    /// YCbCr 4:2:2 sources captured as 10-bit v210 (vs 8-bit 2vuy). ON by
-    /// default, unlike the 12-bit RGB flag above, and the difference is
-    /// deliberate: 12-bit RGB is an exotic format that costs twice the record
-    /// bandwidth and that many boards and modes refuse, while v210 is the
-    /// BASELINE professional format — it is what an SDI wire carries, every
-    /// current Blackmagic board delivers it, and asking for 8-bit means the
-    /// driver drops two bits the signal already has. A board that still says no
-    /// falls back to 2vuy and the depth that came back is on
-    /// `CaptureFormat.bitDepth`.
-    var preferTenBitYUV = true
 
     private var capture: CDLCapture?
     private var audioFormatDescription: CMAudioFormatDescription?
@@ -67,9 +55,6 @@ final class DeckLinkBackendAdapter: NSObject, CaptureBackend {
             capture.forcedModeName = forcedMode.name
             capture.forcedRGB = forcedMode.rgb
         }
-        capture.preferTenBitRGB = preferTenBitRGB
-        capture.preferTwelveBitRGB = preferTwelveBitRGB
-        capture.preferTenBitYUV = preferTenBitYUV
         try capture.start(withDeviceID: deviceID)
         self.capture = capture
     }
@@ -95,7 +80,12 @@ extension DeckLinkBackendAdapter: CDLCaptureDelegate {
             width: format.width, height: format.height,
             frameRate: fps, timecodeFPS: Int(format.timecodeFPS),
             isDropFrame: fractional, name: format.modeName,
-            isRGB444: format.isRGB444, bitDepth: Int(format.bitDepth)))
+            isRGB444: format.isRGB444, bitDepth: Int(format.bitDepth),
+            // 0 out of the bridge is "the signal did not say" — a forced mode,
+            // or a header set older than the depth flags. It becomes nil here
+            // rather than travelling as a depth nobody has ever seen.
+            sourceBitDepth: format.sourceBitDepth > 0
+                ? Int(format.sourceBitDepth) : nil))
     }
 
     // This is the boundary where the bridge's plain values become domain types.

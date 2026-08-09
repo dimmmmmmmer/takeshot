@@ -30,7 +30,8 @@ import Testing
 
     private func videoFormat(width: Int, height: Int, frameRate: Double,
                              timecodeFPS: Int32, name: String,
-                             rgb: Bool = false) -> CDLVideoFormat {
+                             rgb: Bool = false, bitDepth: Int32 = 8,
+                             sourceBitDepth: Int32 = 0) -> CDLVideoFormat {
         let format = CDLVideoFormat()
         format.width = width
         format.height = height
@@ -38,7 +39,36 @@ import Testing
         format.timecodeFPS = timecodeFPS
         format.modeName = name
         format.isRGB444 = rgb
+        format.bitDepth = bitDepth
+        format.sourceBitDepth = sourceBitDepth
         return format
+    }
+
+    /// Both depths cross the bridge, and the bridge's 0 becomes nil.
+    ///
+    /// The zero is what the bridge says when the signal did not describe itself
+    /// — a forced input mode fires no detection callback, and a DeckLink header
+    /// set older than the depth flags cannot read one. Letting it through as the
+    /// number 0 would put a depth nobody has ever seen into the shortfall
+    /// arithmetic; letting it through as 8 would invent an answer.
+    @Test func bothBitDepthsCrossTheBridgeAndZeroBecomesUnknown() throws {
+        let rig = makeRig()
+        let (adapter, capture, recorder) = (rig.adapter, rig.capture, rig.recorder)
+        adapter.capture(capture, didDetect: videoFormat(
+            width: 3840, height: 2160, frameRate: 25, timecodeFPS: 25,
+            name: "2160p25", rgb: true, bitDepth: 10, sourceBitDepth: 12))
+        adapter.capture(capture, didDetect: videoFormat(
+            width: 1920, height: 1080, frameRate: 25, timecodeFPS: 25,
+            name: "1080p25", rgb: true, bitDepth: 10, sourceBitDepth: 0))
+        let formats: [CaptureFormat] = recorder.snapshot.formats
+        #expect(formats.count == 2)
+        let followed: CaptureFormat = try #require(formats.first)
+        #expect(followed.sourceBitDepth == 12, "the signal's depth was dropped")
+        #expect(followed.bitDepth == 10, "the enabled depth was dropped")
+        #expect(followed.capturableBitDepth == 12)
+        let quiet: CaptureFormat = try #require(formats.last)
+        #expect(quiet.sourceBitDepth == nil, "0 was passed on as a real depth")
+        #expect(quiet.capturableBitDepth == nil)
     }
 
     /// 29.97 and 59.94 are flagged as POSSIBLY drop-frame; the real flag comes
@@ -207,7 +237,6 @@ import Testing
         let adapter = DeckLinkBackendAdapter(watchesDevices: false)
         adapter.stopCapture()
         adapter.stopCapture()
-        #expect(adapter.preferTenBitRGB, "10-bit RGB capture is the default")
         adapter.forcedMode = ("1080p25", true)
         #expect(adapter.forcedMode?.name == "1080p25")
         #expect(adapter.forcedMode?.rgb == true)

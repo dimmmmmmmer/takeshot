@@ -122,6 +122,7 @@ extension CaptureController {
             capture.isDropFrame = format.isDropFrame
             capture.isRGB444 = format.isRGB444
             capture.wireBitDepth = format.bitDepth
+            capture.sourceBitDepth = format.sourceBitDepth
         }
         capture.currentTimecode = currentTimecode?.description
         capture.levelsSetting = settings.capture.videoLevels ?? "auto"
@@ -129,7 +130,6 @@ extension CaptureController {
         capture.hdrSetting = HDRMode.resolved(settings.capture.hdrMode).rawValue
         capture.hdrSignal = signalColorimetry.badge ?? "SDR (Rec.709)"
         capture.hdrDisplayMetadata = diagnosticsDisplayMetadata()
-        capture.tenBitCapture = settings.capture.tenBitCapture ?? true
         capture.detectionMode = settings.capture.detectionMode.rawValue
         capture.preRollFrames = settings.capture.preRollFramesEffective
         capture.visualRec = diagnosticsVisualRec()

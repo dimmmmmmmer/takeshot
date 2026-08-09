@@ -48,14 +48,64 @@ struct PlayerTimecodeBadge: View {
             .labelsHidden()
     }
 
+    /// Which row the timecode menu is on. Tags: 0 is RP188, 1…n are channels
+    /// 0…n-1, and -1 is the stored channel when the signal cannot offer it.
+    /// The negative tags are labels rather than choices — see the setter.
+    ///
+    /// Static so the rule can be checked without a window, which is the only way
+    /// the stale-channel case can be checked at all: it needs a stored channel,
+    /// a live channel count, and the two to disagree.
+    static func selectionTag(isLTC: Bool, stored: Int, channels: Int) -> Int {
+        guard isLTC else { return 0 }
+        return isChannelLive(stored, channels: channels) ? stored + 1 : -1
+    }
+
+    /// Whether a stored 0-based LTC channel is one the current signal carries.
+    static func isChannelLive(_ stored: Int, channels: Int) -> Bool {
+        stored >= 0 && stored < channels
+    }
+
+    /// RP188, plus one row per audio channel the CURRENT signal is carrying.
+    ///
+    /// It used to be `ForEach(1...8)`, hard-coded, while a board embeds up to 16
+    /// — so half the channels on an SDI wire could not be selected at all. The
+    /// fix is not 16: the number is a property of the signal (`audioChannelCount`
+    /// is the count of the meters, i.e. the channels the decoder is actually
+    /// handed), and offering channels that are not there is the same bug in the
+    /// other direction. A row in this menu is a promise that LTC can be decoded
+    /// from it.
+    ///
+    /// Two cases the count alone does not cover, and neither may rewrite the
+    /// stored channel — a signal that is briefly down between setups must not
+    /// cost the operator the choice they made:
+    ///
+    /// - **No signal.** There are no channel rows, because there are no
+    ///   channels; `tc_source_ltc_no_signal` says so in the menu rather than
+    ///   leaving it looking like LTC was removed. RP188 stays selectable.
+    /// - **A stored channel above the live count** (a 16-channel rig swapped for
+    ///   a 2-channel one, or the case above). The selection is still shown, on
+    ///   its own row, labelled as unavailable. Silently showing "Ch 1" would
+    ///   claim the operator had chosen something they had not, and silently
+    ///   showing "Ch 13" among the live rows would claim a channel the signal
+    ///   does not have. What the DECODER does meanwhile is unchanged: it clamps
+    ///   to the last channel that exists (`CapturePipeline+Timecode`), so
+    ///   timecode keeps arriving from somewhere while the menu says the chosen
+    ///   source is not there.
     private var timecodeSourcePicker: some View {
-        Picker(L("tc_source"), selection: Binding(
+        let channels = controller.audioChannelCount
+        let stored = controller.settings.capture.ltcChannel ?? 0
+        let isLTC = controller.settings.capture.timecodeSource == "ltc"
+        let unavailable = isLTC && !Self.isChannelLive(stored, channels: channels)
+        return Picker(L("tc_source"), selection: Binding(
             get: {
-                controller.settings.capture.timecodeSource == "ltc"
-                    ? 1 + (controller.settings.capture.ltcChannel ?? 0)
-                    : 0
+                Self.selectionTag(isLTC: isLTC, stored: stored,
+                                  channels: channels)
             },
             set: { value in
+                // -1 is a statement about the current selection, not a choice:
+                // picking it changes nothing, and in particular does not
+                // overwrite the channel the operator is waiting for a signal on.
+                guard value >= 0 else { return }
                 if value == 0 {
                     controller.settings.capture.timecodeSource = nil
                 } else {
@@ -64,8 +114,17 @@ struct PlayerTimecodeBadge: View {
                 }
             })) {
             Text(L("tc_source_rp188")).tag(0)
-            ForEach(1...8, id: \.self) { channel in
-                Text(L("tc_source_ltc", channel)).tag(channel)
+            if unavailable {
+                Text(L("tc_source_ltc_unavailable", stored + 1)).tag(-1)
+            }
+            if channels > 0 {
+                ForEach(1...channels, id: \.self) { channel in
+                    Text(L("tc_source_ltc", channel)).tag(channel)
+                }
+            } else if !unavailable {
+                // the row above already says there is no signal, and says which
+                // channel is waiting for one
+                Text(L("tc_source_ltc_no_signal")).tag(-2)
             }
         }
         .pickerStyle(.menu)

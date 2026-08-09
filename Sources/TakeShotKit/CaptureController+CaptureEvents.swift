@@ -24,7 +24,7 @@ extension CaptureController {
                 // frame rate and that rate is captured at wire time.
                 self.wireDisplayMirrors()
             }
-            if changed { self.reportBitDepthShortfall(format) }
+            if changed { self.reportBitDepth(format) }
         }
         pipeline.onTimecode = { [weak self] timecode in
             guard let self, self.live.currentTimecode != timecode else { return }
@@ -60,13 +60,27 @@ extension CaptureController {
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
         }
-        pipeline.onAudioLevels = { [weak self] levels in
-            self?.live.audioLevels = levels
-        }
+        pipeline.onAudioLevels = { [weak self] in self?.adoptAudioLevels($0) }
         pipeline.onVisualRecReading = { [weak self] reading in
             self?.visualRecReading = reading
         }
     }
+    /// The meters, and — on its own publisher and only when it MOVES — how many
+    /// channels the signal is carrying.
+    ///
+    /// The two are split because they change at completely different rates. The
+    /// levels arrive with every packet, ~25 times a second, which is why they
+    /// live on `LiveSignal` and only the meters observe them. The COUNT changes
+    /// when the signal does, a handful of times a shift, and the LTC channel
+    /// menu is built from it — a menu that observed `LiveSignal` to read
+    /// `audioLevels.count` would re-lay out at meter rate, which is the ~1 CPU
+    /// core of SwiftUI layout that object exists to prevent.
+    private func adoptAudioLevels(_ levels: [Float]) {
+        live.audioLevels = levels
+        guard audioChannelCount != levels.count else { return }
+        audioChannelCount = levels.count
+    }
+
     private func handleRecState(_ recording: Bool) {
         isRecording = recording
         // Which trigger fired, read from the health mirror rather than carried on
@@ -131,59 +145,93 @@ extension CaptureController {
             return fixed
         }
     }
-    /// Recording-integrity failures stick in the alarm banner; everything else
-    /// toasts for five seconds.
+    /// What the signal's own bit depth did to this capture, said out loud.
     ///
-    /// "Failed to start recording" and a take truncated by a format change used
-    /// to toast: the two cases where footage is missing outright, announced more
-    /// quietly than a dropped frame. An operator watching the slate rather than
-    /// the screen had no way to learn about them.
-    /// Say so when the board did not give us the bit depth that was asked for.
+    /// Depth follows the signal now, and that removed a wrong answer and added a
+    /// duty. The operator no longer chooses, so the app owes them BOTH ends of
+    /// what the wire decided on their behalf: the depth it could not keep up
+    /// with, and the depth it went to without being asked.
     ///
-    /// A silent fallback is a colour decision made behind the operator's back:
-    /// they selected 12-bit, the board or the mode could not do it, and the
-    /// takes come out 10-bit with nothing on screen saying which. The picture
-    /// and the footage are still good, so this is a five-second notice rather
-    /// than a sticky alarm — but it is never nothing.
+    /// A five-second notice rather than a sticky alarm in both cases — the
+    /// picture and the footage are good either way — but never nothing.
     ///
-    /// Asked of BOTH samplings. It used to be RGB-only, on the grounds that a
-    /// YUV source was 8-bit '2vuy' by design and never a request that could
-    /// fail — that stopped being true when 10-bit YCbCr ('v210') became the
-    /// default request, and a v210 request that quietly fell back to 8-bit is
-    /// exactly the silent colour decision this exists to prevent.
-    ///
-    /// Only a BOARD can fall short of a request, which is why the demo source is
-    /// excluded rather than compared. It generates an 8-bit signal by
-    /// construction and nothing ever asked it for more, so measuring it against
-    /// the picker would put a notice in front of every operator running --demo
-    /// that they could do nothing about. (The RGB-only guard used to exclude it
-    /// by accident, the demo format not being flagged 4:4:4.)
-    func reportBitDepthShortfall(_ format: CaptureFormat?) {
+    /// Only a BOARD is measured, which is why the demo source is excluded rather
+    /// than compared. It generates an 8-bit signal by construction and reports no
+    /// source depth at all, so there is nothing to measure; the guard is kept
+    /// explicit because a notice on every launch of the demo is how an operator
+    /// learns to ignore the banner that matters.
+    func reportBitDepth(_ format: CaptureFormat?) {
         guard let format, selectedDeviceID != nil, !isMockSelected,
-              let short = Self.bitDepthShortfall(
-                  format: format, requested: settings.capture.resolvedBitDepth)
+              let notice = Self.bitDepthNotice(format: format,
+                                               codec: settings.capture.codec)
         else { return }
-        lastError = String(format: L("bit_depth_fallback"),
-                           short.requested, short.delivered)
+        lastError = notice.localizedText
     }
 
-    /// Which depth applies to a signal, and whether the board met it — the whole
-    /// rule as a value, nil when there is nothing to say.
+    /// What is worth saying about a signal's depth, as a value. nil is silence,
+    /// which is the common case.
     ///
     /// Separate from the reporting above because the two halves fail differently:
-    /// this one is arithmetic about samplings (one picker, two wire formats, and
-    /// 12 on a 4:2:2 wire means 10), and the caller's half is about which sources
-    /// the question can even be asked of.
-    static func bitDepthShortfall(format: CaptureFormat,
-                                  requested: CaptureBitDepth)
-        -> (requested: Int, delivered: Int)? {
-        let wanted = format.isRGB444 ? requested.bits : requested.yuvBits
-        guard format.bitDepth < wanted else { return nil }
-        return (requested: wanted, delivered: format.bitDepth)
+    /// this one is arithmetic about samplings and codecs, and the caller's half
+    /// is about which sources the question can be asked of at all.
+    ///
+    /// The two cases are mutually exclusive by construction — a shortfall means
+    /// the delivered depth is below what the wire could give, and the deep-path
+    /// case IS the deepest the wire goes — so the order below is a reading
+    /// order and not a precedence rule.
+    static func bitDepthNotice(format: CaptureFormat,
+                               codec: CaptureCodec) -> BitDepthNotice? {
+        if let capturable = format.capturableBitDepth, format.bitDepth < capturable {
+            return .shortfall(source: capturable, delivered: format.bitDepth)
+        }
+        guard format.bitDepth >= 12 else { return nil }
+        return .twelveBit(codec: codec)
+    }
+
+    /// The two things a signal's depth can be worth telling the operator.
+    ///
+    /// A value rather than two format-string call sites for the same reason
+    /// `DiskVerdict` is: the rule can then be stated and checked without a board,
+    /// and the words are chosen somewhere else.
+    enum BitDepthNotice: Equatable {
+        /// The wire is carrying more than the app could open. `source` is what
+        /// the signal can actually yield at its sampling, so a 12-bit YCbCr
+        /// source captured as 'v210' is NOT this — ten is all a 4:2:2 wire has
+        /// (see `CaptureFormat.capturableBitDepth`).
+        case shortfall(source: Int, delivered: Int)
+        /// The signal put this capture on 12-bit 'R12B' with nobody choosing it.
+        ///
+        /// This case exists because auto-depth created it. 12-bit used to need a
+        /// deliberate click, so the heaviest path in the app — twice the record
+        /// bandwidth, twice the pre-roll ring per frame, and a sampling only
+        /// ProRes 4444 can carry — was always something the operator had already
+        /// agreed to. Now a camera can put them there between setups, and the
+        /// one thing they must not do is find out in the edit.
+        case twelveBit(codec: CaptureCodec)
+
+        var localizedText: String {
+            switch self {
+            case .shortfall(let source, let delivered):
+                return String(format: L("bit_depth_fallback"), source, delivered)
+            case .twelveBit(let codec):
+                // The codec half is the actionable one: 12-bit RGB 4:4:4 into a
+                // 4:2:2 codec is subsampled on the way in, and that used to be a
+                // consequence of the operator's own click.
+                guard !codec.isRGB444Capable else { return L("bit_depth_twelve") }
+                return String(format: L("bit_depth_twelve_subsampled"),
+                              codec.rawValue)
+            }
+        }
     }
 
     /// Put a pipeline alarm in front of the operator, in the register the alarm
     /// itself declares and in the language the app is set to.
+    ///
+    /// Recording-integrity failures stick in the alarm banner; everything else
+    /// toasts for five seconds. "Failed to start recording" and a take truncated
+    /// by a format change used to toast: the two cases where footage is missing
+    /// outright, announced more quietly than a dropped frame. An operator
+    /// watching the slate rather than the screen had no way to learn about them.
     ///
     /// This used to read the register off the prose — a list of English
     /// substrings ("TAKE LOST", "Dropped", "ingress") matched against the
@@ -281,11 +329,11 @@ extension CaptureController {
     /// What a free-space reading means, as a value.
     ///
     /// Split from the watchdog that acts on it for the same reason
-    /// `bitDepthShortfall` is split from `reportBitDepthShortfall`: the two
-    /// halves fail differently. This one is a rule about two thresholds and can
-    /// be stated exactly; the caller's half is about a volume that may not
-    /// answer the question at all, and only a real disk can put it in either of
-    /// these states. The thresholds ARE the recording-integrity promise — warn
+    /// `bitDepthNotice` is split from `reportBitDepth`: the two halves fail
+    /// differently. This one is a rule about two thresholds and can be stated
+    /// exactly; the caller's half is about a volume that may not answer the
+    /// question at all, and only a real disk can put it in either of these
+    /// states. The thresholds ARE the recording-integrity promise — warn
     /// under 5 GB, close the take under 0.5 — so they belong somewhere that can
     /// be read and checked rather than inline in a tick nothing can drive.
     enum DiskVerdict: Equatable {

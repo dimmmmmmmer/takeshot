@@ -72,12 +72,9 @@ extension CaptureController {
             adapter.forcedMode = settings.capture.forcedInputMode.map {
                 (name: $0, rgb: settings.capture.forcedInputRGB ?? false)
             }
-            let depth = settings.capture.resolvedBitDepth
-            adapter.preferTenBitRGB = depth != .eight
-            adapter.preferTwelveBitRGB = depth == .twelve
-            // One setting, two samplings: there is no 12-bit YCbCr wire format,
-            // so 12 asks for the deepest one there is (see `yuvBits`).
-            adapter.preferTenBitYUV = depth.yuvBits == 10
+            // …and nothing about bit depth: the bridge reads the source's own
+            // depth off the format-detection flags. There is no setting to pass
+            // down any more, which is also why nothing here can get it wrong.
         }
         do {
             try backend.startCapture(deviceID: deviceID)

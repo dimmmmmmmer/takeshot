@@ -17,12 +17,22 @@ review layer on top.
   sub-blacks and super-whites it rides outside 64–940 are still there for the
   grade. There was a second Limited that clipped them away; it is gone, and a
   saved setting that named it now reads as Limited.
-- RGB 4:4:4 sources are captured as 10-bit by default. Turn that off in Settings
-  if the board or the disk cannot keep up.
+- **Bit depth follows the signal.** The board's format detection reports what
+  the source is sending, so there is nothing to set: a 12-bit RGB 4:4:4 camera
+  is captured as 12-bit R12B, everything else at 10-bit (r210 for RGB 4:4:4,
+  v210 for YCbCr 4:2:2). Ten is a floor, not a ceiling — an 8-bit source is
+  still captured at 10 so its sub-blacks and super-whites reach the file.
+  You are told when the signal puts you on 12-bit, and told again if the board
+  could not open the depth the signal is sending.
+- A 12-bit signal recorded with a 4:2:2 codec is subsampled on the way in.
+  ProRes 4444 is the only codec that keeps it.
 - **Forced input mode** overrides autodetection for a source whose format the
   board reports wrongly.
 - **Timecode source**: RP188 from the video stream, or LTC decoded from an
-  embedded audio channel.
+  embedded audio channel. The channel list is the channels the CURRENT signal is
+  carrying — up to 16 on SDI. With no signal there are no channels to offer; a
+  channel you had chosen that the signal does not carry stays in the menu,
+  marked, rather than being silently swapped for another one.
 - The demo source is always in the device list. It generates a 1080p25 signal
   with running timecode, so the whole take path can be exercised without a
   board — and in a build made without the DeckLink SDK it is the only source

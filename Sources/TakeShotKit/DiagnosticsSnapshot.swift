@@ -103,10 +103,20 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         var isDropFrame = false
         var isRGB444 = false
         /// Bits per component the board is really delivering, which is not
-        /// always what the setting asked for — a 12-bit RGB or 10-bit YCbCr
-        /// request the hardware refuses falls back, and the operator's five-second
+        /// always what the SIGNAL is sending — a 12-bit RGB or 10-bit YCbCr
+        /// format the hardware refuses falls back, and the operator's five-second
         /// notice is long gone by the time a bundle is collected.
         var wireBitDepth = 8
+        /// Bits per component the SOURCE says it is sending, off the board's
+        /// format-detection flags; nil when it did not say (a forced input mode,
+        /// an older DeckLink SDK, or the demo source).
+        ///
+        /// The pair is the point. Depth follows the signal and nobody chooses it
+        /// any more, so a bundle that reported only one number could not tell
+        /// "the camera is 10-bit" apart from "the camera is 12-bit and the board
+        /// would not open it" — which are the same line of footage and two
+        /// completely different conversations.
+        var sourceBitDepth: Int?
         var currentTimecode: String?
         /// The setting as stored, and what the levels stage actually does with
         /// it for this signal. The two differ under "auto", which is the mode
@@ -122,7 +132,10 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         /// MaxCLL / MaxFALL / mastering-display luminance, as the board reported
         /// them and as the file was tagged. Empty when the signal carried none.
         var hdrDisplayMetadata = ""
-        var tenBitCapture = true
+        // `tenBitCapture` was reported here, straight off the settings blob.
+        // There is no depth setting any more, so a bundle that printed one
+        // would be printing a stored value nothing reads — the two depth fields
+        // above are what a reader actually needs.
         var detectionMode = ""
         var preRollFrames = 0
         /// The taught REC indicator, in one line — state, box, separation,

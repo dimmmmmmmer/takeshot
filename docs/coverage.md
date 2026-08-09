@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **87.5 %** lines |
-| Measured | **89.01 %** lines (4 166 of 37 909 lines uncovered) |
+| Measured | **89.26 %** lines (4 144 of 38 593 lines uncovered) |
 
 ## What holds the number up: seams, not more tests
 
@@ -89,7 +89,7 @@ a take rather than a click. What it added, and what each one pins:
 
 Two production changes came with it, both stated in the code:
 `CaptureController.diskVerdict` splits the two free-space thresholds out of the
-watchdog tick that nothing can drive (the same split `bitDepthShortfall` already
+watchdog tick that nothing can drive (the same split `bitDepthNotice` already
 had from its reporter), and `TestWait.becomesTrue` gives the CaptureCore suites
 the answering poll `ControllerWait.until` already had.
 
