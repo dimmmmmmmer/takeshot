@@ -98,7 +98,7 @@ extension CaptureController {
                 // and an open take is writing into an orphan; recreate + rearm
                 try? FileManager.default.createDirectory(
                     at: self.destinationRoot, withIntermediateDirectories: true)
-                self.lastError = "Record folder was moved/deleted — recreated"
+                self.lastError = L("toast_record_folder_recreated")
                 self.startFolderWatcher()
                 return
             }

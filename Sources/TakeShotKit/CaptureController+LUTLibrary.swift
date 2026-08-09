@@ -94,7 +94,7 @@ extension CaptureController {
                 lastName = dest.lastPathComponent
                 mirrorLUTToResolve(dest)
             } catch {
-                lastError = "LUT import failed: \(error.localizedDescription)"
+                lastError = L("toast_lut_import_failed", error.localizedDescription)
             }
         }
         reloadLUTList()
@@ -117,7 +117,7 @@ extension CaptureController {
             currentCDL = cdl
             cubeCache = LoadedLook(fileName: fileName, cube: cube, cdl: cdl)
         } catch {
-            lastError = "LUT: \(error.localizedDescription)"
+            lastError = L("toast_lut_failed", error.localizedDescription)
             settings.lutFileName = nil
         }
     }

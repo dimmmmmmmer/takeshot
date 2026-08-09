@@ -21,11 +21,18 @@ import Testing
     /// SDK does not complain and the macOS 15 one does — the same disagreement
     /// the `Sources` side is written around (docs/ARCHITECTURE.md). Reducing
     /// inside the nonisolated scope is right under either.
+    private struct PreviewFacts {
+        var hasImage: Bool
+        var duration: Double?
+        var pixelSize: CGSize?
+    }
+
     private nonisolated static func previewFacts(
-        for url: URL) async -> (hasImage: Bool, duration: Double?,
-                                pixelSize: CGSize?) {
+        for url: URL) async -> PreviewFacts {
         let preview = await CaptureController.otherThumbnail(for: url)
-        return (preview.image != nil, preview.duration, preview.pixelSize)
+        return PreviewFacts(hasImage: preview.image != nil,
+                            duration: preview.duration,
+                            pixelSize: preview.pixelSize)
     }
 
     private func scratch(_ name: String) throws -> URL {

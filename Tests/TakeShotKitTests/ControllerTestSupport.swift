@@ -464,6 +464,17 @@ enum ControllerFixtures {
     }
 }
 
+/// The part of a localized message that survives its placeholders being
+/// filled, in whatever language the suite is running in.
+///
+/// This is how a test checks WHICH message was raised without writing the
+/// English words down. A check spelled `hasPrefix("Delete: ")` goes quietly
+/// true — permanently, and in the passing direction — the first time the suite
+/// runs in Russian, and a check that cannot fail is worse than no check.
+func localizedHead(_ key: String) -> String {
+    String(L(key).prefix { $0 != "%" })
+}
+
 @MainActor
 extension CaptureController {
     /// True when the alarm banner is showing one of the three take-LOST alarms
@@ -479,8 +490,7 @@ extension CaptureController {
     var showsATakeLostAlarm: Bool {
         guard let alert = persistentAlert else { return false }
         let heads = ["alarm_take_lost_writer", "alarm_take_lost_no_audio",
-                     "alarm_take_lost_finalize"]
-            .map { key in L(key).prefix { character in character != "%" } }
+                     "alarm_take_lost_finalize"].map(localizedHead)
         return heads.contains { head in
             !head.isEmpty && alert.contains(head)
         }

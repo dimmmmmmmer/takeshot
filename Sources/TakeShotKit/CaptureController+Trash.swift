@@ -68,7 +68,7 @@ extension CaptureController {
         do {
             try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         } catch {
-            lastError = "Delete: \(error.localizedDescription)"
+            lastError = L("toast_delete_failed", error.localizedDescription)
             return false
         }
         dropFromSelection([url])

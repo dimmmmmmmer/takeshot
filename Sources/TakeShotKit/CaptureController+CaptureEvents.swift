@@ -199,14 +199,29 @@ extension CaptureController {
     /// in — which, under a substring classifier, is exactly the kind of thing
     /// that could.
     func reportPipelineError(_ alarm: PipelineAlarm, camera: String? = nil) {
-        let text = camera.map { "\($0): \(alarm.localizedText)" }
-            ?? alarm.localizedText
+        let text = Self.tagged(alarm.localizedText, source: camera)
         switch alarm.severity {
         case .integrity:
             persistentAlert = text
         case .notice:
             lastError = text
         }
+    }
+
+    /// A message with the camera or device it came from in front of it.
+    ///
+    /// Deliberately NOT a localized format string, and the exception proves the
+    /// i18n rule rather than bending it: there is no English here to translate.
+    /// The source is a channel letter or a board's own name — data — and the
+    /// message arrives already in the operator's language. A `"%@: %@"` key
+    /// would be a row in both .strings files that no translator could act on.
+    ///
+    /// It is a function anyway because two callers do this — the alarm path
+    /// above and the multicam start failure — and a separator that drifts
+    /// between them is the kind of difference nobody notices until a bug report
+    /// arrives with one of each in it.
+    static func tagged(_ message: String, source: String?) -> String {
+        source.map { "\($0): \(message)" } ?? message
     }
 
     // MARK: - free space

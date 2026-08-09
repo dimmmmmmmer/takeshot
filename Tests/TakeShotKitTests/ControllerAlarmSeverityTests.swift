@@ -241,4 +241,59 @@ import Testing
             #expect(controller.lastError != nil)
         }
     }
+
+    /// The toast keys on the export, still, look and file-handling paths —
+    /// localized separately from the alarms above, and with no severity
+    /// question, since each is assigned straight to `lastError`.
+    private static let toastKeys = [
+        "toast_edl_failed", "toast_ale_failed", "toast_report_failed",
+        "toast_pdf_render_failed", "toast_output_failed", "toast_grab_failed",
+        "toast_grab_failed_reason", "toast_record_folder_recreated",
+        "toast_lut_import_failed", "toast_lut_failed",
+        "toast_metadata_log_not_saved", "toast_ranges_not_saved",
+        "toast_delete_failed",
+    ]
+
+    /// Every toast key resolves in BOTH bundles, and this is load-bearing
+    /// rather than tidy.
+    ///
+    /// A missing key renders as the key itself. The suites that check which
+    /// toast was raised now compare against `L("toast_…")` instead of the
+    /// English words — which is right, and which also means that a key absent
+    /// from both files would make those checks compare the key to itself and
+    /// pass while the operator reads `toast_delete_failed` on screen. The
+    /// key-parity test cannot catch that: absent from both files IS parity.
+    @Test func everyToastKeyResolvesInBothLanguages() {
+        defer { L10n.apply(.english) }
+        for language in [AppLanguage.english, .russian] {
+            L10n.apply(language)
+            for key in Self.toastKeys {
+                let text = L(key)
+                #expect(text != key,
+                        "\(key) missing from \(language): the operator reads it")
+                #expect(!text.hasPrefix("toast_"), "\(key) resolved to a key")
+            }
+        }
+    }
+
+    /// …and the Russian is actually Russian rather than a copy of the English.
+    /// Two are deliberately identical — "EDL: %@" and "LUT: %@" are initialisms
+    /// with a colon and nothing to translate — so they are named here rather
+    /// than silently skipped.
+    @Test func theToastsAreTranslatedExceptWhereThereIsNothingToTranslate() {
+        defer { L10n.apply(.english) }
+        let sameInBoth = Set(["toast_edl_failed", "toast_ale_failed",
+                              "toast_lut_failed"])
+        L10n.apply(.english)
+        let english = Self.toastKeys.map { ($0, L($0)) }
+        L10n.apply(.russian)
+        for (key, englishText) in english where !sameInBoth.contains(key) {
+            #expect(L(key) != englishText,
+                    "\(key) is still English in the Russian bundle")
+        }
+        for key in sameInBoth {
+            #expect(L(key) == english.first { $0.0 == key }?.1,
+                    "\(key) gained a translation — take it out of sameInBoth")
+        }
+    }
 }

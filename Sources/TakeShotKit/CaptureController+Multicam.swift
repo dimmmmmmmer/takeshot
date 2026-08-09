@@ -63,7 +63,8 @@ extension CaptureController {
                     try channel.start()
                     channels.append(channel)
                 } catch {
-                    lastError = "\(device.name): \(error.localizedDescription)"
+                    lastError = Self.tagged(error.localizedDescription,
+                                            source: device.name)
                 }
                 letter = FieldStepper.stepLetter(letter, by: 1)
             }

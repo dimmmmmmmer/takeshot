@@ -873,3 +873,21 @@
 "alarm_folder_unreachable" = "Папка записи недоступна: %@";
 "alarm_disk_full" = "ДИСК ЗАПОЛНЕН (%.1f ГБ) — запись остановлена";
 "alarm_disk_low" = "Мало места на диске записи: свободно %.1f ГБ";
+
+/* Уведомления на путях экспорта, стоп-кадров, лутов и работы с файлами.
+   Вопроса о серьёзности здесь нет: всё это идёт в `lastError`, то есть в
+   тост. Половина с `%@` — это error.localizedDescription, её уже перевела
+   система; здесь живёт только рамка вокруг неё. */
+"toast_edl_failed" = "EDL: %@";
+"toast_ale_failed" = "ALE: %@";
+"toast_report_failed" = "Отчёт: %@";
+"toast_pdf_render_failed" = "Не удалось построить PDF";
+"toast_output_failed" = "Вывод: %@";
+"toast_grab_failed" = "Не удалось снять кадр";
+"toast_grab_failed_reason" = "Не удалось снять кадр: %@";
+"toast_record_folder_recreated" = "Папку записи переместили или удалили — создана заново";
+"toast_lut_import_failed" = "Не удалось импортировать LUT: %@";
+"toast_lut_failed" = "LUT: %@";
+"toast_metadata_log_not_saved" = "Журнал метаданных НЕ сохранён: %@";
+"toast_ranges_not_saved" = "Точки in/out НЕ сохранены: %@";
+"toast_delete_failed" = "Удаление: %@";

@@ -877,3 +877,22 @@
 "alarm_folder_unreachable" = "Record folder unreachable: %@";
 "alarm_disk_full" = "DISK FULL (%.1f GB) — recording stopped";
 "alarm_disk_low" = "Record disk low: %.1f GB free";
+
+/* Operator toasts on the export, still, look and file-handling paths. No
+   severity question here, unlike the alarms above: each of these is assigned
+   to `lastError`, so being a toast is already stated by where it goes. The
+   `%@` halves are `error.localizedDescription`, which the system has already
+   localized — only the frame around them lives here. */
+"toast_edl_failed" = "EDL: %@";
+"toast_ale_failed" = "ALE: %@";
+"toast_report_failed" = "Report: %@";
+"toast_pdf_render_failed" = "PDF render failed";
+"toast_output_failed" = "Output: %@";
+"toast_grab_failed" = "Frame grab failed";
+"toast_grab_failed_reason" = "Frame grab failed: %@";
+"toast_record_folder_recreated" = "Record folder was moved/deleted — recreated";
+"toast_lut_import_failed" = "LUT import failed: %@";
+"toast_lut_failed" = "LUT: %@";
+"toast_metadata_log_not_saved" = "Metadata log NOT saved: %@";
+"toast_ranges_not_saved" = "Loop ranges NOT saved: %@";
+"toast_delete_failed" = "Delete: %@";

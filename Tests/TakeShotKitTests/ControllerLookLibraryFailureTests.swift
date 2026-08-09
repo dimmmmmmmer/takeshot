@@ -64,7 +64,8 @@ import Testing
 
             controller.adoptLooks(from: [missing])
 
-            #expect(controller.lastError?.contains("LUT import failed") == true,
+            #expect(controller.lastError?
+                .contains(localizedHead("toast_lut_import_failed")) == true,
                     "a failed look import went unannounced")
             #expect(controller.availableLUTs.isEmpty)
             #expect(controller.settings.lutFileName == nil,
