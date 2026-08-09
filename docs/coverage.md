@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **87.5 %** lines |
-| Measured | **89.01 %** lines (4 166 of 37 909 lines uncovered) |
+| Measured | **89.26 %** lines (4 144 of 38 593 lines uncovered) |
 
 ## What holds the number up: seams, not more tests
 
