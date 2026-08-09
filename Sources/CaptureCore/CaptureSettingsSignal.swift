@@ -27,12 +27,19 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     /// rather than being removed because removing a key is a change to the
     /// on-disk format, and this one buys nothing.
     public var tenBitCapture: Bool?
-    /// Bits per component to request from the board ("8"/"10"/"12"); nil — 10.
-    ///
-    /// INERT as of auto-depth: nothing reads it any more. Removed from the
-    /// record in the commit that follows this one; kept here so the two changes
-    /// can be read apart.
-    public var captureBitDepth: String?
+    // `captureBitDepth` was a key here ("8"/"10"/"12"). It is gone from the
+    // record, not merely unread: bit depth follows the signal and there is no
+    // setting for a stored value to mean anything to. A blob that still carries
+    // the key decodes exactly as before — the synthesized decoder drops keys it
+    // does not know, which is what makes removing one safe — and this build
+    // writes it back without.
+    //
+    // No `RetiredSettings` entry and no schema bump, deliberately. That pair
+    // exists for a field a MIGRATION has to read once, and there is nowhere for
+    // this one to be read into: the operator who had chosen 8-bit to save
+    // bandwidth is moved to what their camera is actually sending, which is the
+    // whole change. `anOldBlobWithARetiredBitDepthStillDecodes` holds the half
+    // of the contract that is real.
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     /// Pre-roll in seconds (legacy; superseded by preRollFrames).

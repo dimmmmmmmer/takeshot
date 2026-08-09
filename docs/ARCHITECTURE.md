@@ -187,8 +187,12 @@ can no longer destroy a code in the deliverable.
 
 ### 12-bit RGB (`R12B`)
 
-`bmdFormat12BitRGB` is offered as a capture bit depth (`captureBitDepth`,
-default 10-bit — 12 is opt-in). `TwelveBitConverter` is the sibling of
+`bmdFormat12BitRGB` is enabled when the SIGNAL says it is 12-bit and the board
+agrees it can deliver it. There is no setting: the format-detection flags carry
+the source's own depth (`CaptureFormat.sourceBitDepth`) and the app follows it,
+with ten as a floor rather than a ceiling — an 8-bit source is still opened at
+`r210`, because the 8-bit path has no wire-record buffer and would clip a
+limited-range camera's excursions into the file. `TwelveBitConverter` is the sibling of
 `TenBitConverter` and produces the same two products; the display half of the
 policy is shared (`WireDisplayTable`), so a 12-bit black lands exactly where a
 10-bit black does. Studio swing at 12 bits is 256/3760, which is the same
