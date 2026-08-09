@@ -287,21 +287,51 @@ import Testing
             // half-megabyte message drops the very client being asserted
             // alive (that race, at sixteen unpolled sends a round, was this
             // suite's flake).
-            await ControllerWait.until { server.maxClientInFlight == 0 }
+            //
+            // Both waits take the I/O budget, and the drain is REQUIRED rather
+            // than discarded. This is what the second flake was: on the CI
+            // runner under coverage instrumentation the ledger needs longer
+            // than the interactive ten seconds to settle half a megabyte per
+            // client, and an ignored `until` let the test push into an
+            // unsettled server and then report "the reading client lost its
+            // status stream" — blaming the server for a wait that had simply
+            // run out. A wait whose outcome IS the precondition has to fail on
+            // itself; see TestWait.becomesTrue for the same rule stated.
+            let settled = await ControllerWait.untilWritten {
+                server.maxClientInFlight == 0
+            }
+            try #require(
+                settled,
+                "the send ledger never drained; this measures the flood")
             controller.takes[0].rating = .bad
             controller.pushRemoteStatus()
-            let heard = await ControllerWait.until { sawBadRating.value > 0 }
+            let heard = await ControllerWait.untilWritten {
+                sawBadRating.value > 0
+            }
             #expect(heard, "the reading client lost its status stream")
 
-            // A phone picking up now is handed the current state, not the flood.
-            let fresh = try await RemoteHarness.connect(
-                port: port, pin: pin, session: RemoteHarness.session())
-            defer { fresh.close() }
-            #expect(try await fresh.next(type: "auth")["ok"] as? Bool == true)
-            let status = try await fresh.next(type: "status")
-            #expect(status["rating"] as? String == "bad",
-                    "a stalled client cost the server its status stream")
+            try await Self.aFreshPhoneIsHandedTheCurrentState(port: port,
+                                                              pin: pin)
         }
+    }
+
+    /// A phone picking up after all that is handed the state as it stands, not
+    /// the flood's backlog.
+    ///
+    /// Its own function because the test above reached the body-length ceiling
+    /// when its two waits were given honest budgets — and this is a separate
+    /// claim about the server anyway: the first two phases are about who gets
+    /// dropped and who keeps their stream, this one is about what a newcomer
+    /// sees.
+    private static func aFreshPhoneIsHandedTheCurrentState(
+        port: Int, pin: String) async throws {
+        let fresh = try await RemoteHarness.connect(
+            port: port, pin: pin, session: RemoteHarness.session())
+        defer { fresh.close() }
+        #expect(try await fresh.next(type: "auth")["ok"] as? Bool == true)
+        let status = try await fresh.next(type: "status")
+        #expect(status["rating"] as? String == "bad",
+                "a stalled client cost the server its status stream")
     }
 
     /// Push until the stalled socket's window shuts and the bytes queued
