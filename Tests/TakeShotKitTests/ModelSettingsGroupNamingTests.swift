@@ -46,8 +46,13 @@ import Testing
         var explained: Set<String> = []
         var bad: [String] = []
         for label in Mirror(reflecting: value).children.compactMap(\.label) {
+            // String(_:) around dropFirst() is not decoration: it returns a
+            // DropFirstSequence, and only the newer compiler infers its way to
+            // a String through the concatenation. The runner's Swift does not,
+            // and the test target is the one thing the two-SDK check here
+            // cannot cover (docs/ARCHITECTURE.md) — so CI found this, twice.
             let prefixed = (prefix + label.prefix(1).uppercased()
-                + label.dropFirst()).lowercased()
+                + String(label.dropFirst())).lowercased()
             if written.contains(prefixed) {
                 explained.insert(prefixed)
             } else if written.contains(label.lowercased()) {
