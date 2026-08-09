@@ -18,7 +18,7 @@ import Foundation
 extension CaptureController {
     /// The offering is on unless the operator turned it off. nil is on: the
     /// offer costs nothing and the consent is asked for separately.
-    var offersMountedCards: Bool { settings.offerMountedCards != false }
+    var offersMountedCards: Bool { settings.offload.offerMountedCards != false }
 
     /// Wired once, from `completeStartup`.
     func startCardWatch() {
@@ -38,7 +38,7 @@ extension CaptureController {
     /// prompt on screen has not been turned off as far as the operator is
     /// concerned.
     func applyCardWatchChange(from oldValue: CaptureSettings) {
-        guard oldValue.offerMountedCards != settings.offerMountedCards else {
+        guard oldValue.offload.offerMountedCards != settings.offload.offerMountedCards else {
             return
         }
         guard offersMountedCards else {
@@ -204,7 +204,7 @@ extension CaptureController {
     /// has been aimed.
     var ownFolders: [URL] {
         var folders = [destinationRoot]
-        folders += (settings.offloadDestinationPaths ?? [])
+        folders += (settings.offload.destinationPaths ?? [])
             .map { URL(fileURLWithPath: $0) }
         return folders
     }

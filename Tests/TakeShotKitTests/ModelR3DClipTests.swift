@@ -51,17 +51,17 @@ struct ModelR3DClipTests {
     /// every clip and nobody knowing why it stutters.
     @Test func theDecodeScaleSettingDefaultsToAutoAndRoundTrips() {
         var settings = CaptureSettings()
-        #expect(settings.r3dDecodeScale == nil)
-        #expect(settings.r3dDecodeScaleEffective == .auto)
+        #expect(settings.r3d.decodeScale == nil)
+        #expect(settings.r3d.decodeScaleEffective == .auto)
         #expect(R3DDecodeScale.auto.divisor == 0, "0 = let the clip decide")
 
         for scale in R3DDecodeScale.allCases {
-            settings.r3dDecodeScale = scale.rawValue
-            #expect(settings.r3dDecodeScaleEffective == scale)
+            settings.r3d.decodeScale = scale.rawValue
+            #expect(settings.r3d.decodeScaleEffective == scale)
         }
         // A value from a newer build falls back rather than trapping.
-        settings.r3dDecodeScale = "sixteenth"
-        #expect(settings.r3dDecodeScaleEffective == .auto)
+        settings.r3d.decodeScale = "sixteenth"
+        #expect(settings.r3d.decodeScaleEffective == .auto)
     }
 
     /// Optional, like every settings field added since the first release: a blob
@@ -81,9 +81,9 @@ struct ModelR3DClipTests {
         let stripped = try JSONSerialization.data(withJSONObject: object)
         let settings = try JSONDecoder().decode(CaptureSettings.self,
                                                 from: stripped)
-        #expect(settings.r3dDecodeScale == nil)
-        #expect(settings.r3dApplyCameraLUT == nil)
-        #expect(settings.r3dDecodeScaleEffective == .auto)
+        #expect(settings.r3d.decodeScale == nil)
+        #expect(settings.r3d.applyCameraLUT == nil)
+        #expect(settings.r3d.decodeScaleEffective == .auto)
     }
 
     // MARK: - the camera look
@@ -92,9 +92,9 @@ struct ModelR3DClipTests {
     /// nil, not false, so a later change of default reaches it.
     @Test func theCameraLookIsOffUntilAskedFor() {
         var settings = CaptureSettings()
-        #expect((settings.r3dApplyCameraLUT ?? false) == false)
-        settings.r3dApplyCameraLUT = true
-        #expect(settings.r3dApplyCameraLUT == true)
+        #expect((settings.r3d.applyCameraLUT ?? false) == false)
+        settings.r3d.applyCameraLUT = true
+        #expect(settings.r3d.applyCameraLUT == true)
     }
 
     /// The viewer states its colour space. This app said nothing about colour to

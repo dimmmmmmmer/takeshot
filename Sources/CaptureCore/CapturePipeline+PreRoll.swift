@@ -11,7 +11,7 @@ import Foundation
 extension CapturePipeline {
     /// Pre-roll frame count (a direct frames setting, fps-independent).
     var preRollFrames: Int {
-        config.settings.preRollFramesEffective
+        config.settings.capture.preRollFramesEffective
     }
 
     /// Buffer capacity: pre-roll + detection latency + slack, but with a memory
@@ -43,7 +43,7 @@ extension CapturePipeline {
     /// larger otherwise: a ring five times deeper costs real memory at UHD and
     /// buys nothing for a trigger nobody switched on.
     private var startConfirmSpan: Int {
-        let confirm = config.settings.startDebounceFrames
+        let confirm = config.settings.capture.startDebounceFrames
         guard visualRecArmed else { return confirm }
         return confirm * Self.visualRecStride(atFrameRate: format?.frameRate ?? 25)
     }

@@ -40,7 +40,7 @@ final class LiveSignal: ObservableObject {
     /// The monitoring level is being held down by DIM. Here rather than in
     /// settings because the footer's DIM highlight is a per-frame neighbour of
     /// the meters (same reason as `volume` above); what gets persisted is the
-    /// STATE alone, never the halved level (see `CaptureSettings.monitorDimmed`).
+    /// STATE alone, never the halved level (see `AudioSettings.monitorDimmed`).
     @Published var dimmed = false
     /// The level DIM took away, put back exactly when it is switched off.
     var volumeBeforeDim: Double = 1
@@ -49,6 +49,6 @@ final class LiveSignal: ObservableObject {
     /// own rather than "volume == 0": a slider parked at zero is a level the
     /// operator chose, a mute is a hold with a restore point — and the slashed
     /// speaker icon has to be able to tell the two apart. Persisted like DIM —
-    /// state only, never the zero (see `CaptureSettings.monitorMuted`).
+    /// state only, never the zero (see `AudioSettings.monitorMuted`).
     @Published var muted = false
 }

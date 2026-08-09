@@ -50,7 +50,7 @@ import Testing
 
         try await ControllerHarness.run { controller, _ in
             let rig = try self.rig(controller, in: media)
-            controller.settings.lutPreviewEnabled = true
+            controller.settings.lut.previewEnabled = true
             controller.currentCube = rig.cube
             controller.applyPlaybackLUT()
 
@@ -71,7 +71,7 @@ import Testing
 
         try await ControllerHarness.run { controller, _ in
             let rig = try self.rig(controller, in: media)
-            controller.settings.lutPreviewEnabled = true
+            controller.settings.lut.previewEnabled = true
             controller.currentCube = rig.cube
             controller.playbackFileHasBakedLUT = true
             controller.applyPlaybackLUT()
@@ -90,7 +90,7 @@ import Testing
 
         try await ControllerHarness.run { controller, _ in
             let rig = try self.rig(controller, in: media)
-            controller.settings.lutPreviewEnabled = true
+            controller.settings.lut.previewEnabled = true
             controller.currentCube = rig.cube
             // the observer on this one applies the change itself
             controller.playbackLUTSuppressed = true
@@ -114,7 +114,7 @@ import Testing
 
         try await ControllerHarness.run { controller, _ in
             let rig = try self.rig(controller, in: media)
-            controller.settings.lutPreviewEnabled = true
+            controller.settings.lut.previewEnabled = true
             controller.currentCube = rig.cube
             controller.lutIntensity = 0
             controller.applyPlaybackLUT()
@@ -149,11 +149,11 @@ import Testing
                 at: media.appendingPathComponent("cached.cube")))
             let name = "cached-\(UUID().uuidString).cube"
             controller.cubeCache = .init(fileName: name, cube: cube, cdl: nil)
-            controller.settings.lutFileName = name
+            controller.settings.lut.fileName = name
 
             controller.rebuildLUT()
 
-            #expect(controller.settings.lutFileName == name,
+            #expect(controller.settings.lut.fileName == name,
                     "the cached LUT was dropped as if its file were missing")
             #expect(controller.lastError == nil)
             let loaded = try #require(controller.currentCube)
@@ -161,10 +161,10 @@ import Testing
             #expect(loaded.data == cube.data)
 
             // a name the cache does not hold goes to disk and fails there
-            controller.settings.lutFileName = "other-\(UUID().uuidString).cube"
+            controller.settings.lut.fileName = "other-\(UUID().uuidString).cube"
             controller.rebuildLUT()
             #expect(controller.currentCube == nil)
-            #expect(controller.settings.lutFileName == nil)
+            #expect(controller.settings.lut.fileName == nil)
             #expect(controller.lastError?.hasPrefix("LUT:") == true)
         }
     }
@@ -178,17 +178,17 @@ import Testing
             #expect(!controller.lutRecordOn)
 
             controller.lutRecordOn = true
-            #expect(controller.settings.lutRecordEnabled == true)
-            #expect(controller.settings.lutPreviewEnabled != true,
+            #expect(controller.settings.lut.recordEnabled == true)
+            #expect(controller.settings.lut.previewEnabled != true,
                     "baking a look does not imply previewing it")
             #expect(controller.lutRecordOn)
 
             controller.lutPreviewOn = true
-            #expect(controller.settings.lutPreviewEnabled == true)
+            #expect(controller.settings.lut.previewEnabled == true)
             #expect(controller.lutRecordOn, "one switch clobbered the other")
 
             controller.lutRecordOn = false
-            #expect(controller.settings.lutRecordEnabled == false)
+            #expect(controller.settings.lut.recordEnabled == false)
             #expect(controller.lutPreviewOn)
         }
     }

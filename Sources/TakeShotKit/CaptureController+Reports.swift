@@ -31,14 +31,14 @@ extension CaptureController {
     func exportSelectsEDL() {
         let good = takes.filter { $0.rating == .good }
         guard let edl = EDLExporter.selectsEDL(
-            takes: good, title: "\(settings.projectName) selects",
+            takes: good, title: "\(settings.naming.projectName) selects",
             fps: Int(max(1, playbackFPS).rounded()), cdl: currentCDL)
         else {
             lastError = L("edl_no_good_takes")
             return
         }
         let name = NamingEngine.sanitize(
-            "\(settings.projectName)_selects") + ".edl"
+            "\(settings.naming.projectName)_selects") + ".edl"
         guard let url = FilePanel.save(named: name, in: destinationRoot)
         else { return }
         do {
@@ -61,7 +61,7 @@ extension CaptureController {
             lastError = L("ale_no_takes")
             return
         }
-        let name = NamingEngine.sanitize("\(settings.projectName)_log") + ".ale"
+        let name = NamingEngine.sanitize("\(settings.naming.projectName)_log") + ".ale"
         guard let url = FilePanel.save(named: name, in: destinationRoot)
         else { return }
         do {
@@ -78,7 +78,7 @@ extension CaptureController {
             return
         }
         let name = NamingEngine.sanitize(
-            "\(settings.projectName)_report_\(Self.reportDateStamp())")
+            "\(settings.naming.projectName)_report_\(Self.reportDateStamp())")
             + (pdf ? ".pdf" : ".csv")
         guard let url = FilePanel.save(named: name, in: destinationRoot)
         else { return }
@@ -86,8 +86,8 @@ extension CaptureController {
             if pdf {
                 guard let data = ShiftReport.pdfData(
                     takes: takes, thumbnails: thumbnails,
-                    project: settings.projectName,
-                    camera: settings.cameraLabel) else {
+                    project: settings.naming.projectName,
+                    camera: settings.naming.cameraLabel) else {
                     lastError = L("toast_pdf_render_failed")
                     return
                 }
@@ -118,13 +118,13 @@ extension CaptureController {
             return nil
         }
         let name = NamingEngine.sanitize(
-            "\(settings.projectName)_contacts_\(Self.reportDateStamp())")
+            "\(settings.naming.projectName)_contacts_\(Self.reportDateStamp())")
             + ".pdf"
         guard let url = FilePanel.save(named: name, in: destinationRoot)
         else { return nil }
         let takes = takes
-        let project = settings.projectName
-        let camera = settings.cameraLabel
+        let project = settings.naming.projectName
+        let camera = settings.naming.cameraLabel
         // Handed back so a test can await the decode instead of polling for a
         // file that a background decode has not written yet. The app ignores it.
         return Task { [weak self] in

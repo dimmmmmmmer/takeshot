@@ -26,8 +26,8 @@ struct OutputSettingsSection: View {
                 }
             }
             Picker(L("monitor_device"), selection: Binding(
-                get: { controller.settings.monitorDeviceID },
-                set: { controller.settings.monitorDeviceID = $0 })) {
+                get: { controller.settings.capture.monitorDeviceID },
+                set: { controller.settings.capture.monitorDeviceID = $0 })) {
                 Text(L("external_off")).tag(String?.none)
                 ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
                     Text(device.name).tag(String?.some(device.id))

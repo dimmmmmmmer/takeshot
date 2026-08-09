@@ -154,7 +154,7 @@ struct ViewPlayerBadgeTests {
             probe.controller.referencePinned = true
             probe.controller.compareMode = .blend
             probe.controller.assist.colorTool = .falseColor
-            probe.controller.settings.framelineRatio = 2.39
+            probe.controller.settings.assist.framelineRatio = 2.39
             for language in [AppLanguage.english, .russian] {
                 let loaded = ViewRender.withLanguage(language) {
                     ViewRender.laidOutSize(
@@ -280,7 +280,7 @@ struct ViewPlayerBadgeTests {
             probe.controller.assist.zebraOn = true
             probe.controller.assist.peakingOn = true
             probe.controller.assist.punchIn = 2
-            probe.controller.settings.safeAreasOn = true
+            probe.controller.settings.assist.safeAreasOn = true
 
             let box = AssistControlsPanel.contentWidth
             let minimum = probe.minimumWidths { AssistControlsPanel() }

@@ -51,7 +51,7 @@ extension HotkeyManager {
             // the condition the LUT menu's item is disabled by: with no LUT
             // selected there is nothing to apply, and a state that shows as
             // "LUT on" with no LUT reads as the LUT being broken
-            if controller.settings.lutFileName != nil {
+            if controller.settings.lut.fileName != nil {
                 controller.lutPreviewOn.toggle()
             }
         case .toggleViewerMode:

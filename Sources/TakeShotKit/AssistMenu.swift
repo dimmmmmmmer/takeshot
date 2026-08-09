@@ -219,8 +219,8 @@ private struct AssistControlRows: View {
 
     @ViewBuilder private var framingRows: some View {
         Picker(L("framelines"), selection: Binding(
-            get: { controller.settings.framelineRatio ?? 0 },
-            set: { controller.settings.framelineRatio = $0 == 0 ? nil : $0 })) {
+            get: { controller.settings.assist.framelineRatio ?? 0 },
+            set: { controller.settings.assist.framelineRatio = $0 == 0 ? nil : $0 })) {
             Text(L("assist_off")).tag(0.0)
             Text(verbatim: "1.85").tag(1.85)
             Text(verbatim: "2.00").tag(2.0)
@@ -230,15 +230,15 @@ private struct AssistControlRows: View {
             Text(verbatim: "9:16").tag(9.0 / 16.0)
         }
         Toggle(L("safe_areas"), isOn: Binding(
-            get: { controller.settings.safeAreasOn ?? false },
-            set: { controller.settings.safeAreasOn = $0 }))
-        if controller.settings.safeAreasOn == true {
+            get: { controller.settings.assist.safeAreasOn ?? false },
+            set: { controller.settings.assist.safeAreasOn = $0 }))
+        if controller.settings.assist.safeAreasOn == true {
             safePercentRow(L("safe_action"), value: Binding(
-                get: { controller.settings.safeActionPercentEffective },
-                set: { controller.settings.safeActionPercent = $0 }))
+                get: { controller.settings.assist.safeActionPercentEffective },
+                set: { controller.settings.assist.safeActionPercent = $0 }))
             safePercentRow(L("safe_title"), value: Binding(
-                get: { controller.settings.safeTitlePercentEffective },
-                set: { controller.settings.safeTitlePercent = $0 }))
+                get: { controller.settings.assist.safeTitlePercentEffective },
+                set: { controller.settings.assist.safeTitlePercent = $0 }))
         }
     }
 

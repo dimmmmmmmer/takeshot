@@ -319,7 +319,7 @@ struct TenBitYUVRecordTests {
 
     /// The 4:2:2 family keeps the wire's legal excursions, which is what the
     /// record path exists to protect and what every default in the app relies
-    /// on (`CaptureSettings.codec` is `.proRes422`).
+    /// on (`CaptureSignalSettings.codec` is `.proRes422`).
     ///
     /// ProRes 4444 is deliberately NOT asserted here, and that is the finding.
     /// It codes RGB, so a YCbCr source is matrixed on the way in — and what

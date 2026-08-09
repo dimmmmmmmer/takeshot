@@ -25,7 +25,7 @@ extension CaptureController {
     /// Start the server if the setting says so. Called at startup and from the
     /// settings change.
     func startRemoteIfEnabled() {
-        guard settings.remoteEnabled == true else { return }
+        guard settings.remote.enabled == true else { return }
         startRemoteServer()
     }
 
@@ -70,7 +70,7 @@ extension CaptureController {
                 }))
         remoteServer = server
         server.start(port: UInt16(clamping: overridePort
-                                  ?? settings.remotePortEffective))
+                                  ?? settings.remote.portEffective))
         startRemoteStatusPump()
     }
 
@@ -92,19 +92,19 @@ extension CaptureController {
     /// version of this failure nobody can diagnose from the set.
     func remoteFailed(_ message: String) {
         stopRemoteServer()
-        if settings.remoteEnabled == true { settings.remoteEnabled = false }
+        if settings.remote.enabled == true { settings.remote.enabled = false }
         lastError = L("remote_failed", message)
     }
 
     /// The stored PIN, generated the first time the remote is switched on.
     @discardableResult
     func ensureRemotePIN() -> String {
-        if let stored = settings.remotePIN, stored.count == 4,
+        if let stored = settings.remote.pin, stored.count == 4,
            stored.allSatisfy(\.isNumber) {
             return stored
         }
         let fresh = RemotePIN.generate()
-        settings.remotePIN = fresh
+        settings.remote.pin = fresh
         return fresh
     }
 
@@ -112,7 +112,7 @@ extension CaptureController {
     /// wrapped. Sockets already open stay up until their next command.
     func regenerateRemotePIN() {
         let fresh = RemotePIN.generate()
-        settings.remotePIN = fresh
+        settings.remote.pin = fresh
     }
 
     /// The addresses to read out or scan for one page. Empty when the machine
@@ -122,20 +122,20 @@ extension CaptureController {
     /// host's trailing slash and the page's leading one from meeting.
     func remoteURLs(for link: RemoteLink = .remote) -> [String] {
         RemoteAddress.urls(port: remoteBoundPort > 0
-                           ? remoteBoundPort : settings.remotePortEffective,
+                           ? remoteBoundPort : settings.remote.portEffective,
                            path: link.path)
     }
 
     // MARK: - settings changes (called from applySettingsChange)
 
     func applyRemoteChange(from oldValue: CaptureSettings) {
-        let wasOn = oldValue.remoteEnabled == true
-        let isOn = settings.remoteEnabled == true
+        let wasOn = oldValue.remote.enabled == true
+        let isOn = settings.remote.enabled == true
         if isOn, !wasOn {
             startRemoteServer()
         } else if !isOn, wasOn {
             stopRemoteServer()
-        } else if isOn, oldValue.remotePortEffective != settings.remotePortEffective {
+        } else if isOn, oldValue.remote.portEffective != settings.remote.portEffective {
             // A port change is a rebind, not a reconfiguration.
             //
             // The effective port, not the stored one: the port field writes the
@@ -146,10 +146,10 @@ extension CaptureController {
             stopRemoteServer()
             startRemoteServer()
         }
-        if oldValue.remotePIN != settings.remotePIN, let pin = settings.remotePIN {
+        if oldValue.remote.pin != settings.remote.pin, let pin = settings.remote.pin {
             remoteServer?.setPIN(pin)
         }
-        if oldValue.appLanguage != settings.appLanguage {
+        if oldValue.theme.appLanguage != settings.theme.appLanguage {
             // The labels on the phone follow the app's language switch; the
             // pages are bytes behind the server's lock, so this needs no
             // restart.

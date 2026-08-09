@@ -297,9 +297,9 @@ public final class CapturePipeline: @unchecked Sendable {
     public init(config: Config) {
         self.config = config
         self.detector = RecDetector(config: RecDetectorConfig(
-            startDebounceFrames: config.settings.startDebounceFrames,
-            stopDebounceFrames: config.settings.stopDebounceFrames,
-            vancOnly: config.settings.detectionMode == .vanc))
+            startDebounceFrames: config.settings.capture.startDebounceFrames,
+            stopDebounceFrames: config.settings.capture.stopDebounceFrames,
+            vancOnly: config.settings.capture.detectionMode == .vanc))
     }
 
     // MARK: - ingress backpressure (see +Input)
@@ -332,7 +332,7 @@ public final class CapturePipeline: @unchecked Sendable {
     /// How many channels are actually written under the current mask.
     var recordChannelCount: Int {
         guard sourceAudioChannels > 0 else { return 0 }
-        guard let mask = config.settings.audioChannelMask else { return sourceAudioChannels }
+        guard let mask = config.settings.audio.audioChannelMask else { return sourceAudioChannels }
         return (0..<sourceAudioChannels).filter { mask & (1 << $0) != 0 }.count
     }
 

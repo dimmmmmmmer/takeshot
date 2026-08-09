@@ -15,8 +15,8 @@ import Testing
     /// could drift from what lands on disk.
     @Test func theCardMirrorsWhatTheNextTakeWillBeNamed() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.projectName = "MARS"
-            controller.settings.cameraLabel = "B"
+            controller.settings.naming.projectName = "MARS"
+            controller.settings.naming.cameraLabel = "B"
             controller.roll = "007" // resets the clip number…
             controller.nextTakeNumber = 12 // …so the clip is set after it
 

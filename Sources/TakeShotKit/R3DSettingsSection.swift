@@ -17,11 +17,11 @@ struct R3DSettingsSection: View {
     var body: some View {
         Section(L("settings_r3d")) {
             Picker(L("r3d_decode_scale"), selection: Binding(
-                get: { controller.settings.r3dDecodeScaleEffective },
+                get: { controller.settings.r3d.decodeScaleEffective },
                 set: {
                     // nil, not "auto": an untouched install writes no key, so a
                     // later change of default reaches it.
-                    controller.settings.r3dDecodeScale =
+                    controller.settings.r3d.decodeScale =
                         $0 == .auto ? nil : $0.rawValue
                 })) {
                 Text(L("r3d_scale_auto")).tag(R3DDecodeScale.auto)
@@ -31,8 +31,8 @@ struct R3DSettingsSection: View {
                 Text(L("r3d_scale_eighth")).tag(R3DDecodeScale.eighth)
             }
             Toggle(L("r3d_camera_lut"), isOn: Binding(
-                get: { controller.settings.r3dApplyCameraLUT ?? false },
-                set: { controller.settings.r3dApplyCameraLUT = $0 ? true : nil }))
+                get: { controller.settings.r3d.applyCameraLUT ?? false },
+                set: { controller.settings.r3d.applyCameraLUT = $0 ? true : nil }))
             Text(L("r3d_color_legend"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

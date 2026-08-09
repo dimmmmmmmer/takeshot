@@ -11,19 +11,19 @@ import Foundation
 extension CapturePipeline {
     /// The take's path from the naming template, before the collision suffix.
     func takeFileURL(timecode: Timecode?) -> URL {
-        let engine = NamingEngine(template: config.settings.namingTemplate,
-                                  clipPadding: config.settings.clipPadWidthEffective)
+        let engine = NamingEngine(template: config.settings.naming.namingTemplate,
+                                  clipPadding: config.settings.naming.clipPadWidthEffective)
         let context = NamingContext(
-            project: config.settings.projectName,
+            project: config.settings.naming.projectName,
             date: Date(),
             scene: config.scene,
             take: config.takeNumber,
             reel: config.roll,
-            camera: config.settings.cameraLabel,
-            postfix: config.settings.postfix ?? "",
+            camera: config.settings.naming.cameraLabel,
+            postfix: config.settings.naming.postfix ?? "",
             timecode: timecode)
         let root = URL(fileURLWithPath:
-            (config.settings.destinationPath as NSString).expandingTildeInPath)
+            (config.settings.capture.destinationPath as NSString).expandingTildeInPath)
         // write STRAIGHT into the chosen folder — no auto subfolders by date/project:
         // the DIT picks the card/roll folder themselves; app nesting surprises them.
         return root

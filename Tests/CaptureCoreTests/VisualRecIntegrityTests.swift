@@ -36,10 +36,10 @@ struct VisualRecIntegrityTests {
     /// nothing else, even though the fixture's timecode runs the whole time.
     private func recordingPipeline(root: URL) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .vanc
-        settings.preRollFrames = 0
-        settings.codec = .proResProxy  // the suite encodes in real time
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .vanc
+        settings.capture.preRollFrames = 0
+        settings.capture.codec = .proResProxy  // the suite encodes in real time
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                     takeNumber: 1))
         // asked of the pipeline rather than left in the settings blob: the

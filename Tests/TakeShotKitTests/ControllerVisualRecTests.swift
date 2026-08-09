@@ -278,14 +278,14 @@ struct ControllerVisualRecReportTests {
 
             // what the stored blob holds…
             let stored = CaptureSettings.loaded(from: controller.defaults)
-            #expect(stored.visualRecRolling != nil)
-            #expect(stored.visualRecIdle != nil)
-            #expect(stored.visualRecSize == 0.1)
-            #expect(stored.visualRecMargin == 0.7)
+            #expect(stored.visualRec.rolling != nil)
+            #expect(stored.visualRec.idle != nil)
+            #expect(stored.visualRec.size == 0.1)
+            #expect(stored.visualRec.margin == 0.7)
 
             // …and what comes back from it
             controller.visualRecTeaching = VisualRecTeaching()
-            controller.restoreVisualRec(from: stored)
+            controller.restoreVisualRec(from: stored.visualRec)
             let restored = controller.visualRecTeaching
             #expect(restored.isTaught, "the references did not come back")
             #expect(!restored.isOn, "the trigger re-armed itself at launch")
@@ -299,9 +299,9 @@ struct ControllerVisualRecReportTests {
     @Test func aCorruptStoredReferenceLeavesItUntaught() async throws {
         try await ViewProbe.run { probe in
             var stored = CaptureSettings()
-            stored.visualRecRolling = "not base64 at all!!"
-            stored.visualRecIdle = "AAAA"
-            probe.controller.restoreVisualRec(from: stored)
+            stored.visualRec.rolling = "not base64 at all!!"
+            stored.visualRec.idle = "AAAA"
+            probe.controller.restoreVisualRec(from: stored.visualRec)
             #expect(probe.controller.visualRecTeaching.rolling == nil)
             #expect(probe.controller.visualRecTeaching.idle == nil)
             #expect(!probe.controller.visualRecTeaching.isTaught)

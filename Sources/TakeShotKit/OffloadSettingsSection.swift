@@ -21,7 +21,7 @@ struct OffloadSettingsSection: View {
                 // nil is on: the default is stored as absent so a settings blob
                 // written by an older build still means what it meant.
                 get: { controller.offersMountedCards },
-                set: { controller.settings.offerMountedCards = $0 ? nil : false }))
+                set: { controller.settings.offload.offerMountedCards = $0 ? nil : false }))
             Text(L("offer_mounted_cards_hint"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

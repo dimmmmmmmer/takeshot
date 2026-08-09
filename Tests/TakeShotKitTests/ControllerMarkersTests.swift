@@ -190,14 +190,14 @@ import Testing
     @Test func theChosenColorIsPersistedAndSurvivesADecode() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.newMarkerColor = "cyan"
-            #expect(controller.settings.defaultMarkerColor == "cyan")
+            #expect(controller.settings.review.defaultMarkerColor == "cyan")
 
             let reloaded = CaptureSettings.loaded(from: controller.defaults)
-            #expect(reloaded.defaultMarkerColor == "cyan")
+            #expect(reloaded.review.defaultMarkerColor == "cyan")
 
             // the default writes NO field, so an untouched install stays clean
             controller.newMarkerColor = TakeMarker.colors[0]
-            #expect(controller.settings.defaultMarkerColor == nil)
+            #expect(controller.settings.review.defaultMarkerColor == nil)
             #expect(controller.newMarkerColor == TakeMarker.colors[0])
         }
     }
@@ -206,7 +206,7 @@ import Testing
     /// palette has no swatch for onto every marker of the day.
     @Test func aColorOutsideThePaletteFallsBackToTheDefault() async throws {
         try await ControllerHarness.run(configure: {
-            $0.defaultMarkerColor = "chartreuse"
+            $0.review.defaultMarkerColor = "chartreuse"
         }, { controller, _ in
             #expect(controller.newMarkerColor == TakeMarker.colors[0])
             controller.cycleNewMarkerColor()

@@ -218,10 +218,10 @@ struct ScopePerformanceTests {
         let root = TestMedia.scratchDirectory("ScopeRateLive")
         defer { try? FileManager.default.removeItem(at: root) }
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.videoLevels = "full"
-        settings.preRollFrames = 0
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.videoLevels = "full"
+        settings.capture.preRollFrames = 0
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         let collected = EventCollector<ScopeData>()

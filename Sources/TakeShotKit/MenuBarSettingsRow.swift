@@ -16,6 +16,6 @@ struct MenuBarSettingsRow: View {
             // nil rather than false when switched back off: an install that
             // never touched it writes no field at all, which is what keeps an
             // older build able to decode the blob.
-            set: { controller.settings.keepInMenuBar = $0 ? true : nil }))
+            set: { controller.settings.theme.keepInMenuBar = $0 ? true : nil }))
     }
 }

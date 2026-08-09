@@ -14,12 +14,12 @@ import Testing
 @Suite @MainActor struct ControllerSettingsTests {
     @Test func everySettingsWriteReachesTheStore() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.projectName = "Nightfall"
-            controller.settings.cameraLabel = "C"
+            controller.settings.naming.projectName = "Nightfall"
+            controller.settings.naming.cameraLabel = "C"
 
             let reloaded = CaptureSettings.loaded(from: controller.defaults)
-            #expect(reloaded.projectName == "Nightfall")
-            #expect(reloaded.cameraLabel == "C")
+            #expect(reloaded.naming.projectName == "Nightfall")
+            #expect(reloaded.naming.cameraLabel == "C")
         }
     }
 
@@ -27,18 +27,18 @@ import Testing
     /// taking the day's record folder with it would lose the library too.
     @Test func factoryResetKeepsTheRecordFolder() async throws {
         try await ControllerHarness.run { controller, root in
-            controller.settings.projectName = "Nightfall"
-            controller.settings.cameraLabel = "D"
-            controller.settings.postfix = "night"
+            controller.settings.naming.projectName = "Nightfall"
+            controller.settings.naming.cameraLabel = "D"
+            controller.settings.naming.postfix = "night"
             controller.panelSide = "left"
             controller.takes = [ControllerFixtures.take(named: "A001C001", in: root)]
 
             controller.resetAllSettings()
 
-            #expect(controller.settings.destinationPath == root.path)
-            #expect(controller.settings.projectName.isEmpty)
-            #expect(controller.settings.cameraLabel == "A")
-            #expect(controller.settings.postfix == nil)
+            #expect(controller.settings.capture.destinationPath == root.path)
+            #expect(controller.settings.naming.projectName.isEmpty)
+            #expect(controller.settings.naming.cameraLabel == "A")
+            #expect(controller.settings.naming.postfix == nil)
             #expect(controller.panelSide == "right")
             // the destination did not change, so the library must survive
             #expect(controller.takes.count == 1)
@@ -47,34 +47,34 @@ import Testing
 
     @Test func interfaceResetTouchesOnlyTheColors() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.projectName = "Nightfall"
-            controller.settings.appearance = "dark"
-            controller.settings.playerBackgroundHex = "#123456"
-            controller.settings.appBackgroundHex = "#654321"
-            controller.settings.accentHex = "#ABCDEF"
+            controller.settings.naming.projectName = "Nightfall"
+            controller.settings.theme.appearance = "dark"
+            controller.settings.theme.playerBackgroundHex = "#123456"
+            controller.settings.theme.appBackgroundHex = "#654321"
+            controller.settings.theme.accentHex = "#ABCDEF"
             controller.panelSide = "left"
 
             controller.resetInterface()
 
-            #expect(controller.settings.playerBackgroundHex == nil)
-            #expect(controller.settings.appBackgroundHex == nil)
-            #expect(controller.settings.accentHex == nil)
-            #expect(controller.settings.appearance == nil)
+            #expect(controller.settings.theme.playerBackgroundHex == nil)
+            #expect(controller.settings.theme.appBackgroundHex == nil)
+            #expect(controller.settings.theme.accentHex == nil)
+            #expect(controller.settings.theme.appearance == nil)
             #expect(controller.panelSide == "right")
-            #expect(controller.settings.projectName == "Nightfall")
+            #expect(controller.settings.naming.projectName == "Nightfall")
         }
     }
 
     @Test func themeMapsToAColorScheme() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.appearance = "light"
+            controller.settings.theme.appearance = "light"
             #expect(controller.colorScheme == .light)
-            controller.settings.appearance = "dark"
+            controller.settings.theme.appearance = "dark"
             #expect(controller.colorScheme == .dark)
-            controller.settings.appearance = nil
+            controller.settings.theme.appearance = nil
             #expect(controller.colorScheme == nil)
             // anything unrecognized follows the system rather than crashing
-            controller.settings.appearance = "sepia"
+            controller.settings.theme.appearance = "sepia"
             #expect(controller.colorScheme == nil)
         }
     }
@@ -90,9 +90,9 @@ import Testing
             controller.accentColor = try #require(Color(hex: "#FF8800"))
             controller.appBackground = try #require(Color(hex: "#101010"))
 
-            #expect(controller.settings.playerBackgroundHex == "#204060")
-            #expect(controller.settings.accentHex == "#FF8800")
-            #expect(controller.settings.appBackgroundHex == "#101010")
+            #expect(controller.settings.theme.playerBackgroundHex == "#204060")
+            #expect(controller.settings.theme.accentHex == "#FF8800")
+            #expect(controller.settings.theme.appBackgroundHex == "#101010")
             #expect(controller.playerBackground.hexString == "#204060")
         }
     }
@@ -113,7 +113,7 @@ import Testing
             let second = root.appendingPathComponent("second-card")
             try FileManager.default.createDirectory(
                 at: second, withIntermediateDirectories: true)
-            controller.settings.destinationPath = second.path
+            controller.settings.capture.destinationPath = second.path
 
             #expect(controller.takes.isEmpty)
             #expect(controller.otherFiles.isEmpty)
@@ -128,17 +128,17 @@ import Testing
     /// board — storing an explicit all-ones mask would freeze the count.
     @Test func anAllOnAudioMaskIsStoredAsNil() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.audioChannelMask == nil)
+            #expect(controller.settings.audio.audioChannelMask == nil)
             #expect(controller.isChannelEnabled(0))
             #expect(controller.isChannelEnabled(15))
 
             controller.toggleAudioChannel(3)
-            #expect(controller.settings.audioChannelMask != nil)
+            #expect(controller.settings.audio.audioChannelMask != nil)
             #expect(!controller.isChannelEnabled(3))
             #expect(controller.isChannelEnabled(2))
 
             controller.toggleAudioChannel(3)
-            #expect(controller.settings.audioChannelMask == nil)
+            #expect(controller.settings.audio.audioChannelMask == nil)
             #expect(controller.isChannelEnabled(3))
         }
     }
@@ -147,7 +147,7 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             #expect(controller.appLanguage == .english)
             controller.appLanguage = .russian
-            #expect(controller.settings.appLanguage == "ru")
+            #expect(controller.settings.theme.appLanguage == "ru")
             #expect(controller.appLanguage == .russian)
             controller.appLanguage = .english
             #expect(controller.appLanguage == .english)

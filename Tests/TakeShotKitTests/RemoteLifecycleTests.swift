@@ -31,7 +31,7 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             let (port, _) = try await RemoteHarness.serve(controller)
             let url = try HTTPURLProbe.url(port: port)
-            controller.settings.remoteEnabled = true // the switch, as the operator left it
+            controller.settings.remote.enabled = true // the switch, as the operator left it
             controller.stopRemoteServer()
 
             // No wait between the two on purpose: the collision is the point.
@@ -43,7 +43,7 @@ import Testing
                 """)
             #expect(await HTTPURLProbe.reachable(url))
             #expect(controller.lastError == nil)
-            #expect(controller.settings.remoteEnabled == true,
+            #expect(controller.settings.remote.enabled == true,
                     "the rebind switched the remote off")
         }
     }
@@ -56,9 +56,9 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             let (port, _) = try await RemoteHarness.serve(controller)
             let url = try HTTPURLProbe.url(port: port)
-            controller.settings.remoteEnabled = true
+            controller.settings.remote.enabled = true
 
-            controller.settings.remotePort = CaptureSettings().remotePortEffective
+            controller.settings.remote.port = CaptureSettings().remote.portEffective
 
             #expect(controller.remoteBoundPort == port,
                     "the listener moved: \(controller.remoteBoundPort) not \(port)")
@@ -129,12 +129,12 @@ import Testing
     @Test func aFailureTurnsTheRemoteBackOff() async throws {
         try await ControllerHarness.run { controller, _ in
             _ = try await RemoteHarness.serve(controller)
-            controller.settings.remoteEnabled = true
+            controller.settings.remote.enabled = true
 
             controller.remoteFailed("Address already in use")
 
             #expect(controller.remoteServer == nil)
-            #expect(controller.settings.remoteEnabled != true)
+            #expect(controller.settings.remote.enabled != true)
             #expect(controller.lastError?.contains("Address already in use") == true)
         }
     }
@@ -143,12 +143,12 @@ import Testing
     /// network until an operator asks for it.
     @Test func theRemoteIsOffUntilItIsSwitchedOn() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.remoteEnabled == nil)
+            #expect(controller.settings.remote.enabled == nil)
             #expect(controller.remoteServer == nil)
             #expect(controller.remoteBoundPort == 0)
-            #expect(controller.settings.remotePIN == nil)
+            #expect(controller.settings.remote.pin == nil)
             // The default port is stated once, in the model.
-            #expect(controller.settings.remotePortEffective == 8765)
+            #expect(controller.settings.remote.portEffective == 8765)
         }
     }
 
@@ -160,8 +160,8 @@ import Testing
                     "the PIN changed under a client that was already using it")
 
             controller.regenerateRemotePIN()
-            #expect(controller.settings.remotePIN != first)
-            #expect(controller.settings.remotePIN?.count == 4)
+            #expect(controller.settings.remote.pin != first)
+            #expect(controller.settings.remote.pin?.count == 4)
         }
     }
 

@@ -16,10 +16,10 @@ import Testing
 
     private func pipeline(root: URL) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual // no take: this is about the monitor
-        settings.preRollSeconds = 0
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual // no take: this is about the monitor
+        settings.capture.preRollSeconds = 0
         return CapturePipeline(config: .init(settings: settings,
                                              slate: .empty, takeNumber: 1))
     }

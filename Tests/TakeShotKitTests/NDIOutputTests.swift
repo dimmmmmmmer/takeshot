@@ -258,8 +258,8 @@ struct NDIVideoMirrorTests {
 struct NDISettingsFieldTests {
     @Test func theSourceNameDefaultsToTheProjectAndTheCamera() {
         var settings = CaptureSettings()
-        settings.projectName = "Dune"
-        settings.cameraLabel = "B"
+        settings.naming.projectName = "Dune"
+        settings.naming.cameraLabel = "B"
         // No host name in it: NDI announces a source as "MACHINE (name)" and
         // supplies the machine half itself.
         #expect(settings.ndiSourceNameEffective == "Dune B")
@@ -269,8 +269,8 @@ struct NDISettingsFieldTests {
 
     @Test func anUnnamedProjectStillGetsAName() {
         var settings = CaptureSettings()
-        settings.projectName = ""
-        settings.cameraLabel = ""
+        settings.naming.projectName = ""
+        settings.naming.cameraLabel = ""
         #expect(settings.ndiSourceNameEffective == "TakeShot")
     }
 
@@ -278,26 +278,26 @@ struct NDISettingsFieldTests {
     /// source announced as " " is one nobody can find in a receiver's list.
     @Test func aBlankNameFallsBackToTheDefault() {
         var settings = CaptureSettings()
-        settings.projectName = "Dune"
-        settings.cameraLabel = "A"
-        settings.ndiSourceName = "   "
+        settings.naming.projectName = "Dune"
+        settings.naming.cameraLabel = "A"
+        settings.ndi.sourceName = "   "
         #expect(settings.ndiSourceNameEffective == "Dune A")
-        settings.ndiSourceName = "Client feed"
+        settings.ndi.sourceName = "Client feed"
         #expect(settings.ndiSourceNameEffective == "Client feed")
     }
 
     @Test func theSwitchIsOffInAFreshInstall() {
-        #expect(CaptureSettings().ndiEnabled == nil)
-        #expect(CaptureSettings().ndiSourceName == nil)
+        #expect(CaptureSettings().ndi.enabled == nil)
+        #expect(CaptureSettings().ndi.sourceName == nil)
     }
 
     /// Optional like every added field, so a blob written by a build that never
     /// heard of NDI still decodes.
     @Test func settingsWrittenBeforeTheFieldExistedStillDecode() throws {
         var settings = CaptureSettings()
-        settings.projectName = "Dune"
-        settings.ndiEnabled = true
-        settings.ndiSourceName = "Client feed"
+        settings.naming.projectName = "Dune"
+        settings.ndi.enabled = true
+        settings.ndi.sourceName = "Client feed"
         let data = try JSONEncoder().encode(settings)
         var raw = try #require(try JSONSerialization.jsonObject(with: data)
             as? [String: Any])
@@ -306,8 +306,8 @@ struct NDISettingsFieldTests {
         let older = try JSONSerialization.data(withJSONObject: raw)
 
         let decoded = try JSONDecoder().decode(CaptureSettings.self, from: older)
-        #expect(decoded.ndiEnabled == nil)
-        #expect(decoded.ndiSourceName == nil)
-        #expect(decoded.projectName == "Dune")
+        #expect(decoded.ndi.enabled == nil)
+        #expect(decoded.ndi.sourceName == nil)
+        #expect(decoded.naming.projectName == "Dune")
     }
 }

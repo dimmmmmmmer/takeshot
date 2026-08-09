@@ -283,7 +283,7 @@ private enum CardFixture {
         defer { try? FileManager.default.removeItem(at: card) }
         try await CardFixture.withWatch { controller, watch in
             // as if the record folder were a folder on this very volume
-            controller.settings.destinationPath =
+            controller.settings.capture.destinationPath =
                 card.appendingPathComponent("Dailies").path
             #expect(controller.isExcludedVolume(
                 MountedVolume(url: card, name: "A001")))
@@ -299,7 +299,7 @@ private enum CardFixture {
         let card = try CardFixture.makeCard("saved-dst")
         defer { try? FileManager.default.removeItem(at: card) }
         let rig: (inout CaptureSettings) -> Void = { [card] in
-            $0.offloadDestinationPaths = [card.appendingPathComponent("DIT").path]
+            $0.offload.destinationPaths = [card.appendingPathComponent("DIT").path]
         }
         try await CardFixture.withWatch(configure: rig) { controller, watch in
             #expect(controller.isExcludedVolume(
@@ -316,7 +316,7 @@ private enum CardFixture {
     @Test func theToggleOffSuppressesEverything() async throws {
         let card = try CardFixture.makeCard("off")
         defer { try? FileManager.default.removeItem(at: card) }
-        let off: (inout CaptureSettings) -> Void = { $0.offerMountedCards = false }
+        let off: (inout CaptureSettings) -> Void = { $0.offload.offerMountedCards = false }
         try await CardFixture.withWatch(configure: off) { controller, watch in
             #expect(!controller.offersMountedCards)
             #expect(!watch.isRunning, "the observers were installed anyway")
@@ -340,7 +340,7 @@ private enum CardFixture {
             #expect(await CardFixture.waitForOffer(controller))
             #expect(watch.isRunning)
 
-            controller.settings.offerMountedCards = false
+            controller.settings.offload.offerMountedCards = false
 
             #expect(controller.cardOffer == nil)
             #expect(!watch.isRunning)

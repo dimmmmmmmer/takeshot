@@ -3,7 +3,7 @@ import Foundation
 /// What the source's code values mean on the wire, and therefore what the
 /// levels stage does with them.
 ///
-/// The setting has always been a string on `CaptureSettings.videoLevels`, and
+/// The setting has always been a string on `CaptureSignalSettings.videoLevels`, and
 /// it stays one so older saved JSON keeps decoding; this is the resolved form
 /// the pipeline and `TenBitConverter` actually branch on, so the decision is
 /// made once instead of by string comparison at four sites.

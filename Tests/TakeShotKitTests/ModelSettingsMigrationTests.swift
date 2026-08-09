@@ -43,8 +43,8 @@ import Testing
     @Test func theExcursionModeMigratesOntoTheSingleLimited() {
         let settings = CaptureSettings.loaded(
             from: store(",\"videoLevels\":\"limited_excursions\""))
-        #expect(settings.videoLevels == InputLevels.limited.rawValue)
-        #expect(InputLevels.resolved(settings.videoLevels) == .limited)
+        #expect(settings.capture.videoLevels == InputLevels.limited.rawValue)
+        #expect(InputLevels.resolved(settings.capture.videoLevels) == .limited)
     }
 
     /// And the operator who had the plain spelling is left alone: the value is
@@ -53,15 +53,15 @@ import Testing
     @Test func thePlainLimitedSpellingIsUntouched() {
         let settings = CaptureSettings.loaded(
             from: store(",\"videoLevels\":\"limited\""))
-        #expect(settings.videoLevels == "limited")
-        #expect(InputLevels.resolved(settings.videoLevels) == .limited)
+        #expect(settings.capture.videoLevels == "limited")
+        #expect(InputLevels.resolved(settings.capture.videoLevels) == .limited)
     }
 
     /// Auto and Full are not touched by any of this.
     @Test func theOtherTwoOptionsSurviveTheMigration() {
-        #expect(CaptureSettings.loaded(from: store("")).videoLevels == nil)
+        #expect(CaptureSettings.loaded(from: store("")).capture.videoLevels == nil)
         #expect(CaptureSettings.loaded(from: store(",\"videoLevels\":\"full\""))
-            .videoLevels == "full")
+            .capture.videoLevels == "full")
     }
 
     // MARK: - the retired verified backup
@@ -72,7 +72,7 @@ import Testing
     @Test func theRetiredBackupFolderBecomesAnOffloadDestination() {
         let settings = CaptureSettings.loaded(
             from: store(",\"backupPath\":\"/Volumes/OLD\""))
-        #expect(settings.offloadDestinationPaths == ["/Volumes/OLD"])
+        #expect(settings.offload.destinationPaths == ["/Volumes/OLD"])
     }
 
     /// An operator who already set up a destination list keeps it: their own
@@ -82,7 +82,7 @@ import Testing
             ,"backupPath":"/Volumes/OLD",
              "offloadDestinationPaths":["/Volumes/SSD1"]
             """))
-        #expect(settings.offloadDestinationPaths == ["/Volumes/SSD1"])
+        #expect(settings.offload.destinationPaths == ["/Volumes/SSD1"])
     }
 
     /// …and the migration runs ONCE. A blob already at the current version is
@@ -91,8 +91,8 @@ import Testing
         let settings = CaptureSettings.loaded(from: store(
             ",\"backupPath\":\"/Volumes/OLD\",\"videoLevels\":\"limited_excursions\"",
             schemaVersion: CaptureSettings.currentSchemaVersion))
-        #expect(settings.offloadDestinationPaths == nil)
-        #expect(settings.videoLevels == "limited_excursions",
+        #expect(settings.offload.destinationPaths == nil)
+        #expect(settings.capture.videoLevels == "limited_excursions",
                 "a blob at the current version was migrated again")
     }
 
@@ -104,15 +104,15 @@ import Testing
     /// the new default, which is stored as nil.
     @Test func aStoredLegendCornerBecomesAnEdge() {
         #expect(CaptureSettings.loaded(from: store(",\"legendCorner\":\"topLeading\""))
-            .legendPlacement == "top")
+            .assist.legendPlacement == "top")
         #expect(CaptureSettings.loaded(from: store(",\"legendCorner\":\"topTrailing\""))
-            .legendPlacement == "top")
+            .assist.legendPlacement == "top")
         #expect(CaptureSettings.loaded(
-            from: store(",\"legendCorner\":\"bottomLeading\"")).legendPlacement == nil)
+            from: store(",\"legendCorner\":\"bottomLeading\"")).assist.legendPlacement == nil)
         #expect(CaptureSettings.loaded(
-            from: store(",\"legendCorner\":\"bottomTrailing\"")).legendPlacement == nil)
+            from: store(",\"legendCorner\":\"bottomTrailing\"")).assist.legendPlacement == nil)
         // nothing stored stays nothing stored — the default, bottom centre
-        #expect(CaptureSettings.loaded(from: store("")).legendPlacement == nil)
+        #expect(CaptureSettings.loaded(from: store("")).assist.legendPlacement == nil)
     }
 
     /// The chroma key's feather used to be an absolute chroma width hung
@@ -124,25 +124,25 @@ import Testing
         let settings = CaptureSettings.loaded(from: store("""
             ,"chromaKeyTolerance":0.25,"chromaKeySoftness":0.1
             """))
-        #expect(settings.chromaKeySoftness == 0.2,
+        #expect(settings.chromaKey.softness == 0.2,
                 "a 0.1-wide feather at tolerance 0.25 is 0.2 of it either side")
-        #expect(settings.chromaKeyTolerance == 0.25, "the tolerance moved")
+        #expect(settings.chromaKey.tolerance == 0.25, "the tolerance moved")
 
         // a stored feather with no stored tolerance is read against the default
         let onDefault = CaptureSettings.loaded(
             from: store(",\"chromaKeySoftness\":0.1"))
-        #expect(onDefault.chromaKeySoftness == 0.25)
+        #expect(onDefault.chromaKey.softness == 0.25)
 
         // the widest old feather cannot come back wider than the new scale goes
         let widest = CaptureSettings.loaded(from: store("""
             ,"chromaKeyTolerance":0.05,"chromaKeySoftness":0.4
             """))
-        #expect(widest.chromaKeySoftness == 1)
+        #expect(widest.chromaKey.softness == 1)
 
         // a hard cut stays a hard cut, and nothing stored stays nothing stored
         #expect(CaptureSettings.loaded(from: store(",\"chromaKeySoftness\":0"))
-            .chromaKeySoftness == 0)
-        #expect(CaptureSettings.loaded(from: store("")).chromaKeySoftness == nil)
+            .chromaKey.softness == 0)
+        #expect(CaptureSettings.loaded(from: store("")).chromaKey.softness == nil)
     }
 
     /// …and a blob this build already wrote is left alone: converting a
@@ -152,7 +152,7 @@ import Testing
         let settings = CaptureSettings.loaded(
             from: store(",\"chromaKeySoftness\":0.5",
                         schemaVersion: CaptureSettings.currentSchemaVersion))
-        #expect(settings.chromaKeySoftness == 0.5)
+        #expect(settings.chromaKey.softness == 0.5)
     }
 
     // MARK: - the removed field decodes harmlessly
@@ -164,11 +164,11 @@ import Testing
         let settings = CaptureSettings.loaded(from: store("""
             ,"backupPath":"/Volumes/OLD","videoLevels":"limited_excursions"
             """))
-        #expect(settings.destinationPath == "/tmp/shoot")
-        #expect(settings.projectName == "Nightfall")
-        #expect(settings.cameraLabel == "B")
-        #expect(settings.startDebounceFrames == 3)
-        #expect(settings.stopDebounceFrames == 7)
+        #expect(settings.capture.destinationPath == "/tmp/shoot")
+        #expect(settings.naming.projectName == "Nightfall")
+        #expect(settings.naming.cameraLabel == "B")
+        #expect(settings.capture.startDebounceFrames == 3)
+        #expect(settings.capture.stopDebounceFrames == 7)
         #expect(settings.schemaVersion == CaptureSettings.currentSchemaVersion)
 
         // and what this build writes back carries no trace of the retired field
@@ -184,8 +184,8 @@ import Testing
         let settings = CaptureSettings.loaded(from: store(
             ",\"backupPath\":\"/Volumes/OLD\",\"videoLevels\":\"limited_excursions\"",
             schemaVersion: nil))
-        #expect(settings.videoLevels == "limited")
-        #expect(settings.offloadDestinationPaths == ["/Volumes/OLD"])
+        #expect(settings.capture.videoLevels == "limited")
+        #expect(settings.offload.destinationPaths == ["/Volumes/OLD"])
         #expect(settings.schemaVersion == CaptureSettings.currentSchemaVersion)
     }
 
@@ -196,7 +196,7 @@ import Testing
         let defaults = InMemoryDefaults()
         defaults.set(Data("not json".utf8), forKey: Self.key)
         let settings = CaptureSettings.loaded(from: defaults)
-        #expect(settings.videoLevels == nil)
-        #expect(settings.offloadDestinationPaths == nil)
+        #expect(settings.capture.videoLevels == nil)
+        #expect(settings.offload.destinationPaths == nil)
     }
 }

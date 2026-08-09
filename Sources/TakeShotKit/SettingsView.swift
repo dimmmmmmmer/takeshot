@@ -77,8 +77,8 @@ struct SettingsView: View {
                     Text(L("lang_system")).tag(AppLanguage.system)
                 }
                 Picker(L("theme"), selection: Binding(
-                    get: { controller.settings.appearance ?? "system" },
-                    set: { controller.settings.appearance = $0 == "system" ? nil : $0 })) {
+                    get: { controller.settings.theme.appearance ?? "system" },
+                    set: { controller.settings.theme.appearance = $0 == "system" ? nil : $0 })) {
                     Text(L("theme_system")).tag("system")
                     Text(L("theme_light")).tag("light")
                     Text(L("theme_dark")).tag("dark")
@@ -107,16 +107,16 @@ struct SettingsView: View {
                 .foregroundStyle(.red)
             }
             Section(L("settings_recording")) {
-                Picker(L("codec"), selection: $controller.settings.codec) {
+                Picker(L("codec"), selection: $controller.settings.capture.codec) {
                     ForEach(CaptureCodec.allCases) { codec in
                         Text(codec.rawValue).tag(codec)
                     }
                 }
-                TextField(L("project"), text: $controller.settings.projectName)
+                TextField(L("project"), text: $controller.settings.naming.projectName)
                 HStack(spacing: 8) {
                     Text(L("destination_folder"))
                         .fixedSize()
-                    Text(controller.settings.destinationPath)
+                    Text(controller.settings.capture.destinationPath)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -129,7 +129,7 @@ struct SettingsView: View {
                 Picker(L("naming_preset"), selection: Binding(
                     get: {
                         Self.namingPresets.first {
-                            $0.template == controller.settings.namingTemplate
+                            $0.template == controller.settings.naming.namingTemplate
                         }?.key ?? "preset_custom"
                     },
                     set: { key in
@@ -142,7 +142,7 @@ struct SettingsView: View {
                     }
                     Text(L("preset_custom")).tag("preset_custom")
                 }
-                TextField(L("naming_template"), text: $controller.settings.namingTemplate)
+                TextField(L("naming_template"), text: $controller.settings.naming.namingTemplate)
                 Text(L("placeholders_legend"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -172,16 +172,16 @@ struct SettingsView: View {
             Section(L("settings_detection")) {
                 DetectionModePicker()
                 FrameCountField(label: L("start_frames"),
-                                value: $controller.settings.startDebounceFrames,
+                                value: $controller.settings.capture.startDebounceFrames,
                                 range: 0...60)
                 FrameCountField(label: L("stop_frames"),
-                                value: $controller.settings.stopDebounceFrames,
+                                value: $controller.settings.capture.stopDebounceFrames,
                                 range: 0...120)
                 FrameCountField(label: L("pre_roll_frames"), value: Binding(
-                    get: { controller.settings.preRollFramesEffective },
+                    get: { controller.settings.capture.preRollFramesEffective },
                     set: {
-                        controller.settings.preRollFrames = $0
-                        controller.settings.preRollSeconds = nil
+                        controller.settings.capture.preRollFrames = $0
+                        controller.settings.capture.preRollSeconds = nil
                     }), range: 0...100)
                 // The third trigger, under the two confirm-frame fields it
                 // shares its numbers with — it has no debounce of its own (see

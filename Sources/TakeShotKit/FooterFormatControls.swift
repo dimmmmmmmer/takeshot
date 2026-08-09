@@ -39,8 +39,8 @@ struct FooterFolderButton: View {
                 .disabled(!controller.canChangeRecordingFormat)
         }
         .help(controller.canChangeRecordingFormat
-              ? L("record_folder_help", controller.settings.destinationPath)
-              : L("record_folder_locked_help", controller.settings.destinationPath))
+              ? L("record_folder_help", controller.settings.capture.destinationPath)
+              : L("record_folder_locked_help", controller.settings.capture.destinationPath))
     }
 
     private var button: some View {
@@ -73,17 +73,17 @@ struct FooterCodecMenu: View {
                 .disabled(!controller.canChangeRecordingFormat)
         }
         .help(controller.canChangeRecordingFormat
-              ? L("codec_footer_help", controller.settings.codec.rawValue)
-              : L("codec_locked_help", controller.settings.codec.rawValue))
+              ? L("codec_footer_help", controller.settings.capture.codec.rawValue)
+              : L("codec_locked_help", controller.settings.capture.codec.rawValue))
     }
 
     private var menu: some View {
         Menu {
             ForEach(CaptureCodec.allCases) { codec in
                 Button {
-                    controller.settings.codec = codec
+                    controller.settings.capture.codec = codec
                 } label: {
-                    if codec == controller.settings.codec {
+                    if codec == controller.settings.capture.codec {
                         Label(codec.rawValue, systemImage: "checkmark")
                     } else {
                         Text(codec.rawValue)

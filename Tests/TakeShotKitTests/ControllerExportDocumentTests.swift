@@ -20,7 +20,7 @@ import Testing
     private func project(
         _ name: String,
         _ body: (CaptureController, URL) async throws -> Void) async throws {
-        try await ControllerHarness.run(configure: { $0.projectName = name }, body)
+        try await ControllerHarness.run(configure: { $0.naming.projectName = name }, body)
     }
 
     /// A day with one circled take and one rejected one. Both are backed by a

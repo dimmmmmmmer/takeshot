@@ -22,14 +22,14 @@ import Testing
 
     private static func settings(root: URL) -> CaptureSettings {
         var settings = CaptureSettings()
-        settings.codec = .proResProxy // the tests encode in real time
-        settings.destinationPath = root.path
-        settings.namingTemplate = "{scene}_T{take}_{tc}"
-        settings.projectName = "Test"
+        settings.capture.codec = .proResProxy // the tests encode in real time
+        settings.capture.destinationPath = root.path
+        settings.naming.namingTemplate = "{scene}_T{take}_{tc}"
+        settings.naming.projectName = "Test"
         // The test owns the trigger: these are assertions about what an
         // INTERRUPTION does to a take, not about what starts one.
-        settings.detectionMode = .manual
-        settings.preRollSeconds = 0
+        settings.capture.detectionMode = .manual
+        settings.capture.preRollSeconds = 0
         return settings
     }
 

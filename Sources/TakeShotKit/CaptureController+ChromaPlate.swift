@@ -93,7 +93,7 @@ extension CaptureController {
     /// plate is a 6K TIFF as often as not, and a clip has to be opened and
     /// decoded before it yields one.
     func loadChromaBackground(mediaURL url: URL) {
-        settings.chromaKeyBackgroundImagePath = url.path
+        settings.chromaKey.backgroundImagePath = url.path
         Task.detached(priority: .userInitiated) { [weak self] in
             let decoded = await Self.decodePlate(url)
             await MainActor.run { [weak self] in
@@ -157,7 +157,7 @@ extension CaptureController {
     func clearChromaBackgroundImage() {
         pipeline.setChromaBackgroundImage(nil)
         chromaBackgroundImageName = nil
-        settings.chromaKeyBackgroundImagePath = nil
+        settings.chromaKey.backgroundImagePath = nil
     }
 
     // MARK: - persistence
@@ -166,25 +166,25 @@ extension CaptureController {
     /// at its default so a blob this build writes still decodes on one that has
     /// never heard of a plate layout.
     static func storePlateLayout(_ layout: ChromaKey.PlateLayout,
-                                 into settings: inout CaptureSettings) {
+                                 into settings: inout ChromaKeySettings) {
         let base = ChromaKey.PlateLayout.identity
-        settings.chromaKeyPlateFit = layout.fit == base.fit
+        settings.plateFit = layout.fit == base.fit
             ? nil : layout.fit.rawValue
-        settings.chromaKeyPlateScale = layout.scale == base.scale
+        settings.plateScale = layout.scale == base.scale
             ? nil : layout.scale
-        settings.chromaKeyPlateOffsetX = layout.offsetX == base.offsetX
+        settings.plateOffsetX = layout.offsetX == base.offsetX
             ? nil : layout.offsetX
-        settings.chromaKeyPlateOffsetY = layout.offsetY == base.offsetY
+        settings.plateOffsetY = layout.offsetY == base.offsetY
             ? nil : layout.offsetY
     }
 
-    static func plateLayout(from stored: CaptureSettings) -> ChromaKey.PlateLayout {
+    static func plateLayout(from stored: ChromaKeySettings) -> ChromaKey.PlateLayout {
         var layout = ChromaKey.PlateLayout()
-        layout.fit = stored.chromaKeyPlateFit
+        layout.fit = stored.plateFit
             .flatMap(ChromaKey.PlateFit.init(rawValue:)) ?? layout.fit
-        layout.scale = stored.chromaKeyPlateScale ?? layout.scale
-        layout.offsetX = stored.chromaKeyPlateOffsetX ?? layout.offsetX
-        layout.offsetY = stored.chromaKeyPlateOffsetY ?? layout.offsetY
+        layout.scale = stored.plateScale ?? layout.scale
+        layout.offsetX = stored.plateOffsetX ?? layout.offsetX
+        layout.offsetY = stored.plateOffsetY ?? layout.offsetY
         layout.clamp()
         return layout
     }

@@ -54,7 +54,7 @@ struct NamingEngineTests {
     }
 
     @Test func postfixAndDefaultTemplate() {
-        let engine = NamingEngine(template: CaptureSettings().namingTemplate)
+        let engine = NamingEngine(template: CaptureSettings().naming.namingTemplate)
         let withPostfix = engine.fileName(for: NamingContext(
             project: "Film", take: 7, reel: "002", camera: "B", postfix: "night"))
         #expect(withPostfix == "Film_B002C07_night")

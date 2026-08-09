@@ -86,12 +86,12 @@ struct AssistGuidesTests {
     /// mean different things.
     @Test func theGuidesComeOutOfTheSettingsIntact() {
         var settings = CaptureSettings()
-        #expect(AssistGuides(settings: settings).isEmpty)
+        #expect(AssistGuides(settings: settings.assist).isEmpty)
 
-        settings.framelineRatio = 2.39
-        settings.safeAreasOn = true
-        settings.safeActionPercent = 88
-        let guides = AssistGuides(settings: settings)
+        settings.assist.framelineRatio = 2.39
+        settings.assist.safeAreasOn = true
+        settings.assist.safeActionPercent = 88
+        let guides = AssistGuides(settings: settings.assist)
         #expect(guides.ratio == 2.39)
         #expect(guides.safeAreas)
         #expect(guides.actionPercent == 88)

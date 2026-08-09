@@ -124,14 +124,14 @@ import Testing
     @Test func theLUTKeyDoesNothingUntilThereIsALUTToApply() async throws {
         try await ControllerHarness.run { controller, _ in
             let hotkeys = manager()
-            try #require(controller.settings.lutFileName == nil)
+            try #require(controller.settings.lut.fileName == nil)
             let before = controller.lutPreviewOn
 
             hotkeys.perform(.toggleLUTPreview, controller: controller)
             #expect(controller.lutPreviewOn == before,
                     "the LUT preview came on with no LUT selected")
 
-            controller.settings.lutFileName = "something.cube"
+            controller.settings.lut.fileName = "something.cube"
             hotkeys.perform(.toggleLUTPreview, controller: controller)
             #expect(controller.lutPreviewOn != before)
         }
@@ -176,15 +176,15 @@ import Testing
     @Test func theChannelBankKeySwitchesToTheMixAndBack() async throws {
         try await ControllerHarness.run { controller, _ in
             let hotkeys = manager()
-            try #require(controller.settings.audioChannelMask == nil)
+            try #require(controller.settings.audio.audioChannelMask == nil)
 
             hotkeys.perform(.toggleAudioChannelBank, controller: controller)
-            #expect(controller.settings.audioChannelMask
+            #expect(controller.settings.audio.audioChannelMask
                 == CaptureController.mixChannelMask)
             #expect(controller.isRecordingMixOnly)
 
             hotkeys.perform(.toggleAudioChannelBank, controller: controller)
-            #expect(controller.settings.audioChannelMask == nil,
+            #expect(controller.settings.audio.audioChannelMask == nil,
                     "the previous channel mask did not come back")
         }
     }
@@ -195,11 +195,11 @@ import Testing
             #expect(await ControllerWait.until { controller.signalFormat != nil })
             controller.toggleManualRecord()
             #expect(await ControllerWait.until { controller.isRecording })
-            let latched = controller.settings.audioChannelMask
+            let latched = controller.settings.audio.audioChannelMask
 
             hotkeys.perform(.toggleAudioChannelBank, controller: controller)
 
-            #expect(controller.settings.audioChannelMask == latched,
+            #expect(controller.settings.audio.audioChannelMask == latched,
                     "the channel mask moved under a rolling take")
 
             controller.toggleManualRecord()

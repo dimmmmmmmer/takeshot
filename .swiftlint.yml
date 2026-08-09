@@ -13,6 +13,11 @@
 # and mixes half-finished copies into the count.
 excluded:
   - .build
+  # docs/ARCHITECTURE.md documents building the older SDK into its own scratch
+  # path, and generated sources in there are no more lintable than the ones in
+  # .build — without this, running the documented check turns `lint --strict`
+  # red on a resource_bundle_accessor.swift nobody wrote.
+  - .build-sdk15
   - .claude
 
 identifier_name:

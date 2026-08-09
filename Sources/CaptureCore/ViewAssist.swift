@@ -31,7 +31,7 @@ public struct ViewAssist: Equatable, Sendable {
     /// wheel: the point of each preset is to contrast with a known kind of
     /// subject (red vanishes on skin, white on highlights), and five names the
     /// crew can call out beat an RGB triple nobody can repeat.
-    /// Persisted by raw value (see `CaptureSettings.peakingColor`), so renaming
+    /// Persisted by raw value (see `AssistSettings.peakingColor`), so renaming
     /// a case silently resets the operator's choice.
     public enum PeakingColor: String, CaseIterable, Sendable {
         case red

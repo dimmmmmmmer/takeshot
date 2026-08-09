@@ -26,13 +26,13 @@ struct RemoteSettingsSection: View {
     /// app should still remember next shoot.
     @State private var link: RemoteLink = .remote
 
-    private var isOn: Bool { controller.settings.remoteEnabled == true }
+    private var isOn: Bool { controller.settings.remote.enabled == true }
 
     var body: some View {
         Section(L("settings_remote")) {
             Toggle(L("remote_enable"), isOn: Binding(
                 get: { isOn },
-                set: { controller.settings.remoteEnabled = $0 ? true : nil }))
+                set: { controller.settings.remote.enabled = $0 ? true : nil }))
             if isOn {
                 portRow
                 pinRow
@@ -45,11 +45,11 @@ struct RemoteSettingsSection: View {
     private var portRow: some View {
         LabeledContent(L("remote_port")) {
             TextField("", value: Binding(
-                get: { controller.settings.remotePortEffective },
+                get: { controller.settings.remote.portEffective },
                 // Below 1024 needs root and above 65535 does not exist; a typo
                 // either way would take the listener down with an error the
                 // operator cannot act on.
-                set: { controller.settings.remotePort = min(65535, max(1024, $0)) }),
+                set: { controller.settings.remote.port = min(65535, max(1024, $0)) }),
                 format: .number.grouping(.never))
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
@@ -60,7 +60,7 @@ struct RemoteSettingsSection: View {
     private var pinRow: some View {
         LabeledContent(L("remote_pin")) {
             HStack(spacing: 10) {
-                Text(controller.settings.remotePIN ?? "----")
+                Text(controller.settings.remote.pin ?? "----")
                     .font(.system(.title3, design: .monospaced))
                     .textSelection(.enabled)
                 Button(L("remote_pin_new")) { controller.regenerateRemotePIN() }

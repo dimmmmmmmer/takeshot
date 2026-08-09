@@ -41,7 +41,7 @@ final class CameraChannel: ObservableObject, Identifiable {
         self.backend = backend
         self.deviceID = deviceID
         var camSettings = settings
-        camSettings.cameraLabel = camLabel
+        camSettings.naming.cameraLabel = camLabel
         self.pipeline = CapturePipeline(config: .init(
             settings: camSettings, roll: roll, takeNumber: 1))
         bind()
@@ -94,14 +94,14 @@ final class CameraChannel: ObservableObject, Identifiable {
     func update(settings: CaptureSettings, slate: SlateMetadata = .empty,
                 roll: String, takeNumber: Int) {
         var camSettings = settings
-        camSettings.cameraLabel = camLabel
+        camSettings.naming.cameraLabel = camLabel
         self.takeNumber = takeNumber
         pipeline.update(config: .init(settings: camSettings, slate: slate,
                                       roll: roll, takeNumber: takeNumber))
         // the HDR setting is not read out of the config — it is resolved per
         // frame — so a channel has to be told it separately or a second camera
         // would keep tone mapping after the operator forced SDR on the first
-        pipeline.setHDRMode(camSettings.hdrMode)
+        pipeline.setHDRMode(camSettings.capture.hdrMode)
     }
 
     /// What REC has asked of this channel. Deliberately NOT `isRecording`: that

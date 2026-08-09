@@ -28,15 +28,15 @@ import Testing
 
     @Test func theSourceChoicePersistsAndRoundTrips() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.audioInputDeviceUID == nil)
+            #expect(controller.settings.audio.audioInputDeviceUID == nil)
 
             controller.audioInputUID = "usb-42"
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .audioInputDeviceUID == "usb-42")
+                .audio.audioInputDeviceUID == "usb-42")
 
             controller.audioInputUID = nil
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .audioInputDeviceUID == nil)
+                .audio.audioInputDeviceUID == nil)
         }
     }
 
@@ -44,7 +44,7 @@ import Testing
     /// existed must keep decoding (the project's contract for added fields).
     @Test func settingsWithoutTheFieldStillDecode() throws {
         var old = CaptureSettings()
-        old.audioInputDeviceUID = "usb-42"
+        old.audio.audioInputDeviceUID = "usb-42"
         let data = try JSONEncoder().encode(old)
         let json = try #require(String(data: data, encoding: .utf8))
         let stripped = json.replacingOccurrences(
@@ -55,7 +55,7 @@ import Testing
                 "the fixture failed to strip the field")
         let decoded = try JSONDecoder().decode(
             CaptureSettings.self, from: Data(stripped.utf8))
-        #expect(decoded.audioInputDeviceUID == nil)
+        #expect(decoded.audio.audioInputDeviceUID == nil)
     }
 
     @Test func aTakeRecordedFromTheUSBSourceCarriesItsPCM() async throws {

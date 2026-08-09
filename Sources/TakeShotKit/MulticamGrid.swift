@@ -30,7 +30,7 @@ private struct MainCameraTile: View {
 
     var body: some View {
         CameraTile(pipeline: controller.pipeline,
-                   label: controller.settings.cameraLabel,
+                   label: controller.settings.naming.cameraLabel,
                    timecode: live.currentTimecode,
                    recording: controller.isRecording,
                    background: controller.playerBackground)

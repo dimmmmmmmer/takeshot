@@ -23,7 +23,7 @@ struct HelpView: View {
                 .padding(Self.padding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .id(controller.settings.appLanguage)
+        .id(controller.settings.theme.appLanguage)
     }
 }
 

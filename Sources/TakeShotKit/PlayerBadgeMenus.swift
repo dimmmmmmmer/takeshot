@@ -51,16 +51,16 @@ struct PlayerTimecodeBadge: View {
     private var timecodeSourcePicker: some View {
         Picker(L("tc_source"), selection: Binding(
             get: {
-                controller.settings.timecodeSource == "ltc"
-                    ? 1 + (controller.settings.ltcChannel ?? 0)
+                controller.settings.capture.timecodeSource == "ltc"
+                    ? 1 + (controller.settings.capture.ltcChannel ?? 0)
                     : 0
             },
             set: { value in
                 if value == 0 {
-                    controller.settings.timecodeSource = nil
+                    controller.settings.capture.timecodeSource = nil
                 } else {
-                    controller.settings.timecodeSource = "ltc"
-                    controller.settings.ltcChannel = value - 1
+                    controller.settings.capture.timecodeSource = "ltc"
+                    controller.settings.capture.ltcChannel = value - 1
                 }
             })) {
             Text(L("tc_source_rp188")).tag(0)

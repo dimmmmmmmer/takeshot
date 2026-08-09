@@ -20,7 +20,7 @@ extension CaptureController {
     ///
     /// Mute is a HOLD, not a level: the level it took away comes back exactly
     /// on un-mute, and the state itself is what persists (like DIM — see
-    /// `CaptureSettings.monitorMuted` for why never the zero). It never
+    /// `AudioSettings.monitorMuted` for why never the zero). It never
     /// disables the output path — the slider always stays live.
     func toggleMonitorMute() {
         if live.muted {
@@ -46,14 +46,14 @@ extension CaptureController {
     /// and the DIM hold, for the same reason: a settings write fans out through
     /// `applySettingsChange` and re-renders the window, and this control sits
     /// among the meters and on a hotkey. What is stored is the state alone —
-    /// see `CaptureSettings.monitorMuted` for why never the zero.
+    /// see `AudioSettings.monitorMuted` for why never the zero.
     private func persistMuteState() {
         mutePersistTask?.cancel()
         let muted = live.muted
         mutePersistTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, let self else { return }
-            self.settings.monitorMuted = muted ? true : nil
+            self.settings.audio.monitorMuted = muted ? true : nil
         }
     }
 
@@ -91,14 +91,14 @@ extension CaptureController {
     /// for the same reason: a settings write fans out through `applySettingsChange`
     /// and re-renders the window, and this button sits among the meters, which a
     /// hotkey can hammer. What is stored is the state alone — see
-    /// `CaptureSettings.monitorDimmed` for why never the halved level.
+    /// `AudioSettings.monitorDimmed` for why never the halved level.
     private func persistDimState() {
         dimPersistTask?.cancel()
         let dimmed = live.dimmed
         dimPersistTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, let self else { return }
-            self.settings.monitorDimmed = dimmed ? true : nil
+            self.settings.audio.monitorDimmed = dimmed ? true : nil
         }
     }
 
@@ -166,7 +166,7 @@ extension CaptureController {
         volumePersistTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, let self else { return }
-            self.settings.monitorVolume = level
+            self.settings.audio.monitorVolume = level
         }
     }
 }

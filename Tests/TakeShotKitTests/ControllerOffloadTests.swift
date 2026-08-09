@@ -43,7 +43,7 @@ import Testing
     /// verifies, but the question is no longer asked.
     @Test func theSheetSeedsItselfFromTheSavedRig() async throws {
         let rig: (inout CaptureSettings) -> Void = {
-            $0.offloadDestinationPaths = ["/Volumes/SSD1", "/Volumes/SSD2"]
+            $0.offload.destinationPaths = ["/Volumes/SSD1", "/Volumes/SSD2"]
         }
         try await ControllerHarness.run(configure: rig) { controller, _ in
             controller.showOffloadSheet()
@@ -62,7 +62,7 @@ import Testing
     /// (`ModelSettingsMigrationTests` covers the move).
     @Test func theMigratedBackupFolderReachesTheSheet() async throws {
         let migrated: (inout CaptureSettings) -> Void = {
-            $0.offloadDestinationPaths = ["/Volumes/OLD"]
+            $0.offload.destinationPaths = ["/Volumes/OLD"]
         }
         try await ControllerHarness.run(configure: migrated) { controller, _ in
             controller.showOffloadSheet()
@@ -184,7 +184,7 @@ import Testing
             }
             // the destinations are remembered for the next card
             let saved = CaptureSettings.loaded(from: controller.defaults)
-            #expect(saved.offloadDestinationPaths == [first.path, second.path])
+            #expect(saved.offload.destinationPaths == [first.path, second.path])
         }
     }
 

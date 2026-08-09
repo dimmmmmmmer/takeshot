@@ -190,7 +190,7 @@ struct NamingPresetMenu: View {
                 Button {
                     controller.applyNamingPreset(preset)
                 } label: {
-                    if controller.settings.namingTemplate == preset.template {
+                    if controller.settings.naming.namingTemplate == preset.template {
                         Label(L(preset.key), systemImage: "checkmark")
                     } else {
                         Text(L(preset.key))

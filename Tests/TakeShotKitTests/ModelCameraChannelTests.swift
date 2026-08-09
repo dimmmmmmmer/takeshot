@@ -27,15 +27,15 @@ struct ModelCameraChannelTests {
 
     private func settings(destination: String) -> CaptureSettings {
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = destination
-        settings.namingTemplate = "{cam}{roll}C{clip}"
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = destination
+        settings.naming.namingTemplate = "{cam}{roll}C{clip}"
         // VANC-only (the shipping default) with a standing timecode: nothing can
         // start a take except the REC request under test
-        settings.detectionMode = .vanc
-        settings.preRollFrames = 0
+        settings.capture.detectionMode = .vanc
+        settings.capture.preRollFrames = 0
         // deliberately the MAIN camera's label — the channel has to override it
-        settings.cameraLabel = "A"
+        settings.naming.cameraLabel = "A"
         return settings
     }
 

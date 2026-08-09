@@ -9,7 +9,7 @@ import Foundation
 extension CaptureController {
     /// All cameras for the preview grid: main (nil channel) + extras.
     var allCameraLabels: [String] {
-        [settings.cameraLabel] + extraChannels.map(\.camLabel)
+        [settings.naming.cameraLabel] + extraChannels.map(\.camLabel)
     }
 
     func toggleMulticam() {
@@ -27,7 +27,7 @@ extension CaptureController {
         defer { refreshRemoteMultiviewTaps() }
         guard on else { return }
 
-        let nextLetter = FieldStepper.stepLetter(settings.cameraLabel, by: 1)
+        let nextLetter = FieldStepper.stepLetter(settings.naming.cameraLabel, by: 1)
         if isMockSelected {
             // demo: a second mock camera
             let mock = MockCaptureBackend()

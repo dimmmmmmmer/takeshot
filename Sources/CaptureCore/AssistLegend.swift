@@ -7,7 +7,7 @@ import Foundation
 ///
 /// The three cases moved here from the SwiftUI overlay they used to size (see
 /// `AssistLegend` below for why the legend is drawn into the frame now). The
-/// raw values are what `CaptureSettings.legendSize` persists, so renaming a
+/// raw values are what `AssistSettings.legendSize` persists, so renaming a
 /// case silently resets the operator's choice.
 public enum AssistLegendSize: String, CaseIterable, Identifiable, Sendable {
     case small = "s"
@@ -151,7 +151,7 @@ public struct AssistLegend: Equatable, Sendable {
     /// The legend as the operator's settings describe it. One conversion, so
     /// the value the renderer draws and the value the popover edits cannot
     /// disagree about what "medium" or "bottom" means.
-    public init(settings: CaptureSettings) {
+    public init(settings: AssistSettings) {
         self.init(
             size: AssistLegendSize(rawValue: settings.legendSize ?? "") ?? .medium,
             placement: AssistLegendPlacement(

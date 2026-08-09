@@ -3,7 +3,7 @@ import Testing
 @testable import TakeShotKit
 
 /// The output picker in Settings is a `ForEach` over these, and the chosen `uid`
-/// is what gets written into `CaptureSettings.playbackAudioDeviceUID` and handed
+/// is what gets written into `AudioSettings.playbackAudioDeviceUID` and handed
 /// to the renderer on the next launch. So an entry with an empty uid silently
 /// becomes "system default" the moment it is saved, and two entries sharing one
 /// breaks the list.

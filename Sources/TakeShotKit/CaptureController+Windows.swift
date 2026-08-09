@@ -34,7 +34,7 @@ extension CaptureController {
     func rebuildPlayout() {
         mirrors.playout?.stop()
         mirrors.playout = nil
-        guard let deviceID = settings.monitorDeviceID,
+        guard let deviceID = settings.capture.monitorDeviceID,
               deviceID.hasPrefix("decklink:") else {
             wireDisplayMirrors()
             return

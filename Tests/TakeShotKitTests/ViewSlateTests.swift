@@ -14,7 +14,7 @@ struct ViewSlateTests {
     private static let windowSize = CGSize(width: 960, height: 540)
 
     private func seed(_ probe: ViewProbe) {
-        probe.controller.settings.projectName = "MARS"
+        probe.controller.settings.naming.projectName = "MARS"
         probe.controller.live.currentTimecode = Timecode(
             hours: 10, minutes: 20, seconds: 30, frames: 12, fps: 25)
     }

@@ -38,13 +38,13 @@ extension CaptureController {
     /// offload rig does. Written on Start, not on every toggle — a half-set
     /// sheet that was never run is not a convention.
     func rememberDailiesChoices(from model: DailiesQueueModel) {
-        settings.dailiesBurnTimecode = model.burnTimecode
-        settings.dailiesBurnClipName = model.burnClipName
-        settings.dailiesBurnProject = model.burnProject
-        settings.dailiesBurnDate = model.burnDate
+        settings.dailies.burnTimecode = model.burnTimecode
+        settings.dailies.burnClipName = model.burnClipName
+        settings.dailies.burnProject = model.burnProject
+        settings.dailies.burnDate = model.burnDate
         let custom = model.customText.trimmingCharacters(in: .whitespaces)
-        settings.dailiesCustomText = custom.isEmpty ? nil : custom
-        settings.dailiesDestinationPath = model.destination?.path
+        settings.dailies.customText = custom.isEmpty ? nil : custom
+        settings.dailies.destinationPath = model.destination?.path
     }
 
     /// A finished run, as the rest of the app sees it.

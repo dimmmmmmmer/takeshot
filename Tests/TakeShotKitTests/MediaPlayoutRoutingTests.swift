@@ -21,7 +21,7 @@ import Testing
     /// holding a handler.
     @Test func withNoOutputDeviceNothingIsMirrored() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.monitorDeviceID == nil)
+            #expect(controller.settings.capture.monitorDeviceID == nil)
             #expect(controller.mirrors.playout == nil)
 
             let collector = MediaFixtures.FrameCollector()
@@ -45,7 +45,7 @@ import Testing
     @Test func anOutputThatIsNotADeckLinkIsIgnored() async throws {
         try await ControllerHarness.run { controller, _ in
             // assigning the setting is what the picker does; it rebuilds itself
-            controller.settings.monitorDeviceID = "builtin-speakers"
+            controller.settings.capture.monitorDeviceID = "builtin-speakers"
 
             #expect(controller.mirrors.playout == nil)
             #expect(controller.lastError == nil,
@@ -62,7 +62,7 @@ import Testing
     /// the test cannot open an output on a machine that does have one.
     @Test func aConfiguredOutputThatIsGoneIsReported() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.monitorDeviceID =
+            controller.settings.capture.monitorDeviceID =
                 "decklink:no-such-board-\(UUID().uuidString)"
 
             #expect(controller.mirrors.playout == nil)

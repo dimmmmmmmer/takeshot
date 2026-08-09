@@ -22,7 +22,7 @@ extension CapturePipeline {
             timecode = tc
         }
         // LTC replaces RP188 wholesale when selected (detector, UI, TC track)
-        if config.settings.timecodeSource == "ltc" {
+        if config.settings.capture.timecodeSource == "ltc" {
             timecode = latestLTC
         }
         return timecode
@@ -80,7 +80,7 @@ extension CapturePipeline {
     /// timecode source.
     func decodeLTC(from sampleBuffer: CMSampleBuffer, channels: Int) {
         guard channels > 0, let format else { return }
-        let channel = min(max(0, config.settings.ltcChannel ?? 0), channels - 1)
+        let channel = min(max(0, config.settings.capture.ltcChannel ?? 0), channels - 1)
         guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
         var length = 0
         var pointer: UnsafeMutablePointer<CChar>?

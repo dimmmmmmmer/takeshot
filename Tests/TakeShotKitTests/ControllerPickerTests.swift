@@ -30,7 +30,7 @@ import UniformTypeIdentifiers
             try await FakeFilePanel.installed(opening: [[elsewhere]]) { panel in
                 controller.chooseDestinationFolder()
 
-                #expect(controller.settings.destinationPath == elsewhere.path)
+                #expect(controller.settings.capture.destinationPath == elsewhere.path)
                 let request = try #require(panel.openRequests.first)
                 #expect(request.directories, "the folder browser offered no folders")
                 #expect(!request.files,
@@ -59,7 +59,7 @@ import UniformTypeIdentifiers
                 controller.chooseDestinationFolder()
 
                 #expect(panel.openRequests.count == 1)
-                #expect(controller.settings.destinationPath == root.path)
+                #expect(controller.settings.capture.destinationPath == root.path)
                 #expect(controller.takes.count == 1)
             }
         }
@@ -135,7 +135,7 @@ import UniformTypeIdentifiers
             try await FakeFilePanel.installed(opening: [[plate]]) { panel in
                 controller.chooseChromaBackgroundImage()
 
-                #expect(controller.settings.chromaKeyBackgroundImagePath
+                #expect(controller.settings.chromaKey.backgroundImagePath
                             == plate.path)
                 let request = try #require(panel.openRequests.first)
                 #expect(!request.multiple, "the plate picker took several files")
@@ -158,13 +158,13 @@ import UniformTypeIdentifiers
     /// art department's background between two clicks.
     @Test func cancellingThePlatePickerKeepsTheCurrentPlate() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.chromaKeyBackgroundImagePath = "/somewhere/plate.tif"
+            controller.settings.chromaKey.backgroundImagePath = "/somewhere/plate.tif"
 
             try await FakeFilePanel.installed { panel in
                 controller.chooseChromaBackgroundImage()
 
                 #expect(panel.openRequests.count == 1)
-                #expect(controller.settings.chromaKeyBackgroundImagePath
+                #expect(controller.settings.chromaKey.backgroundImagePath
                             == "/somewhere/plate.tif")
             }
         }

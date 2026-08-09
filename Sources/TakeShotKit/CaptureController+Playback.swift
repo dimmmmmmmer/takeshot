@@ -100,8 +100,8 @@ extension CaptureController {
         // built per clip and has no business reaching into settings, and the
         // decode scale has to be fixed before the first frame is asked for.
         guard let model = RawPlayerModel(
-            url: url, scale: settings.r3dDecodeScaleEffective,
-            applyCameraLUT: settings.r3dApplyCameraLUT ?? false,
+            url: url, scale: settings.r3d.decodeScaleEffective,
+            applyCameraLUT: settings.r3d.applyCameraLUT ?? false,
             error: &openError) else {
             rawPlayerError = openError
             return

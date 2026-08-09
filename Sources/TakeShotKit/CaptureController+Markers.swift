@@ -18,13 +18,13 @@ extension CaptureController {
     /// has no swatch for onto every marker of the day.
     var newMarkerColor: String {
         get {
-            let stored = settings.defaultMarkerColor
+            let stored = settings.review.defaultMarkerColor
             return TakeMarker.colors.contains(stored ?? "")
                 ? (stored ?? TakeMarker.colors[0]) : TakeMarker.colors[0]
         }
         set {
             // the default stays nil, so an untouched install writes no field
-            settings.defaultMarkerColor =
+            settings.review.defaultMarkerColor =
                 newValue == TakeMarker.colors[0] ? nil : newValue
         }
     }

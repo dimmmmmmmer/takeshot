@@ -66,7 +66,7 @@ struct HDRPerformanceTests {
     func thePerFrameComparisonIsBelowMeasurement() {
         let root = FileManager.default.temporaryDirectory
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
+        settings.capture.destinationPath = root.path
         let pipeline = CapturePipeline(
             config: .init(settings: settings, takeNumber: 1))
         let millionMs = elapsed(1) {

@@ -28,7 +28,7 @@ struct ContentView: View {
                 .frame(height: controller.windowTopInset)
                 .padding(.trailing, 14)
         }
-        .id(controller.settings.appLanguage)
+        .id(controller.settings.theme.appLanguage)
         // The DIT offload runs as a sheet over the main window: it needs a
         // destination LIST, live per-destination progress and a verdict card
         // each, none of which a chain of modal file panels can show.

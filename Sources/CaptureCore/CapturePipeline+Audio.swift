@@ -45,7 +45,7 @@ extension CapturePipeline {
             }
             let levels = PCMAudio.peakLevels(of: packet)
             self.sourceAudioChannels = levels.count
-            if self.config.settings.timecodeSource == "ltc" {
+            if self.config.settings.capture.timecodeSource == "ltc" {
                 self.decodeLTC(from: packet, channels: levels.count)
             }
             self.recordAudio(packet)
@@ -62,7 +62,7 @@ extension CapturePipeline {
         // the mask is LATCHED for the take: the writer's channel count is
         // fixed at start, a live change would kill the whole file
         let activeMask = writer != nil
-            ? recordingMask : config.settings.audioChannelMask
+            ? recordingMask : config.settings.audio.audioChannelMask
         var toWrite: CMSampleBuffer? = sampleBuffer
         if let mask = activeMask {
             toWrite = PCMAudio.selectChannels(sampleBuffer,
@@ -84,7 +84,7 @@ extension CapturePipeline {
     /// The first two ENABLED channels as a stereo feed for the operator.
     private func feedMonitor(_ sampleBuffer: CMSampleBuffer) {
         guard monitorEnabled, let onMonitorAudio else { return }
-        let mask = config.settings.audioChannelMask
+        let mask = config.settings.audio.audioChannelMask
         let indices = mask.map { Array(Self.channels(in: $0).prefix(2)) } ?? [0, 1]
         if let monitor = PCMAudio.selectChannels(sampleBuffer, indices: indices,
                                                  formatCache: &monitorFormatCache) {

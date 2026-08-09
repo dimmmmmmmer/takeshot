@@ -77,7 +77,7 @@ import Testing
             controller.startFolderWatcher()
             try #require(controller.folderWatcher != nil)
 
-            controller.settings.destinationPath = try unreachablePath(under: root)
+            controller.settings.capture.destinationPath = try unreachablePath(under: root)
             controller.startFolderWatcher()
 
             #expect(controller.folderWatcher == nil,
@@ -94,7 +94,7 @@ import Testing
         try await ControllerHarness.run(live: true) { controller, root in
             #expect(await ControllerWait.until { controller.isCapturing })
 
-            controller.settings.destinationPath = try unreachablePath(under: root)
+            controller.settings.capture.destinationPath = try unreachablePath(under: root)
             controller.startDiskWatch()
 
             #expect(await ControllerWait.until {
@@ -118,7 +118,7 @@ import Testing
             controller.toggleManualRecord()
             #expect(await ControllerWait.until { controller.isRecording })
 
-            controller.settings.destinationPath = try unreachablePath(under: root)
+            controller.settings.capture.destinationPath = try unreachablePath(under: root)
             controller.startDiskWatch()
 
             #expect(await ControllerWait.until {
@@ -138,7 +138,7 @@ import Testing
             #expect(await ControllerWait.until { controller.isCapturing })
             let fresh = root.appendingPathComponent("never-used-before")
 
-            controller.settings.destinationPath = fresh.path
+            controller.settings.capture.destinationPath = fresh.path
             controller.startDiskWatch()
 
             #expect(await ControllerWait.until {

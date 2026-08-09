@@ -180,7 +180,7 @@ struct ViewSettingsTests {
             }
             probe.controller.startRemoteServer(overridePort: 0)
             await ControllerWait.until { probe.controller.remoteBoundPort > 0 }
-            probe.controller.settings.remoteEnabled = true
+            probe.controller.settings.remote.enabled = true
 
             let expanded = probe.fittingSizes {
                 Form { RemoteSettingsSection() }.formStyle(.grouped)
@@ -213,7 +213,7 @@ struct ViewSettingsTests {
         try await ViewProbe.run { probe in
             probe.controller.startRemoteServer(overridePort: 0)
             await ControllerWait.until { probe.controller.remoteBoundPort > 0 }
-            probe.controller.settings.remoteEnabled = true
+            probe.controller.settings.remote.enabled = true
 
             let expanded = probe.fittingSizes {
                 Form { RemoteSettingsSection() }.formStyle(.grouped)
@@ -348,7 +348,7 @@ struct ViewSettingsTests {
     @Test func theSettingsFormStillMatchesWithTheMenuBarRow() async throws {
         try await ViewProbe.run { probe in
             DeckLinkProbe.overrideDiagnosis(.loaded)
-            probe.controller.settings.keepInMenuBar = nil
+            probe.controller.settings.theme.keepInMenuBar = nil
             let off = probe.fittingSizes { SettingsView() }
             #expect(off.ru.matches(off.en, slack: 8),
                     "the Russian settings form is a different size: \(off)")
@@ -367,7 +367,7 @@ struct ViewSettingsTests {
             DeckLinkProbe.overrideDiagnosis(.loaded)
             let idle = probe.fittingSizes { SettingsView() }
             probe.controller.isRecording = true
-            probe.controller.settings.forcedInputMode = "1080p25"
+            probe.controller.settings.capture.forcedInputMode = "1080p25"
             let recording = probe.fittingSizes { SettingsView() }
             #expect(recording.ru.width == idle.ru.width)
             #expect(recording.ru.matches(recording.en, slack: 8),

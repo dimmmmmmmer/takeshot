@@ -37,7 +37,7 @@ import Testing
     /// What the live pipeline puts on screen for one grey frame.
     private func liveGraded(_ cube: CubeLUT, level: UInt8) async -> CVPixelBuffer? {
         var settings = CaptureSettings()
-        settings.detectionMode = .manual // nothing here may open a take
+        settings.capture.detectionMode = .manual // nothing here may open a take
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         pipeline.handleFormat(CaptureFormat(width: 320, height: 180,

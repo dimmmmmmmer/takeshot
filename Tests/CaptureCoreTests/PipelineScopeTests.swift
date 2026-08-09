@@ -42,10 +42,10 @@ struct PipelineScopeTests {
     /// a take would put an encoder in the way of it.
     private func idlePipeline(root: URL) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.videoLevels = "full" // pass the ramp's code values through
-        settings.preRollFrames = 0
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.videoLevels = "full" // pass the ramp's code values through
+        settings.capture.preRollFrames = 0
         return CapturePipeline(config: .init(settings: settings, takeNumber: 1))
     }
 

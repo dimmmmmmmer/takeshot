@@ -42,7 +42,7 @@ extension CaptureController {
     // MARK: - the switch and the dials
 
     /// Opt-in, never a default, and never persisted — see
-    /// `CaptureSettings.visualRecCenterX` for the reasoning.
+    /// `VisualRecSettings.centerX` for the reasoning.
     ///
     /// It cannot be switched on until the two references separate. Enforced in
     /// the SETTER and not only by disabling the switch: the panel's row is one
@@ -194,7 +194,7 @@ extension CaptureController {
     // MARK: - persistence
 
     /// The teaching survives a relaunch; the switch does not (see
-    /// `CaptureSettings.visualRecCenterX`). Everything is stored as nil at its
+    /// `VisualRecSettings.centerX`). Everything is stored as nil at its
     /// default — the same convention as every other added field — and the whole
     /// blob is assigned once, because each write to `settings` runs the change
     /// handler.
@@ -202,32 +202,32 @@ extension CaptureController {
         let teaching = visualRecTeaching
         let base = VisualRecTeaching()
         var updated = settings
-        updated.visualRecCenterX = teaching.region.centerX
+        updated.visualRec.centerX = teaching.region.centerX
             == base.region.centerX ? nil : teaching.region.centerX
-        updated.visualRecCenterY = teaching.region.centerY
+        updated.visualRec.centerY = teaching.region.centerY
             == base.region.centerY ? nil : teaching.region.centerY
-        updated.visualRecSize = teaching.region.size == base.region.size
+        updated.visualRec.size = teaching.region.size == base.region.size
             ? nil : teaching.region.size
-        updated.visualRecMargin = teaching.margin == base.margin
+        updated.visualRec.margin = teaching.margin == base.margin
             ? nil : teaching.margin
-        updated.visualRecRolling = teaching.rolling?.encoded
-        updated.visualRecIdle = teaching.idle?.encoded
+        updated.visualRec.rolling = teaching.rolling?.encoded
+        updated.visualRec.idle = teaching.idle?.encoded
         guard updated != settings else { return }
         settings = updated
     }
 
     /// Restore the teaching at launch — switched OFF, whatever it was left at.
-    func restoreVisualRec(from stored: CaptureSettings) {
+    func restoreVisualRec(from stored: VisualRecSettings) {
         var teaching = VisualRecTeaching()
-        teaching.region.centerX = stored.visualRecCenterX ?? teaching.region.centerX
-        teaching.region.centerY = stored.visualRecCenterY ?? teaching.region.centerY
-        teaching.region.size = stored.visualRecSize ?? teaching.region.size
-        teaching.margin = stored.visualRecMargin ?? teaching.margin
+        teaching.region.centerX = stored.centerX ?? teaching.region.centerX
+        teaching.region.centerY = stored.centerY ?? teaching.region.centerY
+        teaching.region.size = stored.size ?? teaching.region.size
+        teaching.margin = stored.margin ?? teaching.margin
         // a blob that was truncated or hand-edited leaves the trigger untaught
         // rather than armed on garbage (see `VisualRecSignature.init(encoded:)`)
-        teaching.rolling = stored.visualRecRolling
+        teaching.rolling = stored.rolling
             .flatMap(VisualRecSignature.init(encoded:))
-        teaching.idle = stored.visualRecIdle
+        teaching.idle = stored.idle
             .flatMap(VisualRecSignature.init(encoded:))
         teaching.clamp()
         teaching.isOn = false
