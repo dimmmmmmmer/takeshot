@@ -268,19 +268,39 @@ struct ViewPanelTests {
     /// an overlay in the window's top-right, i.e. in the top-right corner of a
     /// panel they have nothing to do with.
     ///
-    /// Measured off the ink, with a few points of slack: a gear and a hard-disk
-    /// glyph do not carry the same side bearing, so the two margins are equal to
-    /// within a glyph's own inset and not to the half-point. What this catches
-    /// is a leading or trailing pin, which is off by a hundred points.
+    /// Two halves, because only one of them is portable.
+    ///
+    /// The LAYOUT half runs everywhere: the row takes the whole column and its
+    /// content is far narrower, which is the slack a centre is centred in. That
+    /// is what fails if somebody gives the row a fixed width or lets it grow.
+    ///
+    /// The INK half — where the glyphs actually landed — runs only where there
+    /// is ink to read. On the CI runner `drawnBounds` comes back nil for this
+    /// row: three borderless symbol buttons offscreen on a machine with no
+    /// display draw nothing a bitmap can see, which is the same "sizes are
+    /// portable, ink is not" rule `controlInkFillsItsBounds` already exists
+    /// for. Gated rather than deleted, and gated on the MEASUREMENT rather than
+    /// on the OS, so it runs wherever it can and is never quietly vacuous — the
+    /// layout half above it always asserts something. A few points of slack:
+    /// a gear and a hard-disk glyph carry different side bearings, so the two
+    /// margins match to within a glyph's inset. What it catches is a leading or
+    /// trailing pin, which is off by a hundred points.
     @Test func theUtilityRowIsCentredOnThePanelWidth() async throws {
         try await ViewProbe.run { probe in
             let width = ViewBudget.panelMinWidth
-            let box = try #require(
-                ViewRender.drawnBounds(probe.hosted(PanelUtilityButtons()),
-                                       in: CGSize(width: width, height: 28)),
-                "the utility row drew nothing at all")
-            let leading = box.minX
-            let trailing = width - box.maxX
+            let row = probe.hosted(PanelUtilityButtons())
+            let box = CGSize(width: width, height: 28)
+
+            let laid = ViewRender.laidOutSize(row, in: box)
+            #expect(laid.width == width,
+                    "the row does not take the column, so it cannot centre")
+            let content = ViewRender.fittingSize(probe.hosted(PanelUtilityButtons()))
+            #expect(content.width < width - 80,
+                    "the content is \(content.width)pt of \(width) — no slack to centre in")
+
+            guard let ink = ViewRender.drawnBounds(row, in: box) else { return }
+            let leading = ink.minX
+            let trailing = width - ink.maxX
             #expect(abs(leading - trailing) <= 4,
                     "the row sits \(leading)pt from the left and \(trailing)pt from the right")
             #expect(leading > 40,
