@@ -48,6 +48,23 @@ struct PlayerTimecodeBadge: View {
             .labelsHidden()
     }
 
+    /// Which row the timecode menu is on. Tags: 0 is RP188, 1…n are channels
+    /// 0…n-1, and -1 is the stored channel when the signal cannot offer it.
+    /// The negative tags are labels rather than choices — see the setter.
+    ///
+    /// Static so the rule can be checked without a window, which is the only way
+    /// the stale-channel case can be checked at all: it needs a stored channel,
+    /// a live channel count, and the two to disagree.
+    static func selectionTag(isLTC: Bool, stored: Int, channels: Int) -> Int {
+        guard isLTC else { return 0 }
+        return isChannelLive(stored, channels: channels) ? stored + 1 : -1
+    }
+
+    /// Whether a stored 0-based LTC channel is one the current signal carries.
+    static func isChannelLive(_ stored: Int, channels: Int) -> Bool {
+        stored >= 0 && stored < channels
+    }
+
     /// RP188, plus one row per audio channel the CURRENT signal is carrying.
     ///
     /// It used to be `ForEach(1...8)`, hard-coded, while a board embeds up to 16
@@ -74,23 +91,6 @@ struct PlayerTimecodeBadge: View {
     ///   to the last channel that exists (`CapturePipeline+Timecode`), so
     ///   timecode keeps arriving from somewhere while the menu says the chosen
     ///   source is not there.
-    /// Tags: 0 is RP188, 1…n are channels 0…n-1, -1 is the stored channel the
-    /// signal cannot offer, and -2 is the "no signal yet" note. The negatives
-    /// are labels rather than choices — see the setter.
-    ///
-    /// Static so the rule can be checked without a window, which is the only way
-    /// the stale-channel case can be checked at all: it needs a stored channel,
-    /// a live channel count, and the two to disagree.
-    static func selectionTag(isLTC: Bool, stored: Int, channels: Int) -> Int {
-        guard isLTC else { return 0 }
-        return isChannelLive(stored, channels: channels) ? stored + 1 : -1
-    }
-
-    /// Whether a stored 0-based LTC channel is one the current signal carries.
-    static func isChannelLive(_ stored: Int, channels: Int) -> Bool {
-        stored >= 0 && stored < channels
-    }
-
     private var timecodeSourcePicker: some View {
         let channels = controller.audioChannelCount
         let stored = controller.settings.capture.ltcChannel ?? 0

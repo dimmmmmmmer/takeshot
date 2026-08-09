@@ -145,13 +145,6 @@ extension CaptureController {
             return fixed
         }
     }
-    /// Recording-integrity failures stick in the alarm banner; everything else
-    /// toasts for five seconds.
-    ///
-    /// "Failed to start recording" and a take truncated by a format change used
-    /// to toast: the two cases where footage is missing outright, announced more
-    /// quietly than a dropped frame. An operator watching the slate rather than
-    /// the screen had no way to learn about them.
     /// What the signal's own bit depth did to this capture, said out loud.
     ///
     /// Depth follows the signal now, and that removed a wrong answer and added a
@@ -233,6 +226,12 @@ extension CaptureController {
 
     /// Put a pipeline alarm in front of the operator, in the register the alarm
     /// itself declares and in the language the app is set to.
+    ///
+    /// Recording-integrity failures stick in the alarm banner; everything else
+    /// toasts for five seconds. "Failed to start recording" and a take truncated
+    /// by a format change used to toast: the two cases where footage is missing
+    /// outright, announced more quietly than a dropped frame. An operator
+    /// watching the slate rather than the screen had no way to learn about them.
     ///
     /// This used to read the register off the prose — a list of English
     /// substrings ("TAKE LOST", "Dropped", "ingress") matched against the
@@ -330,11 +329,11 @@ extension CaptureController {
     /// What a free-space reading means, as a value.
     ///
     /// Split from the watchdog that acts on it for the same reason
-    /// `bitDepthShortfall` is split from `reportBitDepthShortfall`: the two
-    /// halves fail differently. This one is a rule about two thresholds and can
-    /// be stated exactly; the caller's half is about a volume that may not
-    /// answer the question at all, and only a real disk can put it in either of
-    /// these states. The thresholds ARE the recording-integrity promise — warn
+    /// `bitDepthNotice` is split from `reportBitDepth`: the two halves fail
+    /// differently. This one is a rule about two thresholds and can be stated
+    /// exactly; the caller's half is about a volume that may not answer the
+    /// question at all, and only a real disk can put it in either of these
+    /// states. The thresholds ARE the recording-integrity promise — warn
     /// under 5 GB, close the take under 0.5 — so they belong somewhere that can
     /// be read and checked rather than inline in a tick nothing can drive.
     enum DiskVerdict: Equatable {

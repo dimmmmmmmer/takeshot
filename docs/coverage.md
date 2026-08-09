@@ -89,7 +89,7 @@ a take rather than a click. What it added, and what each one pins:
 
 Two production changes came with it, both stated in the code:
 `CaptureController.diskVerdict` splits the two free-space thresholds out of the
-watchdog tick that nothing can drive (the same split `bitDepthShortfall` already
+watchdog tick that nothing can drive (the same split `bitDepthNotice` already
 had from its reporter), and `TestWait.becomesTrue` gives the CaptureCore suites
 the answering poll `ControllerWait.until` already had.
 

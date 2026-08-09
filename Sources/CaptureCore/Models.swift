@@ -85,7 +85,11 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     public var id: String { rawValue }
 
     /// Whether the codec can carry a 12-bit RGB source without throwing the
-    /// sampling away. Used to warn, never to override the operator's choice.
+    /// sampling away. Used to warn, never to override the operator's choice —
+    /// `CaptureController.BitDepthNotice.twelveBit` is the warning, and it
+    /// became a real one when depth started following the signal: a 12-bit
+    /// source used to arrive because the operator had clicked for it, so the
+    /// codec beside it was a pair they had chosen.
     public var isRGB444Capable: Bool { self == .proRes4444 }
 }
 
