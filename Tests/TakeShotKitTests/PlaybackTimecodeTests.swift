@@ -170,7 +170,7 @@ import Testing
             controller.playbackURL = root.appendingPathComponent("nothing.mov")
 
             controller.grabFrame()
-            #expect(controller.lastError == "Frame grab failed")
+            #expect(controller.lastError == L("toast_grab_failed"))
             #expect(pngs(in: root).isEmpty)
         }
     }

@@ -65,7 +65,7 @@ extension CaptureController {
             } else if let buffer = playbackTap.currentBuffer() {
                 saveGrab(buffer: buffer)
             } else {
-                lastError = "Frame grab failed"
+                lastError = L("toast_grab_failed")
             }
         } else if isCapturing {
             // the grab lands on the pipeline queue; saving is main-actor work
@@ -93,7 +93,7 @@ extension CaptureController {
         Task { [weak self] in
             let cg = await Self.decodeStill(from: url, at: time)
             await MainActor.run {
-                guard let cg else { self?.lastError = "Frame grab failed"; return }
+                guard let cg else { self?.lastError = L("toast_grab_failed"); return }
                 self?.saveGrab(NSBitmapImageRep(cgImage: cg)
                     .representation(using: .png, properties: [:]))
             }
@@ -117,7 +117,7 @@ extension CaptureController {
         return try? await generator.image(at: time).image
     }
     private func saveGrab(_ png: Data?) {
-        guard let png else { lastError = "Frame grab failed"; return }
+        guard let png else { lastError = L("toast_grab_failed"); return }
         // project_cam_still_timecode
         let stamp = currentTimecode?.fileNameSafe ?? Self.grabTimeStamp()
         let name = NamingEngine.sanitize(
@@ -133,7 +133,7 @@ extension CaptureController {
             flashNewItem(url)
             lastNotice = L("grab_saved", url.lastPathComponent)
         } catch {
-            lastError = "Frame grab failed: \(error.localizedDescription)"
+            lastError = L("toast_grab_failed_reason", error.localizedDescription)
         }
     }
     private static func grabTimeStamp() -> String {

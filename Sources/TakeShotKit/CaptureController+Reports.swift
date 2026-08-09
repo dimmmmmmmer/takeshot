@@ -45,7 +45,7 @@ extension CaptureController {
             try edl.write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("edl_saved", url.lastPathComponent)
         } catch {
-            lastError = "EDL: \(error.localizedDescription)"
+            lastError = L("toast_edl_failed", error.localizedDescription)
         }
     }
     /// Avid log (ALE): every take, not just the selects.
@@ -68,7 +68,7 @@ extension CaptureController {
             try ale.write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("ale_saved", url.lastPathComponent)
         } catch {
-            lastError = "ALE: \(error.localizedDescription)"
+            lastError = L("toast_ale_failed", error.localizedDescription)
         }
     }
     /// Shift report: A4 PDF with thumbnails or a full CSV table.
@@ -88,7 +88,7 @@ extension CaptureController {
                     takes: takes, thumbnails: thumbnails,
                     project: settings.projectName,
                     camera: settings.cameraLabel) else {
-                    lastError = "PDF render failed"
+                    lastError = L("toast_pdf_render_failed")
                     return
                 }
                 try data.write(to: url)
@@ -100,7 +100,7 @@ extension CaptureController {
             }
             lastNotice = L("report_saved", url.lastPathComponent)
         } catch {
-            lastError = "Report: \(error.localizedDescription)"
+            lastError = L("toast_report_failed", error.localizedDescription)
         }
     }
     /// Contact sheet: the day as an A4 thumbnail grid, one cell per take —
@@ -132,14 +132,14 @@ extension CaptureController {
             guard let data = ContactSheet.pdfData(
                 takes: takes, thumbnails: posters,
                 project: project, camera: camera) else {
-                self?.lastError = "PDF render failed"
+                self?.lastError = L("toast_pdf_render_failed")
                 return
             }
             do {
                 try data.write(to: url)
                 self?.lastNotice = L("contact_saved", url.lastPathComponent)
             } catch {
-                self?.lastError = "Report: \(error.localizedDescription)"
+                self?.lastError = L("toast_report_failed", error.localizedDescription)
             }
         }
     }

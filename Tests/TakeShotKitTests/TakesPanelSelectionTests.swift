@@ -171,7 +171,8 @@ import Testing
 
             #expect(trashed == 1)
             #expect(controller.selectedItems == [ghost.url])
-            #expect(controller.lastError?.hasPrefix("Delete: ") == true)
+            #expect(controller.lastError?
+                .hasPrefix(localizedHead("toast_delete_failed")) == true)
             #expect(controller.takes.contains { $0.url == ghost.url })
         }
     }

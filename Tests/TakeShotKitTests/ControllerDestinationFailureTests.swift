@@ -59,7 +59,7 @@ import Testing
             try FileManager.default.removeItem(at: root)
 
             #expect(await ControllerWait.until {
-                controller.lastError?.contains("moved/deleted") == true
+                controller.lastError == L("toast_record_folder_recreated")
             }, "the folder disappeared without a word")
             #expect(FileManager.default.fileExists(atPath: root.path),
                     "the record folder was not put back")

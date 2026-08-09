@@ -105,15 +105,18 @@ import Testing
                          dead.appendingPathExtension("ale"),
                          dead.appendingPathExtension("csv")]) { _ in
                 controller.exportSelectsEDL()
-                #expect(controller.lastError?.hasPrefix("EDL: ") == true,
+                #expect(controller.lastError?
+                    .hasPrefix(localizedHead("toast_edl_failed")) == true,
                         "EDL failure said: \(controller.lastError ?? "nothing")")
 
                 controller.exportALE()
-                #expect(controller.lastError?.hasPrefix("ALE: ") == true,
+                #expect(controller.lastError?
+                    .hasPrefix(localizedHead("toast_ale_failed")) == true,
                         "ALE failure said: \(controller.lastError ?? "nothing")")
 
                 controller.exportShiftReport(pdf: false)
-                #expect(controller.lastError?.hasPrefix("Report: ") == true,
+                #expect(controller.lastError?
+                    .hasPrefix(localizedHead("toast_report_failed")) == true,
                         "report failure said: \(controller.lastError ?? "nothing")")
             }
         }

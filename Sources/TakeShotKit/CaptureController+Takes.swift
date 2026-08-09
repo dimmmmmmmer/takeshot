@@ -82,8 +82,8 @@ extension CaptureController {
             } catch {
                 // ratings/comments silently not persisting is a day-loss bug
                 DispatchQueue.main.async {
-                    self?.lastError = "Metadata log NOT saved: "
-                        + error.localizedDescription
+                    self?.lastError = L("toast_metadata_log_not_saved",
+                                        error.localizedDescription)
                 }
             }
         }
@@ -105,8 +105,8 @@ extension CaptureController {
                 _ = try TakeLogExporter.writeRanges(ranges, toDirectory: root)
             } catch {
                 DispatchQueue.main.async {
-                    self?.lastError = "Loop ranges NOT saved: "
-                        + error.localizedDescription
+                    self?.lastError = L("toast_ranges_not_saved",
+                                        error.localizedDescription)
                 }
             }
         }

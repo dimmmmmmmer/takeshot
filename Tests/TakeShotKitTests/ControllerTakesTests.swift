@@ -155,7 +155,8 @@ import Testing
 
             #expect(controller.takes.count == 1)
             #expect(controller.lastError != nil)
-            #expect(controller.lastError?.hasPrefix("Delete: ") == true)
+            #expect(controller.lastError?
+                .hasPrefix(localizedHead("toast_delete_failed")) == true)
         }
     }
 
@@ -167,7 +168,8 @@ import Testing
             controller.deleteOtherFile(url)
 
             #expect(controller.otherFiles == [url])
-            #expect(controller.lastError?.hasPrefix("Delete: ") == true)
+            #expect(controller.lastError?
+                .hasPrefix(localizedHead("toast_delete_failed")) == true)
         }
     }
 }
