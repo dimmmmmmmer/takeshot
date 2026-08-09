@@ -60,13 +60,27 @@ extension CaptureController {
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
         }
-        pipeline.onAudioLevels = { [weak self] levels in
-            self?.live.audioLevels = levels
-        }
+        pipeline.onAudioLevels = { [weak self] in self?.adoptAudioLevels($0) }
         pipeline.onVisualRecReading = { [weak self] reading in
             self?.visualRecReading = reading
         }
     }
+    /// The meters, and — on its own publisher and only when it MOVES — how many
+    /// channels the signal is carrying.
+    ///
+    /// The two are split because they change at completely different rates. The
+    /// levels arrive with every packet, ~25 times a second, which is why they
+    /// live on `LiveSignal` and only the meters observe them. The COUNT changes
+    /// when the signal does, a handful of times a shift, and the LTC channel
+    /// menu is built from it — a menu that observed `LiveSignal` to read
+    /// `audioLevels.count` would re-lay out at meter rate, which is the ~1 CPU
+    /// core of SwiftUI layout that object exists to prevent.
+    private func adoptAudioLevels(_ levels: [Float]) {
+        live.audioLevels = levels
+        guard audioChannelCount != levels.count else { return }
+        audioChannelCount = levels.count
+    }
+
     private func handleRecState(_ recording: Bool) {
         isRecording = recording
         // Which trigger fired, read from the health mirror rather than carried on

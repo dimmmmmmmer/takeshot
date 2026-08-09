@@ -336,6 +336,8 @@
 "tc_source" = "Timecode source";
 "tc_source_rp188" = "RP188 (video stream)";
 "tc_source_ltc" = "LTC — audio ch %d";
+"tc_source_ltc_unavailable" = "LTC — audio ch %d (not in this signal)";
+"tc_source_ltc_no_signal" = "LTC — no audio signal yet";
 
 "marker_list_help" = "Markers: jump, note, color, delete";
 "marker_jump_help" = "Jump to the marker";

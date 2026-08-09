@@ -29,7 +29,10 @@ review layer on top.
 - **Forced input mode** overrides autodetection for a source whose format the
   board reports wrongly.
 - **Timecode source**: RP188 from the video stream, or LTC decoded from an
-  embedded audio channel.
+  embedded audio channel. The channel list is the channels the CURRENT signal is
+  carrying — up to 16 on SDI. With no signal there are no channels to offer; a
+  channel you had chosen that the signal does not carry stays in the menu,
+  marked, rather than being silently swapped for another one.
 - The demo source is always in the device list. It generates a 1080p25 signal
   with running timecode, so the whole take path can be exercised without a
   board — and in a build made without the DeckLink SDK it is the only source

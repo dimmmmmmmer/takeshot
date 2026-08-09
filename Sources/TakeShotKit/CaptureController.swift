@@ -35,6 +35,20 @@ final class CaptureController: ObservableObject {
     /// @Published rather than on `live`: it changes when the CAMERA changes,
     /// which is a handful of times a shift, not per frame.
     @Published var signalColorimetry = WireColorimetry.sdr
+    /// How many audio channels the CURRENT signal is carrying; 0 when nothing is
+    /// flowing. The count of `live.audioLevels`, republished at the rate it
+    /// actually changes.
+    ///
+    /// @Published here rather than read off `live` at the point of use, and the
+    /// difference is the whole reason it exists: the meters arrive ~25 times a
+    /// second and the channel COUNT changes when the signal does, a handful of
+    /// times a shift. A menu that read `live.audioLevels.count` would have to
+    /// observe `live`, which is what `LiveSignal` was extracted to stop views
+    /// doing (see its comment: ~1 CPU core of SwiftUI layout).
+    ///
+    /// It is what the LTC channel picker offers, so it is also a promise: a
+    /// channel in that menu is one the decoder can actually be pointed at.
+    @Published var audioChannelCount = 0
     /// Per-frame values (TC/meters) — deliberately NOT @Published here; views
     /// that show them observe `live` so the rest of the UI stays still.
     let live = LiveSignal()
