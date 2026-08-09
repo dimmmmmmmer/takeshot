@@ -79,13 +79,6 @@ extension CaptureController {
         slateTakeOverride = min(9999, max(1, Int(digits) ?? 1))
     }
 
-    /// Step the slate's take number. Stepping from "following the clip counter"
-    /// takes it over at the value the operator can see, which is the only
-    /// non-surprising place to start from.
-    func stepSlateTake(_ delta: Int) {
-        slateTakeOverride = min(9999, max(1, max(1, slateTakeNumber) + delta))
-    }
-
     /// A new scene restarts its own take numbering; clearing the scene hands
     /// numbering back to the clip counter.
     ///

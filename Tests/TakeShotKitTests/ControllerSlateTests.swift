@@ -121,11 +121,6 @@ import Testing
 
             controller.commitSlateTakeText("12")
             #expect(controller.slateTakeOverride == 12)
-            controller.stepSlateTake(1)
-            #expect(controller.slateTakeNumber == 13)
-            controller.stepSlateTake(-20)
-            #expect(controller.slateTakeNumber == 1, "clamped at the first take")
-
             controller.commitSlateTakeText("")
             #expect(controller.slateTakeOverride == nil)
             #expect(controller.slateTakeNumber == 9)
