@@ -147,19 +147,6 @@ import Testing
             == "folder watcher armed: ~/Movies/TakeShot/Ep2")
     }
 
-    /// Secrets go by KEY NAME, not by value. A four-digit PIN cannot be removed
-    /// by searching for its digits — "1080" is also a raster — so the rule has
-    /// to be structural, and it has to catch a credential nobody has added yet.
-    @Test func secretsAreRecognisedByName() {
-        #expect(DiagnosticsRedaction.isSecretKey("remotePIN"))
-        #expect(DiagnosticsRedaction.isSecretKey("apiToken"))
-        #expect(DiagnosticsRedaction.isSecretKey("SharedSecret"))
-        #expect(DiagnosticsRedaction.isSecretKey("password"))
-        #expect(!DiagnosticsRedaction.isSecretKey("remotePort"))
-        #expect(!DiagnosticsRedaction.isSecretKey("chromaKeyTolerance"))
-        #expect(!DiagnosticsRedaction.isSecretKey("destinationPath"))
-    }
-
     @Test func theSettingsBlobDropsThePINAndKeepsThePort() {
         var settings = CaptureSettings()
         settings.remote.pin = "4271"

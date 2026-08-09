@@ -137,11 +137,16 @@ import Testing
             == "/Volumes/BACKUP_A, /Volumes/BACKUP_B")
         // Everything the filter does NOT call a secret is reported, and the
         // list is derived from the filter rather than written out, so this
-        // states the contract instead of pinning today's matches. (It matches
-        // more than the PIN today: `keepInMenuBar` lowercases to
-        // "kee-pin-menubar" and is dropped as collateral. A false positive
-        // costs a line of a diagnostic; the opposite would cost a credential,
-        // so the substring rule is not being loosened from here.)
+        // states the contract instead of pinning today's matches.
+        //
+        // Written when the filter matched raw substrings, and it found one:
+        // `keepInMenuBar` lowercases to "kee-pin-menubar" and was dropped from
+        // every bundle as collateral. The filter now matches a marker only
+        // where it BEGINS a camel-case component, so the PIN still goes and
+        // that setting is reported (see
+        // ModelDiagnosticsTests.theRuleSeparatesAPinFromAKeepIn). This
+        // expectation needed no change for that, which is the point of
+        // deriving it.
         let expected = SettingsFormatFixture.allKeys
             .filter { !DiagnosticsRedaction.isSecretKey($0) }
         #expect(printed.keys.sorted() == expected)

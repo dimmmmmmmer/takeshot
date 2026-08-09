@@ -30,14 +30,63 @@ import Foundation
 /// Not covered here because they are simply never collected: the machine's
 /// name, the logged-in user, IP addresses, and any footage.
 enum DiagnosticsRedaction {
-    /// Substrings that make a settings key a secret. Matched case-insensitively
-    /// against the key name, so `remotePIN` goes without being named.
+    /// What makes a settings key a secret. Matched against the key's own
+    /// camel-case components, so `remotePIN` goes without being named here.
     static let secretKeyMarkers = ["pin", "password", "passcode", "secret",
                                    "token", "credential"]
 
+    /// A key's camel-case components, lowercased.
+    ///
+    /// `remotePIN` is `["remote", "pin"]` and `keepInMenuBar` is
+    /// `["keep", "in", "menu", "bar"]`. A run of capitals stays whole, so an
+    /// acronym is one component and not a string of letters: `PINCode` comes
+    /// out `["pin", "code"]`.
+    static func components(of key: String) -> [String] {
+        let characters = Array(key)
+        var parts: [String] = []
+        var current = ""
+        for (index, character) in characters.enumerated() {
+            let previous = index > 0 ? characters[index - 1] : nil
+            let next = index + 1 < characters.count ? characters[index + 1] : nil
+            var startsWord = false
+            if character.isUppercase, let previous {
+                // a capital after a lower-case letter opens a word
+                // ("remote|PIN"), and so does the last capital of a run when a
+                // lower-case letter follows it ("PIN|Code")
+                startsWord = !previous.isUppercase
+                    || (next?.isLowercase ?? false)
+            }
+            if startsWord, !current.isEmpty {
+                parts.append(current.lowercased())
+                current = ""
+            }
+            current.append(character)
+        }
+        if !current.isEmpty { parts.append(current.lowercased()) }
+        return parts
+    }
+
+    /// Is this key a credential?
+    ///
+    /// A marker has to BEGIN one of the key's components. That is a tightening
+    /// of a plain `contains`, and it was not theoretical: `keepInMenuBar`
+    /// lowercases to "kee**pin**menubar", so the setting was dropped from every
+    /// diagnostics bundle ever produced — the "pin" there spans the join
+    /// between `keep` and `In` and belongs to neither.
+    ///
+    /// Still deliberately loose in the direction that matters. The marker is a
+    /// PREFIX of a component rather than the whole of it, so `secrets`,
+    /// `pinCode` and `tokenA` are all caught: a false positive costs one line
+    /// of a diagnostic, a false negative costs a credential. What it will not
+    /// catch is a key written as one run-together lower-case word
+    /// (`mypinvalue`) — Swift property names are camel case, and the whole key
+    /// set is pinned in `SettingsFormatFixture`, so a new one is visible in
+    /// review rather than only here.
     static func isSecretKey(_ key: String) -> Bool {
-        let lowered = key.lowercased()
-        return secretKeyMarkers.contains { lowered.contains($0) }
+        let parts = components(of: key)
+        return secretKeyMarkers.contains { marker in
+            parts.contains { $0.hasPrefix(marker) }
+        }
     }
 
     /// How long a settings value may be before it is summarised instead of
