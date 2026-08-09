@@ -14,22 +14,65 @@ extension CapturePipeline {
         config.settings.capture.preRollFramesEffective
     }
 
-    /// Buffer capacity: pre-roll + detection latency + slack, but with a memory
-    /// cap. Without the cap, 3 s of pre-roll at 4K60 holds ~6 GB of uncompressed
-    /// frames in RAM (OOM); at high resolution the pre-roll quietly shortens.
+    /// The memory the pre-roll ring is allowed to hold, ~1.5 GB. A hard
+    /// ceiling: see `preRollCapacity` for what it is allowed to shorten.
+    static let preRollBudgetBytes = 1_500_000_000
+
+    /// Frames the ring keeps even when a single one is over budget. Guards the
+    /// division below rather than any real raster — at 12-bit 8K a frame is
+    /// 265 MB and the budget already allows five.
+    static let minimumPreRollFrames = 2
+
+    /// Buffer capacity: pre-roll + detection latency + slack, but never more
+    /// than the memory budget. Without the cap, 3 s of pre-roll at 4K60 holds
+    /// ~6 GB of uncompressed frames in RAM (OOM); at high resolution the
+    /// pre-roll quietly shortens.
+    ///
+    /// **The budget is a ceiling, not one term of a `max()`.** It used to be the
+    /// second: `max(startConfirmSpan + 5, budgetFrames)` guaranteed the ring
+    /// could always hold the detection latency however big a frame was, on the
+    /// reasoning that a ring shorter than that costs the head of every take.
+    /// That guarantee was affordable while the deepest capture needed a
+    /// deliberate click — an operator who chose 12-bit UHD had agreed to what it
+    /// costs. Bit depth follows the signal now, so the same arithmetic can be
+    /// reached by a camera changing its output between setups, and it does not
+    /// hold: with the taught REC indicator armed the confirm count is multiplied
+    /// by the watcher's stride (5 at 25 fps), so a start debounce of 12 asks for
+    /// 65 frames, and at 12-bit UHD a record frame is 66 MB — 4.3 GB, pinned, on
+    /// a signal nobody selected. At 10-bit the same settings ask for 2.2 GB, so
+    /// the floor was already over budget before 12-bit could arrive unannounced;
+    /// what changed is who decides.
+    ///
+    /// So the trade is made the other way, deliberately: a ring shortened below
+    /// the detection latency costs the HEAD of one take, and the frames it drops
+    /// are counted and shown (`preRollIncomplete`). An allocation three times
+    /// the budget costs the session. Recording integrity is the reason the cap
+    /// exists at all, and it is the reason it now wins.
     private var preRollCapacity: Int {
         let wanted = preRollFrames + startConfirmSpan + 3
         guard let format, format.width > 0, format.height > 0 else { return wanted }
         // the ring holds what the WRITER gets, so the frame size is the RECORD
-        // buffer's — 4 bytes a pixel for BGRA and 'r210', 8 for the 12-bit
-        // path's 64RGBALE. Assuming 4 would let a 12-bit UHD pre-roll reach
-        // ~3 GB against a 1.5 GB budget.
+        // buffer's — 3 bytes a pixel for 'v210', 4 for BGRA and 'r210', 8 for
+        // the 12-bit path's 64RGBALE. Assuming 4 would let a 12-bit UHD pre-roll
+        // reach ~3 GB against the budget.
         let bytesPerPixel = lutRecord ? 4 : recordBytesPerPixel
-        let bytesPerFrame = format.width * format.height * bytesPerPixel
-        let budgetBytes = 1_500_000_000 // ~1.5 GB
-        let byteCap = max(startConfirmSpan + 5,
-                          budgetBytes / max(1, bytesPerFrame))
-        return min(wanted, byteCap)
+        return Self.preRollCapacity(
+            wanted: wanted,
+            bytesPerFrame: format.width * format.height * bytesPerPixel)
+    }
+
+    /// The capacity rule alone, as arithmetic.
+    ///
+    /// Split from the property that feeds it for the reason `diskVerdict` is:
+    /// this half is a rule about two numbers and can be stated exactly, while
+    /// the caller's half needs a signal, a converter and a settings blob to say
+    /// anything at all. The one case that matters most — 12-bit UHD with a deep
+    /// visual-REC confirm, which the app can now be put into without anybody
+    /// choosing it — is a shape no synthetic pipeline test can reach, and it is
+    /// exactly the shape a wrong answer here is measured in gigabytes of.
+    static func preRollCapacity(wanted: Int, bytesPerFrame: Int) -> Int {
+        let budgetFrames = preRollBudgetBytes / max(1, bytesPerFrame)
+        return max(minimumPreRollFrames, min(wanted, budgetFrames))
     }
 
     /// How many frames pass between the camera's actual start and the detector

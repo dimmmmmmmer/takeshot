@@ -42,6 +42,24 @@ static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 #define TAKESHOT_HAS_DECKLINK_HDR 0
 #endif
 
+// The source's BIT DEPTH in the detection flags needs SDK 11.5 or newer:
+// bmdDetectedVideoInput8BitDepth / 10BitDepth / 12BitDepth joined
+// BMDDetectedVideoInputFormatFlags there, next to the sampling and 3D bits that
+// have always been in it. They are enum constants and not macros, so there is no
+// way to test for them but the version.
+//
+// Guarded HIGH on purpose. An older header set still builds and simply reports
+// the source depth as unknown, which lands on exactly the behaviour this build
+// shipped before auto-depth existed (10-bit both samplings) — a wrong guess in
+// that direction costs a 12-bit source its two extra bits, while a guess the
+// other way is a compile error on the one machine that has the real headers.
+#if TAKESHOT_HAS_DECKLINK_SDK && defined(BLACKMAGIC_DECKLINK_API_VERSION) \
+    && BLACKMAGIC_DECKLINK_API_VERSION >= 0x0b050000
+#define TAKESHOT_HAS_DECKLINK_DEPTH_FLAGS 1
+#else
+#define TAKESHOT_HAS_DECKLINK_DEPTH_FLAGS 0
+#endif
+
 #if TAKESHOT_HAS_DECKLINK_SDK
 
 #pragma mark - Helpers
@@ -97,7 +115,8 @@ static CDLVideoFormat *CDLFormatFromDisplayMode(IDeckLinkDisplayMode *mode) {
         format.frameRate = 25.0;
     }
     format.timecodeFPS = (int)lround(format.frameRate);
-    format.bitDepth = 8; // overwritten by the caller, which knows the format
+    format.bitDepth = 8;     // overwritten by the caller, which knows the format
+    format.sourceBitDepth = 0; // ...and which alone has seen the detection flags
     CFStringRef name = NULL;
     if (mode->GetName(&name) == S_OK && name) {
         format.modeName = (__bridge_transfer NSString *)name;
@@ -116,6 +135,31 @@ static int CDLBitDepthForPixelFormat(BMDPixelFormat pixelFormat) {
         case bmdFormat10BitYUV: return 10; // 'v210'
         default: return 8;                 // 'BGRA' or '2vuy'
     }
+}
+
+// Bits per component the SOURCE is sending, read off the format-detection
+// flags — the OTHER depth, and the one the app never used to look at.
+//
+// BMDDetectedVideoInputFormatFlags carries sampling, bit depth and dual-stream
+// 3D. The bridge read only the sampling bit for years and filled the depth in
+// from the pixel format it had itself requested, which meant the app could
+// state what it had asked for and never what had arrived.
+//
+// 0 means the signal did not say — an older header set, or a forced mode where
+// no detection callback fires at all. Deliberately not defaulted to 8: "unknown"
+// and "eight" lead to opposite decisions, and the callers below and in the app
+// both branch on the difference.
+static int CDLSourceBitDepthFromFlags(BMDDetectedVideoInputFormatFlags flags) {
+#if TAKESHOT_HAS_DECKLINK_DEPTH_FLAGS
+    // Deepest bit wins if a board ever sets more than one, which is the safe
+    // direction: over-asking is padded by the hardware, under-asking is lost.
+    if (flags & bmdDetectedVideoInput12BitDepth) { return 12; }
+    if (flags & bmdDetectedVideoInput10BitDepth) { return 10; }
+    if (flags & bmdDetectedVideoInput8BitDepth) { return 8; }
+#else
+    (void)flags;
+#endif
+    return 0;
 }
 
 // What a frame says its codes mean, or an all-zero value when it says nothing.
@@ -240,7 +284,8 @@ static CDLFrameColorimetry *CDLColorimetryOfFrame(
 }
 - (void)handleFormatChanged:(IDeckLinkDisplayMode *)newMode
                 signalFlags:(BMDDetectedVideoInputFormatFlags)flags;
-- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode;
+- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode
+                             sourceBits:(int)sourceBits;
 - (BMDPixelFormat)yuvPixelFormatForMode:(BMDDisplayMode)mode;
 - (void)handleFrame:(IDeckLinkVideoInputFrame *)videoFrame
               audio:(IDeckLinkAudioInputPacket *)audioPacket;
@@ -520,9 +565,14 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
     }
     if (forced) {
+        // A forced mode suppresses format detection, so no flags ever arrive and
+        // the source's depth is unknown here by construction. Unknown lands on
+        // the floor — 'r210' for RGB, 'v210' for YCbCr — which is what this
+        // build captured at before it followed the signal at all. Forcing the
+        // mode has never been a way to ask for a depth and still is not.
         _currentMode = forced->GetDisplayMode();
         _currentPixelFormat = self.forcedRGB
-            ? [self rgbPixelFormatForMode:_currentMode]
+            ? [self rgbPixelFormatForMode:_currentMode sourceBits:0]
             : [self yuvPixelFormatForMode:_currentMode];
     } else {
         // An arbitrary starting mode; detection corrects it. The pixel format
@@ -565,9 +615,13 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         return NO;
     }
     if (forced) {
-        // no detection callback will come — report the format right away
+        // no detection callback will come — report the format right away, with
+        // the source's depth left at 0: nothing has told us what it is, and
+        // saying 10 because that is what we opened would be the very confusion
+        // between the two depths this pair of fields exists to end.
         CDLVideoFormat *format = CDLFormatFromDisplayMode(forced);
         format.isRGB444 = self.forcedRGB;
+        format.sourceBitDepth = 0;
         format.bitDepth = CDLBitDepthForPixelFormat(_currentPixelFormat);
         forced->Release();
         id<CDLCaptureDelegate> delegate = self.delegate;
@@ -611,13 +665,15 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (!_input) {
         return;
     }
-    // Each sampling at its own requested bit depth (the board does not convert
-    // RGB→YUV on input): RGB 4:4:4 as BGRA/r210/R12B, YCbCr 4:2:2 as v210 or
-    // 2vuy.
+    // Both halves of what the flags carry, read here and nowhere else: the
+    // sampling (the board does not convert RGB→YUV on input, so each is opened
+    // in its own family — RGB 4:4:4 as r210/R12B, YCbCr 4:2:2 as v210 or 2vuy)
+    // and the source's own bit depth, which is what the app follows.
     BOOL isRGB444 = (flags & bmdDetectedVideoInputRGB444) != 0;
+    int sourceBits = CDLSourceBitDepthFromFlags(flags);
     BMDDisplayMode mode = newMode->GetDisplayMode();
     BMDPixelFormat pixelFormat = isRGB444
-        ? [self rgbPixelFormatForMode:mode]
+        ? [self rgbPixelFormatForMode:mode sourceBits:sourceBits]
         : [self yuvPixelFormatForMode:mode];
 
     // Restart streams only on an actual change. Restarting on every callback
@@ -625,14 +681,27 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     // pause/flush/start loop that pins stream time at 0 (all frames get PTS 0,
     // so recording dies on duplicate PTS), drops frames, and burns CPU.
     //
-    // Neither depth request weakens this guard, and that is a requirement on the
-    // two helpers rather than a hope: both rgbPixelFormatForMode and
-    // yuvPixelFormatForMode are PURE functions of the mode and the preference
-    // flags. They therefore answer the same way every time the callback fires
-    // for the same signal, and the comparison below still settles after one
-    // restart. Anything in them that could answer differently on a second call —
-    // a retry counter, a cached probe, a fallback that remembers — would turn
-    // this guard back into the endless loop it exists to prevent.
+    // Following the signal's depth does NOT weaken this guard, and that is a
+    // requirement on the two helpers rather than a hope: both
+    // rgbPixelFormatForMode:sourceBits: and yuvPixelFormatForMode: are PURE
+    // functions of their arguments. What changed is only what those arguments
+    // are — the preference flags an operator set are gone and `sourceBits` from
+    // this callback's own flags took their place, which is if anything a
+    // stronger position: the depth is now derived from the same argument the
+    // sampling always came from, so a second callback for the same signal is a
+    // second call with identical arguments and therefore an identical answer.
+    // The comparison below still settles after one restart. Anything in the
+    // helpers that could answer differently on a second call — a retry counter,
+    // a cached probe, a fallback that remembers — would turn this guard back
+    // into the endless loop it exists to prevent.
+    //
+    // And it settles even in the case the SDK docs leave open, where a board
+    // reports the depth it was ENABLED with rather than the source's: the
+    // mapping reaches a fixed point in one more step, because feeding a
+    // helper's own output depth back in returns the same pixel format
+    // (12 → 'R12B' → 12; 10 → 'r210' → 10; 8 → 'r210' → 10 → 'r210', where the
+    // guard already matches on the format and stops). There is no pair of
+    // depths that map to each other's format, so it cannot oscillate.
     if (mode == _currentMode && pixelFormat == _currentPixelFormat) {
         return;
     }
@@ -647,26 +716,45 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
     CDLVideoFormat *format = CDLFormatFromDisplayMode(newMode);
     format.isRGB444 = isRGB444;
+    // Both depths travel, and they answer different questions: what the signal
+    // said it was, and what the board could actually be opened with.
+    format.sourceBitDepth = sourceBits;
     format.bitDepth = CDLBitDepthForPixelFormat(pixelFormat);
     id<CDLCaptureDelegate> delegate = self.delegate;
     [delegate capture:self didDetectFormat:format];
     }
 }
 
-// The RGB pixel format to enable for `mode`, honouring the requested bit depth
-// but never asking the board for one it says it cannot deliver.
+// The RGB pixel format to enable for `mode` given what the SOURCE says it is
+// sending, never asking the board for one it says it cannot deliver.
+//
+// `sourceBits` comes from CDLSourceBitDepthFromFlags — 8, 10, 12, or 0 for a
+// signal that did not say. The rule is one line with a floor under it:
+//
+//   12 → 'R12B' if the board agrees, else 'r210'
+//   anything else, including unknown → 'r210'
+//
+// TEN IS A FLOOR AND NOT A CEILING, which is the one part of "follow the
+// signal" that deliberately does not. An 8-bit source opened as 'BGRA' would
+// take the app's 8-bit path, and that path has no wire-record buffer — its
+// record frames ARE the expanded display frames, so a limited-range source's
+// sub-blacks and super-whites get clipped into the deliverable. Opening the
+// same source as 'r210' costs bandwidth the board fills with padding and keeps
+// the excursions the wire record path exists to protect. Following a signal UP
+// loses nothing; following it DOWN loses footage.
 //
 // 12-bit is checked against the hardware rather than simply requested: a format
 // the board refuses is how a session ends up with a black or torn picture —
 // EnableVideoInput can return S_OK and then deliver frames the pipeline cannot
-// read. Dropping to 10- (or 8-) bit here keeps the picture, and the depth
-// actually enabled travels back on CDLVideoFormat.bitDepth so the app can tell
-// the operator their 12-bit request was not met.
+// read. Dropping to 10-bit here keeps the picture, and the depth actually
+// enabled travels back on CDLVideoFormat.bitDepth beside the source's own, so
+// the app can tell the operator the signal's 12 bits did not fit.
 //
-// Pure in (mode, preferTwelveBitRGB, preferTenBitRGB) — see the restart guard
-// in handleFormatChanged, which depends on that.
-- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode {
-    if (self.preferTwelveBitRGB && _input) {
+// Pure in (mode, sourceBits) — see the restart guard in handleFormatChanged,
+// which depends on that and says what depending on it means.
+- (BMDPixelFormat)rgbPixelFormatForMode:(BMDDisplayMode)mode
+                             sourceBits:(int)sourceBits {
+    if (sourceBits >= 12 && _input) {
         bool supported = false;
         BMDDisplayMode actualMode = mode;
         HRESULT hr = _input->DoesSupportVideoMode(
@@ -677,29 +765,32 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
             return bmdFormat12BitRGB;
         }
     }
-    return self.preferTenBitRGB ? bmdFormat10BitRGB : bmdFormat8BitBGRA;
+    return bmdFormat10BitRGB;
 }
 
-// The YCbCr pixel format to enable for `mode`: 10-bit 'v210' when it is wanted
-// AND the board says it can deliver it, 8-bit '2vuy' otherwise.
+// The YCbCr pixel format to enable for `mode`: 10-bit 'v210' when the board says
+// it can deliver it, 8-bit '2vuy' otherwise.
 //
-// This is the standard professional SDI case, and asking for 8-bit throws away
-// two bits the wire is already carrying — the driver drops them before the app
-// sees a frame. So 10-bit is what the app asks for by default.
+// It takes no source depth, and that absence is the answer rather than an
+// omission: there are exactly two 4:2:2 capture formats and the deeper one is
+// always the right ask. A 10- or 12-bit source needs 'v210' to survive; an
+// 8-bit one loses nothing by being padded into it and gains the wire-record
+// path (see the floor argument above). So the signal's depth cannot change this
+// answer, which is also why a 12-bit YCbCr source is reported as 12-bit source
+// against a 10-bit capture — the shortfall is the wire format's, not the
+// board's, and the app says so in those words.
 //
 // Checked against the hardware rather than simply requested, for the same reason
-// the 12-bit RGB request is: a format the board refuses is how a session ends up
+// the 12-bit RGB format is: a format the board refuses is how a session ends up
 // with a black or torn picture — EnableVideoInput can return S_OK and then
 // deliver frames the pipeline cannot read. Falling back to '2vuy' keeps the
 // picture, and the depth actually enabled travels back on
-// CDLVideoFormat.bitDepth so the app can tell the operator their 10-bit request
-// was not met.
+// CDLVideoFormat.bitDepth so the app can tell the operator.
 //
-// Pure in (mode, preferTenBitYUV) — see the restart guard in
-// handleFormatChanged, which depends on that and says what depending on it
-// means.
+// Pure in (mode) — see the restart guard in handleFormatChanged, which depends
+// on that and says what depending on it means.
 - (BMDPixelFormat)yuvPixelFormatForMode:(BMDDisplayMode)mode {
-    if (self.preferTenBitYUV && _input) {
+    if (_input) {
         bool supported = false;
         BMDDisplayMode actualMode = mode;
         HRESULT hr = _input->DoesSupportVideoMode(

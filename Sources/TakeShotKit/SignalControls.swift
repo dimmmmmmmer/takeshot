@@ -46,34 +46,15 @@ struct ForcedInputRGBToggle: View {
     }
 }
 
-/// Bits per component to ask the board for — for BOTH samplings, which is why
-/// the rows name two formats each: 10-bit is 'r210' off an RGB 4:4:4 source and
-/// 'v210' off a YCbCr 4:2:2 one.
-///
-/// 10-bit is the default for both, and for YCbCr that is a change worth being
-/// plain about: it is what an SDI wire carries, so 8-bit capture of a 4:2:2
-/// signal was the driver dropping two bits before the app saw a frame. 12-bit,
-/// by contrast, is offered and never the default — it costs twice the record
-/// bandwidth, only ProRes 4444 can carry it, not every board or mode delivers
-/// it, and there is no 12-bit YCbCr wire format at all, so on a 4:2:2 signal it
-/// asks for the same v210 that 10-bit does.
-///
-/// Either request can fall short, and either falls back visibly rather than
-/// quietly (`reportBitDepthShortfall`).
-struct CaptureBitDepthPicker: View {
-    @EnvironmentObject private var controller: CaptureController
-
-    var body: some View {
-        Picker(L("capture_bit_depth"), selection: Binding(
-            get: { controller.settings.capture.resolvedBitDepth },
-            set: { controller.settings.capture.captureBitDepth = $0.rawValue })) {
-            Text(L("bit_depth_8")).tag(CaptureBitDepth.eight)
-            Text(L("bit_depth_10")).tag(CaptureBitDepth.ten)
-            Text(L("bit_depth_12")).tag(CaptureBitDepth.twelve)
-        }
-        .help(L("capture_bit_depth_hint"))
-    }
-}
+// `CaptureBitDepthPicker` stood here — 8 / 10 / 12, asked of both samplings.
+// It is gone because the question was never the operator's to answer: the
+// format-detection callback carries the source's own depth, so the picker asked
+// them to restate something the wire had already said, and the two ways of
+// getting it wrong were capturing shallower than the signal (two bits of the
+// operator's picture, dropped by the driver) or deeper (twice the bandwidth for
+// padding). Depth follows the signal, the app says which depth it landed on
+// when that is worth knowing (`CaptureController.bitDepthNotice`), and the
+// diagnostics bundle carries both the signal's and the board's.
 
 /// What the source's code values mean on the wire.
 ///

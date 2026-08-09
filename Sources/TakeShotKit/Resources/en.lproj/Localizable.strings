@@ -271,12 +271,9 @@
 "input_mode" = "Input format";
 "input_mode_auto" = "Auto detect";
 "input_mode_rgb" = "Signal is RGB 4:4:4";
-"capture_bit_depth" = "Capture bit depth";
-"bit_depth_8" = "8-bit (BGRA / 2vuy)";
-"bit_depth_10" = "10-bit (r210 / v210)";
-"bit_depth_12" = "12-bit RGB (R12B), 10-bit YCbCr";
-"capture_bit_depth_hint" = "RGB 4:4:4 and YCbCr 4:2:2 both. There is no 12-bit YCbCr format — a 4:2:2 signal is captured at 10-bit v210.";
-"bit_depth_fallback" = "%d-bit capture unavailable — the board is delivering %d-bit";
+"bit_depth_fallback" = "The signal is %d-bit — the board is delivering %d-bit";
+"bit_depth_twelve" = "12-bit signal — capturing 12-bit R12B";
+"bit_depth_twelve_subsampled" = "12-bit signal — capturing 12-bit R12B, but %@ records 4:2:2. ProRes 4444 keeps it.";
 "scope_parade" = "Parade";
 "scope_vector" = "Vector";
 "scope_none_hint" = "All scopes are off";

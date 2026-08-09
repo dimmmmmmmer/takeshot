@@ -18,27 +18,20 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     /// from an embedded audio channel (`ltcChannel`, 0-based).
     public var timecodeSource: String?
     public var ltcChannel: Int?
-    /// Capture RGB 4:4:4 sources as 10-bit r210 (nil = on; verified on the
-    /// UltraStudio 4K Mini — every current Blackmagic board is 10-bit capable).
+    /// INERT. A retired 10-bit-capture switch, kept as a key on the record so
+    /// that a blob carrying it still decodes and an operator who downgrades
+    /// still finds it where they left it.
     ///
-    /// Superseded by `captureBitDepth`, which can also say 12. Kept as the
-    /// stored fallback so settings saved before that field existed still
-    /// resolve to the depth the operator had chosen — see `resolvedBitDepth`.
-    /// Nothing writes it any more.
+    /// Nothing reads it and nothing writes it: bit depth follows the signal and
+    /// there is no depth setting for it to fall back to. It stays in the record
+    /// rather than being removed because removing a key is a change to the
+    /// on-disk format, and this one buys nothing.
     public var tenBitCapture: Bool?
-    /// Bits per component to request from the board ("8"/"10"/"12"); nil — fall
-    /// back to `tenBitCapture`, i.e. 10-bit.
+    /// Bits per component to request from the board ("8"/"10"/"12"); nil — 10.
     ///
-    /// Optional like every added field, so old saved JSON still decodes — and
-    /// that nil is also what makes 12-bit OFF by default: nobody gets moved to
-    /// a format their board may not deliver by installing an update.
-    ///
-    /// The same nil now also means 10-bit YCbCr ('v210') on a 4:2:2 source,
-    /// where it used to mean 8-bit '2vuy'. That IS a changed default, chosen
-    /// deliberately rather than inherited: v210 is what the SDI wire carries, so
-    /// 8-bit capture of it was the driver discarding two bits of the operator's
-    /// picture, and the request falls back visibly on a board that refuses it.
-    /// See `CaptureBitDepth.yuvBits`.
+    /// INERT as of auto-depth: nothing reads it any more. Removed from the
+    /// record in the commit that follows this one; kept here so the two changes
+    /// can be read apart.
     public var captureBitDepth: String?
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
@@ -73,20 +66,6 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     public var monitorDeviceID: String?
 
     public init() {}
-
-    /// Bits per component to request for RGB 4:4:4 capture: the explicit
-    /// choice, else the legacy boolean, else 10.
-    ///
-    /// Reading the retired `tenBitCapture` here rather than rewriting it in a
-    /// migration keeps the fallback in one expression and leaves the stored
-    /// blob alone — an operator who downgrades still finds their 8-bit choice
-    /// intact.
-    public var resolvedBitDepth: CaptureBitDepth {
-        if let captureBitDepth, let depth = CaptureBitDepth(rawValue: captureBitDepth) {
-            return depth
-        }
-        return (tenBitCapture ?? true) ? .ten : .eight
-    }
 
     /// Effective pre-roll in frames: explicit value, else migrated legacy
     /// seconds (at 25 fps), else 5.

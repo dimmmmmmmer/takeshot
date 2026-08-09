@@ -13,19 +13,33 @@ public struct CaptureFormat: Equatable, Sendable {
     public var isRGB444: Bool
     /// Bits per component the board is ACTUALLY delivering — 8, 10 or 12.
     ///
-    /// What the backend settled on, not what the settings asked for, so the app
-    /// can tell the operator when a request could not be met (a board or a
-    /// source that cannot do 12-bit falls back, and silence there is a colour
+    /// What the backend settled on, not what the signal said, so the app can
+    /// tell the operator when the wire's depth could not be met (a board or a
+    /// mode that cannot do 12-bit falls back, and silence there is a colour
     /// decision made behind their back).
     ///
     /// Meaningful for both samplings: RGB 4:4:4 is 8 ('BGRA'), 10 ('r210') or 12
     /// ('R12B'), and YCbCr 4:2:2 is 8 ('2vuy') or 10 ('v210'). It used to be
     /// documented as RGB-only, because YUV capture was 8-bit and nothing else.
     public var bitDepth: Int
+    /// Bits per component the SOURCE is sending — 8, 10 or 12 — or nil when the
+    /// board did not say.
+    ///
+    /// The other depth. `bitDepth` above is the app's side of the exchange and
+    /// this is the wire's, and keeping them apart is the whole point: the app
+    /// used to report the depth it had itself requested as though the signal had
+    /// stated it, which made "the source is 12-bit" a thing no screen in the app
+    /// could say.
+    ///
+    /// nil is a real answer and not a zero. A forced input mode fires no
+    /// detection callback at all, a DeckLink header set older than the depth
+    /// flags cannot report it, and the demo source is not a board — in all three
+    /// the honest reading is "unknown", which is not the same decision as 8.
+    public var sourceBitDepth: Int?
 
     public init(width: Int, height: Int, frameRate: Double, timecodeFPS: Int,
                 isDropFrame: Bool = false, name: String, isRGB444: Bool = false,
-                bitDepth: Int = 8) {
+                bitDepth: Int = 8, sourceBitDepth: Int? = nil) {
         self.width = width
         self.height = height
         self.frameRate = frameRate
@@ -34,6 +48,25 @@ public struct CaptureFormat: Equatable, Sendable {
         self.name = name
         self.isRGB444 = isRGB444
         self.bitDepth = bitDepth
+        self.sourceBitDepth = sourceBitDepth
+    }
+
+    /// The deepest capture this signal can yield, or nil when the source's own
+    /// depth is unknown and there is therefore nothing to measure against.
+    ///
+    /// One rule, and it is the sampling's rather than the board's: RGB 4:4:4 can
+    /// be captured at whatever the source sends, and YCbCr 4:2:2 tops out at ten
+    /// however deep the source is, because there is no 12-bit 4:2:2 wire format
+    /// in the SDK — 'v210' is as deep as a 4:2:2 signal goes. That used to be
+    /// stated as `CaptureBitDepth.yuvBits`, about a request an operator made;
+    /// it is the same truth about the wire, now asked of the wire.
+    ///
+    /// This is what "did the board fall short" is measured against, so a 12-bit
+    /// YCbCr source captured as 'v210' is silence rather than a complaint the
+    /// operator can do nothing about.
+    public var capturableBitDepth: Int? {
+        guard let sourceBitDepth else { return nil }
+        return isRGB444 ? sourceBitDepth : min(sourceBitDepth, 10)
     }
 }
 
@@ -56,37 +89,17 @@ public enum CaptureCodec: String, CaseIterable, Codable, Sendable, Identifiable 
     public var isRGB444Capable: Bool { self == .proRes4444 }
 }
 
-/// Bits per component to ask the board for.
-///
-/// A setting rather than a constant because the three are real trade-offs: 8
-/// is BGRA and cheapest, 10 is 'r210' and has been the default since the
-/// pipeline learned to split wire frames, 12 is 'R12B' and costs twice the
-/// record bandwidth for two more bits that only ProRes 4444 can carry.
-///
-/// ONE setting for both samplings rather than two pickers, because "how many
-/// bits do I want off the wire" is one question an operator asks once. The wire
-/// format it names differs — see `bits` for RGB 4:4:4 and `yuvBits` for
-/// YCbCr 4:2:2 — and so does what a board is likely to do with the request:
-/// 12-bit RGB is exotic and often refused, 10-bit YCbCr is the baseline SDI
-/// format and effectively always available.
-public enum CaptureBitDepth: String, CaseIterable, Codable, Sendable, Identifiable {
-    case eight = "8"
-    case ten = "10"
-    case twelve = "12"
-
-    public var id: String { rawValue }
-
-    /// Bits to request from an RGB 4:4:4 source: 8 'BGRA', 10 'r210', 12 'R12B'.
-    public var bits: Int { Int(rawValue) ?? 10 }
-
-    /// Bits to request from a YCbCr 4:2:2 source: 8 '2vuy' or 10 'v210'.
-    ///
-    /// 12 means 10 here, and that is not a rounding-down of the operator's
-    /// wish — there IS no 12-bit YCbCr wire format in the SDK, so 'v210' is the
-    /// deepest thing a 4:2:2 signal can be asked for. Someone who selected 12
-    /// asked for as many bits as the wire has, and on a YCbCr wire that is ten.
-    public var yuvBits: Int { self == .eight ? 8 : 10 }
-}
+// `CaptureBitDepth` stood here: one setting, 8/10/12, asked of both samplings.
+// It is gone, and its absence is the feature. The format-detection callback has
+// always carried the source's own depth — the app read the sampling bit out of
+// those flags and filled the depth in from the pixel format it had itself
+// requested — so the picker was the app asking the operator a question the wire
+// had already answered, and answering it wrong cost either two bits of picture
+// or twice the bandwidth. Depth now follows the signal (`CaptureFormat`'s two
+// depth fields above, and the bridge's `rgbPixelFormatForMode:sourceBits:`), and
+// there is deliberately no override: an operator cannot be right about the
+// number of bits on the wire against the wire itself, which is the same reason
+// there is no "force HDR".
 
 /// Resolution to decode .r3d clips at.
 ///

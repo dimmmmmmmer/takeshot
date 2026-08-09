@@ -64,9 +64,9 @@ struct SettingsView: View {
                 InputModePicker()
                     .disabled(controller.isRecording)
                 ForcedInputRGBToggle()
-                // restarts capture, like the two above
-                CaptureBitDepthPicker()
-                    .disabled(controller.isRecording)
+                // The bit-depth picker used to sit here. Depth follows the
+                // signal now, so there is nothing to choose — see
+                // `SignalControls`.
             }
             Section(L("settings_interface")) {
                 Picker(L("language"), selection: Binding(

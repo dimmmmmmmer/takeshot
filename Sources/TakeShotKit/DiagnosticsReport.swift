@@ -159,7 +159,12 @@ enum DiagnosticsReport {
             out.append(pair("Timecode rate", "\(capture.timecodeFPS) fps"
                             + (capture.isDropFrame ? " drop-frame" : "")))
             out.append(pair("RGB 4:4:4", capture.isRGB444))
-            // what the board is DELIVERING, against the request below
+            // The two depths, on adjacent lines and each labelled with whose
+            // answer it is: the signal's, then what the board could be opened
+            // with. They agree in the ordinary case and the difference is the
+            // whole story in the interesting one.
+            out.append(pair("Source bit depth", capture.sourceBitDepth
+                            .map { "\($0)-bit" } ?? "not reported by the board"))
             out.append(pair("Wire bit depth", "\(capture.wireBitDepth)-bit"))
         } else {
             out.append(pair("Detected format", "none — no signal detected"))
@@ -172,7 +177,6 @@ enum DiagnosticsReport {
         if !capture.hdrDisplayMetadata.isEmpty {
             out.append(pair("HDR displayMetadata", capture.hdrDisplayMetadata))
         }
-        out.append(pair("10-bit capture", capture.tenBitCapture))
         out.append(pair("Detection mode", capture.detectionMode))
         out.append(pair("Pre-roll", "\(capture.preRollFrames) frames"))
         // The third trigger — a switch orthogonal to the mode above, so it is
