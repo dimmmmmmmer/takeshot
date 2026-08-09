@@ -65,8 +65,8 @@ import Testing
             second.monitorOn = false
             second.audioMonitor.stop()
         }
-        try #require(second.settings.destinationPath
-                        == controller.settings.destinationPath,
+        try #require(second.settings.capture.destinationPath
+                        == controller.settings.capture.destinationPath,
                      "the relaunched controller opened a different folder")
         try await body(second)
     }
@@ -295,7 +295,7 @@ import Testing
             controller.transport.position.currentTime = 3
             controller.transport.toggleRangePoint(out: false)
 
-            controller.settings.destinationPath = afternoon.path
+            controller.settings.capture.destinationPath = afternoon.path
 
             let restored = await ControllerWait.untilWritten {
                 controller.transport.storedRange(for: clip)

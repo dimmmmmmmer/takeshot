@@ -57,7 +57,7 @@ struct GapViewAssistTests {
     }
 
     @Test func peakingColorsRoundTripThroughTheirRawValues() {
-        // persisted by raw value too (CaptureSettings.peakingColor) — same
+        // persisted by raw value too (AssistSettings.peakingColor) — same
         // trap: a renamed case is a silently reset choice
         for color in ViewAssist.PeakingColor.allCases {
             #expect(ViewAssist.PeakingColor(rawValue: color.rawValue) == color)

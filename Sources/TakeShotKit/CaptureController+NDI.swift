@@ -46,7 +46,7 @@ extension CaptureController {
     /// Announce the source if the setting says so. Called at startup and from
     /// the settings change.
     func startNDIIfEnabled() {
-        guard settings.ndiEnabled == true else { return }
+        guard settings.ndi.enabled == true else { return }
         startNDIOutput()
     }
 
@@ -106,8 +106,8 @@ extension CaptureController {
     // MARK: - settings changes (called from applySettingsChange)
 
     func applyNDIChange(from oldValue: CaptureSettings) {
-        let wasOn = oldValue.ndiEnabled == true
-        let isOn = settings.ndiEnabled == true
+        let wasOn = oldValue.ndi.enabled == true
+        let isOn = settings.ndi.enabled == true
         if isOn, !wasOn {
             startNDIOutput()
         } else if !isOn, wasOn {
@@ -132,7 +132,7 @@ extension CaptureController {
         mirrors.ndiRenameTask = Task { [weak self] in
             try? await Task.sleep(for: CaptureController.ndiRenameDebounce)
             guard !Task.isCancelled, let self,
-                  self.settings.ndiEnabled == true else { return }
+                  self.settings.ndi.enabled == true else { return }
             self.mirrors.ndi?.stop()
             self.mirrors.ndi = nil
             self.startNDIOutput()

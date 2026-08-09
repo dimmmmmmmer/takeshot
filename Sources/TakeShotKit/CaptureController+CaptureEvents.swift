@@ -161,7 +161,7 @@ extension CaptureController {
     func reportBitDepthShortfall(_ format: CaptureFormat?) {
         guard let format, selectedDeviceID != nil, !isMockSelected,
               let short = Self.bitDepthShortfall(
-                  format: format, requested: settings.resolvedCaptureBitDepth)
+                  format: format, requested: settings.capture.resolvedBitDepth)
         else { return }
         lastError = String(format: L("bit_depth_fallback"),
                            short.requested, short.delivered)

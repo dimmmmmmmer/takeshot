@@ -91,8 +91,8 @@ final class SlateModel: ObservableObject {
 
     // MARK: - the card (straight off the controller)
 
-    var projectName: String { controller?.settings.projectName ?? "" }
-    var cameraLabel: String { controller?.settings.cameraLabel ?? "" }
+    var projectName: String { controller?.settings.naming.projectName ?? "" }
+    var cameraLabel: String { controller?.settings.naming.cameraLabel ?? "" }
     var roll: String { controller?.roll ?? "" }
     /// Clip number with the same padding the filename gets.
     var clipText: String { controller?.clipDisplay ?? "" }

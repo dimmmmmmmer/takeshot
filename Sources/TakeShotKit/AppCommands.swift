@@ -269,7 +269,7 @@ private struct LUTCommands: View {
 
     var body: some View {
         Picker(L("menu_lut"), selection: Binding(
-            get: { controller.settings.lutFileName },
+            get: { controller.settings.lut.fileName },
             set: { controller.selectLUT(fileName: $0) })) {
             Text(L("lut_none")).tag(String?.none)
             ForEach(controller.availableLUTs) { lut in
@@ -284,11 +284,11 @@ private struct LUTCommands: View {
             get: { controller.lutPreviewOn },
             set: { controller.lutPreviewOn = $0 }))
             .keyboardShortcut(hotkeys.combo(for: .toggleLUTPreview).menuShortcut)
-            .disabled(controller.settings.lutFileName == nil)
+            .disabled(controller.settings.lut.fileName == nil)
         Toggle(L("lut_record"), isOn: Binding(
             get: { controller.lutRecordOn },
             set: { controller.lutRecordOn = $0 }))
-            .disabled(controller.settings.lutFileName == nil)
+            .disabled(controller.settings.lut.fileName == nil)
 
         Divider()
 
@@ -316,8 +316,8 @@ private struct AssistCommands: View {
             get: { controller.assist.peakingOn },
             set: { controller.assist.peakingOn = $0 }))
         Toggle(L("safe_areas"), isOn: Binding(
-            get: { controller.settings.safeAreasOn ?? false },
-            set: { controller.settings.safeAreasOn = $0 }))
+            get: { controller.settings.assist.safeAreasOn ?? false },
+            set: { controller.settings.assist.safeAreasOn = $0 }))
         Toggle(L("punch_in"), isOn: Binding(
             get: { controller.assist.punchIn > 1 },
             set: { _ in controller.togglePunchIn() }))

@@ -12,14 +12,14 @@ struct CapturePipelineTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.namingTemplate = "{scene}_T{take}_{tc}"
-        settings.projectName = "Test"
-        settings.startDebounceFrames = 3
-        settings.stopDebounceFrames = 5
-        settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0 // pre-roll is checked by a separate test
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.naming.namingTemplate = "{scene}_T{take}_{tc}"
+        settings.naming.projectName = "Test"
+        settings.capture.startDebounceFrames = 3
+        settings.capture.stopDebounceFrames = 5
+        settings.capture.detectionMode = .timecodeRun
+        settings.capture.preRollSeconds = 0 // pre-roll is checked by a separate test
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, slate: SlateMetadata(scene: "7"), takeNumber: 2))
@@ -103,12 +103,12 @@ struct CapturePipelineTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.startDebounceFrames = 3
-        settings.stopDebounceFrames = 5
-        settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0.8 // 20 frames at 25 fps
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.capture.startDebounceFrames = 3
+        settings.capture.stopDebounceFrames = 5
+        settings.capture.detectionMode = .timecodeRun
+        settings.capture.preRollSeconds = 0.8 // 20 frames at 25 fps
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))
@@ -207,8 +207,8 @@ struct CapturePipelineTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))

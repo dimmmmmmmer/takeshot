@@ -64,7 +64,7 @@ extension CapturePipeline {
     /// buffer and must not be appended a second time.
     private func runDetector(timecode: Timecode?,
                              vancTrigger: VancTrigger?) -> Bool {
-        let mode = config.settings.detectionMode
+        let mode = config.settings.capture.detectionMode
         // The taught indicator is ORTHOGONAL to the mode: it composes with all
         // four rather than being a fifth. That is why it is read before the mode
         // is consulted — including in Manual, where the operator has said "no

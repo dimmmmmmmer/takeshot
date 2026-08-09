@@ -197,7 +197,7 @@ extension CapturePipeline {
                                      nil) == nil else { return }
         ColorTags.tag(pixelBuffer,
                       preset: signalColorimetry.displayPreset
-                          ?? config.settings.colorTagPreset)
+                          ?? config.settings.capture.colorTagPreset)
     }
 
     /// Adopt what the board says this frame's codes mean, filtered through the

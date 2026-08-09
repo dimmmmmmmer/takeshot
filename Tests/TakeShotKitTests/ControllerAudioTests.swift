@@ -32,8 +32,8 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.monitorVolume = 0.6
 
-            await ControllerWait.until { controller.settings.monitorVolume == 0.6 }
-            #expect(controller.settings.monitorVolume == 0.6)
+            await ControllerWait.until { controller.settings.audio.monitorVolume == 0.6 }
+            #expect(controller.settings.audio.monitorVolume == 0.6)
         }
     }
 
@@ -41,14 +41,14 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.monitorOn = true // no signal is running: nothing to hear
             controller.monitorVolume = 0.7
-            await ControllerWait.until { controller.settings.monitorVolume == 0.7 }
+            await ControllerWait.until { controller.settings.audio.monitorVolume == 0.7 }
 
             controller.toggleMonitorMute()
             #expect(controller.monitorVolume == 0)
             // the stored level is the one to come back to, never the mute
-            await ControllerWait.until({ controller.settings.monitorVolume == 0 },
+            await ControllerWait.until({ controller.settings.audio.monitorVolume == 0 },
                                        timeout: .seconds(1))
-            #expect(controller.settings.monitorVolume == 0.7)
+            #expect(controller.settings.audio.monitorVolume == 0.7)
 
             controller.toggleMonitorMute()
             #expect(controller.monitorVolume == 0.7)
@@ -81,7 +81,7 @@ import Testing
 
             controller.viewerMode = .playback
             #expect(controller.monitorOn)
-            #expect(controller.settings.monitorEnabled == true)
+            #expect(controller.settings.audio.monitorEnabled == true)
 
             controller.viewerMode = .record
             #expect(controller.monitorOn)
@@ -91,14 +91,14 @@ import Testing
     @Test func theMonitorSwitchIsRemembered() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.monitorOn = true
-            #expect(controller.settings.monitorEnabled == true)
+            #expect(controller.settings.audio.monitorEnabled == true)
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .monitorEnabled == true)
+                .audio.monitorEnabled == true)
 
             controller.monitorOn = false
-            #expect(controller.settings.monitorEnabled == false)
+            #expect(controller.settings.audio.monitorEnabled == false)
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .monitorEnabled == false)
+                .audio.monitorEnabled == false)
         }
     }
 
@@ -108,7 +108,7 @@ import Testing
 
             controller.playbackOutputUID = "AppleHDAEngineOutput:1"
 
-            #expect(controller.settings.playbackAudioDeviceUID
+            #expect(controller.settings.audio.playbackAudioDeviceUID
                 == "AppleHDAEngineOutput:1")
             #expect(controller.player.audioOutputDeviceUniqueID
                 == "AppleHDAEngineOutput:1")
@@ -139,8 +139,8 @@ import Testing
             controller.toggleMonitorMute()    // ...and is muted before it persists
 
             #expect(controller.monitorVolume == 0)
-            await ControllerWait.until { controller.settings.monitorVolume == 0.35 }
-            #expect(controller.settings.monitorVolume == 0.35,
+            await ControllerWait.until { controller.settings.audio.monitorVolume == 0.35 }
+            #expect(controller.settings.audio.monitorVolume == 0.35,
                     "the muted drag was never persisted")
         }
     }
@@ -173,23 +173,23 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.isCapturing = true
             controller.monitorVolume = 0.6
-            await ControllerWait.until { controller.settings.monitorVolume == 0.6 }
+            await ControllerWait.until { controller.settings.audio.monitorVolume == 0.6 }
 
             controller.toggleMonitorDim()
             #expect(controller.monitorVolume == 0.3)
             // the state is written on the slider's own 400 ms debounce
-            await ControllerWait.until { controller.settings.monitorDimmed == true }
-            #expect(controller.settings.monitorDimmed == true)
+            await ControllerWait.until { controller.settings.audio.monitorDimmed == true }
+            #expect(controller.settings.audio.monitorDimmed == true)
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .monitorDimmed == true)
+                .audio.monitorDimmed == true)
             // and the stored level is still the one the operator set
-            #expect(controller.settings.monitorVolume == 0.6)
+            #expect(controller.settings.audio.monitorVolume == 0.6)
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .monitorVolume == 0.6)
+                .audio.monitorVolume == 0.6)
 
             controller.toggleMonitorDim()
-            await ControllerWait.until { controller.settings.monitorDimmed == nil }
-            #expect(controller.settings.monitorDimmed == nil,
+            await ControllerWait.until { controller.settings.audio.monitorDimmed == nil }
+            #expect(controller.settings.audio.monitorDimmed == nil,
                     "the dim outlived itself in settings")
         }
     }
@@ -199,25 +199,25 @@ import Testing
     /// beside the meters and reachable from a hotkey.
     @Test func theDimStateIsPersistedOnTheSameDebounceAsTheSlider() async throws {
         try await ControllerHarness.run(configure: { settings in
-            settings.monitorVolume = 0.8
-            settings.monitorDimmed = true
+            settings.audio.monitorVolume = 0.8
+            settings.audio.monitorDimmed = true
         }, { controller, _ in
             controller.isCapturing = true
 
             controller.toggleMonitorDim() // off
             #expect(controller.monitorVolume == 0.8)
-            #expect(controller.settings.monitorDimmed == true,
+            #expect(controller.settings.audio.monitorDimmed == true,
                     "the click wrote settings instead of waiting for the debounce")
-            await ControllerWait.until { controller.settings.monitorDimmed == nil }
-            #expect(controller.settings.monitorDimmed == nil)
+            await ControllerWait.until { controller.settings.audio.monitorDimmed == nil }
+            #expect(controller.settings.audio.monitorDimmed == nil)
 
             // two clicks inside one window settle as a single write of the final
             // state — the intermediate one never reaches settings
             controller.toggleMonitorDim() // on...
             controller.toggleMonitorDim() // ...and off again
-            await ControllerWait.until({ controller.settings.monitorDimmed == true },
+            await ControllerWait.until({ controller.settings.audio.monitorDimmed == true },
                                        timeout: .seconds(1))
-            #expect(controller.settings.monitorDimmed == nil,
+            #expect(controller.settings.audio.monitorDimmed == nil,
                     "an intermediate dim click reached settings")
         })
     }
@@ -227,8 +227,8 @@ import Testing
     /// so a quiet launch is explained rather than mysterious.
     @Test func aStoredDimComesBackHoldingTheStoredLevel() async throws {
         try await ControllerHarness.run(configure: { settings in
-            settings.monitorVolume = 0.6
-            settings.monitorDimmed = true
+            settings.audio.monitorVolume = 0.6
+            settings.audio.monitorDimmed = true
         }, { controller, _ in
             #expect(controller.live.dimmed)
             #expect(controller.monitorVolume == 0.3)
@@ -248,7 +248,7 @@ import Testing
             controller.monitorVolume = 0.8
             controller.toggleMonitorDim()
             #expect(controller.live.dimmed)
-            await ControllerWait.until { controller.settings.monitorDimmed == true }
+            await ControllerWait.until { controller.settings.audio.monitorDimmed == true }
 
             controller.monitorVolume = 0.55 // the operator drags the slider
 
@@ -256,8 +256,8 @@ import Testing
             #expect(controller.monitorVolume == 0.55)
             // the stored state goes with it: a badge lit at the next launch would
             // be claiming a hold this level is not under
-            await ControllerWait.until { controller.settings.monitorDimmed == nil }
-            #expect(controller.settings.monitorDimmed == nil)
+            await ControllerWait.until { controller.settings.audio.monitorDimmed == nil }
+            #expect(controller.settings.audio.monitorDimmed == nil)
             // and DIM starts again from the new level
             controller.toggleMonitorDim()
             #expect(controller.monitorVolume == 0.275)
@@ -347,21 +347,21 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.monitorOn = true // no signal is running: nothing to hear
             controller.monitorVolume = 0.7
-            await ControllerWait.until { controller.settings.monitorVolume == 0.7 }
+            await ControllerWait.until { controller.settings.audio.monitorVolume == 0.7 }
 
             controller.toggleMonitorMute()
             #expect(controller.live.muted)
             // the state is written on the slider's own 400 ms debounce
-            await ControllerWait.until { controller.settings.monitorMuted == true }
-            #expect(controller.settings.monitorMuted == true)
+            await ControllerWait.until { controller.settings.audio.monitorMuted == true }
+            #expect(controller.settings.audio.monitorMuted == true)
             #expect(CaptureSettings.loaded(from: controller.defaults)
-                .monitorMuted == true)
+                .audio.monitorMuted == true)
             // and the stored level is still the one the operator set
-            #expect(controller.settings.monitorVolume == 0.7)
+            #expect(controller.settings.audio.monitorVolume == 0.7)
 
             controller.toggleMonitorMute()
-            await ControllerWait.until { controller.settings.monitorMuted == nil }
-            #expect(controller.settings.monitorMuted == nil,
+            await ControllerWait.until { controller.settings.audio.monitorMuted == nil }
+            #expect(controller.settings.audio.monitorMuted == nil,
                     "the mute outlived itself in settings")
         }
     }
@@ -371,8 +371,8 @@ import Testing
     /// speaker is lit, so a silent launch is explained rather than mysterious.
     @Test func aStoredMuteComesBackSilentAndExplained() async throws {
         try await ControllerHarness.run(configure: { settings in
-            settings.monitorVolume = 0.6
-            settings.monitorMuted = true
+            settings.audio.monitorVolume = 0.6
+            settings.audio.monitorMuted = true
         }, { controller, _ in
             #expect(controller.live.muted)
             #expect(controller.monitorVolume == 0)
@@ -392,14 +392,14 @@ import Testing
             controller.monitorVolume = 0.8
             controller.toggleMonitorMute()
             #expect(controller.live.muted)
-            await ControllerWait.until { controller.settings.monitorMuted == true }
+            await ControllerWait.until { controller.settings.audio.monitorMuted == true }
 
             controller.monitorVolume = 0.55 // the operator drags the slider
 
             #expect(!controller.live.muted)
             #expect(controller.monitorVolume == 0.55)
-            await ControllerWait.until { controller.settings.monitorMuted == nil }
-            #expect(controller.settings.monitorMuted == nil)
+            await ControllerWait.until { controller.settings.audio.monitorMuted == nil }
+            #expect(controller.settings.audio.monitorMuted == nil)
         }
     }
 }
@@ -413,7 +413,7 @@ import Testing
     /// 1-2, or everything that was selected before it.
     @Test func theChannelBankKeyGoesToTheMixAndBack() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.audioChannelMask == nil) // all channels
+            #expect(controller.settings.audio.audioChannelMask == nil) // all channels
             #expect(controller.isChannelEnabled(0))
             #expect(controller.isChannelEnabled(7))
 
@@ -430,7 +430,7 @@ import Testing
             // back to "all", which is stored as no mask at all rather than as
             // 0xFFFF — otherwise a board with more channels would arrive with
             // the extra ones already off
-            #expect(controller.settings.audioChannelMask == nil)
+            #expect(controller.settings.audio.audioChannelMask == nil)
             #expect(controller.isChannelEnabled(7))
         }
     }
@@ -443,13 +443,13 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             // the sound department is sending four channels today: mix + two ISOs
             for index in 4..<16 { controller.toggleAudioChannel(index) }
-            #expect(controller.settings.audioChannelMask == 0b1111)
+            #expect(controller.settings.audio.audioChannelMask == 0b1111)
 
             controller.toggleAudioChannelBank()
             #expect(controller.isRecordingMixOnly)
 
             controller.toggleAudioChannelBank()
-            #expect(controller.settings.audioChannelMask == 0b1111,
+            #expect(controller.settings.audio.audioChannelMask == 0b1111,
                     "the operator's channel selection did not come back")
             #expect(controller.isChannelEnabled(3))
             #expect(!controller.isChannelEnabled(4))
@@ -469,13 +469,13 @@ import Testing
 
             #expect(controller.isRecordingMixOnly,
                     "the channel mask changed under a running take")
-            #expect(controller.settings.audioChannelMask
+            #expect(controller.settings.audio.audioChannelMask
                 == CaptureController.mixChannelMask)
 
             // …and it works again the moment the take is closed
             controller.isRecording = false
             controller.toggleAudioChannelBank()
-            #expect(controller.settings.audioChannelMask == nil)
+            #expect(controller.settings.audio.audioChannelMask == nil)
         }
     }
 }

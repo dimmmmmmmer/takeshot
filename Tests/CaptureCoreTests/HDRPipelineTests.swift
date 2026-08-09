@@ -15,10 +15,10 @@ struct HDRPipelineTests {
     private func pipeline(in root: URL,
                           hdrMode: String? = nil) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.preRollFrames = 0
-        settings.hdrMode = hdrMode
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.preRollFrames = 0
+        settings.capture.hdrMode = hdrMode
         return CapturePipeline(config: .init(settings: settings, takeNumber: 1))
     }
 

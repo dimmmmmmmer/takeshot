@@ -36,13 +36,13 @@ import Testing
     /// so it is mirrored into settings — and a spherical lens stores nothing.
     @Test func theDesqueezeFactorIsMirroredIntoSettings() async throws {
         try await ControllerHarness.run { controller, _ in
-            #expect(controller.settings.desqueezeFactor == nil)
+            #expect(controller.settings.assist.desqueezeFactor == nil)
 
             controller.assist.desqueeze = 1.33
-            #expect(controller.settings.desqueezeFactor == 1.33)
+            #expect(controller.settings.assist.desqueezeFactor == 1.33)
 
             controller.assist.desqueeze = 1
-            #expect(controller.settings.desqueezeFactor == nil)
+            #expect(controller.settings.assist.desqueezeFactor == nil)
         }
     }
 
@@ -197,8 +197,8 @@ import Testing
             controller.lutIntensity = 0.35
             #expect(controller.live.lutIntensity == 0.35)
             // written once the drag stops, not on every tick
-            await ControllerWait.until { controller.settings.lutIntensity == 0.35 }
-            #expect(controller.settings.lutIntensity == 0.35)
+            await ControllerWait.until { controller.settings.lut.intensity == 0.35 }
+            #expect(controller.settings.lut.intensity == 0.35)
         }
     }
 
@@ -208,11 +208,11 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.selectLUT(fileName: "no-such-look-\(UUID().uuidString).cube")
 
-            #expect(controller.settings.lutFileName == nil)
+            #expect(controller.settings.lut.fileName == nil)
             #expect(controller.currentCube == nil)
             #expect(controller.lastError?.hasPrefix("LUT:") == true)
             // picking a LUT means wanting to see it
-            #expect(controller.settings.lutPreviewEnabled == true)
+            #expect(controller.settings.lut.previewEnabled == true)
         }
     }
 
@@ -224,7 +224,7 @@ import Testing
 
             controller.lutPreviewOn = true
 
-            #expect(controller.settings.lutPreviewEnabled == true)
+            #expect(controller.settings.lut.previewEnabled == true)
             #expect(!controller.playbackLUTSuppressed)
         }
     }
@@ -294,8 +294,8 @@ import Testing
             controller.compareMode = .off
             controller.differenceGain = .x1
             let reloaded = CaptureSettings.loaded(from: controller.defaults)
-            #expect(reloaded.compareMode == nil)
-            #expect(reloaded.compareDifferenceGain == nil)
+            #expect(reloaded.review.compareMode == nil)
+            #expect(reloaded.review.compareDifferenceGain == nil)
         }
     }
 }

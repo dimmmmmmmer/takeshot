@@ -70,7 +70,7 @@ struct ExternalAudioPipelineTests {
 
     @Test func theInactiveSourcesPacketsAreRefusedWhole() async throws {
         var settings = CaptureSettings()
-        settings.detectionMode = .manual
+        settings.capture.detectionMode = .manual
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         let levels = EventCollector<[Float]>()
@@ -133,10 +133,10 @@ struct ExternalAudioPipelineTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.preRollFrames = 0
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.preRollFrames = 0
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         let finished = TakeCollector()

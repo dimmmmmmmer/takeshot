@@ -50,12 +50,12 @@ final class DailiesQueueModel: ObservableObject {
             isCancelling = false
             queuedTakes = takes
         }
-        burnTimecode = settings.dailiesBurnTimecode ?? true
-        burnClipName = settings.dailiesBurnClipName ?? true
-        burnProject = settings.dailiesBurnProject ?? true
-        burnDate = settings.dailiesBurnDate ?? false
-        customText = settings.dailiesCustomText ?? ""
-        destination = settings.dailiesDestinationPath
+        burnTimecode = settings.dailies.burnTimecode ?? true
+        burnClipName = settings.dailies.burnClipName ?? true
+        burnProject = settings.dailies.burnProject ?? true
+        burnDate = settings.dailies.burnDate ?? false
+        customText = settings.dailies.customText ?? ""
+        destination = settings.dailies.destinationPath
             .map { URL(fileURLWithPath: $0) } ?? defaultFolder
     }
 
@@ -146,8 +146,8 @@ final class DailiesQueueModel: ObservableObject {
     /// burn-in facts composed from the settings that own them.
     static func item(for take: Take, settings: CaptureSettings) -> DailiesItem {
         let cameraRoll = take.roll.isEmpty
-            ? settings.cameraLabel : settings.cameraLabel + take.roll
-        let projectLine = [settings.projectName, cameraRoll]
+            ? settings.naming.cameraLabel : settings.naming.cameraLabel + take.roll
+        let projectLine = [settings.naming.projectName, cameraRoll]
             .filter { !$0.isEmpty }.joined(separator: " · ")
         // ISO date, POSIX locale: a burn-in is read by post in another
         // country, and "03/04" means two different days to two of them.

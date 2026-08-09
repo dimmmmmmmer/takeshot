@@ -242,16 +242,16 @@ import Testing
     @Test func theKeepInMenuBarSettingRoundTrips() {
         let defaults = InMemoryDefaults()
         var settings = CaptureSettings()
-        #expect(settings.keepInMenuBar == nil,
+        #expect(settings.theme.keepInMenuBar == nil,
                 "the menu bar is not TakeShot's until somebody says so")
 
-        settings.keepInMenuBar = true
+        settings.theme.keepInMenuBar = true
         settings.save(to: defaults)
-        #expect(CaptureSettings.loaded(from: defaults).keepInMenuBar == true)
+        #expect(CaptureSettings.loaded(from: defaults).theme.keepInMenuBar == true)
 
-        settings.keepInMenuBar = nil
+        settings.theme.keepInMenuBar = nil
         settings.save(to: defaults)
-        #expect(CaptureSettings.loaded(from: defaults).keepInMenuBar == nil)
+        #expect(CaptureSettings.loaded(from: defaults).theme.keepInMenuBar == nil)
     }
 
     /// An install that never touched the switch writes no field at all, which
@@ -261,7 +261,7 @@ import Testing
         let text = try #require(String(data: data, encoding: .utf8))
         #expect(!text.contains("keepInMenuBar"))
         let decoded = try JSONDecoder().decode(CaptureSettings.self, from: data)
-        #expect(decoded.keepInMenuBar == nil)
+        #expect(decoded.theme.keepInMenuBar == nil)
     }
 
     /// The controller's own read of the setting, which is what installs or

@@ -68,7 +68,7 @@ import Testing
                 .contains(localizedHead("toast_lut_import_failed")) == true,
                     "a failed look import went unannounced")
             #expect(controller.availableLUTs.isEmpty)
-            #expect(controller.settings.lutFileName == nil,
+            #expect(controller.settings.lut.fileName == nil,
                     "a look that never arrived was selected anyway")
         }
     }
@@ -85,7 +85,7 @@ import Testing
             #expect(controller.availableLUTs.contains {
                 $0.fileName == "Show_LUT.cube"
             })
-            #expect(controller.settings.lutFileName == "Show_LUT.cube")
+            #expect(controller.settings.lut.fileName == "Show_LUT.cube")
             #expect(controller.lastError == nil)
         }
     }
@@ -100,7 +100,7 @@ import Testing
             let source = box.appendingPathComponent("Show_LUT.cube")
             try writeCube(at: source)
             controller.adoptLooks(from: [source])
-            try #require(controller.settings.lutFileName == "Show_LUT.cube")
+            try #require(controller.settings.lut.fileName == "Show_LUT.cube")
             let bystander = controller.lutsDirectory
                 .appendingPathComponent("notes.txt")
             try Data("keep me".utf8).write(to: bystander)
@@ -108,7 +108,7 @@ import Testing
             controller.clearLUTs()
 
             #expect(controller.availableLUTs.isEmpty)
-            #expect(controller.settings.lutFileName == nil,
+            #expect(controller.settings.lut.fileName == nil,
                     "the selected look was deleted and stayed selected")
             #expect(!FileManager.default.fileExists(
                 atPath: controller.lutsDirectory

@@ -118,7 +118,7 @@ extension CaptureController {
             cubeCache = LoadedLook(fileName: fileName, cube: cube, cdl: cdl)
         } catch {
             lastError = L("toast_lut_failed", error.localizedDescription)
-            settings.lutFileName = nil
+            settings.lut.fileName = nil
         }
     }
     /// A look file as the pair the app works in: the lattice, and the CDL

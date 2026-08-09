@@ -12,13 +12,13 @@ import SwiftUI
 extension CaptureController {
     /// UI language; English by default.
     var appLanguage: AppLanguage {
-        get { settings.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english }
-        set { settings.appLanguage = newValue.rawValue }
+        get { settings.theme.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english }
+        set { settings.theme.appLanguage = newValue.rawValue }
     }
 
     /// UI theme from settings.
     var colorScheme: ColorScheme? {
-        switch settings.appearance {
+        switch settings.theme.appearance {
         case "light": return .light
         case "dark": return .dark
         default: return nil
@@ -28,11 +28,11 @@ extension CaptureController {
     /// Player backdrop color; black by default.
     var playerBackground: Color {
         get {
-            settings.playerBackgroundHex.flatMap(Color.init(hex:))
+            settings.theme.playerBackgroundHex.flatMap(Color.init(hex:))
                 ?? Color(hex: "#000000")!
         }
         set {
-            settings.playerBackgroundHex = newValue.hexString
+            settings.theme.playerBackgroundHex = newValue.hexString
             applyLetterboxColor()
         }
     }
@@ -50,25 +50,25 @@ extension CaptureController {
 
     /// Control accent color; white by default.
     var accentColor: Color {
-        get { settings.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#FFFFFF")! }
-        set { settings.accentHex = newValue.hexString }
+        get { settings.theme.accentHex.flatMap(Color.init(hex:)) ?? Color(hex: "#FFFFFF")! }
+        set { settings.theme.accentHex = newValue.hexString }
     }
 
     /// Window background color; grey by default — 15% brightness of black (~#262626).
     var appBackground: Color {
         get {
-            settings.appBackgroundHex.flatMap(Color.init(hex:))
+            settings.theme.appBackgroundHex.flatMap(Color.init(hex:))
                 ?? Color(hex: "#262626")!
         }
-        set { settings.appBackgroundHex = newValue.hexString }
+        set { settings.theme.appBackgroundHex = newValue.hexString }
     }
 
     /// Reset only the UI colors to defaults.
     func resetInterface() {
-        settings.playerBackgroundHex = nil
-        settings.appBackgroundHex = nil
-        settings.accentHex = nil
-        settings.appearance = nil
+        settings.theme.playerBackgroundHex = nil
+        settings.theme.appBackgroundHex = nil
+        settings.theme.accentHex = nil
+        settings.theme.appearance = nil
         panelSide = "right"
         applyLetterboxColor()
     }
@@ -76,9 +76,9 @@ extension CaptureController {
     /// Reset ALL app settings to factory (keep the record folder so we don't lose
     /// the current library). Hotkeys and panel layout too.
     func resetAllSettings() {
-        let keepDestination = settings.destinationPath
+        let keepDestination = settings.capture.destinationPath
         var fresh = CaptureSettings()
-        fresh.destinationPath = keepDestination
+        fresh.capture.destinationPath = keepDestination
         settings = fresh
         panelSide = "right"
         defaults.removeObject(forKey: "TakeShot.Hotkeys")

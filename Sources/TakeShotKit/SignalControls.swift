@@ -20,8 +20,8 @@ struct InputModePicker: View {
 
     var body: some View {
         Picker(L("input_mode"), selection: Binding(
-            get: { controller.settings.forcedInputMode ?? "auto" },
-            set: { controller.settings.forcedInputMode =
+            get: { controller.settings.capture.forcedInputMode ?? "auto" },
+            set: { controller.settings.capture.forcedInputMode =
                 $0 == "auto" ? nil : $0 })) {
             Text(L("input_mode_auto")).tag("auto")
             ForEach(controller.selectedDeviceInputModes, id: \.self) { name in
@@ -38,10 +38,10 @@ struct ForcedInputRGBToggle: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        if controller.settings.forcedInputMode != nil {
+        if controller.settings.capture.forcedInputMode != nil {
             Toggle(L("input_mode_rgb"), isOn: Binding(
-                get: { controller.settings.forcedInputRGB ?? false },
-                set: { controller.settings.forcedInputRGB = $0 }))
+                get: { controller.settings.capture.forcedInputRGB ?? false },
+                set: { controller.settings.capture.forcedInputRGB = $0 }))
         }
     }
 }
@@ -65,8 +65,8 @@ struct CaptureBitDepthPicker: View {
 
     var body: some View {
         Picker(L("capture_bit_depth"), selection: Binding(
-            get: { controller.settings.resolvedCaptureBitDepth },
-            set: { controller.settings.captureBitDepth = $0.rawValue })) {
+            get: { controller.settings.capture.resolvedBitDepth },
+            set: { controller.settings.capture.captureBitDepth = $0.rawValue })) {
             Text(L("bit_depth_8")).tag(CaptureBitDepth.eight)
             Text(L("bit_depth_10")).tag(CaptureBitDepth.ten)
             Text(L("bit_depth_12")).tag(CaptureBitDepth.twelve)
@@ -91,7 +91,7 @@ struct InputLevelsPicker: View {
     /// operator's saved choice selects a row rather than nothing (see
     /// `CaptureSettings.migrateToVersion2`, which rewrites the value itself).
     private var selection: String {
-        switch controller.settings.videoLevels {
+        switch controller.settings.capture.videoLevels {
         case nil: return "auto"
         case "off": return InputLevels.full.rawValue
         case "limited_excursions": return InputLevels.limited.rawValue
@@ -102,7 +102,7 @@ struct InputLevelsPicker: View {
     var body: some View {
         Picker(L("video_levels"), selection: Binding(
             get: { selection },
-            set: { controller.settings.videoLevels = $0 == "auto" ? nil : $0 })) {
+            set: { controller.settings.capture.videoLevels = $0 == "auto" ? nil : $0 })) {
             Text(L("levels_auto")).tag("auto")
             Text(L("levels_limited")).tag(InputLevels.limited.rawValue)
             Text(L("levels_full")).tag(InputLevels.full.rawValue)
@@ -129,8 +129,8 @@ struct HDRModePicker: View {
 
     var body: some View {
         Picker(L("hdr_mode"), selection: Binding(
-            get: { HDRMode.resolved(controller.settings.hdrMode) },
-            set: { controller.settings.hdrMode = $0.rawValue })) {
+            get: { HDRMode.resolved(controller.settings.capture.hdrMode) },
+            set: { controller.settings.capture.hdrMode = $0.rawValue })) {
             Text(L("hdr_mode_auto")).tag(HDRMode.auto)
             Text(L("hdr_mode_off")).tag(HDRMode.off)
         }
@@ -150,7 +150,7 @@ struct DetectionModePicker: View {
 
     var body: some View {
         Picker(L("detection_mode"),
-               selection: $controller.settings.detectionMode) {
+               selection: $controller.settings.capture.detectionMode) {
             Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
             Text(L("mode_auto")).tag(RecDetectionMode.auto)
             Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)

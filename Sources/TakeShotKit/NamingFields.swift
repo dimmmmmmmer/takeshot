@@ -23,7 +23,7 @@ struct ClipField: View {
             .onChange(of: controller.nextTakeNumber) { _, _ in
                 if !editing { text = controller.clipDisplay }
             }
-            .onChange(of: controller.settings.clipPadWidth) { _, _ in
+            .onChange(of: controller.settings.naming.clipPadWidth) { _, _ in
                 if !editing { text = controller.clipDisplay }
             }
     }
@@ -49,7 +49,7 @@ struct NamingFieldsView: View {
             slateRow
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
-        .animation(.easeOut(duration: 0.15), value: controller.settings.namingTemplate)
+        .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
     }
 
     /// What the file will be called: only the fields the current template has a
@@ -72,8 +72,8 @@ struct NamingFieldsView: View {
             if uses("{cam}") {
                 Self.steppedField(
                     L("cam_label"), field: .camera, width: 40,
-                    text: Binding(get: { controller.settings.cameraLabel },
-                                  set: { controller.settings.cameraLabel = $0 }),
+                    text: Binding(get: { controller.settings.naming.cameraLabel },
+                                  set: { controller.settings.naming.cameraLabel = $0 }),
                     onStep: { controller.stepCamera($0) })
             }
             if uses("{roll}") {
@@ -88,8 +88,8 @@ struct NamingFieldsView: View {
             if uses("{postfix}") {
                 Self.labeledField(L("postfix_label"), field: .postfix, width: 56,
                                   text: Binding(
-                                    get: { controller.settings.postfix ?? "" },
-                                    set: { controller.settings.postfix =
+                                    get: { controller.settings.naming.postfix ?? "" },
+                                    set: { controller.settings.naming.postfix =
                                         $0.isEmpty ? nil : $0 }))
             }
         }
@@ -107,7 +107,7 @@ struct NamingFieldsView: View {
 
     /// Whether a placeholder is in the current template.
     private func uses(_ placeholder: String) -> Bool {
-        controller.settings.namingTemplate.contains(placeholder)
+        controller.settings.naming.namingTemplate.contains(placeholder)
     }
 
     // MARK: - the two field shapes

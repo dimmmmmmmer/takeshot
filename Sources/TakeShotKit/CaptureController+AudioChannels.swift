@@ -11,15 +11,15 @@ extension CaptureController {
 
     /// Whether the channel is included in the recording.
     func isChannelEnabled(_ index: Int) -> Bool {
-        guard let mask = settings.audioChannelMask else { return true }
+        guard let mask = settings.audio.audioChannelMask else { return true }
         return mask & (1 << index) != 0
     }
 
     func toggleAudioChannel(_ index: Int) {
-        var mask = settings.audioChannelMask ?? 0xFFFF
+        var mask = settings.audio.audioChannelMask ?? 0xFFFF
         mask ^= (1 << index)
         // all enabled — store nil (= "all", including if more channels appear later)
-        settings.audioChannelMask = (mask & 0xFFFF) == 0xFFFF ? nil : mask
+        settings.audio.audioChannelMask = (mask & 0xFFFF) == 0xFFFF ? nil : mask
     }
 
     /// The mix bank: channels 1-2, where the sound department's stereo mix
@@ -28,7 +28,7 @@ extension CaptureController {
 
     /// The record mask is currently the mix and nothing else.
     var isRecordingMixOnly: Bool {
-        settings.audioChannelMask == Self.mixChannelMask
+        settings.audio.audioChannelMask == Self.mixChannelMask
     }
 
     /// One key for the whole channel decision: record the mix on 1-2, or record
@@ -51,19 +51,19 @@ extension CaptureController {
         guard !isRecording else { return }
         if isRecordingMixOnly {
             // 0xFFFF is what "all channels" is stored as (see toggleAudioChannel)
-            settings.audioChannelMask = audioMaskBeforeMixOnly == 0xFFFF
+            settings.audio.audioChannelMask = audioMaskBeforeMixOnly == 0xFFFF
                 ? nil : audioMaskBeforeMixOnly
             return
         }
-        audioMaskBeforeMixOnly = settings.audioChannelMask ?? 0xFFFF
-        settings.audioChannelMask = Self.mixChannelMask
+        audioMaskBeforeMixOnly = settings.audio.audioChannelMask ?? 0xFFFF
+        settings.audio.audioChannelMask = Self.mixChannelMask
     }
 
     /// Playback audio output (also used by the live monitor).
     var playbackOutputUID: String? {
-        get { settings.playbackAudioDeviceUID }
+        get { settings.audio.playbackAudioDeviceUID }
         set {
-            settings.playbackAudioDeviceUID = newValue
+            settings.audio.playbackAudioDeviceUID = newValue
             player.audioOutputDeviceUniqueID = newValue
             audioMonitor.outputDeviceUID = newValue
         }

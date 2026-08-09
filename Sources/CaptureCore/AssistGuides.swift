@@ -35,7 +35,7 @@ public struct AssistGuides: Equatable, Sendable {
     /// The guides as the operator's settings describe them. One conversion, so
     /// the value the renderer draws and the value the popover edits cannot
     /// disagree about what "off" or "93%" means.
-    public init(settings: CaptureSettings) {
+    public init(settings: AssistSettings) {
         self.init(ratio: settings.framelineRatio,
                   safeAreas: settings.safeAreasOn == true,
                   actionPercent: settings.safeActionPercentEffective,

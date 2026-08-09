@@ -98,11 +98,11 @@ extension CapturePipeline {
     public func update(config: Config) {
         queue.async {
             let detectorChanged =
-                config.settings.startDebounceFrames != self.config.settings.startDebounceFrames
-                || config.settings.stopDebounceFrames != self.config.settings.stopDebounceFrames
-                || config.settings.detectionMode != self.config.settings.detectionMode
-            if config.settings.audioChannelMask
-                != self.config.settings.audioChannelMask {
+                config.settings.capture.startDebounceFrames != self.config.settings.capture.startDebounceFrames
+                || config.settings.capture.stopDebounceFrames != self.config.settings.capture.stopDebounceFrames
+                || config.settings.capture.detectionMode != self.config.settings.capture.detectionMode
+            if config.settings.audio.audioChannelMask
+                != self.config.settings.audio.audioChannelMask {
                 // the packed-buffer format caches describe the OLD channel
                 // count — reusing them mis-interleaves audio after a change
                 self.trimFormatCache = nil
@@ -111,9 +111,9 @@ extension CapturePipeline {
             self.config = config
             if detectorChanged {
                 self.detector = RecDetector(config: RecDetectorConfig(
-                    startDebounceFrames: config.settings.startDebounceFrames,
-                    stopDebounceFrames: config.settings.stopDebounceFrames,
-                    vancOnly: config.settings.detectionMode == .vanc))
+                    startDebounceFrames: config.settings.capture.startDebounceFrames,
+                    stopDebounceFrames: config.settings.capture.stopDebounceFrames,
+                    vancOnly: config.settings.capture.detectionMode == .vanc))
             }
         }
     }

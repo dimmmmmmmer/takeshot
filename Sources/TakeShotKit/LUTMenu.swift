@@ -15,7 +15,7 @@ struct LUTMenu: View {
             Image(systemName: "camera.filters")
                 .font(.system(size: 13))
                 .overlay(alignment: .topTrailing) {
-                    if controller.settings.lutFileName != nil,
+                    if controller.settings.lut.fileName != nil,
                        controller.lutPreviewOn || controller.lutRecordOn {
                         Circle()
                             .fill(controller.accentColor)
@@ -52,7 +52,7 @@ struct LUTControlsPanel: View {
     /// Name of the selected LUT for the menu title (or "No LUT").
     private var currentLUTName: String {
         controller.availableLUTs
-            .first { $0.fileName == controller.settings.lutFileName }?.name
+            .first { $0.fileName == controller.settings.lut.fileName }?.name
             ?? L("lut_none")
     }
 
@@ -64,7 +64,7 @@ struct LUTControlsPanel: View {
                 Button {
                     controller.selectLUT(fileName: nil)
                 } label: {
-                    if controller.settings.lutFileName == nil {
+                    if controller.settings.lut.fileName == nil {
                         Label(L("lut_none"), systemImage: "checkmark")
                     } else {
                         Text(L("lut_none"))
@@ -76,7 +76,7 @@ struct LUTControlsPanel: View {
                         Button {
                             controller.selectLUT(fileName: lut.fileName)
                         } label: {
-                            if controller.settings.lutFileName == lut.fileName {
+                            if controller.settings.lut.fileName == lut.fileName {
                                 Label(lut.name, systemImage: "checkmark")
                             } else {
                                 Text(lut.name)
@@ -124,12 +124,12 @@ private struct LUTIntensityControls: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 42)
-                .disabled(controller.settings.lutFileName == nil)
+                .disabled(controller.settings.lut.fileName == nil)
             Text("%").font(.caption).foregroundStyle(.secondary)
         }
         Slider(value: Binding(
             get: { live.lutIntensity },
             set: { controller.lutIntensity = $0 }), in: 0...1)
-        .disabled(controller.settings.lutFileName == nil)
+        .disabled(controller.settings.lut.fileName == nil)
     }
 }

@@ -12,12 +12,12 @@ import SwiftUI
 extension CaptureController {
     /// The record root folder (for the "open folder" button).
     var destinationRoot: URL {
-        URL(fileURLWithPath: (settings.destinationPath as NSString).expandingTildeInPath)
+        URL(fileURLWithPath: (settings.capture.destinationPath as NSString).expandingTildeInPath)
     }
 
     /// Clip number with the current padding (for the field and name preview).
     var clipDisplay: String {
-        String(format: "%0\(settings.clipPadWidthEffective)d", nextTakeNumber)
+        String(format: "%0\(settings.naming.clipPadWidthEffective)d", nextTakeNumber)
     }
 
     /// The name the next take would be written under, without its extension.
@@ -28,16 +28,16 @@ extension CaptureController {
     /// pipeline is configured with, so the phone cannot show a name the writer
     /// is not using.
     var pendingTakeName: String {
-        let engine = NamingEngine(template: settings.namingTemplate,
-                                  clipPadding: settings.clipPadWidthEffective)
+        let engine = NamingEngine(template: settings.naming.namingTemplate,
+                                  clipPadding: settings.naming.clipPadWidthEffective)
         let context = NamingContext(
             // the scene reaches the template through {scene}, so it has to be
             // here too: the pipeline builds its own context WITH it, and a
             // preview that left it out would show the collision warning, the
             // slate window and the phone a name the writer is not using
-            project: settings.projectName, date: Date(), scene: scene,
-            take: nextTakeNumber, reel: roll, camera: settings.cameraLabel,
-            postfix: settings.postfix ?? "",
+            project: settings.naming.projectName, date: Date(), scene: scene,
+            take: nextTakeNumber, reel: roll, camera: settings.naming.cameraLabel,
+            postfix: settings.naming.postfix ?? "",
             timecode: currentTimecode)
         return engine.fileName(for: context)
     }
@@ -47,14 +47,14 @@ extension CaptureController {
     func commitClipText(_ text: String) {
         let digits = text.filter(\.isNumber)
         guard !digits.isEmpty else { return }
-        settings.clipPadWidth = min(4, max(2, digits.count))
+        settings.naming.clipPadWidth = min(4, max(2, digits.count))
         nextTakeNumber = min(9999, max(0, Int(digits) ?? nextTakeNumber))
     }
 
     /// Apply a naming preset: template, clip width, and roll width.
     func applyNamingPreset(_ preset: NamingPreset) {
-        settings.namingTemplate = preset.template
-        settings.clipPadWidth = preset.clipDigits
+        settings.naming.namingTemplate = preset.template
+        settings.naming.clipPadWidth = preset.clipDigits
         if let rollDigits = preset.rollDigits,
            let range = roll.range(of: "[0-9]+$", options: .regularExpression),
            let number = Int(roll[range]) {
@@ -69,7 +69,7 @@ extension CaptureController {
     }
 
     func stepCamera(_ delta: Int) {
-        settings.cameraLabel = FieldStepper.stepLetter(settings.cameraLabel, by: delta)
+        settings.naming.cameraLabel = FieldStepper.stepLetter(settings.naming.cameraLabel, by: delta)
     }
 }
 

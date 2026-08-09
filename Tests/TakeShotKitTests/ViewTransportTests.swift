@@ -171,7 +171,7 @@ struct ViewTransportTests {
             @MainActor func tint() -> String {
                 MarkerButton.navigationTint(probe.controller).hexString
             }
-            #expect(probe.controller.settings.accentHex == nil,
+            #expect(probe.controller.settings.theme.accentHex == nil,
                     "the fixture set an accent; the default is what this checks")
             #expect(tint() == "#FFFFFF",
                     "an untouched install must render the navigation white")

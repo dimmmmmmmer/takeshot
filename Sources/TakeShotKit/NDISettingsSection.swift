@@ -14,7 +14,7 @@ import SwiftUI
 struct NDISettingsSection: View {
     @EnvironmentObject private var controller: CaptureController
 
-    private var isOn: Bool { controller.settings.ndiEnabled == true }
+    private var isOn: Bool { controller.settings.ndi.enabled == true }
 
     var body: some View {
         Section(L("settings_ndi")) {
@@ -23,7 +23,7 @@ struct NDISettingsSection: View {
                 // nil rather than false when switched off: an install that never
                 // touched it writes no field at all, which is what keeps an
                 // older build able to decode the blob.
-                set: { controller.settings.ndiEnabled = $0 ? true : nil }))
+                set: { controller.settings.ndi.enabled = $0 ? true : nil }))
             if isOn {
                 nameRow
                 // Its own view because the state lives on `mirrors`, a nested
@@ -40,11 +40,11 @@ struct NDISettingsSection: View {
     private var nameRow: some View {
         LabeledContent(L("ndi_source_name")) {
             TextField("", text: Binding(
-                get: { controller.settings.ndiSourceName
+                get: { controller.settings.ndi.sourceName
                     ?? controller.settings.ndiSourceNameEffective },
                 // Empty means "back to the default", which is the effective name
                 // the placeholder above is already showing.
-                set: { controller.settings.ndiSourceName =
+                set: { controller.settings.ndi.sourceName =
                     $0.isEmpty ? nil : $0 }))
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)

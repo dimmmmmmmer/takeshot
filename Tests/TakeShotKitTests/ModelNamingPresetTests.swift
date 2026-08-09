@@ -82,8 +82,8 @@ struct ModelNamingPresetTests {
     @Test func clipDigitsSurviveTheSettingsClamp() {
         for preset in NamingPreset.all {
             var settings = CaptureSettings()
-            settings.clipPadWidth = preset.clipDigits
-            let effective = settings.clipPadWidthEffective
+            settings.naming.clipPadWidth = preset.clipDigits
+            let effective = settings.naming.clipPadWidthEffective
             #expect(effective == preset.clipDigits,
                     "\(preset.key) asks for \(preset.clipDigits) clip digits, gets \(effective)")
         }

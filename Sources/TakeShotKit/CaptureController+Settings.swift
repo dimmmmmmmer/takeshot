@@ -40,7 +40,7 @@ extension CaptureController {
     /// fed from. Guarded on a real difference: this runs on every settings
     /// write, volume slider ticks included, and `assist` is @Published.
     private func applyGuideChange() {
-        let guides = AssistGuides(settings: settings)
+        let guides = AssistGuides(settings: settings.assist)
         guard guides != assist.guides else { return }
         setAssist { $0.guides = guides }
     }
@@ -51,7 +51,7 @@ extension CaptureController {
     /// is what every surface is fed. Guarded on a real difference for the
     /// reason above — every settings write lands here.
     private func applyLegendChange() {
-        var legend = AssistLegend(settings: settings)
+        var legend = AssistLegend(settings: settings.assist)
         // …plus the one thing about it that is not a setting: what the signal
         // is encoded with, which decides whether the two top bands are labelled
         // as percentages of an SDR scale or in cd/m² (see `AssistLegend`).
@@ -70,7 +70,7 @@ extension CaptureController {
 
     /// Bundle lookups hit the disk — only on an actual language change.
     private func applyLanguageChange(from oldValue: CaptureSettings) {
-        guard oldValue.appLanguage != settings.appLanguage else { return }
+        guard oldValue.theme.appLanguage != settings.theme.appLanguage else { return }
         L10n.apply(appLanguage)
     }
 
@@ -81,41 +81,46 @@ extension CaptureController {
     /// mute click (or per remote toggle) would make the sliders lag for nothing.
     private func applyPipelineChange(from oldValue: CaptureSettings) {
         var pipelineRelevant = oldValue
-        pipelineRelevant.monitorVolume = settings.monitorVolume
-        pipelineRelevant.monitorDimmed = settings.monitorDimmed
-        pipelineRelevant.monitorMuted = settings.monitorMuted
-        pipelineRelevant.remoteEnabled = settings.remoteEnabled
-        pipelineRelevant.remotePort = settings.remotePort
-        pipelineRelevant.remotePIN = settings.remotePIN
-        // The NDI output is a display mirror wired outside the capture config —
-        // the pipeline has never heard of it, and flicking the switch or typing
-        // in the name field must not rebuild capture mid-take.
-        pipelineRelevant.ndiEnabled = settings.ndiEnabled
-        pipelineRelevant.ndiSourceName = settings.ndiSourceName
+        // Two WHOLE groups the pipeline has never heard of. The remote is a
+        // socket, and NDI is a display mirror wired outside the capture config
+        // — flicking either switch, or typing in the NDI name field, must not
+        // rebuild capture mid-take. Masking the group rather than its fields
+        // one by one is also what keeps this honest when a field is added to
+        // either: it stays out of the capture config by default, which is the
+        // safe direction.
+        pipelineRelevant.remote = settings.remote
+        pipelineRelevant.ndi = settings.ndi
+        // The rest are single fields whose NEIGHBOURS in the same group do
+        // reach the pipeline, so these cannot be masked a group at a time.
+        // The holds and the level are applied straight to the monitor, and
+        // rebuilding the world per dim or mute click is what made the slider lag.
+        pipelineRelevant.audio.monitorVolume = settings.audio.monitorVolume
+        pipelineRelevant.audio.monitorDimmed = settings.audio.monitorDimmed
+        pipelineRelevant.audio.monitorMuted = settings.audio.monitorMuted
         // the status item is a window-level affordance; the writer has never
         // heard of it, and toggling it must not rebuild the capture config
-        pipelineRelevant.keepInMenuBar = settings.keepInMenuBar
+        pipelineRelevant.theme.keepInMenuBar = settings.theme.keepInMenuBar
         // the compare mode/gain reach the pipeline through pushCompare, not
         // through the capture config — a mode click must not rebuild capture
-        pipelineRelevant.compareMode = settings.compareMode
-        pipelineRelevant.compareDifferenceGain = settings.compareDifferenceGain
+        pipelineRelevant.review.compareMode = settings.review.compareMode
+        pipelineRelevant.review.compareDifferenceGain = settings.review.compareDifferenceGain
         guard pipelineRelevant != settings else { return }
         pushConfig()
     }
 
     /// Hardware and destination: each of these restarts something.
     private func applyDeviceChange(from oldValue: CaptureSettings) {
-        if oldValue.monitorDeviceID != settings.monitorDeviceID {
+        if oldValue.capture.monitorDeviceID != settings.capture.monitorDeviceID {
             rebuildPlayout()
         }
-        if oldValue.destinationPath != settings.destinationPath {
+        if oldValue.capture.destinationPath != settings.capture.destinationPath {
             resetLibraryForNewDestination()
             startFolderWatcher()
         }
-        if oldValue.forcedInputMode != settings.forcedInputMode
-            || oldValue.forcedInputRGB != settings.forcedInputRGB
-            || oldValue.tenBitCapture != settings.tenBitCapture
-            || oldValue.captureBitDepth != settings.captureBitDepth {
+        if oldValue.capture.forcedInputMode != settings.capture.forcedInputMode
+            || oldValue.capture.forcedInputRGB != settings.capture.forcedInputRGB
+            || oldValue.capture.tenBitCapture != settings.capture.tenBitCapture
+            || oldValue.capture.captureBitDepth != settings.capture.captureBitDepth {
             restartCapture()
         }
     }
@@ -123,10 +128,10 @@ extension CaptureController {
     /// cam/postfix/template/padding all feed the filename — recompute the
     /// "this name is already taken" warning.
     private func applyNamingChange(from oldValue: CaptureSettings) {
-        guard oldValue.cameraLabel != settings.cameraLabel
-            || oldValue.postfix != settings.postfix
-            || oldValue.namingTemplate != settings.namingTemplate
-            || oldValue.clipPadWidth != settings.clipPadWidth else { return }
+        guard oldValue.naming.cameraLabel != settings.naming.cameraLabel
+            || oldValue.naming.postfix != settings.naming.postfix
+            || oldValue.naming.namingTemplate != settings.naming.namingTemplate
+            || oldValue.naming.clipPadWidth != settings.naming.clipPadWidth else { return }
         refreshNameCollision()
     }
 }

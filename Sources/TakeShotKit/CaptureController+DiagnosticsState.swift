@@ -28,14 +28,14 @@ extension CaptureController {
         // reads this after the wrong fault.
         recording.freeSpaceGB = values?.volumeAvailableCapacityForImportantUsage
             .map { Double($0) / 1_000_000_000 }
-        recording.codec = settings.codec.rawValue
+        recording.codec = settings.capture.codec.rawValue
         recording.health = pipeline.health
         recording.persistentAlert = persistentAlert
         recording.lastError = lastError
         recording.audioSource = externalAudioActive
             ? "external (USB input device)" : "embedded (capture board)"
         recording.externalAudioActive = externalAudioActive
-        recording.audioChannelMask = settings.audioChannelMask
+        recording.audioChannelMask = settings.audio.audioChannelMask
             .map { String(format: "0x%04X", $0) }
         return recording
     }
@@ -113,12 +113,12 @@ extension CaptureController {
     /// have no field to go in (see `DiagnosticsSnapshot.RemoteSection`).
     func diagnosticsRemote() -> DiagnosticsSnapshot.RemoteSection {
         var remote = DiagnosticsSnapshot.RemoteSection()
-        remote.enabled = settings.remoteEnabled == true
+        remote.enabled = settings.remote.enabled == true
         remote.boundPort = remoteBoundPort
-        remote.configuredPort = settings.remotePortEffective
+        remote.configuredPort = settings.remote.portEffective
         remote.clientCount = remoteServer?.clientCount ?? 0
         remote.multiviewActive = remoteMultiviewEncoder != nil
-        remote.pinConfigured = settings.remotePIN?.isEmpty == false
+        remote.pinConfigured = settings.remote.pin?.isEmpty == false
         return remote
     }
 

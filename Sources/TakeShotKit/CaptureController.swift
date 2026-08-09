@@ -419,7 +419,7 @@ final class CaptureController: ObservableObject {
     @Published var monitorOn = true {
         didSet {
             updateAudioMonitorRouting()
-            settings.monitorEnabled = monitorOn
+            settings.audio.monitorEnabled = monitorOn
         }
     }
     /// Debounced persist of the volume slider (see `setVolume` in +Audio).

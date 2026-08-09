@@ -10,9 +10,9 @@ import os.log
 /// onto the machine, and off it into a cube, is `+LUTLibrary`.
 extension CaptureController {
     var lutPreviewOn: Bool {
-        get { settings.lutPreviewEnabled ?? false }
+        get { settings.lut.previewEnabled ?? false }
         set {
-            settings.lutPreviewEnabled = newValue
+            settings.lut.previewEnabled = newValue
             // a per-clip "LUT off" left behind earlier must not eat the new
             // explicit enable — that read as "LUT does nothing in playback"
             if newValue, playbackLUTSuppressed { playbackLUTSuppressed = false }
@@ -21,9 +21,9 @@ extension CaptureController {
     }
 
     var lutRecordOn: Bool {
-        get { settings.lutRecordEnabled ?? false }
+        get { settings.lut.recordEnabled ?? false }
         set {
-            settings.lutRecordEnabled = newValue
+            settings.lut.recordEnabled = newValue
             rebuildLUT()
         }
     }
@@ -42,17 +42,17 @@ extension CaptureController {
             lutPersistTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(400))
                 guard !Task.isCancelled, let self else { return }
-                self.settings.lutIntensity = self.live.lutIntensity
+                self.settings.lut.intensity = self.live.lutIntensity
             }
         }
     }
 
     func selectLUT(fileName: String?) {
-        settings.lutFileName = fileName
+        settings.lut.fileName = fileName
         if fileName != nil, playbackLUTSuppressed { playbackLUTSuppressed = false }
-        if fileName != nil, settings.lutPreviewEnabled != true,
-           settings.lutRecordEnabled != true {
-            settings.lutPreviewEnabled = true // picked a LUT — clearly want to see it
+        if fileName != nil, settings.lut.previewEnabled != true,
+           settings.lut.recordEnabled != true {
+            settings.lut.previewEnabled = true // picked a LUT — clearly want to see it
         }
         rebuildLUT()
     }
@@ -60,7 +60,7 @@ extension CaptureController {
     func rebuildLUT() {
         currentCube = nil
         currentCDL = nil
-        if let fileName = settings.lutFileName {
+        if let fileName = settings.lut.fileName {
             if let cache = cubeCache, cache.fileName == fileName {
                 currentCube = cache.cube // checkbox flips must not re-read disk
                 currentCDL = cache.cdl
@@ -69,10 +69,10 @@ extension CaptureController {
             }
         }
         pipeline.setLUT(currentCube,
-                        preview: settings.lutPreviewEnabled ?? false,
-                        record: settings.lutRecordEnabled ?? false,
+                        preview: settings.lut.previewEnabled ?? false,
+                        record: settings.lut.recordEnabled ?? false,
                         intensity: live.lutIntensity)
-        pipeline.setVideoLevels(settings.videoLevels)
+        pipeline.setVideoLevels(settings.capture.videoLevels)
         applyPlaybackLUT()
     }
     /// LUT on playback — applied in the tap's own render (AVVideoComposition's
@@ -80,12 +80,12 @@ extension CaptureController {
     /// already-baked look: our file tagged com.takeshot.lut or a manual
     /// per-clip off — the LUT isn't applied twice.
     func applyPlaybackLUT() {
-        guard settings.lutPreviewEnabled ?? false, !playbackFileHasBakedLUT,
+        guard settings.lut.previewEnabled ?? false, !playbackFileHasBakedLUT,
               !playbackLUTSuppressed,
               let cube = currentCube else {
             os_log("playback LUT OFF: preview=%d baked=%d suppressed=%d cube=%d",
                    log: CapturePipeline.levelsLog, type: .default,
-                   (settings.lutPreviewEnabled ?? false) ? 1 : 0,
+                   (settings.lut.previewEnabled ?? false) ? 1 : 0,
                    playbackFileHasBakedLUT ? 1 : 0,
                    playbackLUTSuppressed ? 1 : 0,
                    currentCube != nil ? 1 : 0)
@@ -94,7 +94,7 @@ extension CaptureController {
         }
         os_log("playback LUT ON: %{public}s intensity=%.2f",
                log: CapturePipeline.levelsLog, type: .default,
-               settings.lutFileName ?? "?", live.lutIntensity)
+               settings.lut.fileName ?? "?", live.lutIntensity)
         // the cube crosses, and the filter is built on the tap's own queue
         playbackTap.setLUT({ cube.makeFilter() }, intensity: live.lutIntensity)
     }

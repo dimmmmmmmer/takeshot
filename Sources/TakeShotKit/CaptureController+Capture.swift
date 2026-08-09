@@ -39,8 +39,8 @@ extension CaptureController {
         pipeline.update(config: .init(
             settings: settings, slate: slate, roll: roll,
             takeNumber: nextTakeNumber))
-        pipeline.setVideoLevels(settings.videoLevels)
-        pipeline.setHDRMode(settings.hdrMode)
+        pipeline.setVideoLevels(settings.capture.videoLevels)
+        pipeline.setHDRMode(settings.capture.hdrMode)
         for channel in extraChannels {
             // the slate is the SHOT, not the camera: every channel records the
             // same scene/shot/take, only the cam label differs
@@ -69,10 +69,10 @@ extension CaptureController {
     func startCapture() {
         guard let deviceID = selectedDeviceID else { return }
         if let adapter = backend.child(of: DeckLinkBackendAdapter.self) {
-            adapter.forcedMode = settings.forcedInputMode.map {
-                (name: $0, rgb: settings.forcedInputRGB ?? false)
+            adapter.forcedMode = settings.capture.forcedInputMode.map {
+                (name: $0, rgb: settings.capture.forcedInputRGB ?? false)
             }
-            let depth = settings.resolvedCaptureBitDepth
+            let depth = settings.capture.resolvedBitDepth
             adapter.preferTenBitRGB = depth != .eight
             adapter.preferTwelveBitRGB = depth == .twelve
             // One setting, two samplings: there is no 12-bit YCbCr wire format,

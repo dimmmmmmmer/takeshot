@@ -29,7 +29,7 @@ public struct ChromaKey: Equatable, Sendable {
 
     /// What shows through where the screen was.
     ///
-    /// Persisted by raw value (see `CaptureSettings.chromaKeyBackground`), so
+    /// Persisted by raw value (see `ChromaKeySettings.background`), so
     /// renaming a case silently resets the operator's choice.
     public enum Background: String, CaseIterable, Sendable {
         /// The "is my key clean" view — fringes and holes are unmissable on it.
@@ -43,7 +43,7 @@ public struct ChromaKey: Equatable, Sendable {
 
     /// How the plate is matched to the frame before the manual adjustment.
     ///
-    /// Persisted by raw value (`CaptureSettings.chromaKeyPlateFit`), so renaming
+    /// Persisted by raw value (`ChromaKeySettings.plateFit`), so renaming
     /// a case silently resets the operator's choice.
     public enum PlateFit: String, CaseIterable, Sendable {
         /// The whole plate inside the frame; the rest is black.

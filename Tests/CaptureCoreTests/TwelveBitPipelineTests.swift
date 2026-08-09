@@ -13,11 +13,11 @@ struct TwelveBitPipelineTests {
     private func pipeline(in root: URL,
                           codec: CaptureCodec = .proRes4444) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.codec = codec
-        settings.preRollFrames = 0
-        settings.videoLevels = InputLevels.limited.rawValue
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.codec = codec
+        settings.capture.preRollFrames = 0
+        settings.capture.videoLevels = InputLevels.limited.rawValue
         return CapturePipeline(config: .init(settings: settings, takeNumber: 1))
     }
 

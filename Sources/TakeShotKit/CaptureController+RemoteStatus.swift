@@ -38,7 +38,7 @@ extension CaptureController {
         // is its OWN pipeline's state: in multicam the boards record apart,
         // and a B-cam whose writer died must not glow red on A-cam's word.
         status.cameras = [RemoteStatus.CameraState(
-            name: settings.cameraLabel, recording: isRecording)]
+            name: settings.naming.cameraLabel, recording: isRecording)]
             + extraChannels.map {
                 RemoteStatus.CameraState(name: $0.camLabel,
                                          recording: $0.isRecording)

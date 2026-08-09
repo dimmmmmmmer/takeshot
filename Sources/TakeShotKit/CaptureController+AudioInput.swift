@@ -4,7 +4,7 @@ import Foundation
 /// The record-side audio source: the board's embedded audio (the default), or
 /// an external Core Audio input — on real sets the mixer's feed often arrives
 /// over USB rather than embedded in the SDI/HDMI signal. The choice persists
-/// as `CaptureSettings.audioInputDeviceUID`; everything device-facing goes
+/// as `AudioSettings.audioInputDeviceUID`; everything device-facing goes
 /// through the injected `audioInputs` provider so the tests drive this whole
 /// path with a fake device.
 ///
@@ -17,13 +17,13 @@ import Foundation
 extension CaptureController {
     /// The selected input device UID (nil — embedded); Settings binds here.
     var audioInputUID: String? {
-        get { settings.audioInputDeviceUID }
-        set { settings.audioInputDeviceUID = newValue }
+        get { settings.audio.audioInputDeviceUID }
+        set { settings.audio.audioInputDeviceUID = newValue }
     }
 
     /// From `applySettingsChange`: rebuild only when the choice itself moved.
     func applyAudioInputChange(from oldValue: CaptureSettings) {
-        guard oldValue.audioInputDeviceUID != settings.audioInputDeviceUID
+        guard oldValue.audio.audioInputDeviceUID != settings.audio.audioInputDeviceUID
         else { return }
         rebuildExternalAudioSource()
     }
@@ -51,7 +51,7 @@ extension CaptureController {
     /// change waits for it to close (see `reconcileAudioInputAfterTake`).
     func audioInputDevicesChanged() {
         audioInputDevices = audioInputs.list()
-        guard let uid = settings.audioInputDeviceUID, externalAudioSource == nil,
+        guard let uid = settings.audio.audioInputDeviceUID, externalAudioSource == nil,
               !isRecording,
               audioInputDevices.contains(where: { $0.uid == uid })
         else { return }
@@ -63,7 +63,7 @@ extension CaptureController {
     func rebuildExternalAudioSource() {
         externalAudioSource?.stop()
         externalAudioSource = nil
-        guard let uid = settings.audioInputDeviceUID else {
+        guard let uid = settings.audio.audioInputDeviceUID else {
             activateEmbeddedAudio(warning: nil)
             return
         }
@@ -122,7 +122,7 @@ extension CaptureController {
     /// source now — the device came back (reattach) or embedded takes over
     /// with the warning. Called from the REC-state observer.
     func reconcileAudioInputAfterTake() {
-        guard settings.audioInputDeviceUID != nil, externalAudioSource == nil
+        guard settings.audio.audioInputDeviceUID != nil, externalAudioSource == nil
         else { return }
         rebuildExternalAudioSource()
     }
@@ -132,7 +132,7 @@ extension CaptureController {
     /// WHILE the take records — a clean REC start clears the alarm banner,
     /// which would otherwise silently swallow the fallback notice.
     func warnIfAudioFellBackAtRecStart() {
-        guard settings.audioInputDeviceUID != nil, !externalAudioActive
+        guard settings.audio.audioInputDeviceUID != nil, !externalAudioActive
         else { return }
         persistentAlert = L("usb_audio_missing")
     }

@@ -14,10 +14,10 @@ import Foundation
 /// a dock icon; the status item is an addition, never a replacement.
 extension CaptureController {
     /// "Keep TakeShot in the menu bar" — nil/false is off.
-    var keepInMenuBar: Bool { settings.keepInMenuBar ?? false }
+    var keepInMenuBar: Bool { settings.theme.keepInMenuBar ?? false }
 
     func applyMenuBarChange(from oldValue: CaptureSettings) {
-        guard (oldValue.keepInMenuBar ?? false) != keepInMenuBar else { return }
+        guard (oldValue.theme.keepInMenuBar ?? false) != keepInMenuBar else { return }
         updateMenuBarPresence()
     }
 

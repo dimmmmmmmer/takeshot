@@ -71,7 +71,7 @@ import Testing
             // machine) — and the watcher re-creates the folder when it is
             // armed, so it goes first.
             let missing = root.appendingPathComponent("no-such-folder")
-            controller.settings.destinationPath = missing.path
+            controller.settings.capture.destinationPath = missing.path
             controller.folderWatcher?.cancel()
             controller.folderWatcher = nil
             try? FileManager.default.removeItem(at: missing)
@@ -176,7 +176,7 @@ import Testing
         try await ControllerHarness.run { controller, root in
             let out = try scratch(in: root)
             // Four digits, like every PIN the app itself makes.
-            controller.settings.remotePIN = "4271"
+            controller.settings.remote.pin = "4271"
             // Port 0: the listener picks an ephemeral one, so the suite never
             // claims a fixed port on the machine running it.
             controller.startRemoteServer(overridePort: 0)

@@ -18,7 +18,7 @@ struct ViewNDISettingsTests {
             let collapsed = probe.fittingSizes {
                 Form { NDISettingsSection() }.formStyle(.grouped)
             }
-            probe.controller.settings.ndiEnabled = true
+            probe.controller.settings.ndi.enabled = true
             let expanded = probe.fittingSizes {
                 Form { NDISettingsSection() }.formStyle(.grouped)
             }
@@ -56,7 +56,7 @@ struct ViewNDISettingsTests {
     /// instruction than the path.
     @Test func theUnavailableReasonRendersInsideTheWindow() async throws {
         try await ViewProbe.run { probe in
-            probe.controller.settings.ndiEnabled = true
+            probe.controller.settings.ndi.enabled = true
             probe.controller.mirrors.ndiState = .unavailable(
                 "Built without the NDI SDK. Download the NDI SDK for Apple "
                     + "from ndi.video, then copy its headers into "

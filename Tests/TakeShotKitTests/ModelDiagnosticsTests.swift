@@ -162,10 +162,10 @@ import Testing
 
     @Test func theSettingsBlobDropsThePINAndKeepsThePort() {
         var settings = CaptureSettings()
-        settings.remotePIN = "4271"
-        settings.remotePort = 8791
-        settings.projectName = "Ep2"
-        settings.destinationPath = NSHomeDirectory() + "/Movies/TakeShot"
+        settings.remote.pin = "4271"
+        settings.remote.port = 8791
+        settings.naming.projectName = "Ep2"
+        settings.capture.destinationPath = NSHomeDirectory() + "/Movies/TakeShot"
         let flat = DiagnosticsRedaction.settings(settings)
 
         #expect(flat["remotePIN"] == nil)
@@ -175,7 +175,7 @@ import Testing
         #expect(flat["destinationPath"] == "~/Movies/TakeShot")
         // Booleans have to read as switches. JSONSerialization hands them back
         // as NSNumber, and "monitorEnabled = 0" reads as a level.
-        settings.monitorEnabled = false
+        settings.audio.monitorEnabled = false
         #expect(DiagnosticsRedaction.settings(settings)["monitorEnabled"]
             == "false")
     }

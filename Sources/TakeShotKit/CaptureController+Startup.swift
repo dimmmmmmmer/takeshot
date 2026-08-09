@@ -23,16 +23,16 @@ extension CaptureController {
     /// from `init` — it lives here only because the class file is the stored
     /// state's inventory and was outgrowing the file-length limit.
     func completeStartup(stored: CaptureSettings) {
-        L10n.apply(stored.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
-        player.audioOutputDeviceUniqueID = stored.playbackAudioDeviceUID
-        audioMonitor.outputDeviceUID = stored.playbackAudioDeviceUID
+        L10n.apply(stored.theme.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
+        player.audioOutputDeviceUniqueID = stored.audio.playbackAudioDeviceUID
+        audioMonitor.outputDeviceUID = stored.audio.playbackAudioDeviceUID
         // 0 in old saves came from the mute button, not a chosen level
-        let storedVolume = (stored.monitorVolume ?? 1) > 0
-            ? (stored.monitorVolume ?? 1) : 1
+        let storedVolume = (stored.audio.monitorVolume ?? 1) > 0
+            ? (stored.audio.monitorVolume ?? 1) : 1
         audioMonitor.volume = Float(storedVolume)
         live.volume = storedVolume
-        live.lutIntensity = stored.lutIntensity ?? 1
-        monitorOn = stored.monitorEnabled ?? true
+        live.lutIntensity = stored.lut.intensity ?? 1
+        monitorOn = stored.audio.monitorEnabled ?? true
         restoreCompare(from: stored)
         restoreAssists(from: stored)
         player.volume = Float(storedVolume)
@@ -54,7 +54,7 @@ extension CaptureController {
         refreshDevices() // selecting the first device starts capture via didSet
         // the stored USB audio source comes back like the output device does;
         // a device missing at launch falls back to embedded with the warning
-        if stored.audioInputDeviceUID != nil { rebuildExternalAudioSource() }
+        if stored.audio.audioInputDeviceUID != nil { rebuildExternalAudioSource() }
         startFolderSync()
         refreshNameCollision()
         applyLetterboxColor()
@@ -117,15 +117,15 @@ extension CaptureController {
     /// operator set, so the hold is re-applied on top of it and the restore
     /// point is that level exactly. Quiet, but never unexplained — the DIM
     /// badge in the footer is lit (this is why the state is persisted and the
-    /// halved level is not; see CaptureSettings.monitorDimmed).
+    /// halved level is not; see AudioSettings.monitorDimmed).
     ///
     /// A mute left engaged comes back engaged, on top of whatever level is in
     /// force by then (the dimmed one if DIM is also being restored), and that
     /// level is exactly what the un-mute puts back — the footer speaker shows
-    /// the slash. Same reasoning; see CaptureSettings.monitorMuted.
+    /// the slash. Same reasoning; see AudioSettings.monitorMuted.
     private func restoreMonitorHolds(from stored: CaptureSettings,
                                      storedVolume: Double) {
-        if stored.monitorDimmed == true {
+        if stored.audio.monitorDimmed == true {
             live.dimmed = true
             live.volumeBeforeDim = storedVolume
             let held = storedVolume * Self.dimAttenuation
@@ -133,7 +133,7 @@ extension CaptureController {
             audioMonitor.volume = Float(held)
             player.volume = Float(held)
         }
-        if stored.monitorMuted == true {
+        if stored.audio.monitorMuted == true {
             live.muted = true
             monitorVolumeBeforeMute = live.volume
             live.volume = 0
@@ -148,34 +148,34 @@ extension CaptureController {
     /// call so that adding the next one does not push `completeStartup` past
     /// the length at which nobody reads a function top to bottom.
     private func restoreAssists(from stored: CaptureSettings) {
-        assist.desqueeze = stored.desqueezeFactor ?? 1
-        assist.peakingColor = stored.peakingColor
+        assist.desqueeze = stored.assist.desqueezeFactor ?? 1
+        assist.peakingColor = stored.assist.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
         // the framelines and the exposure legend are settings rather than
         // assist state, but they are DRAWN with the aids now, so the drawn
         // values have to be seeded too
-        assist.guides = AssistGuides(settings: stored)
-        assist.legend = AssistLegend(settings: stored)
+        assist.guides = AssistGuides(settings: stored.assist)
+        assist.legend = AssistLegend(settings: stored.assist)
         // clamped, not trusted: the blob may have been written by a build with
         // a different ceiling, or hand-edited
         assist.peakingIntensity = min(
             ViewAssist.maxPeakingIntensity,
-            max(0, stored.peakingIntensity ?? ViewAssist().peakingIntensity))
+            max(0, stored.assist.peakingIntensity ?? ViewAssist().peakingIntensity))
         // the key comes back dialled in and switched OFF (see restoreChroma)
-        restoreChroma(from: stored)
+        restoreChroma(from: stored.chromaKey)
         // …and so does the taught REC indicator, for a stronger reason: its
         // references are a photograph of one camera's overlay (see
         // restoreVisualRec)
-        restoreVisualRec(from: stored)
+        restoreVisualRec(from: stored.visualRec)
     }
 
     /// The compare mode and its gain come back like every other working
     /// preference. Gain first: each didSet pushes the whole compare state, and
     /// the mode's push should already carry the restored gain.
     private func restoreCompare(from stored: CaptureSettings) {
-        differenceGain = stored.compareDifferenceGain
+        differenceGain = stored.review.compareDifferenceGain
             .flatMap(DifferenceGain.init(rawValue:)) ?? .x1
-        compareMode = stored.compareMode
+        compareMode = stored.review.compareMode
             .flatMap(CompareMode.init(rawValue:)) ?? .off
     }
 }

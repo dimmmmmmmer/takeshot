@@ -63,10 +63,10 @@ import Testing
     private func recordTake(in root: URL) async throws -> (take: Take,
                                                            shown: CVPixelBuffer) {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual // the take is started here, by hand
-        settings.preRollFrames = 0
-        settings.codec = .proResProxy    // the suite encodes in real time
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual // the take is started here, by hand
+        settings.capture.preRollFrames = 0
+        settings.capture.codec = .proResProxy    // the suite encodes in real time
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         pipeline.setVideoLevels("limited")

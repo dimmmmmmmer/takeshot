@@ -32,8 +32,8 @@ enum ControllerHarness {
         _ settings: CaptureSettings) throws -> UserDefaults {
         let defaults = InMemoryDefaults()
         settings.save(to: defaults)
-        try #require(CaptureSettings.loaded(from: defaults).destinationPath
-                        == settings.destinationPath,
+        try #require(CaptureSettings.loaded(from: defaults).capture.destinationPath
+                        == settings.capture.destinationPath,
                      "the scratch preferences did not take the settings")
         return defaults
     }
@@ -63,15 +63,15 @@ enum ControllerHarness {
 
         var settings = CaptureSettings()
         settings.schemaVersion = CaptureSettings.currentSchemaVersion
-        settings.destinationPath = root.path
-        settings.codec = .proResProxy // the tests encode in real time
+        settings.capture.destinationPath = root.path
+        settings.capture.codec = .proResProxy // the tests encode in real time
         // The live monitor is on by default in the app, and the demo source
         // generates real sine tones: leaving it on plays them out of the
         // developer's speakers for as long as the suite runs, and opens a real
         // output device that a CI runner may not have. Suites that need the
         // monitor switch itself turn it back on, and none of those run a
         // signal.
-        settings.monitorEnabled = false
+        settings.audio.monitorEnabled = false
         configure(&settings)
         let defaults = try Self.preparedDefaults(settings)
         defer {
@@ -101,7 +101,7 @@ enum ControllerHarness {
             volumeWatch: volumeWatch ?? FakeVolumeWatch())
         // Belt and braces: a controller that did not get the fixture's folder
         // has to fail here rather than quietly work on the operator's.
-        try #require(controller.settings.destinationPath == root.path,
+        try #require(controller.settings.capture.destinationPath == root.path,
                      "the controller adopted a folder that is not the fixture's")
         // The offload log lives in Application Support, which is the
         // operator's. Pointed at the scratch folder before anything can record

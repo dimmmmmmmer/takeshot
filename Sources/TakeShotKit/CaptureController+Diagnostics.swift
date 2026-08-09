@@ -102,7 +102,7 @@ extension CaptureController {
             DiagnosticsSnapshot.DeviceRow(id: $0.id, name: $0.name)
         }
         deck.selectedDeviceID = selectedDeviceID
-        deck.forcedInputMode = settings.forcedInputMode
+        deck.forcedInputMode = settings.capture.forcedInputMode
         deck.brawSDKAvailable = CBRClip.isSDKAvailable()
         return deck
     }
@@ -124,14 +124,14 @@ extension CaptureController {
             capture.wireBitDepth = format.bitDepth
         }
         capture.currentTimecode = currentTimecode?.description
-        capture.levelsSetting = settings.videoLevels ?? "auto"
+        capture.levelsSetting = settings.capture.videoLevels ?? "auto"
         capture.levelsEffective = diagnosticsLevelsInEffect()
-        capture.hdrSetting = HDRMode.resolved(settings.hdrMode).rawValue
+        capture.hdrSetting = HDRMode.resolved(settings.capture.hdrMode).rawValue
         capture.hdrSignal = signalColorimetry.badge ?? "SDR (Rec.709)"
         capture.hdrDisplayMetadata = diagnosticsDisplayMetadata()
-        capture.tenBitCapture = settings.tenBitCapture ?? true
-        capture.detectionMode = settings.detectionMode.rawValue
-        capture.preRollFrames = settings.preRollFramesEffective
+        capture.tenBitCapture = settings.capture.tenBitCapture ?? true
+        capture.detectionMode = settings.capture.detectionMode.rawValue
+        capture.preRollFrames = settings.capture.preRollFramesEffective
         capture.visualRec = diagnosticsVisualRec()
         return capture
     }
@@ -193,7 +193,7 @@ extension CaptureController {
     /// settings blob written years ago still carries them.
     private func diagnosticsLevelsInEffect() -> String {
         let normalized: String?
-        switch settings.videoLevels {
+        switch settings.capture.videoLevels {
         case "auto", nil: normalized = nil
         case "off": normalized = InputLevels.full.rawValue
         case "limited_excursions": normalized = InputLevels.limited.rawValue

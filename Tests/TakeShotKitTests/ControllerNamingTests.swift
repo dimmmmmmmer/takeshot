@@ -14,7 +14,7 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.commitClipText("0007")
             #expect(controller.nextTakeNumber == 7)
-            #expect(controller.settings.clipPadWidthEffective == 4)
+            #expect(controller.settings.naming.clipPadWidthEffective == 4)
             #expect(controller.clipDisplay == "0007")
 
             controller.commitClipText("12")
@@ -32,7 +32,7 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             controller.commitClipText("99999")
             #expect(controller.nextTakeNumber == 9999)
-            #expect(controller.settings.clipPadWidthEffective == 4)
+            #expect(controller.settings.naming.clipPadWidthEffective == 4)
         }
     }
 
@@ -55,8 +55,8 @@ import Testing
             controller.roll = "1"
             controller.applyNamingPreset(arri35)
             #expect(controller.roll == "0001")
-            #expect(controller.settings.namingTemplate == arri35.template)
-            #expect(controller.settings.clipPadWidthEffective == 3)
+            #expect(controller.settings.naming.namingTemplate == arri35.template)
+            #expect(controller.settings.naming.clipPadWidthEffective == 3)
 
             // a letter prefix on the roll survives the repad
             controller.roll = "A12"
@@ -74,7 +74,7 @@ import Testing
             controller.roll = "B7"
             controller.applyNamingPreset(alpha)
             #expect(controller.roll == "B7")
-            #expect(controller.settings.clipPadWidthEffective == 4)
+            #expect(controller.settings.naming.clipPadWidthEffective == 4)
         }
     }
 
@@ -86,12 +86,12 @@ import Testing
             controller.stepRoll(-1)
             #expect(controller.roll == "009")
 
-            controller.settings.cameraLabel = "A"
+            controller.settings.naming.cameraLabel = "A"
             controller.stepCamera(1)
-            #expect(controller.settings.cameraLabel == "B")
-            controller.settings.cameraLabel = "Z"
+            #expect(controller.settings.naming.cameraLabel == "B")
+            controller.settings.naming.cameraLabel = "Z"
             controller.stepCamera(1)
-            #expect(controller.settings.cameraLabel == "A")
+            #expect(controller.settings.naming.cameraLabel == "A")
         }
     }
 

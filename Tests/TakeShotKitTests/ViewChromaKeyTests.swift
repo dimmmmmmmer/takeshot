@@ -37,7 +37,7 @@ struct ViewChromaKeyTests {
             probe.controller.assist.colorTool = .falseColor
             probe.controller.assist.zebraOn = true
             probe.controller.assist.peakingOn = true
-            probe.controller.settings.safeAreasOn = true
+            probe.controller.settings.assist.safeAreasOn = true
             probe.controller.chromaKeyOn = true
             probe.controller.chromaBackground = .image
 

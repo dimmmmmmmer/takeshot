@@ -203,9 +203,9 @@ extension CaptureController {
     func persistCompareSettings() {
         let mode = compareMode == .off ? nil : compareMode.rawValue
         let gain = differenceGain == .x1 ? nil : differenceGain.rawValue
-        guard settings.compareMode != mode
-            || settings.compareDifferenceGain != gain else { return }
-        settings.compareMode = mode
-        settings.compareDifferenceGain = gain
+        guard settings.review.compareMode != mode
+            || settings.review.compareDifferenceGain != gain else { return }
+        settings.review.compareMode = mode
+        settings.review.compareDifferenceGain = gain
     }
 }

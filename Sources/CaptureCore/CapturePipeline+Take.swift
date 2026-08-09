@@ -16,7 +16,7 @@ extension CapturePipeline {
     func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil,
                    trigger: RecTrigger = .manual) {
         guard writer == nil, let format else { return }
-        recordingMask = config.settings.audioChannelMask // latched for the take
+        recordingMask = config.settings.audio.audioChannelMask // latched for the take
         takeColorimetry = signalColorimetry            // …and so is this
         let startIndex = recStartIndex ?? frameIndex
         let timecode = preRollShiftedTimecode(rawTimecode, startIndex: startIndex)
@@ -63,7 +63,7 @@ extension CapturePipeline {
                                 timecode: Timecode?) throws -> TakeWriter {
         try TakeWriter(
             url: url, format: format,
-            codec: config.settings.codec, startTimecode: timecode,
+            codec: config.settings.capture.codec, startTimecode: timecode,
             markerMetadata: {
                 var meta = [
                     TakeWriter.rollKey: config.roll,
@@ -101,7 +101,7 @@ extension CapturePipeline {
             // switches transfer mid-take cannot retag the frames already
             // written.
             colorTagPreset: takeColorimetry.filePreset
-                ?? config.settings.colorTagPreset,
+                ?? config.settings.capture.colorTagPreset,
             displayMetadata: takeColorimetry.displayMetadata,
             audioChannelCount: recordChannelCount)
     }

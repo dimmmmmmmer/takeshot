@@ -40,9 +40,9 @@ import Testing
     /// the codec's name reaches the operator through the tooltip.)
     @Test func theCodecTheFooterOffersIsTheOneTakesAreWrittenIn() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.settings.codec = .proResHQ
-            #expect(controller.settings.codec == .proResHQ)
-            #expect(CaptureSettings.loaded(from: controller.defaults).codec
+            controller.settings.capture.codec = .proResHQ
+            #expect(controller.settings.capture.codec == .proResHQ)
+            #expect(CaptureSettings.loaded(from: controller.defaults).capture.codec
                 == .proResHQ)
         }
     }

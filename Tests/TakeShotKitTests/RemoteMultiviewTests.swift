@@ -54,7 +54,7 @@ import Testing
             let cameras = try #require(status["cameras"] as? [[String: Any]])
             #expect(cameras.count == 1)
             #expect(cameras.first?["name"] as? String
-                == controller.settings.cameraLabel)
+                == controller.settings.naming.cameraLabel)
             #expect(cameras.first?["recording"] as? Bool == false)
 
             // Nothing is encoded until somebody asks: the subscription is

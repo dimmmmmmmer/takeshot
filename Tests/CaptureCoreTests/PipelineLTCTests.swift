@@ -64,14 +64,14 @@ struct PipelineLTCTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.startDebounceFrames = 3
-        settings.stopDebounceFrames = 5
-        settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0
-        settings.timecodeSource = "ltc"
-        settings.ltcChannel = 1
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.capture.startDebounceFrames = 3
+        settings.capture.stopDebounceFrames = 5
+        settings.capture.detectionMode = .timecodeRun
+        settings.capture.preRollSeconds = 0
+        settings.capture.timecodeSource = "ltc"
+        settings.capture.ltcChannel = 1
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, slate: SlateMetadata(scene: "9"), takeNumber: 1))

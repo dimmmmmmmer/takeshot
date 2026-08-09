@@ -61,19 +61,19 @@ extension CaptureController {
         // moves the region they sample (see updateScopeRegion)
         updateScopeRegion()
         if oldValue.desqueeze != assist.desqueeze {
-            settings.desqueezeFactor = assist.desqueeze == 1
+            settings.assist.desqueezeFactor = assist.desqueeze == 1
                 ? nil : assist.desqueeze
         }
         // the peaking color is a crew convention, like the marker color:
         // stored as nil at the default so old builds still decode the blob
         if oldValue.peakingColor != assist.peakingColor {
-            settings.peakingColor = assist.peakingColor == .red
+            settings.assist.peakingColor = assist.peakingColor == .red
                 ? nil : assist.peakingColor.rawValue
         }
         // …and so is how hard it is driven. Stored in the renderer's unit,
-        // shown as a percentage (see CaptureSettings.peakingIntensity).
+        // shown as a percentage (see AssistSettings.peakingIntensity).
         if oldValue.peakingIntensity != assist.peakingIntensity {
-            settings.peakingIntensity =
+            settings.assist.peakingIntensity =
                 assist.peakingIntensity == ViewAssist().peakingIntensity
                 ? nil : assist.peakingIntensity
         }
@@ -155,7 +155,7 @@ extension CaptureController {
     /// The same control as the operator reads it: sensitivity, 0…100 %.
     ///
     /// The slider is in these units and the stored value is in the renderer's
-    /// (see `CaptureSettings.peakingIntensity`) — "2 to 30" is a number out of
+    /// (see `AssistSettings.peakingIntensity`) — "2 to 30" is a number out of
     /// the CoreImage documentation and says nothing about how much peaking that
     /// is.
     var peakingPercent: Double {
@@ -230,19 +230,19 @@ extension CaptureController {
     /// to `assist` (`applyLegendChange`). One direction only: a picker that
     /// wrote `assist` directly would leave the stored choice behind.
     var legendSize: AssistLegendSize {
-        get { AssistLegendSize(rawValue: settings.legendSize ?? "") ?? .medium }
-        set { settings.legendSize = newValue == .medium ? nil : newValue.rawValue }
+        get { AssistLegendSize(rawValue: settings.assist.legendSize ?? "") ?? .medium }
+        set { settings.assist.legendSize = newValue == .medium ? nil : newValue.rawValue }
     }
 
     /// Which edge the legend runs along; bottom, centered, is the default and
     /// is stored as nil like every other default.
     var legendPlacement: AssistLegendPlacement {
         get {
-            AssistLegendPlacement(rawValue: settings.legendPlacement ?? "")
+            AssistLegendPlacement(rawValue: settings.assist.legendPlacement ?? "")
                 ?? .standard
         }
         set {
-            settings.legendPlacement = newValue == .standard
+            settings.assist.legendPlacement = newValue == .standard
                 ? nil : newValue.rawValue
         }
     }

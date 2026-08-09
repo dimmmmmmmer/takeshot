@@ -50,7 +50,7 @@ enum NDIProbe {
 struct NDILifecycleTests {
     @Test func theSwitchIsOffAndNothingIsBuiltUntilItIsThrown() async throws {
         try await NDIProbe.run(live: true) { controller, log in
-            #expect(controller.settings.ndiEnabled == nil)
+            #expect(controller.settings.ndi.enabled == nil)
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiState == .off)
             // The synthetic source has been running the whole time. An idle
@@ -63,15 +63,15 @@ struct NDILifecycleTests {
 
     @Test func theSourceIsAnnouncedAndDroppedWithTheSetting() async throws {
         try await NDIProbe.run { controller, log in
-            controller.settings.projectName = "Dune"
-            controller.settings.cameraLabel = "B"
-            controller.settings.ndiEnabled = true
+            controller.settings.naming.projectName = "Dune"
+            controller.settings.naming.cameraLabel = "B"
+            controller.settings.ndi.enabled = true
 
             #expect(controller.mirrors.ndi != nil)
             #expect(controller.mirrors.ndiState == .sending)
             #expect(log.names == ["Dune B"])
 
-            controller.settings.ndiEnabled = nil
+            controller.settings.ndi.enabled = nil
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiState == .off)
             #expect(await ControllerWait.until {
@@ -84,7 +84,7 @@ struct NDILifecycleTests {
     /// format and at the rate the wire is in — and NOT on the capture queue.
     @Test func theDisplayFrameReachesTheSource() async throws {
         try await NDIProbe.run(live: true) { controller, log in
-            controller.settings.ndiEnabled = true
+            controller.settings.ndi.enabled = true
             let sender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.frames.isEmpty },
                     "no frame ever reached the NDI source")
@@ -109,11 +109,11 @@ struct NDILifecycleTests {
 
     @Test func nothingReachesTheSourceOnceTheSwitchIsOff() async throws {
         try await NDIProbe.run(live: true) { controller, log in
-            controller.settings.ndiEnabled = true
+            controller.settings.ndi.enabled = true
             let sender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.frames.isEmpty })
 
-            controller.settings.ndiEnabled = nil
+            controller.settings.ndi.enabled = nil
             #expect(await ControllerWait.until { sender.isStopped })
             let afterStop = sender.frames.count
             try await Task.sleep(for: .milliseconds(300))
@@ -127,10 +127,10 @@ struct NDILifecycleTests {
     /// name out do not each put a source in every receiver's list.
     @Test func aNameChangeReannouncesTheSourceOnce() async throws {
         try await NDIProbe.run { controller, log in
-            controller.settings.ndiEnabled = true
-            controller.settings.ndiSourceName = "Cl"
-            controller.settings.ndiSourceName = "Clie"
-            controller.settings.ndiSourceName = "Client feed"
+            controller.settings.ndi.enabled = true
+            controller.settings.ndi.sourceName = "Cl"
+            controller.settings.ndi.sourceName = "Clie"
+            controller.settings.ndi.sourceName = "Client feed"
             #expect(log.names.count == 1,
                     "a sender per keystroke: \(log.names)")
 
@@ -154,12 +154,12 @@ struct NDILifecycleTests {
                     NSLocalizedDescriptionKey: "source name already in use",
                 ])
             }
-            controller.settings.ndiEnabled = true
+            controller.settings.ndi.enabled = true
 
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiState
                 == .failed("source name already in use"))
-            #expect(controller.settings.ndiEnabled == true,
+            #expect(controller.settings.ndi.enabled == true,
                     "the switch went off and took the name field with it")
             #expect(controller.lastError?.contains("source name already in use")
                 == true)
@@ -174,11 +174,11 @@ struct NDILifecycleTests {
             controller.mirrors.ndiSenderFactory = { _ in
                 throw NSError(domain: "test", code: 1)
             }
-            controller.settings.ndiEnabled = true
+            controller.settings.ndi.enabled = true
             #expect(controller.mirrors.ndi == nil)
 
             controller.mirrors.ndiSenderFactory = { log.build($0) }
-            controller.settings.ndiSourceName = "Client feed"
+            controller.settings.ndi.sourceName = "Client feed"
             #expect(await ControllerWait.until { controller.mirrors.ndi != nil },
                     "a new name did not retry")
             #expect(log.names == ["Client feed"])
@@ -214,7 +214,7 @@ struct NDIStubBuildTests {
             // clearing it is what puts the real (stub) one back, which is safe
             // in exactly this build and nowhere else.
             controller.mirrors.ndiSenderFactory = nil
-            controller.settings.ndiEnabled = true
+            controller.settings.ndi.enabled = true
 
             #expect(controller.mirrors.ndi == nil)
             guard case .unavailable(let reason) = controller.mirrors.ndiState else {
@@ -222,7 +222,7 @@ struct NDIStubBuildTests {
                 return
             }
             #expect(reason.contains("vendor/NDISDK/include"))
-            #expect(controller.settings.ndiEnabled == true,
+            #expect(controller.settings.ndi.enabled == true,
                     "a structural absence turned the operator's switch off")
         }
     }

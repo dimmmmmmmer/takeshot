@@ -66,7 +66,7 @@ import Testing
 
             #expect(controller.availableLUTs.map(\.fileName) == ["day3_ext.cdl"])
             #expect(controller.availableLUTs.map(\.name) == ["day3_ext"])
-            #expect(controller.settings.lutFileName == "day3_ext.cdl")
+            #expect(controller.settings.lut.fileName == "day3_ext.cdl")
             #expect(controller.lutPreviewOn,
                     "picking a look and not seeing it is not a look")
             #expect(controller.lastError == nil)
@@ -146,7 +146,7 @@ import Testing
                     "a .ccc with no grade in it imported quietly")
             #expect(controller.currentCube == nil)
             #expect(controller.currentCDL == nil)
-            #expect(controller.settings.lutFileName == nil,
+            #expect(controller.settings.lut.fileName == nil,
                     "a look that cannot be read must not stay selected")
         }
     }
@@ -171,7 +171,7 @@ import Testing
             controller.lutRecordOn = true
 
             #expect(controller.lastError == nil)
-            #expect(controller.settings.lutFileName == "look.cdl")
+            #expect(controller.settings.lut.fileName == "look.cdl")
             #expect(controller.currentCDL?.saturation == 0.85)
             #expect(controller.currentCube != nil)
         }
@@ -195,8 +195,8 @@ import Testing
     private func apply(_ look: CDLLook, to controller: CaptureController) {
         controller.cubeCache = .init(fileName: "memory.cdl", cube: look.cube(),
                                      cdl: look)
-        controller.settings.lutFileName = "memory.cdl"
-        controller.settings.lutPreviewEnabled = true
+        controller.settings.lut.fileName = "memory.cdl"
+        controller.settings.lut.previewEnabled = true
         controller.rebuildLUT()
     }
 
@@ -277,7 +277,7 @@ import Testing
             controller.cubeCache = .init(fileName: "equivalent.cube",
                                          cube: try CubeLUT.load(url: url),
                                          cdl: nil)
-            controller.settings.lutFileName = "equivalent.cube"
+            controller.settings.lut.fileName = "equivalent.cube"
             controller.rebuildLUT()
             let viaCube = self.rendered(controller)
 

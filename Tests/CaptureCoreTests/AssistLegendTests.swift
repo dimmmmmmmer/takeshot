@@ -309,7 +309,7 @@ struct AssistLegendTests {
     /// different things by "medium" or "bottom".
     @Test func theLegendComesOutOfTheSettingsIntact() {
         var settings = CaptureSettings()
-        #expect(AssistLegend(settings: settings) == AssistLegend())
+        #expect(AssistLegend(settings: settings.assist) == AssistLegend())
         #expect(AssistLegend().size == .medium)
         #expect(AssistLegend().placement == .bottom)
         #expect(AssistLegendPlacement.standard == .bottom)
@@ -318,14 +318,14 @@ struct AssistLegendTests {
         #expect(!AssistLegendPlacement.top.isVertical)
         #expect(!AssistLegendPlacement.bottom.isVertical)
 
-        settings.legendSize = "l"
-        settings.legendPlacement = "right"
-        #expect(AssistLegend(settings: settings)
+        settings.assist.legendSize = "l"
+        settings.assist.legendPlacement = "right"
+        #expect(AssistLegend(settings: settings.assist)
             == AssistLegend(size: .large, placement: .right))
         // a hand-edited blob falls back rather than crashing a picker
-        settings.legendSize = "enormous"
-        settings.legendPlacement = "diagonal"
-        #expect(AssistLegend(settings: settings) == AssistLegend())
+        settings.assist.legendSize = "enormous"
+        settings.assist.legendPlacement = "diagonal"
+        #expect(AssistLegend(settings: settings.assist) == AssistLegend())
     }
 
     // MARK: - on the frame

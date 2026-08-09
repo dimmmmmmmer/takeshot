@@ -222,7 +222,7 @@ struct ViewFooterTests {
         try await ViewProbe.run { probe in
             var first: CGSize?
             for codec in CaptureCodec.allCases {
-                probe.controller.settings.codec = codec
+                probe.controller.settings.capture.codec = codec
                 let ideal = probe.fittingSizes { FooterCodecMenu() }
                 #expect(ideal.ru == ideal.en, "\(codec.rawValue): \(ideal)")
                 #expect(ideal.en.width < 50,

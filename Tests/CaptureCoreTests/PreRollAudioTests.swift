@@ -15,12 +15,12 @@ struct PreRollAudioTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.startDebounceFrames = 3
-        settings.stopDebounceFrames = 5
-        settings.detectionMode = .timecodeRun
-        settings.preRollSeconds = 0.8 // 20 frames at 25 fps
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.capture.startDebounceFrames = 3
+        settings.capture.stopDebounceFrames = 5
+        settings.capture.detectionMode = .timecodeRun
+        settings.capture.preRollSeconds = 0.8 // 20 frames at 25 fps
 
         let pipeline = CapturePipeline(config: .init(
             settings: settings, slate: SlateMetadata(scene: "1"), takeNumber: 1))

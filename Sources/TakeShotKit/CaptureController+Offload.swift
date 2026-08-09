@@ -91,7 +91,7 @@ extension CaptureController {
     /// value nothing read back and nothing ever did. Which checksum a given run
     /// used is in that run's ASC MHL manifest, which is where post looks for it.
     func rememberOffloadChoices(destinations: [URL]) {
-        settings.offloadDestinationPaths = destinations.isEmpty
+        settings.offload.destinationPaths = destinations.isEmpty
             ? nil : destinations.map(\.path)
     }
 

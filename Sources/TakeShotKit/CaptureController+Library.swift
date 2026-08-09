@@ -58,7 +58,7 @@ extension CaptureController {
         guard let url = FilePanel.openOne(.init(
             files: false, directories: true, createDirectories: true,
             directory: destinationRoot)) else { return }
-        settings.destinationPath = url.path
+        settings.capture.destinationPath = url.path
     }
     /// Light polling of the record folder: video files not among our takes
     /// are shown in a separate Other content block.

@@ -120,10 +120,10 @@ import Testing
 
             // through the JSON blob, exactly as a relaunch would read it
             let reloaded = CaptureSettings.loaded(from: controller.defaults)
-            #expect(reloaded.dailiesBurnTimecode == false)
-            #expect(reloaded.dailiesBurnDate == true)
-            #expect(reloaded.dailiesCustomText == "FOR REVIEW")
-            #expect(reloaded.dailiesDestinationPath == elsewhere.path)
+            #expect(reloaded.dailies.burnTimecode == false)
+            #expect(reloaded.dailies.burnDate == true)
+            #expect(reloaded.dailies.customText == "FOR REVIEW")
+            #expect(reloaded.dailies.destinationPath == elsewhere.path)
 
             // …and the next sheet opens on the saved convention
             model.prepare(takes: [], settings: reloaded,
@@ -139,8 +139,8 @@ import Testing
     /// project · camera+roll line, and the locale-proof date.
     @Test func aTakeBecomesAnItemWithComposedBurninFacts() async throws {
         try await ControllerHarness.run(configure: {
-            $0.projectName = "UnitFilm"
-            $0.cameraLabel = "A"
+            $0.naming.projectName = "UnitFilm"
+            $0.naming.cameraLabel = "A"
         }, { controller, root in
             var take = ControllerFixtures.take(named: "A001C07", in: root)
             take.recordedAt = Date(timeIntervalSince1970: 1_754_092_800) // 2025-08-02 UTC

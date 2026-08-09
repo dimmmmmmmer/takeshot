@@ -147,7 +147,7 @@ extension CaptureController {
     // MARK: - persistence
 
     /// The dial-in survives a relaunch; the switch does not (see
-    /// `CaptureSettings.chromaKeyColorHex` for why). Everything is stored as
+    /// `ChromaKeySettings.colorHex` for why). Everything is stored as
     /// nil at its default — the same convention as every other added field, so
     /// settings written by an older build still decode — and the whole blob is
     /// assigned once, because each write to `settings` runs the change handler.
@@ -155,33 +155,33 @@ extension CaptureController {
         let key = assist.chroma
         let base = ChromaKey()
         var updated = settings
-        updated.chromaKeyColorHex = key.keyColor == base.keyColor
+        updated.chromaKey.colorHex = key.keyColor == base.keyColor
             ? nil : key.keyColor.hexString
-        updated.chromaKeyTolerance = key.tolerance == base.tolerance
+        updated.chromaKey.tolerance = key.tolerance == base.tolerance
             ? nil : key.tolerance
-        updated.chromaKeySoftness = key.softness == base.softness
+        updated.chromaKey.softness = key.softness == base.softness
             ? nil : key.softness
-        updated.chromaKeySpill = key.spill == base.spill ? nil : key.spill
-        updated.chromaKeyBackground = key.background == base.background
+        updated.chromaKey.spill = key.spill == base.spill ? nil : key.spill
+        updated.chromaKey.background = key.background == base.background
             ? nil : key.background.rawValue
-        updated.chromaKeyBackgroundHex = key.backgroundColor == base.backgroundColor
+        updated.chromaKey.backgroundHex = key.backgroundColor == base.backgroundColor
             ? nil : key.backgroundColor.hexString
-        Self.storePlateLayout(key.plate, into: &updated)
+        Self.storePlateLayout(key.plate, into: &updated.chromaKey)
         guard updated != settings else { return }
         settings = updated
     }
 
     /// Restore the dial-in at launch — switched OFF, whatever it was left at.
-    func restoreChroma(from stored: CaptureSettings) {
+    func restoreChroma(from stored: ChromaKeySettings) {
         var key = ChromaKey()
-        if let hex = stored.chromaKeyColorHex,
+        if let hex = stored.colorHex,
            let color = ChromaKey.RGB(hex: hex) { key.keyColor = color }
-        key.tolerance = stored.chromaKeyTolerance ?? key.tolerance
-        key.softness = stored.chromaKeySoftness ?? key.softness
-        key.spill = stored.chromaKeySpill ?? key.spill
-        key.background = stored.chromaKeyBackground
+        key.tolerance = stored.tolerance ?? key.tolerance
+        key.softness = stored.softness ?? key.softness
+        key.spill = stored.spill ?? key.spill
+        key.background = stored.background
             .flatMap(ChromaKey.Background.init(rawValue:)) ?? key.background
-        if let hex = stored.chromaKeyBackgroundHex,
+        if let hex = stored.backgroundHex,
            let color = ChromaKey.RGB(hex: hex) { key.backgroundColor = color }
         key.plate = Self.plateLayout(from: stored)
         key.clamp()
@@ -189,7 +189,7 @@ extension CaptureController {
         assist.chroma = key
         // the plate comes back with it; a file that has since been moved just
         // leaves the checkerboard showing
-        if let path = stored.chromaKeyBackgroundImagePath,
+        if let path = stored.backgroundImagePath,
            FileManager.default.fileExists(atPath: path) {
             loadChromaBackground(mediaURL: URL(fileURLWithPath: path))
         }

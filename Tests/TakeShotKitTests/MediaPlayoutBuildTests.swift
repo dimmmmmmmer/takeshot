@@ -60,7 +60,7 @@ import Testing
     @Test func theOutputModeFollowsTheLiveSignal() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:UltraStudio4KMini"
+                controller.settings.capture.monitorDeviceID = "decklink:UltraStudio4KMini"
 
                 #expect(requests.modes.count == 1)
                 #expect(requests.modes.first?.board == "UltraStudio4KMini",
@@ -77,7 +77,7 @@ import Testing
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
                 #expect(controller.signalFormat == nil)
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
 
                 let asked = try #require(requests.modes.first)
                 #expect(asked.width == 1920)
@@ -98,7 +98,7 @@ import Testing
                 // a raster no HD-only output can take
                 controller.signalFormat = MediaFixtures.format(
                     width: 4096, height: 2160, frameRate: 47.95, timecodeFPS: 48)
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
 
                 #expect(requests.modes.count == 2, "the fallback was not attempted")
                 #expect(requests.modes.first?.width == 4096)
@@ -118,7 +118,7 @@ import Testing
     @Test func aBoardThatRefusesEverythingIsReported() async throws {
         try await withFakeBoard(failing: 2) { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
 
                 #expect(requests.modes.count == 2)
                 #expect(controller.mirrors.playout == nil)
@@ -141,7 +141,7 @@ import Testing
                 // the one that was already torn down
                 await ControllerWait.until { controller.signalFormat != nil }
                 controller.viewerMode = .record
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
                 let board = try #require(requests.outputs.last)
 
                 #expect(await ControllerWait.until { !board.displayed.isEmpty },
@@ -159,7 +159,7 @@ import Testing
     @Test func aFormatArrivingAfterTheOutputRebuildsIt() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run(live: true) { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
                 let firstBoard = try #require(requests.outputs.first)
                 #expect(firstBoard.outputWidth == 1920)
 
@@ -180,7 +180,7 @@ import Testing
     @Test func inReviewTheTapsFramesReachTheBoard() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
                 controller.viewerMode = .playback
                 let feeder = try #require(controller.mirrors.playout)
                 let board = try #require(requests.outputs.first)
@@ -212,7 +212,7 @@ import Testing
     @Test func aStaleTapHandlerIsNotLeftFeedingTheMirror() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
                 controller.viewerMode = .playback
                 let feeder = try #require(controller.mirrors.playout)
                 let board = try #require(requests.outputs.first)
@@ -239,11 +239,11 @@ import Testing
     @Test func rebuildingStopsThePreviousOutput() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:first"
+                controller.settings.capture.monitorDeviceID = "decklink:first"
                 let first = try #require(requests.outputs.first)
                 #expect(first.stops == 0)
 
-                controller.settings.monitorDeviceID = "decklink:second"
+                controller.settings.capture.monitorDeviceID = "decklink:second"
                 #expect(first.stops == 1, "the first output was left running")
                 #expect(requests.outputs.count == 2)
             }
@@ -256,10 +256,10 @@ import Testing
     @Test func clearingTheOutputReleasesTheBoard() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
-                controller.settings.monitorDeviceID = "decklink:board"
+                controller.settings.capture.monitorDeviceID = "decklink:board"
                 let board = try #require(requests.outputs.first)
 
-                controller.settings.monitorDeviceID = nil
+                controller.settings.capture.monitorDeviceID = nil
 
                 #expect(board.stops == 1)
                 #expect(controller.mirrors.playout == nil)

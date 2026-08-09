@@ -20,7 +20,7 @@ enum RemoteHarness {
         controller.startRemoteServer(overridePort: 0)
         let up = await ControllerWait.until { controller.remoteBoundPort > 0 }
         try #require(up, "the listener never reached ready")
-        let pin = try #require(controller.settings.remotePIN)
+        let pin = try #require(controller.settings.remote.pin)
         return (controller.remoteBoundPort, pin)
     }
 

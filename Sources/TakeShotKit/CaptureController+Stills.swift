@@ -121,7 +121,7 @@ extension CaptureController {
         // project_cam_still_timecode
         let stamp = currentTimecode?.fileNameSafe ?? Self.grabTimeStamp()
         let name = NamingEngine.sanitize(
-            [settings.projectName, settings.cameraLabel, "still", stamp]
+            [settings.naming.projectName, settings.naming.cameraLabel, "still", stamp]
                 .filter { !$0.isEmpty }.joined(separator: "_"))
         let url = CapturePipeline.uniqueURL(for: destinationRoot
             .appendingPathComponent(name).appendingPathExtension("png"))

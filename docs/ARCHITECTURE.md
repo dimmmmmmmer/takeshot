@@ -398,16 +398,75 @@ would drop a marker while a roll name is being typed.
   capped at 20). The record folder is emptied and re-pointed between shooting
   days, and the card being copied has nothing to do with it.
 
+## Settings: one flat record, fourteen grouped views of it
+
+`CaptureSettings` does two jobs and they pull in opposite directions.
+
+It is the **record**. One JSON blob in `UserDefaults` under
+`TakeShot.CaptureSettings`, 84 keys, and there is no error path for getting the
+shape wrong: a key that moves stops decoding, `loaded(from:)` answers the throw
+with a fresh default object, and the operator's destination folder, naming
+template, calibrated assist thresholds and taught REC references are silently
+replaced by defaults on the first launch of the update — on a shooting day.
+
+It is also the app's **configuration surface**, read at several hundred call
+sites, and as that it had grown into a god object: 84 flat stored properties,
+half of them carrying a hand-maintained prefix (`chromaKeyPlateOffsetX`)
+standing in for a namespace they could not have.
+
+The two are reconciled by grouping the TYPE while keeping the WIRE FORMAT flat.
+`CaptureSettings` holds fourteen domain groups (`capture`, `naming`, `audio`,
+`theme`, `assist`, `review`, `lut`, `r3d`, `chromaKey`, `visualRec`, `remote`,
+`ndi`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its own
+**synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)` delegate
+to all fourteen against a SINGLE keyed container, so every key still lands at
+the top level exactly where it always did. Nothing hand-writes a per-field
+encode or decode — the field-to-key mapping is still the compiler's, which is
+what makes the 84 keys unforgeable.
+
+Flatness is load-bearing for a second consumer as well as for the stored blob:
+`DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by
+matching the top-level key NAME, which is how `remotePIN` stays out of a bundle
+that gets emailed to someone. Nest it and the filter stops seeing it.
+
+Three suites hold all of that still, and between them the format is a fact
+rather than a claim:
+
+- `ModelSettingsFormatTests` pins the exact key set, that a default install
+  writes only the eight non-Optional keys, that a blob with a distinct value in
+  every field round-trips value for value, that the encoding is flat, and that
+  a save/load through `UserDefaults` — migration chain included — is the
+  identity. Every assertion is phrased in JSON and none names a Swift property
+  path, so a rearrangement of the type cannot edit the fixture it is read
+  against.
+- `ModelSettingsGroupNamingTests` closes what a round trip structurally cannot
+  see: two same-typed fields whose `CodingKeys` are transposed round-trip
+  perfectly. It reflects each group's property labels, encodes the group, and
+  requires every key to derive from its own property by one mechanical rule
+  (group prefix + capitalised label, or the label verbatim for a key that
+  predates its group). It also checks the fourteen groups account for the whole
+  format exactly once, which is what fails if a group is declared and never
+  wired into the delegation.
+- `ModelSettingsMigrationTests` covers what happens to a blob written by an
+  older build, against hand-written JSON.
+
+**Adding a setting**: put it in the group it belongs to, make it Optional, and
+add its key to the pinned list in `SettingsFormatFixture`. **Adding a group**
+means adding it to `init(from:)` and `encode(to:)` — a group left out of either
+takes all of its keys with it, loudly, in the tests above rather than quietly on
+somebody's set.
+
 ## Localization
 
 The base language is English. UI strings go through `L("key")`
 (`Sources/TakeShotKit/L10n.swift`) with the tables in
 `Sources/TakeShotKit/Resources/{en,ru}.lproj/Localizable.strings`. The language
-switch swaps the `.lproj` bundle and is stored in `CaptureSettings.appLanguage`
+switch swaps the `.lproj` bundle and is stored in `ThemeSettings.appLanguage`
 (nil means follow the system).
 
 Make new settings fields **Optional** — otherwise saved JSON from an older
-build will not decode. Core errors (`CaptureCore`, `CDeckLink`) are English and
+build will not decode (see the settings section above for where a new field
+goes and what has to be told about it). Core errors (`CaptureCore`, `CDeckLink`) are English and
 not localized. Add every new string to both tables.
 
 ### What crosses the CaptureCore boundary, and what does not

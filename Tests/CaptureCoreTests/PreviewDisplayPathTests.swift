@@ -45,7 +45,7 @@ enum PreviewProbe {
         var settings = CaptureSettings()
         // manual: nothing in these suites may open a take, so the destination
         // folder is never created and never written to
-        settings.detectionMode = .manual
+        settings.capture.detectionMode = .manual
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         pipeline.handleFormat(CaptureFormat(width: 64, height: 32, frameRate: 25,

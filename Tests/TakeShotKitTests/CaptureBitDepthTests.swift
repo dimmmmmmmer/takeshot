@@ -17,8 +17,8 @@ struct CaptureBitDepthTests {
     /// moves anybody onto a format their board may not deliver.
     @Test func theDefaultIsTenBitAndTwelveIsOff() {
         let fresh = CaptureSettings()
-        #expect(fresh.captureBitDepth == nil)
-        #expect(fresh.resolvedCaptureBitDepth == .ten)
+        #expect(fresh.capture.captureBitDepth == nil)
+        #expect(fresh.capture.resolvedBitDepth == .ten)
     }
 
     /// Settings saved before `captureBitDepth` existed still resolve to the
@@ -26,24 +26,24 @@ struct CaptureBitDepthTests {
     /// for, and it is read rather than rewritten.
     @Test func theLegacyBooleanStillDecidesWhenTheNewFieldIsAbsent() {
         var eightBit = CaptureSettings()
-        eightBit.tenBitCapture = false
-        #expect(eightBit.resolvedCaptureBitDepth == .eight)
+        eightBit.capture.tenBitCapture = false
+        #expect(eightBit.capture.resolvedBitDepth == .eight)
         var tenBit = CaptureSettings()
-        tenBit.tenBitCapture = true
-        #expect(tenBit.resolvedCaptureBitDepth == .ten)
+        tenBit.capture.tenBitCapture = true
+        #expect(tenBit.capture.resolvedBitDepth == .ten)
         // …and the explicit field wins over it, in both directions
         var conflicting = CaptureSettings()
-        conflicting.tenBitCapture = false
-        conflicting.captureBitDepth = CaptureBitDepth.twelve.rawValue
-        #expect(conflicting.resolvedCaptureBitDepth == .twelve)
+        conflicting.capture.tenBitCapture = false
+        conflicting.capture.captureBitDepth = CaptureBitDepth.twelve.rawValue
+        #expect(conflicting.capture.resolvedBitDepth == .twelve)
     }
 
     /// An unrecognised stored value falls back rather than refusing to decode —
     /// a settings blob written by a newer build must not break capture.
     @Test func anUnknownStoredDepthFallsBack() {
         var settings = CaptureSettings()
-        settings.captureBitDepth = "14"
-        #expect(settings.resolvedCaptureBitDepth == .ten)
+        settings.capture.captureBitDepth = "14"
+        #expect(settings.capture.resolvedBitDepth == .ten)
     }
 
     /// The setting round-trips through the stored JSON, which is where an
@@ -51,17 +51,17 @@ struct CaptureBitDepthTests {
     @Test func theSettingRoundTripsThroughStorage() throws {
         let defaults = InMemoryDefaults()
         var settings = CaptureSettings()
-        settings.captureBitDepth = CaptureBitDepth.twelve.rawValue
+        settings.capture.captureBitDepth = CaptureBitDepth.twelve.rawValue
         settings.save(to: defaults)
         let loaded = CaptureSettings.loaded(from: defaults)
-        #expect(loaded.captureBitDepth == "12")
-        #expect(loaded.resolvedCaptureBitDepth == .twelve)
+        #expect(loaded.capture.captureBitDepth == "12")
+        #expect(loaded.capture.resolvedBitDepth == .twelve)
         // and an old blob with no such key still decodes
         let older = InMemoryDefaults()
         var legacy = CaptureSettings()
-        legacy.tenBitCapture = true
+        legacy.capture.tenBitCapture = true
         legacy.save(to: older)
-        #expect(CaptureSettings.loaded(from: older).resolvedCaptureBitDepth == .ten)
+        #expect(CaptureSettings.loaded(from: older).capture.resolvedBitDepth == .ten)
     }
 
     /// Every case has a bit count, and they are the ones the pipeline branches
@@ -81,7 +81,7 @@ struct CaptureBitDepthTests {
         #expect(CaptureBitDepth.ten.yuvBits == 10)
         #expect(CaptureBitDepth.twelve.yuvBits == 10)
         // and the shipped default asks for 10-bit on BOTH samplings
-        #expect(CaptureSettings().resolvedCaptureBitDepth.yuvBits == 10)
+        #expect(CaptureSettings().capture.resolvedBitDepth.yuvBits == 10)
     }
 
     private static func signal(rgb444: Bool, bitDepth: Int) -> CaptureFormat {
@@ -127,7 +127,7 @@ struct CaptureBitDepthTests {
         // both closures passed explicitly: a trailing closure alongside
         // `configure:` is two closures on one call, which the linter rejects
         try await ControllerHarness.run(
-            configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
+            configure: { $0.capture.captureBitDepth = CaptureBitDepth.twelve.rawValue },
             { controller, _ in
             // a BOARD is the source — the harness stands in for the demo source
             // under the "mock:" prefix, and the demo source never reports a
@@ -167,7 +167,7 @@ struct CaptureBitDepthTests {
         // both closures passed explicitly: a trailing closure alongside
         // `configure:` is two closures on one call, which the linter rejects
         try await ControllerHarness.run(
-            configure: { $0.captureBitDepth = CaptureBitDepth.twelve.rawValue },
+            configure: { $0.capture.captureBitDepth = CaptureBitDepth.twelve.rawValue },
             { controller, _ in
             #expect(controller.isMockSelected,
                     "the harness is meant to stand in for the demo source")
@@ -198,8 +198,8 @@ struct CaptureBitDepthTests {
                                      (.ten, true, false),
                                      (.twelve, true, true)] {
             var settings = CaptureSettings()
-            settings.captureBitDepth = depth.rawValue
-            let resolved = settings.resolvedCaptureBitDepth
+            settings.capture.captureBitDepth = depth.rawValue
+            let resolved = settings.capture.resolvedBitDepth
             adapter.preferTenBitRGB = resolved != .eight
             adapter.preferTwelveBitRGB = resolved == .twelve
             adapter.preferTenBitYUV = resolved.yuvBits == 10

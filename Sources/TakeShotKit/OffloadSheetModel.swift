@@ -79,7 +79,7 @@ final class OffloadSheetModel: ObservableObject {
         // The operator's saved destination list. The folder the retired verified
         // backup used to hold is in it too — `CaptureSettings.migrateToVersion2`
         // moves it there on load, so nobody loses a path they had chosen.
-        let saved = settings.offloadDestinationPaths ?? []
+        let saved = settings.offload.destinationPaths ?? []
         rows = saved.map { Row(url: URL(fileURLWithPath: $0)) }
     }
 

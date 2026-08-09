@@ -14,8 +14,8 @@ import Testing
 struct VisualRecPipelineTests {
     private func idlePipeline() -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.detectionMode = .manual
-        settings.preRollFrames = 0
+        settings.capture.detectionMode = .manual
+        settings.capture.preRollFrames = 0
         // The start confirm is put out of this suite's reach on purpose. The
         // indicator is a trigger in Manual mode too — that is the composition
         // this feature is built on — so a rolling reading here would open a
@@ -24,7 +24,7 @@ struct VisualRecPipelineTests {
         // at the watcher's rate and nothing below pushes that many frames.
         // (`PipelineScopeTests` avoids the encoder the same way.) The ring it
         // implies costs nothing: every push here hands over the same buffer.
-        settings.startDebounceFrames = 30
+        settings.capture.startDebounceFrames = 30
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                     takeNumber: 1))
         pipeline.handleFormat(CaptureFormat(
@@ -250,9 +250,9 @@ struct VisualRecPipelineTests {
     /// disarmed it holds what it always did and not a frame more.
     @Test func thePreRollRingCoversTheVisualConfirmSpan() async throws {
         var settings = CaptureSettings()
-        settings.detectionMode = .manual
-        settings.preRollFrames = 5
-        settings.startDebounceFrames = 4
+        settings.capture.detectionMode = .manual
+        settings.capture.preRollFrames = 5
+        settings.capture.startDebounceFrames = 4
         let pipeline = CapturePipeline(config: .init(settings: settings,
                                                      takeNumber: 1))
         pipeline.handleFormat(CaptureFormat(

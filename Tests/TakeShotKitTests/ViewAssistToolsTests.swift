@@ -52,8 +52,8 @@ struct ViewAssistToolsTests {
         try await ViewProbe.run { probe in
             let base = CGSize(width: ViewBudget.playerWidth, height: 380)
             probe.controller.assist.colorTool = .elZone
-            probe.controller.settings.framelineRatio = 2.39
-            probe.controller.settings.safeAreasOn = true
+            probe.controller.settings.assist.framelineRatio = 2.39
+            probe.controller.settings.assist.safeAreasOn = true
             // the new ceiling, so the overlays are measured at what the zoom
             // can actually reach (owner item 42)
             probe.controller.punchInLevel = ViewAssist.maxPunchIn
@@ -83,8 +83,8 @@ struct ViewAssistToolsTests {
             probe.controller.assist.colorTool = .falseColor
             probe.controller.assist.zebraOn = true
             probe.controller.assist.peakingOn = true
-            probe.controller.settings.safeAreasOn = true
-            probe.controller.settings.framelineRatio = 2.39
+            probe.controller.settings.assist.safeAreasOn = true
+            probe.controller.settings.assist.framelineRatio = 2.39
             probe.controller.punchInLevel = 2.5
 
             let box = AssistControlsPanel.contentWidth
@@ -129,26 +129,26 @@ struct ViewAssistSettingsTests {
         """
         let settings = try JSONDecoder().decode(
             CaptureSettings.self, from: Data(legacy.utf8))
-        #expect(settings.legendSize == nil)
-        #expect(settings.legendPlacement == nil)
-        #expect(settings.peakingColor == nil)
-        #expect(settings.peakingIntensity == nil)
-        #expect(settings.safeActionPercentEffective == 93)
-        #expect(settings.safeTitlePercentEffective == 90)
+        #expect(settings.assist.legendSize == nil)
+        #expect(settings.assist.legendPlacement == nil)
+        #expect(settings.assist.peakingColor == nil)
+        #expect(settings.assist.peakingIntensity == nil)
+        #expect(settings.assist.safeActionPercentEffective == 93)
+        #expect(settings.assist.safeTitlePercentEffective == 90)
         // SMPTE RP 218 / EBU R 95, and the ORDER is the point: title safe is
         // the tighter box and has to fall inside action safe. Assign the pair
         // the other way round and the two guides swap, which draws a title-safe
         // line outside the action-safe line — a diagram that contradicts itself.
-        #expect(settings.safeTitlePercentEffective
-                < settings.safeActionPercentEffective,
+        #expect(settings.assist.safeTitlePercentEffective
+                < settings.assist.safeActionPercentEffective,
                 "title safe is drawn outside action safe")
 
         // and a nonsense value cannot put the guides outside the picture
         var edited = settings
-        edited.safeActionPercent = 0
-        edited.safeTitlePercent = 400
-        #expect(edited.safeActionPercentEffective == 50)
-        #expect(edited.safeTitlePercentEffective == 100)
+        edited.assist.safeActionPercent = 0
+        edited.assist.safeTitlePercent = 400
+        #expect(edited.assist.safeActionPercentEffective == 50)
+        #expect(edited.assist.safeTitlePercentEffective == 100)
     }
 
     /// Legend size and placement persist, and the defaults are stored as nil so
@@ -157,8 +157,8 @@ struct ViewAssistSettingsTests {
         try await ViewProbe.run { probe in
             probe.controller.legendSize = .large
             probe.controller.legendPlacement = .left
-            #expect(probe.controller.settings.legendSize == "l")
-            #expect(probe.controller.settings.legendPlacement == "left")
+            #expect(probe.controller.settings.assist.legendSize == "l")
+            #expect(probe.controller.settings.assist.legendPlacement == "left")
             // …and the picker reaches the RENDERER, which is the half that
             // makes it to the hardware monitor: the legend is burned into the
             // display frame off `assist`, not drawn from the settings blob.
@@ -166,14 +166,14 @@ struct ViewAssistSettingsTests {
                 == AssistLegend(size: .large, placement: .left))
 
             let reloaded = CaptureSettings.loaded(from: probe.store)
-            #expect(reloaded.legendSize == "l")
-            #expect(reloaded.legendPlacement == "left")
+            #expect(reloaded.assist.legendSize == "l")
+            #expect(reloaded.assist.legendPlacement == "left")
 
             // the defaults — medium, bottom centre (owner item 40)
             probe.controller.legendSize = .medium
             probe.controller.legendPlacement = .bottom
-            #expect(probe.controller.settings.legendSize == nil)
-            #expect(probe.controller.settings.legendPlacement == nil)
+            #expect(probe.controller.settings.assist.legendSize == nil)
+            #expect(probe.controller.settings.assist.legendPlacement == nil)
             #expect(probe.controller.legendSize == .medium)
             #expect(probe.controller.legendPlacement == .bottom)
             #expect(probe.controller.assist.legend == AssistLegend())
@@ -185,8 +185,8 @@ struct ViewAssistSettingsTests {
     /// drawing last session's legend somewhere else.
     @Test func theLegendChoicesAreRestoredAtStartup() async throws {
         try await ViewProbe.run(configure: {
-            $0.legendSize = "s"
-            $0.legendPlacement = "right"
+            $0.assist.legendSize = "s"
+            $0.assist.legendPlacement = "right"
         }, { probe in
             #expect(probe.controller.legendPlacement == .right)
             #expect(probe.controller.assist.legend
@@ -228,20 +228,20 @@ struct ViewAssistSettingsTests {
             probe.controller.peakingPercent = 80
             probe.controller.commitAssistDraft()
             #expect(probe.controller.assist.peakingIntensity == 24)
-            #expect(probe.controller.settings.peakingIntensity == 24)
-            #expect(CaptureSettings.loaded(from: probe.store).peakingIntensity == 24)
+            #expect(probe.controller.settings.assist.peakingIntensity == 24)
+            #expect(CaptureSettings.loaded(from: probe.store).assist.peakingIntensity == 24)
 
             probe.controller.peakingPercent = 40 // the default, stored as nil
             probe.controller.commitAssistDraft()
-            #expect(probe.controller.settings.peakingIntensity == nil)
+            #expect(probe.controller.settings.assist.peakingIntensity == nil)
         }
         // a stored gain from the old range comes back as itself
-        try await ViewProbe.run(configure: { $0.peakingIntensity = 2 }, { probe in
+        try await ViewProbe.run(configure: { $0.assist.peakingIntensity = 2 }, { probe in
             #expect(probe.controller.assist.peakingIntensity == 2)
             #expect(abs(probe.controller.peakingPercent - 20.0 / 3) < 0.001)
         })
         // …and a hand-edited nonsense value is clamped, not adopted
-        try await ViewProbe.run(configure: { $0.peakingIntensity = 900 }, { probe in
+        try await ViewProbe.run(configure: { $0.assist.peakingIntensity = 900 }, { probe in
             #expect(probe.controller.assist.peakingIntensity
                     == ViewAssist.maxPeakingIntensity)
         })
@@ -253,25 +253,25 @@ struct ViewAssistSettingsTests {
     @Test func thePeakingColorPersists() async throws {
         try await ViewProbe.run { probe in
             probe.controller.setAssist { $0.peakingColor = .green }
-            #expect(probe.controller.settings.peakingColor == "green")
-            #expect(CaptureSettings.loaded(from: probe.store).peakingColor
+            #expect(probe.controller.settings.assist.peakingColor == "green")
+            #expect(CaptureSettings.loaded(from: probe.store).assist.peakingColor
                     == "green")
             // …and the renderer sees it at once: the color rides ViewAssist,
             // which is what every surface is fed (see setViewAssist fan-out)
             #expect(probe.controller.liveAssist.peakingColor == .green)
 
             probe.controller.setAssist { $0.peakingColor = .red }
-            #expect(probe.controller.settings.peakingColor == nil)
+            #expect(probe.controller.settings.assist.peakingColor == nil)
         }
     }
 
     /// And it comes BACK at launch — with garbage in a hand-edited blob
     /// falling back to red rather than to a crash in the picker.
     @Test func thePeakingColorIsRestoredAtStartup() async throws {
-        try await ViewProbe.run(configure: { $0.peakingColor = "yellow" }, { probe in
+        try await ViewProbe.run(configure: { $0.assist.peakingColor = "yellow" }, { probe in
             #expect(probe.controller.assist.peakingColor == .yellow)
         })
-        try await ViewProbe.run(configure: { $0.peakingColor = "vermilion" }, { probe in
+        try await ViewProbe.run(configure: { $0.assist.peakingColor = "vermilion" }, { probe in
             #expect(probe.controller.assist.peakingColor == .red)
         })
     }

@@ -15,11 +15,11 @@ struct TenBitYUVPipelineTests {
                           codec: CaptureCodec = .proRes422,
                           levels: String? = nil) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual
-        settings.codec = codec
-        settings.preRollFrames = 0
-        settings.videoLevels = levels
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual
+        settings.capture.codec = codec
+        settings.capture.preRollFrames = 0
+        settings.capture.videoLevels = levels
         return CapturePipeline(config: .init(settings: settings, takeNumber: 1))
     }
 

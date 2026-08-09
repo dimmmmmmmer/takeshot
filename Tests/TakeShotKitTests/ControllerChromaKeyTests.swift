@@ -204,16 +204,16 @@ struct ControllerChromaKeyTests {
             controller.chromaBackgroundRGB = ChromaKey.RGB(1, 0, 0)
             controller.commitAssistDraft() // the sliders are debounced
 
-            #expect(controller.settings.chromaKeyColorHex == "#0000FF")
-            #expect(controller.settings.chromaKeyTolerance == 0.34)
-            #expect(controller.settings.chromaKeySpill == 0.8)
-            #expect(controller.settings.chromaKeyBackground == "matte")
-            #expect(controller.settings.chromaKeyBackgroundHex == "#FF0000")
+            #expect(controller.settings.chromaKey.colorHex == "#0000FF")
+            #expect(controller.settings.chromaKey.tolerance == 0.34)
+            #expect(controller.settings.chromaKey.spill == 0.8)
+            #expect(controller.settings.chromaKey.background == "matte")
+            #expect(controller.settings.chromaKey.backgroundHex == "#FF0000")
 
             // …and the same values come back out of a reload
             let reloaded = CaptureSettings.loaded(from: probe.store)
-            #expect(reloaded.chromaKeyTolerance == 0.34)
-            controller.restoreChroma(from: reloaded)
+            #expect(reloaded.chromaKey.tolerance == 0.34)
+            controller.restoreChroma(from: reloaded.chromaKey)
             #expect(controller.chroma.keyColor == ChromaKey.blueScreen)
             #expect(controller.chroma.tolerance == 0.34)
             #expect(controller.chroma.softness == 0.05)
@@ -232,14 +232,14 @@ struct ControllerChromaKeyTests {
             let controller = probe.controller
             controller.chromaTolerance = 0.5
             controller.commitAssistDraft()
-            #expect(controller.settings.chromaKeyTolerance == 0.5)
+            #expect(controller.settings.chromaKey.tolerance == 0.5)
 
             controller.chromaTolerance = ChromaKey().tolerance
             controller.commitAssistDraft()
-            #expect(controller.settings.chromaKeyTolerance == nil)
-            #expect(controller.settings.chromaKeyColorHex == nil)
-            #expect(controller.settings.chromaKeyBackground == nil)
-            #expect(controller.settings.chromaKeyBackgroundHex == nil)
+            #expect(controller.settings.chromaKey.tolerance == nil)
+            #expect(controller.settings.chromaKey.colorHex == nil)
+            #expect(controller.settings.chromaKey.background == nil)
+            #expect(controller.settings.chromaKey.backgroundHex == nil)
         }
     }
 
@@ -254,15 +254,15 @@ struct ControllerChromaKeyTests {
         """
         let settings = try JSONDecoder().decode(
             CaptureSettings.self, from: Data(legacy.utf8))
-        #expect(settings.chromaKeyColorHex == nil)
-        #expect(settings.chromaKeyTolerance == nil)
-        #expect(settings.chromaKeyBackground == nil)
-        #expect(settings.chromaKeyBackgroundImagePath == nil)
+        #expect(settings.chromaKey.colorHex == nil)
+        #expect(settings.chromaKey.tolerance == nil)
+        #expect(settings.chromaKey.background == nil)
+        #expect(settings.chromaKey.backgroundImagePath == nil)
 
         var key = ChromaKey()
         key.keyColor = ChromaKey.blueScreen
         var restored = ChromaKey()
-        restored.keyColor = settings.chromaKeyColorHex
+        restored.keyColor = settings.chromaKey.colorHex
             .flatMap(ChromaKey.RGB.init(hex:)) ?? ChromaKey().keyColor
         #expect(restored.keyColor == ChromaKey.greenScreen)
         #expect(key.keyColor != restored.keyColor)
@@ -320,7 +320,7 @@ struct ControllerChromaPlateTests {
             try png.write(to: url)
 
             controller.loadChromaBackground(mediaURL: url)
-            #expect(controller.settings.chromaKeyBackgroundImagePath == url.path)
+            #expect(controller.settings.chromaKey.backgroundImagePath == url.path)
             let loaded = await ControllerWait.until {
                 controller.chromaBackgroundImageName == "plate.png"
             }
@@ -328,7 +328,7 @@ struct ControllerChromaPlateTests {
 
             controller.clearChromaBackgroundImage()
             #expect(controller.chromaBackgroundImageName == nil)
-            #expect(controller.settings.chromaKeyBackgroundImagePath == nil)
+            #expect(controller.settings.chromaKey.backgroundImagePath == nil)
         }
     }
 
@@ -363,7 +363,7 @@ struct ControllerChromaPlateTests {
                 probe.controller.chromaBackgroundImageName == "A001C001.mov"
             }
             #expect(loaded, "the clip never yielded a plate")
-            #expect(probe.controller.settings.chromaKeyBackgroundImagePath
+            #expect(probe.controller.settings.chromaKey.backgroundImagePath
                     == clip.path)
         }
     }
@@ -382,13 +382,13 @@ struct ControllerChromaPlateTests {
             controller.commitAssistDraft()
             #expect(controller.chromaPlateIsAdjusted)
 
-            #expect(controller.settings.chromaKeyPlateFit == "fill")
-            #expect(controller.settings.chromaKeyPlateScale == 1.5)
-            #expect(controller.settings.chromaKeyPlateOffsetX == 0.2)
-            #expect(controller.settings.chromaKeyPlateOffsetY == -0.1)
+            #expect(controller.settings.chromaKey.plateFit == "fill")
+            #expect(controller.settings.chromaKey.plateScale == 1.5)
+            #expect(controller.settings.chromaKey.plateOffsetX == 0.2)
+            #expect(controller.settings.chromaKey.plateOffsetY == -0.1)
 
             let reloaded = CaptureSettings.loaded(from: probe.store)
-            controller.restoreChroma(from: reloaded)
+            controller.restoreChroma(from: reloaded.chromaKey)
             #expect(controller.chromaPlate.fit == .fill)
             #expect(controller.chromaPlate.scale == 1.5)
             #expect(controller.chromaPlate.offsetX == 0.2)
@@ -408,10 +408,10 @@ struct ControllerChromaPlateTests {
             // blob this build writes still decodes on one without the fields
             controller.resetChromaPlate()
             #expect(!controller.chromaPlateIsAdjusted)
-            #expect(controller.settings.chromaKeyPlateFit == nil)
-            #expect(controller.settings.chromaKeyPlateScale == nil)
-            #expect(controller.settings.chromaKeyPlateOffsetX == nil)
-            #expect(controller.settings.chromaKeyPlateOffsetY == nil)
+            #expect(controller.settings.chromaKey.plateFit == nil)
+            #expect(controller.settings.chromaKey.plateScale == nil)
+            #expect(controller.settings.chromaKey.plateOffsetX == nil)
+            #expect(controller.settings.chromaKey.plateOffsetY == nil)
         }
     }
 }

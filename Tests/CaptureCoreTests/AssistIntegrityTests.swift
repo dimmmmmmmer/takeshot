@@ -25,11 +25,11 @@ struct AssistIntegrityTests {
     /// A pipeline that can record, on a scratch folder of its own.
     private func recordingPipeline(root: URL) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.destinationPath = root.path
-        settings.detectionMode = .manual // this suite starts its own take
-        settings.videoLevels = "full"    // pass the test frame's codes through
-        settings.preRollFrames = 0
-        settings.codec = .proResProxy    // the suite encodes in real time
+        settings.capture.destinationPath = root.path
+        settings.capture.detectionMode = .manual // this suite starts its own take
+        settings.capture.videoLevels = "full"    // pass the test frame's codes through
+        settings.capture.preRollFrames = 0
+        settings.capture.codec = .proResProxy    // the suite encodes in real time
         return CapturePipeline(config: .init(settings: settings, takeNumber: 1))
     }
 

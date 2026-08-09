@@ -18,12 +18,12 @@ import Testing
     private func pipeline(root: URL,
                           detection: RecDetectionMode = .manual) -> CapturePipeline {
         var settings = CaptureSettings()
-        settings.codec = .proResProxy
-        settings.destinationPath = root.path
-        settings.namingTemplate = "{tc}"
-        settings.projectName = "TC"
-        settings.detectionMode = detection
-        settings.preRollSeconds = 0
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = root.path
+        settings.naming.namingTemplate = "{tc}"
+        settings.naming.projectName = "TC"
+        settings.capture.detectionMode = detection
+        settings.capture.preRollSeconds = 0
         return CapturePipeline(config: .init(settings: settings,
                                              slate: .empty, takeNumber: 1))
     }
