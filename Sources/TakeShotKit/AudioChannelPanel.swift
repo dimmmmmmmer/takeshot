@@ -52,18 +52,17 @@ struct AudioChannelPanel: View {
                 Button {
                     controller.toggleMonitorMute()
                 } label: {
-                    // same reading as the footer speaker: slashed FILL is
-                    // silence (mute engaged, or the slider at zero), hollow
-                    // slash is the live monitor path switched off
-                    Image(systemName: live.muted || live.volume == 0
-                          ? "speaker.slash.fill"
-                          : (controller.monitorOn
-                             ? "speaker.wave.2.fill" : "speaker.slash"))
-                        .foregroundStyle(live.muted
+                    // the footer speaker's reading, and now literally the same
+                    // one: red for silence however it was reached, the level as
+                    // a wave count (see `MonitorSpeaker`)
+                    let speaker = MonitorSpeaker.reading(
+                        muted: live.muted, volume: live.volume,
+                        monitorOn: controller.monitorOn,
+                        isPlayback: controller.viewerMode == .playback)
+                    Image(systemName: speaker.symbol)
+                        .foregroundStyle(speaker.isSilent
                                          ? AnyShapeStyle(.red)
-                                         : (controller.monitorOn
-                                            ? AnyShapeStyle(controller.accentColor)
-                                            : AnyShapeStyle(.secondary)))
+                                         : AnyShapeStyle(controller.accentColor))
                         .frame(width: 24, height: 20)
                 }
                 .buttonStyle(.plain)

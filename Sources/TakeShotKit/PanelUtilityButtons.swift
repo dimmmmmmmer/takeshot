@@ -1,36 +1,44 @@
 import SwiftUI
 
-/// Settings, the VANC monitor and the offload — on the main window's own top
-/// chrome, opposite the traffic lights.
+/// Settings, the VANC monitor and the offload — a row of their own directly
+/// under the takes panel, centred on it.
 ///
-/// Where they have been and why they are here (owner items 2 and 16). They
-/// started in the footer's bottom-left corner; the footer needs that width for
-/// the codec and the record folder, which are the two things a whole day can be
-/// shot wrong on and which an operator has to be able to READ while the camera
-/// is rolling, so they left. They then spent a release as their own plate under
-/// the takes panel, and that plate was the complaint: three setup buttons in a
-/// box of their own, huddled in the middle of a strip that existed for nothing
-/// else. Item 16 offered the alternative of spreading them across the panel's
-/// width; item 2 asked for something better than either — just put them on the
-/// window. So: no plate, no block, no row of its own. They sit in the band the
-/// window already reserves under the title-bar buttons (`windowTopInset`),
-/// which is otherwise empty space kept clear of the traffic lights.
+/// **Where they have been, and why this is the answer** (owner items 2, 16 and
+/// the correction that produced this file). They started in the footer's
+/// bottom-left corner, and left because the footer needs that width for the
+/// codec and the record folder — the two things a whole day can be shot wrong
+/// on, and the two an operator has to be able to READ while the camera rolls.
+/// They then spent a release as their own PLATE under the takes panel, and the
+/// plate was the complaint: three setup buttons in a box of their own, huddled
+/// in the middle of a strip that existed for nothing else. Item 2 moved them
+/// onto the window's top chrome instead — and that is what the owner is
+/// correcting here: the takes panel sits on the right by default, so "the
+/// window's top-right corner" and "the takes panel's top-right corner" are the
+/// same pixels, and three setup icons floating in the corner of a panel they
+/// have nothing to do with is what he sees.
 ///
-/// Mounted on the WINDOW rather than in either column (see `ContentView`): the
-/// takes panel sits on the left or the right depending on a setting, and these
-/// belong in the window's top-right corner either way — opposite the traffic
-/// lights, which is the one corner nothing else ever occupies.
-struct WindowUtilityButtons: View {
+/// Read across all four moves, every complaint has been about the CHROME rather
+/// than the position — the box, then the corner. So: no box, no corner, no
+/// material of its own. A bare row of icons standing under the panel, centred
+/// on the panel's width, outside the panel's own plate. `ContentView.sidePanel`
+/// puts it in the same column as the panel and inside the same horizontal
+/// padding, so "centred on the column" and "centred on the panel" are one
+/// statement and cannot drift apart.
+///
+/// It follows the panel from side to side for free, which is what the window
+/// overlay was mounted on the window to achieve.
+struct PanelUtilityButtons: View {
     @EnvironmentObject private var controller: CaptureController
     @Environment(\.openWindow) private var openWindow
 
-    /// Icon size in the band. Smaller than the player badges': this is chrome
-    /// beside the window buttons, and it has `windowTopInset` (~26pt) to live
-    /// in without pushing the player down.
-    private static let iconSize: CGFloat = 13
+    /// Icon size. A touch larger than the 13pt these were squeezed to in the
+    /// title-bar band — they are not fitting under the traffic lights any more —
+    /// and still under the player badges', because they are setup controls and
+    /// the panel above them is the content.
+    private static let iconSize: CGFloat = 14
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 18) {
             // Both of these FOCUS a window that is already open rather than
             // doing nothing visible: a Settings window behind the main one is
             // exactly where these get clicked twice (see AppWindows).
@@ -54,10 +62,12 @@ struct WindowUtilityButtons: View {
             }
         }
         .buttonStyle(.borderless)
-        // hugging, not stretched: it is an overlay on the window's top band,
-        // and a full-width one would lie across the strip the operator drags
-        // the window by
+        // The row hugs its three icons; the CENTRING is the frame around it, and
+        // it is here rather than at the call site so the row cannot be mounted
+        // uncentred. `maxWidth: .infinity` takes the column's width — the same
+        // width the panel plate above it takes — and centres the icons in it.
         .fixedSize()
+        .frame(maxWidth: .infinity)
     }
 
     private func button(_ symbol: String, help: String,

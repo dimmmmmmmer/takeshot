@@ -5,11 +5,11 @@ import SwiftUI
 /// on the left, REC dead center, the naming fields on the right.
 ///
 /// Settings, the VANC monitor and the offload copy used to sit here as well.
-/// They are setup, not shooting, and they live on the window's top chrome now
-/// (`WindowUtilityButtons`): at the app's minimum window width the footer has
-/// around 290pt on each side of the record button, and the codec and the
-/// destination folder — the two things a whole day can be shot wrong on — need
-/// that space more than a gear icon does.
+/// They are setup, not shooting, and they live in a row of their own under the
+/// takes panel now (`PanelUtilityButtons`): at the app's minimum window width
+/// the footer has around 290pt on each side of the record button, and the codec
+/// and the destination folder — the two things a whole day can be shot wrong
+/// on — need that space more than a gear icon does.
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -101,6 +101,10 @@ struct FooterCenterControls: View {
 /// sound NOW" must not be behind a popover. The volume popover the click used
 /// to open lives on the chevron beside the icon. In record mode the control
 /// drives the live monitor, in playback — the player volume (one shared level).
+///
+/// What the icon SHOWS is `MonitorSpeaker`, shared with the audio panel and the
+/// transport bar: the level as a wave count, red for silence however it was
+/// reached.
 private struct FooterMonitorButton: View {
     @EnvironmentObject private var controller: CaptureController
     @EnvironmentObject private var hotkeys: HotkeyManager
@@ -118,22 +122,20 @@ private struct FooterMonitorButton: View {
                 set: { controller.monitorVolume = $0 })
     }
 
-    /// The slashed FILL is silence of any kind (muted, or the slider parked at
-    /// zero); the hollow slash stays what it always was — the live monitor path
-    /// switched off in record mode.
-    private var speakerSymbol: String {
-        if live.muted || live.volume == 0 { return "speaker.slash.fill" }
-        if !isPlayback, !controller.monitorOn { return "speaker.slash" }
-        return "speaker.wave.2.fill"
+    /// Symbol and colour in one reading, shared with the audio panel and the
+    /// playback transport — see `MonitorSpeaker` for the rule and why red means
+    /// silence rather than "the mute button specifically".
+    private var speaker: MonitorSpeaker {
+        MonitorSpeaker.reading(muted: live.muted, volume: live.volume,
+                               monitorOn: controller.monitorOn,
+                               isPlayback: isPlayback)
     }
 
-    /// The engaged mute is red — a hold on the output is the one state here an
-    /// operator must be able to spot across the room, and the accent already
-    /// means "active" on the neighbouring controls.
+    /// Red for silence, the accent for a monitor that is doing its job — the
+    /// same accent the DIM badge beside it lights with when engaged.
     private var speakerTint: AnyShapeStyle {
-        if live.muted { return AnyShapeStyle(.red) }
-        return (isPlayback ? live.volume > 0 : controller.monitorOn)
-            ? AnyShapeStyle(controller.accentColor) : AnyShapeStyle(.primary)
+        speaker.isSilent
+            ? AnyShapeStyle(.red) : AnyShapeStyle(controller.accentColor)
     }
 
     var body: some View {
@@ -141,11 +143,13 @@ private struct FooterMonitorButton: View {
             Button {
                 controller.toggleMonitorMute()
             } label: {
-                Image(systemName: speakerSymbol)
+                Image(systemName: speaker.symbol)
                     .font(.system(size: 15))
                     .foregroundStyle(speakerTint)
                     // fixed BOTH dimensions: the symbol variants differ in size
-                    // and a changing anchor would shuffle the row per mute
+                    // — and there are five of them now, one per rung of the
+                    // level ladder — so without this the row would shuffle on
+                    // every drag of the volume slider, not just on a mute
                     .frame(width: 24, height: 20)
             }
             .disabled(!isPlayback && !controller.isCapturing)

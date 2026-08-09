@@ -81,16 +81,22 @@ struct ViewFooterTests {
 
     /// The name-collision warning is the one localized thing in the naming row
     /// ("TAKEN" / "ЗАНЯТО"). It may be a few points wider in Russian; it may not
-    /// make the row taller, and the row still has to fit the footer's half.
+    /// make the row taller, and the block still has to fit the footer's half.
+    ///
+    /// That it RENDERS is measured on the file-name row itself, not on the block:
+    /// the slate row under it is the widest thing in the block since it went
+    /// compact, so the block's width no longer moves when this badge appears.
     @Test func collisionBadgeStaysInsideTheNamingRow() async throws {
         try await ViewProbe.run { probe in
+            let plainRow = probe.fittingSizes { NamingFileNameRow() }
             let plain = probe.fittingSizes { NamingFieldsView() }
             probe.controller.nameCollision = "TS_A001C01.mov"
+            let warnedRow = probe.fittingSizes { NamingFileNameRow() }
             let warned = probe.fittingSizes { NamingFieldsView() }
 
             #expect(warned.ru.height == plain.ru.height,
                     "the collision badge made the naming row taller")
-            #expect(warned.ru.width > plain.ru.width,
+            #expect(warnedRow.ru.width > plainRow.ru.width,
                     "the collision badge did not render at all")
             #expect(warned.ru.width <= ViewBudget.footerHalfWidth,
                     "the warned naming row wants \(warned.ru.width)pt")

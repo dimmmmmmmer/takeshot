@@ -6,7 +6,7 @@
 /* Controls */
 "device" = "Device";
 "no_devices" = "No devices";
-"scene" = "Scene";
+"scene" = "SCENE";
 "record" = "Record";
 "stop" = "Stop";
 "mock_device_name" = "Demo source (no hardware)";
@@ -106,8 +106,8 @@
    These are field captions on the footer's second naming row, under CAM/ROLL/
    CLIP. The chip and its popover they replaced are gone (owner item 27), and
    so are their strings. */
-"slate_shot" = "Shot";
-"slate_take" = "Take";
+"slate_shot" = "SHOT";
+"slate_take" = "TAKE";
 "slate_take_help" = "Take number inside the scene. Left empty it follows the clip counter; type one and it takes over, restarting at 1 whenever the scene changes";
 "slate_sidecar_note" = "A recorded file is never rewritten: corrections are saved to takeshot-slate.csv beside the footage and travel through the log, the ALE and the reports.";
 "description_label" = "Description";

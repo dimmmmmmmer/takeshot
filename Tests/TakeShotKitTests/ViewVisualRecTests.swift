@@ -11,9 +11,13 @@ import Testing
 /// The failure this guards against is silent. A grouped Form does not wrap a
 /// label that is too long, it truncates it — so a Russian status line that no
 /// longer fits shows up as a size and as nothing else. The rows also GROW as the
-/// teaching progresses (the panel is one switch until something has been taught),
-/// so each stage is measured separately: a row that only appears once a reference
-/// exists is a row no test would otherwise see.
+/// teaching progresses (the panel is the switch and the teach row until
+/// something has been taught), so each stage is measured separately: a row that
+/// only appears once a reference exists is a row no test would otherwise see.
+///
+/// And one question that is not a size at all — whether the panel offers a way
+/// in from a fresh install. See `theTeachControlIsReachableFromAFreshInstall`
+/// for what a suite of width checks was able to miss.
 @MainActor
 struct ViewVisualRecTests {
     /// A signature that separates, built without a pipeline: the rows care only
@@ -41,7 +45,7 @@ struct ViewVisualRecTests {
         try await ViewProbe.run { probe in
             let form = ViewBudget.settingsFormWidth
 
-            // 1. untouched: one switch and nothing else
+            // 1. untouched: the switch and the way in, nothing else
             var minimum = probe.minimumWidths { VisualRecRows() }
             #expect(minimum.ru <= form,
                     "the resting switch wants \(minimum.ru)pt of \(form) in Russian")
@@ -65,8 +69,48 @@ struct ViewVisualRecTests {
         }
     }
 
-    /// The rows appear only once there is something to show. A binding wired to
-    /// the wrong flag renders the same single switch whatever the state is, which
+    /// There is a way INTO the feature from a fresh install.
+    ///
+    /// This is the test the suite did not have, and the bug it did not catch:
+    /// the teach row is the only caller of `toggleVisualRecTeach()` in the whole
+    /// app, and it sat behind the same `isExpanded` gate as the dials — which is
+    /// false until something has been taught. The panel was one greyed switch
+    /// and no door, and every existing check here was a WIDTH: the rows fitted
+    /// the form perfectly while offering the operator nothing. The controller
+    /// tests missed it for the mirror-image reason — they call
+    /// `toggleVisualRecTeach()` directly, which no button could.
+    ///
+    /// So the shape is: nothing taught, nothing armed, and the panel still has
+    /// to be taller than the switch by the door — and pressing the door has to
+    /// open the rest.
+    @Test func theTeachControlIsReachableFromAFreshInstall() async throws {
+        try await ViewProbe.run { probe in
+            #expect(!probe.controller.visualRecTeaching.isTaught,
+                    "the fixture starts taught — this test proves nothing")
+            #expect(!probe.controller.visualRecTeachArmed)
+            #expect(!probe.controller.visualRecOn)
+
+            let fresh: CGSize = probe.fittingSize(VisualRecRows())
+            let door: CGSize = probe.fittingSize(VisualRecTeachRow())
+            let switchOnly: CGSize = probe.fittingSize(
+                Toggle(L("visual_rec"), isOn: .constant(false)))
+
+            #expect(door.height > 0, "the teach row renders as nothing")
+            #expect(fresh.height >= switchOnly.height + door.height - 1,
+                    "the untaught panel is \(fresh.height)pt — only the switch, no way in")
+
+            // …and the door opens the rest, from exactly that state
+            probe.controller.toggleVisualRecTeach()
+            #expect(probe.controller.visualRecTeachArmed,
+                    "the teach button did not arm teaching mode")
+            let opened: CGSize = probe.fittingSize(VisualRecRows())
+            #expect(opened.height > fresh.height,
+                    "arming teaching opened nothing: \(fresh) → \(opened)")
+        }
+    }
+
+    /// The dials appear only once there is something to show. A binding wired to
+    /// the wrong flag renders the same two rows whatever the state is, which
     /// a width check would never catch.
     @Test func theRowsAppearOnlyOnceSomethingIsTaught() async throws {
         try await ViewProbe.run { probe in

@@ -46,17 +46,21 @@ struct TakeLogButton: View {
         }
     }
 
+    /// The rows under the slate follow the slate row's width rather than a
+    /// number of their own: the row is a caption + arrows + box three times
+    /// over and sets the popover's width on its own, and a 240pt description
+    /// under it read as a mistake (see `SlateFieldsEditor.popoverContentWidth`).
     private var editor: some View {
         VStack(alignment: .leading, spacing: 8) {
             SlateFieldsEditor(scene: $scene, shot: $shot, takeText: $takeText)
             Text(L("description_label")).font(.caption).foregroundStyle(.secondary)
             TextField("", text: $logDescription)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 240)
+                .frame(width: SlateFieldsEditor.popoverContentWidth)
             Text(L("comment_label")).font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $draft)
                 .font(.body)
-                .frame(width: 240, height: 80)
+                .frame(width: SlateFieldsEditor.popoverContentWidth, height: 80)
                 .overlay(RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(.secondary.opacity(0.3)))
                 .focused($editorFocused)
@@ -67,7 +71,8 @@ struct TakeLogButton: View {
             Text(L("slate_sidecar_note"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 250, alignment: .leading)
+                .frame(width: SlateFieldsEditor.popoverContentWidth,
+                       alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

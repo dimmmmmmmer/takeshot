@@ -13,8 +13,21 @@ import SwiftUI
 /// operator can see the frame and the panel at the same time, which a popover
 /// sitting on top of the frame could not offer.
 ///
-/// The rows collapse to a single switch until the trigger is on or teaching mode
-/// is armed, so an operator who never uses it sees one line.
+/// The rows collapse to the switch and the way IN — two lines — until the
+/// trigger is on or teaching mode is armed, so an operator who never uses it is
+/// not carrying the dials.
+///
+/// **Two lines and not one, which is the whole feature.** The teach row is the
+/// only caller of `toggleVisualRecTeach()` anywhere in the app, so it is the
+/// only thing that can put a first reference in hand; it used to sit behind
+/// `isExpanded`, which is false on a fresh install precisely because nothing has
+/// been taught yet. A greyed switch and nothing else was the entire feature as
+/// shipped, and no test caught it because the suites drive the controller
+/// directly and only ever measured how WIDE the rows were. The switch stays
+/// disabled until the pair separates — that part was right, and the setter
+/// enforces it anyway (see `visualRecOn`) — but "cannot be switched on yet" and
+/// "cannot be reached at all" are different statements and the panel now makes
+/// only the first one.
 struct VisualRecRows: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -30,8 +43,8 @@ struct VisualRecRows: View {
             set: { controller.visualRecOn = $0 }))
             .disabled(!controller.visualRecTeaching.isTaught)
             .help(L("visual_rec_hint"))
+        VisualRecTeachRow()
         if isExpanded {
-            teachRow
             VisualRecSliderRow(
                 label: L("visual_rec_size"),
                 value: Binding(get: { controller.visualRecSize },
@@ -67,25 +80,6 @@ struct VisualRecRows: View {
         "\(Int((fraction * 100).rounded()))"
     }
 
-    /// Arming teaching mode, and forgetting a teaching that has gone stale.
-    private var teachRow: some View {
-        HStack(spacing: 8) {
-            Button(L("visual_rec_teach")) { controller.toggleVisualRecTeach() }
-                .help(L("visual_rec_teach_help"))
-            if controller.visualRecTeachArmed {
-                Image(systemName: "viewfinder")
-                    .foregroundStyle(controller.accentColor)
-                    .help(L("visual_rec_teach_armed"))
-            }
-            Spacer(minLength: 4)
-            Button(L("visual_rec_forget"), role: .destructive) {
-                controller.forgetVisualRecReferences()
-            }
-            .disabled(controller.visualRecTeaching.rolling == nil
-                && controller.visualRecTeaching.idle == nil)
-        }
-    }
-
     /// The two captures. A tick beside each says which one is already in hand —
     /// the pair is useless until both are, and "which am I missing" is the
     /// question this row exists to answer at a glance.
@@ -111,6 +105,35 @@ struct VisualRecRows: View {
             }
         }
         .disabled(!controller.isCapturing)
+    }
+}
+
+/// Arming teaching mode, and forgetting a teaching that has gone stale.
+///
+/// A view of its own rather than a computed property on `VisualRecRows`, and
+/// that is a test's requirement rather than a layout's: this row is the door
+/// into the whole feature, and a suite that can only measure the rows as a block
+/// cannot say whether the door is in them. `ViewVisualRecTests` measures it
+/// separately and holds the untaught panel against switch + door.
+struct VisualRecTeachRow: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(L("visual_rec_teach")) { controller.toggleVisualRecTeach() }
+                .help(L("visual_rec_teach_help"))
+            if controller.visualRecTeachArmed {
+                Image(systemName: "viewfinder")
+                    .foregroundStyle(controller.accentColor)
+                    .help(L("visual_rec_teach_armed"))
+            }
+            Spacer(minLength: 4)
+            Button(L("visual_rec_forget"), role: .destructive) {
+                controller.forgetVisualRecReferences()
+            }
+            .disabled(controller.visualRecTeaching.rolling == nil
+                && controller.visualRecTeaching.idle == nil)
+        }
     }
 }
 

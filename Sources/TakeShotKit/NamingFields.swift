@@ -45,54 +45,11 @@ struct NamingFieldsView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 5) {
-            fileNameRow
+            NamingFileNameRow()
             slateRow
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
         .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
-    }
-
-    /// What the file will be called: only the fields the current template has a
-    /// placeholder for.
-    private var fileNameRow: some View {
-        HStack(alignment: .top, spacing: 6) {
-            // warning: the current name is already taken in the folder
-            if let collision = controller.nameCollision {
-                VStack(spacing: 1) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(L("name_taken_short"))
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.orange)
-                }
-                .padding(.top, 8)
-                .help(L("name_taken_help", collision))
-                .transition(.opacity)
-            }
-            if uses("{cam}") {
-                Self.steppedField(
-                    L("cam_label"), field: .camera, width: 40,
-                    text: Binding(get: { controller.settings.naming.cameraLabel },
-                                  set: { controller.settings.naming.cameraLabel = $0 }),
-                    onStep: { controller.stepCamera($0) })
-            }
-            if uses("{roll}") {
-                Self.steppedField(L("roll_label"), field: .roll, width: 50,
-                                  text: $controller.roll,
-                                  onStep: { controller.stepRoll($0) })
-            }
-            if uses("{clip}") {
-                ClipField()
-                    .help(L("clip_help"))
-            }
-            if uses("{postfix}") {
-                Self.labeledField(L("postfix_label"), field: .postfix, width: 56,
-                                  text: Binding(
-                                    get: { controller.settings.naming.postfix ?? "" },
-                                    set: { controller.settings.naming.postfix =
-                                        $0.isEmpty ? nil : $0 }))
-            }
-        }
     }
 
     /// What was shot. NOT gated on the template like the row above: scene, shot
@@ -105,16 +62,13 @@ struct NamingFieldsView: View {
                             set: { controller.commitSlateTakeText($0) }))
     }
 
-    /// Whether a placeholder is in the current template.
-    private func uses(_ placeholder: String) -> Bool {
-        controller.settings.naming.namingTemplate.contains(placeholder)
-    }
-
     // MARK: - the two field shapes
 
-    /// The caption over a naming field. Every field in both rows carries it,
-    /// and they used to have a copy each — a drifted font size there shows up
-    /// as rows of fields at two different heights.
+    /// The caption over a naming field. Every field in the file-name row carries
+    /// it, and they used to have a copy each — a drifted font size there shows
+    /// up as rows of fields at two different heights. The slate row's captions
+    /// are the same type at the same size, turned through ninety degrees (see
+    /// `SlateFieldsEditor`).
     static func fieldLabel(_ label: String) -> some View {
         Text(label)
             .font(.system(size: 9, weight: .semibold))
@@ -153,5 +107,65 @@ struct NamingFieldsView: View {
             }
         }
         .fixedSize()
+    }
+}
+
+/// What the file will be called: only the fields the current template has a
+/// placeholder for, plus the badge that says the name is already taken.
+///
+/// A view of its own rather than a property of `NamingFieldsView`, and for a
+/// test's sake: the collision badge has to be shown to RENDER, which used to be
+/// asserted as "the block got wider". The slate row under it is the widest thing
+/// in the block now, so the block's width says nothing about this row any more —
+/// and a property inside another view cannot be handed to `NSHostingView`.
+struct NamingFileNameRow: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            // warning: the current name is already taken in the folder
+            if let collision = controller.nameCollision {
+                VStack(spacing: 1) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(L("name_taken_short"))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.orange)
+                }
+                .padding(.top, 8)
+                .help(L("name_taken_help", collision))
+                .transition(.opacity)
+            }
+            if uses("{cam}") {
+                NamingFieldsView.steppedField(
+                    L("cam_label"), field: .camera, width: 40,
+                    text: Binding(get: { controller.settings.naming.cameraLabel },
+                                  set: { controller.settings.naming.cameraLabel = $0 }),
+                    onStep: { controller.stepCamera($0) })
+            }
+            if uses("{roll}") {
+                NamingFieldsView.steppedField(
+                    L("roll_label"), field: .roll, width: 50,
+                    text: $controller.roll,
+                    onStep: { controller.stepRoll($0) })
+            }
+            if uses("{clip}") {
+                ClipField()
+                    .help(L("clip_help"))
+            }
+            if uses("{postfix}") {
+                NamingFieldsView.labeledField(
+                    L("postfix_label"), field: .postfix, width: 56,
+                    text: Binding(
+                        get: { controller.settings.naming.postfix ?? "" },
+                        set: { controller.settings.naming.postfix =
+                            $0.isEmpty ? nil : $0 }))
+            }
+        }
+    }
+
+    /// Whether a placeholder is in the current template.
+    private func uses(_ placeholder: String) -> Bool {
+        controller.settings.naming.namingTemplate.contains(placeholder)
     }
 }

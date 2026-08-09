@@ -168,10 +168,16 @@ struct TransportVolume: View {
             Button {
                 controller.toggleMonitorMute()
             } label: {
-                Image(systemName: live.muted || live.volume == 0
-                      ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                // The footer speaker's reading (see `MonitorSpeaker`). This bar
+                // is over the picture, so an audible monitor stays quiet chrome
+                // rather than taking the accent — but silence is red here too,
+                // because it is the same question being asked.
+                let speaker = MonitorSpeaker.reading(
+                    muted: live.muted, volume: live.volume,
+                    monitorOn: controller.monitorOn, isPlayback: true)
+                Image(systemName: speaker.symbol)
                     .font(.system(size: 11))
-                    .foregroundStyle(live.muted
+                    .foregroundStyle(speaker.isSilent
                                      ? AnyShapeStyle(.red)
                                      : AnyShapeStyle(.secondary))
                     .frame(width: Self.iconWidth, height: Self.iconHeight)

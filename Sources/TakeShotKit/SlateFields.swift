@@ -9,6 +9,25 @@ import SwiftUI
 /// They are fields now, in the footer, under the fields that name the file: the
 /// slate is filled in between takes, on set, and a control you have to open
 /// before you can type into it is one nobody keeps up to date.
+///
+/// **Compact, and where the height went.** Each field used to be a caption
+/// STACKED over a box, the shape the file-name row above uses, and three of
+/// those made the whole footer a caption-line taller than the picture could
+/// spare — the owner's complaint. The caption sits beside its field here
+/// instead, so the row costs exactly one control's height (about 14pt less than
+/// the stack), and each field has the pair of arrows he asked for. The captions
+/// are still the row above's: same 9pt semibold, same caps (SCENE/SHOT/TAKE
+/// beside CAM/ROLL/CLIP), only turned through ninety degrees.
+///
+/// **The caption box is a FIXED width, and that is load-bearing.** These three
+/// captions are the only localized strings in the footer's right half, and the
+/// footer's REC button is centered by that half measuring the same in English
+/// and in Russian (`ViewFooterTests`). Stacked, the caption was narrower than
+/// the box under it and cost nothing; beside it, it would charge the row
+/// whatever "СЦЕНА" happens to measure. A fixed box makes the row's width a
+/// constant again — and `ViewNamingRowTests` measures both languages' captions
+/// against it, because the failure mode of a box too small is a silently
+/// truncated word.
 struct SlateFieldsEditor: View {
     @Binding var scene: String
     @Binding var shot: String
@@ -16,23 +35,77 @@ struct SlateFieldsEditor: View {
     /// mean "not logged" — a numeric binding has no way to say that.
     @Binding var takeText: String
 
-    /// The widths, and why they are these. The row has to fit inside
-    /// `footerHalfWidth` alongside the 6pt gaps: 90 + 60 + 50 leaves room for a
-    /// scene like "112A pickup" without touching the row above, which is the
-    /// one with no slack in it.
-    private static let sceneWidth: CGFloat = 90
-    private static let shotWidth: CGFloat = 60
-    private static let takeWidth: CGFloat = 50
+    /// The widths, and why they are these. Every field's group is
+    /// caption + ‹ + box + ›, and the three of them plus the gaps have to fit
+    /// `footerHalfWidth` (363pt at the app's minimum window). Scene keeps the
+    /// most of it: it is the one that holds more than a number or a letter.
+    private static let sceneWidth: CGFloat = 70
+    private static let shotWidth: CGFloat = 32
+    /// Four digits of monospaced text plus the box's own insets.
+    private static let takeWidth: CGFloat = 36
+    /// The caption box. Must hold the longest of SCENE/SHOT/TAKE and
+    /// СЦЕНА/КАДР/ДУБЛЬ — pinned in the render tests, not eyeballed.
+    static let captionWidth: CGFloat = 36
+    /// One arrow. Both dimensions fixed: a chevron that resized with its state
+    /// would shuffle the row under the operator's pointer.
+    private static let arrowWidth: CGFloat = 11
+    private static let arrowHeight: CGFloat = 18
+
+    /// What the takes panel's popover sizes its other rows to, so the whole
+    /// editor reads as one block rather than a wide slate row over narrow
+    /// boxes. Stated here because this row is what sets the width.
+    static let popoverContentWidth: CGFloat = 330
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            NamingFieldsView.labeledField(L("scene"), field: .scene,
-                                          width: Self.sceneWidth, text: $scene)
-            NamingFieldsView.labeledField(L("slate_shot"), field: .shot,
-                                          width: Self.shotWidth, text: $shot)
-            NamingFieldsView.labeledField(L("slate_take"), field: .take,
-                                          width: Self.takeWidth, text: $takeText)
+        HStack(alignment: .center, spacing: 6) {
+            pagedField(L("scene"), field: .scene, width: Self.sceneWidth,
+                       seed: "1", text: $scene)
+            pagedField(L("slate_shot"), field: .shot, width: Self.shotWidth,
+                       seed: "A", text: $shot)
+            pagedField(L("slate_take"), field: .take, width: Self.takeWidth,
+                       seed: "1", text: $takeText)
                 .help(L("slate_take_help"))
         }
+    }
+
+    /// One slate field: its caption, the box, and the ‹ › that page it.
+    ///
+    /// `seed` is what an empty field becomes on the first press of ›, and the
+    /// three differ because the values do — scenes and takes start at 1, shots
+    /// at A. Everything else about the stepping is `SlateStep`, including the
+    /// part that matters most here: ‹ off the first value empties the field
+    /// again, so "not logged" stays reachable without going for the keyboard.
+    private func pagedField(_ caption: String, field: NameField, width: CGFloat,
+                            seed: String,
+                            text: Binding<String>) -> some View {
+        HStack(spacing: 2) {
+            Text(caption)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: Self.captionWidth, alignment: .leading)
+            arrow("chevron.left", delta: -1, seed: seed, text: text)
+            NameTextField(field: field, text: text)
+                .frame(width: width)
+            arrow("chevron.right", delta: 1, seed: seed, text: text)
+        }
+    }
+
+    private func arrow(_ symbol: String, delta: Int, seed: String,
+                       text: Binding<String>) -> some View {
+        Button {
+            text.wrappedValue = SlateStep.stepped(text.wrappedValue,
+                                                  by: delta, seed: seed)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .frame(width: Self.arrowWidth, height: Self.arrowHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        // free text has no next value, and an arrow that does nothing under the
+        // pointer is worse than one that says so
+        .disabled(!SlateStep.canStep(text.wrappedValue, by: delta))
     }
 }

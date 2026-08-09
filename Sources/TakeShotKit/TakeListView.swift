@@ -54,11 +54,12 @@ struct TakeListView: View {
 
     /// The sections, with whatever is running underneath them.
     ///
-    /// The settings/VANC/offload BUTTONS are not here and not under here any
-    /// more — they are on the window's top chrome (owner item 2, see
-    /// `WindowUtilityButtons`). What stayed is the live-run readout, because a
-    /// job whose status is only visible inside its own sheet cannot be checked
-    /// without reopening the sheet.
+    /// The settings/VANC/offload BUTTONS are not in here: they are a bare row
+    /// under this panel's plate, centred on it (see `PanelUtilityButtons`), and
+    /// `ContentView.sidePanel` — not this view — is what puts them there. What
+    /// IS in here is the live-run readout, because a job whose status is only
+    /// visible inside its own sheet cannot be checked without reopening the
+    /// sheet.
     @ViewBuilder private var sections: some View {
         VStack(spacing: 0) {
             if controller.otherFiles.isEmpty {
@@ -136,7 +137,7 @@ private struct TakesSection: View {
                         // has nothing to do with takes, so a menu disabled by
                         // "no takes yet" made card offload unreachable exactly
                         // when it is most needed — before anything was shot.
-                        // Its home is the window's top chrome.
+                        // Its home is the utility row under this panel.
                     } label: {
                         Color.clear
                     }
