@@ -541,6 +541,11 @@
 "remote_pin" = "PIN";
 "remote_pin_new" = "Новый PIN";
 "remote_address" = "Адрес";
+/* clicking an address puts it on the clipboard; the secondary click adds this
+   and the one below. The phone is the device that needs the address, so the
+   clipboard is the primary action and the browser is not. */
+"remote_address_copy" = "Скопировать адрес";
+"remote_address_open" = "Открыть в браузере";
 /* the segmented switch that picks which page the address and QR are for */
 "remote_page" = "Страница";
 "remote_link_remote" = "Пульт";
