@@ -536,6 +536,11 @@
 "remote_pin" = "PIN";
 "remote_pin_new" = "New PIN";
 "remote_address" = "Address";
+/* clicking an address puts it on the clipboard; the secondary click adds this
+   and the one below. The phone is the device that needs the address, so the
+   clipboard is the primary action and the browser is not. */
+"remote_address_copy" = "Copy address";
+"remote_address_open" = "Open in browser";
 /* the segmented switch that picks which page the address and QR are for */
 "remote_page" = "Page";
 "remote_link_remote" = "Remote";

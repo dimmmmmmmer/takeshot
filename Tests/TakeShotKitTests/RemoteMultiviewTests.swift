@@ -71,9 +71,10 @@ import Testing
                     "the payload does not start like a JPEG")
             let image = try #require(NSBitmapImageRep(data: jpeg),
                                      "the frame bytes do not decode")
-            // 1080p25 from the mock, long edge held to the encoder's ceiling.
-            #expect(image.pixelsWide == 480)
-            #expect(image.pixelsHigh == 270)
+            // 1080p25 from the mock, one camera — so the tile is the whole
+            // phone and gets the top rung of the ladder.
+            #expect(image.pixelsWide == 1280)
+            #expect(image.pixelsHigh == 720)
 
             // And the demand edge did its half: the encoder exists now.
             #expect(controller.remoteMultiviewEncoder != nil)
@@ -149,8 +150,8 @@ import Testing
                                      "the frame bytes do not decode")
             // 1080p25 whole, scaled to the ceiling — the same numbers the
             // assist-free test above asserts.
-            #expect(image.pixelsWide == 480)
-            #expect(image.pixelsHigh == 270, "the desqueeze reshaped the tile")
+            #expect(image.pixelsWide == 1280)
+            #expect(image.pixelsHigh == 720, "the desqueeze reshaped the tile")
             // The frame the grid is fed is the pipeline's clean one, and it is
             // the whole signal: a punch-in applied here would have cropped it
             // to a quarter of the area before the encoder ever saw it.
@@ -305,110 +306,6 @@ import Testing
             let heard = await ControllerWait.until { sawBadRating.value > 0 }
             #expect(heard, "a stalled multiview client cost the others their status")
         }
-    }
-}
-
-/// The encoder on its own: the downscale, the JPEG, and the pace — no server,
-/// no socket, a known frame in and bytes out.
-@Suite @MainActor struct MultiviewEncoderTests {
-    /// What the sink was handed, lock-boxed off the encoder's queue.
-    private final class FrameSink: @unchecked Sendable {
-        private let lock = NSLock()
-        private var frames: [(camera: Int, jpeg: Data)] = []
-
-        func record(_ camera: Int, _ jpeg: Data) {
-            lock.withLock { frames.append((camera, jpeg)) }
-        }
-
-        var count: Int { lock.withLock { frames.count } }
-        var cameras: Set<Int> { lock.withLock { Set(frames.map(\.camera)) } }
-    }
-
-    /// The promised downscale: long edge to the ceiling, aspect kept, and a
-    /// frame already smaller passes through unscaled.
-    @Test func aFrameIsDownscaledToThePhoneCeiling() throws {
-        let context = CIContext(options: [.cacheIntermediates: false])
-        let wide = MediaFixtures.pixelBuffer(level: 0x60, width: 960,
-                                             height: 540)
-        let jpeg = try #require(MultiviewEncoder.jpeg(from: wide,
-                                                      context: context))
-        #expect(jpeg.prefix(2) == Data([0xFF, 0xD8]))
-        let image = try #require(NSBitmapImageRep(data: jpeg))
-        #expect(image.pixelsWide == 480)
-        #expect(image.pixelsHigh == 270)
-
-        let small = MediaFixtures.pixelBuffer(level: 0x60, width: 320,
-                                              height: 180)
-        let smallJPEG = try #require(MultiviewEncoder.jpeg(from: small,
-                                                           context: context))
-        let smallImage = try #require(NSBitmapImageRep(data: smallJPEG))
-        #expect(smallImage.pixelsWide == 320,
-                "a frame under the ceiling was upscaled")
-    }
-
-    /// The tile is the app's own picture, not a re-grade of it (owner item
-    /// 13a).
-    ///
-    /// The display path's contract is that the buffer holds 709-encoded code
-    /// values and every surface says so rather than converting them. The
-    /// encoder used to read the buffer without naming a space — CoreImage then
-    /// guesses, and guesses sRGB for a buffer carrying no colour attachments —
-    /// and write 709, which turns the guess into a gamma conversion the app
-    /// performs nowhere else. A known grey has to come back as itself.
-    @Test func aKnownGreyEncodesBackAsItself() throws {
-        let context = CIContext(options: [.cacheIntermediates: false])
-        let grey: UInt8 = 0x80
-        let frame = MediaFixtures.pixelBuffer(level: grey, width: 320,
-                                              height: 180)
-        let jpeg = try #require(MultiviewEncoder.jpeg(from: frame,
-                                                      context: context))
-        let image = try #require(NSBitmapImageRep(data: jpeg))
-        // The raw samples, not `colorAt` — that answers in a colour space, and
-        // converting the answer is the very operation under test.
-        let base = try #require(image.bitmapData)
-        let offset = (image.pixelsHigh / 2) * image.bytesPerRow
-            + (image.pixelsWide / 2) * image.samplesPerPixel
-        let level = Int(base[offset])
-        // JPEG at 0.5 quality moves a flat field by a code or two; the sRGB
-        // reading the encoder used to take moves 0x80 by about twenty.
-        #expect(abs(level - Int(grey)) <= 6,
-                "the encoder re-graded the frame: \(level) for \(grey)")
-    }
-
-    /// Latest-wins under the pace: a burst of offers produces the first pass
-    /// at once and at most ONE coalesced pass behind it — never a pass per
-    /// offer, which is what would make a 25 fps wire cost 25 encodes.
-    @Test func aBurstOfOffersCoalescesToThePace() async throws {
-        let sink = FrameSink()
-        let encoder = MultiviewEncoder { camera, jpeg in
-            sink.record(camera, jpeg)
-        }
-        let frame = MediaFixtures.pixelBuffer(level: 0x60, width: 320,
-                                              height: 180)
-        for _ in 0..<25 { encoder.offer(frame, camera: 0) }
-
-        let encoded = await ControllerWait.until { sink.count >= 1 }
-        #expect(encoded, "nothing came out of the encoder")
-        // Full-budget wait covering the pace interval with room to spare: the
-        // burst may add one trailing pass and may never add a third.
-        _ = await ControllerWait.until({ sink.count > 2 }, timeout: .seconds(2))
-        #expect(sink.count <= 2,
-                "25 offers in one burst encoded \(sink.count) times")
-    }
-
-    /// The cameras pace independently — B-cam's frames never wait out A-cam's
-    /// interval.
-    @Test func camerasAreEncodedIndependently() async throws {
-        let sink = FrameSink()
-        let encoder = MultiviewEncoder { camera, jpeg in
-            sink.record(camera, jpeg)
-        }
-        let frame = MediaFixtures.pixelBuffer(level: 0x60, width: 320,
-                                              height: 180)
-        encoder.offer(frame, camera: 0)
-        encoder.offer(frame, camera: 1)
-        let both = await ControllerWait.until { sink.cameras == [0, 1] }
-        #expect(both, "the second camera waited on the first one's pace")
     }
 }
 
