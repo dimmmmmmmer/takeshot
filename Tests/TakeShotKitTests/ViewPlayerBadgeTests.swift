@@ -55,29 +55,58 @@ struct ViewPlayerBadgeTests {
         }
     }
 
-    /// The compare bar shares the centered slot with the mode switch, and in its
-    /// resting state — compare off, which is where the player sits for all but a
-    /// few seconds of a shoot — it has to fit between the badges at the
-    /// narrowest window the app allows.
+    /// The identity row — TC on the left, the mode switch centered, the signal
+    /// badges on the right — fits the picture at the narrowest window, in both
+    /// languages, whatever the operator has switched on.
     ///
-    /// Only that state is held to the budget. Engage a compare mode and the bar
-    /// grows past it (the wipe picker, the blend slider, the difference gain and
-    /// the B-side menu all join the row) in ENGLISH as much as in Russian — it
-    /// is over budget by construction, and what stops that from covering the
-    /// format badge is the chrome being one row that compresses. See
-    /// `badgeOverlayNeverStretchesThePlayer`.
-    @Test func compareBarFitsTheCenteredSlotWhileCompareIsOff() async throws {
+    /// This is the owner's "the timecode and the resolution get pushed apart by
+    /// the menu and the playback settings". The compare bar used to share the
+    /// centered slot with the mode switch, and every control in it is
+    /// `.fixedSize()` — so a bar wider than the slot did not compress, it made
+    /// the whole HStack wider than the picture and shoved the badges off both
+    /// edges. Nothing in this row grows without a bound any more; the compare
+    /// bar has a row of its own (see below).
+    @Test func theIdentityRowHoldsItsShapeAtTheNarrowestWindow() async throws {
         try await ViewProbe.run { probe in
-            let center = ViewBudget.playerCenterWidth
+            let chrome = ViewBudget.playerChromeWidth
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             probe.controller.referencePinned = true
 
             for viewer in [CaptureController.ViewerMode.record, .playback] {
                 probe.controller.viewerMode = viewer
-                let ideal = probe.fittingSizes { CompareControls() }
-                #expect(ideal.ru.width <= center,
-                        "\(viewer) bar wants \(ideal.ru.width)pt of \(center)")
-                #expect(ideal.en.width <= center)
+                for mode in [CaptureController.CompareMode.off, .wipe, .blend] {
+                    probe.controller.compareMode = mode
+                    let ideal = probe.fittingSizes { PlayerTopBadgeRow() }
+                    #expect(ideal.ru.width <= chrome,
+                            "\(viewer)/\(mode) row wants \(ideal.ru.width)pt of \(chrome)")
+                    #expect(ideal.en.width <= chrome)
+                    #expect(ideal.ru.height == ideal.en.height,
+                            "\(viewer)/\(mode) row changed height with the language")
+                }
+            }
+        }
+    }
+
+    /// The compare bar's budget is now the whole picture rather than the ~340pt
+    /// between the badge groups, and it has to stay inside THAT in every mode
+    /// and both languages — it cannot compress, so anything over is an overflow
+    /// onto the image rather than a squeeze.
+    @Test func theCompareBarFitsTheFullPictureInEveryMode() async throws {
+        try await ViewProbe.run { probe in
+            let chrome = ViewBudget.playerChromeWidth
+            try ViewFixtures.seedTakes(probe.controller, in: probe.root)
+            probe.controller.referencePinned = true
+
+            for viewer in [CaptureController.ViewerMode.record, .playback] {
+                probe.controller.viewerMode = viewer
+                for mode in [CaptureController.CompareMode.off, .wipe,
+                             .blend, .difference, .sideBySide] {
+                    probe.controller.compareMode = mode
+                    let ideal = probe.fittingSizes { CompareControls() }
+                    #expect(ideal.ru.width <= chrome,
+                            "\(viewer)/\(mode) bar wants \(ideal.ru.width)pt of \(chrome)")
+                    #expect(ideal.en.width <= chrome)
+                }
             }
         }
     }

@@ -95,10 +95,14 @@ adopted into the list.
 
 ## Slate (scene, shot, take)
 
-- The **SLATE** chip in the footer holds the creative metadata of the NEXT
-  take: scene, shot and the take number inside that scene. Click it to type.
-- The take number follows the clip counter until you type one; from then on it
-  is yours, and it restarts at 1 whenever the scene changes. Clearing the field
+- **SCENE / SHOT / TAKE** sit in the footer under the file-name fields and hold
+  the creative metadata of the NEXT take. Type into them, or page them with the
+  ‹ › arrows beside each: the arrows step the number at the end of the value, or
+  the shot letter — 12 → 13, 12A → 12B — and stepping back off the first value
+  empties the field again. A scene you have typed a note into is left alone and
+  the arrows go grey; type that one.
+- The take number follows the clip counter until you set one; from then on it
+  is yours, and it restarts at 1 whenever the scene changes. Emptying the field
   hands numbering back to the clip counter.
 - Scene, shot and take are written INSIDE the recorded .mov, so a file copied
   without its sidecars still knows which scene it is. They also go into the

@@ -122,9 +122,10 @@ struct ViewerModeSwitch: View {
     }
 }
 
-/// Top badges over the player: TC menu (left), mode switch + compare (center),
-/// scopes/LUT/format (right). Shared by the main window and the fullscreen
-/// windows (which hide the mode switch).
+/// Top chrome over the player: the identity row — TC menu (left), mode switch
+/// (center), scopes/LUT/format (right) — and the compare bar on a row of its own
+/// under it. Shared by the main window and the fullscreen windows (which hide
+/// the mode switch).
 struct PlayerTopBadgesModifier: ViewModifier {
     @EnvironmentObject private var controller: CaptureController
     var showsModeSwitch = true
@@ -150,37 +151,36 @@ struct PlayerTopBadgesModifier: ViewModifier {
             .overlay(alignment: .top) { topChrome }
     }
 
-    /// The timecode badge, the centered mode/compare group and the right-hand
-    /// badges in ONE row.
+    /// The identity row on top, the compare bar — when there is one — on a row
+    /// of its own underneath it.
     ///
-    /// They used to be three independent corner overlays, and overlays do not
-    /// know about each other: the centered group slid straight under the badges
-    /// on either side as soon as it grew. It grows a lot — an engaged compare
-    /// (the wipe picker, the blend slider, the difference gain) runs the bar
-    /// well past the ~340pt the badge groups leave at the narrowest window.
-    /// One HStack with two
-    /// equally flexible side zones keeps the group exactly centered (both zones
-    /// always get the same width) and makes overlap impossible: a group too wide
-    /// for the row compresses instead of covering the format badge.
+    /// **Two rows, and that is the fix rather than the layout.** The compare bar
+    /// used to share the centered slot with the mode switch, and every control
+    /// in it is `.fixedSize()` (five-segment picker, wipe picker, gain picker,
+    /// B-side menu, blend slider and its field) — so it cannot compress, it can
+    /// only overflow. The comment here used to claim the row "compresses instead
+    /// of covering the format badge"; what actually happened at the narrowest
+    /// window was that the HStack came out wider than the picture and shoved the
+    /// timecode off the left edge and the format badge off the right, which is
+    /// the owner's "the timecode and the resolution get pushed apart by the menu
+    /// and the playback settings".
+    ///
+    /// TC on the left and resolution on the right is the brief, so that row is
+    /// the one that may not move: it now holds nothing that grows without a
+    /// bound. The compare bar gets the FULL width of the picture instead of the
+    /// ~340pt between the badge groups, which is more than it has ever needed,
+    /// and it costs no extra height — it was already on a second line, inside
+    /// the centered column.
     @ViewBuilder private var topChrome: some View {
         if chromeVisible {
-            HStack(alignment: .top, spacing: 8) {
-                sideZone(alignment: .leading) { timecodeBadge }
-                modeSwitch
-                sideZone(alignment: .trailing) { rightBadges }
+            VStack(spacing: 4) {
+                PlayerTopBadgeRow(showsModeSwitch: showsModeSwitch)
+                compareBar
             }
             // vertical inset under the window buttons is already reserved by the
             // windowTopInset strip above the player
             .padding(8)
         }
-    }
-
-    /// One of the two flexible edge zones. Equal width by construction, which
-    /// is what keeps the middle group centered.
-    private func sideZone(alignment: Alignment,
-                          @ViewBuilder content: () -> some View) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: alignment)
     }
 
     /// Auto-hide: the chrome comes back while the pointer visits the top edge.
@@ -210,23 +210,51 @@ struct PlayerTopBadgesModifier: ViewModifier {
         }
     }
 
-    private var timecodeBadge: some View { PlayerTimecodeBadge() }
+    /// The compare bar, on its own full-width row (see `topChrome`).
+    ///
+    /// Not in sync-play: the bar drives the single player's composite, which is
+    /// not on screen under the grid.
+    @ViewBuilder private var compareBar: some View {
+        if controller.syncPlay == nil,
+           (controller.viewerMode == .playback && controller.playbackURL != nil)
+            || (controller.viewerMode == .record && controller.referencePinned) {
+            CompareControls()
+        }
+    }
+}
 
-    private var modeSwitch: some View {
-        VStack(spacing: 4) {
-            if showsModeSwitch {
-                ViewerModeSwitch()
-            }
+/// The row the brief is about: TC on the left, the mode switch centered, the
+/// signal badges on the right.
+///
+/// A view of its own rather than a property of the modifier, for the reason
+/// `PlayerTimecodeBadge` is one — a property inside a `ViewModifier` cannot be
+/// handed to `NSHostingView`, and this row's WIDTH is now a contract
+/// (`ViewPlayerBadgeTests`): everything in it is bounded, so it fits the picture
+/// at the narrowest window in both languages and cannot be pushed out of shape
+/// by anything the operator switches on.
+struct PlayerTopBadgeRow: View {
+    @EnvironmentObject private var controller: CaptureController
+    var showsModeSwitch = true
 
-            // not in sync-play: the compare bar drives the single player's
-            // composite, which is not on screen under the grid
-            if controller.syncPlay == nil,
-               (controller.viewerMode == .playback
-                && controller.playbackURL != nil)
-                || (controller.viewerMode == .record
-                    && controller.referencePinned) {
-                CompareControls()
-            }
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            sideZone(alignment: .leading) { PlayerTimecodeBadge() }
+            modeSwitch
+            sideZone(alignment: .trailing) { rightBadges }
+        }
+    }
+
+    /// One of the two flexible edge zones. Equal width by construction, which
+    /// is what keeps the middle group centered.
+    private func sideZone(alignment: Alignment,
+                          @ViewBuilder content: () -> some View) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: alignment)
+    }
+
+    @ViewBuilder private var modeSwitch: some View {
+        if showsModeSwitch {
+            ViewerModeSwitch()
         }
     }
 
@@ -240,7 +268,7 @@ struct PlayerTopBadgesModifier: ViewModifier {
             playerOverlayBadge {
                 LUTMenu()
             }
-            formatBadge
+            PlayerFormatBadge()
         }
     }
 
@@ -278,8 +306,6 @@ struct PlayerTopBadgesModifier: ViewModifier {
             }
         }
     }
-
-    private var formatBadge: some View { PlayerFormatBadge() }
 }
 
 extension View {

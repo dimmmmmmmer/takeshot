@@ -23,9 +23,10 @@ struct ViewChangedSurfacesTests {
         let view: AnyView
     }
 
-    /// The window's top chrome band, the panel readout, the panel header, the
-    /// naming block, the slate row, the mode switch and an Other-content tile —
-    /// every surface owner items 1, 2, 16, 27, 28, 43 and 44 touched.
+    /// The utility row under the panel, the panel readout, the player's top
+    /// badge row, the naming block, the slate row, the mode switch and an
+    /// Other-content tile — every surface this round and the ones before it
+    /// touched.
     @Test func everyChangedSurfaceLaysOutInBothLanguages() async throws {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
@@ -36,8 +37,10 @@ struct ViewChangedSurfacesTests {
             let panel = ViewBudget.panelMinWidth
             let half = ViewBudget.footerHalfWidth
             let surfaces = [
-                Surface(name: "utility buttons", width: 300,
-                        view: AnyView(WindowUtilityButtons())),
+                Surface(name: "utility buttons", width: panel,
+                        view: AnyView(PanelUtilityButtons())),
+                Surface(name: "top badge row", width: ViewBudget.playerChromeWidth,
+                        view: AnyView(PlayerTopBadgeRow())),
                 Surface(name: "panel run status", width: panel,
                         view: AnyView(PanelRunStatus())),
                 Surface(name: "takes panel", width: panel,
@@ -74,11 +77,12 @@ struct ViewChangedSurfacesTests {
     }
 
     /// The main window as a whole, at the narrowest size the app allows, with
-    /// the panel on either side — the composition the buttons moved INTO
-    /// (owner item 2). The window may not overflow its own minimum in either
-    /// language, and the top band the buttons now live in must not have pushed
-    /// the player down: the column's height is the proposal, not more.
-    @Test func theMainWindowStillFitsItsMinimumWithTheButtonsOnTheChrome()
+    /// the panel on either side — the composition the utility buttons moved
+    /// INTO, a row under whichever side the panel is on. The window may not
+    /// overflow its own minimum in either language, and the row must not have
+    /// pushed the panel out of the column: the layout's size is the proposal,
+    /// not more.
+    @Test func theMainWindowStillFitsItsMinimumWithTheButtonsUnderThePanel()
         async throws {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)

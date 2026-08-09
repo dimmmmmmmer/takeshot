@@ -10,6 +10,62 @@ import Testing
 /// than erasing it a moment later.
 @MainActor
 struct ViewNamingRowTests {
+    /// The slate row is ONE control tall.
+    ///
+    /// It used to be a caption stacked over a box, three times over, and three
+    /// stacks made the whole footer a caption-line taller than the picture could
+    /// spare — the owner's "the shot/scene/take fields make the footer much
+    /// taller". The caption is beside its box now, so the row costs exactly what
+    /// the box costs. Measured against a bare `NameTextField`, which is what the
+    /// box is: a row taller than that has the caption back on its own line.
+    @Test func theSlateRowIsOneControlTall() async throws {
+        try await ViewProbe.run { probe in
+            let box: CGSize = probe.fittingSize(
+                NameTextField(field: .scene, text: .constant("12A"))
+                    .frame(width: 70))
+            let row = probe.fittingSizes {
+                SlateFieldsEditor(scene: .constant("12A"), shot: .constant("B"),
+                                  takeText: .constant("3"))
+            }
+            #expect(box.height > 0, "the measurement of the box itself is broken")
+            #expect(row.en.height <= box.height + 2,
+                    "the slate row is \(row.en.height)pt for a \(box.height)pt box")
+            #expect(row.ru.height == row.en.height,
+                    "the row took a different height in Russian: \(row)")
+
+            // …and the block above it still stacks: two rows, not one
+            let block = probe.fittingSizes { NamingFieldsView() }
+            #expect(block.en.height > row.en.height + 10,
+                    "the naming block is \(block.en.height)pt — the rows did not stack")
+        }
+    }
+
+    /// The three captions are the only localized strings in the footer's right
+    /// half, and beside their boxes they are charged to the row's width — so
+    /// they live in a FIXED box, and a translation that does not fit it is
+    /// truncated in silence. Both languages are measured against that box.
+    @Test func theSlateCaptionsFitTheirFixedBoxInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let box = SlateFieldsEditor.captionWidth
+            for key in ["scene", "slate_shot", "slate_take"] {
+                let caption = probe.fittingSizes { () -> Text in
+                    Text(L(key)).font(.system(size: 9, weight: .semibold))
+                }
+                #expect(caption.en.width <= box,
+                        "\(key) is \(caption.en.width)pt in English, the box is \(box)")
+                #expect(caption.ru.width <= box,
+                        "\(key) is \(caption.ru.width)pt in Russian, the box is \(box)")
+                // …and they are the caps the row above uses (owner item 3)
+                let english = ViewRender.withLanguage(.english) { L(key) }
+                let russian = ViewRender.withLanguage(.russian) { L(key) }
+                #expect(english == english.uppercased(),
+                        "\(key) reads \(english) beside CAM/ROLL/CLIP")
+                #expect(russian == russian.uppercased(),
+                        "\(key) reads \(russian) in Russian")
+            }
+        }
+    }
+
     /// Scene / shot / take are FIELDS in the footer now, not a chip that opens
     /// a popover. They are on their own row because the file-name row has no
     /// room for them — wrapping was the instruction, not shrinking — so what
@@ -61,15 +117,20 @@ struct ViewNamingRowTests {
     /// The collision badge is the one localized thing in the file-name row
     /// ("TAKEN" / "ЗАНЯТО"). It may be a few points wider in Russian; it may
     /// not add a row, and the block still has to fit.
+    ///
+    /// Its presence is read off the file-name row rather than off the block —
+    /// see the note on `ViewFooterTests.collisionBadgeStaysInsideTheNamingRow`.
     @Test func theCollisionBadgeStillDoesNotGrowTheBlock() async throws {
         try await ViewProbe.run { probe in
+            let plainRow = probe.fittingSizes { NamingFileNameRow() }
             let plain = probe.fittingSizes { NamingFieldsView() }
             probe.controller.nameCollision = "TS_A001C01.mov"
+            let warnedRow = probe.fittingSizes { NamingFileNameRow() }
             let warned = probe.fittingSizes { NamingFieldsView() }
 
             #expect(warned.ru.height == plain.ru.height,
                     "the collision badge added a row")
-            #expect(warned.ru.width > plain.ru.width,
+            #expect(warnedRow.ru.width > plainRow.ru.width,
                     "the collision badge did not render at all")
             #expect(warned.ru.width <= ViewBudget.footerHalfWidth,
                     "the warned block wants \(warned.ru.width)pt")

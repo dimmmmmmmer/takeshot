@@ -6,7 +6,7 @@
 /* Controls */
 "device" = "Устройство";
 "no_devices" = "Нет устройств";
-"scene" = "Сцена";
+"scene" = "СЦЕНА";
 "record" = "Запись";
 "stop" = "Стоп";
 "mock_device_name" = "Демо-источник (без платы)";
@@ -105,8 +105,8 @@
 /* Slate — the creative metadata (scene/shot/take) embedded in the recording.
    Field captions on the footer's second naming row, under CAM/ROLL/CLIP. The
    chip and its popover they replaced are gone (owner item 27). */
-"slate_shot" = "Кадр";
-"slate_take" = "Дубль";
+"slate_shot" = "КАДР";
+"slate_take" = "ДУБЛЬ";
 "slate_take_help" = "Номер дубля внутри сцены. Пустое поле — идёт за счётчиком клипов; введите номер, и он станет главным, начинаясь с 1 при каждой смене сцены";
 "slate_sidecar_note" = "Записанный файл никогда не переписывается: правки сохраняются в takeshot-slate.csv рядом с материалом и уходят в журнал, ALE и отчёты.";
 "description_label" = "Описание";

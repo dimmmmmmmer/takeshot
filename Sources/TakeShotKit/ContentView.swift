@@ -18,16 +18,6 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
-        // Settings, the VANC monitor and the offload, in the band the window
-        // keeps clear of the traffic lights (owner item 2). An overlay on the
-        // whole window and not a row in either column: the takes panel sits on
-        // the left or the right depending on a setting, and these belong in the
-        // top-right corner either way.
-        .overlay(alignment: .topTrailing) {
-            WindowUtilityButtons()
-                .frame(height: controller.windowTopInset)
-                .padding(.trailing, 14)
-        }
         .id(controller.settings.theme.appLanguage)
         // The DIT offload runs as a sheet over the main window: it needs a
         // destination LIST, live per-destination progress and a verdict card
@@ -67,9 +57,9 @@ struct ContentView: View {
 
     private var mainColumn: some View {
         VStack(spacing: 0) {
-            // strip under the window buttons — the actual height of their area
-            // (the utility buttons that sit in it are an overlay on the whole
-            // window, not a row of this column — see `body`)
+            // strip the window keeps clear of the traffic lights; nothing is
+            // mounted in it any more (the utility buttons spent a release there
+            // and are under the takes panel now — see `sidePanel`)
             Color.clear.frame(height: controller.windowTopInset)
             PlayerArea()
             BottomBarView()
@@ -85,18 +75,27 @@ struct ContentView: View {
         .ignoresSafeArea(.container, edges: .top)
     }
 
+    /// The takes panel, and under it — outside its plate, centred on its width —
+    /// the settings/VANC/offload row (see `PanelUtilityButtons`).
+    ///
+    /// Both are children of the same column and share its 10pt horizontal
+    /// padding, so the row is centred on exactly the width the panel occupies:
+    /// there is no second number to keep in step.
     private var sidePanel: some View {
-        TakeListView()
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .background(.regularMaterial,
-                        in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(.white.opacity(0.07)))
-            // top edge flush with the player
-            .padding(.top, controller.windowTopInset)
-            .padding(.bottom, 10)
-            .padding(.horizontal, 10)
-            .frame(minWidth: 310, maxWidth: 480)
-            .ignoresSafeArea(.container, edges: .top)
+        VStack(spacing: 8) {
+            TakeListView()
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(.regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.white.opacity(0.07)))
+            PanelUtilityButtons()
+        }
+        // top edge flush with the player
+        .padding(.top, controller.windowTopInset)
+        .padding(.bottom, 10)
+        .padding(.horizontal, 10)
+        .frame(minWidth: 310, maxWidth: 480)
+        .ignoresSafeArea(.container, edges: .top)
     }
 }

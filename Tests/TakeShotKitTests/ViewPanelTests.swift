@@ -240,27 +240,58 @@ struct ViewPanelTests {
         }
     }
 
-    /// Settings, the VANC monitor and the offload are three icons on the
-    /// window's top chrome now (owner item 2), and that band is only as tall as
-    /// the traffic lights beside it. They carry localized TOOLTIPS and nothing
-    /// else, so no translation may resize them, and the row has to fit inside
-    /// `windowTopInset` without pushing the player down.
-    @Test func theUtilityButtonsFitTheWindowsTopChromeBand() async throws {
+    /// Settings, the VANC monitor and the offload are three icons in a row of
+    /// their own under the takes panel. They carry localized TOOLTIPS and
+    /// nothing else, so no translation may resize them, and the row has to fit
+    /// the narrowest panel with room to spare — it is a row of icons under a
+    /// list, not a toolbar.
+    @Test func theUtilityRowFitsUnderTheNarrowestPanel() async throws {
         try await ViewProbe.run { probe in
-            let ideal = probe.fittingSizes { WindowUtilityButtons() }
-            #expect(ideal.ru == ideal.en,
-                    "a localized label reached the utility buttons: \(ideal)")
-            let band = probe.controller.windowTopInset
-            #expect(ideal.en.height <= band,
-                    "the buttons are \(ideal.en.height)pt tall, the band is \(band)")
-            #expect(ideal.en.width > 0)
+            let hugged = probe.minimumWidths { PanelUtilityButtons() }
+            #expect(hugged.ru == hugged.en,
+                    "a localized label reached the utility buttons: \(hugged)")
+            #expect(hugged.en > 0)
+            #expect(hugged.en <= ViewBudget.panelMinWidth,
+                    "three icons want \(hugged.en)pt of \(ViewBudget.panelMinWidth)")
+            let laid = probe.sizes(proposedWidth: ViewBudget.panelMinWidth) {
+                PanelUtilityButtons()
+            }
+            #expect(laid.en.width == ViewBudget.panelMinWidth,
+                    "the row does not take the column's width, so it cannot centre")
+            #expect(laid.en.height < 40,
+                    "the row is \(laid.en.height)pt tall — that is a toolbar")
         }
     }
 
-    /// They are on the MAIN COLUMN, not in the takes panel: the panel is where
-    /// they used to be, in a plate of their own, and that plate is what owner
-    /// item 2 asked to be rid of. With nothing running the panel must therefore
-    /// be exactly the sections — no strip, no readout, no extra height.
+    /// …and it is CENTRED on the panel's width rather than parked in a corner,
+    /// which is the whole of the owner's complaint: the three icons used to be
+    /// an overlay in the window's top-right, i.e. in the top-right corner of a
+    /// panel they have nothing to do with.
+    ///
+    /// Measured off the ink, with a few points of slack: a gear and a hard-disk
+    /// glyph do not carry the same side bearing, so the two margins are equal to
+    /// within a glyph's own inset and not to the half-point. What this catches
+    /// is a leading or trailing pin, which is off by a hundred points.
+    @Test func theUtilityRowIsCentredOnThePanelWidth() async throws {
+        try await ViewProbe.run { probe in
+            let width = ViewBudget.panelMinWidth
+            let box = try #require(
+                ViewRender.drawnBounds(probe.hosted(PanelUtilityButtons()),
+                                       in: CGSize(width: width, height: 28)),
+                "the utility row drew nothing at all")
+            let leading = box.minX
+            let trailing = width - box.maxX
+            #expect(abs(leading - trailing) <= 4,
+                    "the row sits \(leading)pt from the left and \(trailing)pt from the right")
+            #expect(leading > 40,
+                    "the row starts \(leading)pt in — it is pinned to an edge")
+        }
+    }
+
+    /// The panel itself carries no utility block, and no plate: the buttons are
+    /// under it, outside its material, and what stayed inside is the live-run
+    /// readout. With nothing running the panel must therefore be exactly the
+    /// sections — no strip, no readout, no extra height.
     @Test func anIdlePanelCarriesNoUtilityBlockAtAll() async throws {
         try await ViewProbe.run { probe in
             let idle = probe.fittingSizes { PanelRunStatus() }

@@ -47,8 +47,10 @@ final class LiveSignal: ObservableObject {
 
     /// The speaker's full mute is holding the output at silence. A state of its
     /// own rather than "volume == 0": a slider parked at zero is a level the
-    /// operator chose, a mute is a hold with a restore point — and the slashed
-    /// speaker icon has to be able to tell the two apart. Persisted like DIM —
-    /// state only, never the zero (see `AudioSettings.monitorMuted`).
+    /// operator chose, a mute is a hold with a restore point — and the speaker
+    /// icon has to be able to tell the two apart. It does it with the SLASH,
+    /// which is the hold, rather than with the colour, which is silence either
+    /// way (see `MonitorSpeaker`). Persisted like DIM — state only, never the
+    /// zero (see `AudioSettings.monitorMuted`).
     @Published var muted = false
 }
