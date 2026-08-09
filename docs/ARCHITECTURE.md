@@ -159,6 +159,20 @@ chroma-key preview and exposure tools never reach it. `MultiviewEncoder` then
 encodes it with Rec.709 declared on both ends, so the tile is the app's own
 picture rather than a gamma conversion of it (owner item 13).
 
+How big that tile is depends on how many of them the page is laying out, and
+that is not a refinement — a cap sized for a four-up grid is what made a single
+camera look like a thumbnail, and a cap sized for the single view sends four
+times the bytes for tiles a quarter of the screen. One camera gets 1280 on the
+long edge, two get 960, three or more get 640, which is roughly the physical
+pixels each tile occupies on a phone. Measured at 1080p in, JPEG at 0.75: 42.9,
+28.4 and 16.5 KB a frame at 2.6, 1.5 and 1.5 ms, so the whole page stays inside
+1.7-2.6 Mbit/s at the five-frame pace whatever the camera count. The reduction
+is Lanczos and not an affine transform, which is a correctness point rather
+than a taste one: `transformed(by:)` does not band-limit, and on a zone plate
+reduced 1920 → 640 the band past the target's Nyquist came back with 18.9 codes
+of standard deviation against Lanczos' 1.5 — fine detail folding into moire.
+`MultiviewPerformanceTests` prints the timings and asserts the bytes.
+
 The chroma key runs on the display queue and never on the capture queue, it
 costs one `Bool` read per frame while it is off, and a frame that reaches the
 stage older than one frame interval is shown WITHOUT the key rather than held

@@ -39,8 +39,16 @@ extension CaptureController {
     /// extra channels follow in order — the same order the status'
     /// `cameras` array and the page's tiles use. Called again whenever
     /// multicam reshapes the channel list.
+    ///
+    /// The count goes over too, because it is what sizes each tile: the page
+    /// lays one camera out full screen and four in a 2-across grid, and the
+    /// encoder has no other way to know which it is producing frames for. It
+    /// is the SAME number the status' `cameras` array carries, from the same
+    /// source, so the tile the phone draws and the frame it is handed cannot
+    /// disagree about how big it should be.
     func refreshRemoteMultiviewTaps() {
         guard let encoder = remoteMultiviewEncoder else { return }
+        encoder.setCameraCount(extraChannels.count + 1)
         pipeline.setOnMultiviewFrame { [weak encoder] buffer in
             encoder?.offer(buffer, camera: 0)
         }
