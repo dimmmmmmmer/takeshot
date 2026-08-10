@@ -14,7 +14,6 @@ described in the matching vendor/<sdk>/README.md.
   Blackmagic DeckLink SDK   <https://www.blackmagicdesign.com/developer/>
   Blackmagic RAW SDK        <https://www.blackmagicdesign.com/developer/>
   RED R3D SDK               <https://www.red.com/developers>
-  NDI SDK (Vizrt)           <https://ndi.video/for-developers/ndi-sdk/>
   AJA NTV2 SDK (MIT)        <https://github.com/aja-video/libajantv2>
 
 Without the Blackmagic SDKs the corresponding targets build as stubs and the

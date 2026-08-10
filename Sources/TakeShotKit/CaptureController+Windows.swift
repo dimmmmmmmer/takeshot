@@ -8,8 +8,7 @@ import Foundation
 import SwiftUI
 import os.log
 
-/// Fullscreen surfaces and the mirrors of the viewer — the hardware playout and
-/// the NDI source.
+/// Fullscreen surfaces and the mirrors of the viewer.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
@@ -56,37 +55,28 @@ extension CaptureController {
         }
         wireDisplayMirrors()
     }
-    /// The mirrors show whatever the viewer shows: the hardware output, and the
-    /// NDI source when it is switched on.
+    /// The mirrors show whatever the viewer shows: the hardware output today,
+    /// and anything else hung off the same slot.
     ///
-    /// Both take the SAME frame — the decorated one, aids and key included,
-    /// which is what a director watches — so they share one handler slot per
-    /// source rather than each claiming its own. That is only true because they
-    /// want the same picture: the phone camera grid has a slot of its own
-    /// precisely because it wants the CLEAN frame (see
-    /// `CapturePipeline.publishDisplayFrame`).
+    /// A mirror here takes the DECORATED frame — aids and key included, which is
+    /// what a director watches — which is why one handler slot per source can
+    /// serve all of them. That is only true because they want the same picture:
+    /// the phone camera grid has a slot of its own precisely because it wants
+    /// the CLEAN frame (see `CapturePipeline.publishDisplayFrame`).
     ///
-    /// With neither mirror present the slots go back to nil, so an app with no
-    /// hardware output and NDI off calls nothing per frame.
+    /// With no mirror present the slots go back to nil, so an app with no
+    /// hardware output calls nothing per frame.
     func wireDisplayMirrors() {
         let feeder = mirrors.playout
-        let mirror = mirrors.ndi
-        guard feeder != nil || mirror != nil else {
+        guard feeder != nil else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
             return
         }
         let routeLive = viewerMode == .record
-        // The rate is stated per sender, not per frame: it is captured here
-        // because the handler runs on the display queue and the frame rate is
-        // MainActor state. Every route change re-wires — a signal format change,
-        // a viewer mode switch, a clip opening — so it follows the source.
-        let rate = NDIFrameRate(fps: routeLive
-            ? (signalFormat?.frameRate ?? 0) : playbackFPS)
         let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
             feeder?.submit(buffer)
-            mirror?.offer(buffer, rate: rate)
         }
         pipeline.setOnDisplayFrame(routeLive ? handler : nil)
         playbackTap.setOnDisplayFrame(routeLive ? nil : handler)

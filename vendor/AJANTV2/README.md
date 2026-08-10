@@ -28,6 +28,6 @@ the driver, the same way DeckLink support needs Blackmagic Desktop Video.
 
 ## Licence note
 
-libajantv2 is MIT, so unlike the RED, NDI and Blackmagic SDKs there is no
+libajantv2 is MIT, so unlike the RED and Blackmagic SDKs there is no
 redistribution obstacle — it is kept out of the repository for size and
 checkout speed, not for licensing.

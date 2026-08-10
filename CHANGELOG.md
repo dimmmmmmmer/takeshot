@@ -132,9 +132,6 @@ Gatekeeper's refusal instead of the app.
 
 ### Also new
 
-- **NDI output**: the same mirrored viewer as a source on the set network, for
-  a director's iPad or a client feed, with no second cable and no second board
-  output. Needs a build made against the NDI SDK (see the limits below).
 - **R3D playback**: RED clips, spanned ones included, developed to Rec.709 with
   the camera's metadata and edge timecode. Also needs a build made against
   RED's SDK.
@@ -150,9 +147,6 @@ Gatekeeper's refusal instead of the app.
 - **12-bit RGB is opt-in and its range is unconfirmed.** The SDK and CoreVideo
   both describe `R12B` as full-range 0–4095; whether a board actually puts
   studio-swing codes in it has not been measured on hardware.
-- **NDI needs the NDI SDK at build time**, and an NDI runtime installed to
-  receive. Without the SDK the feature reports itself unavailable in Settings
-  and tells you where to get it.
 - **R3D needs RED's SDK at build time.** Without it an `.r3d` is recognised and
   reported as unsupported rather than silently ignored.
 - **`.braw` playback needs Blackmagic RAW installed** — the free player

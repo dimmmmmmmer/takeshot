@@ -816,17 +816,6 @@
 "menubar_status_ready" = "TakeShot — готов";
 "menubar_status_recording" = "TakeShot — идёт запись";
 
-/* === NDI output: the viewer sent out as a source on the set network === */
-"settings_ndi" = "Выход NDI";
-"ndi_enable" = "Отдавать картинку как источник NDI";
-"ndi_source_name" = "Имя источника";
-"ndi_status" = "Состояние";
-"ndi_sending" = "Отдаёт";
-"ndi_not_sending" = "Не отдаёт";
-"ndi_unavailable" = "Недоступно";
-"ndi_failed_short" = "Не запустилось";
-"ndi_failed" = "NDI: %@";
-
 /* обученный индикатор REC — третий триггер рядом с VANC и бегущим таймкодом */
 "visual_rec" = "Индикатор REC на картинке";
 "visual_rec_hint" = "Начинает дубль, когда в обученной рамке загорается собственный индикатор записи камеры. Только по явному включению и никогда по умолчанию: включить можно лишь после того, как оба эталона сняты и достаточно различаются.";

@@ -814,17 +814,6 @@
 "menubar_status_ready" = "TakeShot — ready";
 "menubar_status_recording" = "TakeShot — recording";
 
-/* === NDI output: the viewer sent out as a source on the set network === */
-"settings_ndi" = "NDI output";
-"ndi_enable" = "Send the viewer as an NDI source";
-"ndi_source_name" = "Source name";
-"ndi_status" = "Status";
-"ndi_sending" = "Sending";
-"ndi_not_sending" = "Not sending";
-"ndi_unavailable" = "Unavailable";
-"ndi_failed_short" = "Could not start";
-"ndi_failed" = "NDI: %@";
-
 /* the taught REC indicator — a third trigger beside VANC and running timecode */
 "visual_rec" = "REC indicator on the picture";
 "visual_rec_hint" = "Rolls a take when the camera's own record indicator lights up inside a box you teach. Opt-in, and never a default: it can only be switched on once both references are captured and far enough apart.";

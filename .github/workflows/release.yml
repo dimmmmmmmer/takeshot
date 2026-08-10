@@ -5,8 +5,8 @@
 # on the release page itself by scripts/release-notes.sh:
 #
 #   * A GitHub runner has none of the vendor SDKs — they are not redistributable
-#     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D and
-#     NDI bridges are compiled as stubs. In particular the published build sees
+#     and nothing here fetches them — so the DeckLink, Blackmagic RAW and R3D
+#     bridges are compiled as stubs. In particular the published build sees
 #     NO capture device: it plays back, it exports, it runs the demo source, and
 #     it cannot record from a board. Anyone who needs capture builds from source
 #     with the DeckLink SDK (CONTRIBUTING.md).

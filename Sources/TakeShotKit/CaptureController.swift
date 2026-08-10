@@ -236,10 +236,10 @@ final class CaptureController: ObservableObject {
     /// at two different times and must never run at once on one disk.
     let verify = OffloadVerifyModel()
 
-    /// The mirrors of the viewer — the DeckLink playout output and the NDI
-    /// source — and the NDI output's state. One holder rather than five
-    /// properties: this type is a capped inventory and they are one subsystem
-    /// (see `DisplayMirrors` and `wireDisplayMirrors`).
+    /// The mirrors of the viewer — the DeckLink playout output, and whatever
+    /// else rides the same display-mirror slot. One holder rather than a
+    /// property each: this type is a capped inventory and they are one
+    /// subsystem (see `DisplayMirrors` and `wireDisplayMirrors`).
     let mirrors = DisplayMirrors()
 
     /// B-side clip for take-vs-take compare (nil — compare against live).

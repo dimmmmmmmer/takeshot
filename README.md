@@ -24,8 +24,8 @@ Three things to know before you download, because they decide whether the
 build is any use to you:
 
 - **It cannot record from a capture board.** The published builds are made on a
-  machine with none of the vendor SDKs on it — Blackmagic's, RED's and NDI's
-  licences all forbid redistributing them — so the DeckLink bridge is compiled
+  machine with none of the vendor SDKs on it — Blackmagic's and RED's licences
+  both forbid redistributing them — so the DeckLink bridge is compiled
   as a stub and no capture device is visible to it at all. It opens, plays back
   and exports footage you already have, and it runs its built-in demo camera,
   which is enough to see whether you like the tool. To capture, build from
@@ -97,10 +97,6 @@ build is any use to you:
   is burned into the picture, so the hardware monitor gets it too.
 - Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
-- NDI output: the same mirrored viewer as a source on the set network, for a
-  director's iPad or a client feed, with no second cable and no second board
-  output. Off by default; needs the NDI SDK at build time
-  (`vendor/NDISDK/README.md`) and an NDI runtime installed.
 - Chroma key for the monitor: pull the green screen with an eyedropper,
   tolerance, softness and spill, and put a checkerboard, a colour or a still
   behind the actor. Preview and monitor output only — the take, the grabs and
@@ -182,10 +178,10 @@ wants a real camera's running timecode or a VANC trigger.
 
 What needs a vendor SDK you obtain yourself — free, but from the vendor, under
 their terms — is the hardware itself: capture and monitor output (DeckLink),
-`.braw` playback (Blackmagic RAW), `.r3d` playback (RED), and NDI output.
-[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. NDI, R3D and
-BRAW each say so at the point of use; a build with no DeckLink SDK simply lists
-no capture device, and **Collect diagnostics** is where it explains itself.
+`.braw` playback (Blackmagic RAW) and `.r3d` playback (RED).
+[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D and BRAW
+each say so at the point of use; a build with no DeckLink SDK simply lists no
+capture device, and **Collect diagnostics** is where it explains itself.
 
 ## Usage
 

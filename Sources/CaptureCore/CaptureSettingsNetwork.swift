@@ -1,8 +1,8 @@
 import Foundation
 
-// The two ways the app puts itself on the set network. Both are off by default
-// and for the same reason: a capture tool does not open a port or announce
-// itself on a production's network until somebody asks it to.
+// How the app puts itself on the set network. Off by default, and for a reason
+// worth stating: a capture tool does not open a port or send a picture out over
+// a production's network until somebody asks it to.
 
 /// The browser remote (see `RemoteServer` and `CaptureController+Remote`).
 public struct RemoteSettings: Codable, Equatable, Sendable {
@@ -37,18 +37,21 @@ public struct RemoteSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// NDI output (see `CNDSender` and `CaptureController+NDI`).
+/// The retired NDI output.
+///
+/// INERT: the bridge, the mirror, the settings section and the controller
+/// extension are all gone, and nothing reads either field any more. It is still
+/// on the record for one commit because removing a key is a change to the
+/// ON-DISK FORMAT — see `SettingsFormatFixture` for what that costs when it goes
+/// wrong — and the two changes are worth reading apart. Removed in the commit
+/// that follows this one.
 public struct NDISettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case enabled = "ndiEnabled"
         case sourceName = "ndiSourceName"
     }
 
-    /// The viewer is sent out as an NDI source; nil/false — off, which is the
-    /// default. Optional, like every added field, so settings written by an
-    /// older build still decode.
     public var enabled: Bool?
-    /// Name the source is announced under; nil — `CaptureSettings.ndiSourceNameEffective`.
     public var sourceName: String?
 
     public init() {}

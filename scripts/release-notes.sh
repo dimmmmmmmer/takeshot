@@ -75,8 +75,6 @@ sdk_state "Blackmagic RAW" "vendor/BRAWSDK/include/BlackmagicRawAPI.h" \
     "\`.braw\` clips do not open."
 sdk_state "RED R3D" "vendor/R3DSDK/Lib/mac64/libR3DSDK-libcpp.a" \
     "\`.r3d\` clips are recognised and reported as unsupported."
-sdk_state "NDI" "vendor/NDISDK/include/Processing.NDI.Lib.h" \
-    "network output reports itself unavailable."
 
 cat <<'FOOTER'
 

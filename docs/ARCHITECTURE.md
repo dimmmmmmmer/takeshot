@@ -139,8 +139,8 @@ desqueeze, punch-in. Key first, aids second — a false colour has to meter the
 picture the monitor is actually showing, background and all.
 
 The aids used to be applied inside `MetalPreviewLayer.render`, once per mounted
-surface. That worked for windows and for nothing else: the hardware playout, the
-NDI source and the director's monitor are handed a pixel buffer rather than a
+surface. That worked for windows and for nothing else: the hardware playout, a
+network output and the director's monitor are handed a pixel buffer rather than a
 layer, so none of them ever saw a false colour or a frameline (owner item 7).
 Running one pass per FRAME instead of one per SURFACE means every mirror of the
 viewer carries what the operator switched on, and there is one place to reason
