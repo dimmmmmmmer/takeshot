@@ -77,7 +77,7 @@ import Testing
         bad += try mismatches(ChromaKeySettings.self, "chromaKey")
         bad += try mismatches(VisualRecSettings.self, "visualRec")
         bad += try mismatches(RemoteSettings.self, "remote")
-        bad += try mismatches(NDISettings.self, "ndi")
+        bad += try mismatches(SRTSettings.self, "srt")
         bad += try mismatches(DailiesSettings.self, "dailies")
         bad += try mismatches(OffloadSettings.self, "offload")
         #expect(bad == [String]())
@@ -117,7 +117,7 @@ import Testing
         claimed += try keys(filled(ChromaKeySettings.self))
         claimed += try keys(filled(VisualRecSettings.self))
         claimed += try keys(filled(RemoteSettings.self))
-        claimed += try keys(filled(NDISettings.self))
+        claimed += try keys(filled(SRTSettings.self))
         claimed += try keys(filled(DailiesSettings.self))
         claimed += try keys(filled(OffloadSettings.self))
         #expect(Set(claimed).count == claimed.count,

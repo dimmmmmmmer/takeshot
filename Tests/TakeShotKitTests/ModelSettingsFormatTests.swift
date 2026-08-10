@@ -65,7 +65,7 @@ import Testing
 
     // MARK: - the values
 
-    /// Decode the blob, encode it again, and every one of the 83 values has to
+    /// Decode the blob, encode it again, and every one of the 88 values has to
     /// come back the same. The fixture gives each key a distinct value, so two
     /// fields that had quietly swapped keys would show up here as two changed
     /// lines rather than round-tripping past a key-set check.

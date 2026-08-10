@@ -134,8 +134,8 @@ extension CaptureController {
         playbackStartTC = model.startTimecode
         playbackFPS = model.frameRate
         // The mirrors follow the RAW player too, and they are wired AFTER the
-        // rate, not before it: they state the rate of the source they are
-        // pointed at, and the NDI frame carries it (see `wireDisplayMirrors`).
+        // rate rather than before it: a mirror is pointed at a source and may
+        // have to state that source's rate (see `wireDisplayMirrors`).
         wireDisplayMirrors()
         playbackAspect = model.height > 0
             ? CGFloat(model.width) / CGFloat(model.height) : nil

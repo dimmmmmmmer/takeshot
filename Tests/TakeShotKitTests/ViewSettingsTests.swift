@@ -273,11 +273,16 @@ struct ViewSettingsTests {
         }
     }
 
-    /// The captions that restated what a control obviously does are gone
-    /// (owner items 3, 6, 8, 14). They were localized strings, so the way they
-    /// come back is somebody re-adding the key — and the render tests above
-    /// would simply measure a taller form without saying why.
-    @Test func theRetiredSettingsCaptionsAreGoneFromBothLanguages() throws {
+    /// Every string a retired part of this window used to show is gone from
+    /// BOTH tables.
+    ///
+    /// Two retirements are covered. The captions that restated what a control
+    /// obviously does (owner items 3, 6, 8, 14), and the whole NDI output
+    /// section — a feature the owner replaced, whose eight labels are the part
+    /// of it a `git rm` cannot reach. Either way the only route back is somebody
+    /// re-adding the key, and the render tests above would simply measure a
+    /// taller form without saying why.
+    @Test func theRetiredSettingsStringsAreGoneFromBothLanguages() throws {
         for language in ["en", "ru"] {
             let path = try #require(Bundle.module.path(forResource: language,
                                                        ofType: "lproj"))
@@ -285,7 +290,10 @@ struct ViewSettingsTests {
                 contentsOfFile: path + "/Localizable.strings") as? [String: String])
             for key in ["menubar_keep_hint", "luts_hint", "remote_hint",
                         "backup_folder", "backup_copying", "backup_verified",
-                        "backup_failed"] {
+                        "backup_failed",
+                        "settings_ndi", "ndi_enable", "ndi_source_name",
+                        "ndi_status", "ndi_sending", "ndi_not_sending",
+                        "ndi_unavailable", "ndi_failed_short", "ndi_failed"] {
                 #expect(strings[key] == nil, "\(key) is back in \(language)")
             }
         }

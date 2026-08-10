@@ -69,6 +69,7 @@ which is worth a great deal and is not the same as green.
 | `CaptureCore` | The SDK-free core |
 | `CDeckLink` | Obj-C++ bridge to the DeckLink SDK: `CDLCapture` (input), `CDLPlayout` (hardware monitor output) |
 | `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
+| `CSRT` | Obj-C++ bridge to libsrt (`CSRTSender`), for the SRT output |
 | `TakeShotKit` | The application layer, as a library so tests can reach it |
 | `TakeShot` | The executable entry point and nothing else |
 
@@ -139,8 +140,8 @@ desqueeze, punch-in. Key first, aids second — a false colour has to meter the
 picture the monitor is actually showing, background and all.
 
 The aids used to be applied inside `MetalPreviewLayer.render`, once per mounted
-surface. That worked for windows and for nothing else: the hardware playout, the
-NDI source and the director's monitor are handed a pixel buffer rather than a
+surface. That worked for windows and for nothing else: the hardware playout, a
+network output and the director's monitor are handed a pixel buffer rather than a
 layer, so none of them ever saw a false colour or a frameline (owner item 7).
 Running one pass per FRAME instead of one per SURFACE means every mirror of the
 viewer carries what the operator switched on, and there is one place to reason
@@ -172,6 +173,88 @@ than a taste one: `transformed(by:)` does not band-limit, and on a zone plate
 reduced 1920 → 640 the band past the target's Nyquist came back with 18.9 codes
 of standard deviation against Lanczos' 1.5 — fine detail folding into moire.
 `MultiviewPerformanceTests` prints the timings and asserts the bytes.
+
+### The SRT output, and why it is not a like-for-like NDI swap
+
+The owner replaced the NDI output with SRT. It rides the same seam — the
+display-mirror slot, one handler per source, carrying the DECORATED frame the
+operator is looking at — and almost nothing else carries over, because the two
+are different kinds of thing.
+
+**NDI announced itself and took frames; SRT is a transport and takes a byte
+stream.** A receiver discovered an NDI source in a list, so the whole
+configuration was a name. An SRT link is an address, a port and a role, and it
+carries an MPEG-TS — so the feature needs an encoder, and the operator has to be
+told about things NDI never asked: where to send, which end dials, how much of a
+bad link to ride out, and how many bits it can carry.
+
+- **`CSRT`** is the bridge, wired the way `CDeckLink` and `CBraw` are: real
+  against the headers in `vendor/SRTSDK/include`, a stub without them, runtime
+  `dlopen`ed, and no part of the SRT ABI hand-declared anywhere (every pointer
+  takes its type from the header via `decltype`, so a wrong name is a compile
+  error). It is an OUTPUT: nothing in it receives, which is why a loopback test
+  can use two of them and still not prove a receiver decodes anything.
+- **`SRTVideoEncoder`** is VideoToolbox H.264 High, hardware when there is any,
+  `RealTime` on, frame reordering OFF. H.264 rather than HEVC because every
+  receiver on a set decodes it; reordering off because it buys one frame of
+  latency instead of a GOP, and because it removes the decode timestamp as a
+  thing that can disagree with the presentation one.
+- **`MPEGTSMuxer`** is pure Foundation — 188-byte packets, seven to a 1316-byte
+  datagram, which is libsrt's own `SRT_LIVE_DEF_PLSIZE` and is 188 × 7 for
+  exactly that reason. Every datagram is padded to that size with null packets.
+  The tables ride with the keyframe rather than on a timer, because a receiver
+  with tables and no keyframe cannot show a picture either. Being pure is what
+  makes a wire format testable: `SRTMuxerTests` is arithmetic over bytes, and the
+  CRC is pinned against the published check value for CRC-32/MPEG-2 rather than
+  against what this code happens to produce.
+- **`SRTVideoMirror`** owns `com.takeshot.srt` and everything on it: the
+  coalesce, the encode, the mux, the send and the reconnect.
+
+**What the frame path pays, measured.** All figures release, M-series laptop.
+
+NDI cost 0.114 ms a frame at 1080p because there was nothing to do — its
+uncompressed RGB WAS the display buffer. Here the display queue's whole
+involvement is a pixel-format test and one `dispatch_async`: **under 0.001 ms at
+1080p and at UHD**, 0.006 ms worst of 200 runs. That is the number to compare
+against NDI's, and it is two orders of magnitude under it because the work moved
+rather than shrank.
+
+Where it moved to, offer to first datagram out: **6.10 ms at 1080p, 20.9 ms at
+UHD**. That is a LATENCY and not an occupancy — VideoToolbox's encode is
+asynchronous, so the mirror's queue is free again long before it elapses — and it
+is a fifth of a 25 fps frame interval at 1080p. The mux alone is 0.046 ms for a
+40 KB frame and 0.171 ms for a 160 KB keyframe.
+
+`SRTPerformanceTests` prints all of it and asserts none of it. What it does assert
+is the byte arithmetic, which is a property of the format rather than of the
+runner: the transport costs about 5 % on top of the payload, and a second of
+8 Mbit/s video is exactly 800 datagrams — 8.42 Mbit/s of UDP payload, which is
+the number to hand somebody asking what to reserve on a link.
+
+**Nothing here can block the frame path, and it is by construction.** `offer` is
+an async dispatch with latest-wins behind it, so a slow pass costs frames and
+never delays them. The socket is opened with sending asynchronous
+(`SRTO_SNDSYN` off), so a link that cannot take the bytes returns "again" and the
+datagram is dropped. The one call that really can park for seconds — a caller's
+connect — happens on the mirror's queue, where parking costs a monitor some
+frames and nothing else.
+
+**A dead link is a state, not an error.** On a venue network the receiver is
+closed half the day. A retryable failure (the far end is not there) is reported
+once and retried with a backoff of one to five seconds; a CONFIGURATION failure
+(a port already bound, an address that resolves to nothing, a passphrase libsrt
+refuses) is not retried at all, because retrying would hide the only thing the
+operator can act on. Only the second one toasts. `aLinkThatFailsOnEveryDatagramDoesNotCostTheTake`
+is what holds the part that matters: a link failing on every datagram for a whole
+recording, and the take still finalizes with no alarm.
+
+**Open until a real receiver has seen it.** The bytes are pinned, the levels are
+measured through a real encode and decode, and the handshake and the option set
+are exercised against real libsrt over the loopback (`SRTLoopbackTests`, which
+runs only where the headers are — not on CI). What none of that touches: whether
+VLC, OBS, Resolve or a hardware bridge actually decodes this stream; whether the
+latency figure behaves as expected on a lossy link; and what a receiver makes of
+the raster changing mid-stream when the operator switches to playback.
 
 ### What the network can reach, and what it cannot
 
@@ -458,7 +541,7 @@ would drop a marker while a roll name is being typed.
 `CaptureSettings` does two jobs and they pull in opposite directions.
 
 It is the **record**. One JSON blob in `UserDefaults` under
-`TakeShot.CaptureSettings`, 84 keys, and there is no error path for getting the
+`TakeShot.CaptureSettings`, 88 keys, and there is no error path for getting the
 shape wrong: a key that moves stops decoding, `loaded(from:)` answers the throw
 with a fresh default object, and the operator's destination folder, naming
 template, calibrated assist thresholds and taught REC references are silently
@@ -472,12 +555,12 @@ standing in for a namespace they could not have.
 The two are reconciled by grouping the TYPE while keeping the WIRE FORMAT flat.
 `CaptureSettings` holds fourteen domain groups (`capture`, `naming`, `audio`,
 `theme`, `assist`, `review`, `lut`, `r3d`, `chromaKey`, `visualRec`, `remote`,
-`ndi`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its own
+`srt`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its own
 **synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)` delegate
 to all fourteen against a SINGLE keyed container, so every key still lands at
 the top level exactly where it always did. Nothing hand-writes a per-field
 encode or decode — the field-to-key mapping is still the compiler's, which is
-what makes the 84 keys unforgeable.
+what makes the 88 keys unforgeable.
 
 Flatness is load-bearing for a second consumer as well as for the stored blob:
 `DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by

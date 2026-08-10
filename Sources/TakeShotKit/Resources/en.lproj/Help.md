@@ -272,6 +272,40 @@ original media.
   screen can show the player alone.
 - With two boards, a second camera records in sync with the first.
 
+## SRT output
+
+Sends the same picture the hardware monitor gets — aids, framelines and chroma
+key included — over the network instead of down a cable, to VLC or OBS or a
+Resolve station or a cloud gateway. Off by default.
+
+- **Connection** is the only part of this that is not obvious, and it is a fact
+  about the venue rather than a preference. *Dial the receiver* when this Mac is
+  behind a router and the receiver is reachable, which is the usual way round.
+  *Wait for the receiver* when it is the other way round: TakeShot holds the port
+  open and whoever wants the picture connects to it. The status row shows the
+  `srt://` address to hand over either way.
+- **Latency** is SRT's whole point. It is the buffer the far end holds, and it is
+  the time SRT has to notice a lost packet and ask for it again — so it is how
+  much of a bad network the picture rides out, paid for in delay. 120 ms is the
+  standard starting figure and is right for a wired venue LAN; raise it on
+  congested Wi-Fi or over the internet, where 4× the round-trip time is the rule
+  of thumb. Below about 20 ms it can recover nothing and you have bought the
+  delay for nothing.
+- **Bitrate** is what the link can carry, which the app cannot know. 8 Mbit/s
+  holds up on a face at 1080p. The stream costs about 5 % more than the number
+  you set, which is the transport itself.
+- **Passphrase** turns on AES. Ten characters or more, or leave it empty and the
+  stream is unencrypted — worth thinking about on a venue's own network. The
+  same passphrase goes into the receiver.
+- Picture only: no audio, deliberately.
+- **When the link dies it comes back by itself.** The status row says
+  "Reconnecting" and why, and TakeShot keeps trying every one to five seconds.
+  Nothing about it can touch a take — a receiver that has been closed all day
+  costs nothing but the status row. What does NOT retry is a setting that cannot
+  work at all (a port already in use, an address that resolves to nothing): that
+  says "Could not start" and waits for you, because retrying would hide it.
+- A receiver joining mid-shoot gets a picture within a second.
+
 ## Keyboard
 
 Every binding below can be changed in Settings → Hotkeys → Edit. The editor

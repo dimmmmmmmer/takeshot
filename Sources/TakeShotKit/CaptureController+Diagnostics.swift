@@ -1,6 +1,7 @@
 import AppKit
 import CBraw
 import CDeckLink
+import CSRT
 import CaptureCore
 import Foundation
 
@@ -104,6 +105,8 @@ extension CaptureController {
         deck.selectedDeviceID = selectedDeviceID
         deck.forcedInputMode = settings.capture.forcedInputMode
         deck.brawSDKAvailable = CBRClip.isSDKAvailable()
+        deck.srtSDKAvailable = CSRTSender.isSDKAvailable()
+        deck.srtRuntimeVersion = SRTStream.runtimeVersion
         return deck
     }
 

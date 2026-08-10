@@ -14,12 +14,20 @@ described in the matching vendor/<sdk>/README.md.
   Blackmagic DeckLink SDK   <https://www.blackmagicdesign.com/developer/>
   Blackmagic RAW SDK        <https://www.blackmagicdesign.com/developer/>
   RED R3D SDK               <https://www.red.com/developers>
-  NDI SDK (Vizrt)           <https://ndi.video/for-developers/ndi-sdk/>
+  libsrt (MPL-2.0)          <https://github.com/Haivision/srt>
   AJA NTV2 SDK (MIT)        <https://github.com/aja-video/libajantv2>
 
 Without the Blackmagic SDKs the corresponding targets build as stubs and the
-application still runs against its demo source. The remaining entries are
-prepared slots; no code reads them yet.
+application still runs against its demo source. The AJA entry is a prepared
+slot; no code reads it yet.
+
+libsrt is licensed under the Mozilla Public License 2.0 and is used for the SRT
+output. Its headers are not committed here and its runtime is loaded dynamically,
+so nothing in this repository or in a build made from it distributes any part of
+libsrt. A release that BUNDLED the runtime would distribute it, and the MPL then
+requires that the source of the covered files be made available to recipients
+and that the licence travel with the binary — see vendor/SRTSDK/README.md before
+shipping such a build.
 
 Runtime frameworks installed by Blackmagic Desktop Video and Blackmagic RAW are
 loaded dynamically at run time and are likewise not redistributed here.

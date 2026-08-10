@@ -132,15 +132,32 @@ Gatekeeper's refusal instead of the app.
 
 ### Also new
 
-- **NDI output**: the same mirrored viewer as a source on the set network, for
-  a director's iPad or a client feed, with no second cable and no second board
-  output. Needs a build made against the NDI SDK (see the limits below).
+- **SRT output**: the mirrored viewer — aids, framelines and chroma key
+  included — encoded as H.264 in an MPEG-TS and sent to an address on the set
+  network. VLC on a director's laptop, OBS, a Resolve station, a cloud gateway:
+  anything that takes an `srt://` URL. Either end can dial, which is what makes
+  it work behind a venue's router in both directions, and there are four things
+  to set: where, how much of a bad link to ride out (the latency), how many bits
+  the link can carry, and an optional AES passphrase. **If the link dies it comes
+  back by itself**, which on a venue network is the normal case rather than the
+  exception — the status row says so and keeps trying, and none of it can touch a
+  take. Needs a build made against libsrt (see the limits below).
 - **R3D playback**: RED clips, spanned ones included, developed to Rec.709 with
   the camera's metadata and edge timecode. Also needs a build made against
   RED's SDK.
 
 ### Known limits
 
+- **The SRT output has never been watched by a real receiver.** The transport
+  stream is checked byte for byte, the encode is measured through a real decode,
+  and the handshake and the socket options are exercised against real libsrt over
+  the loopback — but nothing has yet put VLC or a gateway at the far end of a real
+  network, so the picture coming up correctly on somebody else's machine is the
+  one claim still untested. Try it before a job depends on it.
+- **SRT needs libsrt at build time**, and installed to send. Unlike the camera
+  vendors' SDKs it is MPL-2.0 and needs no registration — `brew install srt`.
+  Without it the feature reports itself unavailable in Settings and says how to
+  get it.
 - **`v210` has never run against a board.** The 10-bit YCbCr path — now the
   default for every 4:2:2 signal — was built and measured against synthetic
   frames and through a real ProRes encode, but the rig it was written on feeds
@@ -150,9 +167,6 @@ Gatekeeper's refusal instead of the app.
 - **12-bit RGB is opt-in and its range is unconfirmed.** The SDK and CoreVideo
   both describe `R12B` as full-range 0–4095; whether a board actually puts
   studio-swing codes in it has not been measured on hardware.
-- **NDI needs the NDI SDK at build time**, and an NDI runtime installed to
-  receive. Without the SDK the feature reports itself unavailable in Settings
-  and tells you where to get it.
 - **R3D needs RED's SDK at build time.** Without it an `.r3d` is recognised and
   reported as unsupported rather than silently ignored.
 - **`.braw` playback needs Blackmagic RAW installed** — the free player

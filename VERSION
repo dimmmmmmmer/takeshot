@@ -18,8 +18,9 @@
 # CFBundleShortVersionString has to be a plain version string for macOS.
 #
 # Still pre-1.0 deliberately: the v210 (10-bit YCbCr) capture path has never
-# run against a board, and NDI and R3D are only real in a build made against
-# their vendor SDKs. 0.1.0 was the never-tagged number the plist carried
+# run against a board, the SRT output has never been watched by a real receiver
+# on a real network, and R3D is only real in a build made against RED's
+# SDK. 0.1.0 was the never-tagged number the plist carried
 # through development; the first published build takes its own so a
 # diagnostics bundle can never be ambiguous about which is which.
 0.2.0

@@ -3,7 +3,8 @@
 <plist version="1.0">
 <dict>
     <!-- The app loads frameworks signed by other teams at runtime: Blackmagic's
-         DeckLinkAPI and BlackmagicRawAPI today, NDI tomorrow. The hardened
+         DeckLinkAPI and BlackmagicRawAPI, and libsrt for the SRT
+         output. The hardened
          runtime's library validation refuses those without this entitlement;
          notarization allows it, and every pro-video app shipping vendor SDKs
          carries it. -->

@@ -44,7 +44,17 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **87.5 %** lines |
-| Measured | **89.26 %** lines (4 144 of 38 593 lines uncovered) |
+| Measured | **89.32 %** lines (4 258 of 39 856 lines uncovered) |
+
+The SRT output moved it up by six hundredths of a point while adding 1 263 lines
+of measurable code, which is a fact about what SHAPE of code it is rather than
+about how hard anybody tried: an MPEG-TS muxer is pure byte arithmetic with no
+device behind it, so it covers itself. The parts of that feature which do not
+cover themselves are the parts with a socket or a codec behind them, and they are
+behind seams for exactly that reason — `SRTStreamSending` for the link,
+`SRTVideoEncoder.isSupported` for the encoder. What stays uncovered is the same
+residue as everywhere else: the Obj-C++ bridge (not Swift, so not measured at all)
+and the branch of the bridge this build did not compile.
 
 ## What holds the number up: seams, not more tests
 

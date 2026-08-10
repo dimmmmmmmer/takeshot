@@ -182,8 +182,8 @@ import Testing
     /// it survives.
     ///
     /// That key was the bit-depth picker, and the picker is gone: depth follows
-    /// the signal now. It is the one key ever removed from this record, and the
-    /// failure it could have caused is the worst one this file exists for — a
+    /// the signal now. It was the first key ever removed from this record, and
+    /// the failure it could have caused is the worst one this file exists for — a
     /// decode that throws hands `loaded(from:)` a fresh default object, so the
     /// operator's destination folder, naming template, calibrated thresholds and
     /// taught REC references are silently replaced by defaults, on a shooting
@@ -208,6 +208,45 @@ import Testing
             data: try JSONEncoder().encode(settings), encoding: .utf8))
         #expect(!round.contains("captureBitDepth"),
                 "the retired key was written back")
+    }
+
+    /// A blob carrying the two NDI keys still decodes, and everything else in it
+    /// survives.
+    ///
+    /// The NDI output is gone — the owner replaced it — and its switch and source
+    /// name went off the record with it. Same shape of contract as the bit-depth
+    /// key above, and the same worst case: a decode that throws hands
+    /// `loaded(from:)` a fresh default object and silently replaces the
+    /// operator's destination folder, naming template, calibrated thresholds and
+    /// taught REC references, on a shooting day, with no error anywhere.
+    ///
+    /// Nothing carries either value across, deliberately. The SRT output that
+    /// replaces the feature wants an address, a port and a role; a source NAME
+    /// answers none of those, and `ndiEnabled == true` would turn on a network
+    /// output pointed nowhere. An operator who had NDI on gets SRT off.
+    @Test func anOldBlobWithRetiredNDIKeysStillDecodes() throws {
+        let settings = CaptureSettings.loaded(from: store("""
+            ,"ndiEnabled":true,"ndiSourceName":"Nightfall B","ltcChannel":3
+            """))
+        #expect(settings.capture.destinationPath == "/tmp/shoot")
+        #expect(settings.naming.projectName == "Nightfall")
+        #expect(settings.capture.ltcChannel == 3)
+        #expect(settings.capture.startDebounceFrames == 3)
+        #expect(settings.schemaVersion == CaptureSettings.currentSchemaVersion)
+
+        let round: String = try #require(String(
+            data: try JSONEncoder().encode(settings), encoding: .utf8))
+        // …and nothing invented an SRT link out of them. `ndiEnabled == true`
+        // carried onto `srtEnabled` would turn on a network output pointed
+        // nowhere, on the first launch of the update, and every other assertion
+        // in this test would still pass.
+        #expect(settings.srt.enabled == nil,
+                "an NDI switch was migrated onto the SRT output")
+        #expect(settings.srt.address == nil)
+        #expect(!round.contains("ndiEnabled"),
+                "the retired ndiEnabled key was written back")
+        #expect(!round.contains("ndiSourceName"),
+                "the retired ndiSourceName key was written back")
     }
 
     /// A blob written before `schemaVersion` existed is version 0: it still has

@@ -128,6 +128,8 @@ enum DiagnosticsReport {
             pair("Framework on disk", deck.frameworkPresent),
             pair("Desktop Video", deck.desktopVideoVersion ?? "not installed"),
             pair("BRAW SDK", deck.brawSDKAvailable),
+            pair("SRT (libsrt)", deck.srtSDKAvailable),
+            pair("libsrt version", deck.srtRuntimeVersion ?? "—"),
             pair("Diagnosis", deck.diagnosis.rawValue),
         ]
         out.append("")

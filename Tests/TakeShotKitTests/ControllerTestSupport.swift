@@ -115,15 +115,15 @@ enum ControllerHarness {
         // whatever they last plugged in.
         controller.offloadedCards.fileURL =
             root.appendingPathComponent("offloaded-cards.json")
-        // The NDI sender is faked for every controller the harness builds, not
-        // only for the suites that care. The real one ANNOUNCES A SOURCE on the
-        // network the machine is on, which on a shoot is the set network: a suite
-        // that reached it would put a phantom camera in every receiver's source
-        // list, once per test. It cannot happen today because no build here has
-        // the SDK, and this is what keeps it from starting to happen the day the
-        // headers are dropped in. Suites that want to look at the frames install
-        // their own factory over this one.
-        controller.mirrors.ndiSenderFactory = { FakeNDISender(name: $0) }
+        // The SRT stream is faked for every controller the harness builds, not
+        // only for the suites that care. The real one puts UDP on the network the
+        // machine is on, which on a shoot is the set network: a suite that
+        // reached it would dial a stranger's address, or bind a port on the
+        // machine running the tests, once per test. Unlike NDI's fake this is not
+        // merely belt and braces — a dev machine with `brew install srt` on it
+        // has the real bridge compiled, and it works. Suites that want to look at
+        // the datagrams install their own factory over this one.
+        controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false
@@ -159,10 +159,10 @@ enum ControllerHarness {
         controller.assistPersistTask?.cancel()
         controller.dimPersistTask?.cancel()
         controller.mutePersistTask?.cancel()
-        // The NDI name field re-announces the source on a 600 ms debounce; a
-        // task still pending would build a sender for a controller the next test
-        // has finished with. This also drops the mirror itself.
-        controller.stopNDIOutput()
+        // The SRT settings fields rebuild the link on a 600 ms debounce; a task
+        // still pending would open one for a controller the next test has
+        // finished with. This also drops the mirror, its encoder and its socket.
+        controller.stopSRTOutput()
         // the watcher re-creates the record folder when it sees it vanish, so it
         // has to go before the folder does
         controller.folderWatcher?.cancel()

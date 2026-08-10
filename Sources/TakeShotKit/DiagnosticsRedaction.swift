@@ -7,11 +7,20 @@ import Foundation
 /// rather than a warning printed next to it. Three rules, and they are all
 /// here rather than at the call sites:
 ///
-/// 1. **Secrets are dropped, not masked.** The remote PIN is the only one today.
-///    It is removed by NAME, generically, so a credential added to
+/// 1. **Secrets are dropped, not masked.** The remote PIN and the SRT
+///    passphrase today. Removed by NAME, generically, so a credential added to
 ///    `CaptureSettings` later is dropped by this code without anyone having to
 ///    remember it — a four-digit PIN cannot safely be removed by searching for
 ///    its value, because "1080" is also a raster.
+///
+///    The same list carries one thing that is NOT a credential: a network
+///    ADDRESS the operator typed. That is a deliberate widening of what the
+///    marker list is for, and rule 4 below is why — this file's stated position
+///    is that IP addresses are never collected, and the SRT output made that
+///    false by putting a receiver's address in the settings record. It is
+///    somebody else's machine on somebody else's production network, in a bundle
+///    that gets emailed, and it diagnoses nothing that the port and the state do
+///    not.
 /// 2. **The account name goes.** Every path is written with the home directory
 ///    abbreviated to `~`, which is what carries the operator's own name.
 /// 3. **The production stays, and is declared.** The project name, the scene,
@@ -28,12 +37,13 @@ import Foundation
 ///    elsewhere (see `CaptureController.diagnosticsVisualRec`).
 ///
 /// Not covered here because they are simply never collected: the machine's
-/// name, the logged-in user, IP addresses, and any footage.
+/// name, the logged-in user, the addresses the machine itself is on, and any
+/// footage.
 enum DiagnosticsRedaction {
     /// What makes a settings key a secret. Matched against the key's own
     /// camel-case components, so `remotePIN` goes without being named here.
-    static let secretKeyMarkers = ["pin", "password", "passcode", "secret",
-                                   "token", "credential"]
+    static let secretKeyMarkers = ["pin", "password", "passcode", "passphrase",
+                                   "secret", "token", "credential", "address"]
 
     /// A key's camel-case components, lowercased.
     ///

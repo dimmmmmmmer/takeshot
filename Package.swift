@@ -68,17 +68,21 @@ var targets: [Target] = [
         name: "CR3D",
         dependencies: hasR3DSDK ? ["R3DSDK"] : []
     ),
-    // Obj-C++ bridge to the NDI SDK (sending the viewer over the set
-    // network). Headers go in vendor/NDISDK/include (see
-    // vendor/NDISDK/README.md); without them the target builds as a stub
-    // (CNDSender.isSDKAvailable == NO) and the feature reports itself
-    // unavailable, which is the shape of every build that has no SDK —
-    // CI included. The runtime libndi is opened with dlopen, so nothing
-    // links here either way.
+    // Obj-C++ bridge to libsrt (sending the viewer over the set network as an
+    // SRT stream). Headers go in vendor/SRTSDK/include/srt (see
+    // vendor/SRTSDK/README.md); without them the target builds as a stub
+    // (CSRTSender.isSDKAvailable == NO) and the feature reports itself
+    // unavailable, which is the shape of every build that has no SDK — CI
+    // included. The runtime libsrt is opened with dlopen, so nothing links here
+    // either way.
+    //
+    // The one vendor slot whose library MAY be redistributed: libsrt is
+    // MPL-2.0, not a camera vendor's licence. What that costs if a release ever
+    // bundles the dylib is written down in that README and in NOTICE.
     .target(
-        name: "CNDI",
+        name: "CSRT",
         cxxSettings: [
-            .headerSearchPath("../../vendor/NDISDK/include")
+            .headerSearchPath("../../vendor/SRTSDK/include")
         ]
     ),
     // The application layer. A library rather than part of the executable:
@@ -87,7 +91,7 @@ var targets: [Target] = [
     // untestable while it lived in the executable.
     .target(
         name: "TakeShotKit",
-        dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CNDI"],
+        dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CSRT"],
         resources: [.process("Resources")],
         swiftSettings: swift6Mode
     ),

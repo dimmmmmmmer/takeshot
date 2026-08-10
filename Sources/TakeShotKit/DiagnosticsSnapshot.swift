@@ -85,6 +85,14 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         /// The BRAW bridge answers the same shape of question (a Blackmagic
         /// framework loaded at runtime), so it is stated in the same place.
         var brawSDKAvailable = false
+        /// …and so does libsrt, for the SRT output. Worth a line of its own
+        /// beyond the settings row that already shows it: the whole failure mode
+        /// of a network output is invisible, and "which build am I running" is
+        /// the first question a report about one has to answer.
+        var srtSDKAvailable = false
+        /// The libsrt version the runtime reported; nil in a build with no
+        /// bridge, or on a machine with none installed.
+        var srtRuntimeVersion: String?
     }
 
     struct DeviceRow: Codable, Sendable {

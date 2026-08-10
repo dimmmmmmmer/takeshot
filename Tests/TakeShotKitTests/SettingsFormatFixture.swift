@@ -26,18 +26,21 @@ enum SettingsFormatFixture {
     /// The defaults key the blob is stored under.
     static let defaultsKey = "TakeShot.CaptureSettings"
 
-    /// Every key the current format has, sorted. 83 of them.
+    /// Every key the current format has, sorted. 88 of them.
     ///
     /// Adding a key here is how a new setting is declared to exist; a key that
     /// disappears from this list is a setting that every existing operator
     /// loses. Neither should ever happen by accident, which is the whole point
     /// of writing them out.
     ///
-    /// One key HAS disappeared, once: `captureBitDepth`, when capture bit depth
-    /// stopped being a setting and started following the signal. Nothing was
-    /// lost with it, because there is nothing left for a stored depth to mean —
-    /// and an old blob that still carries the key decodes exactly as it did
-    /// (`anOldBlobWithARetiredBitDepthStillDecodes`), which is the contract this
+    /// Three keys HAVE disappeared, in two retirements. `captureBitDepth`, when
+    /// capture bit depth stopped being a setting and started following the
+    /// signal; then `ndiEnabled` and `ndiSourceName` with the NDI output itself.
+    /// Nothing was lost with any of them, because there is nothing left for a
+    /// stored depth or a stored source name to mean — and an old blob that still
+    /// carries them decodes exactly as it did
+    /// (`anOldBlobWithARetiredBitDepthStillDecodes`,
+    /// `anOldBlobWithRetiredNDIKeysStillDecodes`), which is the contract this
     /// list is really guarding.
     static let allKeys: [String] = [
         "accentHex", "appBackgroundHex", "appLanguage", "appearance",
@@ -55,13 +58,15 @@ enum SettingsFormatFixture {
         "keepInMenuBar", "legendPlacement", "legendSize", "ltcChannel",
         "lutFileName", "lutIntensity", "lutPreviewEnabled", "lutRecordEnabled",
         "monitorDeviceID", "monitorDimmed", "monitorEnabled", "monitorMuted",
-        "monitorVolume", "namingTemplate", "ndiEnabled", "ndiSourceName",
+        "monitorVolume", "namingTemplate",
         "offerMountedCards", "offloadDestinationPaths", "peakingColor",
         "peakingIntensity", "playbackAudioDeviceUID", "playerBackgroundHex",
         "postfix", "preRollFrames", "preRollSeconds", "projectName",
         "r3dApplyCameraLUT", "r3dDecodeScale", "remoteEnabled", "remotePIN",
         "remotePort", "safeActionPercent", "safeAreasOn", "safeTitlePercent",
-        "schemaVersion", "startDebounceFrames", "stopDebounceFrames",
+        "schemaVersion", "srtAddress", "srtBitrateMbps", "srtEnabled",
+        "srtLatencyMs", "srtPassphrase", "srtPort", "srtRole",
+        "startDebounceFrames", "stopDebounceFrames",
         "tenBitCapture", "timecodeSource", "videoLevels", "visualRecCenterX",
         "visualRecCenterY", "visualRecIdle", "visualRecMargin",
         "visualRecRolling", "visualRecSize",
@@ -75,7 +80,7 @@ enum SettingsFormatFixture {
     /// back to a property's default, so a non-Optional field added today would
     /// make every settings blob written before today undecodable). And a nil
     /// Optional is OMITTED rather than written as null — `encodeIfPresent` —
-    /// so a default install stores eight keys, not eighty-three.
+    /// so a default install stores eight keys, not eighty-eight.
     static let alwaysWrittenKeys: [String] = [
         "cameraLabel", "codec", "destinationPath", "detectionMode",
         "namingTemplate", "projectName", "startDebounceFrames",
@@ -145,8 +150,6 @@ enum SettingsFormatFixture {
           "monitorMuted": false,
           "monitorVolume": 0.42,
           "namingTemplate": "{prefix}_{cam}{roll}C{clip}_{postfix}",
-          "ndiEnabled": true,
-          "ndiSourceName": "Nightfall B",
           "offerMountedCards": false,
           "offloadDestinationPaths": ["/Volumes/BACKUP_A", "/Volumes/BACKUP_B"],
           "peakingColor": "blue",
@@ -166,6 +169,13 @@ enum SettingsFormatFixture {
           "safeAreasOn": true,
           "safeTitlePercent": 88.5,
           "schemaVersion": 3,
+          "srtAddress": "10.0.4.21",
+          "srtBitrateMbps": 12.5,
+          "srtEnabled": true,
+          "srtLatencyMs": 260,
+          "srtPassphrase": "video-village-2026",
+          "srtPort": 9312,
+          "srtRole": "listener",
           "startDebounceFrames": 4,
           "stopDebounceFrames": 6,
           "tenBitCapture": false,
@@ -185,7 +195,7 @@ enum SettingsFormatFixture {
     /// A JSON object as sorted `key = value` lines.
     ///
     /// Compared as text rather than as `NSDictionary` so a failure names the
-    /// field that moved instead of printing two eighty-three-entry dictionaries
+    /// field that moved instead of printing two eighty-eight-entry dictionaries
     /// and leaving the reader to diff them.
     static func lines(of object: [String: Any]) -> [String] {
         object.keys.sorted().map { "\($0) = \(describe(object[$0] ?? "<missing>"))" }

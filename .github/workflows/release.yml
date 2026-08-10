@@ -6,10 +6,13 @@
 #
 #   * A GitHub runner has none of the vendor SDKs — they are not redistributable
 #     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D and
-#     NDI bridges are compiled as stubs. In particular the published build sees
-#     NO capture device: it plays back, it exports, it runs the demo source, and
-#     it cannot record from a board. Anyone who needs capture builds from source
-#     with the DeckLink SDK (CONTRIBUTING.md).
+#     SRT bridges are compiled as stubs. (libsrt is the one that COULD be
+#     fetched: it is MPL-2.0 rather than a camera vendor's licence. It is not,
+#     because a published build with one live bridge and three stubs would be
+#     harder to explain than one with none.) In particular the published build
+#     sees NO capture device: it plays back, it exports, it runs the demo source,
+#     and it cannot record from a board. Anyone who needs capture builds from
+#     source with the DeckLink SDK (CONTRIBUTING.md).
 #   * Ad-hoc signing, no Developer ID, no notarization. First launch of a
 #     download therefore needs right-click → Open, or
 #     `xattr -d com.apple.quarantine /Applications/TakeShot.app`.

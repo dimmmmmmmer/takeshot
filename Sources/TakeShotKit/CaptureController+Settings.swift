@@ -27,7 +27,7 @@ extension CaptureController {
         applyAudioInputChange(from: oldValue)
         applyNamingChange(from: oldValue)
         applyRemoteChange(from: oldValue)
-        applyNDIChange(from: oldValue)
+        applySRTChange(from: oldValue)
         applyCardWatchChange(from: oldValue)
         applyMenuBarChange(from: oldValue)
         applyGuideChange()
@@ -82,14 +82,14 @@ extension CaptureController {
     private func applyPipelineChange(from oldValue: CaptureSettings) {
         var pipelineRelevant = oldValue
         // Two WHOLE groups the pipeline has never heard of. The remote is a
-        // socket, and NDI is a display mirror wired outside the capture config
-        // — flicking either switch, or typing in the NDI name field, must not
-        // rebuild capture mid-take. Masking the group rather than its fields
-        // one by one is also what keeps this honest when a field is added to
-        // either: it stays out of the capture config by default, which is the
-        // safe direction.
+        // socket, and SRT is a display mirror wired outside the capture config —
+        // flicking either switch, or typing in the SRT address field, must not
+        // rebuild capture mid-take. Masking the group rather than its fields one
+        // by one is also what keeps this honest when a field is added to either:
+        // it stays out of the capture config by default, which is the safe
+        // direction.
         pipelineRelevant.remote = settings.remote
-        pipelineRelevant.ndi = settings.ndi
+        pipelineRelevant.srt = settings.srt
         // The rest are single fields whose NEIGHBOURS in the same group do
         // reach the pipeline, so these cannot be masked a group at a time.
         // The holds and the level are applied straight to the monitor, and

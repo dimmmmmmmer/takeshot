@@ -24,7 +24,7 @@ import Foundation
 /// SINGLE keyed container, so every key still lands at the top level exactly
 /// where it always did. Nothing here hand-writes a per-field encode or decode —
 /// the field-to-key mapping is still the compiler's, which is what makes the
-/// 84 keys unforgeable.
+/// 88 keys unforgeable.
 ///
 /// Flatness is load-bearing for a second consumer as well as for the stored
 /// blob: `DiagnosticsRedaction` walks this encoding as a flat map and drops
@@ -62,8 +62,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var visualRec = VisualRecSettings()
     /// The browser remote.
     public var remote = RemoteSettings()
-    /// NDI output.
-    public var ndi = NDISettings()
+    /// The SRT output.
+    public var srt = SRTSettings()
     /// The dailies burn-in set.
     public var dailies = DailiesSettings()
     /// The DIT offload's destinations.
@@ -100,7 +100,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         chromaKey = try ChromaKeySettings(from: decoder)
         visualRec = try VisualRecSettings(from: decoder)
         remote = try RemoteSettings(from: decoder)
-        ndi = try NDISettings(from: decoder)
+        srt = try SRTSettings(from: decoder)
         dailies = try DailiesSettings(from: decoder)
         offload = try OffloadSettings(from: decoder)
         let container = try decoder.container(keyedBy: RecordKeys.self)
@@ -122,30 +122,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         try chromaKey.encode(to: encoder)
         try visualRec.encode(to: encoder)
         try remote.encode(to: encoder)
-        try ndi.encode(to: encoder)
+        try srt.encode(to: encoder)
         try dailies.encode(to: encoder)
         try offload.encode(to: encoder)
         var container = encoder.container(keyedBy: RecordKeys.self)
         try container.encodeIfPresent(schemaVersion, forKey: .schemaVersion)
-    }
-
-    // MARK: - derived across groups
-
-    /// The name NDI announces. NDI presents a source to receivers as
-    /// "MACHINE (name)" and supplies the machine half itself, so this carries
-    /// the project and the camera and nothing else — putting the host in here
-    /// too would print it twice in every source list on the shoot.
-    ///
-    /// On the record rather than on `NDISettings` because it reads the naming
-    /// group as well: the fallback IS the project and the camera label.
-    public var ndiSourceNameEffective: String {
-        let chosen = ndi.sourceName?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !chosen.isEmpty { return chosen }
-        let parts = [naming.projectName, naming.cameraLabel]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return parts.isEmpty ? "TakeShot" : parts.joined(separator: " ")
     }
 
     // MARK: - persistence
