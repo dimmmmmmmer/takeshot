@@ -63,8 +63,7 @@ extension TakeLogExporter {
     /// metadata CSV is decoded lossily.
     public static func parseRanges(csv: String) -> [String: ClipRange] {
         var result: [String: ClipRange] = [:]
-        for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
-            let fields = parseCSVLine(String(line))
+        for fields in parseCSVRecords(csv).dropFirst() {
             guard fields.count >= 3, !fields[0].isEmpty else { continue }
             let range = ClipRange(inPoint: seconds(fields[1]),
                                   outPoint: seconds(fields[2]))
@@ -72,7 +71,7 @@ extension TakeLogExporter {
             // readable end is kept, because half a range is still a mark the
             // operator made
             guard !range.isEmpty else { continue }
-            result[fields[0]] = range
+            result[unguarded(fields[0])] = range
         }
         return result
     }

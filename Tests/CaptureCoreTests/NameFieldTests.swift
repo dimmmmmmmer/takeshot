@@ -96,4 +96,42 @@ struct NameFieldTests {
             }
         }
     }
+
+    /// What the free-text fields do NOT refuse, stated so that the exporters'
+    /// escaping is measured against the real input rather than the intended
+    /// one.
+    ///
+    /// The filter is `controlCharacters`, which is Unicode Cc and Cf. U+2028
+    /// LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are Zl and Zp, so a scene
+    /// or a shot can hold a line break that no control-character test finds —
+    /// and that is exactly what a paste out of Word, Pages or a browser
+    /// carries. Every CSV writer downstream has to flatten it (see
+    /// `CSVInjectionTests`); this is where the fact that it gets in is pinned.
+    @Test func theFreeTextFieldsAdmitAUnicodeLineSeparator() {
+        for field in [NameField.prefix, NameField.postfix, NameField.scene,
+                      NameField.shot] {
+            #expect(field.accepts("12\u{2028}A"),
+                    "\(field) is not the thing that stops a pasted separator")
+            #expect(field.accepts("12\u{2029}A"),
+                    "\(field) is not the thing that stops a pasted separator")
+            // and the ASCII controls it DOES refuse, so the pair is stated
+            #expect(!field.accepts("12\u{0B}A"),
+                    "\(field) still refuses a C0 control")
+            #expect(!field.accepts("12\nA"),
+                    "\(field) still refuses a plain newline")
+        }
+    }
+
+    /// The comment is not a `NameField` at all — it is a `TextEditor` — and the
+    /// naming template is a plain `TextField`. Nothing filters either, which is
+    /// why the corpus in `AwkwardText` is run through the writers whole rather
+    /// than through what a field would have allowed.
+    @Test func theRollIsTheOneFieldAConformCanTrust() {
+        #expect(!NameField.roll.accepts("A 001"),
+                "a reel name takes no whitespace")
+        #expect(!NameField.roll.accepts("A\t001"), "nor a tab")
+        #expect(!NameField.roll.accepts("A\u{2028}001"), "nor a separator")
+        #expect(NameField.roll.accepts("A001-B_2"),
+                "alphanumerics and the two separators are the whole set")
+    }
 }

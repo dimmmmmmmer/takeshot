@@ -84,19 +84,19 @@ extension TakeLogExporter {
     /// hand-edited and saved back. One mangled line must not cost the day.
     public static func parseSlates(csv: String) -> [String: SlateRow] {
         var result: [String: SlateRow] = [:]
-        for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
-            let fields = parseCSVLine(String(line))
+        for fields in parseCSVRecords(csv).dropFirst() {
             guard fields.count >= 5, !fields[0].isEmpty else { continue }
             let row = SlateRow(
-                slate: SlateMetadata(scene: fields[1], shot: fields[2],
+                slate: SlateMetadata(scene: unguarded(fields[1]),
+                                     shot: unguarded(fields[2]),
                                      take: takeNumberField(fields[3])),
-                logDescription: fields[4])
+                logDescription: unguarded(fields[4]))
             // a row that says nothing is not a row — it would only overwrite
             // whatever the file's own embedded slate could still supply
             guard !row.slate.isEmpty || !row.logDescription.isEmpty else {
                 continue
             }
-            result[fields[0]] = row
+            result[unguarded(fields[0])] = row
         }
         return result
     }

@@ -96,7 +96,7 @@ public struct NamingEngine: Sendable {
         }
         // unknown placeholders {something} — remove
         result = result.replacingOccurrences(of: #"\{[^{}]*\}"#, with: "", options: .regularExpression)
-        return Self.collapseSeparators(result)
+        return Self.collapseSeparators(Self.templateSafe(result))
     }
 
     /// Take folder relative to the record root: <project>/<date>/<scene>.
@@ -105,9 +105,49 @@ public struct NamingEngine: Sendable {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         let components = [context.project, dateFormatter.string(from: context.date), context.scene]
-            .map(Self.sanitize)
+            .map(Self.pathComponent)
             .filter { !$0.isEmpty }
         return components.joined(separator: "/")
+    }
+
+    /// One directory level. `sanitize` plus the rule that only a PATH needs:
+    /// a component may not begin or end with a dot.
+    ///
+    /// `sanitize` has no opinion about dots and the file-name path did not need
+    /// one, because `collapseSeparators` trims them off either end of a name.
+    /// A directory got no such pass, so a project named `..` — two keystrokes,
+    /// and nothing in the field refuses them — produced `../<date>/..`, and the
+    /// day's takes were written into the PARENT of the folder the operator
+    /// chose. A leading dot is the milder half of the same gap: a hidden
+    /// directory the operator cannot see in Finder.
+    static func pathComponent(_ value: String) -> String {
+        sanitize(value).replacingOccurrences(
+            of: #"^\.+|\.+$"#, with: "", options: .regularExpression)
+    }
+
+    /// The forbidden characters of a finished name, applied to the finished
+    /// name.
+    ///
+    /// `fileName(for:)` sanitizes every substituted VALUE, and for years that
+    /// looked like enough. It is not: the template itself is free text in
+    /// Settings — a plain `TextField`, no input filter — so its literal
+    /// characters reach the name untouched. A `/` typed into it is a directory
+    /// separator, and a newline or a NUL pasted into it is a name the file
+    /// system will refuse outright. Underscore rather than space, because
+    /// `collapseSeparators` runs next and folds a run of them into one.
+    ///
+    /// A no-op for every vendor preset and every hand-written template that
+    /// only holds placeholders, separators and letters.
+    static func templateSafe(_ value: String) -> String {
+        var forbidden = forbiddenFilenameCharacters
+        forbidden.formUnion(.controlCharacters)
+        forbidden.formUnion(.newlines)
+        guard value.unicodeScalars.contains(where: forbidden.contains) else {
+            return value
+        }
+        return String(String.UnicodeScalarView(value.unicodeScalars.map {
+            forbidden.contains($0) ? "_" : $0
+        }))
     }
 
     /// What a file name cannot contain. Public because the input filter reads

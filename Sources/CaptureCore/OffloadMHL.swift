@@ -110,18 +110,49 @@ public enum OffloadMHL {
     /// Both element text and attribute values go through this — a file called
     /// `A&B <take 2>.mov` is legal on a card and would otherwise produce a
     /// manifest no parser will open.
+    ///
+    /// Two things beyond the five predefined entities, both of them measured
+    /// against `XMLParser` on a manifest this writer had just produced:
+    ///
+    /// - **A carriage return has to be a character reference.** XML end-of-line
+    ///   normalization rewrites a literal CR as LF before the document ever
+    ///   reaches a parser's client, so `clip\rtwo.mov` was written faithfully
+    ///   and read back as `clip\ntwo.mov` — a name no file has, which the verify
+    ///   pass then reports as one file missing and another one extra.
+    /// - **A character XML 1.0 does not allow at all is replaced.** NUL, BEL,
+    ///   VT, FF and the rest of the C0 range are legal in a POSIX file name and
+    ///   illegal in an XML document; one of them anywhere on the card made the
+    ///   whole manifest unparseable (`unreadableManifest`), so the entire copy
+    ///   became unverifiable rather than the one file. There is no escape for
+    ///   them — a numeric reference to a forbidden character is forbidden too —
+    ///   so U+FFFD goes in and that single entry mismatches, loudly, while
+    ///   every other file on the card still verifies.
     static func escaped(_ value: String) -> String {
         var escaped = ""
-        for character in value {
-            switch character {
+        for scalar in value.unicodeScalars {
+            switch scalar {
             case "&": escaped += "&amp;"
             case "<": escaped += "&lt;"
             case ">": escaped += "&gt;"
             case "\"": escaped += "&quot;"
             case "'": escaped += "&apos;"
-            default: escaped.append(character)
+            case "\r": escaped += "&#13;"
+            default:
+                escaped.unicodeScalars.append(isLegalXML10(scalar)
+                    ? scalar : "\u{FFFD}")
             }
         }
         return escaped
+    }
+
+    /// The `Char` production of XML 1.0 fifth edition: tab, LF, CR, then
+    /// everything from U+0020 up bar the surrogates and the two noncharacters
+    /// at the end of the BMP.
+    private static func isLegalXML10(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x9, 0xA, 0xD: return true
+        case 0x20...0xD7FF, 0xE000...0xFFFD, 0x10000...0x10FFFF: return true
+        default: return false
+        }
     }
 }
