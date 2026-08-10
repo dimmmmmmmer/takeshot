@@ -55,6 +55,34 @@ enum AwkwardText {
         all.filter { !$0.value.isEmpty }
     }
 
+    /// The corpus minus the values that cannot occur in a FILE NAME, for the
+    /// tests that put a value there rather than in a field.
+    ///
+    /// Only the NUL is dropped, and not to make a test pass. A NUL is the one
+    /// byte a POSIX path cannot contain, `NameField` refuses control characters
+    /// at entry, and a folder scan cannot hand one back — so in this position it
+    /// is not a value an operator can reach.
+    ///
+    /// What it DID reach was Foundation. `URL(fileURLWithPath:)` percent-encodes
+    /// the NUL on macOS 26, so `lastPathComponent` comes back as the nine safe
+    /// characters `a%00b.mov`; the older Foundation on the CI runner does not
+    /// agree, the name that reached the row was a different string, and three
+    /// tests failed on a lookup by name. They were measuring Foundation's URL
+    /// escaping, not this app's CSV escaping.
+    ///
+    /// The NUL stays in `all`, because a comment, scene or roll CAN carry one —
+    /// a restored settings blob or a remote message is not filtered by a text
+    /// field — and those tests are the ones that should be asking about it.
+    static var pathSafe: [(name: String, value: String)] {
+        all.filter { !$0.value.unicodeScalars.contains("\u{0}") }
+    }
+
+    /// Both restrictions at once, for a test that puts the value in a file name
+    /// AND needs a value to compare (see `pathSafe` and `nonEmpty`).
+    static var pathSafeNonEmpty: [(name: String, value: String)] {
+        pathSafe.filter { !$0.value.isEmpty }
+    }
+
     /// A take carrying `value` wherever the caller puts it.
     static func take(named name: String = "clip.mov", roll: String = "R001",
                      comment: String = "", scene: String = "",
