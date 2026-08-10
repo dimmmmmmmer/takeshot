@@ -29,7 +29,14 @@ jobs:
   analyze:
     name: Analyze Swift
     runs-on: macos-15
-    timeout-minutes: 60
+    # 120, raised from 60 because the analysis outgrew it rather than broke:
+    # measured at 1 h 5 min on the dependabot bump of this very action, i.e. on
+    # main's sources with nothing else changed. The extractor traces a real
+    # `swift build` and then runs the query pack over it, and Sources has grown
+    # a great deal. A scan that always ends in a timeout is a scan nobody reads,
+    # which is the same failure as a test that cannot fail — so this is a real
+    # budget and not a nudge.
+    timeout-minutes: 120
     permissions:
       # Uploading the SARIF results is the only write this workflow needs.
       security-events: write

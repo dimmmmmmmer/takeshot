@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 import CaptureCore
 
@@ -84,10 +85,24 @@ enum AwkwardText {
     }
 
     /// A take carrying `value` wherever the caller puts it.
+    ///
+    /// A NUL in `name` is recorded as an issue here rather than left to fail
+    /// somewhere else. It reached CI twice: `URL(fileURLWithPath:)`
+    /// percent-encodes it on macOS 26 and the older Foundation on the runner
+    /// does not, so a test that put one in a file name passed on this machine
+    /// and failed there, in an assertion about a column count that had nothing
+    /// to do with it. Failing at the call site, on every platform, with the
+    /// reason attached, is the difference between a five-minute fix and reading
+    /// a runner's log. Use `pathSafe` for a loop that names a take from the
+    /// corpus; `all` is still right for every field position.
     static func take(named name: String = "clip.mov", roll: String = "R001",
                      comment: String = "", scene: String = "",
                      shot: String = "", logDescription: String = "",
                      note: String? = nil) -> Take {
+        if name.unicodeScalars.contains("\u{0}") {
+            Issue.record(
+                "a NUL in a file name measures Foundation, not us — use pathSafe")
+        }
         var take = Take(url: URL(fileURLWithPath: "/tmp/takes/\(name)"),
                         scene: scene, roll: roll, takeNumber: 1,
                         startTimecode: Timecode(hours: 10, minutes: 0,
