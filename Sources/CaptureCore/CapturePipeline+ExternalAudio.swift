@@ -34,6 +34,24 @@ extension CapturePipeline {
     /// silent hole that nobody counted.
     static let externalStarvationThreshold = 0.5
 
+    /// How many silence packets ONE frame may write.
+    ///
+    /// The loop below fills from the last audio up to this frame's PTS in 40 ms
+    /// steps, and the frame's PTS is whatever the board says. The first hard-won
+    /// fact about this hardware is that stream time can be pinned or reset, and
+    /// a jump forward turns a single frame into a packet per 40 ms of the gap:
+    /// fifteen thousand allocations, channel trims and writer appends on the
+    /// capture queue for ten minutes of it, which is the one queue that may not
+    /// be handed unbounded work.
+    ///
+    /// 32 is 1.28 s, far above any honest burst — the loop runs once per frame,
+    /// a frame interval is 40 ms, and the deepest legitimate catch-up is the
+    /// starvation threshold itself (0.5 s, thirteen packets). Past the cap the
+    /// cursor is moved to the frame rather than left behind, so an absurd gap
+    /// costs one bounded burst instead of spreading the same work across the
+    /// next five hundred frames.
+    static let maximumPadPacketsPerFrame = 32
+
     /// Switch the audio path between the embedded and the external source.
     /// `expectedChannels` plays the `setExpectedAudioChannels` role for the
     /// new source: the head start the writer needs when a take begins before
@@ -77,6 +95,7 @@ extension CapturePipeline {
         externalAudioLost = false
         externalAudioStarved = false
         lastExternalAudioEnd = nil
+        preRolledAudioEnd = nil
         // the packed-buffer format caches describe the OLD source's channel
         // count (the same reason a mask change resets them in update(config:))
         trimFormatCache = nil
@@ -127,7 +146,10 @@ extension CapturePipeline {
     func padExternalAudioIfNeeded(upTo framePTS: CMTime) {
         guard audioSourceKind == .external, let writer,
               sourceAudioChannels > 0 else { return }
-        let baseline = lastExternalAudioEnd
+        // In order: where the live feed got to, else where the pre-roll drain got
+        // to, else the take's first video frame. The middle one is what stops a
+        // take being padded over its own pre-roll audio.
+        let baseline = lastExternalAudioEnd ?? preRolledAudioEnd
             ?? (writer.firstPTS.isValid ? writer.firstPTS : nil)
         guard let baseline else { return }
         if !externalAudioLost, !externalAudioStarved {
@@ -138,8 +160,9 @@ extension CapturePipeline {
         let chunk = CMTime(value: CMTimeValue(Self.padChunkFrames),
                            timescale: 48_000)
         var cursor = baseline
-        var padded = false
-        while CMTimeAdd(cursor, chunk) <= framePTS {
+        var padded = 0
+        while CMTimeAdd(cursor, chunk) <= framePTS,
+              padded < Self.maximumPadPacketsPerFrame {
             guard let silence = silencePacket(at: cursor) else { break }
             if gapFilledAudioPackets == 0 {
                 DispatchQueue.main.async {
@@ -149,10 +172,15 @@ extension CapturePipeline {
             recordAudio(silence)
             gapFilledAudioPackets += 1
             cursor = CMTimeAdd(cursor, chunk)
-            padded = true
+            padded += 1
         }
-        if padded {
-            lastExternalAudioEnd = cursor
+        if padded > 0 {
+            // Gap left over means the cap stopped the loop, not the frame: the
+            // rest is abandoned rather than carried into the next frames, or an
+            // absurd stream-time jump would cost this work five hundred times
+            // over (see `maximumPadPacketsPerFrame`).
+            lastExternalAudioEnd = CMTimeAdd(cursor, chunk) <= framePTS
+                ? framePTS : cursor
             // Mirrored once per padding burst rather than per packet — the
             // count is what a diagnostic reads, not the individual writes.
             let inTake = gapFilledAudioPackets

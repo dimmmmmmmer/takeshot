@@ -284,7 +284,10 @@ extension CaptureController {
             }
         }
     }
-    private func checkDiskSpace() {
+    /// One tick of the watch above. Internal rather than private so the suite can
+    /// drive exactly one, instead of waiting out a ten-second timer — which is a
+    /// wall-clock window, and the one thing a wait in this repo may not be.
+    func checkDiskSpace() {
         guard isCapturing else { return }
         let values = try? destinationRoot.resourceValues(
             forKeys: [.volumeAvailableCapacityForImportantUsageKey])
@@ -302,7 +305,7 @@ extension CaptureController {
             guard !FileManager.default.fileExists(atPath: destinationRoot.path)
             else { return }
             if isRecording {
-                pipeline.toggleManualRecord()
+                pipeline.stopRecordingIfRolling()
                 persistentAlert = L("alarm_volume_unreachable")
             } else {
                 persistentAlert = L("alarm_folder_unreachable",
@@ -319,7 +322,10 @@ extension CaptureController {
         case .fine:
             break
         case .full(let freeGB):
-            pipeline.toggleManualRecord() // close the take while it can finalize
+            // Close it while it can still finalize — a STOP and not a toggle:
+            // `isRecording` is the main actor's mirror and the pipeline may have
+            // closed the take already (see `stopRecordingIfRolling`).
+            pipeline.stopRecordingIfRolling()
             persistentAlert = L("alarm_disk_full", freeGB)
         case .low(let freeGB):
             persistentAlert = L("alarm_disk_low", freeGB)

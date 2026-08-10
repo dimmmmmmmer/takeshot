@@ -109,19 +109,30 @@ struct VisualRecPipelineTests {
         pipeline.onVisualRecReading = { readings.append($0) }
         pipeline.setVisualRec(VisualRecProbe.taught(rolling: rolling, idle: idle))
 
+        // Polled on the COLLECTOR, because that is what the assertions here are
+        // about. `publishVisualRec` sets the latch under its lock and then hops
+        // the report to the main queue, so there is a window in which
+        // `visualRecReading` already reads `.idle` and `readings` does not
+        // contain it yet. Waiting on the latch and asserting on the collector is
+        // waiting for one outcome and checking another: it went red exactly once
+        // on a loaded machine, with `[Optional(.rolling)]` collected and the
+        // latch already correct — the watcher had seen IDLE and only the delivery
+        // was behind.
         push(pipeline, rolling, frames: 20)
-        await TestWait.until { pipeline.visualRecReading == .rolling }
+        #expect(await TestWait.becomesTrue {
+            readings.all.contains { $0 == VisualRecReading.rolling }
+        }, "the watcher never reported ROLLING")
         #expect(pipeline.visualRecReading == .rolling)
 
         push(pipeline, idle, frames: 20, from: 21)
-        await TestWait.until { pipeline.visualRecReading == .idle }
+        #expect(await TestWait.becomesTrue {
+            readings.all.contains { $0 == VisualRecReading.idle }
+        }, "the watcher never reported IDLE")
         #expect(pipeline.visualRecReading == .idle)
 
         // the callback fired for each CHANGE and not per pass — the readout
         // exists to be read, not to poke the main queue five times a second
         #expect(readings.all.count <= 4, "\(readings.all.count) reports")
-        #expect(readings.all.contains(.rolling))
-        #expect(readings.all.contains(.idle))
     }
 
     /// A red practical elsewhere in frame, all the way through the pipeline: the
@@ -186,8 +197,17 @@ struct VisualRecPipelineTests {
         // busy gate that is twenty queued passes waiting behind the stall
         pipeline.visualRecQueue.async { Thread.sleep(forTimeInterval: 0.4) }
         push(pipeline, rolling, frames: 100)
+        // Both queues drained rather than slept on. `queue.sync` proves every
+        // frame was processed, so every offer this burst will ever make has been
+        // made; `visualRecQueue.sync` waits out the stall and any pass queued
+        // behind it. No frame follows, so after these two no further pass can be
+        // offered and the count can only be what it already is — where the
+        // 600 ms sleep this replaces was a wall-clock window that could look
+        // either too early (nothing delivered) or too late.
         pipeline.queue.sync {}
-        try await Task.sleep(for: .milliseconds(600))
+        pipeline.visualRecQueue.sync {}
+        #expect(await TestWait.becomesTrue { readings.all.count >= 1 },
+                "no pass at all got through the stall")
 
         // one pass got through, and it is the only reading that was published
         #expect(readings.all.count == 1,
