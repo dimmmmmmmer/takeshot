@@ -236,6 +236,13 @@ import Testing
 
         let round: String = try #require(String(
             data: try JSONEncoder().encode(settings), encoding: .utf8))
+        // …and nothing invented an SRT link out of them. `ndiEnabled == true`
+        // carried onto `srtEnabled` would turn on a network output pointed
+        // nowhere, on the first launch of the update, and every other assertion
+        // in this test would still pass.
+        #expect(settings.srt.enabled == nil,
+                "an NDI switch was migrated onto the SRT output")
+        #expect(settings.srt.address == nil)
         #expect(!round.contains("ndiEnabled"),
                 "the retired ndiEnabled key was written back")
         #expect(!round.contains("ndiSourceName"),

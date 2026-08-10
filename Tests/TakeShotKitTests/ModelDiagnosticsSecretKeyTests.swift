@@ -22,6 +22,7 @@ import Testing
         #expect(DiagnosticsRedaction.isSecretKey("apiToken"))
         #expect(DiagnosticsRedaction.isSecretKey("SharedSecret"))
         #expect(DiagnosticsRedaction.isSecretKey("password"))
+        #expect(DiagnosticsRedaction.isSecretKey("srtPassphrase"))
         #expect(!DiagnosticsRedaction.isSecretKey("remotePort"))
         #expect(!DiagnosticsRedaction.isSecretKey("chromaKeyTolerance"))
         #expect(!DiagnosticsRedaction.isSecretKey("destinationPath"))
@@ -69,5 +70,49 @@ import Testing
         // …and a word that merely contains a marker mid-component is not one
         #expect(!DiagnosticsRedaction.isSecretKey("spinnerStyle"))
         #expect(!DiagnosticsRedaction.isSecretKey("takeCount"))
+    }
+}
+
+/// The one entry on the marker list that is not a credential.
+///
+/// `srtAddress` is a receiver's address on somebody else's production network,
+/// typed by the operator, in a record that gets encoded into a bundle and
+/// emailed. `DiagnosticsRedaction`'s own stated position is that IP addresses are
+/// never collected, and the SRT output made that false — so the address is
+/// dropped by the same generic rule the PIN is, and the marker list says so.
+///
+/// Its own suite because it is its own decision, and because the thing it is
+/// really guarding is a claim in prose: the day somebody adds `webhookAddress`
+/// and wonders why it is missing from a bundle, this is the answer.
+@Suite struct ModelDiagnosticsPrivateKeyTests {
+    @Test func aTypedNetworkAddressIsDroppedLikeACredential() {
+        #expect(DiagnosticsRedaction.isSecretKey("srtAddress"))
+        #expect(DiagnosticsRedaction.isSecretKey("srtPassphrase"))
+        // …and the neighbours are not: a port and a role diagnose the feature
+        // without saying whose machine is at the other end.
+        #expect(!DiagnosticsRedaction.isSecretKey("srtPort"))
+        #expect(!DiagnosticsRedaction.isSecretKey("srtRole"))
+        #expect(!DiagnosticsRedaction.isSecretKey("srtLatencyMs"))
+        #expect(!DiagnosticsRedaction.isSecretKey("srtEnabled"))
+    }
+
+    /// …and both really are gone from what the bundle prints, which is the half
+    /// that matters. The rule and its application are different mistakes.
+    @Test func neitherReachesTheBundle() throws {
+        var settings = CaptureSettings()
+        settings.srt.enabled = true
+        settings.srt.address = "10.0.4.21"
+        settings.srt.passphrase = "video-village-2026"
+        settings.srt.port = 9312
+        let printed: [String: String] = DiagnosticsRedaction.settings(settings)
+        #expect(printed["srtAddress"] == nil, "the receiver's address is in the bundle")
+        #expect(printed["srtPassphrase"] == nil, "the passphrase is in the bundle")
+        #expect(printed["srtPort"] == "9312")
+        #expect(printed["srtEnabled"] == "true")
+        // Nothing anywhere in the printed values either — the drop is by key, and
+        // a value that leaked through some other field would defeat the point.
+        let values: [String] = Array(printed.values)
+        #expect(!values.contains("10.0.4.21"))
+        #expect(!values.contains("video-village-2026"))
     }
 }

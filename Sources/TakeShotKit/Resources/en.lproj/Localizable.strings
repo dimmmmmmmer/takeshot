@@ -814,6 +814,30 @@
 "menubar_status_ready" = "TakeShot — ready";
 "menubar_status_recording" = "TakeShot — recording";
 
+/* === SRT output: the viewer encoded and sent to an address on the set network.
+   SRT is a transport and not an announcement, so unlike the NDI output this
+   replaced there is a where and a which-end to be told about. === */
+"settings_srt" = "SRT output";
+"srt_enable" = "Send the viewer over SRT";
+"srt_role" = "Connection";
+"srt_role_caller" = "Dial the receiver";
+"srt_role_listener" = "Wait for the receiver";
+"srt_address" = "Address";
+"srt_port" = "Port";
+"srt_latency" = "Latency, ms";
+"srt_bitrate" = "Bitrate, Mbit/s";
+"srt_passphrase" = "Passphrase";
+"srt_status" = "Status";
+"srt_starting" = "Connecting";
+"srt_sending" = "Sending";
+"srt_not_sending" = "Not sending";
+"srt_reconnecting" = "Reconnecting";
+"srt_unavailable" = "Unavailable";
+"srt_failed_short" = "Could not start";
+"srt_failed" = "SRT: %@";
+"srt_needs_address" = "Enter the receiver's address, or wait for the receiver instead.";
+"srt_passphrase_short" = "A passphrase has to be %d characters or more. Clear the field to send unencrypted.";
+
 /* the taught REC indicator — a third trigger beside VANC and running timecode */
 "visual_rec" = "REC indicator on the picture";
 "visual_rec_hint" = "Rolls a take when the camera's own record indicator lights up inside a box you teach. Opt-in, and never a default: it can only be switched on once both references are captured and far enough apart.";

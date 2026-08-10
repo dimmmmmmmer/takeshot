@@ -115,6 +115,15 @@ enum ControllerHarness {
         // whatever they last plugged in.
         controller.offloadedCards.fileURL =
             root.appendingPathComponent("offloaded-cards.json")
+        // The SRT stream is faked for every controller the harness builds, not
+        // only for the suites that care. The real one puts UDP on the network the
+        // machine is on, which on a shoot is the set network: a suite that
+        // reached it would dial a stranger's address, or bind a port on the
+        // machine running the tests, once per test. Unlike NDI's fake this is not
+        // merely belt and braces — a dev machine with `brew install srt` on it
+        // has the real bridge compiled, and it works. Suites that want to look at
+        // the datagrams install their own factory over this one.
+        controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false
@@ -150,6 +159,10 @@ enum ControllerHarness {
         controller.assistPersistTask?.cancel()
         controller.dimPersistTask?.cancel()
         controller.mutePersistTask?.cancel()
+        // The SRT settings fields rebuild the link on a 600 ms debounce; a task
+        // still pending would open one for a controller the next test has
+        // finished with. This also drops the mirror, its encoder and its socket.
+        controller.stopSRTOutput()
         // the watcher re-creates the record folder when it sees it vanish, so it
         // has to go before the folder does
         controller.folderWatcher?.cancel()

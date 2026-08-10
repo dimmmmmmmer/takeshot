@@ -75,6 +75,9 @@ sdk_state "Blackmagic RAW" "vendor/BRAWSDK/include/BlackmagicRawAPI.h" \
     "\`.braw\` clips do not open."
 sdk_state "RED R3D" "vendor/R3DSDK/Lib/mac64/libR3DSDK-libcpp.a" \
     "\`.r3d\` clips are recognised and reported as unsupported."
+sdk_state "SRT (libsrt)" "vendor/SRTSDK/include/srt/srt.h" \
+    "the SRT output reports itself unavailable. Unlike the others this one is
+  MPL-2.0 and needs no registration: \`brew install srt\` and rebuild."
 
 cat <<'FOOTER'
 

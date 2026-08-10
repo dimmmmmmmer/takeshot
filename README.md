@@ -97,6 +97,11 @@ build is any use to you:
   is burned into the picture, so the hardware monitor gets it too.
 - Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
+- SRT output: the same mirrored viewer, H.264 in an MPEG-TS, sent to an address
+  on the set network — VLC on a director's laptop, OBS, a Resolve station, a
+  cloud gateway. Caller or listener, with the latency, the bitrate and an
+  optional AES passphrase as the only knobs. Off by default; needs libsrt at
+  build time (`vendor/SRTSDK/README.md`) and installed to send.
 - Chroma key for the monitor: pull the green screen with an eyedropper,
   tolerance, softness and spill, and put a checkerboard, a colour or a still
   behind the actor. Preview and monitor output only — the take, the grabs and
@@ -178,8 +183,10 @@ wants a real camera's running timecode or a VANC trigger.
 
 What needs a vendor SDK you obtain yourself — free, but from the vendor, under
 their terms — is the hardware itself: capture and monitor output (DeckLink),
-`.braw` playback (Blackmagic RAW) and `.r3d` playback (RED).
-[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D and BRAW
+`.braw` playback (Blackmagic RAW) and `.r3d` playback (RED). The SRT output
+needs libsrt, which is the one exception to "from the vendor, under their terms":
+it is MPL-2.0 and `brew install srt` away.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D, BRAW and SRT
 each say so at the point of use; a build with no DeckLink SDK simply lists no
 capture device, and **Collect diagnostics** is where it explains itself.
 
