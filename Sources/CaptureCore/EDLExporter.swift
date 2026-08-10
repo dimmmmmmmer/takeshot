@@ -79,8 +79,7 @@ public enum EDLExporter {
         let reel = reelName(for: take, index: index)
         var lines = [String(
             format: "%03d  %@ V     C        %@ %@ %@ %@",
-            index + 1, reel.padding(toLength: 8, withPad: " ",
-                                    startingAt: 0),
+            index + 1, reelField(reel),
             sourceIn.description, sourceOut.description,
             recordIn.description, recordOut.description)]
         lines.append("* FROM CLIP NAME: \(take.url.lastPathComponent)")
@@ -141,7 +140,26 @@ public enum EDLExporter {
     static func reelName(for take: Take, index: Int) -> String {
         let base = take.roll.isEmpty ? String(format: "TS%03d", index + 1)
                                      : take.roll
-        let cleaned = base.replacingOccurrences(of: " ", with: "_")
+        // Every kind of whitespace, not just the space character. A tab shifts
+        // every column after the reel and a newline ends the event statement
+        // early, leaving its second half to be read as an EDL statement of its
+        // own — and CMX has no quoting to escape either with. A roll typed into
+        // the app cannot carry one (see `NameField.roll`), but a roll restored
+        // from a hand-edited log or read off a foreign file's metadata can.
+        let cleaned = base.components(separatedBy: .whitespacesAndNewlines)
+            .joined(separator: "_")
         return String(cleaned.prefix(8))
+    }
+
+    /// The reel in its 8-wide CMX column.
+    ///
+    /// Padded by CHARACTERS rather than through `padding(toLength:)`, which
+    /// counts UTF-16 units: an eight-character reel holding an emoji is
+    /// thirteen of those, and asking for eight cut the string through the
+    /// middle of a surrogate pair — a replacement character in the file and a
+    /// column that no longer lines up. Identical output for anything ASCII,
+    /// which is every reel this app will accept from the keyboard.
+    private static func reelField(_ reel: String) -> String {
+        reel + String(repeating: " ", count: max(0, 8 - reel.count))
     }
 }

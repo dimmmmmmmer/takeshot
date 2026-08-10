@@ -94,11 +94,12 @@ public enum TakeLogExporter {
     /// Used when restoring takes after an app restart.
     public static func parseMetadata(csv: String) -> [String: TakeMeta] {
         var result: [String: TakeMeta] = [:]
-        for line in csv.split(whereSeparator: \.isNewline).dropFirst() {
-            let fields = parseCSVLine(String(line))
+        for fields in parseCSVRecords(csv).dropFirst() {
             guard fields.count >= 5, !fields[0].isEmpty else { continue }
-            let (rating, comment) = parseComments(fields[4], good: fields[3] == "true")
-            result[fields[0]] = TakeMeta(rating: rating, comment: comment)
+            let (rating, comment) = parseComments(unguarded(fields[4]),
+                                                  good: fields[3] == "true")
+            result[unguarded(fields[0])] = TakeMeta(rating: rating,
+                                                    comment: comment)
         }
         return result
     }

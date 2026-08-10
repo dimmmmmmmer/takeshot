@@ -183,4 +183,66 @@ struct NamingEngineTests {
             project: "My Film", date: date, scene: "12A"))
         #expect(dir == "My_Film/2026-07-14/12A")
     }
+
+    /// Two keystrokes nothing in the field refuses, and the day's takes were
+    /// written into the PARENT of the folder the operator chose: `sanitize` has
+    /// no opinion about dots, and only the file-NAME path ran the pass that
+    /// trims them.
+    @Test func aProjectOfTwoDotsCannotLeaveTheRecordFolder() {
+        let engine = NamingEngine(template: "{scene}")
+        for escape in ["..", "...", ".", " .. "] {
+            let dir: String = engine.relativeDirectory(for: NamingContext(
+                project: escape, date: date, scene: escape))
+            #expect(dir == "2026-07-14", "a dots-only name is not a level")
+            let root: URL = URL(fileURLWithPath: "/Volumes/CARD/rec")
+            let resolved: String = root.appendingPathComponent(dir)
+                .standardizedFileURL.path
+            #expect(resolved.hasPrefix("/Volumes/CARD/rec/"),
+                    "the take folder stays inside the record folder")
+        }
+    }
+
+    /// A leading dot is the milder half of the same gap: footage in a directory
+    /// the operator cannot see in Finder.
+    @Test func aProjectBeginningWithADotIsNotAHiddenFolder() {
+        let engine = NamingEngine(template: "{scene}")
+        let dir: String = engine.relativeDirectory(for: NamingContext(
+            project: ".hidden", date: date, scene: "12A"))
+        #expect(dir == "hidden/2026-07-14/12A",
+                "no level of the take folder starts with a dot")
+    }
+
+    /// The template is free text in Settings — a plain `TextField`, no input
+    /// filter — and `fileName(for:)` sanitized the substituted VALUES only. So
+    /// its own literal characters reached the name: a `/` typed into it was a
+    /// directory separator, and a pasted newline or NUL a name the file system
+    /// refuses outright.
+    @Test func theTemplateItselfCannotPutASeparatorInAName() {
+        let cases: [(template: String, expected: String)] = [
+            ("{cam}/{clip}", "P_A_01"),
+            ("{cam}:{clip}", "P_A_01"),
+            ("{cam}\u{0}{clip}", "P_A_01"),
+            ("{cam}\n{clip}", "P_A_01"),
+            ("../{cam}{clip}", "P_A01"),
+        ]
+        for (template, expected) in cases {
+            let engine = NamingEngine(template: template)
+            let name: String = engine.fileName(for: NamingContext(
+                project: "P", take: 1, camera: "A"))
+            #expect(name == expected, "the template cannot forge a path")
+        }
+    }
+
+    /// And a template that only holds placeholders, separators and letters is
+    /// untouched by that pass — every vendor preset has to name exactly what it
+    /// always named.
+    @Test func theVendorPresetsAreUnchangedByTheTemplatePass() {
+        for template in ["{prefix}_{cam}{roll}C{clip}_{postfix}",
+                         "{cam}{roll}C{clip}_{yymmdd}_{postfix}",
+                         "{cam}_{roll}C{clip}X{yymmdd}_{hhmmss}{postfix}_CANON",
+                         "C{clip}"] {
+            #expect(NamingEngine.templateSafe(template) == template,
+                    "a normal template is passed through unchanged")
+        }
+    }
 }

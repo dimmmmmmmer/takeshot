@@ -111,13 +111,12 @@ extension TakeLogExporter {
 
     /// Marker rows from a previously written sidecar, keyed by filename.
     public static func parseMarkerRows(csv: String) -> [String: [MarkerRow]] {
-        let lines = csv.split(whereSeparator: \.isNewline)
-        guard let header = lines.first else { return [:] }
-        let columns = MarkerColumns(header: parseCSVLine(String(header)))
+        let records = parseCSVRecords(csv)
+        guard let header = records.first else { return [:] }
+        let columns = MarkerColumns(header: header)
         var result: [String: [MarkerRow]] = [:]
-        for line in lines.dropFirst() {
-            let fields = parseCSVLine(String(line))
-            let name = columns.name.value(in: fields)
+        for fields in records.dropFirst() {
+            let name = unguarded(columns.name.value(in: fields))
             let timecode = columns.timecode.value(in: fields)
             let legacy = Double(columns.seconds.value(in: fields))
             guard !name.isEmpty, !timecode.isEmpty || legacy != nil else { continue }
@@ -127,7 +126,7 @@ extension TakeLogExporter {
             result[name, default: []].append(MarkerRow(
                 timecodeText: timecode,
                 color: color.isEmpty ? "orange" : color,
-                note: columns.note.value(in: fields),
+                note: unguarded(columns.note.value(in: fields)),
                 legacySeconds: legacy))
         }
         return result
