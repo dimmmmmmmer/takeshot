@@ -23,7 +23,8 @@ import Testing
 
     private func pages() -> [(name: String, data: Data)] {
         [("remote", RemotePage.html()), ("script", RemotePage.scriptHTML()),
-         ("cameras", RemotePage.camerasHTML())]
+         ("cameras", RemotePage.camerasHTML()),
+         ("slate", RemotePage.slateHTML())]
     }
 
     /// The font is a package resource, not a file in the developer's font

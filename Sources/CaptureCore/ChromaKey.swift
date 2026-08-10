@@ -4,10 +4,13 @@ import Foundation
 /// screen, how much of it counts as screen, how soft the edge is, how hard the
 /// spill is pulled out of the subject, and what goes behind the actor.
 ///
-/// A PREVIEW tool. The key is applied in the pipeline's display stage — the
-/// same stage the viewing LUT feeds — so it reaches the viewer and the hardware
-/// monitor, and it reaches the recorder, the grabs, the scopes and the phone
-/// camera grid nowhere at all (see `CapturePipeline+ChromaKey`).
+/// A PREVIEW tool by default, and a recording decision only when the operator
+/// says so. The key is applied in the pipeline's display stage — the same stage
+/// the viewing LUT feeds — so it reaches the viewer and the hardware monitor,
+/// and it reaches the recorder, the grabs, the scopes and the phone camera grid
+/// nowhere at all (see `CapturePipeline+ChromaKey`). `record` is the one
+/// exception, and it is the same exception the viewing LUT already has: see it
+/// below for what a baked take is and is not.
 ///
 /// The math it defines lives in `ChromaKey+Matte`; the CoreImage stage that
 /// runs it is `ChromaKeyer`.
@@ -92,6 +95,31 @@ public struct ChromaKey: Equatable, Sendable {
     /// OFF by default, and off costs nothing: the display stage checks this one
     /// flag before it touches a pixel.
     public var isOn = false
+    /// Composite the key into the RECORDED file as well as onto the monitor.
+    ///
+    /// Off by default, and it follows the viewing LUT's `lut_record` mechanism
+    /// rather than inventing a second one: the writer is handed the DISPLAY
+    /// buffer for such a take, and the file is tagged with what was done to it
+    /// (`TakeWriter.chromaKeyKey`). What that costs is stated once, here,
+    /// because it is not the same trade the LUT makes:
+    ///
+    /// - **The take is a composite, not camera original.** Where the screen was
+    ///   there are now the plate's code values, and no tool downstream can get
+    ///   the cyc back. A baked take cannot be re-keyed, and the offload's
+    ///   checksums are taken over a picture that is partly this app's.
+    /// - **It carries display values, so it carries the display table's
+    ///   clipping**: 8-bit, expanded on the nominal pair, sub-blacks and
+    ///   super-whites gone. Exactly what a LUT-baked take carries, and the
+    ///   reason neither of them is written with `TakeWriter.levelsKey`.
+    /// - **The scopes still read the wire**, which is right for judging the
+    ///   camera and is no longer a measurement of the file — the plate was
+    ///   never on the wire. See `CapturePipeline+ChromaKey`.
+    ///
+    /// Not persisted, like `isOn` and for a stronger reason: a stored flag that
+    /// bakes a display decision into the first take of the next shooting day is
+    /// the one failure this feature is able to cause that nobody would catch on
+    /// set.
+    public var record = false
     /// The screen color. The presets are the digital primaries; a real cyc is
     /// never either of them, which is what the eyedropper is for.
     public var keyColor = RGB(0, 1, 0)

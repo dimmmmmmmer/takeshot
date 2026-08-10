@@ -545,6 +545,7 @@
 "remote_link_remote" = "Remote";
 "remote_link_script" = "Script";
 "remote_link_cameras" = "Cameras";
+"remote_link_slate" = "Slate";
 "remote_no_network" = "This Mac is on no network";
 "remote_not_listening" = "Not listening";
 "remote_failed" = "Web remote: %@";
@@ -712,6 +713,10 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "SYNC";
 "slate_sync_hint" = "Click or press Space — sync flash";
+"slate_page_title" = "TakeShot Slate";
+"slate_page_hold" = "HOLD";
+"slate_page_offline" = "OFFLINE";
+"slate_page_hint" = "Tap for the sync flash. Set the phone's Auto-Lock to Never.";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.
    Not "playback" (owner item 13d): nothing recorded is shown here. === */
 "cameras_title" = "TakeShot Cameras";
@@ -803,6 +808,8 @@
 "chroma_plate_reset" = "Back to a centered fit";
 "media_group_takes" = "Takes";
 "chroma_preview_only" = "Preview and monitor output only — takes, grabs and exports keep the original picture.";
+"chroma_record" = "Bake into recording";
+"chroma_record_warning" = "The next take is written as a composite: the screen is replaced in the file, so it cannot be re-keyed and it is not camera original. The scopes keep measuring the camera, not the file.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Keep TakeShot in the menu bar";
 "menubar_take" = "Take: %@";

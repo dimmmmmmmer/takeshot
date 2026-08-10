@@ -10,6 +10,16 @@ import Foundation
 struct RemoteStatus: Equatable, Sendable {
     /// Timecode as the footer shows it; empty while there is no signal.
     var timecode: String = ""
+    /// The FRAME-NUMBERING rate of that timecode (30 for 29.97 drop-frame, not
+    /// 29); 0 while there is none.
+    ///
+    /// Here for the slate, which is the only page that has to do arithmetic on
+    /// the timecode rather than print it: it counts frames forward between
+    /// statuses, and it cannot do that without knowing how many make a second.
+    /// The timecode's own rate and not the signal's, because that is the number
+    /// the string was built with — drop-frame the page reads off the string's own
+    /// `;` separator, exactly as `Timecode.init(text:fps:)` does.
+    var timecodeFPS: Int = 0
     var recording = false
     var capturing = false
     /// Signal format name ("1080p25"); empty when nothing is detected.
@@ -49,6 +59,28 @@ struct RemoteStatus: Equatable, Sendable {
     /// not the top-level `recording` — in multicam the boards record apart.
     var cameras: [CameraState] = []
 
+    // MARK: - the slate card
+    //
+    // The creative and technical identification of the take being (or about to
+    // be) written — what the desktop slate's card shows, so the phone held in
+    // front of the lens cannot disagree with the Mac on the cart. These are the
+    // PENDING values, not a finished take's: the take log carries those, per row,
+    // and a slate is about the take that has not been shot yet.
+    //
+    // Six short strings on a payload that goes out four times a second. The
+    // alternative was a message type of its own, which would need its own
+    // replay-on-auth and its own change detection to say the same thing.
+
+    /// Scene as the footer holds it.
+    var scene: String = ""
+    var shot: String = ""
+    /// Take number WITHIN the scene, as text — empty is how "not logged" travels
+    /// and a number has no way to say it, the same rule `RemoteTakeLog` follows.
+    var slateTake: String = ""
+    var roll: String = ""
+    /// The project name, which is also the file-name prefix.
+    var project: String = ""
+
     /// A camera as the multiview tile shows it: its label and whether ITS
     /// pipeline is writing right now.
     struct CameraState: Equatable, Sendable {
@@ -66,6 +98,12 @@ struct RemoteStatus: Equatable, Sendable {
         let fields: [String] = [
             "\"type\":\"status\"",
             "\"tc\":\(RemoteJSON.quoted(timecode))",
+            "\"tcFps\":\(timecodeFPS)",
+            "\"scene\":\(RemoteJSON.quoted(scene))",
+            "\"shot\":\(RemoteJSON.quoted(shot))",
+            "\"slateTake\":\(RemoteJSON.quoted(slateTake))",
+            "\"roll\":\(RemoteJSON.quoted(roll))",
+            "\"project\":\(RemoteJSON.quoted(project))",
             "\"recording\":\(recording)",
             "\"capturing\":\(capturing)",
             "\"mode\":\(RemoteJSON.quoted(mode))",

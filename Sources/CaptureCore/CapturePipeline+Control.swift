@@ -49,12 +49,17 @@ extension CapturePipeline {
     public func setLUT(_ lut: CubeLUT?, preview: Bool, record: Bool,
                        intensity: Double = 1) {
         queue.async {
+            // Which buffer the writer gets before this call, so the pre-roll ring
+            // can be dropped if the answer changes — see
+            // `dropPreRollOnFormatChange` for the mixed-format take that is.
+            let was = self.recordBakesDisplayBuffer
             self.lutFilter = lut?.makeFilter()
             self.lutName = lut?.name
             self.lutPreview = preview && lut != nil
             self.lutRecord = record && lut != nil
             self.lutIntensity = min(1, max(0, intensity))
             self.lutBufferPool.reset()
+            self.dropPreRollOnFormatChange(was: was)
         }
     }
 

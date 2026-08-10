@@ -15,6 +15,7 @@ extension CaptureController {
     func remoteStatus() -> RemoteStatus {
         var status = RemoteStatus()
         status.timecode = live.currentTimecode?.description ?? ""
+        status.timecodeFPS = live.currentTimecode?.fps ?? 0
         status.recording = isRecording
         status.capturing = isCapturing
         status.format = signalFormat?.name ?? ""
@@ -31,6 +32,15 @@ extension CaptureController {
         status.rating = (takes.last?.rating ?? .none).rawValue
         status.diskFreeGB = remoteDiskFreeGB
         status.markerCount = remoteMarkerCount
+        // The slate's card, read off the same properties the desktop slate's
+        // model reads (see `SlateModel`) — so the phone in front of the lens and
+        // the window on the cart cannot disagree, and neither can disagree with
+        // what the writer is about to embed.
+        status.scene = scene
+        status.shot = shot
+        status.slateTake = slateTakeNumber > 0 ? String(slateTakeNumber) : ""
+        status.roll = roll
+        status.project = settings.naming.projectName
         // the page shows/hides its non-REC controls on this — see remote.html
         status.mode = viewerMode == .playback ? "playback" : "record"
         // Main camera first, extras in channel order — the same indexing the

@@ -35,13 +35,28 @@ struct ChromaKeyRows: View {
                             range: 0...1,
                             readout: percent(controller.chromaSpill))
             backgroundRows
-            // The one thing nobody may be left guessing about: this picture is
-            // on the director's monitor too, and it is in no file anywhere.
-            Text(L("chroma_preview_only"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            bakeRow
         }
+    }
+
+    /// The bake, and the sentence that has to go with whichever way it is set.
+    ///
+    /// The note is not decoration and it is not the same note in two moods: with
+    /// the bake off it says where this picture goes (the director's monitor too,
+    /// and no file), and with it on it says what the next take BECOMES — a
+    /// composite that is not camera original, whose scopes are still measuring
+    /// the camera rather than the file. That second sentence is the only warning
+    /// an operator gets before a day's footage cannot be re-keyed.
+    @ViewBuilder private var bakeRow: some View {
+        Toggle(L("chroma_record"), isOn: Binding(
+            get: { controller.chromaRecordOn },
+            set: { on in controller.chromaRecordOn = on }))
+            .disabled(!controller.canBakeChromaKey)
+        Text(controller.chromaRecordOn
+            ? L("chroma_record_warning") : L("chroma_preview_only"))
+            .font(.caption2)
+            .foregroundStyle(controller.chromaRecordOn ? .orange : .secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func percent(_ fraction: Double) -> String {

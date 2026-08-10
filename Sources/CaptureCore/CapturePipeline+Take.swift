@@ -18,6 +18,17 @@ extension CapturePipeline {
         guard writer == nil, let format else { return }
         recordingMask = config.settings.audio.audioChannelMask // latched for the take
         takeColorimetry = signalColorimetry            // …and so is this
+        // …and the chroma key, values and all. Not merely tidiness like the
+        // slate: the record buffer's PIXEL FORMAT follows this answer, and
+        // AVAssetWriter does not survive that changing under an open session —
+        // so an operator who disarms the bake mid-take finishes the take they
+        // started, and one who arms it mid-take bakes the NEXT one. The key's
+        // values are latched with the flag for the reason the colorimetry is:
+        // a tolerance dragged mid-take would move which pixels are the plate
+        // halfway through one file, and a file that changes what it is in the
+        // middle is worse than either version of it.
+        takeChromaKey = recordChromaKey
+        takeChromaRecord = recordChromaKey.record && recordChromaKey.isOn
         let startIndex = recStartIndex ?? frameIndex
         let timecode = preRollShiftedTimecode(rawTimecode, startIndex: startIndex)
         // takes are never overwritten: on a name collision — suffix _2, _3…
@@ -73,10 +84,20 @@ extension CapturePipeline {
                 if lutRecord, let lutName {
                     meta[TakeWriter.lutKey] = lutName
                 }
+                // …and a file whose picture is a COMPOSITE, with what went
+                // behind the actor. Not to stop the app applying it twice — a
+                // key is never applied on playback — but because this is the one
+                // fact about such a file that cannot be recovered from the
+                // picture: it says "this is not camera original" to post, to the
+                // operator reviewing it, and to a future reader of this app.
+                if takeChromaRecord {
+                    meta[TakeWriter.chromaKeyKey] = takeChromaKey.background.rawValue
+                }
                 // …and with what its code values mean, so the player expands
                 // the take exactly as the monitor expanded the wire. A baked
                 // LUT is rendered on the display buffer, so that take carries
-                // display values whatever the wire was doing.
+                // display values whatever the wire was doing — and so is a
+                // baked key, which is why one predicate answers for both.
                 //
                 // The answer comes from the levels stage, i.e. from frames that
                 // have already been through it. A take opened before the first
@@ -84,7 +105,7 @@ extension CapturePipeline {
                 // format detection and frame one — cannot know, and says
                 // nothing rather than guessing: unexpanded is a slightly washed
                 // take, and expanding one that should not be crushes it.
-                if recordCarriesWireCodes, !lutRecord {
+                if recordCarriesWireCodes, !recordBakesDisplayBuffer {
                     meta[TakeWriter.levelsKey] = TakeWriter.wireValue
                 }
                 return meta

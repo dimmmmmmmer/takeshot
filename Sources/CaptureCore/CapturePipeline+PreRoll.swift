@@ -55,7 +55,7 @@ extension CapturePipeline {
         // buffer's — 3 bytes a pixel for 'v210', 4 for BGRA and 'r210', 8 for
         // the 12-bit path's 64RGBALE. Assuming 4 would let a 12-bit UHD pre-roll
         // reach ~3 GB against the budget.
-        let bytesPerPixel = lutRecord ? 4 : recordBytesPerPixel
+        let bytesPerPixel = recordBakesDisplayBuffer ? 4 : recordBytesPerPixel
         return Self.preRollCapacity(
             wanted: wanted,
             bytesPerFrame: format.width * format.height * bytesPerPixel)
@@ -99,10 +99,13 @@ extension CapturePipeline {
     func bufferPreRollFrame(_ leveled: LevelledFrame, pts: CMTime) {
         guard writer == nil else { return }
         // the pre-roll must hold what the WRITER gets: the wire-code record
-        // buffer when active, but BGRA when a LUT is baked into the recording —
-        // beginTake runs applyLUT over these frames and a wire format ('r210',
-        // 'R12B', 'v210') is not something to hand CoreImage
-        let preRollFrameBuffer = lutRecord
+        // buffer when active, but BGRA when a display decision is baked into the
+        // recording — beginTake runs applyLUT and the keyer over these frames and
+        // a wire format ('r210', 'R12B', 'v210') is not something to hand
+        // CoreImage. Armed rather than latched, necessarily: these frames are
+        // buffered BEFORE the take that will latch them exists, which is why the
+        // bake's arm/latch split has an armed half at all.
+        let preRollFrameBuffer = recordBakesDisplayBuffer
             ? leveled.display : (leveled.wireRecord ?? leveled.display)
         preRollBuffer.append(PreRollFrame(index: frameIndex,
                                           pixelBuffer: preRollFrameBuffer,
@@ -141,9 +144,13 @@ extension CapturePipeline {
         var lostPreRoll = 0
         var firstPreRollPTS: CMTime?
         for buffered in preRollBuffer where buffered.index >= cutoff {
-            let frame = lutRecord
+            // The head of the take goes through the same bakes its body will,
+            // and with the same latched values: a pre-roll that arrived clean
+            // while the body is a composite is a cut in the middle of one file.
+            var frame = lutRecord
                 ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
                 : buffered.pixelBuffer
+            if takeChromaRecord { frame = chromaBaked(frame) }
             if writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
                                      deadline: drainDeadline) {
                 if firstPreRollPTS == nil { firstPreRollPTS = buffered.pts }

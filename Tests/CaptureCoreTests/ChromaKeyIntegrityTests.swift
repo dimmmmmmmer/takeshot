@@ -8,7 +8,8 @@ import Testing
 
 @testable import CaptureCore
 
-/// The rule the whole feature is built around: the chroma key is a PREVIEW.
+/// The rule the whole feature is built around: the chroma key is a PREVIEW
+/// unless somebody asks for it in writing.
 ///
 /// It reaches the viewer and the hardware monitor because those mirror what the
 /// operator is looking at — the same rule the viewing LUT follows. It reaches
@@ -17,6 +18,11 @@ import Testing
 /// a director watching a keyed monitor must never be the reason a take comes
 /// back from post with a magenta background baked into it. (The grid is a
 /// monitoring surface, not an assist one — see `PreviewDisplayPathTests`.)
+///
+/// Every test here runs with `ChromaProbe.magentaKey()`, whose `record` is off —
+/// the DEFAULT, which is what makes these assertions mean what they say. The
+/// exception the operator can ask for lives in `ChromaKeyBakeTests`, and the
+/// first thing that suite does is pin that this fixture bakes nothing.
 struct ChromaKeyIntegrityTests {
     /// A pipeline that can record, on a scratch folder of its own.
     private func recordingPipeline(root: URL) -> CapturePipeline {

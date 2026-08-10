@@ -1,0 +1,612 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover so the face reaches the bezel; user-scalable=no because
+     a pinch on a slate should never leave it half off screen while a camera is
+     pointed at it. text-size-adjust because iOS otherwise reflows the readout
+     when the page is rotated. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2ee">
+<title>TakeShot</title>
+<style>
+/* The app's own face, embedded at serve time — see remote.html for why, and
+   NOTICE for the licence. */
+__TAKESHOT_FONT__
+/* LIGHT, and it does not follow prefers-color-scheme.
+   The other three pages are dark because they are read by a person holding the
+   phone. This one is read by a CAMERA, several feet away, under set light — and
+   the only light this device has is its own backlight. A dark face at 50 %
+   brightness under a 2K is a black rectangle with something on it; a light one
+   is a slate. It is also what a slate actually looks like, which matters to the
+   editor who has to recognise one in a bin of dailies.
+   Committing to one look is the point: a slate that is dark on the second AC's
+   phone and light on the director's is not a slate. */
+:root {
+  --face: #f2f2ee;
+  --ink: #101014;
+  --dim: #6c6c74;
+  --line: #c9c9c2;
+  --rec: #c8102e;
+  --hold: #b06a00;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--face); color: var(--ink);
+  /* The embedded face, with the system stack behind it — see remote.html. */
+  font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  overscroll-behavior: none; touch-action: manipulation;
+}
+#face {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: stretch; justify-content: center;
+  gap: 1.2vh;
+  padding: calc(env(safe-area-inset-top) + 1.4vh)
+           calc(env(safe-area-inset-right) + 3vw)
+           calc(env(safe-area-inset-bottom) + 1.4vh)
+           calc(env(safe-area-inset-left) + 3vw);
+}
+/* The socket is gone: the whole face is bordered, so the state is visible even
+   in a frame that crops the readout. */
+body.off #face {
+  box-shadow: inset 0 0 0 max(3px, 0.7vh) var(--rec);
+}
+
+/* project · camera — the day's identity, the smallest thing here on purpose:
+   the file name in the header below already carries both, and this line is for
+   the case where the slate is the only thing in frame. */
+#top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  color: var(--dim); font-size: min(3.4vw, 2.4vh); font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  min-height: 1.2em;
+}
+
+/* REC (or NEXT) and the file the recorder is writing. */
+#head {
+  display: flex; align-items: center; gap: 0.5em;
+  font-size: min(4.6vw, 3.4vh); font-weight: 800;
+  letter-spacing: 0.04em; min-height: 1.2em;
+}
+#rec { color: var(--dim); white-space: nowrap; }
+body.rec #rec { color: var(--rec); }
+body.rec #rec::before {
+  content: ""; display: inline-block;
+  width: 0.7em; height: 0.7em; border-radius: 50%;
+  margin-right: 0.4em; background: var(--rec);
+}
+#takeName {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0;
+}
+
+/* THE READOUT. Sized off both axes: the string is eleven monospaced
+   characters, so ~6.6 em wide, and a phone in portrait is width-limited while
+   the same phone in landscape is height-limited. min() of the two is what makes
+   one rule fill both without a media query. */
+#tcRow { position: relative; text-align: center; }
+#tc {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: min(13.4vw, 27vh); font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1.05;
+  white-space: nowrap;
+}
+/* Held: the clock has stopped and the number is the last one the app confirmed.
+   Amber, which is the colour the desktop slate's sync hold already uses. */
+body.hold #tc, body.sync #tc { color: var(--hold); }
+/* Offline: struck through as well as recoloured. A number that is merely a
+   different colour can be read as a live one on footage; a number with a line
+   through it cannot be read as anything but "do not use this". */
+body.off #tc { color: var(--rec); text-decoration: line-through; }
+/* SYNC / HOLD / OFFLINE, in the corner of the readout the desktop slate puts
+   its own tag in. */
+#tag {
+  position: absolute; top: 0; right: 0;
+  font-size: min(3.6vw, 2.6vh); font-weight: 800; letter-spacing: 0.1em;
+  padding: 0.25em 0.7em; border-radius: 999px;
+  background: var(--hold); color: var(--face);
+  visibility: hidden;
+}
+body.hold #tag, body.sync #tag { visibility: visible; }
+body.off #tag { visibility: visible; background: var(--rec); }
+
+/* SCENE / SHOT / TAKE — the three fields a camera is pointed at a slate FOR.
+   Above the roll, like the desktop card, and for the same reason: an editor
+   syncing off this face reads the slate first. */
+#card { display: flex; gap: 2vw; }
+.cell {
+  flex: 1 1 0; min-width: 0; text-align: center;
+  border: max(1px, 0.15vh) solid var(--line); border-radius: 0.4em;
+  padding: 0.5vh 0.4vw;
+}
+.k {
+  color: var(--dim); font-size: min(3vw, 2.2vh); font-weight: 600;
+  letter-spacing: 0.09em; white-space: nowrap; overflow: hidden;
+}
+.v {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: min(7.4vw, 6.2vh); font-weight: 700; line-height: 1.1;
+  white-space: nowrap; overflow: hidden; text-overflow: clip;
+}
+
+#foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 2vw; color: var(--dim); font-size: min(3.2vw, 2.3vh);
+  min-height: 1.2em;
+}
+#roll {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+/* Is this thing talking to the Mac? One dim word, and the only chrome on the
+   face: whoever is about to hold the phone in front of a lens has to be able to
+   answer that before they do, and the readout's own tag answers a different
+   question (whether the NUMBER may be trusted). */
+#conn { text-align: right; white-space: nowrap; }
+#conn::before {
+  content: ""; display: inline-block; width: 0.6em; height: 0.6em;
+  border-radius: 50%; margin-right: 0.45em; background: var(--dim);
+}
+#conn.live::before { background: #2f7d32; }
+#conn.down::before { background: var(--rec); }
+
+/* The sync flash: the face goes BLACK for about two frames at 25p. Black and
+   not white because this face is already almost white — the flash has to be a
+   luminance STEP an editor can find by scrubbing, and on a light slate the only
+   step left is downwards. */
+#flash {
+  position: fixed; inset: 0; background: #000;
+  display: none; z-index: 8;
+}
+body.flash #flash { display: block; }
+
+#gate {
+  position: fixed; inset: 0; background: rgba(242, 242, 238, 0.98);
+  display: none; flex-direction: column; justify-content: center;
+  align-items: center; gap: 16px; padding: 24px; text-align: center;
+  z-index: 10;
+}
+#gate.show { display: flex; }
+#gate p { margin: 0; color: var(--dim); max-width: 22em; line-height: 1.4; }
+#pin {
+  width: 100%; max-width: 260px; padding: 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  font-family: ui-monospace, Menlo, monospace; font-size: 34px;
+  text-align: center; letter-spacing: 0.4em;
+  -webkit-user-select: text; user-select: text;
+}
+#connect {
+  font: inherit; padding: 16px 28px; font-size: 18px; font-weight: 700;
+  color: var(--face); background: var(--ink); border: 0; border-radius: 12px;
+  touch-action: manipulation; cursor: pointer;
+}
+#connect:active { filter: brightness(1.6); }
+#gateError { color: var(--rec); min-height: 1.2em; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="face">
+  <div id="top"><span id="project"></span><span id="cam"></span></div>
+  <div id="head"><span id="rec"></span><span id="takeName"></span></div>
+  <div id="tcRow">
+    <div id="tc">--:--:--:--</div>
+    <div id="tag"></div>
+  </div>
+  <div id="card">
+    <div class="cell"><div class="k" id="kScene"></div><div class="v" id="vScene">—</div></div>
+    <div class="cell"><div class="k" id="kShot"></div><div class="v" id="vShot">—</div></div>
+    <div class="cell"><div class="k" id="kTake"></div><div class="v" id="vTake">—</div></div>
+  </div>
+  <div id="foot"><span id="roll"></span><span id="conn"></span></div>
+</div>
+
+<div id="flash"></div>
+
+<div id="gate">
+  <p id="gateHint"></p>
+  <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+         autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="connect"></button>
+  <div id="gateError"></div>
+  <p id="gateNote"></p>
+</div>
+
+<script>
+// SMPTE timecode arithmetic, and the ONE global on this page.
+//
+// It is deliberate and it is the only one. This block is the only piece of the
+// slate that computes rather than displays — the page counts frames forward
+// between status pushes, which means doing drop-frame arithmetic in a browser —
+// and arithmetic that can only be checked by holding a phone up to a camera is
+// arithmetic nobody checks. Exported, `TakeShotKitTests` evaluates this block on
+// its own (it touches no DOM and no socket, which is what makes that possible)
+// and compares it against CaptureCore's `Timecode` frame by frame, drop-frame
+// minute boundaries and the midnight wrap included.
+//
+// A faithful transcription of `Timecode.swift`, including its edges: fps is
+// clamped at 1, a negative frame number at 0, the drop-frame correction applies
+// only when the rate is a multiple of 30, and the `;` separator is both how a
+// drop-frame label is written and how one is recognised.
+var TAKESHOT_TC = (function () {
+"use strict";
+
+function pad(value) { return value < 10 ? "0" + value : String(value); }
+
+// "HH:MM:SS:FF" / "HH:MM:SS;FF" -> the real frame ordinal since midnight, so
+// that two consecutive recorded frames always differ by exactly 1 (which across
+// a drop-frame minute boundary the label itself does not). null on junk.
+function parse(text, fps) {
+  var rate = Math.max(1, Math.floor(fps || 0));
+  var drop = text.indexOf(";") >= 0;
+  var parts = String(text).split(/[:;]/);
+  if (parts.length !== 4) { return null; }
+  var value = [0, 0, 0, 0];
+  for (var index = 0; index < 4; index += 1) {
+    if (!/^\d+$/.test(parts[index])) { return null; }
+    value[index] = parseInt(parts[index], 10);
+  }
+  var nominal = ((value[0] * 60 + value[1]) * 60 + value[2]) * rate + value[3];
+  if (!drop || rate % 30 !== 0) { return { frame: nominal, drop: drop }; }
+  var dropPerMinute = Math.floor(rate / 15);
+  var totalMinutes = value[0] * 60 + value[1];
+  return {
+    frame: nominal
+      - dropPerMinute * (totalMinutes - Math.floor(totalMinutes / 10)),
+    drop: drop
+  };
+}
+
+// The inverse: a real frame ordinal back to the label a camera would show.
+function label(frameNumber, fps, drop) {
+  var rate = Math.max(1, Math.floor(fps || 0));
+  var frame = Math.max(0, Math.floor(frameNumber));
+  if (drop && rate % 30 === 0) {
+    var dropPerMinute = Math.floor(rate / 15);
+    var perMinute = rate * 60 - dropPerMinute;
+    var per10Minutes = rate * 600 - dropPerMinute * 9;
+    var blocks = Math.floor(frame / per10Minutes);
+    var rest = frame % per10Minutes;
+    frame += dropPerMinute * 9 * blocks;
+    if (rest > dropPerMinute) {
+      frame += dropPerMinute * Math.floor((rest - dropPerMinute) / perMinute);
+    }
+  }
+  var frames = frame % rate;
+  frame = Math.floor(frame / rate);
+  var seconds = frame % 60;
+  frame = Math.floor(frame / 60);
+  var minutes = frame % 60;
+  var hours = Math.floor(frame / 60) % 24;
+  return pad(hours) + ":" + pad(minutes) + ":" + pad(seconds)
+    + (drop ? ";" : ":") + pad(frames);
+}
+
+return { parse: parse, label: label };
+}());
+</script>
+
+<script>
+// The page. Inside a function for the same reason as the other three: a
+// top-level `var` becomes a window property, and several of the names this page
+// wants are already taken there. The one export it does make is above, and it
+// is arithmetic rather than state.
+//
+// **THIS PAGE SENDS NOTHING.** The only message it ever puts on the socket is
+// the `hello` that carries the PIN, because the protocol will not deliver a
+// status without one. There is no REC here, no marker, no rating, no comment,
+// no subscription: a slate is held up in front of a lens by whoever is nearest,
+// and a control on it is a take somebody ends by accident. Even the sync flash
+// is local — it captures the number this page is already showing and puts it on
+// its own face, and the app never hears about it. `RemoteSlateTests` reads this
+// file back and requires that "hello" is the only action in it.
+(function () {
+"use strict";
+// Injected by RemotePage: the app's current language, its labels, and the two
+// timings this page's honesty rests on (`holdMs`, `watchdogMs`).
+var CFG = __TAKESHOT_CONFIG__;
+var S = CFG.strings;
+// The operator page's key, on purpose: it is the same PIN for the same app, and
+// a phone that has opened one page should not retype the code on another.
+var PIN_KEY = "takeshot.remote.pin";
+
+document.documentElement.lang = CFG.lang;
+document.title = S.title;
+
+var el = function (id) { return document.getElementById(id); };
+var socket = null;
+var pin = "";
+var retry = null;
+var retryDelay = 700;
+var watchdog = null;
+
+// THE CLOCK. `seed` is the last timecode the app actually confirmed, `seedAt`
+// when it landed on our own monotonic clock, and everything on the readout is
+// derived from those two.
+//
+// Why it is interpolated at all: the status arrives four times a second, so a
+// page that only printed what it was told would step six frames at a time at
+// 25p, and an editor reading one frame of this slate off the footage would be up
+// to a quarter of a second out — which is exactly the thing a slate exists to
+// prevent. Counting forward from the seed and re-seeding on every push bounds
+// the error to what one 250 ms tick can accumulate, which is why the 1000/1001
+// rates are not treated specially: at 29.97 the difference over one tick is a
+// fiftieth of a frame.
+//
+// Why it stops: past `CFG.holdMs` the readout freezes at the SEED — the last
+// number anybody confirmed — and says HOLD. A slate that keeps counting off a
+// stale seed looks exactly like a live one, and that is the worst failure this
+// page can have. Freezing at the seed rather than at the last interpolated value
+// is the same decision made twice: show what was confirmed, never what was
+// guessed.
+var seed = null;
+var seedAt = 0;
+var seedFps = 0;
+var seedDrop = false;
+// A tap captured this label; it stays on the face until `syncUntil`.
+var syncLabel = "";
+var syncUntil = 0;
+var flashUntil = 0;
+var connected = false;
+// What the readout and its tag currently say. The loop runs at display rate and
+// the number changes at the signal's, so most passes have nothing to write: a
+// DOM mutation per frame for an unchanged string is battery on a device whose
+// battery is the whole reason this page is not a laptop.
+var shownTC = "";
+var shownTag = "";
+
+// About two frames at 25p — long enough to land on at least one frame of
+// whatever camera is pointed at the slate, short enough to read as a clap
+// rather than a screen test. The reading time after it is the editor's.
+var FLASH_MS = 100;
+var SYNC_MS = 1000;
+
+function now() {
+  return (window.performance && window.performance.now)
+    ? window.performance.now() : Date.now();
+}
+
+function paintLabels() {
+  el("gateHint").textContent = S.pinPrompt;
+  el("connect").textContent = S.connect;
+  el("pin").placeholder = "····";
+  el("kScene").textContent = S.scene;
+  el("kShot").textContent = S.shot;
+  el("kTake").textContent = S.take;
+  // On the GATE and not on the face: it is read once, while the code is being
+  // typed, and a slate carries no advice into a shot.
+  el("gateNote").textContent = S.hint;
+}
+
+// The link, in the footer. Its own state and not the readout's: a socket that is
+// up says nothing about whether a status has arrived recently, which is what the
+// tag over the timecode is for.
+function setLink(state) {
+  var node = el("conn");
+  node.className = state;
+  node.textContent = state === "live" ? S.connected
+    : (state === "down" ? S.disconnected : S.connecting);
+}
+
+// An empty value shows as a dash, like the desktop slate's card: a blank box on
+// the footage reads as a render failure, a dash as "not set".
+function shown(value) {
+  return (value === undefined || value === null || value === "") ? "—" : value;
+}
+
+// The card, straight off the status. Everything here is the PENDING take's — the
+// same values the writer is about to embed — so the phone in front of the lens
+// cannot disagree with the Mac on the cart.
+function render(next) {
+  el("project").textContent = next.project || "";
+  var cameras = next.cameras || [];
+  el("cam").textContent = (cameras[0] && cameras[0].name) || "";
+  el("rec").textContent = next.recording ? S.rec : S.next;
+  el("takeName").textContent = next.take || "";
+  el("vScene").textContent = shown(next.scene);
+  el("vShot").textContent = shown(next.shot);
+  el("vTake").textContent = shown(next.slateTake);
+  el("roll").textContent = next.roll ? S.roll + " " + next.roll : "";
+  document.body.classList.toggle("rec", !!next.recording);
+
+  var parsed = (next.tc && next.tcFps)
+    ? TAKESHOT_TC.parse(next.tc, next.tcFps) : null;
+  if (!parsed) {
+    // No signal, so no clock. Said in the header rather than on the readout:
+    // the readout's job is to carry a number or visibly not to, and "no signal"
+    // is a fact about the input, not about this page's connection to the app.
+    seed = null;
+    el("takeName").textContent = S.noSignal;
+    return;
+  }
+  // Re-seeded on every push, forwards or backwards: the app is the authority,
+  // so a camera that was re-jammed or a signal that came back at a different
+  // hour SNAPS rather than being interpolated towards.
+  seed = parsed.frame;
+  seedDrop = parsed.drop;
+  seedFps = next.tcFps;
+  seedAt = now();
+}
+
+// One frame of the readout: which of the four states the clock is in, and the
+// number that goes with it. Ordered offline → sync → hold → live on purpose —
+// a sync hold with a dead socket is still a dead socket, and its number must
+// carry the strike rather than the amber.
+function paint() {
+  var body = document.body;
+  var moment = now();
+  var offline = !connected;
+  var syncing = !offline && moment < syncUntil;
+  var held = seed !== null && (moment - seedAt) > CFG.holdMs;
+  body.classList.toggle("off", offline);
+  body.classList.toggle("sync", syncing);
+  body.classList.toggle("hold", !offline && !syncing && held);
+  body.classList.toggle("flash", moment < flashUntil);
+  write("tag", offline ? S.offline : (syncing ? S.sync : S.hold), "tag");
+  write("tc", readout(moment, syncing), "tc");
+}
+
+// The number, or the dashes that stand for not having one.
+function readout(moment, syncing) {
+  if (seed === null) { return "--:--:--:--"; }
+  if (syncing) { return syncLabel; }
+  return TAKESHOT_TC.label(seed + advanced(moment), seedFps, seedDrop);
+}
+
+// One text write, skipped when nothing changed. See `shownTC` above.
+function write(id, text, slot) {
+  if (slot === "tc") {
+    if (text === shownTC) { return; }
+    shownTC = text;
+  } else {
+    if (text === shownTag) { return; }
+    shownTag = text;
+  }
+  el(id).textContent = text;
+}
+
+// Frames to add to the seed. Zero once the hold window has passed — the readout
+// freezes on the last confirmed number instead of drifting on.
+function advanced(moment) {
+  var elapsed = moment - seedAt;
+  if (elapsed <= 0 || elapsed > CFG.holdMs) { return 0; }
+  return Math.floor(elapsed * seedFps / 1000);
+}
+
+// requestAnimationFrame rather than an interval: the readout has to tick at the
+// signal's frame rate to be worth interpolating at all, and rAF stops by itself
+// when the phone is face down in somebody's pocket.
+function loop() {
+  paint();
+  window.requestAnimationFrame(loop);
+}
+
+// The clap substitute: freeze the number this page is showing, flash the face,
+// and hold the frozen number long enough to read. An editor finds the flash
+// frame and reads the held number off the frames after it.
+//
+// Local, and refused unless the clock is live: capturing a number nobody is
+// confirming would put a stale timecode on the footage with a SYNC tag beside
+// it, which is worse than no slate at all.
+function fireSync() {
+  if (!connected || seed === null) { return; }
+  var moment = now();
+  if ((moment - seedAt) > CFG.holdMs) { return; }
+  syncLabel = TAKESHOT_TC.label(seed + advanced(moment), seedFps, seedDrop);
+  syncUntil = moment + SYNC_MS;
+  flashUntil = moment + FLASH_MS;
+  paint();
+}
+
+function showGate(message) {
+  el("gateError").textContent = message || "";
+  el("gate").classList.add("show");
+  el("pin").value = "";
+  el("pin").focus();
+}
+
+// Same watchdog as the other pages, for the same reason: mobile Safari can stop
+// delivering on a socket without a close or an error. Here it matters most —
+// the page would otherwise sit inside its hold state indefinitely instead of
+// reconnecting, and HOLD understates a socket that is gone.
+function armWatchdog() {
+  if (watchdog) { clearTimeout(watchdog); }
+  watchdog = setTimeout(function () {
+    watchdog = null;
+    var dead = socket;
+    socket = null;
+    if (dead) {
+      dead.onopen = dead.onmessage = dead.onclose = dead.onerror = null;
+      try { dead.close(); } catch (e) {}
+    }
+    retryDelay = 700;
+    dropped();
+  }, CFG.watchdogMs);
+}
+
+function connect() {
+  if (retry) { clearTimeout(retry); retry = null; }
+  if (socket && (socket.readyState === 0 || socket.readyState === 1)) { return; }
+  if (!pin) { showGate(""); return; }
+  setLink("wait");
+  socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://")
+    + location.host + "/ws");
+  armWatchdog();
+  socket.onopen = function () {
+    // The only thing this page ever sends. See the note at the top.
+    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+  };
+  socket.onmessage = function (event) {
+    armWatchdog();
+    var msg;
+    try { msg = JSON.parse(event.data); } catch (e) { return; }
+    if (msg.type === "status") {
+      connected = true;
+      setLink("live");
+      render(msg);
+    } else if (msg.type === "auth" && msg.ok) {
+      retryDelay = 700;
+      connected = true;
+      setLink("live");
+      el("gate").classList.remove("show");
+    } else if (msg.type === "auth") {
+      pin = "";
+      connected = false;
+      try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+      showGate(S.pinBad);
+    }
+  };
+  socket.onclose = function () { dropped(); };
+  socket.onerror = function () { dropped(); };
+}
+
+// Mobile Safari drops the socket whenever the page goes to the background, and
+// gives no error when it does. The seed is deliberately KEPT: the readout goes
+// offline and struck through, which is the honest state, and a reconnect that
+// lands within the hold window brings the number straight back rather than
+// blanking the slate in front of a rolling camera.
+function dropped() {
+  if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+  socket = null;
+  connected = false;
+  syncUntil = 0;
+  setLink("down");
+  if (retry) { return; }
+  retry = setTimeout(function () { retry = null; connect(); }, retryDelay);
+  retryDelay = Math.min(5000, retryDelay * 2);
+}
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible") { retryDelay = 700; connect(); }
+});
+window.addEventListener("online", connect);
+window.addEventListener("pageshow", connect);
+
+el("face").addEventListener("click", fireSync);
+el("connect").addEventListener("click", function () {
+  var value = el("pin").value.replace(/\D/g, "");
+  if (!value) { return; }
+  pin = value;
+  try { localStorage.setItem(PIN_KEY, pin); } catch (e) {}
+  el("gate").classList.remove("show");
+  connect();
+});
+el("pin").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") { el("connect").click(); }
+});
+
+paintLabels();
+setLink("down");
+loop();
+try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) { pin = ""; }
+if (pin) { connect(); } else { showGate(""); }
+}());
+</script>
+</body>
+</html>

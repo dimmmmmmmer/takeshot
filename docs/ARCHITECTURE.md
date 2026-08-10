@@ -152,6 +152,27 @@ wire. That ordering is why a keyed or false-coloured monitor cannot end up in a
 take, and `ChromaKeyIntegrityTests` and `AssistIntegrityTests` are what keep it
 that way.
 
+**Two display decisions can be asked INTO the file, and they are the same
+mechanism asked twice.** The viewing LUT's "bake into recording" was the first;
+the chroma key's `ChromaKey.record` is the second, and it deliberately did not
+invent a path of its own. Both work by handing the writer the DISPLAY buffer for
+that take instead of the wire codes, and by tagging the file with what was done
+to it (`TakeWriter.lutKey`, `TakeWriter.chromaKeyKey`) — so
+`CapturePipeline.recordBakesDisplayBuffer` is the one predicate that decides
+which buffer the pre-roll ring holds, which buffer the still grab matches, and
+whether `TakeWriter.levelsKey` may be written at all. A third bake would add
+itself there and inherit all four answers.
+
+The key needs one thing the LUT did not: a **second keyer, on the capture
+queue**. The display keyer cannot be reused, because its queue is latest-wins and
+drops the effect on a late frame on purpose (see the lateness gate below) — the
+right trade for a monitor and the wrong one for a file, which may drop no frames
+at all. So a bake costs the capture queue one CoreImage pass per recorded frame
+and one `Bool` read otherwise. And the take **latches** the key it opened with,
+values included: the record buffer's pixel format follows that answer, and
+`AVAssetWriter` does not survive a format change under an open session. Arming
+mid-take bakes the next take; disarming mid-take finishes the one in progress.
+
 The phone camera grid (`/cameras`) is deliberately outside all of it. It is a
 monitoring surface, not an assist one, so it is handed the `clean` buffer —
 the same frame before the key and the aids — and the operator's compare wipe,
@@ -198,6 +219,16 @@ And `rate`/`comment`/`slate`/`good`/`bad` drive `exportTakeLog()`, which rewrite
 four sidecar files on the volume the take is being written to; that is the same
 disk, and it is why `setRating` carries the "nothing changed" guard its two
 siblings already had.
+
+**One page reaches nothing at all, and that is a property rather than an
+accident.** `/slate` is a display: the only message it puts on the socket is the
+`hello` that carries the PIN, because the protocol will not deliver a status
+without one. No REC, no marker, no rating, no subscription — a slate is held up
+in front of a lens by whoever is nearest, and a control on it is a take somebody
+ends by accident. Its sync flash is local, so even that is not traffic.
+`RemoteSlateTests` reads the shipped page back and requires `hello` to be the
+only action in it, which pins the property where it can actually regress: in the
+markup.
 
 **Unauthenticated bytes reach none of it.** No MainActor hop, no capture queue,
 no writer, no display path: everything a peer can do before it shows the code is
@@ -296,6 +327,18 @@ picture clips; the codes outside the nominal pair are kept where they are
 useful — in the deliverable and on the scopes, neither of which reads the
 display buffer. `LevelsExcursionTests` pins both halves, numerically and
 through a real encode/decode round trip.
+
+**Unless a bake was asked for**, in which case the deliverable IS the display
+buffer and the clipping goes into the file with it: 8-bit, expanded on the
+nominal pair, sub-blacks and super-whites gone. That is true of a LUT-baked take
+and equally of a chroma-key-baked one, and it is exactly why neither is written
+with `com.takeshot.levels` — the codes in such a file already fill the scale, and
+expanding them again on the way back out would crush them. The scopes are
+unaffected either way, because they read the wire; what changes with a baked key
+is that the scopes and the file have parted company, since the plate the file
+carries in the screen area was never on the wire at all. A baked take is still
+worth exposing by — the trace is the camera — and it is not a measurement of
+itself.
 
 ### What the scopes measure
 

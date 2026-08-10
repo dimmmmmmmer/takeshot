@@ -246,9 +246,40 @@ public final class CapturePipeline: @unchecked Sendable {
     public let assistStage = AssistStage()
     let chromaLock = NSLock()
     var storedChromaKey = ChromaKey()
+    /// The plate, kept here as well as inside the keyer that draws it, so a
+    /// keyer built later (the record one below) can be handed the plate the
+    /// operator loaded before it existed. Guarded by `chromaLock`.
+    var storedChromaPlate: CVPixelBuffer?
     /// Frames that reached the display queue past their own frame interval and
     /// were shown WITHOUT the key rather than held up (guarded by chromaLock).
     var chromaLateDropCount = 0
+
+    // The BAKE (see `ChromaKey.record` and `+ChromaKey`). A second keyer, on the
+    // CAPTURE queue, because the display one cannot be reused for the file: its
+    // queue is latest-wins, so it skips frames on purpose, and a take is allowed
+    // to skip none. Built only when the switch is turned on — a CIContext holds
+    // caches, and an operator who never bakes must not pay for one.
+    /// Capture-queue confined, like the writer it feeds.
+    var recordChromaKeyer: ChromaKeyer?
+    /// The key as the CAPTURE queue sees it — the same value `storedChromaKey`
+    /// holds for the display queue, delivered through a queue hop instead of a
+    /// lock (the shape `setLUT` already uses). Queue-confined.
+    var recordChromaKey = ChromaKey()
+    /// The key LATCHED when the current take opened, and whether that take bakes
+    /// at all. Latched like the audio channel mask, the slate and the
+    /// colorimetry, and here for a harder reason than any of them: the record
+    /// buffer's PIXEL FORMAT depends on the answer (BGRA when baking, the wire
+    /// format otherwise), and AVAssetWriter does not survive that changing under
+    /// an open session. Queue-confined.
+    var takeChromaKey = ChromaKey()
+    var takeChromaRecord = false
+    /// Frames written into a baking take WITHOUT the key because the render
+    /// failed. Cumulative for the session, and a diagnostic rather than a
+    /// control: any value above zero means some file on the disk has
+    /// uncomposited frames in it. Guarded by `chromaLock`, like
+    /// `chromaLateDropCount` beside it and for the same reason — the writer is
+    /// the capture queue and the reader is the main actor.
+    var chromaBakeFallbackCount = 0
 
     var monitorEnabled = false
     var monitorFormatCache: CMAudioFormatDescription?

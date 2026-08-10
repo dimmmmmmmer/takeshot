@@ -41,6 +41,7 @@ extension CaptureController {
             pin: pin, page: RemotePage.html(),
             scriptPage: RemotePage.scriptHTML(),
             camerasPage: RemotePage.camerasHTML(),
+            slatePage: RemotePage.slateHTML(),
             handlers: RemoteServer.Handlers(
                 command: { [weak self] command in
                     // The server's queue must never touch the controller: every
@@ -156,6 +157,7 @@ extension CaptureController {
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
             remoteServer?.setCamerasPage(RemotePage.camerasHTML())
+            remoteServer?.setSlatePage(RemotePage.slateHTML())
         }
     }
 }

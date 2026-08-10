@@ -125,7 +125,12 @@ adopted into the list.
   through the log and the exports. That is deliberate — the footage is camera
   original, and the offload's checksums are taken over it.
 - The digital slate window shows scene/shot/take on its card, so a camera
-  pointed at it records the same values the file carries.
+  pointed at it records the same values the file carries. The web remote serves
+  the same slate to a phone (Settings → Remote → Page → Slate), which is the one
+  that can actually be held in front of the lens. Tap it for the sync flash. Its
+  timecode counts between the app's updates and freezes VISIBLY — amber and
+  tagged — the moment it stops being confirmed, so a stopped clock can never be
+  mistaken for a running one. Set the phone's Auto-Lock to Never.
 
 ## Review
 
@@ -174,8 +179,15 @@ never bends it.
 - The key is on the viewer AND on the hardware monitor the director is watching,
   because both mirror the same display frame. It is in no take, no grab and no
   export — those come off the picture before the key is applied.
+- **"Bake into recording"** is the exception, and it changes what a take IS. The
+  next take is written as a composite: the screen is replaced in the file, so the
+  footage cannot be re-keyed and is not camera original. The scopes go on
+  measuring the camera rather than the file — which is still the right thing to
+  expose against, because the plate was never on the wire. A take opened with the
+  bake on finishes that way whatever you touch mid-take, and one opened without it
+  stays clean; the file itself says which it is.
 - Assists and LUTs are a display layer. Nothing they show reaches the recorded
-  file unless "bake into recording" is on for the LUT.
+  file unless "bake into recording" is on — for the LUT, or for the chroma key.
 
 ## LUT and looks
 
