@@ -24,7 +24,7 @@ import Foundation
 /// SINGLE keyed container, so every key still lands at the top level exactly
 /// where it always did. Nothing here hand-writes a per-field encode or decode —
 /// the field-to-key mapping is still the compiler's, which is what makes the
-/// 84 keys unforgeable.
+/// 81 keys unforgeable.
 ///
 /// Flatness is load-bearing for a second consumer as well as for the stored
 /// blob: `DiagnosticsRedaction` walks this encoding as a flat map and drops
@@ -62,9 +62,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var visualRec = VisualRecSettings()
     /// The browser remote.
     public var remote = RemoteSettings()
-    /// The retired NDI output — inert, and off the record in the next commit
-    /// (see `NDISettings`).
-    public var ndi = NDISettings()
     /// The dailies burn-in set.
     public var dailies = DailiesSettings()
     /// The DIT offload's destinations.
@@ -101,7 +98,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         chromaKey = try ChromaKeySettings(from: decoder)
         visualRec = try VisualRecSettings(from: decoder)
         remote = try RemoteSettings(from: decoder)
-        ndi = try NDISettings(from: decoder)
         dailies = try DailiesSettings(from: decoder)
         offload = try OffloadSettings(from: decoder)
         let container = try decoder.container(keyedBy: RecordKeys.self)
@@ -110,7 +106,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
 
     /// And each group encodes back into the same one. Asking an encoder for a
     /// keyed container twice at the same coding path hands back the container
-    /// it already made, so fourteen groups produce one flat object.
+    /// it already made, so thirteen groups produce one flat object.
     public func encode(to encoder: Encoder) throws {
         try capture.encode(to: encoder)
         try naming.encode(to: encoder)
@@ -123,7 +119,6 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         try chromaKey.encode(to: encoder)
         try visualRec.encode(to: encoder)
         try remote.encode(to: encoder)
-        try ndi.encode(to: encoder)
         try dailies.encode(to: encoder)
         try offload.encode(to: encoder)
         var container = encoder.container(keyedBy: RecordKeys.self)

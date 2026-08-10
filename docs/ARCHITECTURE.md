@@ -453,12 +453,12 @@ would drop a marker while a roll name is being typed.
   capped at 20). The record folder is emptied and re-pointed between shooting
   days, and the card being copied has nothing to do with it.
 
-## Settings: one flat record, fourteen grouped views of it
+## Settings: one flat record, thirteen grouped views of it
 
 `CaptureSettings` does two jobs and they pull in opposite directions.
 
 It is the **record**. One JSON blob in `UserDefaults` under
-`TakeShot.CaptureSettings`, 84 keys, and there is no error path for getting the
+`TakeShot.CaptureSettings`, 81 keys, and there is no error path for getting the
 shape wrong: a key that moves stops decoding, `loaded(from:)` answers the throw
 with a fresh default object, and the operator's destination folder, naming
 template, calibrated assist thresholds and taught REC references are silently
@@ -470,14 +470,14 @@ half of them carrying a hand-maintained prefix (`chromaKeyPlateOffsetX`)
 standing in for a namespace they could not have.
 
 The two are reconciled by grouping the TYPE while keeping the WIRE FORMAT flat.
-`CaptureSettings` holds fourteen domain groups (`capture`, `naming`, `audio`,
+`CaptureSettings` holds thirteen domain groups (`capture`, `naming`, `audio`,
 `theme`, `assist`, `review`, `lut`, `r3d`, `chromaKey`, `visualRec`, `remote`,
-`ndi`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its own
+`dailies`, `offload`) plus `schemaVersion`. Each group carries its own
 **synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)` delegate
-to all fourteen against a SINGLE keyed container, so every key still lands at
+to all thirteen against a SINGLE keyed container, so every key still lands at
 the top level exactly where it always did. Nothing hand-writes a per-field
 encode or decode — the field-to-key mapping is still the compiler's, which is
-what makes the 84 keys unforgeable.
+what makes the 81 keys unforgeable.
 
 Flatness is load-bearing for a second consumer as well as for the stored blob:
 `DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by
@@ -499,7 +499,7 @@ rather than a claim:
   perfectly. It reflects each group's property labels, encodes the group, and
   requires every key to derive from its own property by one mechanical rule
   (group prefix + capitalised label, or the label verbatim for a key that
-  predates its group). It also checks the fourteen groups account for the whole
+  predates its group). It also checks the thirteen groups account for the whole
   format exactly once, which is what fails if a group is declared and never
   wired into the delegation.
 - `ModelSettingsMigrationTests` covers what happens to a blob written by an

@@ -37,22 +37,18 @@ public struct RemoteSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// The retired NDI output.
-///
-/// INERT: the bridge, the mirror, the settings section and the controller
-/// extension are all gone, and nothing reads either field any more. It is still
-/// on the record for one commit because removing a key is a change to the
-/// ON-DISK FORMAT — see `SettingsFormatFixture` for what that costs when it goes
-/// wrong — and the two changes are worth reading apart. Removed in the commit
-/// that follows this one.
-public struct NDISettings: Codable, Equatable, Sendable {
-    enum CodingKeys: String, CodingKey {
-        case enabled = "ndiEnabled"
-        case sourceName = "ndiSourceName"
-    }
-
-    public var enabled: Bool?
-    public var sourceName: String?
-
-    public init() {}
-}
+// `ndiEnabled` and `ndiSourceName` were a group here. They are gone from the
+// record, not merely unread: the NDI output is gone and there is no feature for
+// a stored switch or a stored source name to mean anything to. A blob that still
+// carries either key decodes exactly as before — the synthesized decoder drops
+// keys it does not know, which is what makes removing one safe — and this build
+// writes it back without them.
+//
+// No `RetiredSettings` entry and no schema bump, deliberately, for the reason
+// `captureBitDepth` did not get one either: that pair exists for a field a
+// MIGRATION has to read once, and there is nowhere for these to be read into.
+// The SRT output that replaces the feature needs an address, a port and a role,
+// and a source NAME answers none of those questions — carrying it across would
+// be inventing a value rather than preserving one. An operator who had NDI on
+// gets SRT off, and configures it. `anOldBlobWithRetiredNDIKeysStillDecodes`
+// holds the half of the contract that is real.
