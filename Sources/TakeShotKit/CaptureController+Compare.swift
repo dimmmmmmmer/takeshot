@@ -73,6 +73,40 @@ extension CaptureController {
             && playbackURL != nil
     }
 
+    /// Whether there is anything to compare the picture AGAINST right now.
+    ///
+    /// In playback the B side is the clip in the player (or another clip
+    /// chosen beside it); in record it is the pinned reference and nothing
+    /// else. Every compare CONTROL is meaningless without one — `pushCompare`
+    /// sends `.off` to the pipeline while nothing is pinned, so a mode picker
+    /// offered in that state is a control that changes nothing.
+    var compareHasBSide: Bool {
+        viewerMode == .playback ? playbackURL != nil : referencePinned
+    }
+
+    /// Whether the compare row belongs over the player at all.
+    ///
+    /// One property rather than a condition written out in the chrome, for the
+    /// reason `showsCompareSplit` and `showsWipeHandle` are properties: it is a
+    /// decision about what the operator is OFFERED, and a test has to be able
+    /// to ask it from a fresh install without rendering a window.
+    ///
+    /// **Why record mode asks `isCapturing` and not `referencePinned`.** It
+    /// asked the latter, and that made live compare unreachable: the pin button
+    /// is the only caller of `pinReferenceFromCurrentFrame()` in the app, it
+    /// lives in this row, and the row only appeared once something was already
+    /// pinned. The key was inside the lock — the same shape the taught REC
+    /// indicator shipped with. The row is now offered whenever there is a frame
+    /// to pin, and it collapses to the pin alone until there is a B side (see
+    /// `CompareControls`).
+    ///
+    /// Not in sync-play: the bar drives the single player's composite, which is
+    /// not on screen under the grid.
+    var showsCompareBar: Bool {
+        guard syncPlay == nil else { return false }
+        return viewerMode == .playback ? playbackURL != nil : isCapturing
+    }
+
     /// Whether the draggable wipe seam belongs on screen.
     ///
     /// The wipe arrives already composited in the picture, so the seam is
@@ -85,10 +119,10 @@ extension CaptureController {
     ///
     /// In playback there has to be a clip; in record there has to be a pinned
     /// reference, or there is no B side and the seam divides a picture from
-    /// itself.
+    /// itself — which is `compareHasBSide`, shared with the bar so the two
+    /// cannot come to disagree about what a B side is.
     var showsWipeHandle: Bool {
-        guard compareMode == .wipe else { return false }
-        return viewerMode == .playback ? playbackURL != nil : referencePinned
+        compareMode == .wipe && compareHasBSide
     }
 
     /// The aspect the wipe seam rides: the composite is letterboxed into a

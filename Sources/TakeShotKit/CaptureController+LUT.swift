@@ -9,6 +9,16 @@ import os.log
 /// size at which nobody reads it top to bottom any more. Getting look files
 /// onto the machine, and off it into a cube, is `+LUTLibrary`.
 extension CaptureController {
+    /// Whether there is a look for the two switches to switch on.
+    ///
+    /// Four surfaces offer them — the badge popover, the View menu, the ⌃L key
+    /// and the intensity row — and the popover was the one that did not ask,
+    /// so it could store `previewEnabled = true` over no cube at all. Stated
+    /// once here and asserted in the controller tests, the way
+    /// `canChangeRecordingFormat` and `canDimMonitoring` are: "is it really
+    /// gated" is a question about the rule, not about a rendered control.
+    var canApplyLUT: Bool { settings.lut.fileName != nil }
+
     var lutPreviewOn: Bool {
         get { settings.lut.previewEnabled ?? false }
         set {

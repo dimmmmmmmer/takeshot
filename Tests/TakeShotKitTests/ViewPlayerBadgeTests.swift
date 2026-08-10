@@ -97,11 +97,20 @@ struct ViewPlayerBadgeTests {
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             probe.controller.referencePinned = true
 
+            // A clip in the player, because that is the only state the app
+            // mounts this bar in during playback — measured without one it
+            // collapses to the pin (see `showsCompareBar`) and the budget check
+            // passes on a 23pt row that is not the bar under test.
+            probe.controller.playbackURL = probe.root
+                .appendingPathComponent("a.mov")
+
             for viewer in [CaptureController.ViewerMode.record, .playback] {
                 probe.controller.viewerMode = viewer
                 for mode in [CaptureController.CompareMode.off, .wipe,
                              .blend, .difference, .sideBySide] {
                     probe.controller.compareMode = mode
+                    #expect(probe.controller.compareHasBSide,
+                            "\(viewer)/\(mode): measured with nothing to compare against")
                     let ideal = probe.fittingSizes { CompareControls() }
                     #expect(ideal.ru.width <= chrome,
                             "\(viewer)/\(mode) bar wants \(ideal.ru.width)pt of \(chrome)")
@@ -121,6 +130,8 @@ struct ViewPlayerBadgeTests {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             probe.controller.viewerMode = .playback
+            probe.controller.playbackURL = probe.root
+                .appendingPathComponent("a.mov")
 
             for mode in [CaptureController.CompareMode.off, .wipe,
                          .blend, .difference, .sideBySide] {
@@ -153,6 +164,8 @@ struct ViewPlayerBadgeTests {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             probe.controller.viewerMode = .playback
+            probe.controller.playbackURL = probe.root
+                .appendingPathComponent("a.mov")
 
             let resting = probe.fittingSizes { CompareControls() }
             probe.controller.compareMode = .difference
@@ -260,6 +273,8 @@ struct ViewPlayerBadgeTests {
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
             probe.controller.viewerMode = .playback
+            probe.controller.playbackURL = probe.root
+                .appendingPathComponent("a.mov")
             probe.controller.referencePinned = true
 
             for mode in [CaptureController.CompareMode.off, .wipe,

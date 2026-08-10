@@ -53,6 +53,33 @@ extension CaptureController {
     /// Any scope surface visible (drives the analyzers and the badge tint).
     var showScopes: Bool { showScopesOverlay || scopesWindowOpen }
 
+    /// Scopes on, or off — the write side of `showScopes`.
+    ///
+    /// **Why this is a method and not three call sites toggling the overlay
+    /// flag.** The badge over the player, the ⌃W key and the View menu's
+    /// checkmark all LIT from `showScopes` (two surfaces) or from
+    /// `showScopesOverlay` (the third) while all three WROTE the overlay flag —
+    /// and the overlay is deliberately not drawn while the scopes window is open
+    /// (`PlayerBadgesModifier.scopesOverlay`). So with the scopes on the cart's
+    /// second monitor the badge read ON, pressing it changed nothing an operator
+    /// could see, and it silently latched `showScopesOverlay = true`: the panel
+    /// then jumped over the picture the moment that window was later closed,
+    /// with nothing having asked for it.
+    ///
+    /// One decision, so the reading and the press cannot disagree: off means
+    /// every scope surface off, including the window the operator opened —
+    /// closing it is the literal meaning of the switch they just pressed.
+    func toggleScopes() {
+        guard showScopes else {
+            showScopesOverlay = true
+            return
+        }
+        showScopesOverlay = false
+        if scopesWindowOpen {
+            AppWindows.window(.scopes)?.performClose(nil)
+        }
+    }
+
     /// Route scope analysis to whichever source is actually on screen.
     func updateScopesRunning() {
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)

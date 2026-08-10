@@ -193,6 +193,48 @@ import Testing
         }
     }
 
+    /// The two switches are gated by ONE rule, and every surface asks it.
+    ///
+    /// Four places offer them — the badge popover, View ▸ LUT, the ⌃L key and
+    /// the intensity row beside them — and three asked whether a look was
+    /// selected while the popover did not. So the popover could write
+    /// `previewEnabled = true` with no cube anywhere: a stored flag claiming a
+    /// look that does not exist, and four controls disagreeing about one fact.
+    ///
+    /// Asserted as the rule rather than as a rendered control, for the reason
+    /// `canChangeRecordingFormat` is: `.disabled(…)` is not something a
+    /// headless render can be asked about, and a copy of the condition per
+    /// surface is what let them drift in the first place.
+    @Test func theLookSwitchesAreGatedByOneRuleEverySurfaceAsks() async throws {
+        let media = try MediaFixtures.makeDirectory("lut-gate")
+        defer { try? FileManager.default.removeItem(at: media) }
+
+        try await ControllerHarness.run { controller, _ in
+            controller.lutsDirectory = media
+            _ = try MediaFixtures.writeRedCube(
+                at: media.appendingPathComponent("red.cube"))
+
+            #expect(controller.settings.lut.fileName == nil,
+                    "the fixture ships a look — this test proves nothing")
+            #expect(!controller.canApplyLUT,
+                    "the look switches are live over no look at all")
+
+            // the way in is the list beside them, not the switches: picking a
+            // look opens the gate AND turns the preview on by itself, so
+            // nothing is out of reach behind it
+            controller.selectLUT(fileName: "red.cube")
+            #expect(controller.lastError == nil,
+                    "the fixture look did not load: \(controller.lastError ?? "")")
+            #expect(controller.canApplyLUT)
+            #expect(controller.lutPreviewOn,
+                    "picking a look left both switches off and the gate now shut behind them")
+
+            // …and back: clearing the look shuts it again
+            controller.selectLUT(fileName: nil)
+            #expect(!controller.canApplyLUT)
+        }
+    }
+
     /// Where imported looks live. The Resolve mirror is what puts the same look
     /// in the colourist's hands, and it only works at the exact path Resolve
     /// scans.

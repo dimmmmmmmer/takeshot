@@ -143,6 +143,46 @@ struct ControllerScopesTests {
 
     /// The separate window is not one of the player overlays: it does not cover
     /// the picture, so opening the audio panel must not close it.
+    /// The switch the badge, the ⌃W key and the View menu all press is the
+    /// write side of the reading they all light from.
+    ///
+    /// They lit from `showScopes` (overlay OR window) and wrote
+    /// `showScopesOverlay` alone, and the overlay is deliberately not drawn
+    /// while the scopes window is up. So with the scopes in their own window the
+    /// badge read ON and pressing it changed nothing visible — while latching
+    /// the overlay flag, which then put a panel over the picture the moment that
+    /// window was closed. Nothing in the suite could see it: the flag is what
+    /// every existing scopes test asserts on, and it was being set.
+    @Test func theScopesSwitchReachesEverythingItsLightCovers() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(!controller.showScopes, "the fixture starts with scopes up")
+            #expect(!controller.showScopesOverlay)
+
+            controller.toggleScopes()
+            #expect(controller.showScopesOverlay)
+            #expect(controller.showScopes)
+
+            controller.toggleScopes()
+            #expect(!controller.showScopesOverlay)
+            #expect(!controller.showScopes)
+
+            // the scopes are up because the WINDOW is up: the switch reads ON,
+            // and pressing it must not quietly arm the overlay behind it
+            controller.scopesWindowOpen = true
+            #expect(controller.showScopes)
+            controller.toggleScopes()
+            #expect(!controller.showScopesOverlay,
+                    "pressing the lit switch latched an overlay nobody can see")
+
+            // …and with the window gone, the switch still turns them on
+            controller.scopesWindowOpen = false
+            #expect(!controller.showScopes)
+            controller.toggleScopes()
+            #expect(controller.showScopes)
+            controller.showScopesOverlay = false
+        }
+    }
+
     @Test func theScopesWindowIsNotClosedByThePlayerOverlays() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.scopesWindowOpen = true

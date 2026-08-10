@@ -95,12 +95,21 @@ struct LUTControlsPanel: View {
                 }
             }
             .menuStyle(.borderlessButton)
+            // Both gated on there BEING a look, like the same two toggles in
+            // the View menu, the ⌃L key and the intensity row three lines
+            // below. Ungated here they wrote "preview on" into the settings
+            // over no cube at all — a stored flag claiming a look that does
+            // not exist, and the one surface in the app that disagreed with
+            // the other three about it. Nothing is lost: picking a look turns
+            // the preview on by itself (see `selectLUT`).
             Toggle(L("lut_preview"), isOn: Binding(
                 get: { controller.lutPreviewOn },
                 set: { controller.lutPreviewOn = $0 }))
+                .disabled(!controller.canApplyLUT)
             Toggle(L("lut_record"), isOn: Binding(
                 get: { controller.lutRecordOn },
                 set: { controller.lutRecordOn = $0 }))
+                .disabled(!controller.canApplyLUT)
             Divider()
             LUTIntensityControls(live: controller.live)
         }
@@ -124,12 +133,12 @@ private struct LUTIntensityControls: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 42)
-                .disabled(controller.settings.lut.fileName == nil)
+                .disabled(!controller.canApplyLUT)
             Text("%").font(.caption).foregroundStyle(.secondary)
         }
         Slider(value: Binding(
             get: { live.lutIntensity },
             set: { controller.lutIntensity = $0 }), in: 0...1)
-        .disabled(controller.settings.lut.fileName == nil)
+        .disabled(!controller.canApplyLUT)
     }
 }

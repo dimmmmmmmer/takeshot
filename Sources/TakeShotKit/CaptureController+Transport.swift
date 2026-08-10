@@ -18,6 +18,20 @@ extension CaptureController {
         viewerMode == .playback && (playbackURL != nil || syncPlay != nil)
     }
 
+    /// A clip is loaded in the SINGLE player — the grid does not count.
+    ///
+    /// What the items that act on one clip's own timeline are enabled by: the
+    /// loop range and the markers. Both belong to a file, the grid has two to
+    /// four of them and no loop at all, and both were reaching the single
+    /// player parked underneath it: `toggleLoopPoint` refused outright
+    /// (`guard syncPlay == nil`), `loopPlayback` and every marker item went
+    /// through to whatever clip was last open — a marker written at the paused
+    /// player's position, into a file the operator cannot see. Enabled and
+    /// wrong is worse than grey, so the menus ask this instead.
+    var isReviewingSingleClip: Bool {
+        viewerMode == .playback && playbackURL != nil && syncPlay == nil
+    }
+
     func togglePlayPause() {
         if let sync = syncPlay {
             sync.togglePlay()

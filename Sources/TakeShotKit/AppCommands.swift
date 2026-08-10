@@ -122,10 +122,13 @@ private struct PlaybackCommands: View {
 
         Divider()
 
+        // A marker belongs to ONE file, so the grid does not enable these —
+        // see `isReviewingSingleClip`. It is the recording or the clip in the
+        // single player, and nothing else.
         Menu(L("markers_title")) {
             MarkerCommands(controller: controller, hotkeys: hotkeys)
         }
-        .disabled(!controller.isReviewingClip && !controller.isRecording)
+        .disabled(!controller.isReviewingSingleClip && !controller.isRecording)
 
         Menu(L("menu_rating")) {
             RatingCommands(controller: controller, hotkeys: hotkeys)
@@ -162,10 +165,15 @@ private struct TransportCommands: View {
     }
 }
 
+/// The loop range is a property of one clip's timeline, so unlike the transport
+/// above these ask `isReviewingSingleClip`: the sync-play grid has no loop, and
+/// with the grid up all three of these were reaching the single player parked
+/// underneath it — the in/out points silently refused, the loop switch quietly
+/// looping a clip nobody can see.
 private struct LoopCommands: View {
     @ObservedObject var controller: CaptureController
 
-    private var idle: Bool { !controller.isReviewingClip }
+    private var idle: Bool { !controller.isReviewingSingleClip }
 
     var body: some View {
         Button(L("menu_in_point")) { controller.toggleLoopPoint(out: false) }
@@ -226,9 +234,13 @@ private struct ViewCommands: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // Checked when ANY scope surface is up, and unchecking it takes them
+        // all down — the same one decision the badge and the ⌃W key press (see
+        // `toggleScopes`). It used to read the overlay flag alone, so with the
+        // scopes in their own window the menu said they were off.
         Toggle(L("menu_scopes_overlay"), isOn: Binding(
-            get: { controller.showScopesOverlay },
-            set: { controller.showScopesOverlay = $0 }))
+            get: { controller.showScopes },
+            set: { _ in controller.toggleScopes() }))
             .keyboardShortcut(hotkeys.combo(for: .toggleScopesOverlay).menuShortcut)
         // Every one of these FOCUSES the window it names when it is already
         // open (see AppWindows): a View-menu item that silently does nothing
@@ -284,11 +296,11 @@ private struct LUTCommands: View {
             get: { controller.lutPreviewOn },
             set: { controller.lutPreviewOn = $0 }))
             .keyboardShortcut(hotkeys.combo(for: .toggleLUTPreview).menuShortcut)
-            .disabled(controller.settings.lut.fileName == nil)
+            .disabled(!controller.canApplyLUT)
         Toggle(L("lut_record"), isOn: Binding(
             get: { controller.lutRecordOn },
             set: { controller.lutRecordOn = $0 }))
-            .disabled(controller.settings.lut.fileName == nil)
+            .disabled(!controller.canApplyLUT)
 
         Divider()
 

@@ -250,6 +250,12 @@ var pin = "";
 var retry = null;
 var retryDelay = 700;
 var lastStatus = null;
+// Whether the socket is up. Module-level because the enablement rule below is
+// asked from BOTH the socket-state path and the status path, and a rule that
+// each of them keeps its own copy of is a rule that comes to disagree with
+// itself — which is exactly what happened between this page and the Mac's
+// menus (see `refreshButtons`).
+var live = false;
 var watchdog = null;
 // The take the <img> currently belongs to, whether that fetch has landed, when
 // it was last asked for, and how many times. See refreshPoster.
@@ -282,14 +288,44 @@ function setConnection(state) {
   node.className = state;
   node.textContent = state === "live" ? S.connected
     : (state === "down" ? S.disconnected : S.connecting);
-  // Nothing may be pressed while the socket is not up: a queued command that
-  // arrives after the take ends would fire on the wrong take.
-  var off = state !== "live";
+  live = state === "live";
+  refreshButtons();
+  if (!live) { el("tc").classList.add("stale"); }
+}
+
+// What may be pressed, stated ONCE for the four buttons.
+//
+// Nothing at all while the socket is down: a queued command that arrives after
+// the take ends would fire on the wrong take. Beyond that, each button asks the
+// same question its counterpart on the Mac asks, off the two facts the status
+// already carries:
+//
+//   * REC needs a source running (`AppCommands` greys it on `!isCapturing`);
+//   * MARKER needs a take being WRITTEN. This page hides the button outright in
+//     playback (see `render`), so a marker here is always the rolling take's —
+//     and `addMarker()` with nothing rolling falls through both of its branches
+//     without a toast or an error;
+//   * GOOD/BAD need a take to rate. `toggleLastRating` is
+//     `guard let last = takes.last else { return }`.
+//
+// Ungated — which is how this page shipped — all three were pressable from the
+// first second of a shoot and all three were silent. The director presses
+// harder; nothing happens; the remote is the thing that looks broken. The Mac's
+// menu bar, the status item and the Playback menu all carry these two rules
+// already (`AppCommands`, `MenuBarModel`); the phone was the one copy that did
+// not.
+function refreshButtons() {
+  var status = lastStatus;
+  var can = function (id) {
+    if (!live) { return false; }
+    if (!status) { return id !== "rec"; }
+    if (id === "rec") { return !!status.capturing; }
+    if (id === "marker") { return !!status.recording; }
+    return !!status.lastTakeId;
+  };
   ["rec", "marker", "good", "bad"].forEach(function (id) {
-    el(id).disabled = off
-      || (id === "rec" && !!lastStatus && !lastStatus.capturing);
+    el(id).disabled = !can(id);
   });
-  if (off) { el("tc").classList.add("stale"); }
 }
 
 function render(next) {
@@ -301,7 +337,7 @@ function render(next) {
   var rec = el("rec");
   rec.classList.toggle("on", !!next.recording);
   rec.textContent = next.recording ? S.stop : S.rec;
-  rec.disabled = !next.capturing;
+  refreshButtons();
   // The page follows the app's viewer mode; only REC is a static control.
   // In playback the marker button goes away entirely — a marker pressed there
   // lands on whatever frame the laptop happens to be parked on, which is not

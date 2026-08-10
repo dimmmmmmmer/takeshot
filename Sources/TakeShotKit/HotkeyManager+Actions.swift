@@ -46,12 +46,12 @@ extension HotkeyManager {
         case .toggleScopesOverlay:
             // the flag the View menu's toggle writes; its didSet closes the
             // other player overlay and re-routes the analyzers
-            controller.showScopesOverlay.toggle()
+            controller.toggleScopes()
         case .toggleLUTPreview:
             // the condition the LUT menu's item is disabled by: with no LUT
             // selected there is nothing to apply, and a state that shows as
             // "LUT on" with no LUT reads as the LUT being broken
-            if controller.settings.lut.fileName != nil {
+            if controller.canApplyLUT {
                 controller.lutPreviewOn.toggle()
             }
         case .toggleViewerMode:
