@@ -111,7 +111,19 @@ extension RemoteClient {
         let accepted = RemotePIN.matches(candidate, expected: server.currentPIN)
         let take = RemoteRequest.queryValue(RemotePage.posterTakeParameter,
                                             in: request.query) ?? ""
-        holdForTarpit(server.notePINAttempt(failed: !accepted)) { [weak self] in
+        // nil is this peer already having a PIN answer on the way: the guess is
+        // counted and this request gets no response at all. Closed rather than
+        // left hanging — an unanswered fetch that keeps its connection slot for
+        // fifteen seconds would hand the enumeration the socket exhaustion for
+        // free. An `<img>` reads a dropped connection exactly as it reads the
+        // 404 it gets while a take's frame is still decoding, and the page
+        // already retries that.
+        guard let hold = server.notePINAttempt(peer: peer, failed: !accepted)
+        else {
+            close(code: nil)
+            return
+        }
+        holdForTarpit(hold) { [weak self] in
             self?.answerPoster(accepted: accepted, take: take)
         }
     }

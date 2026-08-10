@@ -45,9 +45,23 @@ struct RemoteWebSocketFrame: Equatable {
     /// two fixed bytes, the announced length, the rules that length has to
     /// obey, and the masked body — each of which either has enough bytes to
     /// decide or does not.
+    ///
+    /// **Read through the buffer, never copied out of it.** `drainFrames` calls
+    /// this once per frame against one arrival, so a `[UInt8](buffer)` here was
+    /// a copy of everything still unread, per frame — quadratic in the number
+    /// of frames one arrival carries, and the client chooses that number. See
+    /// `RemoteClient.drainFrames` for the measurement; the two halves are the
+    /// same fault and only fix it together.
     static func decode(from buffer: Data) throws -> (frame: RemoteWebSocketFrame,
                                                      consumed: Int)? {
-        let bytes = [UInt8](buffer)
+        try buffer.withUnsafeBytes { raw in
+            try decode(bytes: raw.bindMemory(to: UInt8.self))
+        }
+    }
+
+    private static func decode(
+        bytes: UnsafeBufferPointer<UInt8>
+    ) throws -> (frame: RemoteWebSocketFrame, consumed: Int)? {
         guard bytes.count >= 2 else { return nil }
         let opcode = try opcode(in: bytes)
         guard let (length, afterLength) = try payloadLength(in: bytes) else {
@@ -64,7 +78,8 @@ struct RemoteWebSocketFrame: Equatable {
 
     /// Stage 1 — the two fixed bytes: what kind of frame this is, and the two
     /// rules that do not depend on how long it says it is.
-    private static func opcode(in bytes: [UInt8]) throws -> Opcode {
+    private static func opcode(
+        in bytes: UnsafeBufferPointer<UInt8>) throws -> Opcode {
         guard bytes[0] & 0x70 == 0 else { throw RemoteFrameError.reservedBits }
         guard let opcode = Opcode(rawValue: bytes[0] & 0x0F) else {
             throw RemoteFrameError.unknownOpcode
@@ -89,8 +104,8 @@ struct RemoteWebSocketFrame: Equatable {
     }
 
     /// Stage 4 — the body, XORed back out from under its 4-byte mask.
-    private static func unmasked(_ bytes: [UInt8], at offset: Int,
-                                 length: Int) -> Data {
+    private static func unmasked(_ bytes: UnsafeBufferPointer<UInt8>,
+                                 at offset: Int, length: Int) -> Data {
         let mask = Array(bytes[offset..<(offset + 4)])
         let start = offset + 4
         var payload = Array(bytes[start..<(start + length)])
@@ -107,7 +122,8 @@ struct RemoteWebSocketFrame: Equatable {
     /// goes wrong, and because reading them inline put `decode` over the
     /// project's complexity ceiling — which is the ceiling doing its job.
     private static func payloadLength(
-        in bytes: [UInt8]) throws -> (length: Int, offset: Int)? {
+        in bytes: UnsafeBufferPointer<UInt8>
+    ) throws -> (length: Int, offset: Int)? {
         let short = Int(bytes[1] & 0x7F)
         switch short {
         case 126:

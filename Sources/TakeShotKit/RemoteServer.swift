@@ -229,8 +229,10 @@ final class RemoteServer: @unchecked Sendable {
         handlers.multiviewDemand(demand)
     }
 
-    /// Register one PIN verification and say how long its answer must be held
-    /// back. Queue-confined, like the tarpit it reads.
+    /// Register one PIN verification by `peer` and say how long its answer must
+    /// be held back — or nil for "do not answer this one", which is what a peer
+    /// that already has an answer on the way is told. Queue-confined, like the
+    /// tarpit it reads.
     ///
     /// Every path that answers a PIN comes through here — the socket's
     /// handshake and the poster's query string alike. A second place that says
@@ -239,13 +241,46 @@ final class RemoteServer: @unchecked Sendable {
     /// enumeration needs. The single exception is a socket re-presenting a code
     /// this server already accepted on it (see `RemoteClient.handle`), which
     /// answers nothing an attacker could reach without the code already.
-    func notePINAttempt(failed: Bool) -> TimeInterval {
-        tarpit.attempt(failed: failed, now: Self.monotonicNow())
+    ///
+    /// `peer` is the source address, which is what makes the cost the
+    /// guesser's rather than the set's — see `RemotePINTarpit`.
+    func notePINAttempt(peer: String, failed: Bool) -> TimeInterval? {
+        tarpit.attempt(peer: peer, failed: failed, now: Self.monotonicNow())
     }
 
-    /// Failures still inside the tarpit's window. For the tests; nothing in the
-    /// server branches on it.
+    /// Failures still inside the tarpit's window, for the busiest peer. For the
+    /// tests; nothing in the server branches on it.
     var pinPressure: Int { queue.sync { tarpit.pressure } }
+
+    /// Whether any peer has a PIN answer on the way right now. For the tests,
+    /// like `pinPressure`, and they need it: a peer may have only one answer
+    /// outstanding, so a guess sent into an occupied slot is counted and never
+    /// answered — a test that measures how long an answer took has to know the
+    /// slot was free before it asked.
+    var pinAnswerPending: Bool {
+        queue.sync { tarpit.hasAnswerPending(now: Self.monotonicNow()) }
+    }
+
+    /// The source addresses the registry is holding, in no order.
+    ///
+    /// For the tests. The tarpit's ledger keys on this, and the key comes from
+    /// `NWConnection.endpoint` being the REMOTE peer on a connection a listener
+    /// accepted — an assumption about Network.framework that is worth one
+    /// assertion against a real accepted socket rather than a comment.
+    var clientPeers: [String] { queue.sync { clients.values.map(\.peer) } }
+
+    /// Run every connection's handshake deadline now.
+    ///
+    /// For the tests, like `pinPressure`. The deadline is one `asyncAfter` per
+    /// connection (`RemoteClient.start`) and it is fifteen seconds long; what
+    /// is worth pinning is the condition it asks — a slot belongs to a page
+    /// that showed the code — and not the clock behind it. Queue-confined, like
+    /// the registry it walks.
+    func sweepUnauthenticated() {
+        queue.sync {
+            for client in clients.values { client.closeIfUnauthenticated() }
+        }
+    }
 
     /// The largest send ledger any client is carrying. For the tests, like
     /// `pinPressure`: a send whose completion has not landed yet counts

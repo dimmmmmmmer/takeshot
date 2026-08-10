@@ -11,51 +11,154 @@ import Testing
 /// unit on set cannot connect. Testing it against the wall clock would cost a
 /// minute of suite per assertion, so the clock is handed in.
 @Suite struct RemotePINTarpitTests {
-    /// `count` failures, all at the same instant; the delay each was told to
-    /// take comes back.
+    private static let guesser = "10.0.0.9"
+    private static let phone = "10.0.0.31"
+
+    /// `count` failures from one peer, all at the same instant; the delay each
+    /// was told to take comes back, nil for the ones not answered at all.
     private func guesses(_ count: Int, into tarpit: inout RemotePINTarpit,
-                         at now: TimeInterval) -> [TimeInterval] {
-        (0..<count).map { _ in tarpit.attempt(failed: true, now: now) }
+                         from peer: String = RemotePINTarpitTests.guesser,
+                         at now: TimeInterval) -> [TimeInterval?] {
+        (0..<count).map { _ in
+            tarpit.attempt(peer: peer, failed: true, now: now)
+        }
     }
 
     /// A unit mistyping the code on two phones must not meet the delay at all.
     @Test func aHandfulOfWrongCodesIsStillAnsweredAtOnce() {
         var tarpit = RemotePINTarpit()
-        let held = guesses(RemotePINTarpit.threshold, into: &tarpit, at: 100)
+        let held: [TimeInterval?] = guesses(RemotePINTarpit.threshold,
+                                            into: &tarpit, at: 100)
         #expect(held.allSatisfy { $0 == 0 })
-        #expect(tarpit.attempt(failed: false, now: 100) == 0,
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false, now: 100) == 0,
                 "a right code was slowed before anyone was enumerating")
     }
 
     /// The point of the whole thing: past the threshold, the answer is held —
     /// and held for the right code exactly as long as for a wrong one, or the
     /// clock becomes the oracle the delay was meant to close.
+    ///
+    /// Read at the same queue state on both sides, which is what "the same"
+    /// has to mean now that a peer is answered one at a time: the second read
+    /// is taken once the first answer has gone out.
     @Test func pastTheThresholdRightAndWrongWaitTheSame() {
         var tarpit = RemotePINTarpit()
         _ = guesses(RemotePINTarpit.threshold + 1, into: &tarpit, at: 100)
-        #expect(tarpit.attempt(failed: true, now: 100) == RemotePINTarpit.delay)
-        #expect(tarpit.attempt(failed: false, now: 100) == RemotePINTarpit.delay)
+        let wrong: TimeInterval? = tarpit.attempt(peer: Self.guesser,
+                                                  failed: true, now: 100)
+        let free: TimeInterval = 100 + RemotePINTarpit.delay
+        let right: TimeInterval? = tarpit.attempt(peer: Self.guesser,
+                                                  failed: false, now: free)
+        #expect(wrong == RemotePINTarpit.delay)
+        #expect(right == RemotePINTarpit.delay)
+    }
+
+    /// The other half of "no oracle", under the one-at-a-time rule: a second
+    /// attempt in the same instant is refused an answer whichever code it
+    /// carried. If only the wrong one were swallowed, silence would be the
+    /// oracle the delay closed.
+    @Test func aSecondAttemptInTheSameInstantIsUnansweredEitherWay() {
+        var wrongFirst = RemotePINTarpit()
+        _ = guesses(RemotePINTarpit.threshold + 1, into: &wrongFirst, at: 100)
+        #expect(wrongFirst.attempt(peer: Self.guesser, failed: true,
+                                   now: 100) == RemotePINTarpit.delay)
+        #expect(wrongFirst.attempt(peer: Self.guesser, failed: false,
+                                   now: 100) == nil)
+
+        var rightFirst = RemotePINTarpit()
+        _ = guesses(RemotePINTarpit.threshold + 1, into: &rightFirst, at: 100)
+        #expect(rightFirst.attempt(peer: Self.guesser, failed: false,
+                                   now: 100) == RemotePINTarpit.delay)
+        #expect(rightFirst.attempt(peer: Self.guesser, failed: true,
+                                   now: 100) == nil)
     }
 
     /// Never a lockout, and never an escalation either. However long the
-    /// guessing goes on, the right code is answered the same two seconds late:
-    /// a delay that climbed with the pressure would be a lockout wearing a
-    /// duration, and the unit holding the code would meet it first.
+    /// guessing goes on, an answered code is answered the same two seconds
+    /// late: a delay that climbed with the pressure would be a lockout wearing
+    /// a duration.
     @Test func theDelayNeverGrowsPastTheOne() {
         var tarpit = RemotePINTarpit()
         _ = guesses(500, into: &tarpit, at: 100)
-        #expect(tarpit.attempt(failed: false, now: 100) == RemotePINTarpit.delay)
-        _ = guesses(5_000, into: &tarpit, at: 101)
-        #expect(tarpit.attempt(failed: false, now: 101) == RemotePINTarpit.delay)
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false,
+                               now: 102) == RemotePINTarpit.delay)
+        _ = guesses(5_000, into: &tarpit, at: 110)
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false,
+                               now: 112) == RemotePINTarpit.delay)
+    }
+
+    /// The property the whole rewrite is for: what a guesser spends is the
+    /// GUESSER's, and it reaches nobody else. A phone on its own address is
+    /// answered at once while another address is being walked flat out — where
+    /// the server-wide count this replaced held every answer on the set two
+    /// seconds late, and could be kept that way all day by anything that could
+    /// reach the port.
+    @Test func aGuesserCannotSlowAnybodyElse() {
+        var tarpit = RemotePINTarpit()
+        _ = guesses(5_000, into: &tarpit, at: 100)
+        #expect(tarpit.attempt(peer: Self.phone, failed: false, now: 100) == 0,
+                "one address guessing put the whole set behind the delay")
+        #expect(tarpit.attempt(peer: Self.phone, failed: true, now: 100) == 0,
+                "a mistyped code on a quiet address paid somebody else's bill")
+    }
+
+    /// And the property that makes the two seconds cost what they say: more
+    /// sockets buy nothing, because the ledger is the address's. Eight sockets
+    /// firing together used to be eight answers scheduled together and
+    /// delivered together — the delay paid once per batch instead of per guess.
+    @Test func aPeerIsAnsweredOnceAtATimeHoweverManySocketsItOpens() {
+        var tarpit = RemotePINTarpit()
+        _ = guesses(RemotePINTarpit.threshold + 1, into: &tarpit, at: 100)
+        let batch: [TimeInterval?] = guesses(8, into: &tarpit, at: 100)
+        #expect(batch.first == RemotePINTarpit.delay)
+        #expect(batch.dropFirst().allSatisfy { $0 == nil },
+                "a peer had more than one PIN answer on the way at once")
+    }
+
+    /// What a thousand guesses cost, in seconds, counted rather than described.
+    ///
+    /// The attacker here is optimal: it always asks the moment the previous
+    /// answer has gone out, from one address, over as many sockets as it likes
+    /// (which is why the socket count does not appear — it cannot help). The
+    /// total is the wall clock it would need.
+    ///
+    /// Before this rewrite the same thousand cost about fifty seconds: eight
+    /// connection slots, five answered refusals a socket before it is dropped,
+    /// all five held concurrently and released together two seconds later, and
+    /// a free reconnect behind them — twenty answered guesses a second. That
+    /// number is arithmetic from the old constants and is not measured here;
+    /// this one is.
+    @Test func aThousandGuessesFromOneAddressCostHalfAnHour() {
+        var tarpit = RemotePINTarpit()
+        var now: TimeInterval = 0
+        var unanswered = 0
+        for _ in 0..<1000 {
+            guard let hold = tarpit.attempt(peer: Self.guesser, failed: true,
+                                            now: now) else {
+                unanswered += 1
+                continue
+            }
+            now += hold
+        }
+        // The first `threshold + 1` are free — a unit mistyping the code must
+        // never meet this — and every one after costs the full delay.
+        let free = Double(RemotePINTarpit.threshold + 1)
+        let expected: TimeInterval = (1000 - free) * RemotePINTarpit.delay
+        print(String(format: "REMOTEPINCOST 1000 guesses from one address: %.0f s",
+                     now))
+        #expect(unanswered == 0, "the optimal attacker was throttled twice over")
+        #expect(now == expected, "a thousand guesses no longer cost what the tarpit says")
     }
 
     @Test func theDelayDecaysOnceTheGuessingStops() {
         var tarpit = RemotePINTarpit()
         _ = guesses(RemotePINTarpit.threshold + 1, into: &tarpit, at: 100)
-        #expect(tarpit.attempt(failed: false, now: 100) == RemotePINTarpit.delay)
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false,
+                               now: 100) == RemotePINTarpit.delay)
 
-        let afterTheWindow = 100 + RemotePINTarpit.window
-        #expect(tarpit.attempt(failed: false, now: afterTheWindow) == 0,
+        let afterTheWindow: TimeInterval = 100 + RemotePINTarpit.window
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false,
+                               now: afterTheWindow) == 0,
                 "the tarpit stayed hot after the guessing stopped")
         #expect(tarpit.pressure == 0)
     }
@@ -66,7 +169,8 @@ import Testing
         var tarpit = RemotePINTarpit()
         var now: TimeInterval = 100
         for _ in 0..<50 {
-            #expect(tarpit.attempt(failed: true, now: now) == 0,
+            #expect(tarpit.attempt(peer: Self.guesser, failed: true,
+                                   now: now) == 0,
                     "a guess a window apart was counted as an enumeration")
             now += RemotePINTarpit.window
         }
@@ -74,12 +178,21 @@ import Testing
 
     /// The delay slows the answers, not the sending: a script can keep firing,
     /// and what it fires at must not be a list that grows for a minute on a
-    /// machine that is recording.
+    /// machine that is recording — nor a map that grows one entry per address
+    /// something decided to spray from.
     @Test func aFloodIsRememberedBoundedly() {
         var tarpit = RemotePINTarpit()
         _ = guesses(50_000, into: &tarpit, at: 100)
         #expect(tarpit.pressure == RemotePINTarpit.threshold + 1)
-        #expect(tarpit.attempt(failed: false, now: 100) == RemotePINTarpit.delay)
+        #expect(tarpit.attempt(peer: Self.guesser, failed: false,
+                               now: 102) == RemotePINTarpit.delay)
+
+        for index in 0..<(RemotePINTarpit.maximumPeers * 4) {
+            _ = tarpit.attempt(peer: "10.1.\(index / 256).\(index % 256)",
+                               failed: true, now: 200)
+        }
+        #expect(tarpit.pressure <= RemotePINTarpit.threshold + 1,
+                "one peer's ledger grew past its own cap")
     }
 }
 
@@ -123,8 +236,12 @@ import Testing
                 (\(server.pinPressure) failures registered)
                 """)
 
+            try #require(await RemoteHarness.pinSlotFree(server),
+                         "the burst's own answer never went out")
             let refused = try await RemoteHarness.measureAuth(port: port,
                                                               pin: wrong)
+            try #require(await RemoteHarness.pinSlotFree(server),
+                         "the refusal never went out")
             let accepted = try await RemoteHarness.measureAuth(port: port,
                                                                pin: pin)
             // Generous: the delay is two seconds and the baseline is a
@@ -178,10 +295,20 @@ import Testing
             })
             // A guess left mid-flight: its answer is parked on the queue right
             // now, which is the moment the readout must not stop.
+            //
+            // Sent into a slot known to be free, and then CHECKED to be in
+            // flight. A peer is answered one at a time, so a guess fired at an
+            // occupied slot is swallowed — and this test would have gone green
+            // on a server holding nothing at all, which is the one way it must
+            // not pass.
+            try #require(await RemoteHarness.pinSlotFree(server),
+                         "the burst's own answer never went out")
             let guessing = try RemoteRawSocket(port: port)
             defer { guessing.close() }
             try guessing.handshake()
             guessing.sendHello(pin: wrong)
+            try #require(await ControllerWait.until { server.pinAnswerPending },
+                         "the guess was never held, so nothing was being tested")
 
             controller.takes[0].rating = .good
             controller.pushRemoteStatus()
@@ -289,6 +416,8 @@ import Testing
                 server.pinPressure > RemotePINTarpit.threshold
             })
 
+            try #require(await RemoteHarness.pinSlotFree(server),
+                         "the burst's own answer never went out")
             let hot = try await refusal(phone, pin: wrong)
             #expect(hot > cold + .seconds(1), """
                 a wrong code on an authenticated socket was answered as fast as \
@@ -321,6 +450,8 @@ import Testing
             #expect(server.pinPressure > RemotePINTarpit.threshold,
                     "guessing over HTTP never reached the server's count")
 
+            try #require(await RemoteHarness.pinSlotFree(server),
+                         "the last guess's own answer never went out")
             let hot = try await RemoteHarness.poster(port: port, pin: wrong)
             #expect(hot.http.statusCode == 403)
             #expect(hot.elapsed > cold.elapsed + .seconds(1), """

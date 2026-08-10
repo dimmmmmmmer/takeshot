@@ -168,6 +168,46 @@ enum RemoteCommand: Equatable, Sendable {
     /// app command — so it is never dispatched to the controller.
     case multiview(on: Bool)
 
+    /// Longest operator text this protocol will carry into a take.
+    ///
+    /// The number is the narrowest thing that has to hold it. A take's comment
+    /// is written into the EDL as a CMX 3600 comment line, `* COMMENT: <text>`;
+    /// CMX is an 80-column format — this codebase already treats that as
+    /// binding, at `EDLExporter.ascLines`, where the ASC's five digits of
+    /// precision exist so that all nine CDL values fit one such line — and the
+    /// eleven characters of `"* COMMENT: "` leave sixty-nine. Every other
+    /// consumer is wider: the ALE and both CSVs have no column limit at all,
+    /// and the field on the phone is a one-line `<input>` that shows about half
+    /// of this on a handset.
+    ///
+    /// The same number bounds scene and shot, which have no format capacity to
+    /// derive one from — a slate identifier that does not fit a comment line is
+    /// not a slate identifier — so there is one rule here rather than a second
+    /// number with a worse reason behind it.
+    ///
+    /// Bounded HERE, on the wire, and not on the model: this is what a network
+    /// peer may write, and the operator's own keyboard is a different question
+    /// with a person behind it. Without it a comment was bounded only by the
+    /// frame ceiling — 128 KB of text into `takeshot-log.csv`, the ALE and the
+    /// reports, and re-broadcast to every phone on every change.
+    static let maximumTextLength = 69
+
+    /// `text` as this protocol will carry it, cut VISIBLY when it is too long.
+    ///
+    /// The ellipsis is the point. A script supervisor whose note was cut has to
+    /// be able to see that it was: the edit comes straight back down the socket
+    /// in the next take-log push, and a note ending in "…" reads as truncated
+    /// to the person who typed it and to whoever opens the CSV in post. A
+    /// silent cut is a note that says something the scripty did not.
+    ///
+    /// Counted in characters and not bytes, so a grapheme is never split in
+    /// half; the byte length that follows from that is still nothing beside
+    /// what the wire allowed.
+    static func bounded(_ text: String) -> String {
+        guard text.count > maximumTextLength else { return text }
+        return String(text.prefix(maximumTextLength - 1)) + "…"
+    }
+
     /// The wire action plus whatever arguments it carries. nil for anything
     /// malformed — an unknown rating word must not be read as "clear it".
     ///
@@ -199,7 +239,7 @@ enum RemoteCommand: Equatable, Sendable {
             guard let id = dictionary["id"] as? String, !id.isEmpty,
                   let text = dictionary["text"] as? String
             else { return nil }
-            return .comment(takeID: id, text: text)
+            return .comment(takeID: id, text: bounded(text))
         case "slate":
             // Strict about the id and about the three fields being present:
             // a message missing one of them would silently CLEAR it, which is
@@ -210,7 +250,8 @@ enum RemoteCommand: Equatable, Sendable {
                   let take = dictionary["take"] as? String
             else { return nil }
             return .slate(takeID: id,
-                          slate: SlateMetadata(scene: scene, shot: shot,
+                          slate: SlateMetadata(scene: bounded(scene),
+                                               shot: bounded(shot),
                                                take: slateTake(take)))
         case "multiview":
             // Strict, like `rate`: a missing flag must not be read as "on".
@@ -224,8 +265,12 @@ enum RemoteCommand: Equatable, Sendable {
     /// The slate's take number off the wire. Empty — and anything that is not
     /// a positive whole number — means "not logged", which is a state the page
     /// can express by clearing the field.
+    ///
+    /// Bounded before it is parsed, like the two text fields beside it: `Int`
+    /// answers nil to a hundred kilobytes of digits, but only after reading all
+    /// of them.
     private static func slateTake(_ text: String) -> Int {
-        guard let value = Int(text.trimmingCharacters(in: .whitespaces)),
+        guard let value = Int(bounded(text).trimmingCharacters(in: .whitespaces)),
               value > 0 else { return 0 }
         return value
     }
@@ -315,64 +360,4 @@ enum RemotePIN {
     }
 }
 
-/// What makes a four-digit code cost something to guess: a server-wide delay on
-/// the ANSWER to every PIN check, once too many of them have failed lately.
-///
-/// The per-socket cap in `RemoteClient` never did this. Reconnecting is free, so
-/// it only makes every fifth guess cost a fresh TCP connection — ten thousand
-/// combinations against eight sockets at a time still fall in seconds on a set
-/// network. The count that matters is the SERVER's, because no reconnect resets
-/// it.
-///
-/// Two rules the delay lives or dies by:
-///
-/// - It is never a refusal. The unit holding the code is holding the phone that
-///   starts the take, and a remote that locks out the right PIN because someone
-///   else was guessing is a remote nobody switches on a second time. A correct
-///   code is always accepted, just later.
-/// - It is the same for a right code and a wrong one. A delay applied only to
-///   failures is an oracle with a two-second clock on it, which is a better
-///   oracle than the one it replaced.
-///
-/// A value type with the clock passed in: the decay is arithmetic, and testing
-/// arithmetic should not cost a minute of wall clock.
-struct RemotePINTarpit {
-    /// Failures inside the window before answers start being held. Small enough
-    /// to bite an enumeration in its first second; large enough that a unit
-    /// mistyping the code on two phones never meets it.
-    static let threshold = 6
-    /// How long a failure is remembered. Attempts further apart than this never
-    /// add up to anything, which is what "the delay decays" means here.
-    static let window: TimeInterval = 60
-    /// How long an answer waits while the tarpit is hot. Two seconds is barely
-    /// noticeable behind a button press and turns the four-digit space from
-    /// seconds of enumeration into most of an hour.
-    static let delay: TimeInterval = 2
-
-    /// Monotonic timestamps of recent failures, oldest first.
-    ///
-    /// Only the newest `threshold + 1` are kept: the question is ever only
-    /// "were there MORE than `threshold` inside the window", and holding an
-    /// unbounded list of them would let a flood the delay is meant to punish
-    /// allocate freely on a machine that is recording.
-    private var failures: [TimeInterval] = []
-
-    /// Register one PIN verification and say how long its answer must wait.
-    ///
-    /// The delay is read from the state BEFORE this attempt is counted, so a
-    /// right code and a wrong one presented at the same moment wait exactly as
-    /// long — count first and the attempt that crosses the threshold would be
-    /// delayed only if it happened to be the wrong one.
-    mutating func attempt(failed: Bool, now: TimeInterval) -> TimeInterval {
-        failures.removeAll { now - $0 >= Self.window }
-        let held = failures.count > Self.threshold ? Self.delay : 0
-        guard failed else { return held }
-        failures.append(now)
-        if failures.count > Self.threshold + 1 { failures.removeFirst() }
-        return held
-    }
-
-    /// Failures still inside the window, capped as `failures` is. Read by the
-    /// tests to know the burst landed; nothing branches on it.
-    var pressure: Int { failures.count }
-}
+// `RemotePINTarpit` — what a guess costs — lives in `RemotePINTarpit.swift`.

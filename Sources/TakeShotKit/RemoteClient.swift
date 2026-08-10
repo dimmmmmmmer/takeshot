@@ -52,11 +52,22 @@ final class RemoteClient: @unchecked Sendable {
     /// that never complete, must not grow without limit on a machine that is
     /// recording.
     static let maximumBuffer = 128 * 1024
-    /// How long a connection may sit without finishing its request. The client
-    /// cap exists to stop a script from exhausting the app's sockets, and
-    /// without a deadline a half-open connection — a phone that slept during
-    /// the handshake — holds one of those slots until TCP gives up hours later.
-    /// Only pre-upgrade: a WebSocket is meant to sit there all day.
+    /// How long a connection may sit without showing the PIN. The client cap
+    /// exists to stop a script from exhausting the app's sockets, and without a
+    /// deadline a half-open connection — a phone that slept during the
+    /// handshake — holds one of those slots until TCP gives up hours later.
+    ///
+    /// It covers the UPGRADE as well as the request head, which it did not.
+    /// "A WebSocket is meant to sit there all day" is true of an authenticated
+    /// one and of nothing else: eight `curl`s that ask for `/ws` and then say
+    /// nothing took every slot on the server for as long as the app ran, and no
+    /// phone on the set could connect at all. Upgrading is free and anonymous;
+    /// what a slot is FOR is a page that showed the code.
+    ///
+    /// Fifteen seconds is generous against what a real page does: it opens the
+    /// socket only once it has a PIN to send (see `remote.html`'s `connect`),
+    /// sends `hello` in `onopen`, and the slowest answer the server gives is
+    /// the tarpit's two seconds.
     static let handshakeDeadline = DispatchTimeInterval.seconds(15)
     /// Ceiling on bytes handed to the transport but not yet accepted by it.
     ///
@@ -72,8 +83,36 @@ final class RemoteClient: @unchecked Sendable {
     /// report itself done.
     static let closeFlushDeadline = DispatchTimeInterval.milliseconds(250)
 
+    /// Commands a socket may have in hand at once, and how fast the allowance
+    /// comes back.
+    ///
+    /// The ceiling is set above what the PAGES can produce and far below what a
+    /// loop can. The largest legitimate burst there is comes from
+    /// `script.html`'s `flushPending`, which fires every edit made while the
+    /// socket was down the moment it comes back: one `comment` and one `slate`
+    /// per take, and a shooting day's take list is bounded at 200 by the poster
+    /// cache that has to hold one image for each of them — so 400, and 512 is
+    /// the next power of two above it. The refill is what a person can do: every
+    /// message behind this protocol follows a tap or a field losing focus, and
+    /// sixteen a second is several times the fastest of those.
+    ///
+    /// A phone in a pocket, a page stuck in a retry loop, or a code that
+    /// changed hands can otherwise turn one message into one rewrite of four
+    /// sidecar files, hundreds of times a second, on the volume the take is
+    /// being written to.
+    static let commandBurst = 512.0
+    static let commandsPerSecond = 16.0
+
     let connection: NWConnection
     weak var server: RemoteServer?
+    /// The source address, as the tarpit's ledger keys on it. Read once here:
+    /// `NWConnection.endpoint` is the remote peer for a connection a listener
+    /// accepted, and it does not change under an open socket.
+    ///
+    /// An endpoint that is not a host and port leaves this empty, which puts
+    /// every such peer in one bucket — the old server-wide behaviour, as the
+    /// fallback rather than as the rule.
+    let peer: String
     /// The server's queue, kept for the close-frame deadline and for the
     /// tarpit's held answers. Everything in this class already runs on it.
     var queue: DispatchQueue?
@@ -124,9 +163,42 @@ final class RemoteClient: @unchecked Sendable {
     /// `RemoteServer.multiviewFrameSends`), like `inFlightBytes`.
     var frameSends = 0
 
+    /// Command allowance left, and when it was last topped up.
+    private var commandTokens = RemoteClient.commandBurst
+    private var tokensAt = RemoteServer.monotonicNow()
+
     init(connection: NWConnection, server: RemoteServer) {
         self.connection = connection
         self.server = server
+        self.peer = Self.address(of: connection.endpoint)
+    }
+
+    /// The host half of an endpoint, as a ledger key.
+    static func address(of endpoint: NWEndpoint) -> String {
+        guard case .hostPort(let host, _) = endpoint else { return "" }
+        switch host {
+        case .ipv4(let address): return "\(address)"
+        case .ipv6(let address): return "\(address)"
+        case .name(let name, _): return name
+        @unknown default: return ""
+        }
+    }
+
+    /// Spend one command's allowance, or say the socket is going too fast.
+    ///
+    /// A refused command is dropped and NOT answered: an error per refusal
+    /// turns a flood into a reply flood, which is the thing `write`'s ceiling
+    /// was just taught to refuse. The page finds out the honest way — the next
+    /// status and take-log push carry what the app actually has.
+    private func spendCommandAllowance() -> Bool {
+        let now = RemoteServer.monotonicNow()
+        commandTokens = min(Self.commandBurst,
+                            commandTokens
+                                + (now - tokensAt) * Self.commandsPerSecond)
+        tokensAt = now
+        guard commandTokens >= 1 else { return false }
+        commandTokens -= 1
+        return true
     }
 
     func start(on queue: DispatchQueue) {
@@ -141,10 +213,23 @@ final class RemoteClient: @unchecked Sendable {
         }
         connection.start(queue: queue)
         queue.asyncAfter(deadline: .now() + Self.handshakeDeadline) { [weak self] in
-            guard let self, !self.upgraded, !self.unregistered else { return }
-            self.close(code: nil)
+            self?.closeIfUnauthenticated()
         }
         receive()
+    }
+
+    /// The half-open-connection sweep, run once per connection when
+    /// `handshakeDeadline` passes: a socket that has not shown the PIN by then
+    /// is holding one of eight slots for nothing, and the phones that need one
+    /// are the ones that have the code.
+    ///
+    /// 1008 is "policy violation", the same code a refused PIN gets: the page
+    /// then shows a refusal rather than sending the operator to look at the
+    /// Wi-Fi. A connection that never upgraded has no frame to carry it and is
+    /// simply cancelled — `close` decides that, not this.
+    func closeIfUnauthenticated() {
+        guard !authenticated, !unregistered else { return }
+        close(code: 1008)
     }
 
     /// Send a status/notification frame. Silently does nothing until the client
@@ -157,13 +242,6 @@ final class RemoteClient: @unchecked Sendable {
     /// recorder. See `maximumInFlight`.
     func send(text: String) {
         guard upgraded, authenticated, !closed else { return }
-        guard inFlight < Self.maximumInFlight else {
-            // 1011: the server is giving up on the socket, not on the phone. The
-            // page reconnects on its own and is sent a current status, which is
-            // what something forty seconds behind wants anyway.
-            close(code: 1011)
-            return
-        }
         write(RemoteWebSocketFrame.text(text))
     }
 
@@ -233,7 +311,16 @@ final class RemoteClient: @unchecked Sendable {
         // behind the delay, the dispatch included: a command that ran two
         // seconds before its own acknowledgement would put the status push in
         // front of it and time the two apart for whoever was watching.
-        holdForTarpit(server.notePINAttempt(failed: !accepted)) { [weak self] in
+        //
+        // nil is this peer already having an answer on the way. The guess is
+        // counted and nothing goes back — which is what stops eight sockets
+        // from being eight times the guessing rate, and is why the socket is
+        // left open rather than closed: a page whose answer was swallowed
+        // because something on its address was enumerating retries on its own
+        // watchdog and gets in.
+        guard let hold = server.notePINAttempt(peer: peer, failed: !accepted)
+        else { return }
+        holdForTarpit(hold) { [weak self] in
             self?.settle(message, accepted: accepted)
         }
     }
@@ -259,6 +346,10 @@ final class RemoteClient: @unchecked Sendable {
                 write(RemoteWebSocketFrame.text(takeLog))
             }
         }
+        // `hello` is the handshake and costs nothing; everything else is work
+        // somebody's disk or main thread has to do, and is metered.
+        guard message.command != .hello else { return }
+        guard spendCommandAllowance() else { return }
         if case .multiview(let on) = message.command {
             // A per-connection subscription, not an app command: the server
             // settles it here and the controller never hears of it. Pending
@@ -269,7 +360,6 @@ final class RemoteClient: @unchecked Sendable {
             server.multiviewDemandChanged()
             return
         }
-        guard message.command != .hello else { return }
         server.dispatch(message.command)
     }
 
@@ -311,6 +401,22 @@ final class RemoteClient: @unchecked Sendable {
     // MARK: - writing
 
     func write(_ data: Data) {
+        // The ceiling lives HERE and not in `send(text:)`, which is where it
+        // used to be — the status stream was the only thing it covered, and the
+        // status stream is the one thing on this socket that needs a PIN. A
+        // pong and a `bad_message` are answered before authentication, they go
+        // out through this method, and neither was counted against anything: a
+        // peer that opens the socket, sends malformed frames as fast as the
+        // wire allows and never reads had the app queueing replies until it
+        // died, on a machine that is recording. The ceiling asks the same
+        // question of every byte the protocol sends.
+        guard inFlight < Self.maximumInFlight else {
+            // 1011: the server is giving up on the socket, not on the phone. A
+            // real page reconnects on its own and is sent a current status,
+            // which is what something forty seconds behind wants anyway.
+            close(code: 1011)
+            return
+        }
         // `contentProcessed` is Network.framework's backpressure signal: it fires
         // when the transport has room for more, which for a peer that stopped
         // reading is never. Counting the bytes between the send and that callback

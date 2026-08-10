@@ -104,6 +104,19 @@ enum RemoteHarness {
     static func wrongPIN(besides pin: String) -> String {
         pin == "0000" ? "1111" : "0000"
     }
+
+    /// Wait until no peer has a PIN answer on the way.
+    ///
+    /// A peer may have exactly one answer outstanding (`RemotePINTarpit`), and
+    /// every socket in this suite comes from 127.0.0.1 — one peer. So a test
+    /// that measures how long an answer took has to ask into a free slot, or it
+    /// is measuring a guess that was counted and deliberately never answered.
+    /// On a set network the phone and the guesser are different addresses and
+    /// this does not arise; on loopback it is the whole difference between a
+    /// measurement and a hang.
+    static func pinSlotFree(_ server: RemoteServer) async -> Bool {
+        await ControllerWait.until { !server.pinAnswerPending }
+    }
 }
 
 /// A WebSocket client for the tests. `URLSessionWebSocketTask` does the
@@ -169,6 +182,13 @@ final class RemoteRawSocket {
         var size = receiveBuffer
         setsockopt(descriptor, SOL_SOCKET, SO_RCVBUF, &size,
                    socklen_t(MemoryLayout<Int32>.size))
+        // A test that keeps writing while the server decides to drop the
+        // connection is writing to a closed socket, and the default answer to
+        // that is SIGPIPE — which kills the whole suite rather than failing one
+        // assertion. The write reports the error instead.
+        var noSignal: Int32 = 1
+        setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal,
+                   socklen_t(MemoryLayout<Int32>.size))
         var timeout = timeval(tv_sec: readTimeout, tv_usec: 0)
         setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout,
                    socklen_t(MemoryLayout<timeval>.size))
@@ -229,6 +249,16 @@ final class RemoteRawSocket {
     func sendHello(pin: String) {
         sendFrame(opcode: 0x1,
                   payload: Data(#"{"action":"hello","pin":"\#(pin)"}"#.utf8))
+    }
+
+    /// Bytes straight onto the wire, unvalidated. For the one thing
+    /// `sendFrame` cannot do: hand over thousands of frames in one write, which
+    /// is how a flood arrives and is nothing like a browser sending forty bytes
+    /// at a time. False when the socket has gone — which is the answer a test
+    /// flooding a server that may drop it needs, rather than a crash.
+    @discardableResult
+    func sendRaw(_ data: Data) -> Bool {
+        write(data)
     }
 
     /// The code on the first close frame the server sends, or nil if it sends
