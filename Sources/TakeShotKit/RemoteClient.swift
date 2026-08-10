@@ -201,7 +201,9 @@ final class RemoteClient: @unchecked Sendable {
         return true
     }
 
-    func start(on queue: DispatchQueue) {
+    /// `deadline` is the server's — see `RemoteServer.handshakeDeadline` for why
+    /// it is not simply read off `Self` here.
+    func start(on queue: DispatchQueue, deadline: DispatchTimeInterval) {
         self.queue = queue
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
@@ -212,7 +214,7 @@ final class RemoteClient: @unchecked Sendable {
             }
         }
         connection.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + Self.handshakeDeadline) { [weak self] in
+        queue.asyncAfter(deadline: .now() + deadline) { [weak self] in
             self?.closeIfUnauthenticated()
         }
         receive()
@@ -291,37 +293,34 @@ final class RemoteClient: @unchecked Sendable {
             close(code: nil)
             return
         }
-        let accepted = RemotePIN.matches(message.pin, expected: server.currentPIN)
-        // A socket that already showed this code is not being verified again,
-        // and holding its commands back would aim the tarpit at the one phone
-        // the tarpit exists for. The unit with the code in it is the unit that
-        // presses REC, and a REC button two seconds late loses the head of a
-        // take — for as long as somebody else keeps guessing, which is a
-        // lockout wearing a duration.
+        // The one place this socket can find out whether a code matched, and it
+        // charges for the asking. `exempt` is the socket already having shown
+        // THIS code: holding its commands back would aim the tarpit at the one
+        // phone the tarpit exists for — the unit with the code in it is the unit
+        // that presses REC, and a REC button two seconds late loses the head of
+        // a take for as long as somebody else keeps guessing.
         //
-        // Only a code that STILL matches takes this path. A rotated one falls
-        // through and pays, so a socket authenticated with yesterday's PIN
-        // cannot walk today's for free; and reaching the path at all costs a
-        // valid code, so the stopwatch tells apart only what its holder knows.
-        if authenticated, accepted {
-            settle(message, accepted: true)
-            return
-        }
         // Verified now, answered when the tarpit says so. The whole answer goes
         // behind the delay, the dispatch included: a command that ran two
         // seconds before its own acknowledgement would put the status push in
         // front of it and time the two apart for whoever was watching.
-        //
-        // nil is this peer already having an answer on the way. The guess is
-        // counted and nothing goes back — which is what stops eight sockets
-        // from being eight times the guessing rate, and is why the socket is
-        // left open rather than closed: a page whose answer was swallowed
-        // because something on its address was enumerating retries on its own
-        // watchdog and gets in.
-        guard let hold = server.notePINAttempt(peer: peer, failed: !accepted)
-        else { return }
-        holdForTarpit(hold) { [weak self] in
-            self?.settle(message, accepted: accepted)
+        switch server.checkPIN(message.pin, peer: peer, exempt: authenticated) {
+        case .silent:
+            // This peer already has an answer on the way. The guess was counted
+            // and nothing goes back — which is what stops eight sockets from
+            // being eight times the guessing rate. The socket is left open
+            // rather than closed: a page whose answer was swallowed because
+            // something on its address was enumerating retries on its own
+            // watchdog and gets in.
+            return
+        case .accepted(let hold):
+            holdForTarpit(hold) { [weak self] in
+                self?.settle(message, accepted: true)
+            }
+        case .refused(let hold):
+            holdForTarpit(hold) { [weak self] in
+                self?.settle(message, accepted: false)
+            }
         }
     }
 
@@ -347,9 +346,15 @@ final class RemoteClient: @unchecked Sendable {
             }
         }
         // `hello` is the handshake and costs nothing; everything else is work
-        // somebody's disk or main thread has to do, and is metered.
+        // somebody's disk or main thread has to do, and is metered twice — once
+        // against this socket, to stop one runaway page, and once against the
+        // set, because eight sockets each inside their own limit are still a
+        // hundred and twenty-eight sidecar rewrites a second on the volume the
+        // take is being written to.
         guard message.command != .hello else { return }
-        guard spendCommandAllowance() else { return }
+        guard spendCommandAllowance(), server.spendCommandAllowance() else {
+            return
+        }
         if case .multiview(let on) = message.command {
             // A per-connection subscription, not an app command: the server
             // settles it here and the controller never hears of it. Pending

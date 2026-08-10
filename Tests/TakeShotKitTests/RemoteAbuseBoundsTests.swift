@@ -163,6 +163,130 @@ import Testing
     private static func landed(_ controller: CaptureController) -> Int {
         Int(controller.takes.first?.comment ?? "") ?? -1
     }
+
+    /// The set's own ceiling, which the per-socket one does not imply: eight
+    /// sockets each inside their own limit still reach a hundred and twenty-eight
+    /// commands a second on the volume the take is being written to.
+    ///
+    /// The arithmetic is checked directly rather than by sending a thousand real
+    /// commands — that would spend the suite's time rewriting sidecars to prove
+    /// a token bucket.
+    @Test func theSetHasOneCommandAllowanceBetweenAllOfIt() async throws {
+        try await ControllerHarness.run { controller, _ in
+            _ = try await RemoteHarness.serve(controller)
+            let server: RemoteServer = try #require(controller.remoteServer)
+            let spent: Int = server.drainCommandAllowance()
+            #expect(spent == Int(RemoteServer.commandBurst),
+                    "the set's command burst is not the number it says it is")
+        }
+    }
+
+    /// And that it is ONE bucket rather than one each: a socket must be refused
+    /// on an allowance somebody else spent.
+    ///
+    /// Driven from an exhausted server rather than from a thousand messages, for
+    /// the reason above — what needs proving here is the wiring, not the sum.
+    @Test func aSocketIsRefusedOnAnAllowanceAnotherSpent() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take: Take = try RemoteHarness.seedTake(
+                controller, in: root, named: "A001C44", clip: 44)
+            let served = try await RemoteHarness.serve(controller)
+            let server: RemoteServer = try #require(controller.remoteServer)
+            let client = try await RemoteHarness.connect(
+                port: served.port, pin: served.pin,
+                session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+
+            _ = server.drainCommandAllowance()
+            try await client.send(["action": "comment",
+                                   "id": take.id.uuidString,
+                                   "text": "42", "pin": served.pin])
+            let landed: Bool = await ControllerWait.until(
+                { controller.takes.first?.comment == "42" },
+                timeout: .seconds(2))
+            #expect(!landed,
+                    "a socket spent a command the set had no allowance left for")
+        }
+    }
+}
+
+/// The rating guard, driven the way a phone drives it.
+///
+/// Its own suite because the claim is about the SOCKET path: the controller-level
+/// test next door proves the guard exists, and would go on passing if
+/// `perform(remote:)` were changed to bypass `setRating` altogether.
+@Suite @MainActor struct RemoteRatingChurnTests {
+    @Test func aPhoneRepeatingARatingRewritesNothing() async throws {
+        try await ControllerHarness.run { controller, root in
+            let take: Take = try RemoteHarness.seedTake(
+                controller, in: root, named: "A001C45", clip: 45)
+            let log: URL = root.appendingPathComponent(TakeLogExporter.fileName)
+            let served = try await RemoteHarness.serve(controller)
+            let client = try await RemoteHarness.connect(
+                port: served.port, pin: served.pin,
+                session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+
+            let rate: [String: Any] = ["action": "rate",
+                                       "id": take.id.uuidString,
+                                       "rating": "good", "pin": served.pin]
+            try await client.send(rate)
+            let rated: Bool = await ControllerWait.untilWritten {
+                controller.takes.first?.rating == TakeRating.good
+            }
+            try #require(rated, "the rating from the page never landed")
+            await ControllerWait.fileExists(at: log)
+            try FileManager.default.removeItem(at: log)
+
+            // The same rating again, from the same page. Nothing to write.
+            try await client.send(rate)
+            let rewritten: Bool = await ControllerWait.until(
+                { FileManager.default.fileExists(atPath: log.path) },
+                timeout: .seconds(2))
+            #expect(!rewritten,
+                    "a phone repeating a rating rewrote the sidecars on the record volume")
+        }
+    }
+}
+
+/// That a PIN cannot be verified anywhere that does not pay for it.
+///
+/// Stated as a rule about WHERE the comparison lives rather than as a list of
+/// today's endpoints, because a list of endpoints is itself a thing that goes
+/// stale: the next person adds a route, checks a code in it, and no assertion
+/// anywhere notices that the tarpit stopped covering the cheapest way in.
+@Suite struct RemotePINDoorTests {
+    /// The comparison happens in `RemoteServer.swift` and nowhere else under
+    /// `Sources`. That file is the one door (`RemoteServer.checkPIN`), and it
+    /// charges the tarpit on every path through it.
+    @Test func aPINIsComparedInExactlyOnePlace() throws {
+        let sources: URL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        var reachable = ObjCBool(false)
+        try #require(FileManager.default.fileExists(atPath: sources.path,
+                                                   isDirectory: &reachable),
+                     "the Sources tree was not where this test looked for it")
+
+        let walker = try #require(FileManager.default.enumerator(
+            at: sources, includingPropertiesForKeys: nil),
+                                  "the Sources tree could not be walked")
+        var callers: [String] = []
+        var swiftFiles = 0
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            swiftFiles += 1
+            guard let text = try? String(contentsOf: url, encoding: .utf8),
+                  text.contains("RemotePIN.matches(") else { continue }
+            callers.append(url.lastPathComponent)
+        }
+        try #require(swiftFiles > 100, "the walk did not find the source tree")
+        #expect(callers.sorted() == ["RemoteServer.swift"],
+                "a PIN is compared somewhere that does not charge the tarpit")
+    }
 }
 
 /// Who the tarpit charges.

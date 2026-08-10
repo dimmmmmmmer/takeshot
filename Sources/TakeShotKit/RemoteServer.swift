@@ -72,10 +72,43 @@ final class RemoteServer: @unchecked Sendable {
 
     static let log = Logger(subsystem: "com.takeshot.app", category: "remote")
 
+    /// Commands the whole SET may have in hand at once, and how fast the
+    /// allowance comes back.
+    ///
+    /// The per-socket ceiling in `RemoteClient` stops one runaway page; this one
+    /// stops the crew, and the first does not bound the second: eight sockets
+    /// each inside their own limit still reach a hundred and twenty-eight
+    /// commands a second, and every `rate`, `comment` and `slate` among them
+    /// rewrites four sidecar files on the volume the take is being written to.
+    ///
+    /// The burst is what the set can legitimately produce AT ONCE, and that is
+    /// not eight times one page's burst. The bulk flush belongs to the script
+    /// page — `flushPending` sends one comment and one slate per take when the
+    /// socket comes back — and there is one script supervisor. Two such pages,
+    /// a second person or the same person's phone and tablet, against the
+    /// 200-take day the poster cache is sized for: 2 × 2 × 200 = 800, and 1024
+    /// is the next power of two above it. Everything else on the set is buttons.
+    ///
+    /// The refill is what people do. Every message behind this protocol follows
+    /// a tap or a field losing focus, so a busy set is a few a second across
+    /// every phone on it; thirty-two is several times that, and a quarter of
+    /// what the per-socket ceilings alone would allow.
+    static let commandBurst = 1024.0
+    static let commandsPerSecond = 32.0
+
     /// Read by `RemoteServer+Listener` as well as here, so module-internal
     /// rather than private — never wider than the module.
     let handlers: Handlers
     let queue = DispatchQueue(label: "com.takeshot.remote")
+    /// How long a connection may sit without showing the PIN, handed to every
+    /// connection this server accepts.
+    ///
+    /// Per server, and for one reason: so a test can watch the deadline FIRE
+    /// rather than only the condition it asks. Fifteen seconds is fifteen
+    /// seconds, and a defence whose timer is never armed is one uncovered line
+    /// away from no defence at all. The app never passes anything but the
+    /// default.
+    let handshakeDeadline: DispatchTimeInterval
     private let shared: OSAllocatedUnfairLock<Shared>
 
     // MARK: - queue-confined state
@@ -103,10 +136,16 @@ final class RemoteServer: @unchecked Sendable {
     /// edges only — every subscribe, unsubscribe and disconnect recounts, and
     /// most recounts change nothing.
     private var multiviewDemand = false
+    /// The set's command allowance, and when it was last topped up.
+    private var commandTokens = RemoteServer.commandBurst
+    private var commandTokensAt = RemoteServer.monotonicNow()
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         camerasPage: Data = Data(), handlers: Handlers) {
+         camerasPage: Data = Data(), handlers: Handlers,
+         handshakeDeadline: DispatchTimeInterval
+            = RemoteClient.handshakeDeadline) {
         self.handlers = handlers
+        self.handshakeDeadline = handshakeDeadline
         self.shared = OSAllocatedUnfairLock(
             initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
                                  camerasPage: camerasPage))
@@ -229,23 +268,69 @@ final class RemoteServer: @unchecked Sendable {
         handlers.multiviewDemand(demand)
     }
 
-    /// Register one PIN verification by `peer` and say how long its answer must
-    /// be held back — or nil for "do not answer this one", which is what a peer
-    /// that already has an answer on the way is told. Queue-confined, like the
-    /// tarpit it reads.
+    /// **The one door a PIN is verified through.** Compares the code AND
+    /// charges for having asked, in one step that cannot be half-used.
     ///
-    /// Every path that answers a PIN comes through here — the socket's
-    /// handshake and the poster's query string alike. A second place that says
-    /// yes or no to a code without paying for it is the same four digits with
-    /// the delay switched off, and being the cheaper of the two is all an
-    /// enumeration needs. The single exception is a socket re-presenting a code
-    /// this server already accepted on it (see `RemoteClient.handle`), which
-    /// answers nothing an attacker could reach without the code already.
+    /// It is one call rather than two because the two-call shape — compare, then
+    /// remember to register the attempt — puts the tarpit's coverage in the
+    /// hands of whoever writes the next endpoint. An endpoint that answers yes
+    /// or no to a code for free is the same four digits with the delay switched
+    /// off, and being the cheaper of the two is all an enumeration needs. There
+    /// is no test here that lists today's endpoints, because a list of endpoints
+    /// is itself a thing that goes stale; what is pinned instead is that the
+    /// comparison happens in this file and nowhere else in `Sources`
+    /// (`RemotePINDoorTests`).
     ///
-    /// `peer` is the source address, which is what makes the cost the
-    /// guesser's rather than the set's — see `RemotePINTarpit`.
-    func notePINAttempt(peer: String, failed: Bool) -> TimeInterval? {
-        tarpit.attempt(peer: peer, failed: failed, now: Self.monotonicNow())
+    /// `exempt` is the single deliberate free answer: a socket re-presenting a
+    /// code this server already accepted on it. It answers nothing an attacker
+    /// could reach without the code already, and it is what keeps the
+    /// operator's own REC button from going behind somebody else's guessing —
+    /// see `RemoteClient.handle`. A code that no longer matches falls through
+    /// and pays, so a socket authenticated with yesterday's PIN cannot walk
+    /// today's for free.
+    ///
+    /// Queue-confined, like the tarpit it reads. `peer` is the source address,
+    /// which is what makes the cost the guesser's rather than the set's.
+    func checkPIN(_ candidate: String, peer: String,
+                  exempt: Bool) -> RemotePINVerdict {
+        let accepted = RemotePIN.matches(candidate, expected: currentPIN)
+        if exempt, accepted { return .accepted(hold: 0) }
+        guard let hold = tarpit.attempt(peer: peer, failed: !accepted,
+                                        now: Self.monotonicNow()) else {
+            return .silent
+        }
+        return accepted ? .accepted(hold: hold) : .refused(hold: hold)
+    }
+
+    /// Spend one command against the SET's allowance.
+    ///
+    /// Queue-confined: every caller is already on this queue, which is what
+    /// lets one bucket be shared by every connection without a lock.
+    func spendCommandAllowance() -> Bool {
+        let now = Self.monotonicNow()
+        commandTokens = min(Self.commandBurst,
+                            commandTokens
+                                + (now - commandTokensAt) * Self.commandsPerSecond)
+        commandTokensAt = now
+        guard commandTokens >= 1 else { return false }
+        commandTokens -= 1
+        return true
+    }
+
+    /// Spend the set's whole allowance and say how much that was, leaving it
+    /// with nothing.
+    ///
+    /// For the tests, and it does two jobs there: the burst is a number in a
+    /// comment until something counts it, and proving that two sockets share ONE
+    /// bucket needs a server that has run out. Getting there by sending a
+    /// thousand real commands would spend the suite's time rewriting sidecars to
+    /// prove a token bucket.
+    func drainCommandAllowance() -> Int {
+        queue.sync {
+            var spent = 0
+            while spendCommandAllowance() { spent += 1 }
+            return spent
+        }
     }
 
     /// Failures still inside the tarpit's window, for the busiest peer. For the
@@ -329,4 +414,21 @@ final class RemoteServer: @unchecked Sendable {
         // last one out is what lets the app stop encoding.
         multiviewDemandChanged()
     }
+}
+
+/// What `RemoteServer.checkPIN` answers: whether the code matched, and what
+/// having asked costs.
+///
+/// An enum rather than a pair, so the third case cannot be forgotten — a peer
+/// that already has an answer on the way is told nothing at all, and a caller
+/// that treated that as "refused" would hand the enumeration back the reply it
+/// was denied.
+enum RemotePINVerdict: Equatable {
+    /// The code matched. Deliver the answer after `hold` seconds.
+    case accepted(hold: TimeInterval)
+    /// The code did not match. Deliver the answer after `hold` seconds — the
+    /// same wait an accepted one takes, or the clock becomes the oracle.
+    case refused(hold: TimeInterval)
+    /// Say nothing: this peer already has a PIN answer on the way.
+    case silent
 }

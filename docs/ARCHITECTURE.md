@@ -173,6 +173,43 @@ reduced 1920 → 640 the band past the target's Nyquist came back with 18.9 code
 of standard deviation against Lanczos' 1.5 — fine detail folding into moire.
 `MultiviewPerformanceTests` prints the timings and asserts the bytes.
 
+### What the network can reach, and what it cannot
+
+Read this before adding an endpoint to the remote. It is an enumeration of every
+entry point, not a measurement of contention — nothing below has been measured
+under load, and the numbers that would say how much any of it costs need the rig.
+
+**An authenticated peer reaches the capture queue and the writer, by design.**
+`{"action":"rec"}` goes `RemoteClient.settle` → `RemoteServer.dispatch` →
+`Task { @MainActor in perform(remote:) }` → `CaptureController.toggleManualRecord()`
+→ `CapturePipeline.toggleManualRecord()` → `queue.async { finishTake() / beginTake() }`.
+That last hop is the capture queue and those two calls are the `AVAssetWriter`.
+On a rolling take, one `rec` message ends it — which is the point of a remote
+REC button, and is why the four-digit PIN is the whole of what stands in front of
+it. What must not be true is that it is unbounded: commands are metered per
+socket (`RemoteClient.commandBurst`) and per set (`RemoteServer.commandBurst`),
+because a phone in a pocket or a page in a retry loop would otherwise cycle
+begin/finish at message rate, one file per cycle.
+
+**Two narrower reaches, both behind the PIN.** The multiview subscription calls
+`CapturePipeline.setOnMultiviewFrame`, which takes `displayFrameLock` — the same
+lock `publishDisplayFrame` takes once per frame — for two pointer assignments.
+And `rate`/`comment`/`slate`/`good`/`bad` drive `exportTakeLog()`, which rewrites
+four sidecar files on the volume the take is being written to; that is the same
+disk, and it is why `setRating` carries the "nothing changed" guard its two
+siblings already had.
+
+**Unauthenticated bytes reach none of it.** No MainActor hop, no capture queue,
+no writer, no display path: everything a peer can do before it shows the code is
+answered on the remote's own serial queue. Its bounds live there — the buffer
+ceiling, the frame ceiling, the in-flight ceiling on every protocol write, the
+connection cap, and the deadline by which a socket must have shown the PIN.
+
+**Nothing blocks across the boundary in either direction.** Every remote→app
+call is `Task { @MainActor }`; every app→remote call is `queue.async`. The only
+synchronous crossings are `RemoteServer`'s read-only `queue.sync` accessors, all
+of which are read from the MainActor or from tests.
+
 The chroma key runs on the display queue and never on the capture queue, it
 costs one `Bool` read per frame while it is off, and a frame that reaches the
 stage older than one frame interval is shown WITHOUT the key rather than held

@@ -85,6 +85,38 @@ import Testing
         }
     }
 
+    /// The deadline actually FIRES, on its own, with nobody calling it.
+    ///
+    /// The test above pins the condition the sweep asks; this one pins that
+    /// anything asks it. Deleting the `asyncAfter` in `RemoteClient.start` left
+    /// every other test in this file green — one uncovered line between a
+    /// working defence and none, which is exactly the shape that ships.
+    ///
+    /// A server built here rather than through the controller, so the deadline
+    /// can be a fraction of a second instead of fifteen. `RemoteFailureBox`
+    /// is the existing way to drive a listener with no app behind it.
+    @Test func theDeadlineFiresWithoutAnybodyCallingIt() async throws {
+        let box = RemoteFailureBox()
+        let server = RemoteServer(pin: "1234", page: Data("x".utf8),
+                                  handlers: box.handlers(),
+                                  handshakeDeadline: .milliseconds(300))
+        defer { server.stop() }
+        server.start(port: 0)
+        let up: Bool = await ControllerWait.until { box.boundPort > 0 }
+        try #require(up, "the listener never came up")
+
+        let socket = try RemoteRawSocket(port: Int(box.boundPort))
+        defer { socket.close() }
+        try socket.handshake()
+        let held: Bool = await ControllerWait.until { server.clientCount == 1 }
+        try #require(held, "the upgraded socket never reached the registry")
+
+        // Nothing is called on the server from here. The only thing that can
+        // return this slot is the deadline the connection was started with.
+        let swept: Bool = await ControllerWait.until { server.clientCount == 0 }
+        #expect(swept, "the handshake deadline never fired on its own")
+    }
+
     /// The other half, and the risk the deadline carries: a phone that DID show
     /// the code is meant to sit on its socket all day. A sweep that took it
     /// would turn every quiet moment on set into a reconnect.
