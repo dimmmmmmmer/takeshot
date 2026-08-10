@@ -93,6 +93,6 @@ extension RemoteServer {
         }
         let client = RemoteClient(connection: connection, server: self)
         clients[ObjectIdentifier(client)] = client
-        client.start(on: queue)
+        client.start(on: queue, deadline: handshakeDeadline)
     }
 }

@@ -29,8 +29,17 @@ extension CaptureController {
         exportTakeLog()
     }
 
+    /// Set a take's rating. A rating it already has is nothing at all — the
+    /// same guard `setComment` and `setSlate` carry, and it was the one of the
+    /// three without it.
+    ///
+    /// That is not tidiness. `exportTakeLog` rewrites four sidecar files on the
+    /// record volume, and the web remote's `rate` command lands here: without
+    /// the guard, a page repeating the rating a take already has is one full
+    /// rewrite per message, on the disk a take is being written to.
     func setRating(_ rating: TakeRating, for take: Take) {
         guard let idx = takes.firstIndex(where: { $0.id == take.id }) else { return }
+        guard takes[idx].rating != rating else { return }
         takes[idx].rating = rating
         exportTakeLog()
     }
