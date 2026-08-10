@@ -152,4 +152,66 @@ import Testing
                     "a loop key leaked through to the hidden single player")
         }
     }
+
+    /// What the menu items that act on ONE clip's timeline are enabled by.
+    ///
+    /// The test above proves the loop key does nothing under the grid — and
+    /// "does nothing" was the whole complaint: the Playback menu's in/out
+    /// points, its loop switch and its five marker items were all enabled the
+    /// moment `isReviewingClip` went true, which the grid makes true. So the
+    /// operator got live-looking items that either refused silently
+    /// (`toggleLoopPoint`) or went through to the single player parked
+    /// underneath — `loopPlayback` looping a clip nobody can see, and
+    /// `addMarker` writing into it at the paused playhead.
+    ///
+    /// This is the enablement, asked from the states an operator passes
+    /// through, because a menu's `.disabled(…)` cannot be measured from a
+    /// rendered view and the rule is the thing worth pinning anyway.
+    @Test func theGridEnablesTheTransportButNotOneClipsTimeline() async throws {
+        try await ControllerHarness.run { controller, root in
+            MediaFixtures.silence(controller)
+            let takes: [Take] = try seedTakes(controller, in: root, count: 2)
+
+            // fresh: neither, and in particular nothing to mark
+            #expect(!controller.isReviewingClip)
+            #expect(!controller.isReviewingSingleClip)
+            #expect(!controller.isRecording,
+                    "the fixture is rolling — the marker gate proves nothing")
+
+            // one clip in the single player: both, so the loop and the markers
+            // are offered exactly where they mean something
+            controller.viewerMode = .playback
+            controller.playbackURL = takes[0].url
+            #expect(controller.isReviewingClip)
+            #expect(controller.isReviewingSingleClip)
+
+            // the grid: the transport still answers (it routes to the master),
+            // the one-clip items must not
+            controller.selectedItems = Set(takes.map(\.url))
+            controller.startSyncPlay()
+            defer { controller.endSyncPlay() }
+            #expect(controller.syncPlay != nil,
+                    "the grid never opened — the rest of this proves nothing")
+            #expect(controller.isReviewingClip,
+                    "the grid stopped answering the transport keys")
+            #expect(!controller.isReviewingSingleClip,
+                    "the grid still enables the loop range and the markers of the clip underneath it")
+
+            // and the stale URL is exactly the trap: it is still set, which is
+            // what made the marker items look live and land in the wrong file
+            #expect(controller.playbackURL != nil,
+                    "no stale clip underneath — this test cannot see the trap")
+
+            // the compare row is the same question one surface along: it drives
+            // the single player's composite, which is not under the grid
+            #expect(!controller.showsCompareBar,
+                    "the compare row is over the grid, whose composite it cannot drive")
+
+            controller.endSyncPlay()
+            #expect(controller.showsCompareBar,
+                    "leaving the grid left the compare row off the clip it can drive")
+            #expect(controller.isReviewingSingleClip,
+                    "leaving the grid left the single clip's own items greyed")
+        }
+    }
 }

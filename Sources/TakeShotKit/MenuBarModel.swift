@@ -153,9 +153,16 @@ final class MenuBarModel: ObservableObject {
             Item(command: nil, title: L("menubar_take", takeName), enabled: false),
             .separator,
             // The same gate the Playback menu's marker group uses: a marker
-            // needs either a take being written or a clip in the player.
+            // needs either a take being written or a clip in the SINGLE player
+            // — a grid of two to four has no one file to put it in.
             Item(command: .addMarker, title: L("hotkey_marker"),
-                 enabled: controller.isRecording || controller.isReviewingClip),
+                 enabled: controller.isRecording
+                    || controller.isReviewingSingleClip),
+            // Deliberately ungated, unlike the footer's speaker (which greys
+            // with no capture and no clip): "kill the sound NOW" is the one
+            // thing the status item exists for with the window closed, and the
+            // ⌃A key is ungated too. Noted here because the two DO differ and
+            // the difference is a choice, not an oversight.
             Item(command: .toggleMute, title: L("menubar_mute_monitor"),
                  enabled: true, checked: controller.live.muted),
             .separator,

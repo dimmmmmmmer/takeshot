@@ -212,12 +212,12 @@ struct PlayerTopBadgesModifier: ViewModifier {
 
     /// The compare bar, on its own full-width row (see `topChrome`).
     ///
-    /// Not in sync-play: the bar drives the single player's composite, which is
-    /// not on screen under the grid.
+    /// The condition is `controller.showsCompareBar` and not a copy of it: the
+    /// row's reachability is a decision, and it is stated once beside the
+    /// compare state it is about (`CaptureController+Compare`), where a test can
+    /// ask it without a window.
     @ViewBuilder private var compareBar: some View {
-        if controller.syncPlay == nil,
-           (controller.viewerMode == .playback && controller.playbackURL != nil)
-            || (controller.viewerMode == .record && controller.referencePinned) {
+        if controller.showsCompareBar {
             CompareControls()
         }
     }
@@ -275,7 +275,10 @@ struct PlayerTopBadgeRow: View {
     private var scopesBadge: some View {
         playerOverlayBadge {
             Button {
-                controller.showScopesOverlay.toggle()
+                // `toggleScopes`, not the overlay flag: the tint below reads
+                // `showScopes`, and a press that could not reach half of what
+                // that reading covers is a lit button that does nothing.
+                controller.toggleScopes()
             } label: {
                 Image(systemName: "waveform.path.ecg.rectangle")
                     .font(.system(size: 13))
