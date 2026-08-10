@@ -53,6 +53,22 @@ extension CaptureController {
             scannedPaths.insert(url.path)
             return .foreign
         }
+        // A take whose finalize failed is renamed `*_FAILED.mov` precisely so it
+        // cannot pass for good footage — and the rename alone does not achieve
+        // that. `movieFragmentInterval` means the half-written file already has a
+        // moov carrying `com.takeshot.origin`, so the check below recognised it
+        // and the very next folder scan adopted it back into the takes list, from
+        // there into `takeshot-log.csv`, which is what post-production reads.
+        // It stays VISIBLE, as Other content: with fragmented atoms most of such
+        // a file is usually recoverable and deleting it is not this app's call.
+        // `contains` rather than `hasSuffix` — a second failure of the same name
+        // comes out as `..._FAILED_2.mov`, the same reading the diagnostics
+        // bundle's own flag uses.
+        if url.deletingPathExtension().lastPathComponent
+            .contains(CapturePipeline.failedTakeSuffix) {
+            scannedPaths.insert(url.path)
+            return .foreign
+        }
         let embedded = await Self.embeddedMetadata(of: url)
         scannedPaths.insert(url.path)
         guard let embedded else {

@@ -357,6 +357,22 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Stream-time end of the last admitted (or padded) external packet while
     /// a take runs; where the next padding chunk starts.
     var lastExternalAudioEnd: CMTime?
+    /// Stream-time end of the PRE-ROLL audio drained into the take that is
+    /// rolling, which is a different question from the one above and must not be
+    /// answered by it.
+    ///
+    /// It is the padding watchdog's baseline before any live packet has been
+    /// admitted: without it the baseline was the take's first VIDEO frame, i.e.
+    /// the start of the pre-roll picture, so any pre-roll longer than the
+    /// starvation threshold read as a device that had gone quiet and the take was
+    /// padded back over the sound the drain had just written.
+    ///
+    /// Kept separate from `lastExternalAudioEnd` because that field also arms the
+    /// overlap guard in `admitExternalPacket`, and a real interface's host
+    /// timestamps run slightly behind the board's stream clock — seeding it
+    /// refused every live packet until the feed caught up, which cost a take's
+    /// whole audio track instead of its head.
+    var preRolledAudioEnd: CMTime?
     /// Silence packets written to keep the take's audio continuous after the
     /// external source went away. Per take, reported like dropped audio.
     var gapFilledAudioPackets = 0

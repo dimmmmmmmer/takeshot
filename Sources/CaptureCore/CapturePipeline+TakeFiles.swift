@@ -77,6 +77,14 @@ extension CapturePipeline {
             .appendingPathComponent(name + failedTakeSuffix)
             .appendingPathExtension(url.pathExtension)
         let target = uniqueURL(for: renamed)
+        // `uniqueURL` RESERVES what it hands out, and the reservation is only
+        // ever dropped by whoever creates the file. Nothing creates this one:
+        // either the move succeeds and the filesystem becomes the authority, or
+        // it fails and the name was never used — and an empty take reaches here
+        // after `cancel()` has already deleted the file, so that is not a rare
+        // branch. Left held, the set grew by one dead path per failure for the
+        // life of the process.
+        defer { releaseReservation(for: target) }
         do {
             try FileManager.default.moveItem(at: url, to: target)
             return target

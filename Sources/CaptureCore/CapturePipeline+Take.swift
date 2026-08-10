@@ -48,6 +48,7 @@ extension CapturePipeline {
                 $0.gapFilledAudioPacketsInTake = 0
             }
             lastExternalAudioEnd = nil
+            preRolledAudioEnd = nil
             warnIfTakeHasNoAudioTrack(url: url)
             drainPreRoll(into: writer, startIndex: startIndex)
             DispatchQueue.main.async { self.onRecStateChanged?(true) }

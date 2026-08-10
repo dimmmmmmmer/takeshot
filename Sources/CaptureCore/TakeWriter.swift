@@ -233,6 +233,32 @@ public final class TakeWriter {
         audioInput.append(audioSampleBuffer)
     }
 
+    /// A buffered (pre-roll) audio packet — the counterpart of
+    /// `appendBuffered(pixelBuffer:pts:)` and for the same reason.
+    ///
+    /// The pre-roll drain hands over a whole window's worth of packets in one
+    /// burst, which outruns the audio input exactly as the picture burst outruns
+    /// the video one. Offered through `append` they were simply refused and
+    /// counted: measured on a 20-frame pre-roll, 15 of a take's ~20 pre-roll
+    /// packets were dropped, so "pre-roll carries audio as well as picture" held
+    /// for the first fifth of the window and the rest of the take's head was
+    /// silent — reported afterwards as "audio packet(s) dropped", which reads
+    /// like a busy disk rather than the head of the take.
+    ///
+    /// The wait shares the video drain's deadline, so the whole drain still costs
+    /// the capture queue one bounded stall and not two.
+    @discardableResult
+    public func appendBuffered(audioSampleBuffer: CMSampleBuffer,
+                               deadline: Date) -> Bool {
+        guard sessionStarted, let audioInput else { return false }
+        while !audioInput.isReadyForMoreMediaData, writer.status == .writing,
+              Date() < deadline {
+            usleep(2000)
+        }
+        append(audioSampleBuffer: audioSampleBuffer)
+        return true
+    }
+
     /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
         // finishing with zero samples fails inside AVAssetWriter (-11800) and

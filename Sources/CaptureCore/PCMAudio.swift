@@ -7,7 +7,15 @@ public enum PCMAudio {
     public static func makeSampleBuffer(bytes: UnsafeRawPointer, sampleFrames: Int,
                                         channelCount: Int, ptsSeconds: Double,
                                         formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
-        if formatCache == nil {
+        // The cache exists so a 40 ms packet does not rebuild a description, and
+        // it used to be keyed on nothing at all: a cached one was reused whatever
+        // channel count the caller asked for. A source that changed its own count
+        // then produced buffers DESCRIBING the old count and CARRYING the new
+        // one, which is mis-interleaved audio in the file rather than an error
+        // anywhere. The pipeline resets its caches on the two changes it is told
+        // about (the operator's channel mask, a source switch) and cannot reset
+        // them for the one it only learns from a packet.
+        if !Self.describes(formatCache, channels: channelCount) {
             var asbd = AudioStreamBasicDescription(
                 mSampleRate: 48_000,
                 mFormatID: kAudioFormatLinearPCM,
@@ -77,6 +85,17 @@ public enum PCMAudio {
                                     channelCount: selected.count, ptsSeconds: pts,
                                     formatCache: &formatCache)
         }
+    }
+
+    /// Whether a cached description really describes this many channels — the
+    /// cache key `makeSampleBuffer` above did not have. nil is "no cache", which
+    /// answers false and builds one.
+    private static func describes(_ description: CMAudioFormatDescription?,
+                                  channels: Int) -> Bool {
+        guard let description,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(
+                  description)?.pointee else { return false }
+        return Int(asbd.mChannelsPerFrame) == channels
     }
 
     /// The stream description, if this really is interleaved 16-bit PCM.

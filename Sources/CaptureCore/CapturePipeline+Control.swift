@@ -129,6 +129,23 @@ extension CapturePipeline {
         }
     }
 
+    /// Close the take that is rolling, and do nothing at all when none is.
+    ///
+    /// Deliberately not `toggleManualRecord`. The two disk watchdogs mean one
+    /// direction — "close it while it can still finalize" — and they decide on
+    /// the MAIN actor's mirror of the REC state, which the pipeline updates one
+    /// queue hop later. A take the pipeline has already closed itself (the writer
+    /// died as the volume went, the signal dropped) therefore leaves the mirror
+    /// reading true for a moment, and a toggle read against it OPENS a take on
+    /// the volume that is failing. The button, the hotkey, the menu and the
+    /// remote still toggle, because a toggle is what they mean.
+    public func stopRecordingIfRolling() {
+        queue.async {
+            guard self.writer != nil else { return }
+            self.finishTake()
+        }
+    }
+
     /// Capture stopped: close the current take, reset state.
     public func captureStopped() {
         queue.async {
@@ -142,6 +159,7 @@ extension CapturePipeline {
             // external audio anchor (and its gap bookkeeping) is stale
             self.externalHostAnchor = nil
             self.lastExternalAudioEnd = nil
+            self.preRolledAudioEnd = nil
             self.externalAudioStarved = false
             self.externalAudioLost = false
             self.latestLTC = nil // the old session's LTC must not name new takes
