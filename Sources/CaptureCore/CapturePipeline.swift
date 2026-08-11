@@ -307,6 +307,17 @@ public final class CapturePipeline: @unchecked Sendable {
     let inFlightLock = NSLock()
     var inFlightFrames = 0
     var ingressDrops = 0
+    /// When the input last delivered a frame, in uptime nanoseconds — what the
+    /// frame-arrival watchdog measures (see `+FrameWatchdog`). Guarded by
+    /// `inFlightLock` rather than by a lock of its own: the ingress door already
+    /// takes that lock once per frame, so the stamp costs one store.
+    var lastFrameArrival: UInt64 = 0
+
+    // MARK: - frame-arrival watchdog (see +FrameWatchdog)
+
+    /// Live only while a take is open, which is what keeps the alarm off the
+    /// screen while the app stands by between setups (queue-confined).
+    var frameWatchdog: DispatchSourceTimer?
 
     // MARK: - health mirror (see +Health)
 
@@ -320,6 +331,10 @@ public final class CapturePipeline: @unchecked Sendable {
     var mirroredAudioDrops = 0
 
     var trimFormatCache: CMAudioFormatDescription?
+    /// Whether this take's channel-count change has already been reported. The
+    /// COUNT lives on the writer, which is where the conform happens; this is
+    /// only the "said it once" latch (see `noteAudioConform`).
+    var reportedAudioConform = false
     var lastPublishedLevels: [Float] = []
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).

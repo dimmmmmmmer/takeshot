@@ -205,6 +205,12 @@ extension CapturePipeline {
         // cannot be placed and is dropped.
         drainPreRollAudio(into: writer, from: firstPreRollPTS,
                           deadline: drainDeadline)
+        // The ring can hold packets from BEFORE a channel-count change while the
+        // take latched the count after it, so the head of a take is a place the
+        // conform really fires (see `TakeWriter.conformed`). Reported here rather
+        // than waiting for the first live packet, which a source that went quiet
+        // never sends.
+        noteAudioConform(from: writer)
         // Two ways the head of a take goes missing, reported as one number
         // because they cost the operator the same thing. Once the drain budget is
         // spent the rest of the burst is dropped — and those are the frames

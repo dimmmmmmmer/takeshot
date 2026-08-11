@@ -184,6 +184,28 @@ enum TestWait {
 }
 
 enum TestAudio {
+    /// How many channels a file's audio really carries, read off a SAMPLE rather
+    /// than off the track: a format description crossing out of the nonisolated
+    /// scope that loaded it is a crossing the older SDK rejects, and a count is
+    /// a value. 0 when there is no audio track at all.
+    static func channelCount(of url: URL) async throws -> Int {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.tracks(ofType: .audio).first
+        else { return 0 }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(output)
+        reader.startReading()
+        defer { reader.cancelReading() }
+        while let buffer = output.copyNextSampleBuffer() {
+            guard let format = CMSampleBufferGetFormatDescription(buffer),
+                  let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(
+                    format)?.pointee else { continue }
+            return Int(asbd.mChannelsPerFrame)
+        }
+        return 0
+    }
+
     /// What is actually in a file's audio track: where the first sample sits
     /// and how much sound there is. The declared track timeRange follows the
     /// writer's session and looks healthy even with no samples in it, so

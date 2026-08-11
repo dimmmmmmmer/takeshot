@@ -54,10 +54,22 @@ extension CapturePipeline {
     /// take 12, a gap, and take 13, with a clip counter that advanced
     /// once. Close on the spot; a re-lock starts a fresh take.
     private func signalLost() {
+        closeTakeOnLostInput(.takeClosedSignalLost)
+    }
+
+    /// The input can no longer be trusted, whether it said so or not: the same
+    /// close for the board's own signal-loss callback and for the frame-arrival
+    /// watchdog, which reaches the same conclusion from silence (see
+    /// `+FrameWatchdog`). One body rather than two, because everything after the
+    /// alarm is the same question and has the same answer — the detector's state,
+    /// the pre-roll frames now separated from whatever comes back by the length
+    /// of the gap, and the frozen picture on screen. Only the alarm differs, and
+    /// only because the operator can act on which one it was.
+    func closeTakeOnLostInput(_ alarm: PipelineAlarm) {
         if writer != nil {
             finishTake()
             DispatchQueue.main.async {
-                self.onError?(.takeClosedSignalLost)
+                self.onError?(alarm)
             }
         }
         detector.reset()
@@ -109,6 +121,11 @@ extension CapturePipeline {
     /// report the running count. False means the caller must not enqueue.
     private func admitFrameAtIngress() -> Bool {
         inFlightLock.lock()
+        // The input is alive, whatever this pipeline does with the frame next:
+        // stamped before the window test on purpose, because a frame turned away
+        // below is the pipeline being outrun, not the board going quiet (see
+        // `+FrameWatchdog`).
+        lastFrameArrival = DispatchTime.now().uptimeNanoseconds
         if inFlightFrames >= 12 {
             ingressDrops += 1
             let drops = ingressDrops

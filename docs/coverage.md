@@ -89,7 +89,7 @@ a take rather than a click. What it added, and what each one pins:
 
 | Suite | The failure it exercises |
 | --- | --- |
-| `TakeInterruptionTests` | The cable out mid-take, the camera changing format mid-take, and a finalize that fails: the take is closed rather than left starving, the alarm is sticky, the file survives, the next take is a file of its own, and a take that could not be finalized never joins the list. |
+| `TakeInterruptionTests` | The cable out mid-take, the camera changing format mid-take, an input that wedges without raising any event at all, and a finalize that fails: the take is closed rather than left starving, the alarm is sticky, the file survives, the next take is a file of its own, and a take that could not be finalized never joins the list. The frame-arrival watchdog gets its negative half here too — it must say nothing while the app stands by between setups. |
 | `PipelineTimecodeSourceTests` | A timecode arriving with no frame rate, and a camera that starts Rec Run after the take does — read back as the tc32 samples in the finished .mov, not off the writer. |
 | `PipelineVancStatsTests` | The VANC monitor's tallies, the once-a-second publish rate, and the reset on capture stop. |
 | `ControllerDestinationFailureTests` | The record folder moved out from under the app, a destination whose volume cannot be interrogated, a fresh folder that is created rather than alarmed about, quitting mid-take, and a board appearing on the backend callback. |

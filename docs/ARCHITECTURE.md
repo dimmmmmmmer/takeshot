@@ -418,15 +418,43 @@ These are load-bearing. A change that touches one belongs in its own commit
 with the reasoning stated.
 
 - `movieFragmentInterval` is set: a crash or power loss mid-take must not lose
-  the whole file.
+  the whole file. **Setting the property is not the guarantee**, and for a long
+  time the guarantee did not hold: AVAssetWriter closes a fragment only once
+  EVERY input has data past the boundary, and the timecode track's samples were
+  all appended in `finish()`. So a take with a timecode track — every take —
+  produced `ftyp` plus one `mdat` and no `moov` at all when the process was
+  killed: the picture on disk with nothing describing it. The samples are now
+  committed as the take runs, one per second, lagging the picture by that much
+  (`TakeWriter.commitTimecodeSamples`), which is a fraction of the fragment
+  interval for a measured reason — a track written at the FRAGMENT cadence is
+  permanently one boundary short of releasing the fragment it just reached.
+  Measured on an abandoned 13 s take: 10 s come back, with picture and sound.
+  Chunking is transparent to a reader, because a tc32 sample states the timecode
+  of its first frame and the frames after it are counted from there.
 - A mid-take format change, a signal loss, or a dead writer closes the take
   with a **sticky** alarm. The writer returning `false` is ambiguous between
   "busy encoder" and "volume detached"; `TakeWriter.hasFailed` disambiguates.
+- **An input that stops delivering without saying so** closes the take too, and
+  a clock is the only thing that can see it: a wedged board stays in the device
+  list, raises no signal-loss event and no format change, and simply stops
+  calling back. `CapturePipeline+FrameWatchdog` gives a rolling take one second
+  of silence — 24 consecutive frames at the slowest rate the app supports, where
+  one dropped frame is routine — and then closes it in the same register a real
+  dropout does. The timer exists only between `beginTake` and `finishTake`, so
+  nothing fires while the app stands by between setups.
 - A take joins the list only after a successful finalize. A failed finalize is
   renamed `*_FAILED.mov` rather than re-adopted by the folder scan as healthy
   footage.
 - The audio channel mask is latched per take — the writer's channel count is
-  fixed at take start, and changing it live kills the file.
+  fixed at take start, and changing it live kills the file. A source that
+  changes its OWN count mid-take is the case the latch cannot cover, because the
+  pipeline learns the new count from the packet: those packets are conformed to
+  the latched width (`CapturePipeline.conformedToTake`) rather than the take
+  being closed, since closing costs the rest of the shot's picture for a change
+  in the reference audio. AVAssetWriter does not refuse a mismatched packet — it
+  misreads it, so 8-channel track fed 2-channel packets measured 0.34 s of sound
+  under 0.68 s of picture. The channel map after the change is a guess, so it
+  raises the sticky alarm and marks the take's log row.
 - Pre-roll carries audio as well as picture.
 - Dropped video, audio and pre-roll frames are counted and shown.
 - Free space is watched: a warning under 5 GB, the take is closed under 0.5 GB.

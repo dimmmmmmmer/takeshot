@@ -179,8 +179,174 @@ import Testing
                 "an eight-channel packet describes itself as \(eightCount)")
     }
 
-    // MARK: - the crash the fragment interval exists for
+    /// …and the pipeline half of the same event, which is the one that costs a
+    /// take. The writer's channel count is latched when the take opens; a source
+    /// that changes its own count mid-take then hands `recordAudio` a packet of a
+    /// different width, and `selectChannels` filters the mask to what ARRIVED, so
+    /// a shrunk packet reaches a wider track. The integrity rules say that kills
+    /// the file, and nothing guarded it: the audio input refuses the packet, the
+    /// writer goes to `.failed`, and the next video frame closes the take as a
+    /// loss — the rest of the shot gone because the sound changed shape.
+    ///
+    /// The packets are conformed to the latched count instead: extra channels
+    /// trimmed, missing ones silent. The take survives, and the change is
+    /// reported in the sticky register because the channel MAP after it is a
+    /// guess — post has to know before the edit, not after.
+    @Test func aSourceThatChangesChannelCountMidTakeDoesNotCostTheTake() async throws {
+        let root = TestMedia.scratchDirectory("AudioChannelsMoved")
+        defer { try? FileManager.default.removeItem(at: root) }
 
+        let pipeline = CapturePipeline(config: .init(
+            settings: Self.settings(root: root, preRoll: 0), takeNumber: 1))
+        let takes = TakeCollector()
+        let errors = EventCollector<PipelineAlarm>()
+        let recStates = EventCollector<Bool>()
+        pipeline.onTakeFinished = { takes.append($0) }
+        pipeline.onError = { errors.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
+        pipeline.handleFormat(Self.format)
+
+        let feed = ChannelChangingFeed(pipeline: pipeline)
+        try await feed.push(frames: 4, audioChannels: 8) // the writer latches 8
+        pipeline.toggleManualRecord()
+        #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
+                "the take never opened")
+        try await feed.push(frames: 6, audioChannels: 8)
+        try await feed.push(frames: 10, audioChannels: 2) // …and the source moves
+        pipeline.toggleManualRecord()
+
+        await TestWait.untilWritten { recStates.last == false }
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !takes.isEmpty }
+
+        let take: Take = try #require(takes.first,
+                                      "the take was lost to the channel change")
+        #expect(pipeline.health.takesFailedToFinalize == 0,
+                "the channel change killed the finalize")
+        #expect(!errors.all.contains { $0.message.contains("TAKE LOST") },
+                "the channel change was reported as a lost take")
+        #expect(errors.contains(.takeAudioChannelsConformed(from: 2, to: 8)),
+                "the channel change was never reported")
+        #expect(PipelineAlarm.takeAudioChannelsConformed(from: 2, to: 8)
+                    .severity == .integrity,
+                "a guessed channel map was reported as a passing notice")
+
+        // …and the track really is the width it was declared: a file whose
+        // header says eight and whose samples carry two is unplayable audio.
+        await TestWait.fileExists(at: take.url)
+        let channels: Int = try await TestAudio.channelCount(of: take.url)
+        #expect(channels == 8,
+                "the take's audio track came out with \(channels) channel(s)")
+
+        // The damage a bare mismatch actually does on this host, and the reason
+        // the file is what has to be asserted rather than the writer's status:
+        // an 8-channel track fed 2-channel packets is not refused, it is
+        // MISREAD — a 1920-frame packet of two channels is 480 frames of eight,
+        // so the sound runs out a quarter of the way through and the tail of the
+        // take is silent. Nothing anywhere says so.
+        let audio: (first: Double?, seconds: Double) =
+            try await TestAudio.span(of: take.url)
+        let picture: Double = try await AVURLAsset(url: take.url)
+            .load(.duration).seconds
+        #expect(audio.seconds > picture - 0.2,
+                "\(audio.seconds) s of sound under \(picture) s of picture")
+    }
+
+    /// …and the same change one moment EARLIER, which is a different code path
+    /// and was the reason the guard belongs in the writer rather than in
+    /// `recordAudio`. A source that changes its count while the app stands by
+    /// leaves the pre-roll ring holding the old width and the take latching the
+    /// new one, and the drain appends those packets without going through the
+    /// live path at all — so a guard on the live path alone leaves the HEAD of
+    /// the take mis-shaped, which is the part pre-roll exists to save.
+    @Test func aChannelCountThatMovedInsideThePreRollIsConformedToo() async throws {
+        let root = TestMedia.scratchDirectory("AudioChannelsPreRoll")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = CapturePipeline(config: .init(
+            settings: Self.settings(root: root, preRoll: 10), takeNumber: 1))
+        let takes = TakeCollector()
+        let errors = EventCollector<PipelineAlarm>()
+        let recStates = EventCollector<Bool>()
+        pipeline.onTakeFinished = { takes.append($0) }
+        pipeline.onError = { errors.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
+        pipeline.handleFormat(Self.format)
+
+        let feed = ChannelChangingFeed(pipeline: pipeline)
+        // eight channels into the ring, then the source drops to two, and only
+        // THEN does the take open — so the latch is 2 and the ring holds 8
+        try await feed.push(frames: 6, audioChannels: 8)
+        try await feed.push(frames: 3, audioChannels: 2)
+        pipeline.toggleManualRecord()
+        #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
+                "the take never opened")
+        try await feed.push(frames: 8, audioChannels: 2)
+        pipeline.toggleManualRecord()
+
+        await TestWait.untilWritten { recStates.last == false }
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !takes.isEmpty }
+
+        let take: Take = try #require(takes.first,
+                                      "the take was lost to the channel change")
+        #expect(errors.contains(.takeAudioChannelsConformed(from: 8, to: 2)),
+                "a pre-roll packet of the old width was never reported")
+        #expect(take.comment.contains("audio channel count changed"),
+                "the log row says nothing: \(take.comment)")
+
+        // Eight channels read as two is FOUR TIMES the samples, so the failure
+        // here is sound running past the picture rather than falling short of it
+        // — the head of the take overlapping everything after it.
+        await TestWait.fileExists(at: take.url)
+        let audio: (first: Double?, seconds: Double) =
+            try await TestAudio.span(of: take.url)
+        let picture: Double = try await AVURLAsset(url: take.url)
+            .load(.duration).seconds
+        #expect(audio.seconds < picture + 0.2,
+                "\(audio.seconds) s of sound under \(picture) s of picture")
+        let channels: Int = try await TestAudio.channelCount(of: take.url)
+        #expect(channels == 2,
+                "the take's audio track came out with \(channels) channel(s)")
+    }
+
+    /// Frames at the live pace with one embedded audio packet beside each, at a
+    /// channel count the caller can change mid-run — which is the input no
+    /// shared fixture produces, and the only way to reach the latch.
+    private final class ChannelChangingFeed {
+        private let pipeline: CapturePipeline
+        private let picture: CVPixelBuffer = TestMedia.pixelBuffer()
+        /// One cache across both widths on purpose: rebuilding it when the count
+        /// moves is exactly what `PCMAudio.makeSampleBuffer` has to do.
+        private var cache: CMAudioFormatDescription?
+        private var frame = 0
+
+        init(pipeline: CapturePipeline) {
+            self.pipeline = pipeline
+        }
+
+        func push(frames: Int, audioChannels: Int) async throws {
+            for _ in 0..<frames {
+                frame += 1
+                pipeline.handleFrame(
+                    pixelBuffer: picture,
+                    pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
+                    timecode: nil)
+                if let packet: CMSampleBuffer = TestMedia.audioBuffer(
+                    seconds: Double(frame) * 0.04, channels: audioChannels,
+                    cache: &cache) {
+                    pipeline.handleAudio(packet)
+                }
+                try await Task.sleep(for: .milliseconds(40))
+            }
+        }
+    }
+}
+
+/// The crash the fragment interval exists for, in its own extension so the
+/// suite above stays inside the house type-body limit — one theme per block, and
+/// this one is about what survives a process that never finishes its writer.
+extension TakeIntegrityBoundsTests {
     /// `movieFragmentInterval` is set so a crash or a power loss mid-take does
     /// not cost the whole file. Nothing pinned that, and the property being
     /// assigned is not the same statement as the bytes being on disk.
@@ -189,24 +355,24 @@ import Testing
     /// the file a killed process leaves behind. It has to be readable, and its
     /// duration has to be most of what was written.
     ///
-    /// **It is not, and that is a KNOWN GAP awaiting a decision rather than a
-    /// test that has not been written yet.** A take carries a timecode track
-    /// whose only samples are appended in `finish()`, so that input has no data
-    /// while the take rolls, and `AVAssetWriter` will not cut a fragment until
-    /// EVERY input has data up to the boundary. Measured on this machine: an
-    /// abandoned single-track file is `ftyp` + `moov` + `moof`/`mdat` pairs and
-    /// reads back as 10 s of 13; add one input that never receives a sample and
-    /// the same file is `ftyp` + one 170 KB `mdat` with **no `moov` at all**. So
-    /// the picture is on disk and nothing describes it — a crash mid-take costs
-    /// the whole take, which is the case the fragment interval is there for.
+    /// It was not, and the reason was the timecode track: its only samples were
+    /// appended in `finish()`, so that input had no data while the take rolled,
+    /// and `AVAssetWriter` will not cut a fragment until EVERY input has data up
+    /// to the boundary. Measured on this machine: an abandoned single-track file
+    /// is `ftyp` + `moov` + `moof`/`mdat` pairs and reads back as 10 s of 13; add
+    /// one input that never receives a sample and the same file is `ftyp` + one
+    /// 170 KB `mdat` with **no `moov` at all**. The picture was on disk and
+    /// nothing described it — so the guarantee held only for a take with no
+    /// timecode and no audio, which is the case nobody has.
     ///
-    /// Both candidate fixes change what every take file contains, which is why
-    /// this is pinned as a known issue instead: appending the timecode samples
-    /// as the take runs (one per interval, lagging, which keeps
-    /// `addTimecodeResync` working), or appending the start sample and marking
-    /// that input finished at once (simpler, and it retires the resync). Both
-    /// were measured to restore the 10-of-13 seconds. Remove the
-    /// `withKnownIssue` when one of them lands.
+    /// The timecode samples are now written AS THE TAKE RUNS — one per second,
+    /// lagging the picture by that much (`TakeWriter.commitTimecodeSamples`), so
+    /// what a crash costs is the fragment still open. Measured here: 10 s of the
+    /// 13 come back. This used to be pinned with `withKnownIssue`; it is a plain
+    /// assertion because the gap is closed, and the bound is deliberately 5 s
+    /// rather than 10 so that a host which fragments on a different boundary
+    /// (CI is two macOS releases behind) reports the loss of the GUARANTEE
+    /// rather than the loss of a second.
     @Test func anAbandonedTakeIsStillReadableUpToItsLastFragment() async throws {
         let root = TestMedia.scratchDirectory("AbandonedTake")
         try FileManager.default.createDirectory(at: root,
@@ -215,39 +381,54 @@ import Testing
         let url: URL = root.appendingPathComponent("abandoned.mov")
 
         try await Self.abandonWriter(at: url, frames: 325) // 13 s at 25 fps
-        // This half holds today and is where the teeth are: the picture really
-        // is on disk, so what is missing is only the moov that describes it.
+        // The picture on disk, which held even while the moov did not.
         let size: Int = (try FileManager.default.attributesOfItem(
             atPath: url.path)[.size] as? Int) ?? 0
         #expect(size > 100_000,
                 "the abandoned take left \(size) bytes — no picture at all")
 
-        // `isIntermittent` because the two hosts need not agree: this is
-        // AVAssetWriter's fragmenting rule, CI is two macOS releases behind, and
-        // asserting either answer would pin the host rather than this app (the
-        // same reason the HDR file test prints instead of asserting). What is
-        // NOT host-dependent is the reproduction above, and the moment the gap
-        // is closed this becomes a plain assertion.
-        await withKnownIssue("a crash mid-take loses the whole file",
-                             isIntermittent: true) {
-            let asset = AVURLAsset(url: url)
-            let duration: Double = (try await asset.load(.duration)).seconds
-            #expect(duration > 5,
-                    "an abandoned 13 s take reads back as \(duration) s")
-            let tracks: [AVAssetTrack] = try await asset.tracks(ofType: .video)
-            #expect(tracks.count == 1,
-                    "the abandoned take has \(tracks.count) video tracks")
-        }
+        let asset = AVURLAsset(url: url)
+        let duration: Double = (try await asset.load(.duration)).seconds
+        #expect(duration > 5,
+                "an abandoned 13 s take reads back as \(duration) s")
+        let tracks: [AVAssetTrack] = try await asset.tracks(ofType: .video)
+        #expect(tracks.count == 1,
+                "the abandoned take has \(tracks.count) video tracks")
+    }
+
+    /// …and the same crash on the take an operator actually shoots. The case
+    /// above is the one the gap was measured on; every real take also carries
+    /// audio, which is a SECOND input the fragment boundary waits for — so a
+    /// timecode fix that worked only for a silent take would leave the rule
+    /// broken for every file on the disk.
+    @Test func anAbandonedTakeWithSoundIsStillReadable() async throws {
+        let root = TestMedia.scratchDirectory("AbandonedTakeAudio")
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url: URL = root.appendingPathComponent("abandoned-audio.mov")
+
+        try await Self.abandonWriter(at: url, frames: 325, audioChannels: 2)
+        let asset = AVURLAsset(url: url)
+        let duration: Double = (try await asset.load(.duration)).seconds
+        #expect(duration > 5,
+                "an abandoned 13 s take with sound reads back as \(duration) s")
+        let audio: [AVAssetTrack] = try await asset.tracks(ofType: .audio)
+        #expect(audio.count == 1,
+                "the abandoned take has \(audio.count) audio tracks")
     }
 
     /// Write `frames` and let the writer go without finishing it. Its own
     /// function so the instance is released before the assertions run.
-    private static func abandonWriter(at url: URL, frames: Int) async throws {
+    private static func abandonWriter(at url: URL, frames: Int,
+                                      audioChannels: Int = 0) async throws {
         let writer = try TakeWriter(
             url: url, format: Self.format, codec: .proResProxy,
             startTimecode: Timecode(hours: 10, minutes: 0, seconds: 0,
-                                    frames: 0, fps: 25))
+                                    frames: 0, fps: 25),
+            audioChannelCount: audioChannels)
         let picture: CVPixelBuffer = TestMedia.pixelBuffer()
+        var cache: CMAudioFormatDescription?
         for index: Int in 0..<frames {
             let pts = CMTime(value: CMTimeValue(index * 1000), timescale: 25_000)
             var attempts: Int = 0
@@ -255,6 +436,16 @@ import Testing
                 attempts += 1
                 try await Task.sleep(for: .milliseconds(5))
             }
+            guard audioChannels > 0,
+                  let packet: CMSampleBuffer = TestMedia.audioBuffer(
+                    seconds: Double(index) * 0.04, channels: audioChannels,
+                    cache: &cache) else { continue }
+            // buffered, not live: the loop feeds a take's worth of packets far
+            // faster than 40 ms apart, and offered through `append` the input
+            // simply refuses most of them — which would leave the audio input
+            // starved and prove nothing about the fragment rule
+            writer.appendBuffered(audioSampleBuffer: packet,
+                                  deadline: Date().addingTimeInterval(0.5))
         }
     }
 }
