@@ -214,4 +214,67 @@ import Testing
                     "leaving the grid left the single clip's own items greyed")
         }
     }
+
+    /// The grid can be turned DOWN and turned OFF.
+    ///
+    /// It could not be. The tiles' speaker buttons choose which take is audible
+    /// — one at a time, never a mix — and that was the whole of the grid's audio:
+    /// no mute, no level, and the app's one shared monitoring level reached the
+    /// live monitor and the single player and stopped there. So a comparison
+    /// opened at full level over a muted monitor, and there was no control
+    /// anywhere to quieten it.
+    ///
+    /// Asserted on the players themselves, because that is where it either
+    /// happens or does not: `isMuted` stays the answer to WHICH take, `volume` is
+    /// the level, and the two must not be confused — a zero level must not move
+    /// the speaker glyph off the take the operator picked.
+    @Test func theGridTakesTheAppsOneMonitoringLevelAndItsMute() async throws {
+        try await ControllerHarness.run { controller, root in
+            MediaFixtures.silence(controller)
+            let takes: [Take] = try seedTakes(controller, in: root, count: 2)
+            controller.selectedItems = Set(takes.map(\.url))
+            controller.monitorVolume = 0.4
+
+            controller.startSyncPlay()
+            defer { controller.endSyncPlay() }
+            let model: SyncPlayModel = try #require(controller.syncPlay)
+
+            // opened at the level the operator was already listening at
+            #expect(model.volume == 0.4, "the grid opened at its own level")
+            let opened: [Float] = model.tiles.map { $0.player.volume }
+            #expect(opened == [Float(0.4), Float(0.4)],
+                    "the level did not reach the players")
+            let routed: [Bool] = model.tiles.map { $0.player.isMuted }
+            #expect(routed == [false, true],
+                    "one take audible, and it is the first")
+
+            // the slider reaches it
+            controller.monitorVolume = 0.9
+            let raised: [Float] = model.tiles.map { $0.player.volume }
+            #expect(raised == [Float(0.9), Float(0.9)])
+
+            // …and so does the mute HOLD, which is what "turn it off NOW" is
+            controller.toggleMonitorMute()
+            let muted: [Float] = model.tiles.map { $0.player.volume }
+            #expect(muted == [Float(0), Float(0)],
+                    "the mute did not silence the grid")
+            let stillRouted: [Bool] = model.tiles.map { $0.player.isMuted }
+            #expect(stillRouted == [false, true],
+                    "the mute moved the audible take instead of silencing it")
+
+            controller.toggleMonitorMute()
+            let restored: [Float] = model.tiles.map { $0.player.volume }
+            #expect(restored == [Float(0.9), Float(0.9)],
+                    "un-mute did not give the level back")
+
+            // the tile speakers still do their own job, at the level in force
+            model.audibleIndex = 1
+            let moved: [Bool] = model.tiles.map { $0.player.isMuted }
+            #expect(moved == [true, false])
+            let unchanged: [Float] = model.tiles.map { $0.player.volume }
+            #expect(unchanged == [Float(0.9), Float(0.9)])
+
+            controller.monitorVolume = 0
+        }
+    }
 }

@@ -163,7 +163,7 @@ struct SettingsView: View {
                         Button(L("clear_data"), role: .destructive) {
                             confirmClearLUTs = true
                         }
-                        .disabled(controller.availableLUTs.isEmpty)
+                        .disabled(!controller.hasLUTs)
                     }
                 }
             }

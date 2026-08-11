@@ -25,6 +25,11 @@ struct OffloadSheet: View {
     /// item 18) — without it a card that silently never prompts is
     /// indistinguishable from a bug.
     @ObservedObject var ledger: OffloadedCardLedger
+    /// Read for the enabling rules alone — `isOffloadRunning`, `canStartOffload`,
+    /// `canStopDiskJob`, `canStartVerify`, each named once in
+    /// `CaptureController+Offload`. The models are still observed, which is what
+    /// keeps the re-read fresh.
+    @EnvironmentObject private var controller: CaptureController
     @Environment(\.dismiss) private var dismiss
 
     /// Wide enough for a full destination path at a readable size; the sheet is
@@ -115,7 +120,7 @@ struct OffloadSheet: View {
                 isEmpty: model.source == nil,
                 finderTarget: model.source) {
                     Button(L("choose")) { pickSource() }
-                        .disabled(model.isRunning)
+                        .disabled(controller.isOffloadRunning)
                 }
         }
     }
@@ -152,7 +157,7 @@ struct OffloadSheet: View {
                 } label: {
                     Label(L("offload_add_dest"), systemImage: "plus")
                 }
-                .disabled(model.isRunning)
+                .disabled(controller.isOffloadRunning)
             }
             if model.rows.isEmpty {
                 Text(L("offload_no_dest"))
@@ -175,14 +180,14 @@ struct OffloadSheet: View {
                     model.setDestination(url, at: row.id)
                 }
             }
-            .disabled(model.isRunning)
+            .disabled(controller.isOffloadRunning)
             Button {
                 model.removeDestination(row.id)
             } label: {
                 Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
-            .disabled(model.isRunning)
+            .disabled(controller.isOffloadRunning)
             .help(L("offload_remove_dest"))
         }
     }
@@ -231,16 +236,16 @@ struct OffloadSheetFooter: View {
         HStack {
             if model.isRunning {
                 Button(L("offload_cancel_run")) { model.cancel() }
-                    .disabled(model.isCancelling)
+                    .disabled(!controller.canStopDiskJob)
             }
             Button(L("verify_menu")) { controller.chooseDiskToVerify() }
-                .disabled(model.isRunning || controller.verify.isRunning)
+                .disabled(!controller.canStartVerify)
             Spacer()
             Button(model.isRunning ? L("offload_hide") : L("close"),
                    action: dismiss)
             Button(L("offload_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!model.canStart)
+                .disabled(!controller.canStartOffload)
         }
     }
 }

@@ -116,6 +116,56 @@ struct ViewSyncPlayTests {
         }
     }
 
+    /// The master transport carries a LEVEL, not just a routing choice.
+    ///
+    /// The tiles' speaker buttons pick which take is audible; that was the whole
+    /// of the grid's audio, so a comparison could be moved between takes and
+    /// never turned down or off. The control is `TransportVolume` — the same
+    /// speaker-plus-slider the single player's transport has, on the same one
+    /// shared level — so the bar now holds two sliders: the scrubber and the
+    /// level.
+    ///
+    /// Counted as real AppKit sliders (the `theFieldInstallsItsFormatter` idiom),
+    /// and gated on the count being able to see one at all: a structural count
+    /// that silently returns zero on some host would otherwise "prove" the
+    /// control is missing — or, worse, pass for having found nothing.
+    @Test func theMasterTransportCarriesTheMonitoringLevel() async throws {
+        try await ViewProbe.run { probe in
+            let model = try startSession(probe, count: 2)
+            defer { probe.controller.endSyncPlay() }
+
+            let reference: Int = Self.sliderCount(
+                probe.hosted(Slider(value: .constant(0.5), in: 0...1)))
+            try #require(reference == 1,
+                         "this host does not render a Slider as an NSSlider, so the count below would prove nothing")
+
+            let bar: Int = Self.sliderCount(
+                probe.hosted(SyncPlayTransportBar(model: model)))
+            #expect(bar == 2,
+                    "the sync transport has \(bar) slider(s): the scrubber, and no monitoring level")
+            // …and it is the app's ONE level, so it reads what the app is at.
+            probe.controller.monitorVolume = 0.25
+            #expect(probe.controller.playbackVolume == 0.25)
+            #expect(model.volume == 0.25,
+                    "the bar's level and the grid's are not the same level")
+            probe.controller.monitorVolume = 0
+        }
+    }
+
+    /// How many real sliders a view puts on screen.
+    private static func sliderCount(_ view: some View) -> Int {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(x: 0, y: 0, width: ViewBudget.transportWidth,
+                            height: 60)
+        host.layoutSubtreeIfNeeded()
+        return countSliders(in: host)
+    }
+
+    private static func countSliders(in view: NSView) -> Int {
+        if view is NSSlider { return 1 }
+        return view.subviews.reduce(0) { $0 + countSliders(in: $1) }
+    }
+
     /// The whole grid view renders at the player's size in both languages —
     /// tiles, labels and chrome — without stretching its host.
     @Test func theGridLaysOutAtThePlayersSizeInBothLanguages() async throws {

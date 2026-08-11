@@ -81,6 +81,15 @@ final class SyncPlayModel: ObservableObject {
     @Published var audibleIndex = 0 {
         didSet { applyAudioRouting() }
     }
+    /// The level the audible take plays at, 0…1.
+    ///
+    /// The app's ONE monitoring level, pushed in by `CaptureController.setVolume`
+    /// — so the mute hold, the DIM hold and the slider reach the grid the way
+    /// they reach the single player, and switching between them does not change
+    /// loudness. The grid used to have neither: the per-tile speaker moved the
+    /// sound between takes and there was no way to turn it down or off at all,
+    /// which on a set is the control that matters most.
+    @Published private(set) var volume: Double = 1
 
     private var timeObserver: Any?
     private var boundaryObserver: Any?
@@ -329,9 +338,20 @@ extension SyncPlayModel {
         alignPaused(to: 0)
     }
 
+    /// Set the monitoring level for the whole grid. Called by the controller on
+    /// every level change, mute and un-mute — never by a view.
+    func setVolume(_ level: Double) {
+        volume = min(max(0, level), 1)
+        applyAudioRouting()
+    }
+
+    /// One take audible, at the app's level. The mute flag stays the choice of
+    /// WHICH take and the volume is the level of it: a zero level silences the
+    /// grid without moving the speaker glyph off the take the operator picked.
     private func applyAudioRouting() {
         for (index, tile) in tiles.enumerated() {
             tile.player.isMuted = index != audibleIndex
+            tile.player.volume = Float(volume)
         }
     }
 

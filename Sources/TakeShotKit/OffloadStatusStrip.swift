@@ -39,7 +39,7 @@ struct OffloadStatusStrip: View {
                 Image(systemName: "stop.circle")
             }
             .buttonStyle(.borderless)
-            .disabled(isCancelling)
+            .disabled(!controller.canStopDiskJob)
             .fixedSize()
             .help(L("offload_cancel_run"))
         }
@@ -76,9 +76,9 @@ struct OffloadStatusStrip: View {
 
     // MARK: - what the two jobs have in common
 
-    private var isCancelling: Bool {
-        offload.isCancelling || verify.isCancelling
-    }
+    // "Is it already stopping" used to be a private property here as well as a
+    // read of `model.isCancelling` in each sheet — three spellings of one rule.
+    // It is `controller.canStopDiskJob` now, once, and this strip asks that.
 
     /// By bytes rather than by file count, for the reason the verify sheet's own
     /// bar states: a card is one 40 GB clip and two hundred 2 KB sidecars, and a

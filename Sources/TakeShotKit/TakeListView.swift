@@ -114,9 +114,9 @@ private struct TakesSection: View {
                 .overlay {
                     Menu {
                         Button(L("export_edl")) { controller.exportSelectsEDL() }
-                            .disabled(!controller.takes.contains { $0.rating == .good })
+                            .disabled(!controller.canExportSelects)
                         Button(L("export_ale")) { controller.exportALE() }
-                            .disabled(controller.takes.isEmpty)
+                            .disabled(!controller.hasTakes)
                         Button(L("export_report_pdf")) {
                             controller.exportShiftReport(pdf: true)
                         }
@@ -145,7 +145,7 @@ private struct TakesSection: View {
                     .menuIndicator(.hidden)
                 }
                 .fixedSize()
-                .disabled(controller.takes.isEmpty)
+                .disabled(!controller.hasTakes)
                 .help(L("export_menu_help"))
                 // The offload status line used to sit here, squeezed between
                 // the export button and the view picker. It is a live job with

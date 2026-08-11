@@ -87,15 +87,31 @@ final class OffloadSheetModel: ObservableObject {
 
     func addDestination(_ url: URL) {
         rows.append(Row(url: url))
+        rememberDestinations()
     }
 
     func setDestination(_ url: URL, at id: Row.ID) {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
         rows[index].url = url
+        rememberDestinations()
     }
 
     func removeDestination(_ id: Row.ID) {
         rows.removeAll { $0.id == id }
+        rememberDestinations()
+    }
+
+    /// The saved rig follows the LIST, not the run.
+    ///
+    /// It used to be written from `begin(resume:)` alone, and that path is only
+    /// reachable with a non-empty list — so `offload.destinationPaths` could
+    /// never become nil again and a removal had nowhere to be recorded. Two
+    /// things then outlived the destination: the sheet seeded the retired path
+    /// back in on the next open, and `ownFolders` went on excluding that
+    /// destination's whole volume from the mounted-card offers, which is the
+    /// half that costs footage rather than a click.
+    private func rememberDestinations() {
+        controller?.rememberOffloadChoices(destinations: destinations)
     }
 
     /// Where a row's copy actually lands: the card's own folder name, created

@@ -34,9 +34,56 @@ extension CaptureController {
         destinationRoot.appendingPathComponent("Dailies")
     }
 
+    // MARK: - what the sheet's controls are enabled by
+    //
+    // Every one of these is a rule the sheet used to spell out per button. They
+    // are stated here, once, in the extension that owns the queue — see
+    // `ViewDisabledRuleTests` for why that is enforced rather than encouraged.
+
+    /// A queue is going: everything that would change what it is doing is
+    /// locked (the burn-ins, the destination).
+    var isDailiesRunning: Bool { dailies.isRunning }
+
+    /// Start: nothing running, something to encode, somewhere to put it.
+    var canStartDailies: Bool { dailies.canStart }
+
+    /// The two controls that steer a run in flight — the footer's Stop and the
+    /// progress panel's Skip. One rule: it is running, and it is not already
+    /// stopping.
+    var canSteerDailiesQueue: Bool {
+        dailies.isRunning && !dailies.isCancelling
+    }
+
+    /// Whether the destination is pointed somewhere other than the folder
+    /// beside the footage — which is the only state the minus button has
+    /// anything to undo. Named here so the sheet asks it rather than spelling
+    /// it out (see `ViewDisabledRuleTests`).
+    var canClearDailiesDestination: Bool {
+        !dailies.isRunning && !dailies.isDestinationDefault
+    }
+
+    /// Put the destination back to the Dailies folder beside the footage — the
+    /// minus the offload sheet's destination rows have had all along.
+    ///
+    /// Written through on the spot rather than at the next Start, and that is
+    /// the half that was actually missing: `destinationPath` had no writer that
+    /// could produce nil, so the first run pinned the deliverable to one
+    /// absolute path for good. The record folder is re-pointed between shooting
+    /// days; a pinned dailies folder then keeps sending the next show's review
+    /// files to the last show's disk.
+    func clearDailiesDestination() {
+        guard canClearDailiesDestination else { return }
+        settings.dailies.destinationPath = nil
+        dailies.destination = defaultDailiesFolder
+    }
+
     /// The operator's burn-in convention survives the relaunch, like the
     /// offload rig does. Written on Start, not on every toggle — a half-set
     /// sheet that was never run is not a convention.
+    ///
+    /// The destination is stored only while it IS an override: a run into the
+    /// default folder writes nil, so Start cannot re-pin what the minus just
+    /// cleared, and the folder goes on following the record folder.
     func rememberDailiesChoices(from model: DailiesQueueModel) {
         settings.dailies.burnTimecode = model.burnTimecode
         settings.dailies.burnClipName = model.burnClipName
@@ -44,7 +91,8 @@ extension CaptureController {
         settings.dailies.burnDate = model.burnDate
         let custom = model.customText.trimmingCharacters(in: .whitespaces)
         settings.dailies.customText = custom.isEmpty ? nil : custom
-        settings.dailies.destinationPath = model.destination?.path
+        settings.dailies.destinationPath = model.isDestinationDefault
+            ? nil : model.destination?.path
     }
 
     /// A finished run, as the rest of the app sees it.

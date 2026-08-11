@@ -160,11 +160,18 @@ private struct SyncPlayTileTimecode: View {
     }
 }
 
-/// The master transport: play/pause, ±5 s, frame steps and the scrubber, all
-/// driving every player through the model's synchronized start. Icons and
-/// monospaced digits only — like the other two bars, the localization lives
-/// in the tooltips.
+/// The master transport: play/pause, ±5 s, frame steps, the scrubber and the
+/// monitoring level, all driving every player through the model's synchronized
+/// start. Icons and monospaced digits only — like the other two bars, the
+/// localization lives in the tooltips.
+///
+/// The speaker is `TransportVolume`, the same control the single player's
+/// transport carries, on the same one shared level: the tiles' own speakers say
+/// WHICH take is audible, and this says how loud and whether at all. The grid
+/// shipped with only the first of those, so a comparison could be moved between
+/// takes and never turned down.
 struct SyncPlayTransportBar: View {
+    @EnvironmentObject private var controller: CaptureController
     @ObservedObject var model: SyncPlayModel
 
     var body: some View {
@@ -181,6 +188,9 @@ struct SyncPlayTransportBar: View {
             SyncPlayPositionControls(model: model, position: model.position)
 
             TransportTimeText(TransportBar.timeText(model.schedule.length))
+
+            TransportVolume(live: controller.live)
+                .help(L("playback_volume"))
         }
         .transportBarChrome()
     }

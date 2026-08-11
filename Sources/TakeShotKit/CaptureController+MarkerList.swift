@@ -22,6 +22,15 @@ extension CaptureController {
         return otherMarkers[Self.markerKey(url)] ?? []
     }
 
+    /// There is a marker to go to, or to clear. What the three navigation items
+    /// in the Markers menu are enabled by — one rule, three surfaces.
+    var hasPlaybackMarkers: Bool { !playbackMarkers.isEmpty }
+
+    /// A marker can be DROPPED: either a clip is under review in the single
+    /// player or the camera is rolling. Both are timelines a flag belongs on;
+    /// the sync-play grid is not one (see `isReviewingSingleClip`).
+    var canDropMarker: Bool { isReviewingSingleClip || isRecording }
+
     /// The sidecar's key for a clip: its file name, the same one the ranges
     /// sidecar uses (`TransportModel.key`).
     nonisolated static func markerKey(_ url: URL) -> String {

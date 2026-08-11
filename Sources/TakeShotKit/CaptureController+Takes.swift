@@ -18,6 +18,22 @@ extension CaptureController {
         destinationRoot.appendingPathComponent(TakeLogExporter.fileName)
     }
 
+    // MARK: - what "there is footage to act on" means
+    //
+    // Both of these were spelled out inline at seven `.disabled(` sites between
+    // the menu bar, the footer and the takes panel's export menu — which is the
+    // shape the audit found two disagreeing copies of elsewhere. Stated here,
+    // once, in the extension that owns the list.
+
+    /// Anything has been shot (or scanned in) at all: instant replay, the ALE,
+    /// both shift reports, the rating menu and the export menu.
+    var hasTakes: Bool { !takes.isEmpty }
+
+    /// Something is circled. The selects EDL is the only export with a narrower
+    /// set than "the day", and an EDL of no takes is a file post cannot use —
+    /// `exportSelectsEDL` refuses it with a toast, so the button says so first.
+    var canExportSelects: Bool { takes.contains { $0.rating == .good } }
+
     /// Click the circle: none → good → bad → none.
     func cycleRating(_ take: Take) {
         guard let idx = takes.firstIndex(where: { $0.id == take.id }) else { return }

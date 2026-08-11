@@ -110,8 +110,30 @@ struct NamingFieldsView: View {
     }
 }
 
-/// What the file will be called: only the fields the current template has a
-/// placeholder for, plus the badge that says the name is already taken.
+/// What the file will be called, plus the badge that says the name is already
+/// taken.
+///
+/// **A field is hidden by the template only when the FILE NAME is the only thing
+/// that consumes it.** That is the rule the slate row below already states from
+/// the other side ("scene, shot and take describe the work, not the file name"),
+/// and this row used to decide the opposite way for three fields that are not
+/// file-name decoration at all:
+///
+/// - **ROLL** is the reel. It is written into the take's own metadata
+///   (`TakeWriter.rollKey`), into the Reel Name column of `takeshot-log.csv` and
+///   the ALE, into the EDL's reel, onto the slate, and it is the key the clip
+///   counter restarts on (`resetClipForRoll`). It had exactly one editor in the
+///   whole app, so choosing the Sony α preset (`C{clip}`) made all of that
+///   uneditable while every one of those consumers went on writing it.
+/// - **CAM** is the camera letter: the shift report, the still's file name, the
+///   multicam channel labels, the slate and the remote's camera list all read it.
+/// - **CLIP** is the take number: it goes into the Take column and onto the
+///   slate, and the counter keeps moving whether a placeholder shows it or not.
+///
+/// **POSTFIX stays gated**, because it really is filename decoration and nothing
+/// else reads it — which is what makes this a rule rather than "show
+/// everything". The widest state is unchanged either way: the default template
+/// spends all four, which is the case `ViewFooterTests` measures.
 ///
 /// A view of its own rather than a property of `NamingFieldsView`, and for a
 /// test's sake: the collision badge has to be shown to RENDER, which used to be
@@ -136,23 +158,17 @@ struct NamingFileNameRow: View {
                 .help(L("name_taken_help", collision))
                 .transition(.opacity)
             }
-            if uses("{cam}") {
-                NamingFieldsView.steppedField(
-                    L("cam_label"), field: .camera, width: 40,
-                    text: Binding(get: { controller.settings.naming.cameraLabel },
-                                  set: { controller.settings.naming.cameraLabel = $0 }),
-                    onStep: { controller.stepCamera($0) })
-            }
-            if uses("{roll}") {
-                NamingFieldsView.steppedField(
-                    L("roll_label"), field: .roll, width: 50,
-                    text: $controller.roll,
-                    onStep: { controller.stepRoll($0) })
-            }
-            if uses("{clip}") {
-                ClipField()
-                    .help(L("clip_help"))
-            }
+            NamingFieldsView.steppedField(
+                L("cam_label"), field: .camera, width: 40,
+                text: Binding(get: { controller.settings.naming.cameraLabel },
+                              set: { controller.settings.naming.cameraLabel = $0 }),
+                onStep: { controller.stepCamera($0) })
+            NamingFieldsView.steppedField(
+                L("roll_label"), field: .roll, width: 50,
+                text: $controller.roll,
+                onStep: { controller.stepRoll($0) })
+            ClipField()
+                .help(L("clip_help"))
             if uses("{postfix}") {
                 NamingFieldsView.labeledField(
                     L("postfix_label"), field: .postfix, width: 56,

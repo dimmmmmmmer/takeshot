@@ -42,7 +42,12 @@ extension CaptureController {
                                  startTimecode: $0.startTimecode,
                                  duration: $0.durationSeconds)
         }
-        syncPlay = SyncPlayModel(sources: sources)
+        let model = SyncPlayModel(sources: sources)
+        // The grid opens at the level the operator is already listening at,
+        // mute and DIM included — a comparison that starts at full level over a
+        // muted monitor is the surprise this app exists not to produce.
+        model.setVolume(live.volume)
+        syncPlay = model
         viewerMode = .playback
     }
 

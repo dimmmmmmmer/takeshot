@@ -172,6 +172,26 @@ var watchdog = null;
 // One record per camera index — the byte in front of every binary frame.
 var tiles = [];
 
+// Whether a tap leaves the tapped tile fullscreen.
+//
+// Entering is pointless with one tile — it already IS the whole screen — but
+// LEAVING never is, and that is the bug this replaces: the tap handler refused
+// both directions on `tiles.length < 2`, and the count can drop to one UNDER a
+// tile that is already fullscreen (a board dropping out of the multicam set
+// pops the OTHER tile — see ensureTiles). The fullscreen tile then covered the
+// footer, the TC and the connection dot, and nothing but a page reload cleared
+// it. Pure, and the whole rule, so it can be checked without a DOM.
+function wantsFullscreen(wasFull, count) {
+  return !wasFull && count > 1;
+}
+
+// Take every tile out of fullscreen. Also called when the grid shrinks: a lone
+// tile has nothing to be fullscreen OVER, so the state is corrected rather than
+// left for the operator to find and tap their way out of.
+function clearFullscreen() {
+  tiles.forEach(function (tile) { tile.root.classList.remove("full"); });
+}
+
 function makeTile() {
   var root = document.createElement("div");
   root.className = "tile";
@@ -191,13 +211,12 @@ function makeTile() {
   root.appendChild(img);
   root.appendChild(wait);
   root.appendChild(tag);
-  // Fullscreen one camera on tap, back on the next tap. Pointless with a
-  // single tile — it is already the whole screen.
+  // Fullscreen one camera on tap, back on the next tap. The way OUT is never
+  // refused — see wantsFullscreen.
   root.addEventListener("click", function () {
-    if (tiles.length < 2) { return; }
     var was = root.classList.contains("full");
-    tiles.forEach(function (tile) { tile.root.classList.remove("full"); });
-    if (!was) { root.classList.add("full"); }
+    clearFullscreen();
+    if (wantsFullscreen(was, tiles.length)) { root.classList.add("full"); }
   });
   var tile = { root: root, img: img, name: name, url: null };
   el("grid").appendChild(root);
@@ -214,6 +233,7 @@ function ensureTiles(count) {
     gone.root.remove();
     if (gone.url) { URL.revokeObjectURL(gone.url); }
   }
+  if (want < 2) { clearFullscreen(); }
   el("grid").setAttribute("data-count", want > 2 ? "many" : String(want));
 }
 

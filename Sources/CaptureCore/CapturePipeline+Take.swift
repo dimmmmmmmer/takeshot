@@ -93,16 +93,20 @@ extension CapturePipeline {
             // the creative side, embedded so it survives a copy that leaves
             // the sidecars behind — see TakeWriter's key documentation
             slate: config.slate,
-            // An HDR source overrides the operator's colorimetry preset, and
-            // that is the FILE stating what it carries rather than a setting
-            // being ignored: the record buffer holds the wire's PQ or HLG codes
-            // (the wire-code rule is untouched by HDR), so a file tagged
+            // What the file says its codes mean comes from the SIGNAL and from
+            // nowhere else. The record buffer holds the wire's codes (the
+            // wire-code rule is untouched by HDR), so a PQ or HLG take tagged
             // Rec.709 would be read a hundred times too dark or too bright by
             // every tool downstream. Latched with the take, so a camera that
             // switches transfer mid-take cannot retag the frames already
-            // written.
-            colorTagPreset: takeColorimetry.filePreset
-                ?? config.settings.capture.colorTagPreset,
+            // written; nil is Rec.709, which is what an SDR wire is.
+            //
+            // `settings.capture.colorTagPreset` used to be the fallback here.
+            // It has had no writer since its picker was deleted, so it was
+            // permanently nil and this was already always Rec.709 — see the
+            // field, which is a tombstone now rather than a claim about a
+            // choice the operator has.
+            colorTagPreset: takeColorimetry.filePreset,
             displayMetadata: takeColorimetry.displayMetadata,
             audioChannelCount: recordChannelCount)
     }

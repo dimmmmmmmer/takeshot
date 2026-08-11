@@ -742,6 +742,7 @@
 "dailies_custom_placeholder" = "Своя строка (сверху слева)";
 "dailies_dest_label" = "Папка:";
 "dailies_pick_dest" = "Куда сложить дейлизы";
+"dailies_reset_dest" = "Вернуть папку Dailies рядом с материалом";
 "dailies_start" = "Старт";
 "dailies_stop" = "Остановить очередь";
 "dailies_skip" = "Пропустить файл";

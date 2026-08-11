@@ -11,6 +11,11 @@ import SwiftUI
 /// the sheet is away (see `DailiesStatusStrip`).
 struct DailiesSheet: View {
     @ObservedObject var model: DailiesQueueModel
+    /// Read for the enabling rules alone — each of them is named once on the
+    /// controller (`isDailiesRunning`, `canStartDailies`, `canSteerDailiesQueue`,
+    /// `canClearDailiesDestination`) rather than spelled out per button here.
+    /// The model is still observed, which is what makes the re-read fresh.
+    @EnvironmentObject private var controller: CaptureController
     @Environment(\.dismiss) private var dismiss
 
     /// Narrower than the offload sheet: one destination and five switches,
@@ -42,7 +47,6 @@ struct DailiesSheet: View {
             if let progress = model.progress {
                 Divider()
                 DailiesProgressPanel(progress: progress,
-                                     isCancelling: model.isCancelling,
                                      onSkip: { model.skipCurrentItem() })
             }
             if let report = model.report {
@@ -66,11 +70,20 @@ struct DailiesSheet: View {
                 .textFieldStyle(.roundedBorder)
         }
         .toggleStyle(.checkbox)
-        .disabled(model.isRunning)
+        .disabled(controller.isDailiesRunning)
     }
 
     // MARK: - destination
 
+    /// One destination, and now both of the controls the offload sheet's
+    /// destination rows have: Choose, and the minus that puts it back.
+    ///
+    /// The minus is not decoration. Without it the default — a Dailies folder
+    /// beside the day's footage — was reachable exactly once, before the first
+    /// run: `destinationPath` had no writer that could produce nil, so one
+    /// choice pinned the deliverable to one absolute path for every show after
+    /// it. Greyed while the default is already in force, so it says whether
+    /// there is an override at all.
     private var destinationSection: some View {
         HStack(spacing: 10) {
             Text(L("dailies_dest_label"))
@@ -88,7 +101,15 @@ struct DailiesSheet: View {
                     model.destination = url
                 }
             }
-            .disabled(model.isRunning)
+            .disabled(controller.isDailiesRunning)
+            Button {
+                controller.clearDailiesDestination()
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!controller.canClearDailiesDestination)
+            .help(L("dailies_reset_dest"))
         }
     }
 
@@ -100,7 +121,7 @@ struct DailiesSheet: View {
         HStack {
             if model.isRunning {
                 Button(L("dailies_stop")) { model.cancel() }
-                    .disabled(model.isCancelling)
+                    .disabled(!controller.canSteerDailiesQueue)
             }
             Spacer()
             Button(model.isRunning ? L("offload_hide") : L("close")) {
@@ -108,7 +129,7 @@ struct DailiesSheet: View {
             }
             Button(L("dailies_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!model.canStart)
+                .disabled(!controller.canStartDailies)
         }
     }
 }
@@ -119,7 +140,11 @@ struct DailiesSheet: View {
 /// changes shape makes everything under it jump.
 struct DailiesProgressPanel: View {
     let progress: DailiesProgress
-    let isCancelling: Bool
+    /// Skip and the footer's Stop are one rule — "the queue is running and not
+    /// already stopping" — so both ask `canSteerDailiesQueue` rather than each
+    /// carrying its own copy of it. This panel used to be handed the flag as a
+    /// value, which is how one rule becomes two spellings.
+    @EnvironmentObject private var controller: CaptureController
     let onSkip: () -> Void
 
     var body: some View {
@@ -136,7 +161,7 @@ struct DailiesProgressPanel: View {
                 }
                 Spacer(minLength: 2)
                 Button(L("dailies_skip"), action: onSkip)
-                    .disabled(isCancelling)
+                    .disabled(!controller.canSteerDailiesQueue)
             }
             ProgressView(value: Double(progress.framesDone),
                          total: Double(max(1, progress.framesTotal)))

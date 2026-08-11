@@ -1,5 +1,6 @@
 import CaptureCore
 import Foundation
+import os.log
 
 /// Cards that mount while the app is running.
 ///
@@ -197,15 +198,44 @@ extension CaptureController {
     func isExcludedVolume(_ volume: MountedVolume) -> Bool {
         let path = Self.comparablePath(volume.url)
         guard path != "/", volume.isLocal, volume.isBrowsable else { return true }
-        return ownFolders.contains { Self.folder($0, isOn: path) }
+        guard let mine = ownFolder(on: volume) else { return false }
+        // Said out loud, because this is the one exclusion that can be WRONG and
+        // the operator has no other way to find out: everything else here is a
+        // property of the volume, and this is a decision about a folder somebody
+        // configured. A card that mounts and never asks used to leave no trace
+        // at all.
+        os_log("mounted volume not offered as a card: %{public}s holds %{public}s",
+               log: CapturePipeline.levelsLog, type: .default,
+               path, mine.path)
+        return true
     }
 
-    /// Folders this app writes to: the record folder and everywhere an offload
-    /// has been aimed.
+    /// The folder of ours that makes this volume not a card, or nil when there
+    /// is none — the answer `isExcludedVolume` reports, and what a test asks.
+    func ownFolder(on volume: MountedVolume) -> URL? {
+        let path = Self.comparablePath(volume.url)
+        return ownFolders.first { Self.folder($0, isOn: path) }
+    }
+
+    /// Folders this app writes to: the record folder, and every offload
+    /// destination that is still there.
+    ///
+    /// The record folder counts unconditionally — takes are being written into
+    /// it and it is created on demand, so its absence says nothing. A saved
+    /// DESTINATION is a different kind of claim: it is a path from a previous
+    /// shooting day, the disk it names may be in a case in a van, and macOS
+    /// re-uses mount names. `/Volumes/Untitled/DIT` matched by path alone
+    /// excluded every future volume that happened to mount at
+    /// `/Volumes/Untitled` — a camera card among them — for as long as the
+    /// setting lived, which was forever (see `rememberOffloadChoices`). So a
+    /// destination has to still EXIST to speak for its volume: on the disk it
+    /// was picked on it does, and on the card that inherited the mount point it
+    /// does not.
     var ownFolders: [URL] {
         var folders = [destinationRoot]
         folders += (settings.offload.destinationPaths ?? [])
             .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
         return folders
     }
 

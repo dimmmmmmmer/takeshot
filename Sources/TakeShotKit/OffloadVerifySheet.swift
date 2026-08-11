@@ -12,6 +12,10 @@ import SwiftUI
 /// written on that folder. So the pass is running by the time the sheet appears.
 struct OffloadVerifySheet: View {
     @ObservedObject var model: OffloadVerifyModel
+    /// For the Stop button's rule alone: `canStopDiskJob` is one name for both
+    /// disk jobs, because `cancelRunningDiskJob` is one button for both. The
+    /// model is still observed, so the re-read is fresh.
+    @EnvironmentObject private var controller: CaptureController
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -74,7 +78,7 @@ struct OffloadVerifySheet: View {
         HStack {
             if model.isRunning {
                 Button(L("verify_cancel_run")) { model.cancel() }
-                    .disabled(model.isCancelling)
+                    .disabled(!controller.canStopDiskJob)
             }
             Spacer()
             Button(model.isRunning ? L("offload_hide") : L("close")) {

@@ -60,9 +60,24 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     /// are `InputLevels` raw values, and the property stays a `String?` so
     /// settings JSON written by an older build still decodes.
     public var videoLevels: String?
-    /// Video color tags: "709" (nclc 1-1-1, default), "601", "2020". An HDR
-    /// source overrides this for its own takes — the file has to state the
-    /// transfer the camera really sent (see `WireColorimetry.filePreset`).
+    /// INERT, like `tenBitCapture` above and for the same kind of reason: a
+    /// retired picker's key, kept on the record so a blob carrying it still
+    /// decodes and an operator who downgrades finds their value where they left
+    /// it. Nothing reads it and nothing writes it.
+    ///
+    /// It named the video colour tags ("709", "601", "2020") and was read for
+    /// real behaviour — the recorded file's tags — while its picker had already
+    /// been deleted, so every take has been tagged Rec.709 for as long as that
+    /// has been true. The picker is not coming back, and that is a decision
+    /// rather than an omission: what a file says its codes MEAN is a
+    /// measurement of the signal, not a preference. Where the camera really does
+    /// send something else the app already follows it and overrides any setting
+    /// — `WireColorimetry.filePreset` puts PQ, HLG and Rec.2020 on the file from
+    /// the wire's own metadata, latched per take. A preset an operator could set
+    /// on top of that could only be wrong: nothing on set can verify it, and a
+    /// Rec.709 signal tagged 601 or 2020 is mis-transformed by every tool
+    /// downstream. Same shape as `hdrMode` deliberately having no "force HDR",
+    /// and as the manual bit depth that went for the owner's own reason.
     public var colorTagPreset: String?
     /// What the app does with a source reporting PQ or HLG: nil/"auto" — follow
     /// the signal; "off" — treat every source as SDR, which is exactly how the

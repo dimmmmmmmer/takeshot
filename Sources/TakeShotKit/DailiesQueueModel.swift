@@ -18,6 +18,12 @@ final class DailiesQueueModel: ObservableObject {
     @Published var customText = ""
     /// Where the dailies land. Defaults to a Dailies folder beside the takes.
     @Published var destination: URL?
+    /// The folder beside the footage — what `destination` means when the
+    /// operator has not pointed it anywhere. Held so the sheet can offer the way
+    /// BACK to it and so a run that lands there is not recorded as a choice:
+    /// the record folder is re-pointed between shows, and a saved absolute path
+    /// would aim the next show's dailies at the last one's disk.
+    @Published private(set) var defaultFolder: URL?
     /// What Start will queue, in take order. Seeded by the controller from
     /// the panel selection (or the whole day) when the sheet opens.
     @Published var queuedTakes: [Take] = []
@@ -55,12 +61,27 @@ final class DailiesQueueModel: ObservableObject {
         burnProject = settings.dailies.burnProject ?? true
         burnDate = settings.dailies.burnDate ?? false
         customText = settings.dailies.customText ?? ""
+        self.defaultFolder = defaultFolder
         destination = settings.dailies.destinationPath
             .map { URL(fileURLWithPath: $0) } ?? defaultFolder
     }
 
     var canStart: Bool {
         !isRunning && !queuedTakes.isEmpty && destination != nil
+    }
+
+    /// Whether the destination is still the folder beside the footage.
+    ///
+    /// The one question that decides what gets STORED: a destination equal to
+    /// the default is not an override, so nothing is written and the folder
+    /// follows the record folder wherever the next show points it. Compared
+    /// lexically through `comparablePath` for the reason stated there — neither
+    /// folder need exist yet.
+    var isDestinationDefault: Bool {
+        guard let destination else { return true }
+        guard let defaultFolder else { return false }
+        return CaptureController.comparablePath(destination)
+            == CaptureController.comparablePath(defaultFolder)
     }
 
     var burnins: DailiesBurnins {

@@ -69,7 +69,7 @@ private struct FileCommands: View {
 
         Button(L("grab_frame")) { controller.grabFrame() }
             .keyboardShortcut(hotkeys.combo(for: .grabFrame).menuShortcut)
-            .disabled(!controller.isCapturing && controller.playbackURL == nil)
+            .disabled(!controller.canGrabFrame)
 
         Divider()
 
@@ -94,16 +94,16 @@ private struct ExportCommands: View {
 
     var body: some View {
         Button(L("export_edl")) { controller.exportSelectsEDL() }
-            .disabled(!controller.takes.contains { $0.rating == .good })
+            .disabled(!controller.canExportSelects)
         // next to the EDL, and gated the same way: greyed exactly when the set
         // it exports is empty. That set is every take, not the circled ones —
         // the ALE is the log an assistant builds a bin from.
         Button(L("export_ale")) { controller.exportALE() }
-            .disabled(controller.takes.isEmpty)
+            .disabled(!controller.hasTakes)
         Button(L("export_report_pdf")) { controller.exportShiftReport(pdf: true) }
-            .disabled(controller.takes.isEmpty)
+            .disabled(!controller.hasTakes)
         Button(L("export_report_csv")) { controller.exportShiftReport(pdf: false) }
-            .disabled(controller.takes.isEmpty)
+            .disabled(!controller.hasTakes)
     }
 }
 
@@ -128,18 +128,18 @@ private struct PlaybackCommands: View {
         Menu(L("markers_title")) {
             MarkerCommands(controller: controller, hotkeys: hotkeys)
         }
-        .disabled(!controller.isReviewingSingleClip && !controller.isRecording)
+        .disabled(!controller.canDropMarker)
 
         Menu(L("menu_rating")) {
             RatingCommands(controller: controller, hotkeys: hotkeys)
         }
-        .disabled(controller.takes.isEmpty)
+        .disabled(!controller.hasTakes)
 
         Divider()
 
         Button(L("hotkey_replay")) { controller.instantReplay() }
             .keyboardShortcut(hotkeys.combo(for: .instantReplay).menuShortcut)
-            .disabled(controller.takes.isEmpty)
+            .disabled(!controller.hasTakes)
     }
 }
 
@@ -149,19 +149,17 @@ private struct PlaybackCommands: View {
 private struct TransportCommands: View {
     @ObservedObject var controller: CaptureController
 
-    private var idle: Bool { !controller.isReviewingClip }
-
     var body: some View {
         Button(L("menu_play_pause")) { controller.togglePlayPause() }
-            .disabled(idle)
+            .disabled(!controller.isReviewingClip)
         Button(L("menu_step_back")) { controller.stepPlayback(forward: false) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingClip)
         Button(L("menu_step_forward")) { controller.stepPlayback(forward: true) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingClip)
         Button(L("menu_skip_back")) { controller.skipPlayback(bySeconds: -5) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingClip)
         Button(L("menu_skip_forward")) { controller.skipPlayback(bySeconds: 5) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingClip)
     }
 }
 
@@ -173,17 +171,15 @@ private struct TransportCommands: View {
 private struct LoopCommands: View {
     @ObservedObject var controller: CaptureController
 
-    private var idle: Bool { !controller.isReviewingSingleClip }
-
     var body: some View {
         Button(L("menu_in_point")) { controller.toggleLoopPoint(out: false) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingSingleClip)
         Button(L("menu_out_point")) { controller.toggleLoopPoint(out: true) }
-            .disabled(idle)
+            .disabled(!controller.isReviewingSingleClip)
         Toggle(L("playback_loop"), isOn: Binding(
             get: { controller.loopPlayback },
             set: { controller.loopPlayback = $0 }))
-            .disabled(idle)
+            .disabled(!controller.isReviewingSingleClip)
     }
 }
 
@@ -200,11 +196,11 @@ private struct MarkerCommands: View {
         Divider()
 
         Button(L("marker_prev_help")) { controller.jumpToMarker(forward: false) }
-            .disabled(controller.playbackMarkers.isEmpty)
+            .disabled(!controller.hasPlaybackMarkers)
         Button(L("marker_next_help")) { controller.jumpToMarker(forward: true) }
-            .disabled(controller.playbackMarkers.isEmpty)
+            .disabled(!controller.hasPlaybackMarkers)
         Button(L("markers_clear_all")) { controller.clearPlaybackMarkers() }
-            .disabled(controller.playbackMarkers.isEmpty)
+            .disabled(!controller.hasPlaybackMarkers)
     }
 }
 
