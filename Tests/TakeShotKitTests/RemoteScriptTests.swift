@@ -43,7 +43,7 @@ import Testing
                            matching predicate: ([[String: Any]]) -> Bool)
         async throws -> Bool {
         for _ in 0..<reads {
-            let message = try await client.next(type: "takes", within: 40)
+            let message = try await client.next(type: "takes")
             guard let takes = message["takes"] as? [[String: Any]] else {
                 return false
             }

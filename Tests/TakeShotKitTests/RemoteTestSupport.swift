@@ -143,10 +143,27 @@ final class RemoteTestClient {
             try #require(String(bytes: data, encoding: .utf8))))
     }
 
-    /// The next message of a given `type`, skipping anything else. Bounded, so
-    /// a server that stops talking fails the test instead of hanging the suite.
-    func next(type: String, within attempts: Int = 12) async throws -> [String: Any] {
-        for _ in 0..<attempts {
+    /// The next message of a given `type`, skipping anything else.
+    ///
+    /// Bounded by a DEADLINE, not by a message count, and that distinction cost
+    /// a red CI run. A tarpitted answer arrives behind however many status
+    /// pushes the server sent while it was held — four a second — so an
+    /// attempts cap is really a wall-clock budget wearing a count, and the
+    /// number that was generous here was not generous on a slower machine under
+    /// coverage instrumentation. This project's rule is that a wait polls for
+    /// the OUTCOME with an I/O-sized budget; a count of intervening messages is
+    /// neither.
+    ///
+    /// The count survives only as a runaway backstop, set far above anything a
+    /// real exchange produces: `receive()` parks until a message arrives, so a
+    /// server that goes silent is bounded by neither of these — it was not
+    /// bounded by the old cap either.
+    func next(type: String, within budget: Duration = .seconds(45),
+              cap: Int = 4096) async throws -> [String: Any] {
+        let deadline = ContinuousClock.now + budget
+        var seen = 0
+        while ContinuousClock.now < deadline, seen < cap {
+            seen += 1
             guard case .string(let text) = try await task.receive() else { continue }
             guard let object = try? JSONSerialization.jsonObject(
                 with: Data(text.utf8)) as? [String: Any] else { continue }

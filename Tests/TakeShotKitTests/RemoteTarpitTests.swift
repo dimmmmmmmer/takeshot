@@ -348,9 +348,11 @@ import Testing
         let started = ContinuousClock.now
         try await phone.send(action: "good", pin: wrong)
         // Read past the status pushes a held answer leaves in front of the
-        // refusal — four a second, and the refusal comes out behind them.
-        #expect(try await phone.next(type: "auth",
-                                     within: 40)["ok"] as? Bool == false)
+        // refusal — four a second, and the refusal comes out behind them. How
+        // MANY of them is not something to write down: it is the hold divided
+        // by the push rate, and a count that was generous here ran out on the
+        // runner. `next` is bounded by a deadline for that reason.
+        #expect(try await phone.next(type: "auth")["ok"] as? Bool == false)
         return started.duration(to: .now)
     }
 
