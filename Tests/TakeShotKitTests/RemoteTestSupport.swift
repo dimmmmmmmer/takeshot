@@ -178,6 +178,68 @@ final class RemoteTestClient {
     }
 }
 
+/// A reader that never stops draining, remembering what got through.
+///
+/// Two suites need one, for the same reason: `URLSessionWebSocketTask` only
+/// takes bytes off the wire while a receive is pending, so a client nobody
+/// reads from fills its own window a few pushes into a flood and stops being
+/// the healthy half of the fixture.
+///
+/// It also says when its OWN socket failed, and that is the repair rather than
+/// the convenience. The reader dying and the server going quiet are different
+/// claims, and a bare `while true { try await receive() }` made them the same
+/// one: the throw ended an unstructured task nothing was awaiting, the wait
+/// underneath came back false a full budget later, and the message blamed the
+/// push path for a socket the server had closed. That is how a red CI run read
+/// as "the reading client lost its status stream" and sent a flake hunt after
+/// the wrong half of the test.
+@MainActor
+final class RemoteDrain {
+    /// Text messages taken off the wire, binary ones, and the subset of texts
+    /// carrying a bad rating — the three things the stalled-client tests ask.
+    let texts = HitCounter()
+    let binaries = HitCounter()
+    let badRatings = HitCounter()
+    private var task: Task<Void, Never>?
+
+    init(_ client: RemoteTestClient) {
+        // The counters are captured, not `self`: a task that runs until it is
+        // cancelled would otherwise keep its own owner alive.
+        let texts: HitCounter = self.texts
+        let binaries: HitCounter = self.binaries
+        let badRatings: HitCounter = self.badRatings
+        task = Task<Void, Never> { @MainActor in
+            while true {
+                let message: URLSessionWebSocketTask.Message
+                do {
+                    message = try await client.task.receive()
+                } catch {
+                    if !Task.isCancelled {
+                        Issue.record("""
+                            the reading client's own socket failed, so nothing \
+                            measured after this is about the server: \(error)
+                            """)
+                    }
+                    return
+                }
+                switch message {
+                case .data:
+                    binaries.bump()
+                case .string(let text):
+                    texts.bump()
+                    if text.contains(#""rating":"bad""#) { badRatings.bump() }
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    func stop() {
+        task?.cancel()
+    }
+}
+
 /// A WebSocket client made of a plain socket, for the two things
 /// `URLSessionWebSocketTask` will not do.
 ///
