@@ -109,4 +109,60 @@ public enum ColorTags {
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey,
                               v.cvMatrix, .shouldPropagate)
     }
+
+    // MARK: - reading the tags back off a file
+    //
+    // The inverse of everything above, and it lives here for the reason the
+    // writing half does: a second place that decides what a tag MEANS is a
+    // second place for it to drift. There are two readers now — the player
+    // (`PlaybackFrameTap+Levels`) and the dailies transcode — and they have to
+    // reach the same answer about the same file, or a proxy disagrees with the
+    // review it was made from.
+    //
+    // Anything that is not PQ or HLG is `.sdr` and anything that is not
+    // Rec.2020 is `.rec709`. That is what leaves a foreign clip, a still and a
+    // take from before these tags existed exactly as they are: a file that
+    // states nothing gets no transform, rather than a guess.
+
+    /// The transfer a `kCMFormatDescriptionExtension_TransferFunction` value
+    /// names; `.sdr` for every other spelling and for none at all.
+    static func transfer(ofTag tag: String?) -> SignalTransfer {
+        let pq: String =
+            kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String
+        let hlg: String =
+            kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String
+        switch tag {
+        case pq: return .pq
+        case hlg: return .hlg
+        default: return .sdr
+        }
+    }
+
+    /// The transfer AND the primaries of one video format description, which
+    /// only ever travel together — a PQ curve on Rec.709 primaries and one on
+    /// Rec.2020 primaries are not the same picture, and whoever acts on the
+    /// curve has to know which.
+    public static func colorimetry(of description: CMFormatDescription)
+        -> WireColorimetry {
+        let extensions = CMFormatDescriptionGetExtensions(description)
+            as? [String: Any] ?? [:]
+        let transferTag = extensions[
+            kCMFormatDescriptionExtension_TransferFunction as String] as? String
+        let primariesTag = extensions[
+            kCMFormatDescriptionExtension_ColorPrimaries as String] as? String
+        let wide = kCMFormatDescriptionColorPrimaries_ITU_R_2020 as String
+        return WireColorimetry(
+            transfer: transfer(ofTag: transferTag),
+            primaries: primariesTag == wide ? .rec2020 : .rec709)
+    }
+
+    /// The same question asked of a whole asset: its first video track's
+    /// format description, or `.sdr` when it has neither.
+    public static func colorimetry(of asset: AVAsset) async -> WireColorimetry {
+        guard let track = try? await asset.tracks(ofType: .video).first,
+              let description: CMFormatDescription =
+                try? await track.load(.formatDescriptions).first
+        else { return .sdr }
+        return colorimetry(of: description)
+    }
 }

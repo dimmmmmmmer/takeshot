@@ -89,12 +89,34 @@ public enum DailiesEngine {
 
     /// H.264 settings for the daily: bitrate scaled by area from the 1080p
     /// anchor so a downscaled or small-raster source is not drowned in bits.
-    static func videoSettings(size: CGSize, frameRate: Double) -> [String: Any] {
+    ///
+    /// `colorimetry` is the SOURCE's, and it decides one thing: whether the
+    /// proxy has to state what its codes are. An SDR source gets no colour
+    /// properties key at all — which is a different thing from getting the
+    /// Rec.709 one, and it is what makes "an SDR daily is byte for byte the
+    /// file it was before any of this" true of one branch rather than of a
+    /// diff. An HDR source has been tone mapped into a Rec.709 curve by the
+    /// time it reaches the encoder, so the file must say Rec.709 or every
+    /// player puts a PQ or HLG EOTF over codes that already went through one
+    /// and crushes the picture a second time.
+    ///
+    /// The PRIMARIES are the deliberate half. They are NOT converted and the
+    /// proxy says Rec.2020, because that is literally what its codes are: the
+    /// tone map is per channel and cannot move a primary, so the picture that
+    /// comes out of it is Rec.2020 primaries under a Rec.709 curve — the exact
+    /// combination `ColorTags.rec2020Preset` exists for and the exact one the
+    /// live display buffer already carries. Converting the gamut instead would
+    /// mean a 3x3 matrix in linear light per pixel, in 8 bits, written from
+    /// scratch, to reach a result a colour-managed player computes exactly and
+    /// for free from the tag.
+    static func videoSettings(size: CGSize, frameRate: Double,
+                              colorimetry: WireColorimetry = .sdr)
+        -> [String: Any] {
         let areaFraction = size.width * size.height
             / (maxSize.width * maxSize.height)
         let bitrate = max(1_000_000,
                           Int(Double(bitsPerSecondAt1080p) * areaFraction))
-        return [
+        var settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: Int(size.width),
             AVVideoHeightKey: Int(size.height),
@@ -104,6 +126,11 @@ public enum DailiesEngine {
                     Int(max(1, frameRate.rounded())),
             ],
         ]
+        if colorimetry.isHDR {
+            settings[AVVideoColorPropertiesKey] = ColorTags
+                .videoColorProperties(for: colorimetry.displayPreset)
+        }
+        return settings
     }
 
     /// AAC stereo for every daily, whatever the take recorded: editorial

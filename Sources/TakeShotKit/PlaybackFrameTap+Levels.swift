@@ -58,22 +58,14 @@ extension PlaybackFrameTap {
     ///
     /// Anything that is not PQ or HLG is `.sdr`, including a file that states
     /// nothing: an untagged clip is left exactly as it always was.
+    ///
+    /// The read itself is `ColorTags`', which is where every other decision
+    /// about what a tag means already lives. It has a second caller now — the
+    /// dailies transcode asks the same question of the same file so that a
+    /// proxy cannot disagree with the review it was made from — and two copies
+    /// of the answer is exactly how they would come to.
     static func transfer(of asset: AVAsset) async -> SignalTransfer {
-        guard let track = try? await asset.loadTracks(withMediaType: .video)
-            .first,
-            let description = try? await track.load(.formatDescriptions).first
-        else { return .sdr }
-        let extensions = CMFormatDescriptionGetExtensions(description)
-            as? [String: Any] ?? [:]
-        let tag = extensions[
-            kCMFormatDescriptionExtension_TransferFunction as String] as? String
-        let pq = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String
-        let hlg = kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String
-        switch tag {
-        case pq: return .pq
-        case hlg: return .hlg
-        default: return .sdr
-        }
+        await ColorTags.colorimetry(of: asset).transfer
     }
 
     /// The same question for the compare clip, which arrives as a URL rather
