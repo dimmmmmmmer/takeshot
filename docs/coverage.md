@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.39 %** lines (4 125 of 42 904 lines uncovered) |
+| Measured | **90.38 %** lines (4 126 of 42 904 lines uncovered) |
 
 The NDI output's return moved it up by five hundredths of a point while adding
 367 lines of measurable code, and for a related reason: the parts of it that do
@@ -54,6 +54,12 @@ no sender and no network. What stays uncovered is `Sources/CNDI` (Obj-C++, so
 not measured at all) and, inside it, the branch of the bridge this build did not
 compile: the machine that restored the feature has the NDI runtime and no SDK
 headers, so the whole real half of `CNDI.mm` is dark here and on CI alike.
+
+Two runs of that same tree measured 4 125 and 4 126 uncovered lines — one line
+of jitter, re-derived with `--report-only` off the second run's own profdata
+before it was written down. The figure above is the second run's. A tenth of a
+point of run-to-run noise is worth knowing about before somebody chases a
+hundredth.
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than

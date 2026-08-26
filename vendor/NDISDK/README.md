@@ -139,6 +139,13 @@ on a measurement taken since it came back. Drop the headers in and it is one
 
 ## Licence note
 
+**The SDK is free and carries no royalty.** Checked on Vizrt's licensing page
+before this feature was restored: the download costs nothing, and there is no
+per-unit fee and no revenue threshold behind it. What the licence asks for is
+attribution and correct naming, not money — so "is NDI worth what it costs" is a
+question about obligations rather than about a bill. The registration form is a
+signature, which is why the download is the owner's to make and not an agent's.
+
 The NDI runtime may be redistributed inside an NDI-enabled application, but only
 under Vizrt's SDK licence, which carries attribution and naming requirements —
 the product has to identify NDI correctly and link to their site. That is
