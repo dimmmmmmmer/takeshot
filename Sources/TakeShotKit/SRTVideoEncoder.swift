@@ -1,6 +1,7 @@
 import CoreMedia
 @preconcurrency import CoreVideo
 import Foundation
+import os
 import VideoToolbox
 
 /// The display frame, encoded, because SRT carries a byte stream and not frames.
@@ -89,6 +90,26 @@ final class SRTVideoEncoder {
     let refusedProperties: [String]
     private let session: VTCompressionSession
 
+    /// The two things a running encoder is asked to change, and the reason it
+    /// can be asked at all.
+    ///
+    /// A monitoring feed has viewers who arrive in the middle of it. One that
+    /// has just joined sees nothing until the next keyframe — up to a whole
+    /// GOP of black — and a link that has narrowed needs fewer bits NOW, not
+    /// after a reconnect. Both are properties VideoToolbox takes while the
+    /// session runs, so neither costs a rebuild, and a rebuild is exactly what
+    /// the viewer would see as a gap.
+    ///
+    /// Held under a lock because the asking and the encoding are on different
+    /// queues by construction: frames arrive on the mirror's queue, and a
+    /// viewer joins on the server's.
+    private struct Live {
+        var bitsPerSecond: Int
+        var keyframeWanted = false
+    }
+
+    private let live: OSAllocatedUnfairLock<Live>
+
     /// The session is created with NO output callback, deliberately: that is what
     /// lets each `encode` carry its own handler, so the closure's lifetime is
     /// VideoToolbox's problem rather than a retained refcon this file would have
@@ -121,6 +142,8 @@ final class SRTVideoEncoder {
                 "the H.264 encoder could not be created (\(status))")
         }
         session = created
+        live = OSAllocatedUnfairLock(
+            initialState: Live(bitsPerSecond: configuration.bitsPerSecond))
         refusedProperties = Self.apply(configuration, to: created)
         VTCompressionSessionPrepareToEncodeFrames(created)
     }
@@ -139,10 +162,6 @@ final class SRTVideoEncoder {
         // is free to burst past whatever the link can carry, and on an SRT link a
         // burst is exactly what fills the send buffer and drops the frames behind
         // it.
-        let burst = [
-            NSNumber(value: configuration.bitsPerSecond / 8 * 3 / 2),
-            NSNumber(value: 1.0),
-        ] as CFArray
         let properties: [CFString: CFTypeRef] = [
             // Drop quality rather than take longer. The frame path cannot wait.
             kVTCompressionPropertyKey_RealTime: kCFBooleanTrue,
@@ -150,9 +169,6 @@ final class SRTVideoEncoder {
                 kVTProfileLevel_H264_High_AutoLevel,
             // See the type comment: one frame of latency, and one timestamp.
             kVTCompressionPropertyKey_AllowFrameReordering: kCFBooleanFalse,
-            kVTCompressionPropertyKey_AverageBitRate:
-                NSNumber(value: configuration.bitsPerSecond),
-            kVTCompressionPropertyKey_DataRateLimits: burst,
             kVTCompressionPropertyKey_MaxKeyFrameInterval:
                 NSNumber(value: configuration.keyframeInterval),
             kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration:
@@ -170,7 +186,88 @@ final class SRTVideoEncoder {
         return properties.compactMap { key, value in
             VTSessionSetProperty(session, key: key, value: value) == noErr
                 ? nil : key as String
+        } + applyRate(configuration.bitsPerSecond, to: session)
+    }
+
+    /// The average and its one-second burst ceiling, which are one decision and
+    /// are therefore set in one place — by the initial configuration and by
+    /// every later change alike.
+    ///
+    /// Without a ceiling a keyframe is free to burst past whatever the link can
+    /// carry, and on an SRT link a burst is exactly what fills the send buffer
+    /// and drops the frames behind it.
+    private static func applyRate(_ rate: Int,
+                                  to session: VTCompressionSession) -> [String] {
+        let pairs: [(CFString, CFTypeRef)] = [
+            (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: rate)),
+            (kVTCompressionPropertyKey_DataRateLimits,
+             [NSNumber(value: rate / 8 * 3 / 2), NSNumber(value: 1.0)] as CFArray),
+        ]
+        return pairs.compactMap { key, value in
+            VTSessionSetProperty(session, key: key, value: value) == noErr
+                ? nil : key as String
         }
+    }
+
+    /// The bitrate the session is running at, which is not necessarily the one
+    /// it was built with.
+    var bitsPerSecond: Int { live.withLock { $0.bitsPerSecond } }
+
+    /// Move the bitrate on a running session.
+    ///
+    /// The average and the one-second burst ceiling move TOGETHER, because they
+    /// are one decision: leaving the old ceiling behind a lowered average lets
+    /// a keyframe burst at the rate the link has just told us it cannot carry,
+    /// which is the failure the ceiling exists to prevent. Returns the keys the
+    /// session refused — empty when it took them — for the same reason
+    /// `refusedProperties` exists: a discarded status is how a stream silently
+    /// keeps running at a rate nobody chose.
+    @discardableResult
+    func setBitsPerSecond(_ rate: Int) -> [String] {
+        let rate = max(64_000, rate)
+        let refused = Self.applyRate(rate, to: session)
+        if refused.isEmpty { live.withLock { $0.bitsPerSecond = rate } }
+        return refused
+    }
+
+    /// What the SESSION says it is running at, read back out of it rather than
+    /// remembered here.
+    ///
+    /// `refusedProperties` proves a property was ACCEPTED; this proves what it
+    /// was accepted as, which is the difference between a dial that moved and
+    /// one that only looks like it did. nil when the session will not say.
+    var appliedRate: (average: Int, burstBytesPerSecond: Int)? {
+        guard let average = Self.property(
+                kVTCompressionPropertyKey_AverageBitRate, of: session)
+                as? NSNumber,
+              let limits = Self.property(
+                kVTCompressionPropertyKey_DataRateLimits, of: session)
+                as? [NSNumber],
+              let bytes = limits.first
+        else { return nil }
+        return (average.intValue, bytes.intValue)
+    }
+
+    /// One property, read back. Through `Unmanaged` rather than a `CFTypeRef?`:
+    /// the out parameter is a raw pointer, and forming one to an optional
+    /// object reference is a warning this build does not carry.
+    private static func property(_ key: CFString,
+                                 of session: VTCompressionSession) -> Any? {
+        var box: Unmanaged<CFTypeRef>?
+        guard VTSessionCopyProperty(session, key: key, allocator: nil,
+                                    valueOut: &box) == noErr,
+              let value = box?.takeRetainedValue() else { return nil }
+        return value
+    }
+
+    /// Ask for a keyframe on the next frame submitted.
+    ///
+    /// A request rather than a command: it is answered by the next `encode`,
+    /// which is where VideoToolbox will take it. Repeated calls before that
+    /// frame collapse into one — a room of viewers joining at once wants one
+    /// keyframe between them, not one each.
+    func requestKeyframe() {
+        live.withLock { $0.keyframeWanted = true }
     }
 
     /// Submit one frame.
@@ -184,10 +281,17 @@ final class SRTVideoEncoder {
         let time = CMTime(value: ticks, timescale: scale)
         let step = MPEGTSMuxer.clockHz
             / Int64(max(1, configuration.framesPerSecond))
+        let forced = live.withLock { state -> Bool in
+            defer { state.keyframeWanted = false }
+            return state.keyframeWanted
+        }
+        let frameProperties = forced
+            ? [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary
+            : nil
         VTCompressionSessionEncodeFrame(
             session, imageBuffer: buffer, presentationTimeStamp: time,
             duration: CMTime(value: step, timescale: scale),
-            frameProperties: nil, infoFlagsOut: nil
+            frameProperties: frameProperties, infoFlagsOut: nil
         ) { [sink] status, _, sample in
             guard status == noErr, let sample else { return }
             sink(sample)
