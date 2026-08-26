@@ -93,6 +93,17 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         /// The libsrt version the runtime reported; nil in a build with no
         /// bridge, or on a machine with none installed.
         var srtRuntimeVersion: String?
+        /// …and so does NDI, the other network output. Two lines rather than one
+        /// because for NDI they can disagree in a way that matters and is
+        /// otherwise baffling: the SDK HEADERS are what a build has or has not,
+        /// and the RUNTIME is what a machine has or has not, and a machine with
+        /// NDI Tools installed and no SDK reports a version of nothing. That is
+        /// the exact state the feature was restored in, so it is the first thing
+        /// a report about a missing source has to be able to say.
+        var ndiSDKAvailable = false
+        /// The libndi version the runtime reported; nil in a build with no
+        /// bridge, or on a machine with none installed.
+        var ndiRuntimeVersion: String?
     }
 
     struct DeviceRow: Codable, Sendable {

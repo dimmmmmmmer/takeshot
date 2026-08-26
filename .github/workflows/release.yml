@@ -5,8 +5,8 @@
 # on the release page itself by scripts/release-notes.sh:
 #
 #   * A GitHub runner has none of the vendor SDKs — they are not redistributable
-#     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D, SRT
-#     and WebRTC bridges are compiled as stubs. (libsrt and libdatachannel are
+#     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D, SRT,
+#     WebRTC and NDI bridges are compiled as stubs. (libsrt and libdatachannel are
 #     the two that COULD be fetched: both are MPL-2.0 rather than a camera
 #     vendor's licence, and `scripts/bundle-app.sh` already knows how to carry
 #     libdatachannel inside the app. Neither is, because a published build with

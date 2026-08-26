@@ -39,7 +39,7 @@ which has none of them, so the DMG on the releases page can play back and
 export but cannot see a capture board. If you want to change that, that is the
 thing to change.
 
-Four of these are wired up; the last is a slot — the SDK has somewhere to go
+Six of these are wired up; the last is a slot — the SDK has somewhere to go
 and its terms are written down, but no code reads it yet.
 
 | SDK | Goes in | State |
@@ -48,6 +48,8 @@ and its terms are written down, but no code reads it yet.
 | [Blackmagic RAW](https://www.blackmagicdesign.com/developer/) | `vendor/BRAWSDK/` | in use; without it `.braw` files do not open (`CBRClip.isSDKAvailable == NO`) |
 | [R3D](https://www.red.com/developers) | `vendor/R3DSDK/` | in use; without it `.r3d` is recognized and reported as unsupported (`CR3DClip.isSDKAvailable == NO`) |
 | [libsrt](https://github.com/Haivision/srt) | `vendor/SRTSDK/` | in use; without it the SRT output reports itself unavailable (`CSRTSender.isSDKAvailable == NO`). `brew install srt` — MPL-2.0, no registration |
+| [libdatachannel](https://github.com/paullouisageneau/libdatachannel) | `vendor/libdatachannel/` | in use; without it the remote's `/live` page reports itself unavailable (`CDCPeerConnection.isSDKAvailable == NO`). MPL-2.0, but in no package manager — a release bundles it |
+| [NDI](https://ndi.video/for-developers/ndi-sdk/) | `vendor/NDISDK/` | in use; without it the NDI output reports itself unavailable (`CNDSender.isSDKAvailable == NO`). SDK 4 or newer, free registration |
 | [AJA NTV2](https://github.com/aja-video/libajantv2) | `vendor/AJANTV2/` | slot only — an AJA `CaptureBackend` is planned, not built |
 
 Each `vendor/*/README.md` says exactly which files to copy where, and what the
@@ -55,13 +57,17 @@ licence lets you ship.
 
 Only R3D is linked at build time, and only when its archive is really on disk
 (see the comment in `Package.swift`). The rest are opened at runtime —
-`DeckLinkAPIDispatch.cpp` is compiled into the bridge, and the RAW and libsrt
-runtimes are `dlopen`ed — so a build made without those SDKs still runs on a
-machine that has them.
+`DeckLinkAPIDispatch.cpp` is compiled into the bridge, and the RAW, libsrt,
+libdatachannel and NDI runtimes are `dlopen`ed — so a build made without those
+SDKs still runs on a machine that has them.
 
-libsrt is the odd one out on licensing rather than on linking: MPL-2.0 rather
-than a vendor's own terms, so it is the only one a release could legally bundle.
-What that would cost is written down in `vendor/SRTSDK/README.md` and `NOTICE`.
+libsrt and libdatachannel are the odd ones out on licensing rather than on
+linking: MPL-2.0 rather than a vendor's own terms, so they are the ones a
+release could legally bundle, and the second one it has to. The NDI runtime may
+also be redistributed, but under Vizrt's own SDK licence and its attribution
+requirements rather than the MPL's source-availability ones — and no release
+bundles it today. What each would cost is written down in the matching
+`vendor/*/README.md` and in `NOTICE`.
 
 For how the pieces fit together, and the hardware behaviour the capture path
 depends on, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

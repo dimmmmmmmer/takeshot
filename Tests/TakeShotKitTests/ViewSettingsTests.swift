@@ -276,12 +276,20 @@ struct ViewSettingsTests {
     /// Every string a retired part of this window used to show is gone from
     /// BOTH tables.
     ///
-    /// Two retirements are covered. The captions that restated what a control
-    /// obviously does (owner items 3, 6, 8, 14), and the whole NDI output
-    /// section — a feature the owner replaced, whose eight labels are the part
-    /// of it a `git rm` cannot reach. Either way the only route back is somebody
+    /// One retirement is covered: the captions that restated what a control
+    /// obviously does (owner items 3, 6, 8, 14). The only route back is somebody
     /// re-adding the key, and the render tests above would simply measure a
     /// taller form without saying why.
+    ///
+    /// **The NDI section's nine strings used to be on this list and are
+    /// deliberately off it.** That feature was retired and then un-retired — the
+    /// owner asked for NDI beside SRT rather than instead of it — so the keys
+    /// are back in both tables on purpose, and a list that still named them
+    /// would be asserting the opposite of what the app now does. What holds them
+    /// to the same standard instead is `ViewNDISettingsTests`, which renders the
+    /// section in both languages and checks that every one of those labels fits
+    /// the form. A retirement that comes back is not the same thing as a key
+    /// that leaked back in, and only the tests can tell the two apart.
     @Test func theRetiredSettingsStringsAreGoneFromBothLanguages() throws {
         for language in ["en", "ru"] {
             let path = try #require(Bundle.module.path(forResource: language,
@@ -290,10 +298,7 @@ struct ViewSettingsTests {
                 contentsOfFile: path + "/Localizable.strings") as? [String: String])
             for key in ["menubar_keep_hint", "luts_hint", "remote_hint",
                         "backup_folder", "backup_copying", "backup_verified",
-                        "backup_failed",
-                        "settings_ndi", "ndi_enable", "ndi_source_name",
-                        "ndi_status", "ndi_sending", "ndi_not_sending",
-                        "ndi_unavailable", "ndi_failed_short", "ndi_failed"] {
+                        "backup_failed"] {
                 #expect(strings[key] == nil, "\(key) is back in \(language)")
             }
         }

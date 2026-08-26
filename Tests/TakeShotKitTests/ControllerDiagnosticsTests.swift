@@ -1,4 +1,6 @@
 import CDeckLink
+import CNDI
+import CSRT
 import CaptureCore
 import Foundation
 import Testing
@@ -132,6 +134,41 @@ import Testing
             #expect(report.contains("Framework on disk"))
             #expect(report.contains("Desktop Video"))
             #expect(report.contains(deck.diagnosis.rawValue))
+        }
+    }
+
+    /// **Both network outputs say which build this is**, and NDI needs two
+    /// lines rather than one.
+    ///
+    /// The whole failure mode of a network output is invisible — an operator
+    /// with no source in their receiver's list has no way to tell "this binary
+    /// was never compiled to send" from "the network ate it". For NDI the two
+    /// halves can disagree in a way nothing else here can: the SDK HEADERS are
+    /// what a BUILD has, the runtime dylib is what a MACHINE has, and a machine
+    /// with NDI Tools installed and no SDK — which is the state this feature was
+    /// restored on — has the runtime and reports a version of nothing. A report
+    /// that printed only one of them would be actively misleading there.
+    ///
+    /// What is asserted is the CONSISTENCY of the two, not their values: this
+    /// suite runs on machines with and without each SDK, and pinning either
+    /// would pin the host.
+    @Test func theNetworkOutputsSayWhichBuildThisIs() async throws {
+        try await ControllerHarness.run { controller, root in
+            let out = try scratch(in: root)
+            let deck = controller.diagnosticsSnapshot().deckLink
+
+            #expect(deck.ndiSDKAvailable == CNDSender.isSDKAvailable())
+            #expect(deck.srtSDKAvailable == CSRTSender.isSDKAvailable())
+            // A version can only come from a bridge that is really there. The
+            // other direction is NOT asserted: a real bridge on a machine with
+            // no runtime is exactly the case that reports nil.
+            if deck.ndiRuntimeVersion != nil { #expect(deck.ndiSDKAvailable) }
+
+            let folder = try await collect(controller, into: out)
+            let report = try read(folder, DiagnosticsBundle.reportFileName)
+            #expect(report.contains("NDI SDK"))
+            #expect(report.contains("libndi version"))
+            #expect(report.contains("SRT (libsrt)"))
         }
     }
 

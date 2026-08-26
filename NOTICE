@@ -14,6 +14,7 @@ described in the matching vendor/<sdk>/README.md.
   Blackmagic DeckLink SDK   <https://www.blackmagicdesign.com/developer/>
   Blackmagic RAW SDK        <https://www.blackmagicdesign.com/developer/>
   RED R3D SDK               <https://www.red.com/developers>
+  NDI SDK (Vizrt)           <https://ndi.video/for-developers/ndi-sdk/>
   libsrt (MPL-2.0)          <https://github.com/Haivision/srt>
   libdatachannel (MPL-2.0)  <https://github.com/paullouisageneau/libdatachannel>
   AJA NTV2 SDK (MIT)        <https://github.com/aja-video/libajantv2>
@@ -46,8 +47,18 @@ satisfies that. The same applies to the MPL-2.0 components it links in
 vendor/libdatachannel/README.md before publishing a build that carries the
 dylib.
 
-Runtime frameworks installed by Blackmagic Desktop Video and Blackmagic RAW are
-loaded dynamically at run time and are likewise not redistributed here.
+The NDI SDK is used for the NDI output. Its headers are not committed here and
+its runtime (libndi) is loaded dynamically, so nothing in this repository or in
+a build made from it distributes any part of it. The runtime MAY be
+redistributed inside an NDI-enabled application, but only under Vizrt's own SDK
+licence, whose obligations are about attribution and naming rather than source
+availability: the product has to identify NDI correctly and link to their site.
+No published release bundles it. Read the licence in the SDK, and
+vendor/NDISDK/README.md, before shipping one that does.
+
+Runtime frameworks installed by Blackmagic Desktop Video, Blackmagic RAW and
+the NDI Tools are loaded dynamically at run time and are likewise not
+redistributed here.
 
 Bundled fonts
 -------------

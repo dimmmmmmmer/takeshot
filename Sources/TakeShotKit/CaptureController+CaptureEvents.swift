@@ -19,9 +19,12 @@ extension CaptureController {
             self.signalFormat = format
             if changed, format != nil, self.mirrors.playout != nil {
                 self.rebuildPlayout() // re-wires the mirrors on its way out
-            } else if changed, format != nil, self.mirrors.srt != nil {
-                // No hardware output, but the SRT encoder is built for a raster
-                // and a frame rate, and the rate is captured at wire time.
+            } else if changed, format != nil,
+                      self.mirrors.srt != nil || self.mirrors.ndi != nil {
+                // No hardware output, but both of the remaining outputs care
+                // about the rate and both capture it at wire time: the SRT
+                // encoder is BUILT for a raster and a frame rate, and an NDI
+                // frame STATES the source's rate on the wire.
                 self.wireDisplayMirrors()
             }
             if changed { self.reportBitDepth(format) }

@@ -17,10 +17,10 @@ private let webrtcSignallingQueue =
 /// The WebRTC viewers, from the controller's side: answering an offer, holding
 /// the connection it produced, and giving the slot back when it ends.
 ///
-/// **The frames come off the SAME display-mirror slot the hardware monitor and
-/// the SRT stream ride** (see `wireDisplayMirrors`), so a browser watching over
-/// WebRTC sees the DECORATED frame — the picture the operator is looking at,
-/// aids and chroma key included — through the one shared encoder.
+/// **The frames come off the SAME display-mirror slot the hardware monitor, the
+/// NDI source and the SRT stream ride** (see `wireDisplayMirrors`), so a browser
+/// watching over WebRTC sees the DECORATED frame — the picture the operator is
+/// looking at, aids and chroma key included — through the one shared encoder.
 ///
 /// That is a decision with an open question behind it, and it is written here
 /// rather than discovered later: the phone camera GRID deliberately shows the
@@ -31,6 +31,17 @@ private let webrtcSignallingQueue =
 /// director's monitor. Whoever removes the JPEG grid has to settle it: either
 /// the grid adopts this picture, or "one encoder" becomes "one encoder per
 /// distinct picture" and the second one is paid for.
+///
+/// **The NDI output narrows that question rather than widening it, which is
+/// worth knowing before anyone counts three feeds and assumes three votes.**
+/// NDI is not a consumer of this encoder at all — its SDK takes frames and
+/// compresses them itself, so it hangs off the display buffer beside the
+/// hardware feeder. It could therefore take the clean picture for the price of
+/// one more handler slot and no second encode, and it takes the decorated one
+/// anyway, on the merits stated at the top of `CaptureController+NDI`. So the
+/// "one encoder cannot compress two pictures" argument is still about exactly
+/// two consumers, SRT and this one; NDI is independent evidence for the same
+/// answer rather than another claim on the same session.
 extension CaptureController {
     // MARK: - the shared encoder
 

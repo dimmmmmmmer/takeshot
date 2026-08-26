@@ -24,7 +24,7 @@ import Foundation
 /// SINGLE keyed container, so every key still lands at the top level exactly
 /// where it always did. Nothing here hand-writes a per-field encode or decode —
 /// the field-to-key mapping is still the compiler's, which is what makes the
-/// 88 keys unforgeable.
+/// 90 keys unforgeable.
 ///
 /// Flatness is load-bearing for a second consumer as well as for the stored
 /// blob: `DiagnosticsRedaction` walks this encoding as a flat map and drops
@@ -62,6 +62,8 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     public var visualRec = VisualRecSettings()
     /// The browser remote.
     public var remote = RemoteSettings()
+    /// The NDI output.
+    public var ndi = NDISettings()
     /// The SRT output.
     public var srt = SRTSettings()
     /// The dailies burn-in set.
@@ -100,6 +102,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         chromaKey = try ChromaKeySettings(from: decoder)
         visualRec = try VisualRecSettings(from: decoder)
         remote = try RemoteSettings(from: decoder)
+        ndi = try NDISettings(from: decoder)
         srt = try SRTSettings(from: decoder)
         dailies = try DailiesSettings(from: decoder)
         offload = try OffloadSettings(from: decoder)
@@ -109,7 +112,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
 
     /// And each group encodes back into the same one. Asking an encoder for a
     /// keyed container twice at the same coding path hands back the container
-    /// it already made, so fourteen groups produce one flat object.
+    /// it already made, so fifteen groups produce one flat object.
     public func encode(to encoder: Encoder) throws {
         try capture.encode(to: encoder)
         try naming.encode(to: encoder)
@@ -122,6 +125,7 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         try chromaKey.encode(to: encoder)
         try visualRec.encode(to: encoder)
         try remote.encode(to: encoder)
+        try ndi.encode(to: encoder)
         try srt.encode(to: encoder)
         try dailies.encode(to: encoder)
         try offload.encode(to: encoder)
