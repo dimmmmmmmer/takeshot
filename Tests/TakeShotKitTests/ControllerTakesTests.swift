@@ -23,14 +23,48 @@ import Testing
         return takes
     }
 
-    /// The CSV is written on a background queue, so every read waits for the
-    /// content it is about to assert on rather than for the file to exist.
-    private func log(_ root: URL, containing needle: String,
+    /// Read the sidecar once it says everything the caller is about to assert,
+    /// and hand back the very text that said so.
+    ///
+    /// The CSV is written on a background queue, so a read has to wait — and
+    /// WHAT it waits for is the whole of this. The old shape polled for ONE
+    /// needle while its callers went on to assert other facts, and each of
+    /// those facts is a SEPARATE write: an edit rewrites the file, so three
+    /// edits are three rewrites. Quiet, all three land inside one 50 ms poll
+    /// and the test passes; loaded, the file is read between them. Read at the
+    /// moment the comment lands, the log says
+    /// `A001C02.mov,001,2,,boom in frame` — no rating, no `Bad:` prefix — and
+    /// two assertions about a file that was still being written fail. That is
+    /// a real red run on this machine, and it is reproduced here by moving the
+    /// read one statement earlier.
+    ///
+    /// It also read the file a SECOND time to return it, so the text asserted
+    /// on was never the text the wait had looked at. One read now.
+    ///
+    /// This is CLAUDE.md's rule about waits in the form it takes for a file:
+    /// poll for the OUTCOME — the caller's whole claim — on an I/O-sized
+    /// budget, never for one fact that happens to arrive first.
+    ///
+    /// Rows rather than substrings, and each has to match a COMPLETE line.
+    /// `TakeLogExporter` writes `atomically: true`, so no reader can see a
+    /// torn file today; a `contains` that half a row could satisfy would make
+    /// this helper quietly depend on that, and the row form does not.
+    private func log(_ root: URL, rows: [String],
                      file: String = TakeLogExporter.fileName) async -> String {
         let url = root.appendingPathComponent(file)
-        func text() -> String? { try? String(contentsOf: url, encoding: .utf8) }
-        await ControllerWait.until { text()?.contains(needle) == true }
-        return text() ?? ""
+        var settled: String = ""
+        await ControllerWait.untilWritten {
+            guard let text: String = try? String(contentsOf: url,
+                                                 encoding: .utf8)
+            else { return false }
+            let lines: [String] = text.split(separator: "\n").map(String.init)
+            guard rows.allSatisfy({ (row: String) -> Bool in
+                lines.contains { (line: String) -> Bool in line.contains(row) }
+            }) else { return false }
+            settled = text
+            return true
+        }
+        return settled
     }
 
     @Test func ratingCyclesNoneGoodBadNone() async throws {
@@ -92,10 +126,15 @@ import Testing
             controller.setComment("boom in frame", for: controller.takes[1])
             controller.setRating(.bad, for: controller.takes[1])
 
-            let csv = await log(root, containing: "boom in frame")
+            // Every fact below is a separate write, so the wait is for all of
+            // them — see `log(_:rows:)` for what waiting for one of them cost.
+            // Resolve reads the Good Take checkbox from the fourth column.
+            let csv: String = await log(root, rows: [
+                "A001C01.mov,001,1,true",
+                "A001C02.mov,001,2,false,Bad: boom in frame",
+            ])
 
             #expect(csv.contains("A001C01.mov"))
-            // Resolve reads the Good Take checkbox from this column
             #expect(csv.contains("A001C01.mov,001,1,true"))
             #expect(csv.contains("A001C02.mov,001,2,false"))
             #expect(csv.contains("Bad: boom in frame"))
@@ -117,7 +156,9 @@ import Testing
                 recordedAt: Date(timeIntervalSince1970: 1_700_000_001))]
 
             controller.exportTakeLog()
-            let csv = await log(root, containing: "A001C01.mov")
+            // Both rows, because the order of the two is the claim.
+            let csv: String = await log(root, rows: ["A001C01.mov",
+                                                    "A001C02.mov"])
 
             #expect(csv.contains("A001C02.mov"))
             // and in recording order, not "whatever is still on disk first"
@@ -136,9 +177,14 @@ import Testing
             controller.takes = [take]
 
             controller.exportTakeLog()
-            let csv = await log(root, containing: "10:00:01:12",
-                                file: TakeLogExporter.markersFileName)
+            // All three facts, and each has to be on a complete line — the
+            // marker's row carries them together, and a wait that named one of
+            // them would be the very shape `log(_:rows:)` exists to stop.
+            let csv: String = await log(
+                root, rows: ["A001C01.mov", "10:00:01:12", "focus"],
+                file: TakeLogExporter.markersFileName)
             #expect(csv.contains("A001C01.mov"))
+            #expect(csv.contains("10:00:01:12"))
             #expect(csv.contains("focus"))
         }
     }

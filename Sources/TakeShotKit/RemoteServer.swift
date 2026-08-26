@@ -384,6 +384,14 @@ final class RemoteServer: @unchecked Sendable {
         queue.sync { clients.values.map(\.inFlightBytes).max() ?? 0 }
     }
 
+    /// Commands honoured, across all clients. For the tests, and for the same
+    /// reason as the ledger below — see `RemoteClient.commandsHonoured`. The
+    /// command ceiling is a RATE, so the only way to check it from outside is
+    /// to count what got through and divide by the time it took.
+    var commandsHonoured: Int {
+        queue.sync { clients.values.map(\.commandsHonoured).reduce(0, +) }
+    }
+
     /// Frames handed to the transport, across all clients. For the tests —
     /// the one-in-flight rule is otherwise invisible from outside: a frame
     /// held back is indistinguishable on the wire from one not yet encoded.

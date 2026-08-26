@@ -115,8 +115,31 @@ import Testing
     /// real page produces is `script.html`'s `flushPending` after the socket
     /// comes back: one comment and one slate per take.
     ///
-    /// Each command carries its own index as the comment text, so the take
-    /// itself reports how many got through.
+    /// **The second half is a RATE, and it has to be asserted as one.** This
+    /// used to send `commandBurst + 256` commands and require that the last of
+    /// them never reached the controller — which is not what a token bucket
+    /// promises. `commandBurst` at once and `commandsPerSecond` afterwards
+    /// means 768 commands ARE allowed, over sixteen seconds; the old assertion
+    /// held only while the send loop outran the refill, and it went red on the
+    /// development Mac with three other test batteries running. Giving it more
+    /// room would have been worse than the flake: a bound that only holds on
+    /// an idle machine is not a bound, and this one exists for a phone
+    /// spending the app's time exactly when the app is busiest.
+    ///
+    /// So the claim is now the bucket's own — over however long this machine
+    /// took, no more than `commandBurst + commandsPerSecond × elapsed` were
+    /// honoured. That holds at any speed, and it pins the refill RATE, which
+    /// the old shape never checked at all. `RemoteClient.commandsHonoured` is
+    /// what makes it visible: a refused command is dropped silently, so the
+    /// wire cannot say how many got through.
+    ///
+    /// Each command still carries its own index as the comment text, so the
+    /// take reports how far into the flood the socket got — and the pace is
+    /// PRINTED, because on a machine too slow to outrun the refill the
+    /// guarantee is not violated by anything and a reader should be able to
+    /// see that rather than read a green tick as a measurement. Same house
+    /// rule as `MultiviewPerformanceTests`: a runner's clock measures the
+    /// runner.
     @Test func aSocketCannotSpendMoreCommandsThanAPageEverProduces() async throws {
         try await ControllerHarness.run { controller, root in
             let take: Take = try RemoteHarness.seedTake(
@@ -131,14 +154,18 @@ import Testing
             // pending, and this test pushes hundreds of commands, each of which
             // comes back as a status and a take log. Without a reader the
             // client's own window shuts and the server drops it for the stall
-            // — which would look exactly like the ceiling doing its job.
-            let drain = Task { @MainActor in
-                while true { _ = try await client.task.receive() }
-            }
-            defer { drain.cancel() }
+            // — which would look exactly like the ceiling doing its job, and
+            // `RemoteDrain` is what tells the two apart: it records an issue
+            // the moment its own socket fails, instead of ending a task
+            // nothing is awaiting and leaving the ledger below to read low for
+            // a reason that has nothing to do with the ceiling.
+            let drain = RemoteDrain(client)
+            defer { drain.stop() }
 
+            let server: RemoteServer = try #require(controller.remoteServer)
             let identifier: String = take.id.uuidString
             let sent: Int = Int(RemoteClient.commandBurst) + 256
+            let started: ContinuousClock.Instant = .now
             for index in 0..<sent {
                 try await client.send(["action": "comment",
                                        "id": identifier,
@@ -152,16 +179,45 @@ import Testing
             #expect(honoured,
                     "the ceiling cut into a burst a real page can produce")
 
-            let overran: Bool = await ControllerWait.until(
+            // The full-budget wait that proves a change did NOT happen, kept
+            // as it was: a ceiling that stopped working shows as the whole
+            // flood landing, and this is where that would appear. It also
+            // gives the server time to finish READING the tail of the flood,
+            // which is what the ledger below counts. It costs the allowance
+            // two seconds of refill — 32 commands against a discrimination of
+            // 768 to 547 — and a broken ceiling leaves it early anyway.
+            _ = await ControllerWait.until(
                 { Self.landed(controller) >= sent - 1 }, timeout: .seconds(2))
-            #expect(!overran,
-                    "a socket spent more commands than the ceiling allows")
+
+            let elapsed: Double = Self.seconds(started.duration(to: .now))
+            let allowance: Double = RemoteClient.commandBurst
+                + RemoteClient.commandsPerSecond * elapsed
+            let spent: Int = server.commandsHonoured
+            print("command ceiling: \(spent) of \(sent) honoured in "
+                + "\(Self.rounded(elapsed)) s; the allowance over that time is "
+                + "\(Int(allowance))")
+            let overrun: String = "a socket spent \(spent) commands in "
+                + "\(Self.rounded(elapsed)) s, against an allowance of "
+                + "\(Int(allowance))"
+            #expect(Double(spent) <= allowance, "\(overrun)")
         }
     }
 
     /// The index of the last command that reached the controller.
     private static func landed(_ controller: CaptureController) -> Int {
         Int(controller.takes.first?.comment ?? "") ?? -1
+    }
+
+    /// A `Duration` as seconds, and as text. Both spelled out rather than
+    /// inferred — the runner's compiler is a version behind and these are test
+    /// expressions (see CLAUDE.md).
+    private static func seconds(_ duration: Duration) -> Double {
+        let parts: (seconds: Int64, attoseconds: Int64) = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+
+    private static func rounded(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 
     /// The set's own ceiling, which the per-socket one does not imply: eight

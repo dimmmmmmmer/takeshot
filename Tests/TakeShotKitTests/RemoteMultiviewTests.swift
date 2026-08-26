@@ -187,53 +187,92 @@ import Testing
             }
             try #require(subscribed, "the raw socket never subscribed")
 
-            // Push until the socket's window shuts and a completion stops
-            // landing. Half-megabyte frames for the same reason the stalled-
-            // client status test uses them: loopback buffers absorb small
-            // sends for most of a minute. One push per round, NOT a burst — a
-            // burst collapses under latest-wins into two sends total, which
-            // is the very rule under test working against its own fixture.
+            // Push until a frame is held behind one in flight. Half-
+            // megabyte frames because loopback buffers absorb small sends for
+            // most of a minute, and the frame path has no in-flight BYTE
+            // ceiling to trip (frames are deliberately not counted into
+            // `inFlightBytes` — see RemoteClient+Multiview), so a big frame
+            // here cannot drop the client the way it could on the status
+            // path. One push per round, NOT a burst — a burst collapses under
+            // latest-wins into two sends total, which is the very rule under
+            // test working against its own fixture.
             let big = Data(repeating: 0xAB, count: 512 * 1024)
-            let stuck = await Self.wedge(server, jpeg: big)
-            let settled = try #require(stuck, "the socket never stalled")
+            let backedUp: Bool = await Self.backUp(server, jpeg: big)
+            try #require(backedUp,
+                         "the socket never backed up, so nothing was held")
+            let settled: Int = server.multiviewFrameSends
 
             // The claim itself: more frames arrive, none is handed over while
             // the one in flight is unacknowledged — and per camera they
             // REPLACE the held frame instead of queueing behind it.
-            for _ in 0..<10 {
+            for _ in 0..<Self.floodFrames {
                 server.broadcastFrame(camera: 0, jpeg: big)
                 server.broadcastFrame(camera: 1, jpeg: big)
             }
+            // Poll for the VIOLATION rather than for quiet: a gate that
+            // stopped working puts the whole flood on the wire in the time it
+            // takes the queue to drain the pushes.
             _ = await ControllerWait.until(
-                { server.multiviewFrameSends > settled }, timeout: .seconds(2))
-            #expect(server.multiviewFrameSends == settled,
-                    "a second frame was sent while the first was in flight")
-            #expect(server.multiviewFramesInFlight == 1)
-            #expect(server.multiviewPendingFrames == 2,
+                { server.multiviewFrameSends > settled + Self.acknowledgeSlack },
+                timeout: .seconds(2))
+
+            // The client has to still be there, or every ledger below reads
+            // zero and the bounds pass without measuring anything.
+            #expect(server.clientCount == 1, "the fixture's socket went away")
+            #expect(server.multiviewFrameSends <= settled + Self.acknowledgeSlack,
+                    "frames were handed over while one was in flight")
+            #expect(server.multiviewPendingFrames <= 2,
                     "held frames queued up instead of latest-wins per camera")
         }
     }
 
-    /// Feed frames until a completion stops landing, and hand back the send
-    /// ledger at that point — nil when the socket never wedged inside the
-    /// budget. One frame per round so latest-wins cannot collapse the flood,
-    /// and the wedge is confirmed by the ledger holding still across a beat
-    /// WITH a frame in flight — an outcome poll, never a wall-clock guess.
+    /// Frames pushed per camera by the flood. Twenty in total, against a
+    /// tolerance of two, is the order of magnitude the claim rests on.
+    private static let floodFrames: Int = 10
+
+    /// How far the send ledger may move during the flood and still be obeying
+    /// the rule.
+    ///
+    /// It is not zero, and asserting zero is what made this CI's flake. A
+    /// socket whose window is shutting can still acknowledge the frame already
+    /// on the wire, and each acknowledgement releases exactly one held frame —
+    /// so the ledger moves by one, twice over at the worst, with nothing wrong.
+    /// The runner's red run moved it by exactly one, between the wedge check
+    /// and the assertion; the same failure reproduces on the development Mac,
+    /// verbatim, by returning from `backUp` one round early.
+    ///
+    /// Two is a tenth of what the flood pushes, so the distance the assertion
+    /// actually keeps is the whole one: a gate that stopped working shows up
+    /// as twenty, not as three.
+    private static let acknowledgeSlack: Int = 2
+
+    /// Feed one camera until the socket is backed up: a frame handed to the
+    /// transport and another HELD behind it. One frame per round, so
+    /// latest-wins cannot collapse the flood into two sends.
+    ///
+    /// Both halves of the exit are outcomes the ledger states, and that is the
+    /// whole repair. This used to decide the socket was wedged from 300 ms of
+    /// quiet, and no window can carry that claim: an unacknowledged frame and
+    /// a shut window look identical inside one, so on a slower machine the
+    /// check passed with a completion still on its way, it landed during the
+    /// flood, and the ledger the assertions read had moved under them. That is
+    /// the runner's red run, and it reproduces here — verbatim, three times in
+    /// three — by returning from this function one round early.
+    ///
+    /// A held frame is also the only fixture the assertions need now, which is
+    /// why nothing here waits for the socket to be permanently stuck.
     @MainActor
-    private static func wedge(_ server: RemoteServer,
-                              jpeg: Data) async -> Int? {
-        for _ in 0..<80 {
+    private static func backUp(_ server: RemoteServer,
+                               jpeg: Data) async -> Bool {
+        for _ in 0..<1024 {
             server.broadcastFrame(camera: 0, jpeg: jpeg)
-            try? await Task.sleep(for: .milliseconds(50))
-            guard server.multiviewFramesInFlight == 1 else { continue }
-            let before = server.multiviewFrameSends
-            try? await Task.sleep(for: .milliseconds(300))
-            if server.multiviewFrameSends == before,
-               server.multiviewFramesInFlight == 1 {
-                return before
-            }
+            // Reading the ledger is a `sync` hop onto the server's own queue,
+            // so the push above has already been applied when this runs.
+            if server.multiviewFramesInFlight == 1,
+               server.multiviewPendingFrames >= 1 { return true }
+            try? await Task.sleep(for: .milliseconds(20))
         }
-        return nil
+        return false
     }
 
     /// A phone that walked out of Wi-Fi mid-stream holds one frame in flight
@@ -254,25 +293,12 @@ import Testing
                                     "pin": pin])
 
             // The healthy client drains for the whole test — statuses AND
-            // frames — remembering what got through (see the stalled-client
-            // status test for why the drain must never stop reading).
-            let sawBadRating = HitCounter()
-            let framesSeen = HitCounter()
-            let drain = Task { @MainActor in
-                while true {
-                    switch try await healthy.task.receive() {
-                    case .data:
-                        framesSeen.bump()
-                    case .string(let text):
-                        if text.contains(#""rating":"bad""#) {
-                            sawBadRating.bump()
-                        }
-                    @unknown default:
-                        break
-                    }
-                }
-            }
-            defer { drain.cancel() }
+            // frames — remembering what got through, and saying so itself if
+            // its own socket is the one that goes (see `RemoteDrain`, and the
+            // stalled-client status test for why the drain must never stop
+            // reading).
+            let drain = RemoteDrain(healthy)
+            defer { drain.stop() }
 
             let stalled = try RemoteRawSocket(port: port)
             defer { stalled.close() }
@@ -291,7 +317,7 @@ import Testing
             for round in 1...12 {
                 server.broadcastFrame(camera: 0, jpeg: big)
                 let got = await ControllerWait.until {
-                    framesSeen.value >= round
+                    drain.binaries.value >= round
                 }
                 #expect(got, "the reading client lost its frame stream")
             }
@@ -303,7 +329,7 @@ import Testing
             // ...and the status stream flows past it exactly as before.
             controller.takes[0].rating = .bad
             controller.pushRemoteStatus()
-            let heard = await ControllerWait.until { sawBadRating.value > 0 }
+            let heard = await ControllerWait.until { drain.badRatings.value > 0 }
             #expect(heard, "a stalled multiview client cost the others their status")
         }
     }

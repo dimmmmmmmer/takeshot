@@ -251,18 +251,10 @@ import Testing
             // then cross the in-flight ceiling between two polls, the count
             // skips from 2 to 0, and this test was the suite's flake. The
             // drain also remembers whether the post-drop status got through,
-            // which is the "keeps their pushes" being claimed.
-            let received = HitCounter()
-            let sawBadRating = HitCounter()
-            let drain = Task { @MainActor in
-                while true {
-                    guard case .string(let text) = try await healthy.task
-                        .receive() else { continue }
-                    received.bump()
-                    if text.contains(#""rating":"bad""#) { sawBadRating.bump() }
-                }
-            }
-            defer { drain.cancel() }
+            // which is the "keeps their pushes" being claimed — and says so
+            // itself if its own socket is the one that goes (see RemoteDrain).
+            let drain = RemoteDrain(healthy)
+            defer { drain.stop() }
 
             let stalled = try RemoteRawSocket(port: port)
             defer { stalled.close() }
@@ -272,31 +264,34 @@ import Testing
             try #require(joined, "the raw socket never authenticated")
 
             let dropped = await Self.floodUntilOneDrops(
-                server, status: controller.remoteStatus(), received: received)
+                server, status: controller.remoteStatus(), received: drain.texts)
             #expect(dropped,
                     "a client that stopped reading was buffered without limit")
 
-            // One went, and it was the stalled one: the client that kept
-            // reading is the slot still held.
-            #expect(server.clientCount == 1)
+            // One went, and it was the stalled one. WHICH slot is still held
+            // is not visible in the count — the drain above is what says it,
+            // by recording an issue the moment the reading client's socket
+            // fails. A bare `== 1` was true in the run that went red on CI.
+            #expect(server.clientCount == 1,
+                    "exactly one client went; the drain says which")
 
             // And its pushes still flow: the status sent AFTER the drop
             // reaches it. First the send ledger has to drain — the reader has
             // the flood's bytes, but a completion still in flight counts
-            // against the drop ceiling, and a push behind an unsettled
-            // half-megabyte message drops the very client being asserted
-            // alive (that race, at sixteen unpolled sends a round, was this
-            // suite's flake).
+            // against the drop ceiling, and a push behind an unsettled message
+            // drops the very client being asserted alive (that race, at
+            // sixteen unpolled sends a round, was this suite's first flake;
+            // `floodPadding` is what closed the rest of it).
             //
             // Both waits take the I/O budget, and the drain is REQUIRED rather
             // than discarded. This is what the second flake was: on the CI
             // runner under coverage instrumentation the ledger needs longer
-            // than the interactive ten seconds to settle half a megabyte per
-            // client, and an ignored `until` let the test push into an
-            // unsettled server and then report "the reading client lost its
-            // status stream" — blaming the server for a wait that had simply
-            // run out. A wait whose outcome IS the precondition has to fail on
-            // itself; see TestWait.becomesTrue for the same rule stated.
+            // than the interactive ten seconds to settle, and an ignored
+            // `until` let the test push into an unsettled server and then
+            // report "the reading client lost its status stream" — blaming the
+            // server for a wait that had simply run out. A wait whose outcome
+            // IS the precondition has to fail on itself; see
+            // TestWait.becomesTrue for the same rule stated.
             let settled = await ControllerWait.untilWritten {
                 server.maxClientInFlight == 0
             }
@@ -306,7 +301,7 @@ import Testing
             controller.takes[0].rating = .bad
             controller.pushRemoteStatus()
             let heard = await ControllerWait.untilWritten {
-                sawBadRating.value > 0
+                drain.badRatings.value > 0
             }
             #expect(heard, "the reading client lost its status stream")
 
@@ -334,34 +329,74 @@ import Testing
                 "a stalled client cost the server its status stream")
     }
 
+    /// How much the flood pads a status by, and the whole reason this test
+    /// stopped being the suite's flake.
+    ///
+    /// Padding at all is necessary: loopback socket buffers autotune into the
+    /// megabytes, so a send on the stalled socket keeps completing until
+    /// several MB have gone nowhere, and at a bare status of 180 bytes that
+    /// is most of a minute of round trips.
+    ///
+    /// Padding to more than the ceiling is what was wrong. A message larger
+    /// than `RemoteClient.maximumInFlight` puts EVERY client's ledger over the
+    /// limit for as long as its bytes are on the wire — the reading one
+    /// included — and the app's own status tick fires four times a second
+    /// (`CaptureController.remoteTick`) into that window. `write` then closes
+    /// the very client this test asserts alive, with 1011, and the test's
+    /// reader dies with it. The old padding was 512 KB, sixteen times the
+    /// ceiling; here that window is microseconds and on the runner it is long
+    /// enough to catch a tick, which is exactly the CI-only failure. It
+    /// reproduces on this machine in one run by broadcasting one extra status
+    /// inside the window.
+    ///
+    /// A quarter of the ceiling is the size, and the fraction is the point
+    /// rather than the number: a client that is DRAINING is then at most a
+    /// quarter of the way to the limit when a tick arrives, so no interleaving
+    /// of the tick and one flood message can reach it, and only a socket that
+    /// stopped draining accumulates — which is the property under test. It is
+    /// still forty-five times a bare status, so the wire fills in round trips
+    /// rather than in minutes.
+    private static let floodPadding: Int = RemoteClient.maximumInFlight / 4
+
     /// Push until the stalled socket's window shuts and the bytes queued
-    /// behind it pass the ceiling. Half-megabyte take names rather than more
-    /// pushes: loopback socket buffers autotune into the megabytes, so a send
-    /// on the stalled socket keeps completing until several MB have gone
-    /// nowhere — with a status of 180 bytes that is most of a minute. One
-    /// push per RECEIPT: waiting for the reading client to take each message
-    /// before the next goes out means its completion is already queued ahead
-    /// of the next broadcast, so its own in-flight bytes never see two
-    /// messages — only the socket that stopped draining can accumulate to the
-    /// ceiling. (The old shape — bursts of sixteen, unpolled — relied on
-    /// outracing the send completions, and under load it dropped the reading
-    /// client too: that was this suite's flake.)
+    /// behind it pass the ceiling.
+    ///
+    /// One push per RECEIPT: waiting for the reading client to take each
+    /// message before the next goes out means its completion is already queued
+    /// ahead of the next broadcast on the server's own serial queue, so its
+    /// in-flight bytes never see two flood messages. (The old shape — bursts
+    /// of sixteen, unpolled — relied on outracing the send completions, and
+    /// under load it dropped the reading client too.)
+    ///
+    /// The exit is an OUTCOME — a client actually going — and the round cap is
+    /// only a runaway backstop. The wedge arrives after however many bytes
+    /// this machine's loopback absorbs: measured here at 137 rounds, i.e. 1.1
+    /// MB, three runs in a row to the round. A thousand leaves room for a pipe
+    /// eight times as deep, which is the direction a slower machine could
+    /// differ in; a cap a slow machine cannot reach would turn a wedge that
+    /// merely took longer into a failure about the server.
+    ///
+    /// A receipt that never comes ends the flood rather than burning the rest
+    /// of the cap ten seconds at a time: the reading client has stopped taking
+    /// messages, so there is nothing left to push against, and the drain has
+    /// already recorded why.
     @MainActor
     private static func floodUntilOneDrops(_ server: RemoteServer,
                                            status: RemoteStatus,
                                            received: HitCounter) async -> Bool {
         var padded = status
-        padded.takeName = String(repeating: "A", count: 512 * 1024)
+        padded.takeName = String(repeating: "A", count: floodPadding)
         var dropped = false
         var rounds = 0
-        while !dropped, rounds < 64 {
+        while !dropped, rounds < 1024 {
             rounds += 1
             server.broadcast(padded)
             let sent = rounds
-            await ControllerWait.until {
+            let receipted: Bool = await ControllerWait.until {
                 received.value >= sent || server.clientCount < 2
             }
             dropped = server.clientCount < 2
+            if !receipted { break }
         }
         return dropped
     }
