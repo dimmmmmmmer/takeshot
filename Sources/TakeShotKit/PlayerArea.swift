@@ -63,20 +63,11 @@ struct PlayerArea: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                // above the transport bar when one is showing (marker toasts
-                // must not land under the controls)
-                let transportInset: CGFloat =
-                    controller.viewerMode == .playback
-                    && controller.playbackURL != nil ? 52 : 10
-                if let error = controller.lastError {
-                    PlayerToast(text: error, tint: .orange,
-                                bottomInset: transportInset)
-                } else if let notice = controller.lastNotice {
-                    // marker toasts carry the marker's own color; everything
-                    // else is the neutral confirmation green
-                    PlayerToast(text: notice,
-                                tint: controller.lastNoticeTint ?? .green,
-                                bottomInset: transportInset)
+                if let plan = PlayerToastPlan.current(
+                    error: controller.lastError, notice: controller.lastNotice,
+                    noticeTint: controller.lastNoticeTint,
+                    transport: controller.transportBarKind) {
+                    PlayerToast(plan: plan)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: controller.lastError)
@@ -85,27 +76,63 @@ struct PlayerArea: View {
     }
 }
 
-/// A toast over the bottom of the player.
+/// What the player says over the bottom of the picture, and how far up.
 ///
-/// The error and the notice are the same strip with a different tint, and they
-/// were written out twice — including the `bottomInset`, which is what keeps a
-/// toast from landing under the transport bar. A drifted copy of that number is
-/// the take-failed message hidden behind the play button.
-private struct PlayerToast: View {
+/// Two decisions, both of which have gone wrong here before. WHICH message: an
+/// error outranks a notice, because a take that failed matters more than the
+/// marker that was just written, and a notice landing on top of a failure is
+/// the operator not being told. HOW FAR UP: clear of the transport bar when
+/// there is one, near the edge when there is not — the comment this replaces
+/// said what a drifted copy of that number costs, "the take-failed message
+/// hidden behind the play button", and then the number drifted anyway, because
+/// it lived in a `let` inside an overlay closure where nothing could read it.
+///
+/// It asks `CaptureController.transportBarKind` now, which is the same answer
+/// the bar itself is drawn from.
+struct PlayerToastPlan: Equatable {
     let text: String
     let tint: Color
     let bottomInset: CGFloat
 
+    /// Clear of a transport bar, and near the edge without one.
+    static let insetOverTransport: CGFloat = 52
+    static let insetOverPicture: CGFloat = 10
+
+    /// nil when the player has nothing to say.
+    static func current(
+        error: String?, notice: String?, noticeTint: Color?,
+        transport: CaptureController.TransportBarKind) -> PlayerToastPlan? {
+        let inset = transport == .none ? insetOverPicture : insetOverTransport
+        if let error {
+            return PlayerToastPlan(text: error, tint: .orange, bottomInset: inset)
+        }
+        if let notice {
+            // marker toasts carry the marker's own color; everything else is
+            // the neutral confirmation green
+            return PlayerToastPlan(text: notice, tint: noticeTint ?? .green,
+                                   bottomInset: inset)
+        }
+        return nil
+    }
+}
+
+/// A toast over the bottom of the player.
+///
+/// The error and the notice are the same strip with a different tint, and they
+/// were written out twice. What each one SAYS is `PlayerToastPlan`.
+private struct PlayerToast: View {
+    let plan: PlayerToastPlan
+
     var body: some View {
-        Text(text)
+        Text(plan.text)
             .font(.caption)
-            .foregroundStyle(tint)
+            .foregroundStyle(plan.tint)
             .lineLimit(2)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.black.opacity(0.6),
                         in: RoundedRectangle(cornerRadius: 8))
-            .padding(.bottom, bottomInset)
+            .padding(.bottom, plan.bottomInset)
             .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

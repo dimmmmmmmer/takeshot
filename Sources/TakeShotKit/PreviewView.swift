@@ -12,29 +12,6 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
-    /// Whether to show the AVPlayer transport (video, not photo/RAW).
-    /// The still-image list is the folder scanner's own — a second copy here
-    /// would eventually drift, and a still on the drifted side gets a video
-    /// transport drawn over a photo.
-    private var showsTransport: Bool {
-        guard controller.viewerMode == .playback, controller.syncPlay == nil,
-              let url = controller.playbackURL
-        else { return false }
-        let ext = url.pathExtension.lowercased()
-        return !CaptureController.imageExtensions.contains(ext)
-            && !CaptureController.rawExtensions.contains(ext)
-            && controller.rawPlayer?.url != url
-    }
-
-    /// RAW clips get the engine's own transport.
-    private var showsRawTransport: Bool {
-        guard controller.viewerMode == .playback, controller.syncPlay == nil,
-              let url = controller.playbackURL
-        else { return false }
-        if controller.rawPlayer?.url == url { return true }
-        return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
-    }
-
     /// What feeds the unified surface right now (stills go through the tap
     /// too — the same render/LUT/compare path as video).
     private var surfaceSource: ViewerSurface.Source {
@@ -107,15 +84,23 @@ struct PreviewView: View {
                     }
                 }
             }
-            if showsTransport {
+            // which bar, if any, is `controller.transportBarKind` and not a
+            // rule of this view's own: the toast over the picture has to clear
+            // whatever is drawn here, and two spellings of it drifted
+            switch controller.transportBarKind {
+            case .video:
                 TransportBar(player: controller.player, model: controller.transport)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(6)
-            } else if showsRawTransport, let model = controller.rawPlayer {
-                RawTransportBar(model: model)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .padding(6)
+            case .raw:
+                if let model = controller.rawPlayer {
+                    RawTransportBar(model: model)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(6)
+                }
+            case .none:
+                EmptyView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

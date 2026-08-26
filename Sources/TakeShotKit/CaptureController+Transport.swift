@@ -32,6 +32,41 @@ extension CaptureController {
         viewerMode == .playback && playbackURL != nil && syncPlay == nil
     }
 
+    /// Which transport bar, if any, is drawn under the picture.
+    enum TransportBarKind: Equatable {
+        /// No bar: the live signal, a still, a sync-play grid, or a RAW clip
+        /// the engine could not open.
+        case none
+        /// The AVPlayer transport — a video clip in the single player.
+        case video
+        /// The RAW engine's own bar: BRAW, R3D or a CinemaDNG folder.
+        case raw
+    }
+
+    /// What is under the picture right now.
+    ///
+    /// One rule, because two surfaces need the answer and they used to ask
+    /// different questions. `PreviewView` asked a careful one — video only, not
+    /// a still, not RAW, not a grid — while the toast that has to clear the bar
+    /// asked "is a clip loaded in playback", which is not the same question and
+    /// is wrong for exactly the cases the careful one excludes: a still and a
+    /// sync-play grid have no bar, and the toast floated 42 points above
+    /// nothing over both. `PlayerToast` names the other half of that drift.
+    ///
+    /// A RAW clip the engine could NOT open gets no bar at all, which is the
+    /// same reading `PreviewView.surfaceSource` already takes of it — what is
+    /// on screen there is a "could not open" notice, and a transport under it
+    /// would be driving whatever clip was open before.
+    var transportBarKind: TransportBarKind {
+        guard viewerMode == .playback, syncPlay == nil, let url = playbackURL
+        else { return .none }
+        if rawPlayer?.url == url { return .raw }
+        let ext = url.pathExtension.lowercased()
+        guard !Self.rawExtensions.contains(ext),
+              !Self.imageExtensions.contains(ext) else { return .none }
+        return .video
+    }
+
     func togglePlayPause() {
         if let sync = syncPlay {
             sync.togglePlay()
