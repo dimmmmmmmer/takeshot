@@ -51,8 +51,21 @@ public struct ScopeData: Sendable {
     /// waveform: the grid puts ~138 k samples on this map and 256² already
     /// gives it two per cell. At 384² most cells would hold less than one, and
     /// a vectorscope drawn from a sparser map does not gain detail — it gains
-    /// gaps. What it needed was the 1-2-1 softening the traces already had,
-    /// which it now gets.
+    /// gaps.
+    ///
+    /// What it needed instead was to stop rounding each sample to a cell, and
+    /// that is `Accumulator.addToVector`: a sample is split between the four
+    /// cells around it, so the trace has a position finer than the grid it is
+    /// stored on. That is where "low res" was actually coming from — a whole
+    /// cell is about four device pixels in the two-up layout, and every trace
+    /// was quantised to one. Rendered side by side on a hue sweep, the ring's
+    /// edges lose their staircase entirely.
+    ///
+    /// 384² was then rendered from the same frame for comparison and NOT
+    /// taken: the ring is crisper, but thinner and speckled inside from the
+    /// support each cell loses, which is a trade rather than an improvement,
+    /// and it wants a real signal and the owner's eye rather than a synthetic
+    /// one and mine. The evidence is here so that decision starts from it.
     public static let vectorSize = 256
     /// Grayscale density maps, row-major `waveWidth * waveHeight`;
     /// row 0 is the highest code value (the top of the scope).
