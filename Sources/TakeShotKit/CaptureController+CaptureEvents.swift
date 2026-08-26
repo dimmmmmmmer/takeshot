@@ -25,6 +25,10 @@ extension CaptureController {
                 self.wireDisplayMirrors()
             }
             if changed { self.reportBitDepth(format) }
+            // The first real rate is the first chance to turn a LEGACY seconds
+            // pre-roll into the frame count it means. Once. After it the
+            // number is stored and a later rate change cannot move it.
+            if let format { self.settleLegacyPreRoll(atFrameRate: format.frameRate) }
         }
         pipeline.onTimecode = { [weak self] timecode in
             guard let self, self.live.currentTimecode != timecode else { return }

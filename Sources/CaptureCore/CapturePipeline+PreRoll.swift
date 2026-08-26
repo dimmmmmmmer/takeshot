@@ -9,9 +9,17 @@ import Foundation
 /// the frames it governs were never on screen together. Internal rather than
 /// private: the frame path fills the ring and the take path empties it.
 extension CapturePipeline {
-    /// Pre-roll frame count (a direct frames setting, fps-independent).
+    /// Pre-roll frame count.
+    ///
+    /// The stored setting is frames and the rate below cannot change it — it is
+    /// passed for the one case that is not a frame count, a LEGACY
+    /// `preRollSeconds` off an old settings blob, which has to be read at the
+    /// rate the signal is actually running rather than at an assumed 25 (see
+    /// `preRollFramesEffective(atFrameRate:)`). nil before the first format
+    /// callback, which is the same answer the assumption gives.
     var preRollFrames: Int {
-        config.settings.capture.preRollFramesEffective
+        config.settings.capture.preRollFramesEffective(
+            atFrameRate: format?.frameRate)
     }
 
     /// The memory the pre-roll ring is allowed to hold, ~1.5 GB. A hard

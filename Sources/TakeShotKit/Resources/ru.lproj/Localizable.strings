@@ -265,6 +265,13 @@
 "start_frames" = "Подтверждение старта (кадры)";
 "stop_frames" = "Подтверждение стопа (кадры)";
 "pre_roll_frames" = "Пре-ролл (кадры)";
+"pre_roll_seconds" = "Пре-ролл (секунды)";
+"pre_roll_unit" = "Пре-ролл в";
+"pre_roll_unit_frames" = "Кадрах";
+"pre_roll_unit_seconds" = "Секундах";
+"pre_roll_reading" = "Читается как";
+"pre_roll_reading_value" = "%1$@ кадр. · %2$@ с при %3$@";
+"pre_roll_reading_assumed" = "%1$@ кадр. · %2$@ с при %3$@ (условно)";
 "lut_duplicate_title" = "LUT «%@» уже импортирован";
 "lut_duplicate_text" = "Выбери, что сделать с дубликатом.";
 "lut_replace" = "Заменить";

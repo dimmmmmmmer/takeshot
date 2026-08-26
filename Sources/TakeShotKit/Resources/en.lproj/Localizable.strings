@@ -263,6 +263,13 @@
 "start_frames" = "REC start confirm (frames)";
 "stop_frames" = "REC stop confirm (frames)";
 "pre_roll_frames" = "Pre-roll (frames)";
+"pre_roll_seconds" = "Pre-roll (seconds)";
+"pre_roll_unit" = "Pre-roll in";
+"pre_roll_unit_frames" = "Frames";
+"pre_roll_unit_seconds" = "Seconds";
+"pre_roll_reading" = "Reads as";
+"pre_roll_reading_value" = "%1$@ frames · %2$@ s at %3$@";
+"pre_roll_reading_assumed" = "%1$@ frames · %2$@ s at %3$@ (assumed)";
 "lut_duplicate_title" = "LUT \"%@\" is already imported";
 "lut_duplicate_text" = "Choose what to do with the duplicate.";
 "lut_replace" = "Replace";

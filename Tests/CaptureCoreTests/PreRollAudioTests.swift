@@ -97,6 +97,78 @@ struct PreRollAudioTests {
         #expect(tenCapacity * tenBit <= CapturePipeline.preRollBudgetBytes)
     }
 
+    // MARK: - what the setting means, in frames
+
+    /// A LEGACY `preRollSeconds` off an old settings blob is converted at the
+    /// SIGNAL's rate, not at a hard-coded 25.
+    ///
+    /// The conversion used to be `Int((preRollSeconds * 25).rounded())`, which
+    /// is the right answer on exactly one signal. On a 23.976 source a legacy
+    /// one-second pre-roll came back as 25 frames where it is 24, and on a 50
+    /// as 25 where it is 50 — half the head of every take of the day, silently,
+    /// with nothing on screen saying a different number was meant.
+    @Test func aLegacySecondsPreRollConvertsAtTheSignalsRate() {
+        var capture = CaptureSignalSettings()
+        capture.preRollSeconds = 1
+        for (rate, frames): (Double, Int) in [(23.976, 24), (25, 25), (50, 50)] {
+            let got: Int = capture.preRollFramesEffective(atFrameRate: rate)
+            #expect(got == frames,
+                    "one second at \(rate) fps is \(frames) frames, not \(got)")
+        }
+        // …and with no signal up — which is exactly when a settings sheet is
+        // likely to be open — it reads as the retired field always meant it
+        #expect(capture.preRollFramesEffective(atFrameRate: nil) == 25,
+                "with nothing connected the legacy value keeps its old reading")
+    }
+
+    /// The other half of the same contract: once a frame count is STORED, the
+    /// rate cannot move it. A camera changed from 25 to 50 between setups must
+    /// not double the operator's pre-roll behind their back — frames is the
+    /// stored unit precisely because it stays true across a format change.
+    @Test func anEnteredFrameCountDoesNotMoveWithTheSignalsRate() {
+        var capture = CaptureSignalSettings()
+        capture.preRollFrames = 12
+        for rate: Double? in [23.976, 25, 50, 59.94, nil] {
+            #expect(capture.preRollFramesEffective(atFrameRate: rate) == 12,
+                    "a stored frame count moved at \(rate ?? -1) fps")
+        }
+    }
+
+    /// A pre-roll typed in SECONDS meets the ring's memory ceiling through the
+    /// same code path a frame count does, because it becomes one before
+    /// anything downstream sees it.
+    ///
+    /// The unit switch is the obvious way to get around a bound that is stated
+    /// in frames: 60 s at 50 fps is 3000 frames, and at 12-bit UHD that is
+    /// ~199 GB of pre-roll ring — two orders of magnitude over a budget that
+    /// CLAUDE.md calls a hard ceiling. It cannot be reached, and not by a check
+    /// of its own: the conversion clamps to the same `preRollFrameRange` the
+    /// frames field is bounded by, and `preRollCapacity` then applies the memory
+    /// ceiling to the frame count that comes out.
+    @Test func aPreRollTypedInSecondsMeetsTheSameCeilingAsOneTypedInFrames() {
+        let bytesPerFrame: Int = 3840 * 2160 * 8
+        let unclamped: Int = 3000 // 60 s x 50 fps, if nothing bounded it
+        #expect(unclamped * bytesPerFrame > 100 * CapturePipeline.preRollBudgetBytes,
+                "60 s at 50 fps unbounded is \(unclamped * bytesPerFrame) bytes")
+
+        let fromSeconds: Int = CaptureSignalSettings.preRollFrames(
+            seconds: 60, atFrameRate: 50)
+        #expect(fromSeconds == CaptureSignalSettings.preRollFrameRange.upperBound,
+                "a seconds entry asked for \(fromSeconds) frames")
+        // the same number a frames entry of 60 x 50 would have been held to
+        var typed = CaptureSignalSettings()
+        typed.preRollFrames = unclamped
+        #expect(typed.preRollFramesEffective(atFrameRate: 50) == fromSeconds,
+                "the two units disagree about the maximum")
+
+        // …and the memory ceiling then applies to it, unchanged
+        let capacity: Int = CapturePipeline.preRollCapacity(
+            wanted: fromSeconds + 3, bytesPerFrame: bytesPerFrame)
+        #expect(capacity * bytesPerFrame <= CapturePipeline.preRollBudgetBytes,
+                "\(capacity) frames is \(capacity * bytesPerFrame) bytes")
+        #expect(capacity == 22, "the UHD 12-bit ring holds \(capacity) frames")
+    }
+
     /// Nothing changes for the rasters the budget was never tight on: at 1080p
     /// the ring holds everything that was asked for, at every depth.
     @Test func theBudgetDoesNotShortenAnHDRing() {
