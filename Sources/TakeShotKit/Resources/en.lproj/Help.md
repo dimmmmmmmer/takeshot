@@ -56,7 +56,11 @@ player switches it too.
 
 Two settings temper the detector: the **debounce** frames confirm a start or
 stop before it is acted on, and **pre-roll** keeps frames in memory so the take
-begins before the camera did.
+begins before the camera did. Pre-roll can be typed in frames or in seconds,
+whichever you think in; what is stored is always the frame count, converted at
+the rate the signal is running, and both readings are shown under the field. A
+value entered on one signal does not change when the next one runs at another
+rate — a frame count is an answer that stays true.
 
 **REC indicator on the picture** is a third trigger, and it is a switch beside
 the mode rather than another entry in it: it composes with all four, and it is

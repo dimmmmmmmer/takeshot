@@ -43,10 +43,23 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     public var startDebounceFrames: Int = 0
     public var stopDebounceFrames: Int = 0
     /// Pre-roll in seconds (legacy; superseded by preRollFrames).
+    ///
+    /// Read once, by `preRollFramesEffective(atFrameRate:)`, and only while
+    /// `preRollFrames` is nil — it is a value off an old blob, not a second
+    /// place the setting lives. Anything that writes the pre-roll clears it.
     public var preRollSeconds: Double?
     /// Pre-roll in frames: how many frames BEFORE the camera's record start to
-    /// include. nil — 5 (or a migrated legacy seconds value).
+    /// include. nil — 5 (or a legacy seconds value read at the signal's rate).
+    ///
+    /// The stored truth whichever unit the field is showing (see
+    /// `preRollUnit`): the ring holds frames, so frames is what is kept.
     public var preRollFrames: Int?
+    /// Which unit the pre-roll FIELD is in — nil/"frames" or "seconds"
+    /// (`PreRollUnit` raw values). A preference about entry and display only:
+    /// the value stored is a frame count either way, converted at the signal's
+    /// rate on the way in. Optional like every added field, so settings JSON
+    /// written by an older build still decodes.
+    public var preRollUnit: String?
     /// Forced input display mode ("1080p25"…); nil — autodetect.
     public var forcedInputMode: String?
     /// With a forced mode: the signal is RGB 4:4:4 (BGRA); nil/false — YUV.
@@ -88,14 +101,9 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     public var monitorDeviceID: String?
 
     public init() {}
-
-    /// Effective pre-roll in frames: explicit value, else migrated legacy
-    /// seconds (at 25 fps), else 5.
-    public var preRollFramesEffective: Int {
-        if let preRollFrames { return max(0, preRollFrames) }
-        if let preRollSeconds { return max(0, Int((preRollSeconds * 25).rounded())) }
-        return 5
-    }
+    // The pre-roll's arithmetic — the range both entry units clamp against,
+    // the seconds↔frames conversion and `preRollFramesEffective(atFrameRate:)`
+    // — is in `PreRollSetting.swift`, beside the unit that selects the field.
 }
 
 /// What the file is called. `projectName` is the `{prefix}` the operator types

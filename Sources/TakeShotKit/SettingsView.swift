@@ -177,12 +177,9 @@ struct SettingsView: View {
                 FrameCountField(label: L("stop_frames"),
                                 value: $controller.settings.capture.stopDebounceFrames,
                                 range: 0...120)
-                FrameCountField(label: L("pre_roll_frames"), value: Binding(
-                    get: { controller.settings.capture.preRollFramesEffective },
-                    set: {
-                        controller.settings.capture.preRollFrames = $0
-                        controller.settings.capture.preRollSeconds = nil
-                    }), range: 0...100)
+                // frames or seconds, at the operator's choice, plus the line
+                // that reads it back in both — see `PreRollControls`
+                PreRollRows()
                 // The third trigger, under the two confirm-frame fields it
                 // shares its numbers with — it has no debounce of its own (see
                 // RecDetector+Visual) and it is a switch orthogonal to the mode
