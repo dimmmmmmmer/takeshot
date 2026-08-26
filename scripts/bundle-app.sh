@@ -9,6 +9,21 @@ APP="build/TakeShot.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/TakeShot "$APP/Contents/MacOS/TakeShot"
+
+# Apple Silicon only, and checked rather than assumed (owner: "мы ориентированы
+# только на М чипы"). An x86_64 build of a capture and preview application runs
+# under Rosetta on every Mac this ships to, which is a cost paid on every frame
+# — so it is a build failure here, not a note on a download page. The likeliest
+# way to arrive here is an x86_64 shell (a Homebrew under /usr/local, or a
+# terminal opened with "Open using Rosetta" ticked years ago), which is exactly
+# the mistake that leaves no trace in the artifact except its architecture.
+BUILT_ARCH=$(lipo -archs "$APP/Contents/MacOS/TakeShot")
+if [ "$BUILT_ARCH" != "arm64" ]; then
+    echo "TakeShot built as $BUILT_ARCH; this project ships arm64 only." >&2
+    echo "You are probably in an x86_64 shell — check with 'uname -m' and" \
+         "'arch', and rebuild from a native one." >&2
+    exit 1
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # SwiftPM target resources (localizations): Bundle.module looks for them in
 # Contents/Resources. The bundle is named after the target that owns the
