@@ -21,6 +21,9 @@ on:
   schedule:
     # Monday morning, so a new query release is caught without a push.
     - cron: "23 6 * * 1"
+  # On demand, because this workflow's failure mode is a build that never
+  # returns and the only way to study it is to run it deliberately.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,13 +32,16 @@ jobs:
   analyze:
     name: Analyze Swift
     runs-on: macos-15
-    # 120, raised from 60 because the analysis outgrew it rather than broke:
-    # measured at 1 h 5 min on the dependabot bump of this very action, i.e. on
-    # main's sources with nothing else changed. The extractor traces a real
-    # `swift build` and then runs the query pack over it, and Sources has grown
-    # a great deal. A scan that always ends in a timeout is a scan nobody reads,
-    # which is the same failure as a test that cannot fail — so this is a real
-    # budget and not a nudge.
+    # 120, and it is NOT known to be enough. History, so the next person does
+    # not re-derive it: 60 was outgrown (measured at 1 h 5 min on the dependabot
+    # bump of this action), so it was raised to 120 — and then the two scheduled
+    # runs after that raise, 17 and 24 August, both ran the full 120 and were
+    # killed, on a tree whose Sources had not changed by one line since the run
+    # that finished in 40 minutes. Raising it again would only buy a longer wait
+    # for the same blank log, so the budget stays where it is and the Build step
+    # below carries a shorter one that keeps its output. A scan that always ends
+    # in a timeout is a scan nobody reads, which is the same failure as a test
+    # that cannot fail.
     timeout-minutes: 120
     permissions:
       # Uploading the SARIF results is the only write this workflow needs.
@@ -51,9 +57,30 @@ jobs:
           languages: swift
           build-mode: manual
 
+      # What the runner actually is. The same tree built under the extractor in
+      # 40 minutes on 11 August and then twice ran past two hours on the two
+      # Mondays after it, with not one source file changed in between (the only
+      # commit in that window touches Tests/, which `swift build` does not
+      # compile). So the variable is the image, not this repository, and the
+      # next failure should carry evidence about it rather than a guess.
+      - name: Runner facts
+        run: |
+          sw_vers
+          swift --version
+          xcodebuild -version || true
+          sysctl -n hw.memsize hw.ncpu
+          vm_stat
+
       # Between init and analyze, and traced by the extractor. Only the Swift
       # build: the app bundle and the tests are ci.yml's job.
+      #
+      # This step has its OWN, shorter budget, and that is the point: a job
+      # killed by the job-level timeout has no retrievable log at all — the
+      # 17 and 24 August runs are both blank, which is why "where does it
+      # hang" was unanswerable. A step that fails on its own timeout keeps
+      # everything it printed, so the last "Compiling …" line survives.
       - name: Build
+        timeout-minutes: 45
         run: swift build
 
       - name: Perform CodeQL Analysis
