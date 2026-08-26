@@ -55,24 +55,43 @@ struct VectorscopeView: View {
 
     /// A target's unit position, from the exact same chroma math the analyzer
     /// plots with — which is why a bar lands on its box instead of near it.
-    static func target(_ name: String, _ r: Int, _ g: Int, _ b: Int) -> VectorTarget {
+    /// Including the PRIMARIES: a bar's chroma is a fact about the matrix that
+    /// coded it, so both ends have to be told which one the signal is in.
+    static func target(_ name: String, _ r: Int, _ g: Int, _ b: Int,
+                       primaries: SignalPrimaries) -> VectorTarget {
         let (cb, cr) = ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
-                                            b: Double(b))
+                                            b: Double(b), primaries: primaries)
         return VectorTarget(id: name, x: CGFloat(0.5 + cb / 255),
                             y: CGFloat(0.5 - cr / 255))
     }
 
     /// The six colour-bar hues, at a given bar amplitude in 8-bit units.
-    private static func targets(atAmplitude v: Int) -> [VectorTarget] {
-        [target("R", v, 0, 0), target("G", 0, v, 0), target("B", 0, 0, v),
-         target("Cy", 0, v, v), target("Mg", v, 0, v), target("Yl", v, v, 0)]
+    ///
+    /// Where the boxes sit depends on the signal, and that is the whole point:
+    /// Rec.2020 codes luma with different weights, so the same bar has
+    /// different chroma, and a graticule fixed on 709 is the documented reason
+    /// a Rec.2020 chart used to miss its boxes. It is not a tolerance question
+    /// — 2020's red target sits about a tenth of the scope's width from 709's.
+    static func targets(atAmplitude v: Int,
+                        primaries: SignalPrimaries) -> [VectorTarget] {
+        [target("R", v, 0, 0, primaries: primaries),
+         target("G", 0, v, 0, primaries: primaries),
+         target("B", 0, 0, v, primaries: primaries),
+         target("Cy", 0, v, v, primaries: primaries),
+         target("Mg", v, 0, v, primaries: primaries),
+         target("Yl", v, v, 0, primaries: primaries)]
     }
 
     /// 75 % bars — the boxes an operator actually lines a chart up on.
-    static let targets75 = targets(atAmplitude: 191)
+    static func targets75(_ primaries: SignalPrimaries) -> [VectorTarget] {
+        targets(atAmplitude: 191, primaries: primaries)
+    }
+
     /// 100 % bars — marked, not boxed: they sit on the outer circle, and a full
     /// box there would be half outside the scope.
-    static let targets100 = targets(atAmplitude: 255)
+    static func targets100(_ primaries: SignalPrimaries) -> [VectorTarget] {
+        targets(atAmplitude: 255, primaries: primaries)
+    }
 
     /// How much of the box the scope square is allowed to take.
     ///
@@ -100,7 +119,8 @@ struct VectorscopeView: View {
                         .position(x: center.x, y: center.y)
                 }
                 VectorscopeGraticule(side: side, center: center,
-                                     skinToneLine: skinToneLine)
+                                     skinToneLine: skinToneLine,
+                                     primaries: data.primaries)
             }
         }
         .aspectRatio(1, contentMode: .fit)

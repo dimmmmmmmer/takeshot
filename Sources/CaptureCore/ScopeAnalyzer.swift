@@ -179,10 +179,17 @@ public enum ScopeAnalyzer {
     /// Full-range BT.709 chroma of gamma-encoded R'G'B' — shared by the
     /// analysis and the vectorscope graticule so targets are exact. Scale-free:
     /// the caller's units come back out.
-    public static func chroma(r: Double, g: Double, b: Double)
+    public static func chroma(r: Double, g: Double, b: Double,
+                              primaries: SignalPrimaries = .rec709)
         -> (cb: Double, cr: Double) {
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        return ((b - y) / 1.8556, (r - y) / 1.5748)
+        let weights = primaries.rgbToXYZ.lumaWeights
+        let y = weights.r * r + weights.g * g + weights.b * b
+        // The denominators FOLLOW from the weights — 2(1 − Yb) for Cb and
+        // 2(1 − Yr) for Cr — which is how 709 gets 1.8556 and 1.5748 and how
+        // 2020 gets 1.8814 and 1.4746. Writing them as constants beside
+        // derived weights is how the two halves of one matrix come apart.
+        return ((b - y) / (2 * (1 - weights.b)),
+                (r - y) / (2 * (1 - weights.r)))
     }
 
     private static let sequenceLock = NSLock()

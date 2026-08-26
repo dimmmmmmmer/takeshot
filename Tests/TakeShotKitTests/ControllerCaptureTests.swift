@@ -174,19 +174,27 @@ import Testing
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
 
+            // A fresh take is unrated, and Resolve's Good Take column is a
+            // checkbox: unrated is an EMPTY field, not "false" (which reads as
+            // "the operator rejected it").
+            //
+            // The wait is for that whole row rather than for the name, and it
+            // is the same shape as `ControllerTakesTests.log(_:rows:)` for the
+            // same reason: an edit rewrites this file, so a wait that stops at
+            // one fact can be settled by a version that does not yet carry the
+            // one being claimed. Nothing edits the take here, so today the two
+            // arrive in one write — the point is that the test does not depend
+            // on that being true.
+            let row: String = "A001C01.mov,001,1,,"
             let log = root.appendingPathComponent(TakeLogExporter.fileName)
             let logged = await ControllerWait.untilWritten {
                 (try? String(contentsOf: log, encoding: .utf8))?
-                    .contains("A001C01.mov") == true
+                    .contains(row) == true
             }
-            // asserted before reading, so a timeout says what went wrong
-            // instead of throwing a bare "no such file"
-            try #require(logged, "the take never reached \(log.lastPathComponent)")
-            let csv = try String(contentsOf: log, encoding: .utf8)
-            // a fresh take is unrated, and Resolve's Good Take column is a
-            // checkbox: unrated is an EMPTY field, not "false" (which reads as
-            // "the operator rejected it")
-            #expect(csv.contains("A001C01.mov,001,1,,"))
+            // asserted rather than read-then-thrown, so a timeout says what
+            // went wrong instead of raising a bare "no such file"
+            try #require(logged,
+                         "the take's row never reached \(log.lastPathComponent)")
 
             await ControllerWait.untilWritten { controller.thumbnails[take.id] != nil }
             #expect(controller.thumbnails[take.id] != nil)

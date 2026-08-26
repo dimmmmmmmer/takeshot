@@ -43,6 +43,9 @@ struct VectorscopeGraticule: View {
     let side: CGFloat
     let center: CGPoint
     let skinToneLine: Bool
+    /// Which matrix the signal is coded in. The targets are a fact about it,
+    /// not a constant — see `VectorscopeView.targets(atAmplitude:primaries:)`.
+    var primaries: SignalPrimaries = .rec709
     @Environment(\.scopeGridBrightness) private var brightness
 
     /// The I axis: 123° counter-clockwise from the +Cb axis. Stated as the
@@ -56,10 +59,10 @@ struct VectorscopeGraticule: View {
         ZStack {
             rings
             axes
-            ForEach(VectorscopeView.targets100) { target in
+            ForEach(VectorscopeView.targets100(primaries)) { target in
                 fullAmplitudeTick(target)
             }
-            ForEach(VectorscopeView.targets75) { target in
+            ForEach(VectorscopeView.targets75(primaries)) { target in
                 targetBox(target)
             }
         }

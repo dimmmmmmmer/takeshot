@@ -245,7 +245,9 @@ extension ScopeAnalyzer {
         private func addToVector(r: Int, g: Int, b: Int,
                                  nativeChroma: (cb: Double, cr: Double)?) {
             let raw = nativeChroma
-                ?? ScopeAnalyzer.chroma(r: Double(r), g: Double(g), b: Double(b))
+                ?? ScopeAnalyzer.chroma(r: Double(r), g: Double(g),
+                                        b: Double(b),
+                                        primaries: colorimetry.primaries)
             let cb = raw.cb * chromaGain, cr = raw.cr * chromaGain
             let size = Self.vectorSize
             let span = Double(ScopeAnalyzer.sampleLevels - 1)

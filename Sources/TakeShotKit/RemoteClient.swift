@@ -166,6 +166,13 @@ final class RemoteClient: @unchecked Sendable {
     /// Command allowance left, and when it was last topped up.
     private var commandTokens = RemoteClient.commandBurst
     private var tokensAt = RemoteServer.monotonicNow()
+    /// Commands this socket was actually allowed to spend. For the tests (via
+    /// `RemoteServer.commandsHonoured`), like `inFlightBytes` and `frameSends`
+    /// — the ceiling is otherwise invisible from outside, because a refused
+    /// command is dropped SILENTLY and on purpose, so nothing on the wire
+    /// tells a command the app ignored from one it applied to a value the take
+    /// already had.
+    private(set) var commandsHonoured = 0
 
     init(connection: NWConnection, server: RemoteServer) {
         self.connection = connection
@@ -198,6 +205,7 @@ final class RemoteClient: @unchecked Sendable {
         tokensAt = now
         guard commandTokens >= 1 else { return false }
         commandTokens -= 1
+        commandsHonoured += 1
         return true
     }
 
