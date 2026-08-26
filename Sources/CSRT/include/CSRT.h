@@ -66,7 +66,7 @@ typedef NS_ENUM(NSInteger, CSRTOpenFailure) {
 /// handshake or for libsrt's connect timeout — and `sendDatagram:length:` never
 /// does. Both belong on a queue that may block. Never the capture queue, never
 /// main, and never two queues at once: this object is not thread-safe and is
-/// confined to `SRTVideoMirror`'s queue.
+/// confined to `SRTMirror`'s queue.
 @interface CSRTSender : NSObject
 
 /// Whether this build was compiled against the real headers AND the runtime

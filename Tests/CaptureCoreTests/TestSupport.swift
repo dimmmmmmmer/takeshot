@@ -43,15 +43,42 @@ enum TestMedia {
     }
 
     /// 40 ms of silence on `channels` channels — shape matters, not content.
+    ///
+    /// `signature` fills it instead with a value that identifies the CHANNEL
+    /// and the frame, for the suites where the content is the thing being
+    /// checked: a buffer that reached the wrong consumer, or a channel taken
+    /// from the wrong slot, is then visible rather than being a plausible zero.
+    /// Silence is also what makes `AudioChannelDetector` say nothing, which is
+    /// load-bearing for every suite that already passes this.
     static func audioBuffer(seconds: Double, channels: Int = 16,
+                            signature: Bool = false,
                             cache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
         let frames = 1920
-        let samples = [Int16](repeating: 0, count: frames * channels)
+        var samples = [Int16](repeating: 0, count: frames * channels)
+        if signature {
+            for frame in 0..<frames {
+                for channel in 0..<channels {
+                    samples[frame * channels + channel] =
+                        Self.audioSignature(frame: frame, channel: channel,
+                                            seconds: seconds)
+                }
+            }
+        }
         return samples.withUnsafeBytes { raw in
             PCMAudio.makeSampleBuffer(bytes: raw.baseAddress!, sampleFrames: frames,
                                       channelCount: channels, ptsSeconds: seconds,
                                       formatCache: &cache)
         }
+    }
+
+    /// The value one sample carries under `signature`. Deterministic in all
+    /// three coordinates, so the same packet built twice is byte-identical and
+    /// two different ones never are.
+    static func audioSignature(frame: Int, channel: Int,
+                               seconds: Double) -> Int16 {
+        let packet = Int((seconds * 25).rounded())
+        return Int16(truncatingIfNeeded:
+            (channel + 1) * 1000 + frame % 97 + packet * 7)
     }
 
     /// A scratch directory that the caller removes in a `defer`.
@@ -68,6 +95,11 @@ struct SignalDriver {
     let pipeline: CapturePipeline
     /// Set to also feed audio alongside every frame.
     var withAudio = false
+    /// How many channels that audio carries, and whether it carries anything at
+    /// all — see `TestMedia.audioBuffer`. The defaults are what every existing
+    /// suite drove through here before either was a parameter.
+    var audioChannels = 16
+    var audioSignature = false
 
     private final class Counter {
         var frame = 0
@@ -76,9 +108,12 @@ struct SignalDriver {
 
     private let counter = Counter()
 
-    init(pipeline: CapturePipeline, withAudio: Bool = false) {
+    init(pipeline: CapturePipeline, withAudio: Bool = false,
+         audioChannels: Int = 16, audioSignature: Bool = false) {
         self.pipeline = pipeline
         self.withAudio = withAudio
+        self.audioChannels = audioChannels
+        self.audioSignature = audioSignature
     }
 
     /// One frame (and its audio) at `timecode`, then a real 40 ms wait.
@@ -91,6 +126,8 @@ struct SignalDriver {
             timecode: timecode, vancTrigger: nil)
         if withAudio,
            let audio = TestMedia.audioBuffer(seconds: Double(frame) * 0.04,
+                                             channels: audioChannels,
+                                             signature: audioSignature,
                                              cache: &counter.audioCache) {
             pipeline.handleAudio(audio)
         }
@@ -204,6 +241,37 @@ enum TestAudio {
             return Int(asbd.mChannelsPerFrame)
         }
         return 0
+    }
+
+    /// Every byte of a file's audio track, in order.
+    ///
+    /// The samples themselves rather than a duration or a channel count,
+    /// because "the tap did not change what the file gets" is a claim about
+    /// BYTES: a mis-interleave, a channel taken from the wrong slot and a
+    /// packet written twice all leave the track the right length. The take is
+    /// written LPCM (`TakeWriter.audioSettings`), so the bytes on the disk are
+    /// the samples that were appended and two identical takes compare equal.
+    static func rawSamples(of url: URL) async throws -> Data {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.tracks(ofType: .audio).first
+        else { return Data() }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(output)
+        reader.startReading()
+        defer { reader.cancelReading() }
+        var out = Data()
+        while let buffer = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
+            let length = CMBlockBufferGetDataLength(block)
+            var bytes = [UInt8](repeating: 0, count: length)
+            guard CMBlockBufferCopyDataBytes(block, atOffset: 0,
+                                             dataLength: length,
+                                             destination: &bytes)
+                == kCMBlockBufferNoErr else { continue }
+            out.append(contentsOf: bytes)
+        }
+        return out
     }
 
     /// What is actually in a file's audio track: where the first sample sits

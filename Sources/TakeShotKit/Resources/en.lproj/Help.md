@@ -325,7 +325,14 @@ Resolve station or a cloud gateway. Off by default.
 - **Passphrase** turns on AES. Ten characters or more, or leave it empty and the
   stream is unencrypted — worth thinking about on a venue's own network. The
   same passphrase goes into the receiver.
-- Picture only: no audio, deliberately.
+- **Sound goes with it**, and it does not depend on the cart's speakers. The
+  stream carries a stereo track: the first two channels of whatever is being
+  recorded — your channel mask, or the channels TakeShot measured as carrying a
+  signal during standby — so a director hears what you hear. There is nothing to
+  switch on. Turn the monitors down and the far end keeps its sound. If only one
+  channel is enabled the stream is mono rather than that channel twice. Nobody
+  has yet checked how closely the sound lines up with the picture on a real
+  receiver, so check that before a job depends on lip sync.
 - **When the link dies it comes back by itself.** The status row says
   "Reconnecting" and why, and TakeShot keeps trying every one to five seconds.
   Nothing about it can touch a take — a receiver that has been closed all day

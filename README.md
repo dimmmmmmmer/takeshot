@@ -99,9 +99,11 @@ build is any use to you:
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
 - SRT output: the same mirrored viewer, H.264 in an MPEG-TS, sent to an address
   on the set network — VLC on a director's laptop, OBS, a Resolve station, a
-  cloud gateway. Caller or listener, with the latency, the bitrate and an
-  optional AES passphrase as the only knobs. Off by default; needs libsrt at
-  build time (`vendor/SRTSDK/README.md`) and installed to send.
+  cloud gateway. **With sound**: a stereo fold of the channels being recorded,
+  AAC on a second stream, and it does not depend on whether the cart's speakers
+  are up. Caller or listener, with the latency, the bitrate and an optional AES
+  passphrase as the only knobs. Off by default; needs libsrt at build time
+  (`vendor/SRTSDK/README.md`) and installed to send.
 - NDI output: the same mirrored viewer announced as a source on the set network,
   for a director's iPad or a client feed, with no second cable and no second
   board output. Beside SRT rather than instead of it, because the two answer

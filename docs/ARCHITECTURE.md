@@ -231,14 +231,19 @@ when it is across a network somebody else runs.
   thing that can disagree with the presentation one.
 - **`MPEGTSMuxer`** is pure Foundation — 188-byte packets, seven to a 1316-byte
   datagram, which is libsrt's own `SRT_LIVE_DEF_PLSIZE` and is 188 × 7 for
-  exactly that reason. Every datagram is padded to that size with null packets.
-  The tables ride with the keyframe rather than on a timer, because a receiver
-  with tables and no keyframe cannot show a picture either. Being pure is what
+  exactly that reason. Every datagram is that size: a video access unit pads its
+  tail with null packets, and an audio one waits for the next unit or for the
+  next picture instead (see "The stereo tap" below for why the two answer
+  differently). The tables ride with the keyframe rather than on a timer,
+  because a receiver with tables and no keyframe cannot show a picture either.
+  Being pure is what
   makes a wire format testable: `SRTMuxerTests` is arithmetic over bytes, and the
   CRC is pinned against the published check value for CRC-32/MPEG-2 rather than
   against what this code happens to produce.
-- **`SRTVideoMirror`** owns `com.takeshot.srt` and everything on it: the
-  coalesce, the encode, the mux, the send and the reconnect.
+- **`SRTMirror`** owns `com.takeshot.srt` and everything on it: the mux of
+  both elementary streams, the send and the reconnect. The encodes are NOT here
+  — they are shared (`LiveVideoEncoder`, `LiveAudioEncoder`) and hand this file
+  units somebody else paid for.
 
 **What the frame path pays, measured.** All figures release, M-series laptop.
 
@@ -335,16 +340,109 @@ NDI has no such number because NDI's own codec decides its rate from the picture
 One number for one encoder, and a feed that is not behind that encoder is not
 asked to pretend it is.
 
-**And both are picture only, for one shared reason.** NDI carries audio and so
-does MPEG-TS; neither is sent any, because the pipeline's only stereo feed is
-`onMonitorAudio` — a single slot owned by `AudioMonitor` and gated on
-`monitorEnabled`, so hanging either feed off it would make a director's sound a
-side effect of the cart's speakers. The missing piece is one independent tap in
-`CapturePipeline+Audio`, and only the leg after it differs (AAC and a second PID
-for SRT, planar float and `NDIlib_send_send_audio_v3` for NDI). Two outputs now
-want the same tap, which is an argument for building it once rather than per
-output. The gap has not moved since either feature was written; it has gained a
-second claimant.
+**SRT carries sound now; NDI does not, and what separates them is the LEG rather
+than the tap.** Both used to be picture only for one shared reason: the
+pipeline's only stereo feed was `onMonitorAudio`, a single slot owned by
+`AudioMonitor` and gated on `monitorEnabled`, so hanging either feed off it
+would have made a director's sound a side effect of the cart's speakers. That
+half is built and it is built once — `CapturePipeline.addAudioTap` is one stereo
+mix per packet, taken once, served to the speakers and every outgoing transport
+alike, and delivered whatever the monitor switch says. See "The stereo tap"
+below. Only the leg after it differs: AAC and a second PID for SRT, planar float
+and `NDIlib_send_send_audio_v3` for NDI, Opus for WebRTC because AAC is not a
+browser codec. SRT's leg is written and executed here; the other two are stated
+seams, because neither can be RUN on a machine with no NDI headers and no
+libdatachannel — see `CaptureController+NDI` and `CaptureController+WebRTC` for
+what each one costs when it is built. (The Opus half of the WebRTC leg was
+assumed missing and turned out not to be: AudioToolbox encodes Opus on this
+machine, measured. What is missing there is the peer connection nothing here has
+ever run, not the codec.)
+
+### The stereo tap, and which channels go out
+
+One tap, in `CapturePipeline+Audio`, feeding every outgoing transport.
+
+- **It is independent of the monitor by construction, not by convention.**
+  `setAudioMonitorEnabled` reaches `onMonitorAudio` and nothing else;
+  `addAudioTap` delivers whatever that switch says. An operator taking the cart's
+  speakers down does not take the sound off a director's laptop with it, and
+  nobody has to turn the speakers up to give them any.
+- **One mix, several consumers.** `feedStereo` builds the stereo packet ONCE and
+  hands the same `CMSampleBuffer` to the speakers and to every tap, so an
+  operator monitoring while streaming pays one `selectChannels` and not two.
+  Pinned by identity rather than by equality (`theSpeakersAndTheWireShareOneMix`)
+  — two separate mixes have identical bytes, so only `===` rules the second one
+  out.
+- **Nothing listening costs two boolean tests.** No mix, no buffer, no closure
+  call. Observed at the format cache rather than at a clock: `stereoFormatCache`
+  is written by that one `selectChannels` and by nothing else, so a nil after
+  thirty packets is proof the guard returned every time.
+- **The channels are the ones in force for the FILE, folded to two.** The
+  operator's mask when they have given one, `AudioChannelDetector`'s answer when
+  they have not, the take's latch while one is rolling — `activeAudioChannelMask`,
+  the same expression the record path reads, so what goes out is always a PREFIX
+  of what is being written and the two cannot diverge. A fixed 1-2 would send a
+  sixteen-channel rig whose live pair is 5-6 two dead channels, confidently. One
+  enabled channel travels MONO rather than doubled: both legs state a channel
+  count, and faking a second is the app inventing sound.
+- **It cannot reach the take.** It runs after `recordAudio`, off its own format
+  cache, and never touches the packet the writer is given. Pinned in bytes: the
+  same take is shot twice, with a consumer on the tap and with none, and the
+  audio track's LPCM samples are compared
+  (`theRecordedAudioIsByteIdenticalWithTheTapOnAndOff`), under a mask that makes
+  the two paths genuinely different — three channels to the file, two to the
+  wire.
+
+**What one audio packet costs the capture queue**, measured in release on an
+M-series laptop with
+`TAKESHOT_BENCH=1 scripts/test.sh -c release --filter AudioTapCost`. The
+pipeline is standing by, so `recordAudio` returns at once and the difference
+between the rows is the tap. Minimum of nine passes of 400 packets each — the
+pass that got a whole core:
+
+| listening | µs/packet (min) | median |
+| --- | --- | --- |
+| nothing | 17.4 | 17.6 |
+| one transport | 21.4 | 21.6 |
+| two transports | 23.7 | 23.8 |
+| speakers + one transport | 23.7 | 23.7 |
+
+A packet is 40 ms, so the FIRST consumer costs 4.0 µs — 0.01 % of the interval
+it arrives in — and that is the mix plus one delivery. The SECOND costs 2.2 µs,
+a delivery and no mix, which is the arithmetic `feedStereo` exists for. And
+"speakers + one transport" landing on the same number as "two transports" is the
+same fact from the other side: to this path the cart's monitors are just another
+consumer of the one mix.
+
+**A single 400-packet pass could not separate those rows**, which is why the
+benchmark takes nine — and why the first version of this table was wrong. With a
+sink that RETAINED every delivered buffer, "two transports" measured BELOW "one"
+in two consecutive release runs: what was being timed was the test's own array
+growing at a different rate per row. The sink counts and keeps nothing now.
+
+**The AAC leg.** `LiveAudioEncoder` is `LiveVideoEncoder`'s shape one media type
+along: one AudioToolbox AAC-LC converter for every consumer taking sound, built
+when the first appears and dropped with the last, on `com.takeshot.audio-encode`
+and never on the capture queue. The clock is the sound's own sample count
+anchored once against the shared `LiveClock` — an access unit is 1024 samples,
+which at 48 kHz on the transport stream's 90 kHz is exactly 1920 ticks, so the
+stamps are an integer series with no rounding in them. `MPEGTSMuxer` frames each
+unit in ADTS on PID 0x0101 with `stream_type` 0x0F, and the program map declares
+that stream only once an access unit has actually ARRIVED — a PMT naming a PID
+nothing feeds is a receiver waiting for sound that is not coming, which is the
+trap `TakeWriter+Audio` pads a starved track to avoid, one transport along.
+
+Audio units are held back rather than padded out: three transport packets per
+unit against seven to a datagram would cost four null packets every 21.3 ms,
+about 280 kbit/s, which is more than the audio stream itself. So whole datagrams
+leave and a video unit flushes whatever is left — the picture keeps the latency
+it had, the padding stays what it always was (half a datagram per frame), and
+never more than six packets are held.
+
+**What only a real receiver can answer** is lip sync. Both streams are stamped
+against one `LiveClock` and the arithmetic cannot drift, but the OFFSET between
+the two paths' latencies is a property of a decoder and has never been measured
+against one. It is a constant, not a drift.
 
 **Open in a way SRT's opening is not**: the machine this was restored on has the
 NDI runtime (`/usr/local/lib/libndi.4.dylib`) and no SDK headers anywhere, so

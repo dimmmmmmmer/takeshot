@@ -116,7 +116,7 @@ extension CapturePipeline {
                 // the packed-buffer format caches describe the OLD channel
                 // count — reusing them mis-interleaves audio after a change
                 self.trimFormatCache = nil
-                self.monitorFormatCache = nil
+                self.stereoFormatCache = nil
             }
             self.config = config
             if detectorChanged {

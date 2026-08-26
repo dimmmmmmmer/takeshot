@@ -66,9 +66,13 @@ struct ViewNDISettingsTests {
     /// read better for an operator is exactly the change that would push the
     /// form wider without anyone measuring it again.
     @Test func theUnavailableReasonRendersInsideTheWindow() async throws {
-        let reason: String = try #require(NDISender.unavailableReason
+        // Not `#require`: the `??` already makes this non-optional, and
+        // wrapping a non-optional is a warning the build does not carry. The
+        // fallback is what a build WITH the SDK lays out — the point is that
+        // some real message fits, not which one.
+        let reason: String = NDISender.unavailableReason
             ?? "Built without the NDI SDK. Building with it is described in "
-                + "vendor/NDISDK/README.md.")
+                + "vendor/NDISDK/README.md."
         try await ViewProbe.run { probe in
             probe.controller.settings.ndi.enabled = true
             probe.controller.mirrors.ndiState = .unavailable(reason)

@@ -5,7 +5,7 @@ import os
 
 /// **One H.264 encode, for every live consumer watching the same picture.**
 ///
-/// This is the piece that was inside `SRTVideoMirror` while SRT was the only
+/// This is the piece that was inside `SRTMirror` while SRT was the only
 /// thing watching, and the reason it is out here is arithmetic rather than
 /// tidiness: a second consumer that built a second `VTCompressionSession` would
 /// encode the same 1080p picture twice, on a machine whose actual job is
@@ -22,7 +22,7 @@ import os
 /// pictures reaches is decided by `LiveFrame`'s subscript and nowhere else.
 ///
 /// Two consumers exist today and they want the same frame in two wire formats:
-/// `SRTVideoMirror` puts it in a transport stream and `WebRTCViewer` puts it in
+/// `SRTMirror` puts it in a transport stream and `WebRTCViewer` puts it in
 /// RTP. Both start from `MPEGTSMuxer.accessUnit(from:)`, which is the seam a
 /// `CMSampleBuffer` becomes bytes at, and neither has an opinion the other has
 /// to know about.

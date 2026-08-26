@@ -55,12 +55,12 @@ enum SRTStreamError: Error, Equatable {
 ///
 /// `Sendable` because a stream is BUILT by the factory — which the controller
 /// hands over on the MainActor — and then used on the mirror's queue. What makes
-/// that safe is the confinement rather than any locking: `SRTVideoMirror` is the
+/// that safe is the confinement rather than any locking: `SRTMirror` is the
 /// only thing that ever touches one, on one serial queue, and the implementations
 /// say so at their declaration.
 protocol SRTStreamSending: AnyObject, Sendable {
     /// Open the link. BLOCKING — a caller's connect waits for the handshake or
-    /// for libsrt's connect timeout. Called only on `SRTVideoMirror`'s queue.
+    /// for libsrt's connect timeout. Called only on `SRTMirror`'s queue.
     func open() throws
     /// Send one datagram. Never blocks.
     func send(_ datagram: Data) -> SRTSendOutcome
@@ -75,7 +75,7 @@ protocol SRTStreamSending: AnyObject, Sendable {
 ///
 /// `@unchecked Sendable`, and the invariant is the confinement rather than a lock:
 /// `CSRTSender` owns a socket and is explicitly not thread-safe, and the ONLY
-/// thing that calls into one is `SRTVideoMirror`, on `com.takeshot.srt`, one call
+/// thing that calls into one is `SRTMirror`, on `com.takeshot.srt`, one call
 /// at a time. `theWorkNeverRunsOnTheCallersQueue` is what holds that.
 final class SRTStream: SRTStreamSending, @unchecked Sendable {
     private let sender: CSRTSender

@@ -16,7 +16,7 @@ import Testing
 /// installs its own factory over that.
 ///
 /// Lock-guarded rather than main-actor-confined for the reason
-/// `FakeAudioCaptureDevice` carries a lock: it is called on `SRTVideoMirror`'s
+/// `FakeAudioCaptureDevice` carries a lock: it is called on `SRTMirror`'s
 /// queue and read from the test, and TSan aborts a suite on a plain `var`.
 final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
     private let lock = NSLock()
@@ -73,13 +73,13 @@ final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
 /// Every event a mirror reported, in order.
 final class SRTEventLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var stored: [SRTVideoMirror.Event] = []
+    private var stored: [SRTMirror.Event] = []
 
-    func record(_ event: SRTVideoMirror.Event) {
+    func record(_ event: SRTMirror.Event) {
         lock.withLock { stored.append(event) }
     }
 
-    var all: [SRTVideoMirror.Event] { lock.withLock { stored } }
+    var all: [SRTMirror.Event] { lock.withLock { stored } }
 }
 
 enum SRTFixtures {
@@ -131,7 +131,7 @@ enum SRTFixtures {
                                        framesPerSecond: framesPerSecond)
         return SRTRig(
             encoder: encoder, log: log,
-            mirror: SRTVideoMirror(endpoint: endpoint, encoder: encoder,
+            mirror: SRTMirror(endpoint: endpoint, encoder: encoder,
                                    factory: { _ in stream },
                                    onEvent: { log.record($0) }))
     }
@@ -141,7 +141,7 @@ enum SRTFixtures {
 struct SRTRig {
     let encoder: LiveVideoEncoder
     let log: SRTEventLog
-    let mirror: SRTVideoMirror
+    let mirror: SRTMirror
 
     /// Open the link and come back once the mirror has SETTLED — either
     /// subscribed to the encoder, or having reported why it could not be.
@@ -194,9 +194,9 @@ struct SRTRig {
     /// by hand comes back while the operator is still looking, slow enough that a
     /// network that is simply not there costs one attempt per five seconds.
     @Test func theReconnectBackoffIsBoundedBothWays() {
-        #expect(SRTVideoMirror.reconnectDelay == 1)
-        #expect(SRTVideoMirror.reconnectCeiling == 5)
-        #expect(SRTVideoMirror.reconnectDelay < SRTVideoMirror.reconnectCeiling)
+        #expect(SRTMirror.reconnectDelay == 1)
+        #expect(SRTMirror.reconnectCeiling == 5)
+        #expect(SRTMirror.reconnectDelay < SRTMirror.reconnectCeiling)
     }
 }
 
@@ -260,7 +260,7 @@ final class SampleCounter: @unchecked Sendable {
 /// reporting the machine rather than the code.
 @Suite(.enabled(if: SRTVideoEncoder.isSupported,
                 "no H.264 encoder on this machine"))
-struct SRTVideoMirrorTests {
+struct SRTMirrorTests {
     /// A pass that cannot keep up REPLACES the pending frame rather than queueing
     /// behind it — the feed falls to fewer frames, never to older ones, which is
     /// the only acceptable failure for a monitor. Four frames offered back to back
@@ -338,7 +338,7 @@ struct SRTVideoMirrorTests {
         caller.async { mirror.offer(buffer, framesPerSecond: 25) }
         #expect(await ControllerWait.until { !stream.queues.isEmpty },
                 "no datagram ever reached the link")
-        #expect(stream.queues.allSatisfy { $0 == SRTVideoMirror.queueLabel },
+        #expect(stream.queues.allSatisfy { $0 == SRTMirror.queueLabel },
                 "the send ran on \(stream.queues)")
         mirror.stop()
     }
@@ -383,7 +383,7 @@ struct SRTVideoMirrorTests {
             try await Task.sleep(for: .milliseconds(60))
         }
         #expect(await ControllerWait.until {
-            log.all.contains(SRTVideoMirror.Event.lost("the fake link says so"))
+            log.all.contains(SRTMirror.Event.lost("the fake link says so"))
         }, "the loss was never reported: \(log.all)")
         // …and it tries again rather than sitting there. The first backoff is a
         // second, so this is an I/O-sized wait rather than an interactive one.
@@ -401,7 +401,7 @@ struct SRTVideoMirrorTests {
         let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until {
-            log.all.contains(SRTVideoMirror.Event
+            log.all.contains(SRTMirror.Event
                 .refused("cannot listen on port 9000"))
         }, "the refusal was never reported: \(log.all)")
         try await Task.sleep(for: .milliseconds(1500))
@@ -427,7 +427,7 @@ struct SRTVideoMirrorTests {
         }
         try await Task.sleep(for: .milliseconds(200))
         #expect(stream.datagrams.isEmpty)
-        #expect(log.all == [SRTVideoMirror.Event.waiting],
+        #expect(log.all == [SRTMirror.Event.waiting],
                 "a waiting listener reported \(log.all)")
         mirror.stop()
     }
@@ -446,7 +446,7 @@ struct SRTVideoMirrorTests {
             try await Task.sleep(for: .milliseconds(60))
         }
         try await Task.sleep(for: .milliseconds(200))
-        #expect(log.all == [SRTVideoMirror.Event.opened],
+        #expect(log.all == [SRTMirror.Event.opened],
                 "a full send buffer reported \(log.all)")
         #expect(!stream.isClosed, "a full send buffer closed the link")
         mirror.stop()
@@ -513,9 +513,9 @@ struct SRTVideoMirrorTests {
     /// by hand comes back while the operator is still looking, slow enough that a
     /// network that is simply not there costs one attempt per five seconds.
     @Test func theReconnectBackoffIsBoundedBothWays() {
-        #expect(SRTVideoMirror.reconnectDelay == 1)
-        #expect(SRTVideoMirror.reconnectCeiling == 5)
-        #expect(SRTVideoMirror.reconnectDelay < SRTVideoMirror.reconnectCeiling)
+        #expect(SRTMirror.reconnectDelay == 1)
+        #expect(SRTMirror.reconnectCeiling == 5)
+        #expect(SRTMirror.reconnectDelay < SRTMirror.reconnectCeiling)
     }
 }
 

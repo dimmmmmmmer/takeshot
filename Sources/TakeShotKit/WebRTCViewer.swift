@@ -116,7 +116,7 @@ final class WebRTCViewer: @unchecked Sendable {
     /// a picture.
     private var awaitingKeyframe = true
     /// Packets the transport refused, logged rather than shown — see
-    /// `SRTVideoMirror.dropLogInterval` for why a number nobody watches live
+    /// `SRTMirror.dropLogInterval` for why a number nobody watches live
     /// belongs in the log a diagnostics bundle carries.
     private var dropped = 0
 
@@ -260,7 +260,7 @@ final class WebRTCViewer: @unchecked Sendable {
         subscribed = true
         let encoder = session.withLock { $0 }
         // The weak reference is resolved ONCE, out here — see the same note in
-        // `SRTVideoMirror.subscribe` for why the inner block must capture a
+        // `SRTMirror.subscribe` for why the inner block must capture a
         // strong one.
         encoder.addSink(self) { [weak self] sample in
             guard let viewer = self else { return }
@@ -287,7 +287,7 @@ final class WebRTCViewer: @unchecked Sendable {
         }
         for packet in packetizer.packets(for: unit) where !peer.send(rtp: packet) {
             dropped += 1
-            if dropped % SRTVideoMirror.dropLogInterval == 0 {
+            if dropped % SRTMirror.dropLogInterval == 0 {
                 os_log("WebRTC dropped %d packets", dropped)
             }
         }

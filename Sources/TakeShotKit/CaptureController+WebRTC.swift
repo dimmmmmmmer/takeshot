@@ -35,6 +35,39 @@ private let webrtcSignallingQueue =
 /// It takes the decorated one anyway, on the merits stated at the top of
 /// `CaptureController+NDI` — which is independent evidence for the same answer
 /// rather than a cost anybody is avoiding.
+///
+/// **Picture only, and the seam is where the connection is, not where the codec
+/// is.** The stereo feed exists now and is independent of the cart's speakers
+/// (`CapturePipeline.addAudioTap`), and SRT came off it — but a browser cannot
+/// be handed what SRT is handed: AAC is not a WebRTC codec, and the payload
+/// types a browser offers are Opus and G.711.
+///
+/// **Opus is the half that turned out NOT to be missing, and that is written
+/// down because it was assumed the other way first.** Measured on this machine
+/// rather than looked up: AudioToolbox opens a converter to `kAudioFormatOpus`
+/// and really encodes — 960 frames of 48 kHz stereo in, 469 then 418 then 390
+/// bytes out over three consecutive frames — so an Opus leg would need no
+/// third-party library at all, the way the AAC one needs none.
+/// `kAudioFormatOpus` is declared in the macOS 15.4 SDK's headers as well as
+/// macOS 26's; whether the ENCODER is present on the runtime at this app's
+/// deployment floor has NOT been measured, and this machine is macOS 26 — the
+/// same shape as the `mdcv`/`clli` caveat the HDR wave left.
+///
+/// What is missing is everything after the codec, and none of it can be RUN
+/// here. `CDataChannel` is a stub with no libdatachannel on any search path in
+/// this tree and `WebRTCPeering` is a fake in every test, so no peer connection
+/// here has ever carried a byte. An audio track needs an `m=audio` section
+/// negotiated against a real browser's offer — `WebRTCOffer` parses video and
+/// says so at the line that skips the rest — and an RFC 7587 Opus packetizer
+/// beside `RTPH264Packetizer`. An SDP negotiation and a wire format are both
+/// things only the far end can prove, and writing them on the strength of
+/// having read the RFCs is what this project does not do.
+///
+/// The seam is the same one NDI's is, and the tap is on the correct side of it:
+/// an Opus encoder is a second consumer registered exactly as
+/// `ensureLiveAudioEncoder` registers the AAC one, and a second term in
+/// `releaseIdleLiveAudio`'s `wanted`. Nothing in `CapturePipeline+Audio`
+/// changes.
 extension CaptureController {
     // MARK: - signalling
 

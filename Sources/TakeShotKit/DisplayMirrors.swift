@@ -59,7 +59,7 @@ final class DisplayMirrors: ObservableObject {
     /// The SRT output; nil — off, which is the default. Built on the setting's
     /// edge and dropped on the other, so with the switch off the display path has
     /// no SRT consumer at all and no encoder exists (see `CaptureController+SRT`).
-    var srt: SRTVideoMirror?
+    var srt: SRTMirror?
 
     /// What Settings shows about the SRT output. Published because it is the only
     /// honest answer to "is it sending?": the switch is a wish, and a build with
@@ -93,9 +93,28 @@ final class DisplayMirrors: ObservableObject {
     /// two pictures.
     var liveEncoders: [LivePicture: LiveVideoEncoder] = [:]
 
-    /// The 90 kHz origin every one of them stamps against — one per app, so a
-    /// browser moved from one picture to another is not handed a timestamp from
-    /// a different clock. See `LiveClock`.
+    /// **One AAC encode for every live consumer taking SOUND**, and nil while
+    /// nothing is — which is the default.
+    ///
+    /// Not a pool, and the asymmetry with `liveEncoders` is the point rather
+    /// than an omission: a session per picture exists because a browser chooses
+    /// what it is watching and one H.264 session cannot carry two pictures.
+    /// There is only ever one sound — the stereo fold of the channels in force
+    /// (`CapturePipeline.stereoChannelIndices`) — so a second AAC session could
+    /// only ever be a second encode of identical samples. One is the whole
+    /// answer.
+    ///
+    /// Built when the first consumer appears and dropped when the last goes,
+    /// and the pipeline's audio tap is registered and removed with it, so a set
+    /// with nothing listening costs the capture queue an uncontended lock and
+    /// two tests per packet, and no mix at all. See
+    /// `CaptureController+LiveAudio`.
+    var liveAudioEncoder: LiveAudioEncoder?
+
+    /// The 90 kHz origin every one of them stamps against — the picture's
+    /// sessions and the sound's alike, so a receiver reading two PIDs is
+    /// reading one clock, and a browser moved from one picture to another is
+    /// not handed a timestamp from a different one. See `LiveClock`.
     let liveClock = LiveClock()
 
     /// The grid picture, while somebody is watching it: every camera's clean

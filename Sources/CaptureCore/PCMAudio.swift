@@ -154,7 +154,13 @@ public enum PCMAudio {
     /// A copy of the buffer's samples. Copying costs one packet's worth of
     /// memory and buys a lifetime the caller can reason about — the block
     /// buffer's pointer is only valid while the sample buffer is retained.
-    static func interleavedSamples(
+    ///
+    /// Public because the outgoing legs off the pipeline's stereo tap live in
+    /// TakeShotKit and every one of them starts by reading a packet's samples:
+    /// the AAC encoder here, planar float for NDI at the seam. The copy is what
+    /// makes that safe to hand across a queue at all, which is the same reason
+    /// it exists for the callers inside this module.
+    public static func interleavedSamples(
         of sampleBuffer: CMSampleBuffer) -> [Int16]? {
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
         else { return nil }

@@ -240,12 +240,18 @@ Gatekeeper's refusal instead of the app.
   it inside the app; a build made from source does not unless you build the
   library too, and the page then says so and stops asking. The camera grid at
   `/cameras` keeps working either way, which is why it is still there.
-- **Both network outputs are picture only.** NDI and MPEG-TS both carry audio
-  and neither is sent any, because the only stereo feed inside the app belongs
-  to the room speakers and is switched off with them — sound on a director's
-  iPad would become a side effect of whether the cart's monitors are up. It
-  needs a tap of its own, and one tap would serve both, which is why it is not
-  being built one output at a time.
+- **The SRT output carries sound; the NDI one still does not.** The SRT stream
+  now has a stereo audio track on it: the same two channels the cart's speakers
+  play, which are the first two of whatever is being RECORDED — your channel
+  mask, or the channels the app measured as carrying during standby. There is no
+  switch for it and it does not depend on the speakers: turn the cart's monitors
+  down and the director's laptop keeps its sound. If your mask leaves one channel
+  enabled the stream is mono rather than that channel twice.
+  **Nobody has watched it on a real receiver.** The two streams are timestamped
+  off one clock and the arithmetic is checked, but how far the sound sits from
+  the picture on a decoder has not been measured — check it before a job depends
+  on lip sync. NDI is still picture only: the shared half is built and the NDI
+  half of it cannot even be compiled on a machine without the SDK headers.
 - **`v210` has never run against a board.** The 10-bit YCbCr path — now the
   default for every 4:2:2 signal — was built and measured against synthetic
   frames and through a real ProRes encode, but the rig it was written on feeds
