@@ -53,6 +53,49 @@ public enum PCMAudio {
         return sampleBuffer
     }
 
+    /// How many channels an interleaved 16-bit PCM buffer carries; 0 when it is
+    /// not one of those at all.
+    public static func channelCount(of sampleBuffer: CMSampleBuffer) -> Int {
+        guard let asbd = interleavedPCM16(of: sampleBuffer) else { return 0 }
+        return Int(asbd.mChannelsPerFrame)
+    }
+
+    /// The same samples at EXACTLY `channelCount` channels: extra channels
+    /// dropped, missing ones silent, the ones in common kept where they are.
+    ///
+    /// `trimChannels` below can only narrow, and narrowing is only half of what
+    /// a source that changed its own count can do to a track whose width is
+    /// already latched (see `CapturePipeline.recordAudio`). Returns the original
+    /// buffer when it is already the right width, so the case that happens on
+    /// every packet costs one comparison.
+    public static func conformChannels(
+        _ sampleBuffer: CMSampleBuffer, to channelCount: Int,
+        formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
+        guard channelCount > 0, let asbd = interleavedPCM16(of: sampleBuffer)
+        else { return nil }
+        let sourceChannels = Int(asbd.mChannelsPerFrame)
+        guard sourceChannels != channelCount else { return sampleBuffer }
+        guard sourceChannels > 0,
+              let samples = interleavedSamples(of: sampleBuffer) else { return nil }
+
+        let frames = samples.count / sourceChannels
+        let shared = min(sourceChannels, channelCount)
+        var packed = [Int16](repeating: 0, count: frames * channelCount)
+        for frame in 0..<frames {
+            for channel in 0..<shared {
+                packed[frame * channelCount + channel] =
+                    samples[frame * sourceChannels + channel]
+            }
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        return packed.withUnsafeBytes { raw -> CMSampleBuffer? in
+            guard let base = raw.baseAddress else { return nil }
+            return makeSampleBuffer(bytes: base, sampleFrames: frames,
+                                    channelCount: channelCount, ptsSeconds: pts,
+                                    formatCache: &formatCache)
+        }
+    }
+
     /// Keep the first `channelCount` channels (a wrapper over selectChannels).
     public static func trimChannels(_ sampleBuffer: CMSampleBuffer, to channelCount: Int,
                                     formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {

@@ -37,7 +37,7 @@ import Testing
 
     /// Every alarm CaptureCore can raise, in call-site order.
     ///
-    /// Ten of the thirteen are sticky. The three that toast are the take's
+    /// Twelve of the fifteen are sticky. The three that toast are the take's
     /// closing tallies, reported after a take that DID finalize: the live alarm
     /// for them, where there is one, already fired while the take was rolling,
     /// and these are the totals stated quietly afterwards.
@@ -71,6 +71,11 @@ import Testing
               alarm: .takeClosedSignalLost,
               message: "Take closed: input signal lost mid-take",
               sticky: true),
+        // CapturePipeline+FrameWatchdog — the board wedged and said nothing
+        .init(site: "FrameWatchdog.checkFrameArrival",
+              alarm: .takeClosedFramesStopped,
+              message: "Take closed: input stopped delivering frames mid-take",
+              sticky: true),
         // CapturePipeline+Input — frames refused at the door
         .init(site: "Input.admitFrameAtIngress",
               alarm: .ingressOverload(drops: 100),
@@ -81,6 +86,12 @@ import Testing
               alarm: .externalAudioPadded,
               message: "USB AUDIO LOST — take continues, "
                   + "audio padded with silence",
+              sticky: true),
+        // CapturePipeline+Audio — the source changed its own channel count
+        .init(site: "Audio.conformedToTake",
+              alarm: .takeAudioChannelsConformed(from: 2, to: 8),
+              message: "AUDIO CHANNELS CHANGED — source sent 2, "
+                  + "take conformed to 8",
               sticky: true),
         // CapturePipeline+Take — the writer never opened
         .init(site: "Take.beginTake",
@@ -163,13 +174,26 @@ import Testing
         return sticky.contains(where: message.contains)
     }
 
+    /// Sites added AFTER the substring classifier was retired. The oracle was
+    /// never shown these messages, so agreeing with it about them is not a claim
+    /// anybody made — and "AUDIO CHANNELS CHANGED" is precisely the shape that
+    /// list could not classify: a sticky integrity alarm whose wording contains
+    /// none of the seven magic words, which under the old rule would have
+    /// toasted away in five seconds. Their severity is pinned by the row like
+    /// every other one; only the oracle comparison is skipped.
+    private static let afterTheClassifier: Set<String> = [
+        "Audio.conformedToTake",
+    ]
+
     @Test func theTypedSeverityAgreesWithTheSubstringListItReplaced() {
         for sample in Self.samples {
             #expect(sample.alarm.message == sample.message,
                     "\(sample.site): CaptureCore's English prose changed")
-            #expect(Self.legacyClassifierSaysSticky(sample.message)
-                        == sample.sticky,
-                    "\(sample.site): the oracle disagrees with the pinned row")
+            if !Self.afterTheClassifier.contains(sample.site) {
+                #expect(Self.legacyClassifierSaysSticky(sample.message)
+                            == sample.sticky,
+                        "\(sample.site): the oracle disagrees with the row")
+            }
             #expect((sample.alarm.severity == .integrity) == sample.sticky,
                     "\(sample.site): the typed severity moved the register")
         }

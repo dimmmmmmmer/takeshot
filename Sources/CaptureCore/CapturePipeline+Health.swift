@@ -73,6 +73,26 @@ extension CapturePipeline {
         healthLock.withLock { change(&storedHealth) }
     }
 
+    /// Say once per take that the source changed its own channel count under a
+    /// latched track, and what it was changed to.
+    ///
+    /// The conform itself happens in the writer, which is the only place that
+    /// knows the latched width and the only one every append path goes through
+    /// (see `TakeWriter.conformed`); the ALARM has to happen here, because the
+    /// writer has no callbacks. Once per take rather than once per packet: a
+    /// device that renegotiates its count every buffer would otherwise raise a
+    /// sticky alarm at packet rate, and the operator needs to be told the map
+    /// moved, not how often.
+    func noteAudioConform(from writer: TakeWriter) {
+        guard writer.conformedAudioPackets > 0, !reportedAudioConform else { return }
+        reportedAudioConform = true
+        let from = writer.conformedFromChannels
+        let to = writer.audioTrackChannels
+        DispatchQueue.main.async {
+            self.onError?(.takeAudioChannelsConformed(from: from, to: to))
+        }
+    }
+
     /// Mirror the writer's audio-drop tally, which lives on the writer and is
     /// only ever bumped from the capture queue. The delta is tracked here so
     /// the running session total survives the take that produced it, and so a

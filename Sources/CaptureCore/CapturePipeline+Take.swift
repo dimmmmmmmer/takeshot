@@ -62,6 +62,7 @@ extension CapturePipeline {
             takeNumber = config.takeNumber
             droppedFrames = 0
             gapFilledAudioPackets = 0
+            reportedAudioConform = false
             mirroredAudioDrops = 0
             noteHealth {
                 $0.isRecording = true
@@ -73,6 +74,10 @@ extension CapturePipeline {
             }
             lastExternalAudioEnd = nil
             preRolledAudioEnd = nil
+            // from here on the take is answerable for its input: a board that
+            // stops calling back has to be noticed by a clock (see
+            // `+FrameWatchdog`), and the timer exists only while one is open
+            startFrameWatchdog()
             warnIfTakeHasNoAudioTrack(url: url)
             drainPreRoll(into: writer, startIndex: startIndex)
             DispatchQueue.main.async { self.onRecStateChanged?(true) }
@@ -162,10 +167,16 @@ extension CapturePipeline {
     func finishTake() {
         guard let writer else { return }
         self.writer = nil
-        // Last chance to read the writer's audio tally on the queue that owns
-        // it: no more packets can arrive now, and the finalize below runs on a
-        // task of its own.
+        // Nothing left for the watchdog to protect, and it must not fire between
+        // takes — including when it is the watchdog itself that got us here.
+        stopFrameWatchdog()
+        // Last chance to read the writer's audio tallies on the queue that owns
+        // them: no more packets can arrive now, and the finalize below runs on a
+        // task of its own. The conform one is read here as well as per packet,
+        // for the take whose source moved and then went quiet — there would be
+        // no later packet to notice it on.
         noteAudioDrops(from: writer)
+        noteAudioConform(from: writer)
         noteHealth {
             $0.isRecording = false
             $0.takeFileName = nil
@@ -260,21 +271,33 @@ extension CapturePipeline {
             durationSeconds: writer.durationSeconds,
             recordedAt: takeStartedAt)
         take.slate = takeSlate
-        if gapFilledAudioPackets > 0 {
-            // the take's log row says what happened to its sound — a padded
-            // take found only in the edit is exactly the silent failure the
-            // integrity rules exist to prevent
-            //
-            // English, and staying English even though the alarm beside it is
-            // now localized: this is not a message to the operator, it is the
-            // Comments column of `takeshot-log.csv` and of the ALE, whose
-            // schema is frozen and whose reader is post-production. A row that
-            // said "Звук USB потерян" because the operator had the UI in
-            // Russian would be a different value in a machine-read column.
-            take.comment = "USB audio lost — \(gapFilledAudioPackets) "
-                + "packet(s) padded with silence"
-        }
+        take.comment = audioNotes(from: writer).joined(separator: "; ")
         return take
+    }
+
+    /// What the take's log row says happened to its sound. A take whose audio
+    /// went wrong and says nothing is exactly the silent failure the integrity
+    /// rules exist to prevent — it is found in the edit.
+    ///
+    /// English, and staying English even though the alarms beside these are now
+    /// localized: this is not a message to the operator, it is the Comments
+    /// column of `takeshot-log.csv` and of the ALE, whose schema is frozen and
+    /// whose reader is post-production. A row that said "Звук USB потерян"
+    /// because the operator had the UI in Russian would be a different value in
+    /// a machine-read column.
+    private func audioNotes(from writer: TakeWriter) -> [String] {
+        var notes: [String] = []
+        if gapFilledAudioPackets > 0 {
+            notes.append("USB audio lost — \(gapFilledAudioPackets) "
+                + "packet(s) padded with silence")
+        }
+        if writer.conformedAudioPackets > 0 {
+            // the channel MAP after the change is a guess, which is the part
+            // post has to know before it starts laying the tracks out
+            notes.append("audio channel count changed mid-take — "
+                + "\(writer.conformedAudioPackets) packet(s) conformed")
+        }
+        return notes
     }
 
     /// Drop a finished task's handle, back on the pipeline queue that owns the

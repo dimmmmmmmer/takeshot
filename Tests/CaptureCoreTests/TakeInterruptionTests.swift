@@ -314,3 +314,88 @@ import Testing
         await pipeline.finishPendingWrites()
     }
 }
+
+/// The dropout with no event behind it, in its own extension so the suite
+/// above stays inside the house type-body limit. Same theme as the cable
+/// coming out — an open take whose input stopped — reached the one way that
+/// raises no callback at all.
+extension TakeInterruptionTests {
+    /// The dropout with no event behind it: the device stays listed, reports no
+    /// signal loss and no format change, and simply stops calling back. Nothing
+    /// noticed — the take stayed open, REC stayed red, and not a byte more
+    /// reached the file until somebody looked at the timecode display.
+    ///
+    /// The frame-arrival watchdog is what notices, and it has to land in the same
+    /// register a real dropout does: the take closed where it stands, its
+    /// picture still on disk, and a sticky alarm rather than a toast.
+    @Test func aWedgedInputWithNoEventClosesTheOpenTakeAndSaysSo() async throws {
+        let root = TestMedia.scratchDirectory("WedgedInput")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = CapturePipeline(config: .init(
+            settings: Self.settings(root: root),
+            slate: SlateMetadata(scene: "7"), takeNumber: 1))
+        let ears = Ears()
+        ears.listen(to: pipeline)
+        pipeline.handleFormat(Self.format)
+
+        let driver = SignalDriver(pipeline: pipeline)
+        try await rollingTake(pipeline: pipeline, driver: driver)
+
+        // …and then nothing at all: no frames, and deliberately no
+        // `handleSignal(present:)` — that is the whole point of this failure.
+        #expect(await TestWait.becomesTrue { ears.recStates.last == false },
+                "a wedged input left the take open")
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !ears.takes.isEmpty }
+
+        let take = try #require(ears.takes.first,
+                                "the wedged take was never published")
+        #expect(!pipeline.health.isRecording)
+        #expect(pipeline.health.takesClosed == 1)
+        // closed, not lost: what was recorded before the wedge is on disk
+        #expect(pipeline.health.takesFailedToFinalize == 0)
+        #expect(ears.said("Take closed: input stopped delivering frames mid-take"))
+        #expect(ears.severity(of: "stopped delivering frames") == .integrity,
+                "a wedged board was reported as a passing notice")
+
+        await TestWait.fileExists(at: take.url)
+        let duration = try await AVURLAsset(url: take.url).load(.duration)
+        #expect(duration.seconds > 0, "the closed take has no picture in it")
+    }
+
+    /// …and it says nothing at all when no take is rolling. A watchdog that
+    /// fires while the app stands by between setups — which is most of a
+    /// shooting day, and where a signal legitimately comes and goes — is a
+    /// banner the operator learns to dismiss.
+    @Test func theFrameWatchdogIsSilentWhileNoTakeIsRolling() async throws {
+        let root = TestMedia.scratchDirectory("WatchdogIdle")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = CapturePipeline(config: .init(
+            settings: Self.settings(root: root),
+            slate: SlateMetadata(scene: "8"), takeNumber: 1))
+        let ears = Ears()
+        ears.listen(to: pipeline)
+        pipeline.handleFormat(Self.format)
+
+        let driver = SignalDriver(pipeline: pipeline)
+        // standing by: a signal, then nothing, for several times the budget
+        _ = try await driver.pushRunning(from: Self.standby, count: 4,
+                                         pixelBuffer: TestMedia.pixelBuffer())
+        await TestWait.until({ !ears.errors.isEmpty }, timeout: .seconds(3))
+        #expect(ears.errors.isEmpty,
+                "the watchdog alarmed while standing by")
+
+        // …and the same silence AFTER a take, which is the gap between setups
+        try await rollingTake(pipeline: pipeline, driver: driver, frames: 4)
+        pipeline.toggleManualRecord()
+        await TestWait.untilWritten { ears.recStates.last == false }
+        await pipeline.finishPendingWrites()
+        let afterTake = ears.errors.all.count
+        await TestWait.until({ ears.errors.all.count > afterTake },
+                            timeout: .seconds(3))
+        #expect(!ears.said("stopped delivering frames"),
+                "the watchdog closed a take that was already closed")
+    }
+}

@@ -32,10 +32,14 @@ extension PipelineAlarm {
             L("alarm_take_closed_format")
         case .takeClosedSignalLost:
             L("alarm_take_closed_signal")
+        case .takeClosedFramesStopped:
+            L("alarm_take_closed_no_frames")
         case .ingressOverload(let drops):
             L("alarm_ingress_overload", drops)
         case .externalAudioPadded:
             L("alarm_usb_audio_lost")
+        case .takeAudioChannelsConformed(let from, let to):
+            L("alarm_audio_channels_conformed", from, to)
         case .recordingStartFailed(let reason):
             L("alarm_recording_start_failed", reason)
         case .takeLostNoAudioTrack(let file):

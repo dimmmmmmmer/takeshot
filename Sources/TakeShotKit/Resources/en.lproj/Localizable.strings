@@ -883,8 +883,10 @@
 "alarm_preroll_incomplete" = "Pre-roll incomplete: %d frame(s) before the REC point were not written";
 "alarm_take_closed_format" = "Take closed: input format changed mid-take";
 "alarm_take_closed_signal" = "Take closed: input signal lost mid-take";
+"alarm_take_closed_no_frames" = "Take closed: input stopped delivering frames mid-take";
 "alarm_ingress_overload" = "Pipeline overloaded — %d frame(s) dropped at ingress";
 "alarm_usb_audio_lost" = "USB AUDIO LOST — take continues, audio padded with silence";
+"alarm_audio_channels_conformed" = "AUDIO CHANNELS CHANGED — source sent %1$d, take conformed to %2$d";
 "alarm_recording_start_failed" = "Failed to start recording: %@";
 "alarm_take_lost_no_audio" = "TAKE LOST audio — %1$@ started before the audio format was known and has no audio track";
 "alarm_take_lost_finalize" = "TAKE LOST — failed to finalize %1$@: %2$@";

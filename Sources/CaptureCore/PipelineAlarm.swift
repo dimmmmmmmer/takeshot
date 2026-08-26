@@ -40,12 +40,21 @@ public enum PipelineAlarm: Sendable, Equatable {
     /// The cable came out. No frames means no VANC, so the camera's stop and
     /// its next start are both invisible; the take is closed on the spot.
     case takeClosedSignalLost
+    /// The input went quiet without reporting anything at all — a wedged board
+    /// that stays listed and stops calling back. Same cost as a signal loss,
+    /// and only a clock can see it (see `CapturePipeline+FrameWatchdog`).
+    case takeClosedFramesStopped
     /// Frames turned away at the door because the in-flight window is full.
     case ingressOverload(drops: Int)
     /// The USB audio interface stopped feeding while a take rolls. The take
     /// continues on padded silence — honest silence beats splicing sources
     /// into a writer whose channel count is already latched.
     case externalAudioPadded
+    /// The audio source changed its own channel count under a writer whose
+    /// count is latched for the take. The packets are conformed to the latched
+    /// count and the take survives; the map its later channels carry is a
+    /// guess, which is why this is not a quiet notice.
+    case takeAudioChannelsConformed(from: Int, to: Int)
     /// The writer never opened, so there is no take at all.
     case recordingStartFailed(reason: String)
     /// A take that began before the first audio packet has no audio input and
@@ -86,8 +95,10 @@ public enum PipelineAlarm: Sendable, Equatable {
     public var severity: Severity {
         switch self {
         case .takeLostWriterFailed, .recordingFramesDropped, .preRollIncomplete,
-             .takeClosedFormatChanged, .takeClosedSignalLost, .ingressOverload,
-             .externalAudioPadded, .recordingStartFailed,
+             .takeClosedFormatChanged, .takeClosedSignalLost,
+             .takeClosedFramesStopped, .ingressOverload,
+             .externalAudioPadded, .takeAudioChannelsConformed,
+             .recordingStartFailed,
              .takeLostNoAudioTrack, .takeLostFinalizeFailed:
             .integrity
         case .takeDroppedAudioPackets, .takeGapFilledAudio,
@@ -112,10 +123,15 @@ public enum PipelineAlarm: Sendable, Equatable {
             "Take closed: input format changed mid-take"
         case .takeClosedSignalLost:
             "Take closed: input signal lost mid-take"
+        case .takeClosedFramesStopped:
+            "Take closed: input stopped delivering frames mid-take"
         case .ingressOverload(let drops):
             "Pipeline overloaded — \(drops) frame(s) dropped at ingress"
         case .externalAudioPadded:
             "USB AUDIO LOST — take continues, audio padded with silence"
+        case .takeAudioChannelsConformed(let from, let to):
+            "AUDIO CHANNELS CHANGED — source sent \(from), "
+                + "take conformed to \(to)"
         case .recordingStartFailed(let reason):
             "Failed to start recording: \(reason)"
         case .takeLostNoAudioTrack(let file):

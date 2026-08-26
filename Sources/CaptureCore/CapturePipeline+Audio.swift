@@ -70,10 +70,15 @@ extension CapturePipeline {
                                               formatCache: &trimFormatCache)
         }
         if let writer {
+            // The writer conforms what it is given to the count it latched — a
+            // source can change its own, and the mask trim above filters to what
+            // ARRIVED (see `TakeWriter.conformed`). Reported from here, because
+            // only the pipeline can raise an alarm.
             if let toWrite { writer.append(audioSampleBuffer: toWrite) }
-            // Only takes the health lock when the tally actually moved, so an
-            // accepted packet costs one comparison.
+            // Both only take the health lock when a tally actually moved, so an
+            // accepted packet costs two comparisons.
             noteAudioDrops(from: writer)
+            noteAudioConform(from: writer)
         } else if preRollFrames > 0 {
             // not recording: keep the sound of the pre-roll window, so the
             // take that starts in a moment has audio under its first frames
