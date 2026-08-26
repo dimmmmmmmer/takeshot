@@ -309,3 +309,70 @@ import Testing
         }
     }
 }
+
+/// The saved rig — the two or three SSDs that come back every shooting day.
+///
+/// Its own suite rather than four more tests in `ControllerOffloadTests`, which
+/// is at its type-length ceiling: what is stored between days and what a run
+/// does are different subjects, and the first one is where the bug was.
+@Suite @MainActor struct ControllerOffloadRigTests {
+    /// Taking a destination off the list STICKS.
+    ///
+    /// It did not, and the write was unreachable rather than merely missing:
+    /// the only caller of `rememberOffloadChoices` ran from `begin(resume:)`,
+    /// which is reached through `canStart` and therefore only ever with a
+    /// non-empty list — so `offload.destinationPaths` could never become nil
+    /// again. The retired path then came back on the next sheet, and went on
+    /// speaking for its whole volume in `ownFolders` (see the card-watch
+    /// suite, which holds the half that costs footage).
+    ///
+    /// Asserted through the stored blob, because a relaunch is the case that
+    /// matters: an in-memory list that empties and refills itself from settings
+    /// is the bug, not the fix.
+    @Test func removingADestinationSurvivesTheRelaunch() async throws {
+        let rig: (inout CaptureSettings) -> Void = {
+            $0.offload.destinationPaths = ["/Volumes/SSD1", "/Volumes/SSD2"]
+        }
+        try await ControllerHarness.run(configure: rig) { controller, _ in
+            controller.showOffloadSheet()
+            let model: OffloadSheetModel = controller.offload
+            try #require(model.rows.count == 2, "the saved rig did not seed")
+
+            model.removeDestination(model.rows[1].id)
+
+            #expect(CaptureSettings.loaded(from: controller.defaults)
+                .offload.destinationPaths == ["/Volumes/SSD1"],
+                    "the removal was not written down")
+
+            // …and the last one too: the list has to be able to reach nil, which
+            // is the state the only previous writer could not produce.
+            model.removeDestination(model.rows[0].id)
+
+            #expect(CaptureSettings.loaded(from: controller.defaults)
+                .offload.destinationPaths == nil,
+                    "an emptied destination list still reads as a saved rig")
+            // The next sheet then seeds nothing, rather than the path that was
+            // just taken away.
+            model.prepare(settings: CaptureSettings.loaded(from: controller.defaults),
+                          version: "test")
+            #expect(model.rows.isEmpty,
+                    "the removed destinations came back with the sheet")
+        }
+    }
+
+    /// The other two editors write through as well, or the list and the record
+    /// disagree about the rig until something starts a run.
+    @Test func addingAndRepointingADestinationAreWrittenDownToo() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let model: OffloadSheetModel = controller.offload
+            model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
+            #expect(CaptureSettings.loaded(from: controller.defaults)
+                .offload.destinationPaths == ["/Volumes/SSD1"])
+
+            model.setDestination(URL(fileURLWithPath: "/Volumes/SSD9"),
+                                 at: model.rows[0].id)
+            #expect(CaptureSettings.loaded(from: controller.defaults)
+                .offload.destinationPaths == ["/Volumes/SSD9"])
+        }
+    }
+}

@@ -30,7 +30,7 @@ struct DailiesStatusStrip: View {
                 Image(systemName: "stop.circle")
             }
             .buttonStyle(.borderless)
-            .disabled(dailies.isCancelling)
+            .disabled(!controller.canSteerDailiesQueue)
             .fixedSize()
             .help(L("dailies_stop"))
         }

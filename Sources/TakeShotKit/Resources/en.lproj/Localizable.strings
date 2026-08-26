@@ -744,6 +744,7 @@
 "dailies_custom_placeholder" = "Custom line (top left)";
 "dailies_dest_label" = "Destination:";
 "dailies_pick_dest" = "Where the dailies land";
+"dailies_reset_dest" = "Back to a Dailies folder beside the footage";
 "dailies_start" = "Start";
 "dailies_stop" = "Stop queue";
 "dailies_skip" = "Skip file";

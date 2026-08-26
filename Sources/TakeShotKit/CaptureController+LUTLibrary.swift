@@ -18,6 +18,10 @@ extension CaptureController {
 
     enum DuplicateLUTChoice { case replace, keepBoth, skip }
 
+    /// The library holds something: what "Clear looks" is enabled by. Not the
+    /// same question as `canApplyLUT`, which asks whether one is SELECTED.
+    var hasLUTs: Bool { !availableLUTs.isEmpty }
+
     /// Where looks live when nobody says otherwise. The controller reads the
     /// instance property seeded from this, not the static — see `lutsDirectory`.
     nonisolated static var defaultLUTsDirectory: URL {

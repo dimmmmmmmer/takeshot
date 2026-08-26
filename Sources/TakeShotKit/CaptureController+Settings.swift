@@ -26,6 +26,7 @@ extension CaptureController {
         applyDeviceChange(from: oldValue)
         applyAudioInputChange(from: oldValue)
         applyNamingChange(from: oldValue)
+        applyR3DChange(from: oldValue)
         applyRemoteChange(from: oldValue)
         applySRTChange(from: oldValue)
         applyCardWatchChange(from: oldValue)
@@ -130,6 +131,60 @@ extension CaptureController {
         if oldValue.capture.codec != settings.capture.codec {
             reportBitDepth(signalFormat)
         }
+    }
+
+    /// The two R3D decode options reach the clip that is ALREADY open.
+    ///
+    /// Both are read once, in `openRawClip`, because the decoder is built around
+    /// them — the scale has to be fixed before the first frame is asked for and
+    /// the camera LUT is a property of the decode. So neither could ever reach
+    /// the clip on screen, and the clip on screen is the whole reason the scale
+    /// picker exists: it is chosen while an 8K clip is stuttering, and it did
+    /// nothing until the next clip was opened.
+    ///
+    /// Reopening is the only way to apply it, so that is what this does —
+    /// putting the playhead and the play state back, because a picker click is
+    /// not a request to start the clip again from the top.
+    private func applyR3DChange(from oldValue: CaptureSettings) {
+        guard oldValue.r3d.decodeScale != settings.r3d.decodeScale
+            || oldValue.r3d.applyCameraLUT != settings.r3d.applyCameraLUT
+        else { return }
+        reopenR3DClip()
+    }
+
+    /// Whether the two R3D options have anything in the player to reach.
+    ///
+    /// The clip's own format and not "is a RAW engine loaded": BRAW and
+    /// CinemaDNG go through the same engine and neither decoder has ever read
+    /// these options, so a scale click must not disturb them. Named rather than
+    /// inlined because it is what makes the wiring assertable in a build with no
+    /// RED SDK — which is what CI and every published build are.
+    var playbackIsR3D: Bool {
+        playbackURL?.pathExtension.lowercased() == "r3d"
+    }
+
+    /// Reopen the R3D clip in the player with the current decode options, at the
+    /// frame and in the state it was in. Nothing to do for any other format: the
+    /// options belong to R3D's decoder and BRAW/CinemaDNG never read them.
+    func reopenR3DClip() {
+        guard playbackIsR3D, let url = playbackURL else { return }
+        let frame = rawPlayer?.currentFrame ?? 0
+        let wasPlaying = rawPlayer?.isPlaying ?? false
+        let wasLooping = rawPlayer?.isLooping ?? false
+        // `play(url:)` is the real open path — it files the outgoing engine's
+        // in/out points and hands them back to the new one — so the range the
+        // operator marked survives the reopen rather than being reconstructed
+        // here.
+        play(url: url)
+        // A clip that would not open again has already said why
+        // (`rawPlayerError`); there is nothing to put the playhead back into.
+        guard let fresh = rawPlayer else { return }
+        fresh.isLooping = wasLooping
+        // A fresh engine is playing (see `openRawClip`); the seek carries the
+        // play state through, so pausing FIRST is what leaves a paused clip
+        // paused on the frame it was parked on.
+        if !wasPlaying { fresh.pause() }
+        fresh.seek(to: frame)
     }
 
     /// cam/postfix/template/padding all feed the filename — recompute the

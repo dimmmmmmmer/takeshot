@@ -109,6 +109,13 @@ extension CaptureController {
         return live.dimmed || live.volume > 0
     }
 
+    /// Whether there is a monitoring path at all — a clip under review, or a
+    /// running source. What the footer's speaker and its level popover are
+    /// enabled by, and the first half of `canDimMonitoring` above: DIM asks the
+    /// same question and then one more, which is why they are two names and not
+    /// one.
+    var canMonitorAudio: Bool { isCapturing || viewerMode == .playback }
+
     /// The live feed is only monitored while the viewer is showing it. Without
     /// this the capture audio kept playing over a clip in playback — two sound
     /// sources at once, and the operator hears the room instead of the take.
@@ -150,6 +157,11 @@ extension CaptureController {
         live.volume = newValue
         audioMonitor.volume = Float(newValue)
         player.volume = Float(newValue)
+        // …and the sync-play grid, which is a third player with its own audio
+        // path. Without this line the one shared level reached the live monitor
+        // and the single player and stopped there: the grid had no mute and no
+        // level, only the per-tile speaker that MOVES the sound.
+        syncPlay?.setVolume(newValue)
         // dragging the volume up implies "I want to hear it" (live monitor only)
         if newValue > 0, !monitorOn, isCapturing, viewerMode == .record {
             monitorOn = true

@@ -56,9 +56,9 @@ struct OffloadSheet: View {
         VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
             Text(L("offload_title"))
                 .offloadText(.title)
-            sourceSection
+            OffloadSourceSection(model: model)
             Divider()
-            destinationSection
+            OffloadDestinationSection(model: model)
             if let warning = model.validationMessage {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
                     .offloadText(.body, tint: .orange)
@@ -95,14 +95,24 @@ struct OffloadSheet: View {
             OffloadCardLedgerList(ledger: ledger)
         }
     }
+}
 
-    // MARK: - source
+/// The card, as a tile of the same family as a destination (owner item 22).
+///
+/// It used to be a line of text beside two prominent icon rows, which said the
+/// destinations were the important half — they are not, and picking the wrong
+/// source is the more expensive mistake of the two.
+///
+/// A view of its own rather than a property of the sheet, for the reason
+/// `OffloadSheetFooter` states: it reads its enabling rule off the controller,
+/// and an `@EnvironmentObject` is bound only when SwiftUI evaluates the view —
+/// a property the render tests ask for directly is evaluated by the test, where
+/// there is no environment at all.
+struct OffloadSourceSection: View {
+    @ObservedObject var model: OffloadSheetModel
+    @EnvironmentObject private var controller: CaptureController
 
-    /// The card, as a tile of the same family as a destination (owner item 22).
-    /// It used to be a line of text beside two prominent icon rows, which said
-    /// the destinations were the important half — they are not, and picking the
-    /// wrong source is the more expensive mistake of the two.
-    private var sourceSection: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             Text(L("offload_source_label"))
                 .offloadText(.section)
@@ -115,14 +125,14 @@ struct OffloadSheet: View {
                 isEmpty: model.source == nil,
                 finderTarget: model.source) {
                     Button(L("choose")) { pickSource() }
-                        .disabled(model.isRunning)
+                        .disabled(controller.isOffloadRunning)
                 }
         }
     }
 
-    /// How full the card is — but only for a volume. The same two numbers over
-    /// a folder on a working disk would describe the disk, which is not what
-    /// the line beside a sound roll appears to be saying.
+    /// How full the card is — but only for a volume. The same two numbers over a
+    /// folder on a working disk would describe the disk, which is not what the
+    /// line beside a sound roll appears to be saying.
     private var sourceDetail: String? {
         guard let source = model.source,
               OffloadVolumeFacts.isVolumeRoot(source) else { return nil }
@@ -136,10 +146,16 @@ struct OffloadSheet: View {
             model.source = url
         }
     }
+}
 
-    // MARK: - destinations
+/// The destination list: add, re-point, remove.
+///
+/// Its own view for the same reason as the source section above.
+struct OffloadDestinationSection: View {
+    @ObservedObject var model: OffloadSheetModel
+    @EnvironmentObject private var controller: CaptureController
 
-    private var destinationSection: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             HStack {
                 Text(L("offload_dest_label"))
@@ -152,7 +168,7 @@ struct OffloadSheet: View {
                 } label: {
                     Label(L("offload_add_dest"), systemImage: "plus")
                 }
-                .disabled(model.isRunning)
+                .disabled(controller.isOffloadRunning)
             }
             if model.rows.isEmpty {
                 Text(L("offload_no_dest"))
@@ -175,20 +191,20 @@ struct OffloadSheet: View {
                     model.setDestination(url, at: row.id)
                 }
             }
-            .disabled(model.isRunning)
+            .disabled(controller.isOffloadRunning)
             Button {
                 model.removeDestination(row.id)
             } label: {
                 Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
-            .disabled(model.isRunning)
+            .disabled(controller.isOffloadRunning)
             .help(L("offload_remove_dest"))
         }
     }
 
-    /// Where this copy lands and whether the disk can hold it — the two facts
-    /// the operator checks before pressing Start, on one line.
+    /// Where this copy lands and whether the disk can hold it — the two facts the
+    /// operator checks before pressing Start, on one line.
     private func destinationDetail(_ row: OffloadSheetModel.Row) -> String? {
         let parts = [model.destinationFolder(for: row)
             .map { "→ \($0.lastPathComponent)" },
@@ -201,7 +217,6 @@ struct OffloadSheet: View {
         OffloadPanels.pickFolder(message: L("offload_pick_dest"),
                                  prompt: L("offload_dest_prompt"))
     }
-
 }
 
 /// The sheet's action bar.
@@ -231,16 +246,16 @@ struct OffloadSheetFooter: View {
         HStack {
             if model.isRunning {
                 Button(L("offload_cancel_run")) { model.cancel() }
-                    .disabled(model.isCancelling)
+                    .disabled(!controller.canStopDiskJob)
             }
             Button(L("verify_menu")) { controller.chooseDiskToVerify() }
-                .disabled(model.isRunning || controller.verify.isRunning)
+                .disabled(!controller.canStartVerify)
             Spacer()
             Button(model.isRunning ? L("offload_hide") : L("close"),
                    action: dismiss)
             Button(L("offload_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!model.canStart)
+                .disabled(!controller.canStartOffload)
         }
     }
 }

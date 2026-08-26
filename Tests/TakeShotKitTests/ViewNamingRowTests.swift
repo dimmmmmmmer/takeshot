@@ -158,6 +158,82 @@ struct ViewNamingRowTests {
         }
     }
 
+    // MARK: - what the template is allowed to hide
+
+    /// The Sony α preset is `C{clip}` — no `{cam}`, no `{roll}`, no `{postfix}` —
+    /// and picking it used to take CAM and ROLL off the screen. `controller.roll`
+    /// has exactly ONE editor in the whole app, so the reel name became
+    /// uneditable while every consumer of it went on working: the take's own
+    /// `com.takeshot.roll` metadata, the Reel Name column of `takeshot-log.csv`
+    /// and the ALE, the EDL's reel, the slate, and the clip counter, which
+    /// RESTARTS on the roll. The same for CAM (the shift report, the still's
+    /// name, the multicam labels) and for CLIP (the Take column).
+    ///
+    /// The rule is now the one the slate row below already followed: the template
+    /// hides a field only when the file name is the only thing that consumes it.
+    /// POSTFIX is the only such field, and it is still hidden — which is what
+    /// makes this a rule rather than "show everything".
+    ///
+    /// Counted as real AppKit text fields, the way `theFieldInstallsItsFormatter`
+    /// does: a field that is not in the tree cannot be typed into, and that is
+    /// the whole claim.
+    @Test func theTemplateHidesOnlyTheFieldNothingElseConsumes() async throws {
+        try await ViewProbe.run { probe in
+            // The reference first: this measurement has to be able to see a
+            // field at all before the counts below mean anything.
+            let one: Int = Self.textFieldCount(
+                probe.hosted(NameTextField(field: .roll, text: .constant("A001"))),
+                width: 80)
+            try #require(
+                one == 1,
+                "this host draws no NSTextField, so the counts below prove nothing")
+
+            probe.controller.settings.naming.namingTemplate =
+                "{prefix}_{cam}{roll}C{clip}_{postfix}"
+            let all: Int = Self.textFieldCount(
+                probe.hosted(NamingFileNameRow()), width: ViewBudget.footerHalfWidth)
+            #expect(all == 4,
+                    "the default template renders \(all) fields, not four")
+
+            // The Sony α preset, by its own name rather than by its string.
+            let alpha: NamingPreset = try #require(
+                NamingPreset.all.first { $0.key == "preset_sony_alpha" },
+                "the Sony α preset is gone")
+            #expect(alpha.template == "C{clip}")
+            probe.controller.applyNamingPreset(alpha)
+
+            let kept: Int = Self.textFieldCount(
+                probe.hosted(NamingFileNameRow()), width: ViewBudget.footerHalfWidth)
+            #expect(
+                kept == 3,
+                "the Sony α preset renders \(kept) fields — CAM, ROLL and CLIP are consumed outside the file name")
+
+            // …and the reel really is still consumed under that template, which
+            // is why it has to stay editable: the counter restarts on it.
+            probe.controller.roll = "007"
+            probe.controller.nextTakeNumber = 9
+            probe.controller.roll = "008"
+            #expect(probe.controller.nextTakeNumber == 1,
+                    "the clip counter stopped following a roll the template does not mention")
+        }
+    }
+
+    /// How many real text fields a view puts on screen.
+    private static func textFieldCount(_ view: some View, width: CGFloat) -> Int {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(x: 0, y: 0, width: width, height: 200)
+        host.layoutSubtreeIfNeeded()
+        return countTextFields(in: host)
+    }
+
+    private static func countTextFields(in view: NSView) -> Int {
+        // An NSTextField's own field editor is a subview while it is being
+        // edited; nothing here is focused, and the count is of the fields
+        // themselves rather than of anything inside them.
+        if view is NSTextField { return 1 }
+        return view.subviews.reduce(0) { $0 + countTextFields(in: $1) }
+    }
+
     // MARK: - the character never gets in (owner item 28)
 
     /// The formatter behind every filename field, asked the question the

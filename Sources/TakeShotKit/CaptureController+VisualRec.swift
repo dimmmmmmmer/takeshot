@@ -151,6 +151,18 @@ extension CaptureController {
 
     // MARK: - what the panel reads back
 
+    /// The trigger can be switched on: the two references exist and separate.
+    /// The switch's own enabling rule, named here beside the setter that
+    /// enforces the same thing (see `visualRecOn`).
+    var canUseVisualRec: Bool { visualRecTeaching.isTaught }
+
+    /// There is something to forget — one reference is enough, since half a
+    /// teaching is exactly the state the operator wants to clear and start
+    /// again from.
+    var hasVisualRecReferences: Bool {
+        visualRecTeaching.rolling != nil || visualRecTeaching.idle != nil
+    }
+
     /// The taught separation in code values, or nil before both references
     /// exist.
     var visualRecSeparationText: String? {

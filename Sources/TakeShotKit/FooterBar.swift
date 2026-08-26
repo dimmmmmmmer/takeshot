@@ -79,7 +79,7 @@ struct FooterCenterControls: View {
                     .font(.system(size: 15))
             }
             .buttonStyle(.borderless)
-            .disabled(controller.takes.isEmpty)
+            .disabled(!controller.hasTakes)
             .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
             RecordButton()
             Button {
@@ -89,7 +89,7 @@ struct FooterCenterControls: View {
                     .font(.system(size: 15))
             }
             .buttonStyle(.borderless)
-            .disabled(!controller.isCapturing && controller.playbackURL == nil)
+            .disabled(!controller.canGrabFrame)
             .help(L("grab_frame"))
         }
     }
@@ -152,7 +152,7 @@ private struct FooterMonitorButton: View {
                     // every drag of the volume slider, not just on a mute
                     .frame(width: 24, height: 20)
             }
-            .disabled(!isPlayback && !controller.isCapturing)
+            .disabled(!controller.canMonitorAudio)
             .help("\(L("monitor_mute_help")) — \(hotkeys.combo(for: .toggleMonitorMute).display)")
 
             Button {
@@ -162,7 +162,7 @@ private struct FooterMonitorButton: View {
                     .font(.system(size: 7, weight: .semibold))
                     .frame(width: 11, height: 20)
             }
-            .disabled(!isPlayback && !controller.isCapturing)
+            .disabled(!controller.canMonitorAudio)
             .help(L("monitor_volume_help"))
             .popover(isPresented: $showPopover, arrowEdge: .top) {
                 VStack(spacing: 10) {

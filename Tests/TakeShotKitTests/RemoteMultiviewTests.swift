@@ -379,6 +379,62 @@ import Testing
         #expect(html.contains("paintLabels()"))
     }
 
+    /// The way OUT of a fullscreen tile.
+    ///
+    /// There was none. The tap handler refused BOTH directions on
+    /// `tiles.length < 2`, and the count really does drop to one under a tile
+    /// that is already fullscreen — a board leaving the multicam set pops the
+    /// OTHER tile (`ensureTiles` pops from the end). The remaining tile kept the
+    /// `full` class, which is `position: fixed; inset: 0`, so it covered the
+    /// footer with the timecode and the connection dot, and the only way back
+    /// was to reload the page. On a phone gaffer-taped to a cart, that is the
+    /// monitoring surface gone.
+    ///
+    /// Driven rather than pattern-matched: the rule is a pure function in the
+    /// shipped page, and this evaluates THAT text in a JS engine. Entering is
+    /// still refused for a single tile — it is already the whole screen — and
+    /// leaving never is.
+    @Test @MainActor func aFullscreenCameraTileCanAlwaysBeLeft() throws {
+        let html: String = try #require(
+            String(bytes: RemotePage.camerasHTML(), encoding: .utf8))
+        let name: String = "function wantsFullscreen("
+        let start: Range<String.Index> = try #require(
+            html.range(of: name),
+            "the cameras page states no fullscreen rule to check")
+        let end: Range<String.Index> = try #require(
+            html.range(of: "\n}", range: start.upperBound..<html.endIndex),
+            "the fullscreen rule does not end where this test can cut it")
+        let source: String = String(html[start.lowerBound..<end.upperBound])
+        let context: JSContext = try #require(JSContext())
+        context.evaluateScript(source)
+        try #require(context.exception == nil,
+                     "the fullscreen rule does not evaluate on its own")
+
+        let asks: (Bool, Int) -> Bool = { wasFull, count in
+            context.evaluateScript(
+                "wantsFullscreen(\(wasFull), \(count))")?.toBool() ?? false
+        }
+        // The way out, at every count — including the one the old guard refused.
+        #expect(!asks(true, 1), "a lone fullscreen tile cannot be left")
+        #expect(!asks(true, 2), "a fullscreen tile cannot be left")
+        #expect(!asks(true, 4))
+        // The way in, only where it means something.
+        #expect(!asks(false, 1), "one tile is already the whole screen")
+        #expect(asks(false, 2))
+        #expect(asks(false, 4))
+
+        // The guard that refused the exit tap is gone, and the tap asks the rule
+        // rather than carrying a second copy of it.
+        #expect(!html.contains("if (tiles.length < 2) { return; }"),
+                "the tap handler still refuses to leave fullscreen")
+        #expect(html.contains("if (wantsFullscreen(was, tiles.length))"),
+                "the tap handler does not ask the rule")
+        // …and a grid that shrinks under a fullscreen tile corrects itself, so
+        // the operator is not left having to find the tap at all.
+        #expect(html.contains("if (want < 2) { clearFullscreen(); }"),
+                "a shrinking grid leaves a lone tile fullscreen")
+    }
+
     @Test @MainActor func everyCamerasLabelIsTranslated() {
         for (field, key) in RemotePage.camerasLabels {
             for language in [AppLanguage.english, AppLanguage.russian] {

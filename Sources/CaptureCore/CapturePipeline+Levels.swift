@@ -187,17 +187,17 @@ extension CapturePipeline {
     /// encoder color-converts pixels when buffer tags mismatch the file tags
     /// (verified on device: a display-gamma tag here darkened recorded shadows).
     ///
-    /// An HDR source overrides the operator's preset for the DISPLAY buffer,
-    /// with the tag that says what that buffer really holds: the camera's
-    /// Rec.2020 primaries and, because the tone map has already happened, a
-    /// Rec.709 transfer. Tagging it PQ would ask ColorSync to apply the PQ
-    /// curve to something that is no longer PQ. See `WireColorimetry`.
+    /// An HDR source states its own tag for the DISPLAY buffer, and it says what
+    /// that buffer really holds: the camera's Rec.2020 primaries and, because
+    /// the tone map has already happened, a Rec.709 transfer. Tagging it PQ
+    /// would ask ColorSync to apply the PQ curve to something that is no longer
+    /// PQ. See `WireColorimetry`. nil is Rec.709, which is what an SDR wire is —
+    /// the retired `colorTagPreset` setting was the fallback here and has been
+    /// permanently nil since its picker went (see the field's tombstone).
     func tagColorIfUntagged(_ pixelBuffer: CVPixelBuffer) {
         guard CVBufferCopyAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,
                                      nil) == nil else { return }
-        ColorTags.tag(pixelBuffer,
-                      preset: signalColorimetry.displayPreset
-                          ?? config.settings.capture.colorTagPreset)
+        ColorTags.tag(pixelBuffer, preset: signalColorimetry.displayPreset)
     }
 
     /// Adopt what the board says this frame's codes mean, filtered through the

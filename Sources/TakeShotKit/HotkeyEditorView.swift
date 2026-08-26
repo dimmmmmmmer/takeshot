@@ -123,6 +123,11 @@ struct HotkeyEditorView: View {
                 Image(systemName: "arrow.uturn.backward")
             }
             .buttonStyle(.borderless)
+            // disabled(exception): per-ROW, like the slate steppers — whether
+            // THIS action still holds its default binding. Named once on
+            // `HotkeyEditorModel`, which owns the bindings the sheet is editing;
+            // the controller has no opinion about them and there is one of these
+            // buttons per action in the list.
             .disabled(!model.isCustomized(action))
             .help(L("hotkey_reset_one"))
             .accessibilityLabel(L("hotkey_reset_one"))

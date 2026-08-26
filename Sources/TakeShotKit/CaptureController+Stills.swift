@@ -19,6 +19,14 @@ import SwiftUI
 /// Split out of `+Playback`, which had grown to hold the engine switch, the
 /// asynchronous format read and both of these at once.
 extension CaptureController {
+    /// There is a picture to grab: the live signal, or a clip under review.
+    ///
+    /// `grabFrame` answers both cases and says so with a toast when neither has
+    /// a frame in hand; this is the same question asked before the click, and it
+    /// is one rule with two surfaces (the footer's camera button and File →
+    /// Grab Frame), which is why it is named here rather than at each of them.
+    var canGrabFrame: Bool { isCapturing || playbackURL != nil }
+
     /// Decode a still into Rec.709 display code values and hand it to the tap.
     func loadStill(url: URL) {
         Task.detached(priority: .userInitiated) { [weak self] in

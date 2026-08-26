@@ -41,7 +41,7 @@ struct VisualRecRows: View {
         Toggle(L("visual_rec"), isOn: Binding(
             get: { controller.visualRecOn },
             set: { controller.visualRecOn = $0 }))
-            .disabled(!controller.visualRecTeaching.isTaught)
+            .disabled(!controller.canUseVisualRec)
             .help(L("visual_rec_hint"))
         VisualRecTeachRow()
         if isExpanded {
@@ -131,8 +131,7 @@ struct VisualRecTeachRow: View {
             Button(L("visual_rec_forget"), role: .destructive) {
                 controller.forgetVisualRecReferences()
             }
-            .disabled(controller.visualRecTeaching.rolling == nil
-                && controller.visualRecTeaching.idle == nil)
+            .disabled(!controller.hasVisualRecReferences)
         }
     }
 }

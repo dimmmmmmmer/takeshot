@@ -106,6 +106,13 @@ struct SlateFieldsEditor: View {
         .foregroundStyle(.secondary)
         // free text has no next value, and an arrow that does nothing under the
         // pointer is worse than one that says so
+        //
+        // disabled(exception): a predicate over this ARROW's own two arguments —
+        // the field it was built for and the direction it points — rather than
+        // over app state. The rule is still named exactly once, in
+        // `SlateStep.canStep`, which is what the enforcement is for; a
+        // parameterless `controller.something` has nothing to be here, because
+        // there are six of these arrows and each asks about a different field.
         .disabled(!SlateStep.canStep(text.wrappedValue, by: delta))
     }
 }

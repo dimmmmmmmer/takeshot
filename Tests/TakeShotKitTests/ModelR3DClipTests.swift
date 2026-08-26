@@ -86,6 +86,75 @@ struct ModelR3DClipTests {
         #expect(settings.r3d.decodeScaleEffective == .auto)
     }
 
+    // MARK: - the picker reaches the clip that is already open
+
+    /// Both options are read once, when the clip is opened, so a change made
+    /// while a clip is on screen used to reach nothing at all — and the clip on
+    /// screen is the entire reason the scale picker exists. It is chosen because
+    /// THIS 8K clip is stuttering, and it did nothing until the next one.
+    ///
+    /// Observed by the app going back to the decoder for the same clip, which is
+    /// the only observable a build with no RED SDK has: there is no way to
+    /// synthesize an .r3d, so a real second decode cannot happen here (see this
+    /// suite's own note). What is asserted is that the settings write is WIRED to
+    /// the reopen — `rawPlayerError` is cleared by hand and comes back, which
+    /// only happens if the clip was opened again.
+    @MainActor
+    @Test func changingTheDecodeScaleReopensTheClipInThePlayer() async throws {
+        try await ControllerHarness.run { controller, root in
+            let clip: URL = root.appendingPathComponent("A001_C001_0101XX_001.r3d")
+            try Data(repeating: 0x00, count: 4096).write(to: clip)
+
+            controller.play(url: clip)
+            try #require(controller.playbackURL == clip)
+            #expect(controller.playbackIsR3D)
+            controller.rawPlayerError = nil
+
+            controller.settings.r3d.decodeScale = R3DDecodeScale.quarter.rawValue
+
+            #expect(controller.rawPlayerError != nil,
+                    "the decode scale never reached the clip in the player")
+
+            // …and the camera LUT is the same question about the same decode.
+            controller.rawPlayerError = nil
+            controller.settings.r3d.applyCameraLUT = true
+            #expect(controller.rawPlayerError != nil,
+                    "the camera LUT never reached the clip in the player")
+
+            // A settings write that is not one of the two must not reopen
+            // anything: this runs on every write, volume slider ticks included.
+            controller.rawPlayerError = nil
+            controller.settings.naming.postfix = "PROXY"
+            #expect(controller.rawPlayerError == nil,
+                    "an unrelated setting reopened the clip in the player")
+        }
+    }
+
+    /// And it reaches R3D ONLY. BRAW and CinemaDNG share the engine and neither
+    /// decoder has ever read these options, so a scale click must leave a DNG
+    /// clip exactly where it is — the same engine object, not a fresh one.
+    @MainActor
+    @Test func changingTheDecodeScaleLeavesOtherRawFormatsAlone() async throws {
+        try await ControllerHarness.run { controller, root in
+            let folder: URL = root.appendingPathComponent("clip.dng-sequence")
+            try FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true)
+            try Data("frame".utf8)
+                .write(to: folder.appendingPathComponent("frame_000001.dng"))
+
+            controller.play(url: folder)
+            let opened: RawPlayerModel = try #require(controller.rawPlayer,
+                                                     "the DNG clip did not open")
+            #expect(!controller.playbackIsR3D)
+
+            controller.settings.r3d.decodeScale = R3DDecodeScale.eighth.rawValue
+
+            #expect(controller.rawPlayer === opened,
+                    "an R3D setting rebuilt a CinemaDNG engine")
+            #expect(controller.rawPlayerError == nil)
+        }
+    }
+
     // MARK: - the camera look
 
     /// Off by default, and the OFF state is what an untouched install stores —

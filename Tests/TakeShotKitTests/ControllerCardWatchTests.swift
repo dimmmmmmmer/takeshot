@@ -22,7 +22,7 @@ import Testing
 /// (owner item 18) — and a fixture set that belongs to whichever suite happens
 /// to be written first is how the second one ends up with a copy of it.
 @MainActor
-private enum CardFixture {
+enum CardFixture {
     static func scratch(_ name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("takeshot-card-\(name)-\(UUID().uuidString)")
@@ -262,52 +262,6 @@ private enum CardFixture {
 
             #expect(controller.cardOffer != nil)
             #expect(controller.deferredCardOffers.isEmpty)
-        }
-    }
-
-    // MARK: - volumes that are never cards
-
-    @Test func theBootVolumeNeverPrompts() async throws {
-        try await CardFixture.withWatch { controller, watch in
-            watch.mount(URL(fileURLWithPath: "/"), name: "Macintosh HD")
-
-            #expect(!(await ControllerWait.until(
-                { controller.cardOffer != nil }, timeout: .seconds(2))))
-        }
-    }
-
-    /// The app's own destination disk: offering to copy a card OFF the disk the
-    /// copies land on is the one wrong guess that costs more than a click.
-    @Test func theDestinationVolumeNeverPrompts() async throws {
-        let card = try CardFixture.makeCard("own-disk")
-        defer { try? FileManager.default.removeItem(at: card) }
-        try await CardFixture.withWatch { controller, watch in
-            // as if the record folder were a folder on this very volume
-            controller.settings.capture.destinationPath =
-                card.appendingPathComponent("Dailies").path
-            #expect(controller.isExcludedVolume(
-                MountedVolume(url: card, name: "A001")))
-
-            watch.mount(card, name: "A001")
-
-            #expect(!(await ControllerWait.until(
-                { controller.cardOffer != nil }, timeout: .seconds(2))))
-        }
-    }
-
-    @Test func aSavedOffloadDestinationNeverPrompts() async throws {
-        let card = try CardFixture.makeCard("saved-dst")
-        defer { try? FileManager.default.removeItem(at: card) }
-        let rig: (inout CaptureSettings) -> Void = { [card] in
-            $0.offload.destinationPaths = [card.appendingPathComponent("DIT").path]
-        }
-        try await CardFixture.withWatch(configure: rig) { controller, watch in
-            #expect(controller.isExcludedVolume(
-                MountedVolume(url: card, name: "DAILIES_SSD")))
-            watch.mount(card, name: "DAILIES_SSD")
-
-            #expect(!(await ControllerWait.until(
-                { controller.cardOffer != nil }, timeout: .seconds(2))))
         }
     }
 

@@ -18,6 +18,33 @@ extension CaptureController {
     nonisolated static let offloadQueue = DispatchQueue(
         label: "takeshot.offload", qos: .utility)
 
+    // MARK: - what the sheets' controls are enabled by
+    //
+    // The offload sheet, the verify sheet and the takes-panel strip are three
+    // surfaces onto two runs, and they had three spellings of "is it going" and
+    // two of "is it already stopping" between them — one of them a `let` handed
+    // into a view. Named here, in the extension that owns both models.
+
+    /// A copy is in flight: the whole form is locked, because none of it can
+    /// reach a run that has already been planned.
+    var isOffloadRunning: Bool { offload.isRunning }
+
+    /// Start: a source, at least one destination, nothing already running and
+    /// nothing left to answer (see `OffloadSheetModel.canStart`).
+    var canStartOffload: Bool { offload.canStart }
+
+    /// Stop, from either surface: something is running and it is not already
+    /// stopping. One rule for the offload and the verify, because
+    /// `cancelRunningDiskJob` is one button for both.
+    var canStopDiskJob: Bool {
+        (offload.isRunning && !offload.isCancelling)
+            || (verify.isRunning && !verify.isCancelling)
+    }
+
+    /// "Check a disk copy…": one disk job at a time (see `claimTheDiskJob`,
+    /// which enforces the same thing for the menu item).
+    var canStartVerify: Bool { !offload.isRunning && !verify.isRunning }
+
     /// Open the offload sheet. This is the entry point the UI calls.
     func showOffloadSheet() {
         // A run that is already going is not a busy signal — it is the thing
