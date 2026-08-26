@@ -181,6 +181,13 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         var lastError: String?
         var audioSource = "embedded"
         var audioChannelMask: String?
+        /// Who chose the mask above, and whether the standby measurement had
+        /// answered at the moment the bundle was collected. Both, because a
+        /// take recorded on two channels is a different report depending on
+        /// whether the app measured that or the operator asked for it — and
+        /// "auto, no answer yet" is the third case, where every channel is
+        /// recorded (see `AudioChannelDetector`).
+        var audioChannelDecision: String?
         var externalAudioActive = false
     }
 

@@ -38,6 +38,7 @@ struct AudioChannelPanel: View {
                 }
                 dbScale
             }
+            channelDecisionRow
             // whose channels these are: the board's embed or the USB source
             // (with its honest channel count) — the meters look the same
             // either way, and mistaking one for the other costs a take's sound
@@ -98,6 +99,40 @@ struct AudioChannelPanel: View {
         .shadow(radius: 18)
     }
 
+    /// Who chose the dimmed channels, and how to take it back.
+    ///
+    /// The columns above already SHOW the mask — a channel the measurement
+    /// excluded is dimmed exactly as one the operator switched off is — and
+    /// that is the problem this row solves: without it the two are the same
+    /// picture, and an operator looking at fourteen dark meters cannot tell
+    /// whether the app decided that or they did three takes ago.
+    private var channelDecisionRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                controller.setAudioChannelsAuto(!controller.isAudioChannelsAutomatic)
+            } label: {
+                Label(L("audio_channels_auto"),
+                      systemImage: controller.isAudioChannelsAutomatic
+                          ? "checkmark.circle.fill" : "circle")
+                    .font(.caption)
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+            .disabled(!controller.canChangeAudioChannels)
+            Text(controller.audioChannelDecisionText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        // The tooltip hangs off the row rather than the button, so the "why is
+        // this locked" text stays readable while a take is recording — the same
+        // shape as the codec picker's (see `FooterFormatControls`).
+        .help(L("audio_channels_auto_help"))
+        .frame(maxWidth: panelWidth, alignment: .leading)
+    }
+
     private func channelColumn(index: Int, level: Float) -> some View {
         let enabled = controller.isChannelEnabled(index)
         return VStack(spacing: 3) {
@@ -117,13 +152,11 @@ struct AudioChannelPanel: View {
                 .foregroundStyle(enabled ? .primary : .tertiary)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            // the channel mask is latched per take — flipping it mid-take
-            // would desync the writer's fixed channel count
-            guard !controller.isRecording else { return }
-            controller.toggleAudioChannel(index)
-        }
-        .opacity(controller.isRecording ? 0.55 : 1)
+        .onTapGesture { controller.toggleAudioChannel(index) }
+        // the channel mask is latched per take — flipping it mid-take would
+        // desync the writer's fixed channel count (`canChangeAudioChannels`)
+        .disabled(!controller.canChangeAudioChannels)
+        .opacity(controller.canChangeAudioChannels ? 1 : 0.55)
         .help(enabled ? L("channel_on_help") : L("channel_off_help"))
     }
 

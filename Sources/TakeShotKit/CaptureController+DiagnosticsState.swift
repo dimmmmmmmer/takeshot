@@ -35,9 +35,27 @@ extension CaptureController {
         recording.audioSource = externalAudioActive
             ? "external (USB input device)" : "embedded (capture board)"
         recording.externalAudioActive = externalAudioActive
-        recording.audioChannelMask = settings.audio.audioChannelMask
+        recording.audioChannelMask = effectiveAudioChannelMask
             .map { String(format: "0x%04X", $0) }
+        recording.audioChannelDecision = Self.channelDecision(
+            automatic: isAudioChannelsAutomatic,
+            measured: detectedAudioChannelMask != nil)
         return recording
+    }
+
+    /// Who chose the channel mask, as the bundle words it.
+    ///
+    /// A pure function of the two flags rather than a chain inside the builder:
+    /// the builder needs a live controller and a real pipeline to run at all,
+    /// and the three answers are exactly the thing a reader of a bundle has to
+    /// be able to trust. Three, not two — "auto and nothing measured yet"
+    /// records every channel and is what the first seconds of every session
+    /// look like (see `AudioChannelDetector`).
+    static func channelDecision(automatic: Bool, measured: Bool) -> String {
+        guard automatic else { return "operator" }
+        return measured
+            ? "auto — measured while standing by"
+            : "auto — nothing measured carrying yet, so all channels"
     }
 
     // MARK: - the takes

@@ -106,8 +106,13 @@ extension CapturePipeline {
                 config.settings.capture.startDebounceFrames != self.config.settings.capture.startDebounceFrames
                 || config.settings.capture.stopDebounceFrames != self.config.settings.capture.stopDebounceFrames
                 || config.settings.capture.detectionMode != self.config.settings.capture.detectionMode
+            // Both halves of the channel decision, because either can change
+            // the WIDTH: switching auto off can widen the trim back to every
+            // declared channel without the mask itself moving at all.
             if config.settings.audio.audioChannelMask
-                != self.config.settings.audio.audioChannelMask {
+                != self.config.settings.audio.audioChannelMask
+                || config.settings.audio.audioChannelAuto
+                != self.config.settings.audio.audioChannelAuto {
                 // the packed-buffer format caches describe the OLD channel
                 // count — reusing them mis-interleaves audio after a change
                 self.trimFormatCache = nil
@@ -167,6 +172,10 @@ extension CapturePipeline {
             self.preRolledAudioEnd = nil
             self.externalAudioStarved = false
             self.externalAudioLost = false
+            // …and so is what the last session's channels were measured
+            // carrying: the next one may be a different board, a different
+            // camera or a different embed (see `AudioChannelDetector`).
+            self.resetAudioChannelDetection()
             self.latestLTC = nil // the old session's LTC must not name new takes
             self.ltcDecoder.reset()
             self.frameGrabHandler = nil

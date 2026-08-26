@@ -147,8 +147,25 @@ public struct AudioSettings: Codable, Equatable, Sendable {
     /// speaker in the footer says why the room is quiet. Persisting the zero
     /// itself is the bug that once made every launch start silent.
     public var monitorMuted: Bool?
-    /// Bit mask of recorded channels (bit i = channel i); nil — all.
+    /// Bit mask of recorded channels (bit i = channel i) — the OPERATOR's
+    /// answer. nil means they have not given one, which is the usual state:
+    /// with `audioChannelAuto` in force the measurement answers instead, and
+    /// with it switched off nil is "every channel the source declares".
     public var audioChannelMask: Int?
+    /// Follow the measurement when the operator has not chosen channels
+    /// themselves (nil/true — follow it; false — do not).
+    ///
+    /// `AudioChannelDetector` watches which channels carry a stream while the
+    /// app stands by, and this is what lets its answer reach a take. Optional,
+    /// like every added field, so old saved JSON still decodes — and nil
+    /// reading as ON is what makes this the DEFAULT rather than a switch
+    /// somebody has to find: an operator upgrading gets the measurement, and
+    /// one who had already picked channels keeps their `audioChannelMask`,
+    /// because an explicit mask is what auto fills in for and never overrides.
+    ///
+    /// Stored as nil rather than true when on, so a default install still
+    /// writes no key at all (see `SettingsFormatFixture.alwaysWrittenKeys`).
+    public var audioChannelAuto: Bool?
     /// Audio device UID for playback output; nil — system.
     public var playbackAudioDeviceUID: String?
     /// Audio input for recording: a Core Audio input device UID (a USB

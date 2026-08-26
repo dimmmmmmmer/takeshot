@@ -83,6 +83,15 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onVancStats: (([VancPacketStat]) -> Void)?
     /// Per-channel audio peak levels, dBFS. Arrive at the audio-packet rate (~25 Hz).
     public var onAudioLevels: (([Float]) -> Void)?
+    /// Which channels the standby measurement says are carrying a stream, as a
+    /// bit mask — nil when it has no answer (see `AudioChannelDetector`).
+    ///
+    /// Its own callback rather than a field on the levels, and for the reason
+    /// the channel COUNT is already split off them: the levels arrive 25 times
+    /// a second and this changes a handful of times a session, and the panel
+    /// row that shows it must not re-lay out at meter rate. Delivered on the
+    /// main queue, only when the answer moves.
+    public var onAudioChannelsDetected: ((Int?) -> Void)?
     /// Scope data (waveform + histograms) from the displayed frame, up to
     /// `scopeUpdatesPerSecond` while enabled via setScopesEnabled. Delivered on
     /// the main queue.
@@ -381,16 +390,58 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).
     var sourceAudioChannels = 0
+    /// Which channels have carried a stream since the source came up (see
+    /// `AudioChannelDetector`). Queue-confined, like every counter here.
+    var audioDetector = AudioChannelDetector()
+    /// The detector's answer as last PUBLISHED — the shadow that keeps a
+    /// per-packet measurement from costing a main-queue hop per packet, the way
+    /// `mirroredAudioDrops` keeps a per-packet tally from costing a lock.
+    var detectedAudioMask: Int?
+
+    /// The channels a take opened NOW would record, before any latch: the
+    /// operator's mask when they have given one, the measurement when they have
+    /// not, and nil — every channel the source declares — when neither has an
+    /// answer.
+    ///
+    /// Auto fills the nil and never overrides a choice, which is what makes
+    /// "the operator can override it" a property of one expression rather than
+    /// of a flag somewhere agreeing with a mask somewhere else.
+    var effectiveAudioChannelMask: Int? {
+        let chosen = config.settings.audio.audioChannelMask
+        guard config.settings.audio.audioChannelAuto ?? true else { return chosen }
+        return chosen ?? detectedAudioMask
+    }
 
     // LTC from an embedded audio channel (all access on queue).
     let ltcDecoder = LTCDecoder()
     var latestLTC: Timecode?
 
-    /// How many channels are actually written under the current mask.
-    var recordChannelCount: Int {
+    /// How many channels are actually written under `mask` — nil being every
+    /// channel the source declares.
+    ///
+    /// Takes the mask rather than reading one, because the two callers inside
+    /// `beginTake` want the LATCHED answer at a moment when `writer` is not yet
+    /// assigned and `activeAudioChannelMask` would therefore route them through
+    /// the live one. Same value today; a track sized by a different mask from
+    /// the one its packets are trimmed with is not a bug worth leaving to
+    /// statement order.
+    func recordChannelCount(under mask: Int?) -> Int {
         guard sourceAudioChannels > 0 else { return 0 }
-        guard let mask = config.settings.audio.audioChannelMask else { return sourceAudioChannels }
+        guard let mask else { return sourceAudioChannels }
         return (0..<sourceAudioChannels).filter { mask & (1 << $0) != 0 }.count
+    }
+
+    /// …under the mask in force right now.
+    var recordChannelCount: Int { recordChannelCount(under: activeAudioChannelMask) }
+
+    /// The mask in force right now: latched for the open take, live otherwise.
+    ///
+    /// The mask is latched per take because the writer's channel count is fixed
+    /// at start and a live change would desync the two (`+Take`), and stating
+    /// that in one place is what keeps the trim, the track width and the log
+    /// row answering the same question.
+    var activeAudioChannelMask: Int? {
+        writer != nil ? recordingMask : effectiveAudioChannelMask
     }
 
     /// The last levels decision written to the log — one line per change (see

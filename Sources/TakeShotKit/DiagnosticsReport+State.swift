@@ -42,6 +42,8 @@ enum DiagnosticsStateReport {
             pair("Audio source", recording.audioSource),
             pair("External audio live", recording.externalAudioActive),
             pair("Audio channel mask", recording.audioChannelMask ?? "all"),
+            pair("Audio channels chosen by",
+                 recording.audioChannelDecision ?? "unrecorded"),
         ]
         out.append("")
         out += counters(recording.health)

@@ -156,6 +156,12 @@
 "audio_panel_hint" = "Click a channel to toggle recording.";
 "channel_on_help" = "Recording — click to exclude from file";
 "channel_off_help" = "Muted — click to record this channel";
+"audio_channels_auto" = "Auto";
+"audio_channels_auto_help" = "Auto records the channels that carried a signal while standing by. Click any channel to choose them yourself; locked while recording.";
+"audio_channels_auto_listening" = "listening — all channels recorded";
+"audio_channels_auto_detected" = "%@ carry signal";
+"audio_channels_manual" = "chosen by hand: %@";
+"audio_channels_all" = "all channels";
 "meters_click_help" = "Audio channels — click for the full panel with dB values and per-channel toggles";
 "playback_output" = "Playback audio output";
 "system_default" = "System default";

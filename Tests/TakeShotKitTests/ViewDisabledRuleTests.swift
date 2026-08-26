@@ -236,6 +236,8 @@ struct ViewDisabledRuleTests {
             #expect(!controller.canStartDailies)
             #expect(!controller.canSteerDailiesQueue)
             #expect(controller.canChangeRecordingFormat, "nothing is recording")
+            #expect(controller.canChangeAudioChannels,
+                    "no take has latched a channel mask")
         }
     }
 }
