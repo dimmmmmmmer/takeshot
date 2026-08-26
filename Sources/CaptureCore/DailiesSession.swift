@@ -25,6 +25,21 @@ struct DailiesSourceFacts {
     let outputSize: CGSize
     /// nil — the timecode burn-in is off and no clock is computed at all.
     let timeline: DailiesTimeline?
+    /// What the SOURCE FILE says its codes mean, read from its own format
+    /// description and never from live state. A daily is made from a finished
+    /// file that may have been shot in an earlier session, on another machine,
+    /// off another camera — the wire that produced it is long gone, and the
+    /// only thing that still knows what its codes mean is the take itself.
+    let colorimetry: WireColorimetry
+    /// The one 256-entry lookup the decoded picture goes through on its way
+    /// into the proxy: `StudioSwing.playbackTable`, the SAME table the player
+    /// applies to the same file. Not a second tone map — a proxy that
+    /// disagrees with the review it came from is worse than no proxy.
+    ///
+    /// nil when the file needs nothing at all, which is every SDR take with no
+    /// levels key, every foreign clip, and every take from before either tag
+    /// existed.
+    let levels: [UInt8]?
 
     static func probe(item: DailiesItem,
                       burnins: DailiesBurnins) async throws -> DailiesSourceFacts {
@@ -38,6 +53,12 @@ struct DailiesSourceFacts {
         // 25 as the last resort only: a rate of 0 would freeze the TC clock.
         let frameRate = nominalRate > 0 ? Double(nominalRate) : 25
         let duration = (try? await asset.load(.duration).seconds) ?? 0
+        let colorimetry = await ColorTags.colorimetry(of: asset)
+        // BOTH questions the player asks, asked here the same way: the levels
+        // key says whether the codes are studio swing, the transfer tag says
+        // what curve they are on, and the two compose into one table.
+        let metadata: [AVMetadataItem] = (try? await asset.load(.metadata)) ?? []
+        let wireCodes = await TakeWriter.carriesWireCodes(metadata)
         return DailiesSourceFacts(
             asset: asset, videoTrack: track,
             audioTracks: (try? await asset.tracks(ofType: .audio)) ?? [],
@@ -46,7 +67,10 @@ struct DailiesSourceFacts {
             outputSize: DailiesEngine.outputSize(for: naturalSize),
             timeline: burnins.timecode
                 ? await DailiesEngine.timeline(for: asset, item: item,
-                                               frameRate: frameRate) : nil)
+                                               frameRate: frameRate) : nil,
+            colorimetry: colorimetry,
+            levels: StudioSwing.playbackTable(wireCodes: wireCodes,
+                                              transfer: colorimetry.transfer))
     }
 }
 
@@ -133,7 +157,8 @@ struct DailiesSession {
         let video = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: DailiesEngine.videoSettings(
-                size: facts.outputSize, frameRate: facts.frameRate))
+                size: facts.outputSize, frameRate: facts.frameRate,
+                colorimetry: facts.colorimetry))
         video.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: video, sourcePixelBufferAttributes: nil)
