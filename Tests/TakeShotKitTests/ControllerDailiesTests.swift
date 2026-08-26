@@ -148,7 +148,7 @@ import Testing
     /// run into that folder does NOT store it again.
     @Test func theDailiesDestinationCanBeReturnedToTheFolderBesideTheFootage() async throws {
         try await ControllerHarness.run { controller, root in
-            let model = controller.dailies
+            let model: DailiesQueueModel = controller.dailies
             let beside: URL = controller.defaultDailiesFolder
             model.prepare(takes: [], settings: controller.settings,
                           defaultFolder: beside)

@@ -129,13 +129,14 @@ struct ViewSyncPlayTests {
     /// and gated on the count being able to see one at all: a structural count
     /// that silently returns zero on some host would otherwise "prove" the
     /// control is missing — or, worse, pass for having found nothing.
-    @Test func theMasterTransportCarriesTheMonitoringLevel() async throws {
+    @Test func theSyncTransportCarriesTheMonitoringLevel() async throws {
         try await ViewProbe.run { probe in
-            let model = try startSession(probe, count: 2)
+            let model: SyncPlayModel = try startSession(probe, count: 2)
             defer { probe.controller.endSyncPlay() }
 
             let reference: Int = Self.sliderCount(
-                probe.hosted(Slider(value: .constant(0.5), in: 0...1)))
+                probe.hosted(Slider(value: .constant(Double(0.5)),
+                                    in: Double(0)...Double(1))))
             try #require(reference == 1,
                          "this host does not render a Slider as an NSSlider, so the count below would prove nothing")
 

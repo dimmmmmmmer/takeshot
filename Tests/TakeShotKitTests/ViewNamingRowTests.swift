@@ -184,14 +184,16 @@ struct ViewNamingRowTests {
             let one: Int = Self.textFieldCount(
                 probe.hosted(NameTextField(field: .roll, text: .constant("A001"))),
                 width: 80)
-            try #require(one == 1,
-                         "this host does not render a naming field as an NSTextField, so the counts below would prove nothing")
+            try #require(
+                one == 1,
+                "this host draws no NSTextField, so the counts below prove nothing")
 
             probe.controller.settings.naming.namingTemplate =
                 "{prefix}_{cam}{roll}C{clip}_{postfix}"
             let all: Int = Self.textFieldCount(
                 probe.hosted(NamingFileNameRow()), width: ViewBudget.footerHalfWidth)
-            #expect(all == 4, "the default template renders \(all) fields, not CAM/ROLL/CLIP/POSTFIX")
+            #expect(all == 4,
+                    "the default template renders \(all) fields, not four")
 
             // The Sony α preset, by its own name rather than by its string.
             let alpha: NamingPreset = try #require(
@@ -202,8 +204,9 @@ struct ViewNamingRowTests {
 
             let kept: Int = Self.textFieldCount(
                 probe.hosted(NamingFileNameRow()), width: ViewBudget.footerHalfWidth)
-            #expect(kept == 3,
-                    "the Sony α preset renders \(kept) fields — CAM, ROLL and CLIP all have consumers outside the file name")
+            #expect(
+                kept == 3,
+                "the Sony α preset renders \(kept) fields — CAM, ROLL and CLIP are consumed outside the file name")
 
             // …and the reel really is still consumed under that template, which
             // is why it has to stay editable: the counter restarts on it.

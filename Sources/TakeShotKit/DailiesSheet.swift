@@ -11,11 +11,6 @@ import SwiftUI
 /// the sheet is away (see `DailiesStatusStrip`).
 struct DailiesSheet: View {
     @ObservedObject var model: DailiesQueueModel
-    /// Read for the enabling rules alone — each of them is named once on the
-    /// controller (`isDailiesRunning`, `canStartDailies`, `canSteerDailiesQueue`,
-    /// `canClearDailiesDestination`) rather than spelled out per button here.
-    /// The model is still observed, which is what makes the re-read fresh.
-    @EnvironmentObject private var controller: CaptureController
     @Environment(\.dismiss) private var dismiss
 
     /// Narrower than the offload sheet: one destination and five switches,
@@ -41,9 +36,9 @@ struct DailiesSheet: View {
                 .offloadText(.title)
             Text(L("dailies_batch", model.queuedTakes.count))
                 .offloadText(.caption)
-            burninSection
+            DailiesBurninSection(model: model)
             Divider()
-            destinationSection
+            DailiesDestinationRow(model: model)
             if let progress = model.progress {
                 Divider()
                 DailiesProgressPanel(progress: progress,
@@ -56,9 +51,27 @@ struct DailiesSheet: View {
         }
     }
 
-    // MARK: - burn-ins
+    // MARK: - footer
 
-    private var burninSection: some View {
+    /// Close stays live over a running queue and says so — the run continues
+    /// and the takes panel reports on it (the offload sheet's contract).
+    private var footer: some View {
+        DailiesSheetFooter(model: model) { dismiss() }
+    }
+}
+
+/// The burn-in switches.
+///
+/// A view of its own rather than a property of the sheet, and the reason is the
+/// same one `OffloadSheetFooter` states: it reads the enabling rule off the
+/// controller, and an `@EnvironmentObject` is only bound when SwiftUI evaluates
+/// the view — a property the render tests ask for directly is evaluated by the
+/// test instead, with no environment at all.
+struct DailiesBurninSection: View {
+    @ObservedObject var model: DailiesQueueModel
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             Text(L("dailies_burn_section"))
                 .offloadText(.section)
@@ -72,19 +85,22 @@ struct DailiesSheet: View {
         .toggleStyle(.checkbox)
         .disabled(controller.isDailiesRunning)
     }
+}
 
-    // MARK: - destination
+/// The one destination, with both of the controls the offload sheet's
+/// destination rows have: Choose, and the minus that puts it back.
+///
+/// The minus is not decoration. Without it the default — a Dailies folder beside
+/// the day's footage — was reachable exactly once, before the first run:
+/// `dailies.destinationPath` had no writer that could produce nil, so one choice
+/// pinned the deliverable to one absolute path for every show after it. Greyed
+/// while the default is already in force, so it also says whether there is an
+/// override at all.
+struct DailiesDestinationRow: View {
+    @ObservedObject var model: DailiesQueueModel
+    @EnvironmentObject private var controller: CaptureController
 
-    /// One destination, and now both of the controls the offload sheet's
-    /// destination rows have: Choose, and the minus that puts it back.
-    ///
-    /// The minus is not decoration. Without it the default — a Dailies folder
-    /// beside the day's footage — was reachable exactly once, before the first
-    /// run: `destinationPath` had no writer that could produce nil, so one
-    /// choice pinned the deliverable to one absolute path for every show after
-    /// it. Greyed while the default is already in force, so it says whether
-    /// there is an override at all.
-    private var destinationSection: some View {
+    var body: some View {
         HStack(spacing: 10) {
             Text(L("dailies_dest_label"))
                 .offloadText(.body)
@@ -112,21 +128,26 @@ struct DailiesSheet: View {
             .help(L("dailies_reset_dest"))
         }
     }
+}
 
-    // MARK: - footer
+/// The sheet's action bar. Its own view for the reason above — Stop and Start
+/// both ask the controller for their rule — and, like the offload sheet's
+/// footer, it takes its dismissal in rather than reading the environment: a
+/// footer measured on its own in a render test has no sheet to dismiss.
+struct DailiesSheetFooter: View {
+    @ObservedObject var model: DailiesQueueModel
+    @EnvironmentObject private var controller: CaptureController
+    let dismiss: () -> Void
 
-    /// Close stays live over a running queue and says so — the run continues
-    /// and the takes panel reports on it (the offload sheet's contract).
-    private var footer: some View {
+    var body: some View {
         HStack {
             if model.isRunning {
                 Button(L("dailies_stop")) { model.cancel() }
                     .disabled(!controller.canSteerDailiesQueue)
             }
             Spacer()
-            Button(model.isRunning ? L("offload_hide") : L("close")) {
-                dismiss()
-            }
+            Button(model.isRunning ? L("offload_hide") : L("close"),
+                   action: dismiss)
             Button(L("dailies_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!controller.canStartDailies)

@@ -192,9 +192,11 @@ extension CaptureController {
     ///
     /// The boot volume, anything reached over the network, the system's own
     /// hidden mounts — and the app's OWN disks: the record folder's volume and
-    /// every destination the operator has saved. Offering to copy a card off the
+    /// every destination that is still on one. Offering to copy a card off the
     /// disk the copies land on is the one wrong guess that would cost more than
-    /// a click to undo.
+    /// a click to undo — and excluding a card because a destination that no
+    /// longer exists once had that mount point is the wrong guess in the other
+    /// direction, which is worse, because it is silent (see `ownFolders`).
     func isExcludedVolume(_ volume: MountedVolume) -> Bool {
         let path = Self.comparablePath(volume.url)
         guard path != "/", volume.isLocal, volume.isBrowsable else { return true }
