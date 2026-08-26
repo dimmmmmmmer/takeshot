@@ -276,6 +276,40 @@ import Testing
                 "half a second of standby decided the take's width: \(channels)")
     }
 
+    /// A source SWITCH throws the measurement away, and the answer the panel is
+    /// holding with it.
+    ///
+    /// A sixteen-channel embed's "1-2 carry signal" is a statement about the
+    /// BOARD's channels 1 and 2. Applied to the USB cart that replaced it, it is
+    /// a mask made of another device's channels — and the operator would be
+    /// reading a panel still claiming the old measurement while the take
+    /// recorded under the new source.
+    @Test func switchingTheAudioSourceThrowsTheMeasurementAway() async throws {
+        let root = TestMedia.scratchDirectory("AudioAutoSourceSwitch")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = Self.pipeline(root: root)
+        let answers = EventCollector<Int?>()
+        pipeline.onAudioChannelsDetected = { answers.append($0) }
+        pipeline.handleFormat(TakeIntegrityBoundsTests.format)
+        pipeline.setExpectedAudioChannels(16)
+        let feeder = Feeder(pipeline: pipeline,
+                            embed: Embed(channels: 16, carrying: [0, 1]))
+        try await feeder.push(frames: 30)
+        let measured: Int? = pipeline.queue.sync { pipeline.detectedAudioMask }
+        #expect(measured == 0b11,
+                "the embed was never measured at all: \(measured as Any)")
+
+        pipeline.setActiveAudioSource(.external, expectedChannels: 2)
+
+        let cleared: Int? = pipeline.queue.sync { pipeline.detectedAudioMask }
+        #expect(cleared == nil,
+                "the board's answer survived onto the USB cart: \(cleared as Any)")
+        await TestWait.untilWritten { answers.last == Int?.none }
+        #expect(answers.last == Int?.none,
+                "the panel was never told the old answer had gone")
+    }
+
     /// The mask is LATCHED: a measurement that lands mid-take changes the next
     /// take and not this one.
     ///

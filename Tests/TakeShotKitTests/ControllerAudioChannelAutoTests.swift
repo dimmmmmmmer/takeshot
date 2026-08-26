@@ -200,10 +200,22 @@ import Testing
             controller.settings.audio.audioChannelMask = nil
             let everything: String = controller.audioChannelDecisionText
 
-            let states: [String] = [listening, measured, byHand, everything]
+            // …and the fifth reading this one has to be told apart from: a
+            // measurement that really did find every channel carrying. A
+            // "listening" line that quietly says "1-16 carry signal" is the
+            // app claiming a measurement it has not made, and it is the exact
+            // shape the obvious implementation takes (`detected ?? 0xFFFF`).
+            controller.setAudioChannelsAuto(true)
+            controller.detectedAudioChannelMask = 0xFFFF
+            let allMeasured: String = controller.audioChannelDecisionText
+
+            let states: [String] = [listening, measured, byHand, everything,
+                                    allMeasured]
             let joined: String = states.joined(separator: " | ")
-            #expect(Set(states).count == 4,
-                    "two of the four channel states read the same: \(joined)")
+            #expect(Set(states).count == 5,
+                    "two of the five channel states read the same: \(joined)")
+            #expect(listening != allMeasured,
+                    "nothing was measured, yet the panel read: \(listening)")
             #expect(measured.contains("1-2"), "measured reads: \(measured)")
             #expect(byHand.contains("1-3"), "by hand reads: \(byHand)")
             #expect(!listening.isEmpty)
