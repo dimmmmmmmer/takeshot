@@ -32,24 +32,36 @@ import Foundation
 /// runtime dlopen happens on the first `unavailableReason` read, which is the
 /// moment the operator asks for the feature.
 ///
-/// **Picture only, on purpose, and the gap has not shrunk — it has gained a
-/// second claimant.** NDI carries audio, and an iPad with no sound is half a
-/// monitor. So does MPEG-TS, and the SRT output says exactly the same thing at
-/// the top of `CaptureController+SRT`. The obstacle is one and the same: the
-/// only stereo feed the pipeline produces is `onMonitorAudio`, a single slot
-/// already owned by `AudioMonitor` (the room speakers) and gated on
-/// `monitorEnabled` — so either feed hung off it would make the sound on a
-/// director's iPad a side effect of whether the operator has the cart's speakers
-/// up, and forcing that switch on to get audio is precisely the bug
-/// `ControllerHarness` goes out of its way to prevent. Sending sound therefore
-/// needs a SECOND tap in `CapturePipeline+Audio`, independent of the monitor and
-/// of its channel mask; only the leg after that tap differs (planar float and
-/// `NDIlib_send_send_audio_v3` here, AAC and a second PID over there). Two
-/// outputs now want the same missing tap, which is an argument for building it
-/// once rather than per output — and against guessing at either half now: none
-/// of the NDI leg can be compiled, let alone checked, on a machine with no SDK
-/// headers. The picture is the half that replaces a cable, and it is the half
-/// that is here.
+/// **Picture only — and what is missing is now the LEG, not the tap.** NDI
+/// carries audio and an iPad with no sound is half a monitor, which is the
+/// sentence the SRT output used to carry at the top of
+/// `CaptureController+SRT`. The obstacle both of them named was one and the
+/// same: the pipeline's only stereo feed was `onMonitorAudio`, a single slot
+/// owned by `AudioMonitor` (the room speakers) and gated on `monitorEnabled`,
+/// so either feed hung off it would have made the sound on a director's iPad a
+/// side effect of whether the operator has the cart's speakers up — and forcing
+/// that switch on to get audio is precisely the bug `ControllerHarness` goes
+/// out of its way to prevent. That half is built:
+/// `CapturePipeline.addAudioTap` is one stereo mix per packet, taken once,
+/// served to every outgoing transport, delivered whatever the monitor switch
+/// says. SRT is the leg that came off it.
+///
+/// **What is left here is the NDI leg, and the reason it is left is that none
+/// of it can be executed on this machine.** It is a planar-float conversion —
+/// `NDIlib_send_send_audio_v3` takes de-interleaved 32-bit float where the tap
+/// produces interleaved 16-bit integer — and a call into `CNDSender`, which is
+/// a STUB in any build without the SDK headers, and there are no vendor drops
+/// here or on CI at all. Written now it would be a conversion nothing calls and
+/// a bridge call that compiles to nothing, shipped on the strength of having
+/// been read rather than run.
+///
+/// What it costs when the headers land is small and known, which is the point
+/// of stating the seam rather than guessing at the leg: `CapturePipeline+Audio`
+/// does not change at all, `LiveAudioEncoder` is not involved (NDI takes PCM
+/// and codes it itself), and the wiring is one more term in
+/// `releaseIdleLiveAudio`'s `wanted` plus a consumer registered the way
+/// `ensureLiveAudioEncoder` registers the first. The tap was the half both
+/// outputs were waiting on, and it is the half that is here.
 extension CaptureController {
     /// How long a name edit settles before the source is re-announced. The field
     /// writes on every keystroke and NDI has no way to rename a live sender, so

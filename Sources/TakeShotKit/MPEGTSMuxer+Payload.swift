@@ -42,7 +42,7 @@ extension MPEGTSMuxer {
         ]
     }
 
-    /// The PES split across transport packets.
+    /// The video PES split across transport packets.
     ///
     /// The first packet carries the program clock and, on a keyframe, the
     /// random-access indicator; the last is padded out through its adaptation
@@ -50,17 +50,31 @@ extension MPEGTSMuxer {
     /// as a short one.
     mutating func video(_ pes: [UInt8], pcr: Int64,
                         randomAccess: Bool) -> [[UInt8]] {
+        elementary(pes, pid: Self.videoPID,
+                   leading: Self.clockField(pcr: pcr,
+                                            randomAccess: randomAccess))
+    }
+
+    /// A PES split across transport packets on one PID, with `leading` in the
+    /// adaptation field of the first packet and nothing in the rest.
+    ///
+    /// Shared between the two elementary streams rather than written twice.
+    /// The difference between them is exactly `leading` — the picture carries
+    /// the program clock and the sound does not, because a program has ONE
+    /// clock reference and the PMT names which PID it is on. Everything else,
+    /// the splitting and the tail padding, is the same arithmetic and a second
+    /// copy of it is a second place for the stuffing to be one byte out.
+    mutating func elementary(_ pes: [UInt8], pid: UInt16,
+                             leading: [UInt8]) -> [[UInt8]] {
         var out: [[UInt8]] = []
         var offset = 0
         var first = true
         while offset < pes.count {
-            let clock = first
-                ? Self.clockField(pcr: pcr, randomAccess: randomAccess) : []
-            let room = Self.payloadPerPacket - clock.count
+            let lead = first ? leading : []
+            let room = Self.payloadPerPacket - lead.count
             let take = min(room, pes.count - offset)
-            let adaptation = clock
-                + Self.stuffing(bytes: room - take, after: clock)
-            out.append(packet(pid: Self.videoPID, start: first,
+            let adaptation = lead + Self.stuffing(bytes: room - take, after: lead)
+            out.append(packet(pid: pid, start: first,
                               adaptation: adaptation,
                               payload: pes[offset..<(offset + take)]))
             offset += take
@@ -104,17 +118,38 @@ extension MPEGTSMuxer {
         return tablePacket(body, on: Self.patPID)
     }
 
-    /// One stream, which is also its own clock reference.
+    /// The program's streams, and which of them carries its clock.
+    ///
+    /// One entry or two, on `carriesAudio`. The section length follows from the
+    /// count rather than being written twice: nine bytes of program header,
+    /// five per elementary stream, four of CRC. That is 0x12 for the picture
+    /// alone — byte for byte what this table was before there was any sound —
+    /// and 0x17 with the audio stream on it.
+    ///
+    /// The video PID stays the clock reference in both. A program has one, and
+    /// moving it because a second stream appeared would restate the timing of
+    /// the feed for a change that is not about timing.
     mutating func programMap() -> [UInt8] {
-        var body: [UInt8] = [0x02, 0xB0, 0x12]
+        var streams: [UInt8] = Self.elementaryStream(type: Self.streamTypeH264,
+                                                     pid: Self.videoPID)
+        if carriesAudio {
+            streams += Self.elementaryStream(type: Self.streamTypeAAC,
+                                             pid: Self.audioPID)
+        }
+        let sectionLength = 9 + streams.count + 4
+        var body: [UInt8] = [0x02, 0xB0, UInt8(sectionLength)]
         body += [UInt8(Self.programNumber >> 8),
                  UInt8(Self.programNumber & 0xFF), 0xC1, 0x00, 0x00]
         body += [0xE0 | UInt8((Self.videoPID >> 8) & 0x1F),
                  UInt8(Self.videoPID & 0xFF), 0xF0, 0x00]
-        body += [Self.streamTypeH264,
-                 0xE0 | UInt8((Self.videoPID >> 8) & 0x1F),
-                 UInt8(Self.videoPID & 0xFF), 0xF0, 0x00]
+        body += streams
         return tablePacket(body, on: Self.pmtPID)
+    }
+
+    /// One entry in the PMT's stream loop: what it is, where it is, and no
+    /// descriptors.
+    static func elementaryStream(type: UInt8, pid: UInt16) -> [UInt8] {
+        [type, 0xE0 | UInt8((pid >> 8) & 0x1F), UInt8(pid & 0xFF), 0xF0, 0x00]
     }
 
     /// A section as a whole packet: pointer field, section, CRC, then 0xFF to the

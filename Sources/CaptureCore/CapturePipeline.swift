@@ -98,7 +98,17 @@ public final class CapturePipeline: @unchecked Sendable {
     public var onScopeData: ((ScopeData) -> Void)?
     /// Stereo monitor feed (first two enabled channels) while audio monitoring
     /// is on. Delivered on the pipeline queue — the consumer re-queues itself.
+    ///
+    /// **The cart's speakers, and nothing else.** This slot is `AudioMonitor`'s
+    /// and it is gated on `monitorEnabled`, so anything hung off it would tie
+    /// its sound to whether the operator has the speakers up. Outgoing feeds
+    /// take `addAudioTap` instead, which is the same packet without the gate —
+    /// see `CapturePipeline+Audio`.
     public var onMonitorAudio: ((CMSampleBuffer) -> Void)?
+
+    /// One consumer of the stereo tap. Runs on the pipeline queue, which is the
+    /// capture queue; hop before doing anything with it.
+    public typealias AudioTap = @Sendable (CMSampleBuffer) -> Void
     /// What the taught record indicator reads, whenever it CHANGES — at most a
     /// few times a second, and never while the trigger is disarmed. Delivered on
     /// the main queue; it is what lets the operator see the box working before
@@ -305,7 +315,24 @@ public final class CapturePipeline: @unchecked Sendable {
     var chromaBakeFallbackCount = 0
 
     var monitorEnabled = false
-    var monitorFormatCache: CMAudioFormatDescription?
+    /// The format description for the STEREO packet — the one the cart's
+    /// speakers and every outgoing transport share. Named for the packet and
+    /// not for the monitor because there is exactly one of them per audio
+    /// packet now, whoever asked for it (see `CapturePipeline+Audio`).
+    var stereoFormatCache: CMAudioFormatDescription?
+
+    /// Consumers of that stereo packet that are NOT the cart's speakers: the
+    /// SRT stream, and whatever else grows a leg off the same tap.
+    ///
+    /// A registry rather than a slot, and locked rather than queue-confined,
+    /// for `LiveVideoEncoder.sinks`' two reasons one media type along. Several
+    /// transports want the same packet and each comes and goes on its own
+    /// switch, so a single slot would make the second one to arrive silence the
+    /// first. And they are added and removed on the MainActor while the tap
+    /// reads them on the pipeline queue, which is two threads and therefore a
+    /// lock rather than a comment.
+    let audioTapLock = NSLock()
+    var audioTapSinks: [ObjectIdentifier: AudioTap] = [:]
 
     public static let levelsLog = OSLog(subsystem: "com.takeshot.app", category: "levels")
 

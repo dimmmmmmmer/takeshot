@@ -105,7 +105,7 @@ extension CapturePipeline {
         // the packed-buffer format caches describe the OLD source's channel
         // count (the same reason a mask change resets them in update(config:))
         trimFormatCache = nil
-        monitorFormatCache = nil
+        stereoFormatCache = nil
         padFormatCache = nil
         sourceAudioChannels = max(0, expectedChannels)
         // A different source is a different channel LAYOUT, so what the old

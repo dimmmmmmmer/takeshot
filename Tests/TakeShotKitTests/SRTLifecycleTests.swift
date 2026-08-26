@@ -126,7 +126,7 @@ struct SRTLifecycleTests {
             // …and it happened on the mirror's queue. The capture queue owns the
             // per-frame work and an H.264 encode on it is a dropped frame in the
             // file.
-            #expect(stream.queues.allSatisfy { $0 == SRTVideoMirror.queueLabel },
+            #expect(stream.queues.allSatisfy { $0 == SRTMirror.queueLabel },
                     "the send ran on \(stream.queues)")
         }
     }

@@ -4,15 +4,24 @@ import CoreMedia
 import Foundation
 import os.log
 
-/// Mirrors the viewer to an SRT endpoint, on a queue of its own.
+/// Mirrors the viewer to an SRT endpoint — picture and sound — on a queue of
+/// its own.
 ///
-/// **The encode is not here any more, and that is the point of the split.** One
-/// H.264 session serves every live consumer (`LiveVideoEncoder`) — this file
-/// registers a sink on it, and what arrives is an encoded sample somebody else
-/// paid for. A second `VTCompressionSession` for the second thing watching the
-/// same picture is the cost this app cannot pay, on a machine whose actual job
-/// is writing ProRes to a card. What is left here is the SRT half and nothing
-/// else: the transport stream, the socket, and the reconnect.
+/// **Neither encode is here, and that is the point of the split.** One H.264
+/// session serves every live consumer (`LiveVideoEncoder`) and one AAC session
+/// serves everything taking sound (`LiveAudioEncoder`); this file registers a
+/// sink on each, and what arrives is an encoded unit somebody else paid for. A
+/// second `VTCompressionSession` for the second thing watching the same picture
+/// is the cost this app cannot pay, on a machine whose actual job is writing
+/// ProRes to a card. What is left here is the SRT half and nothing else: the
+/// transport stream, the socket, and the reconnect.
+///
+/// **Two elementary streams, one link, one clock.** The picture is on PID 0x0100
+/// and the sound on 0x0101, both stamped against the shared `LiveClock` on the
+/// transport stream's own 90 kHz, and the program map declares the second one
+/// only once sound has actually arrived (see `deliver(audio:)`). The sound is
+/// taken off `CapturePipeline.addAudioTap` — the mix the cart's speakers get,
+/// without the switch the cart's speakers are behind.
 ///
 /// The discipline is `MultiviewEncoder`'s and `PlayoutFeeder`'s: the mux and the
 /// send run on THIS queue — never on capture, never on main — and the sample
@@ -32,7 +41,7 @@ import os.log
 /// told once, and nothing here can reach the recorder: the whole file calls an
 /// encoder's samples and a socket, and neither the pipeline nor the writer
 /// appears in it.
-final class SRTVideoMirror: @unchecked Sendable {
+final class SRTMirror: @unchecked Sendable {
     /// What the operator is told, hopped to the MainActor by the controller.
     enum Event: Equatable, Sendable {
         /// Datagrams are going out and the link is taking them.
@@ -72,12 +81,15 @@ final class SRTVideoMirror: @unchecked Sendable {
     /// bundle is where a number nobody watches live belongs.
     static let dropLogInterval = 100
 
-    private let queue = DispatchQueue(label: SRTVideoMirror.queueLabel,
+    private let queue = DispatchQueue(label: SRTMirror.queueLabel,
                                       qos: .userInitiated)
     private let endpoint: SRTEndpoint
     /// The shared session. Held strongly: this object is one of its consumers
     /// and must not outlive the samples it is registered for.
     private let encoder: LiveVideoEncoder
+    /// The shared AAC encode, on the same terms — nil in a build or a test that
+    /// has no codec for it, and the picture goes out alone.
+    private let audioEncoder: LiveAudioEncoder?
     private let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending
     private let onEvent: @Sendable (Event) -> Void
 
@@ -86,7 +98,7 @@ final class SRTVideoMirror: @unchecked Sendable {
     private var stream: SRTStreamSending?
     private var muxer = MPEGTSMuxer()
     private var stopped = false
-    private var backoff = SRTVideoMirror.reconnectDelay
+    private var backoff = SRTMirror.reconnectDelay
     private var reopening = false
     private var dropped = 0
     /// The last event handed upwards. A repeat is swallowed: each one is a
@@ -95,10 +107,12 @@ final class SRTVideoMirror: @unchecked Sendable {
     private var reported: Event?
 
     init(endpoint: SRTEndpoint, encoder: LiveVideoEncoder,
+         audioEncoder: LiveAudioEncoder? = nil,
          factory: @escaping @Sendable (SRTEndpoint) throws -> SRTStreamSending,
          onEvent: @escaping @Sendable (Event) -> Void) {
         self.endpoint = endpoint
         self.encoder = encoder
+        self.audioEncoder = audioEncoder
         self.factory = factory
         self.onEvent = onEvent
     }
@@ -119,6 +133,7 @@ final class SRTVideoMirror: @unchecked Sendable {
     /// below has even been scheduled.
     func stop() {
         encoder.removeSink(self)
+        audioEncoder?.removeSink(self)
         queue.async { [self] in
             stopped = true
             stream?.close()
@@ -134,9 +149,38 @@ final class SRTVideoMirror: @unchecked Sendable {
     /// one seam a `CMSampleBuffer` becomes bytes at — the WebRTC viewer starts
     /// from exactly the same call and puts the same access unit in RTP instead.
     private func deliver(_ sample: CMSampleBuffer) {
-        guard !stopped, let stream,
+        guard !stopped, stream != nil,
               let unit = MPEGTSMuxer.accessUnit(from: sample) else { return }
-        for datagram in muxer.datagrams(for: unit) {
+        send(muxer.datagrams(for: unit))
+    }
+
+    /// One encoded access unit of SOUND as datagrams on the same socket.
+    ///
+    /// **The program map is turned on by the first unit that actually arrives,
+    /// not by the encoder existing.** A PMT that declares an audio PID nothing
+    /// ever feeds is a receiver waiting for sound that is not coming — the same
+    /// trap `TakeWriter+Audio` pads a starved track to avoid, one transport
+    /// along — and "an AAC encoder was constructed" is not the same claim as
+    /// "this machine can encode AAC". So the map follows the bytes, and the
+    /// keyframe asked for here is what carries the new map to whoever is
+    /// already watching; without it a receiver would wait out the rest of the
+    /// GOP with audio packets it has been told nothing about.
+    private func deliver(audio unit: LiveAudioEncoder.AccessUnit) {
+        guard !stopped, stream != nil else { return }
+        if !muxer.carriesAudio {
+            muxer.carriesAudio = true
+            encoder.requestKeyframe()
+        }
+        send(muxer.datagrams(forAudio: unit))
+    }
+
+    /// Datagrams onto the socket, and what each outcome means for the link.
+    /// Shared by the two elementary streams: they are the same socket and the
+    /// same link, and a second copy of this is a second place for a `.broken`
+    /// to be read as a drop.
+    private func send(_ datagrams: [Data]) {
+        guard let stream else { return }
+        for datagram in datagrams {
             switch stream.send(datagram) {
             case .sent:
                 report(.opened)
@@ -197,6 +241,14 @@ final class SRTVideoMirror: @unchecked Sendable {
             guard let mirror = self else { return }
             mirror.queue.async { mirror.deliver(sample) }
         }
+        // The same hop for the sound, off the AAC encoder's queue rather than
+        // VideoToolbox's. Nothing about the two streams is ordered against each
+        // other here and nothing needs to be: a receiver puts them back
+        // together from the stamps, which is what one 90 kHz clock is for.
+        audioEncoder?.addSink(self) { [weak self] unit in
+            guard let mirror = self else { return }
+            mirror.queue.async { mirror.deliver(audio: unit) }
+        }
         encoder.requestKeyframe()
     }
 
@@ -208,6 +260,7 @@ final class SRTVideoMirror: @unchecked Sendable {
     /// drops the frame before compressing it.
     private func linkLost(_ reason: String) {
         encoder.removeSink(self)
+        audioEncoder?.removeSink(self)
         stream?.close()
         stream = nil
         report(.lost(reason))

@@ -24,7 +24,7 @@ import Foundation
 /// alternative of handing SRT a short message and hoping the far end's demuxer
 /// is relaxed about it.
 ///
-/// Confined to `SRTVideoMirror`'s queue: the continuity counters are state.
+/// Confined to `SRTMirror`'s queue: the continuity counters are state.
 struct MPEGTSMuxer {
     /// One encoded picture, in Annex B, ready to be packetised.
     struct AccessUnit: Equatable, Sendable {
@@ -60,12 +60,23 @@ struct MPEGTSMuxer {
     static let patPID: UInt16 = 0x0000
     static let pmtPID: UInt16 = 0x1000
     static let videoPID: UInt16 = 0x0100
+    /// The second elementary stream: the sound off the pipeline's stereo tap.
+    ///
+    /// Its own PID and not a second thing on the video one — that is what an
+    /// elementary stream IS. 0x0101 sits next to the picture's for the same
+    /// reason the two are numbered at all: a demuxer's log reads as one program
+    /// with two streams rather than as two unrelated numbers.
+    static let audioPID: UInt16 = 0x0101
     /// A packet with no information in it, which is how a datagram is filled.
     static let nullPID: UInt16 = 0x1FFF
     static let programNumber: UInt16 = 1
     /// H.264 in a transport stream. HEVC would be 0x24; `SRTVideoEncoder` says
     /// why this stream is not that.
     static let streamTypeH264: UInt8 = 0x1B
+    /// AAC with ADTS framing. 0x11 would be LATM, which fewer receivers take
+    /// without being told; see `LiveAudioEncoder` for why the far end decides
+    /// this rather than the codec does.
+    static let streamTypeAAC: UInt8 = 0x0F
     /// The transport stream's clock, fixed by the standard at 90 kHz. It is why
     /// the encoder is asked for timestamps on that timescale in the first place
     /// rather than converting here and rounding twice.
@@ -77,6 +88,35 @@ struct MPEGTSMuxer {
     /// in it as a lost packet, so it is per-PID state and not per-frame.
     private var continuity: [UInt16: UInt8] = [:]
 
+    /// Whether the program has a second elementary stream in it.
+    ///
+    /// The PMT is built from this, so it is not a decoration: a program map
+    /// that DECLARES an audio PID nothing ever feeds is a receiver waiting for
+    /// sound that is not coming, which several of them answer by holding the
+    /// picture too. Set by whoever knows whether an audio encoder exists (see
+    /// `SRTMirror.setCarriesAudio`), and a change only reaches the wire on
+    /// the next keyframe — which is when the tables are resent, and why that
+    /// setter asks for one.
+    var carriesAudio = false
+
+    /// Packets muxed but not yet in a whole datagram.
+    ///
+    /// **The audio leg is what this is for, and it costs the picture nothing.**
+    /// Every datagram is 1316 bytes whatever is in it, so an access unit that
+    /// does not fill the last one is padded with nulls — half a datagram per
+    /// unit on average. For a picture that is one unit per FRAME and about
+    /// 16 kbit/s at 25 fps. For sound it is one unit per 21.3 ms and about
+    /// 280 kbit/s of nothing, which is more than the audio stream itself.
+    ///
+    /// So audio packets go in here and only WHOLE datagrams leave, while a
+    /// video unit takes everything pending with it and pads once. The padding
+    /// stays exactly what it was before there was any sound — half a datagram
+    /// per frame — and what audio pays instead is up to one video frame of
+    /// buffering, which a receiver absorbs against the PTS the unit already
+    /// carries. Never more than six packets are held, because seven is a
+    /// datagram and a datagram leaves.
+    private var pendingPackets: [[UInt8]] = []
+
     init() {}
 
     /// One access unit as whole datagrams.
@@ -86,6 +126,11 @@ struct MPEGTSMuxer {
     /// that has a keyframe and no tables cannot either — so the two arrive
     /// together and the join time is one keyframe interval, which is the number
     /// the operator would have been waiting on anyway.
+    ///
+    /// **The picture flushes.** Whatever audio is pending rides out with this
+    /// frame and the tail is padded, so a video unit never waits for a sound
+    /// unit — the feed the operator is replacing a cable with is the picture,
+    /// and it keeps the latency it had.
     mutating func datagrams(for unit: AccessUnit) -> [Data] {
         var packets: [[UInt8]] = []
         if unit.isKeyframe {
@@ -94,7 +139,34 @@ struct MPEGTSMuxer {
         }
         packets += video(Self.pes(payload: unit.payload, pts: unit.pts),
                          pcr: unit.pts, randomAccess: unit.isKeyframe)
-        return Self.grouped(packets)
+        pendingPackets += packets
+        let out = Self.grouped(pendingPackets)
+        pendingPackets.removeAll(keepingCapacity: true)
+        return out
+    }
+
+    /// Whole datagrams out of what is pending, leaving the remainder. The audio
+    /// side of the trade above; see `MPEGTSMuxer+Audio`.
+    mutating func takeWholeDatagrams() -> [Data] {
+        let whole = pendingPackets.count / Self.packetsPerDatagram
+        guard whole > 0 else { return [] }
+        let taken = whole * Self.packetsPerDatagram
+        let out = Self.grouped(Array(pendingPackets[0..<taken]))
+        pendingPackets.removeFirst(taken)
+        return out
+    }
+
+    /// Packets muxed and not yet sent. For the tests: "audio is never padded"
+    /// and "the picture always flushes" are both claims about this number, and
+    /// a muxer that held nothing and one that held six are indistinguishable
+    /// from the datagrams alone.
+    var heldPackets: Int { pendingPackets.count }
+
+    /// Add packets to the pending run. Internal rather than private because the
+    /// audio half of this type is a file along, for the body-length reason the
+    /// payload half already is.
+    mutating func hold(_ packets: [[UInt8]]) {
+        pendingPackets += packets
     }
 
     /// Packets in groups of seven, the tail padded so every datagram is the size

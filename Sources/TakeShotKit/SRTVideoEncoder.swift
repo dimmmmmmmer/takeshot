@@ -14,7 +14,7 @@ import VideoToolbox
 /// not that, and no amount of care makes it that. So it is arranged so that its
 /// cost cannot reach the frame path AT ALL, rather than being kept small:
 ///
-/// - It runs on `SRTVideoMirror`'s queue. The display queue's whole involvement
+/// - It runs on `SRTMirror`'s queue. The display queue's whole involvement
 ///   is a pixel-format check and one `dispatch_async`.
 /// - Latest-wins upstream: at most one frame is submitted per pass, so a slow
 ///   encode makes the feed *fewer frames* and never makes it *later ones*.
@@ -41,7 +41,7 @@ import VideoToolbox
 /// get wrong here. `SRTEncodeTests` measures it through a real encode and decode
 /// rather than asserting it.
 ///
-/// Confined to `SRTVideoMirror`'s queue.
+/// Confined to `SRTMirror`'s queue.
 final class SRTVideoEncoder {
     /// What the session is built for. A change to any of it is a new session,
     /// which is why the mirror holds this and compares it per frame.

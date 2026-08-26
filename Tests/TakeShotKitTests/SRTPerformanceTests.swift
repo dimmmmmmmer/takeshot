@@ -100,7 +100,7 @@ struct SRTPerformanceTests {
                                        framesPerSecond: 100_000)
         let rig = SRTRig(
             encoder: encoder, log: SRTEventLog(),
-            mirror: SRTVideoMirror(endpoint: SRTFixtures.endpoint,
+            mirror: SRTMirror(endpoint: SRTFixtures.endpoint,
                                    encoder: encoder, factory: { _ in stream },
                                    onEvent: { _ in }))
         rig.start()

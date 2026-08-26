@@ -4,7 +4,7 @@ import Foundation
 /// Mirrors the viewer to an NDI source, on a queue of its own.
 ///
 /// **The one live output that is not a consumer of the shared encoder, and that
-/// is a fact about NDI rather than a shortcut.** `SRTVideoMirror` and
+/// is a fact about NDI rather than a shortcut.** `SRTMirror` and
 /// `WebRTCViewer` both register a sink on `LiveVideoEncoder` and take H.264
 /// samples; NDI's SDK takes FRAMES and compresses them with a codec of its own
 /// inside the send call, so forcing it through that seam would mean handing it

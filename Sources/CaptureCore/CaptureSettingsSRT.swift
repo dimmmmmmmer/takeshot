@@ -55,7 +55,7 @@ public struct SRTEndpoint: Equatable, Sendable {
     }
 }
 
-/// The SRT output (see `CSRTSender`, `SRTVideoMirror` and
+/// The SRT output (see `CSRTSender`, `SRTMirror` and
 /// `CaptureController+SRT`).
 ///
 /// Seven fields, and the shortlist is the design. NDI needed a switch and a name;

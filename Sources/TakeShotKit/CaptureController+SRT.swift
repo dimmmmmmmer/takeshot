@@ -17,27 +17,38 @@ import Foundation
 /// `dlopen` happens on the first `unavailableReason` read, which is the moment the
 /// operator asks for the feature.
 ///
-/// **Picture only, on purpose, and here is the door.** MPEG-TS carries audio
-/// perfectly well and SRT does not care, but the only stereo feed the pipeline
-/// produces is `onMonitorAudio`, and it is wrong for this twice over. It is a
-/// single slot already owned by `AudioMonitor` (the room speakers), and it is
-/// gated on `monitorEnabled` — so an SRT feed hung off it would make the sound on
-/// a director's laptop a side effect of whether the operator has the cart's
-/// speakers up, and forcing that switch on to get audio is precisely the bug
-/// `ControllerHarness` goes out of its way to prevent. Sending sound therefore
-/// needs a SECOND tap in `CapturePipeline+Audio`, independent of the monitor and
-/// of its channel mask, plus an AAC encoder and a second elementary stream in
-/// `MPEGTSMuxer` with its own PID and its own PES timing against the same 90 kHz
-/// clock. That is a path with a timing contract of its own and none of it can be
-/// checked without a real receiver, so it is not being guessed at here. The
-/// picture is the half that replaces a cable.
+/// **It carries sound now, and the tap it comes off is not the monitor's.**
+/// The stereo feed is `CapturePipeline.addAudioTap` — one mix per packet, taken
+/// once and served to every outgoing transport, delivered whatever
+/// `monitorEnabled` says. That was the whole obstacle: the pipeline's only
+/// stereo feed used to be `onMonitorAudio`, a single slot owned by
+/// `AudioMonitor` and gated on the cart's speakers, so a feed hung off it would
+/// have made a director's sound a side effect of whether the operator has the
+/// speakers up. The channels are the ones in force for the FILE, folded to two
+/// (see `CapturePipeline.stereoChannelIndices` for why that rule and not a
+/// fixed 1-2).
 ///
-/// **The NDI output states the same gap for the same reason**, and the shared
-/// half is the tap rather than the codec: both feeds need one independent
-/// stereo tap in `CapturePipeline+Audio`, and only the leg after it differs (AAC
-/// and a second PID here, planar float and `NDIlib_send_send_audio_v3` there).
-/// Two outputs now want the same missing piece, which is an argument for
-/// building it once rather than per output — see `CaptureController+NDI`.
+/// From there the leg is this transport's own: `LiveAudioEncoder` compresses it
+/// once, `MPEGTSMuxer` frames it in ADTS and puts it on a second PID against
+/// the same 90 kHz clock the picture is stamped from, and the program map turns
+/// on when the first access unit actually arrives rather than when an encoder
+/// is constructed. There is no switch for it — a cable to a director's monitor
+/// carries sound, and an operator cannot hear the far end to judge one.
+///
+/// **What only a real receiver can answer** is lip sync. Both streams are
+/// stamped against one `LiveClock`, the picture at the moment a frame is
+/// offered to the encoder and the sound at the moment its first packet is
+/// accepted plus an exact 1920 ticks per access unit — so the arithmetic cannot
+/// drift, and the OFFSET between the two paths' latencies has never been
+/// measured against a decoder. It is a constant, not a drift, and a receiver is
+/// what would show its size.
+///
+/// **The NDI leg is still open, and the shared half is now built.** Both feeds
+/// wanted one independent stereo tap and only the leg after it differs — AAC
+/// and a second PID here, planar float and `NDIlib_send_send_audio_v3` there.
+/// The tap is the half that is done; see `CaptureController+NDI` for why that
+/// leg is not, and `CaptureController+LiveAudio` for the one line that widens
+/// when it is.
 extension CaptureController {
     /// How long a settings edit settles before the link is rebuilt.
     ///
@@ -83,12 +94,17 @@ extension CaptureController {
     private func openSRTLink(to endpoint: SRTEndpoint) {
         let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending =
             mirrors.srtStreamFactory ?? { SRTStream.make($0) }
-        let mirror = SRTVideoMirror(
+        let mirror = SRTMirror(
             endpoint: endpoint,
             // The session for the picture this link carries. A browser already
             // watching the same one hands this link a warm encoder; the switch
             // being thrown first builds one that a viewer joins later.
             encoder: ensureLiveEncoder(for: Self.srtPicture),
+            // …and the one AAC session, which also registers the pipeline's
+            // audio tap. Built here rather than in `wireDisplayMirrors`
+            // because sound does not ride the display slot: it comes off the
+            // capture queue's audio path, which no picture is on.
+            audioEncoder: ensureLiveAudioEncoder(),
             factory: factory,
             onEvent: { [weak self] event in
                 // The mirror's queue must never touch the controller: every event
@@ -116,6 +132,11 @@ extension CaptureController {
         // picture, and `releaseIdleLivePictures` is the one place that decides;
         // it re-wires every slot either way.
         releaseIdleLivePictures()
+        // The sound is a separate question and gets a separate answer: no
+        // browser takes it today, so the SRT switch really is the last one out
+        // — but the decision lives in one place so that stops being true by one
+        // line rather than by this call being wrong.
+        releaseIdleLiveAudio()
     }
 
     /// What the mirror says about the link, turned into what Settings shows.
@@ -127,7 +148,7 @@ extension CaptureController {
     /// status row and a reconnect, and the only thing that toasts is `refused` —
     /// a configuration the operator has to go and change, which is exactly the
     /// case where nothing will improve until somebody is told.
-    func applySRTEvent(_ event: SRTVideoMirror.Event) {
+    func applySRTEvent(_ event: SRTMirror.Event) {
         // A late event from a mirror that has already been stopped: the switch is
         // off and the row says so, and it must not be talked back out of that.
         guard mirrors.srt != nil else { return }
