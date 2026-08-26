@@ -623,7 +623,6 @@
 "report_col_tc_out" = "TC OUT";
 "report_col_dur" = "DUR";
 "report_col_ok" = "OK";
-"report_col_notes" = "NOTES";
 "report_duration_fmt" = "%.1fs";
 "report_rating_good" = "GOOD";
 "report_rating_bad" = "BAD";

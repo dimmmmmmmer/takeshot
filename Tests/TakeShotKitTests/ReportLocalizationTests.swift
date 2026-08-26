@@ -43,7 +43,10 @@ struct ReportLocalizationTests {
         #expect(body.contains("отчёт смены"), "the title is not translated")
         #expect(body.contains("Камера A"))
         #expect(body.contains("2 дублей"))
-        for column in ["КЛИП", "TC НАЧ", "TC КОН", "ДЛИТ", "ОЦЕНКА", "ЗАМЕТКИ"] {
+        // The note left the columns (it is a "✎" line inside the row), so
+        // the Russian note itself is what proves that half of the sheet —
+        // see aRussianNoteReachesThePaperWhole.
+        for column in ["КЛИП", "TC НАЧ", "TC КОН", "ДЛИТ", "ОЦЕНКА"] {
             #expect(body.contains(column), "column \(column) is missing")
         }
         #expect(body.contains("ГОДЕН"))

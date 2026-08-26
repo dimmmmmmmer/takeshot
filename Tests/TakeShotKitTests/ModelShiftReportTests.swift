@@ -47,7 +47,8 @@ struct ModelShiftReportTests {
         let document = try document([take(1), take(2), take(3)])
         #expect(document.pageCount == 1)
         let body = text(of: document)
-        for column in ["CLIP", "TC IN", "TC OUT", "DUR", "OK", "NOTES"] {
+        // No NOTES: the note is a line inside its row, not a column.
+        for column in ["CLIP", "TC IN", "TC OUT", "DUR", "OK"] {
             #expect(body.contains(column), "column \(column) is missing")
         }
     }
@@ -127,6 +128,71 @@ struct ModelShiftReportTests {
         #expect(body.contains("soft on the wide"))
         #expect(body.contains("10:00:05:12"))
         #expect(body.contains("boom in frame"))
+    }
+
+    /// PDF text extraction breaks a wrapped line wherever the layout broke it,
+    /// so a sentence that reaches the paper whole comes back with newlines
+    /// inside it. Collapsing runs of whitespace asserts that every word arrived,
+    /// in order, without pinning where the wrap happens to fall.
+    private func flowed(_ text: String) -> String {
+        text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    /// A real note is a sentence, not a word: this is the only free text on the
+    /// report and the reason the sheet is worth reading a week later. It used to
+    /// be laid out in the 71pt left over after the other six columns — about
+    /// twelve characters of what the operator actually typed (owner: "заметку
+    /// на дубле только 12ю символами? это же крайне мало").
+    @Test func aRealSentenceOfANoteReachesThePaperWhole() throws {
+        let note = "soft focus on the wide, boom shadow crossing on the pan"
+        let body = flowed(text(of: try document([take(1, comment: note)])))
+        #expect(body.contains(note), "the note is cut short on the paper")
+    }
+
+    /// Cyrillic is wider per character than Latin, so the language that needed
+    /// the rating column widened is the one to check the note against.
+    @Test func aRussianNoteReachesThePaperWhole() throws {
+        let note = "мягкий фокус на общем плане, тень микрофона на панораме"
+        let data = try #require(ViewRender.withLanguage(.russian) {
+            ShiftReport.pdfData(takes: [take(1, comment: note)],
+                                thumbnails: [:], project: "Ночь", camera: "A")
+        })
+        let body = flowed(text(of: try #require(PDFDocument(data: data))))
+        #expect(body.contains(note), "the Russian note is cut short")
+    }
+
+    /// A note has to end somewhere, and where it ends must be visible: an
+    /// operator who reads their own truncated sentence knows to open the app,
+    /// while one whose words vanished silently does not know anything is gone.
+    @Test func aNoteLongerThanItsRoomEndsInAnEllipsis() throws {
+        let note = String(repeating: "the operator kept typing and typing ",
+                          count: 12)
+        let body = flowed(text(of: try document([take(1, comment: note)])))
+        #expect(body.contains("the operator kept typing"),
+                "none of the long note reached the paper")
+        #expect(!body.contains(flowed(note)), "a 420-character note cannot fit")
+        #expect(body.contains("\u{2026}"), "the note was cut with no ellipsis")
+    }
+
+    /// The note line makes a row taller than the fixed 46pt every row used to
+    /// be, and row height is what pagination is arithmetic on — so the take that
+    /// overflows is exactly the one at risk of being dropped.
+    @Test func noTakeWithANoteIsLostAcrossPageBreaks() throws {
+        let takes = (1...40).map {
+            take($0, comment: "note \($0): soft on the wide, boom in the pan, "
+                 + "operator asked for a second pass on this one")
+        }
+        let document = try document(takes)
+        let body = flowed(text(of: document))
+        let missing = takes
+            .map { $0.url.deletingPathExtension().lastPathComponent }
+            .filter { !body.contains($0) }
+        #expect(missing.isEmpty,
+                "not printed: \(missing.joined(separator: ", "))")
+        for index in 1...40 {
+            #expect(body.contains("note \(index):"),
+                    "the note of take \(index) is missing")
+        }
     }
 
     /// The out point is derived from the start TC plus the duration; printing
