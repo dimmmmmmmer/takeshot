@@ -46,6 +46,30 @@ struct PunchEventSurface: NSViewRepresentable {
     }
 }
 
+/// What an event carries that the rule needs, as a value.
+///
+/// A struct rather than eight parameters, because that is what these are: one
+/// reading off one `NSEvent`. It also lets a test state only the facts a case
+/// is about.
+struct PunchEvent {
+    var type: NSEvent.EventType
+    var magnification: CGFloat = 0
+    var modifiers: NSEvent.ModifierFlags = []
+    var scrollingDelta: CGSize = .zero
+    /// A trackpad reports points; a wheel notch reports lines.
+    var precise: Bool = true
+}
+
+/// What one pinch or scroll over the picture amounts to.
+enum PunchInput: Equatable {
+    /// Not ours: hand the event on untouched.
+    case ignore
+    /// Zoom by a relative factor, anchored where the pointer is.
+    case magnify(Double)
+    /// Move the picture by this many points.
+    case pan(CGSize)
+}
+
 /// Trackpad and wheel input SwiftUI cannot express, plus the grab-hand cursor.
 ///
 /// Events arrive through a local NSEvent monitor instead of by hit testing. A
@@ -107,49 +131,70 @@ final class PunchEventView: NSView {
     }
 
     /// nil consumes the event, the event itself passes it on.
+    ///
+    /// Reads the facts off the event and applies the outcome; the RULE is
+    /// `decide`, which is a function of those facts alone.
     private func handle(_ event: NSEvent) -> NSEvent? {
-        guard let window, event.window === window, !bounds.isEmpty else {
-            return event
-        }
+        guard let window, event.window === window else { return event }
         let pointer = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(pointer) else { return event }
+        let facts = PunchEvent(
+            type: event.type, magnification: event.magnification,
+            modifiers: event.modifierFlags,
+            scrollingDelta: CGSize(width: event.scrollingDeltaX,
+                                   height: event.scrollingDeltaY),
+            precise: event.hasPreciseScrollingDeltas)
+        switch Self.decide(facts, pointer: pointer, bounds: bounds,
+                           isPunchedIn: isPunchedIn()) {
+        case .ignore:
+            return event
+        case .magnify(let factor):
+            onMagnify?(factor, pointer, bounds.size)
+            return nil
+        case .pan(let delta):
+            onScroll?(delta, bounds.size)
+            return nil
+        }
+    }
+
+    /// What a pinch or a scroll over the picture MEANS.
+    ///
+    /// A value rather than three calls inside the monitor, because the monitor
+    /// itself cannot be driven from a test: a local `NSEvent` monitor wants a
+    /// real application event queue, and a synthesized event cannot carry the
+    /// window number that would make it match. Stated over the facts an event
+    /// carries, the rule is ordinary code — and it is a rule worth pinning,
+    /// since it decides whether a wheel zooms or pans, which is the difference
+    /// between framing a shot and losing it mid-roll.
+    static func decide(_ event: PunchEvent, pointer: CGPoint, bounds: CGRect,
+                       isPunchedIn: Bool) -> PunchInput {
+        guard !bounds.isEmpty, bounds.contains(pointer) else { return .ignore }
         switch event.type {
         case .magnify:
             // a pinch reports a RELATIVE delta per event; it always zooms —
             // the gesture means nothing else over a picture
-            onMagnify?(1 + Double(event.magnification), pointer, bounds.size)
-            return nil
+            return .magnify(1 + Double(event.magnification))
         case .scrollWheel:
             // ⌘-scroll zooms (the macOS idiom): plain scroll cannot, because
-            // it is already the pan while punched in, and a wheel that zooms
-            // until 1.1x and pans after would change meaning mid-roll
-            if event.modifierFlags.contains(.command) {
-                onMagnify?(Self.wheelZoomFactor(
-                    deltaY: event.scrollingDeltaY,
-                    precise: event.hasPreciseScrollingDeltas),
-                    pointer, bounds.size)
-                return nil
+            // it is already the pan while punched in, and a wheel that zoomed
+            // until 1.1x and panned after would change meaning mid-roll
+            if event.modifiers.contains(.command) {
+                return .magnify(
+                    wheelZoomFactor(deltaY: event.scrollingDelta.height,
+                                    precise: event.precise))
             }
-            guard isPunchedIn() else { return event } // nothing to pan
-            onScroll?(scrollDelta(of: event), bounds.size)
-            return nil
+            guard isPunchedIn else { return .ignore } // nothing to pan
+            // a trackpad reports points; a wheel notch reports lines
+            let factor: CGFloat = event.precise ? 1 : pointsPerLine
+            return .pan(CGSize(width: event.scrollingDelta.width * factor,
+                               height: event.scrollingDelta.height * factor))
         default:
-            return event
+            return .ignore
         }
     }
 
     /// A wheel notch is worth this many points of precise scroll — shared by
     /// the pan and the zoom so a notch feels the same in both.
     private static let pointsPerLine: CGFloat = 16
-
-    /// Scroll distance in points, in the same sense as a drag of the picture.
-    private func scrollDelta(of event: NSEvent) -> CGSize {
-        // a trackpad reports points; a wheel notch reports lines
-        let factor: CGFloat = event.hasPreciseScrollingDeltas
-            ? 1 : Self.pointsPerLine
-        return CGSize(width: event.scrollingDeltaX * factor,
-                      height: event.scrollingDeltaY * factor)
-    }
 
     /// A ⌘-scroll step as a relative magnification factor. Scrolling up zooms
     /// in. `exp` keeps the steps symmetric — +N points exactly undoes −N — and
