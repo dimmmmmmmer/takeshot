@@ -119,6 +119,15 @@ final class RemoteClient: @unchecked Sendable {
 
     var buffer = Data()
     var upgraded = false
+    /// A request whose head has arrived and whose body has not.
+    ///
+    /// The one route that carries a body is the WebRTC offer, and a request
+    /// head is not a request until the bytes it announced are here — so the
+    /// parsed head waits with the length it is owed, and `drainRequest` finishes
+    /// the job on whichever packet completes it. Nil for every GET, which is
+    /// every other route.
+    var pendingRequest: RemoteRequest?
+    var pendingBodyLength = 0
     /// Read by `RemoteClient+Multiview` as well — the frame path must never
     /// serve a socket that has not shown the PIN. Written only here.
     private(set) var authenticated = false

@@ -21,6 +21,20 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     /// (see `MultiviewEncoder`), and a phone is being offered a link, not a
     /// piece of the architecture.
     case cameras
+    /// The viewer itself, as video.
+    ///
+    /// Not the same thing as `cameras`, and the difference is the point: that
+    /// page is one JPEG per board at five a second, of the CLEAN signal,
+    /// several tiles at once. This is ONE picture — the decorated viewer, the
+    /// frame the SRT output carries — as an H.264 track over WebRTC, at the
+    /// signal's own rate.
+    ///
+    /// The two stand side by side deliberately and not forever. The grid is
+    /// what still works on a build with no libdatachannel in it, which is every
+    /// build until the library is dropped in; removing it is a separate piece
+    /// of work with a decision in it (see `CaptureController+WebRTC` for which
+    /// picture the grid would then be showing).
+    case live
     /// The digital slate, on a phone held up in front of a lens.
     ///
     /// The Mac already has one (`SlateView`), and it is on the cart. This is the
@@ -38,6 +52,7 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         case .remote: return "/"
         case .script: return "/script"
         case .cameras: return "/cameras"
+        case .live: return "/live"
         case .slate: return "/slate"
         }
     }
@@ -48,6 +63,7 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         case .remote: return "remote_link_remote"
         case .script: return "remote_link_script"
         case .cameras: return "remote_link_cameras"
+        case .live: return "remote_link_live"
         case .slate: return "remote_link_slate"
         }
     }
@@ -203,6 +219,30 @@ enum RemotePage {
         ("rec", "cameras_rec"),
     ]
 
+    /// Where the live page lives.
+    static let livePath = RemoteLink.live.path
+
+    /// The live page's label table.
+    ///
+    /// The gate and connection strings are shared with the other pages — same
+    /// socket, same PIN — and `wait` is the camera grid's own "no video yet",
+    /// because it is the same sentence about the same signal. What is its own
+    /// is the pair this page needs and no other does: a title for the state
+    /// where the app cannot answer at all, and the button that tries again.
+    static let liveLabels: [(field: String, key: String)] = [
+        ("title", "live_title"),
+        ("connected", "remote_online"),
+        ("connecting", "remote_connecting"),
+        ("disconnected", "remote_offline"),
+        ("connect", "remote_connect"),
+        ("pinPrompt", "remote_pin_prompt"),
+        ("pinBad", "remote_pin_bad"),
+        ("wait", "cameras_wait"),
+        ("rec", "cameras_rec"),
+        ("unavailable", "live_unavailable"),
+        ("retry", "live_retry"),
+    ]
+
     /// Where the slate lives.
     static let slatePath = RemoteLink.slate.path
 
@@ -275,6 +315,11 @@ enum RemotePage {
         render(resource: "cameras", labels: camerasLabels)
     }
 
+    /// The live page, same discipline again.
+    static func liveHTML() -> Data {
+        render(resource: "live", labels: liveLabels)
+    }
+
     /// The slate, same discipline again.
     static func slateHTML() -> Data {
         render(resource: "slate", labels: slateLabels)
@@ -310,6 +355,7 @@ enum RemotePage {
             + "watchdogMs:\(watchdogMilliseconds),"
             + "holdMs:\(slateHoldMilliseconds),"
             + "posterPath:\(RemoteJSON.quoted(posterPath)),"
+            + "offerPath:\(RemoteJSON.quoted(RemoteWebRTC.offerPath)),"
             + "strings:{\(strings)}}"
     }
 }

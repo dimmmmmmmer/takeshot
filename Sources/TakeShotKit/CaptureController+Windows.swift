@@ -56,20 +56,24 @@ extension CaptureController {
         }
         wireDisplayMirrors()
     }
-    /// The mirrors show whatever the viewer shows: the hardware output, and the
-    /// SRT stream when it is switched on.
+    /// The mirrors show whatever the viewer shows: the hardware output, the SRT
+    /// stream when it is switched on, and any browser watching over WebRTC.
     ///
-    /// Both take the SAME frame — the decorated one, aids and key included, which
-    /// is what a director watches — so they share one handler slot per source
-    /// rather than each claiming its own. That is only true because they want the
-    /// same picture: the phone camera grid has a slot of its own precisely because
-    /// it wants the CLEAN frame (see `CapturePipeline.publishDisplayFrame`).
+    /// All of them take the SAME frame — the decorated one, aids and key
+    /// included, which is what a director watches — so they share one handler
+    /// slot per source rather than each claiming its own. That is only true
+    /// because they want the same picture: the phone camera grid has a slot of
+    /// its own precisely because it wants the CLEAN frame (see
+    /// `CapturePipeline.publishDisplayFrame`), and what that costs the WebRTC
+    /// feed is written down at the top of `CaptureController+WebRTC`.
     ///
-    /// With neither mirror present the slots go back to nil, so an app with no
-    /// hardware output and SRT off calls nothing per frame.
+    /// The frame goes to the SHARED ENCODER rather than to each watcher: one
+    /// H.264 session serves every one of them, and the samples fan out from
+    /// there (`LiveVideoEncoder`). With no hardware output and nothing watching
+    /// the slots go back to nil, so an idle app calls nothing per frame.
     func wireDisplayMirrors() {
         let feeder = mirrors.playout
-        let mirror = mirrors.srt
+        let mirror = mirrors.liveEncoder
         guard feeder != nil || mirror != nil else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)

@@ -6,27 +6,31 @@ import os.log
 
 /// Mirrors the viewer to an SRT endpoint, on a queue of its own.
 ///
-/// The discipline is `MultiviewEncoder`'s and `PlayoutFeeder`'s, and it has to be
-/// stricter here than it was for NDI because there is real work in the path: the
-/// display queue drops a frame here and returns at once, only the newest frame is
-/// kept, and the encode, the mux and the send all run on THIS queue — never on
-/// capture, never on main. A pass that cannot keep up REPLACES the pending frame
-/// instead of queueing behind it, so the feed falls to fewer frames rather than to
-/// older ones, which is the right failure for a monitor.
+/// **The encode is not here any more, and that is the point of the split.** One
+/// H.264 session serves every live consumer (`LiveVideoEncoder`) — this file
+/// registers a sink on it, and what arrives is an encoded sample somebody else
+/// paid for. A second `VTCompressionSession` for the second thing watching the
+/// same picture is the cost this app cannot pay, on a machine whose actual job
+/// is writing ProRes to a card. What is left here is the SRT half and nothing
+/// else: the transport stream, the socket, and the reconnect.
 ///
-/// **Nothing in this path can block the frame path, by construction rather than by
-/// being fast.** `offer` is a pixel-format test and one `dispatch_async`. The
-/// encode is asked to drop quality rather than take longer. The socket is opened
-/// with sending asynchronous, so a link that cannot take the bytes says "again"
-/// and the datagram is dropped. And a connect — the one call here that really can
-/// park for seconds — happens on this queue, where parking costs frames on a
-/// monitor and nothing else.
+/// The discipline is `MultiviewEncoder`'s and `PlayoutFeeder`'s: the mux and the
+/// send run on THIS queue — never on capture, never on main — and the sample
+/// arrives on VideoToolbox's thread and hops here before anything touches it.
+///
+/// **Nothing in this path can block the frame path, by construction rather than
+/// by being fast.** The encoder's queue hands a sample over and returns. The
+/// socket is opened with sending asynchronous, so a link that cannot take the
+/// bytes says "again" and the datagram is dropped. And a connect — the one call
+/// here that really can park for seconds — happens on this queue, where parking
+/// costs this feed's frames and nothing else: the encoder's queue is not
+/// behind it, so a WebRTC viewer keeps its picture through an SRT reconnect.
 ///
 /// **A dead link is the normal case, so it is a state and not an error.** On a
 /// venue network the receiver is closed half the day, the Wi-Fi drops, somebody
-/// re-patches a switch. The link is reopened with a backoff, the operator is told
-/// once, and nothing here can reach the recorder: the whole file calls the
-/// display path's frames and a socket, and neither the pipeline nor the writer
+/// re-patches a switch. The link is reopened with a backoff, the operator is
+/// told once, and nothing here can reach the recorder: the whole file calls an
+/// encoder's samples and a socket, and neither the pipeline nor the writer
 /// appears in it.
 final class SRTVideoMirror: @unchecked Sendable {
     /// What the operator is told, hopped to the MainActor by the controller.
@@ -45,23 +49,8 @@ final class SRTVideoMirror: @unchecked Sendable {
         case unavailable(String)
     }
 
-    /// Ceiling on the send rate. Not a throttle on any signal the app captures —
-    /// every format it takes is at or under 60 — but the display path can
-    /// republish far faster than a wire rate: an aid switched on over a paused
-    /// picture pushes the same frame again (`CapturePipeline.redrawDisplayStage`),
-    /// and a playback scrub delivers as fast as the decoder manages. Coalescing
-    /// collapses those into one frame; the ceiling is what keeps a burst of them
-    /// off the encoder and off the network.
-    static let framesPerSecond = 60.0
-
-    static var minimumInterval: TimeInterval { 1 / framesPerSecond }
-
-    /// The only pixel format the display path produces. A frame in anything else
-    /// is dropped here, before it costs a queue hop.
-    static let acceptedPixelFormat = kCVPixelFormatType_32BGRA
-
-    /// The queue everything runs on. Named so a test can assert that neither the
-    /// encoder nor the socket is ever touched from the capture queue.
+    /// The queue everything here runs on. Named so a test can assert that the
+    /// socket is never touched from the capture queue — or from the encoder's.
     static let queueLabel = "com.takeshot.srt"
 
     /// First wait after a link goes, and the ceiling it doubles up to.
@@ -83,52 +72,35 @@ final class SRTVideoMirror: @unchecked Sendable {
     /// bundle is where a number nobody watches live belongs.
     static let dropLogInterval = 100
 
-    /// Frame rate to assume when nothing has said one. 1080p25 is what the
-    /// playout mirror falls back to, for the same reason.
-    static let fallbackFrameRate = 25
-
     private let queue = DispatchQueue(label: SRTVideoMirror.queueLabel,
                                       qos: .userInitiated)
     private let endpoint: SRTEndpoint
-    private let bitsPerSecond: Int
+    /// The shared session. Held strongly: this object is one of its consumers
+    /// and must not outlive the samples it is registered for.
+    private let encoder: LiveVideoEncoder
     private let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending
     private let onEvent: @Sendable (Event) -> Void
-    private let interval: TimeInterval
 
     // MARK: - queue-confined state
 
     private var stream: SRTStreamSending?
     private var muxer = MPEGTSMuxer()
-    private var encoder: SRTVideoEncoder?
-    private var pending: CVPixelBuffer?
-    private var pendingFrameRate = 0.0
-    private var scheduled = false
-    private var reopening = false
     private var stopped = false
-    private var lastSendAt: TimeInterval = 0
     private var backoff = SRTVideoMirror.reconnectDelay
-    /// Monotonic clock at the first frame, and the last stamp handed to the
-    /// encoder. The stream's clock is the app's own send clock: a monitoring
-    /// feed's timing is when it went out, and the camera's timecode belongs to
-    /// the file.
-    private var origin: TimeInterval?
-    private var lastTicks: Int64 = -1
+    private var reopening = false
     private var dropped = 0
     /// The last event handed upwards. A repeat is swallowed: each one is a
     /// MainActor hop and a `@Published` write, and "still reconnecting" arriving
     /// once a second would re-render the settings window for no news.
     private var reported: Event?
 
-    init(endpoint: SRTEndpoint, bitsPerSecond: Int,
-         framesPerSecond: Double = SRTVideoMirror.framesPerSecond,
+    init(endpoint: SRTEndpoint, encoder: LiveVideoEncoder,
          factory: @escaping @Sendable (SRTEndpoint) throws -> SRTStreamSending,
          onEvent: @escaping @Sendable (Event) -> Void) {
         self.endpoint = endpoint
-        self.bitsPerSecond = bitsPerSecond
+        self.encoder = encoder
         self.factory = factory
         self.onEvent = onEvent
-        interval = framesPerSecond > 0 ? 1 / framesPerSecond
-            : SRTVideoMirror.minimumInterval
     }
 
     /// Open the link. Asynchronous on purpose: a caller's connect blocks, and the
@@ -137,118 +109,30 @@ final class SRTVideoMirror: @unchecked Sendable {
         queue.async { [self] in openLink() }
     }
 
-    /// Offer one displayed frame. Called on the display queue (live) or the tap
-    /// queue (playback); returns at once — the hop is an async dispatch, never a
-    /// wait.
-    func offer(_ buffer: CVPixelBuffer, framesPerSecond: Double) {
-        guard CVPixelBufferGetPixelFormatType(buffer) == Self.acceptedPixelFormat
-        else { return }
-        queue.async { [self] in enqueue(buffer, framesPerSecond: framesPerSecond) }
-    }
-
     /// Take the link down. Asynchronous on purpose: a send or a connect may be in
     /// flight and the main actor must not park behind it. The serial queue orders
-    /// this after that call and before anything offered later, and `stopped` makes
-    /// every one of those inert.
+    /// this after that call and before anything delivered later, and `stopped`
+    /// makes every one of those inert.
+    ///
+    /// The sink goes FIRST and synchronously: a mirror the operator has just
+    /// switched off must stop costing the encoder a fan-out before the queue hop
+    /// below has even been scheduled.
     func stop() {
+        encoder.removeSink(self)
         queue.async { [self] in
             stopped = true
-            pending = nil
-            encoder?.invalidate()
-            encoder = nil
             stream?.close()
             stream = nil
         }
     }
 
-    // MARK: - the frame path
-
-    private func enqueue(_ buffer: CVPixelBuffer, framesPerSecond: Double) {
-        guard !stopped else { return }
-        pending = buffer // latest wins
-        pendingFrameRate = framesPerSecond
-        guard !scheduled else { return }
-        scheduled = true
-        let wait = max(0, lastSendAt + interval - RemoteServer.monotonicNow())
-        queue.asyncAfter(deadline: .now() + wait) { [weak self] in
-            self?.encodePending()
-        }
-    }
-
-    private func encodePending() {
-        scheduled = false
-        guard !stopped, let buffer = pending else { return }
-        pending = nil
-        // Nothing open: the frame is dropped here rather than encoded into a
-        // socket that is not there. An idle reconnect costs one buffer release
-        // per frame interval and no encoder at all.
-        guard stream != nil else { return }
-        // Stamped before the pass, so the pace is measured start to start and a
-        // slow encode does not quietly raise the delivered rate afterwards.
-        lastSendAt = RemoteServer.monotonicNow()
-        guard let session = session(for: buffer) else { return }
-        session.encode(buffer, ticks: nextTicks(at: lastSendAt))
-    }
-
-    /// The 90 kHz stamp for a frame offered at `now`, forced to increase — the
-    /// encoder rejects a timestamp that does not, and two frames closer together
-    /// than 11 µs cannot happen under the pace ceiling anyway.
-    private func nextTicks(at now: TimeInterval) -> Int64 {
-        let start = origin ?? now
-        origin = start
-        let ticks = Int64((now - start) * Double(MPEGTSMuxer.clockHz))
-        lastTicks = max(ticks, lastTicks + 1)
-        return lastTicks
-    }
-
-    /// An encoder built for this raster and rate, rebuilt when either changes.
-    ///
-    /// A rebuild is what a signal format change or a switch into playback costs,
-    /// and it is deliberately not smoothed over: the new session's first frame is
-    /// a keyframe, which drags the parameter sets and the tables with it, so a
-    /// receiver follows the change instead of decoding the new raster against the
-    /// old SPS.
-    private func session(for buffer: CVPixelBuffer) -> SRTVideoEncoder? {
-        let rate = pendingFrameRate > 0
-            ? Int(pendingFrameRate.rounded()) : Self.fallbackFrameRate
-        let wanted = SRTVideoEncoder.Configuration(
-            width: CVPixelBufferGetWidth(buffer),
-            height: CVPixelBufferGetHeight(buffer),
-            framesPerSecond: max(1, rate), bitsPerSecond: bitsPerSecond)
-        if let encoder, encoder.configuration == wanted { return encoder }
-        encoder?.invalidate()
-        encoder = nil
-        do {
-            encoder = try SRTVideoEncoder(configuration: wanted) { [weak self] sample in
-                // VideoToolbox's queue. Everything this object owns lives on its
-                // own queue, so the sample comes home before it is muxed or sent.
-                //
-                // The weak reference is resolved ONCE, out here, and the strong
-                // one is what the inner block captures. Writing `self?.queue.async
-                // { self?.deliver(unit) }` captures the weak variable itself in a
-                // concurrently-executing closure, which the compiler is right to
-                // complain about: two threads would be reading the same optional
-                // while ARC writes it.
-                guard let mirror = self else { return }
-                mirror.queue.async { mirror.deliver(sample) }
-            }
-        } catch {
-            report(.refused((error as? SRTStreamError)?.message
-                    ?? error.localizedDescription))
-        }
-        if let refused = encoder?.refusedProperties, !refused.isEmpty {
-            // Not a failure: the stream still encodes, at VideoToolbox's own
-            // defaults for whatever was refused. It IS the operator's bitrate
-            // quietly not being honoured, so it goes where a number nobody watches
-            // live belongs — the log a diagnostics bundle carries.
-            os_log("SRT encoder refused %{public}s",
-                   refused.joined(separator: ", "))
-        }
-        return encoder
-    }
-
     // MARK: - the link
 
+    /// One encoded sample as transport-stream datagrams on the socket.
+    ///
+    /// The access unit comes from `MPEGTSMuxer.accessUnit(from:)`, which is the
+    /// one seam a `CMSampleBuffer` becomes bytes at — the WebRTC viewer starts
+    /// from exactly the same call and puts the same access unit in RTP instead.
     private func deliver(_ sample: CMSampleBuffer) {
         guard !stopped, let stream,
               let unit = MPEGTSMuxer.accessUnit(from: sample) else { return }
@@ -279,6 +163,7 @@ final class SRTVideoMirror: @unchecked Sendable {
             try link.open()
             stream = link
             backoff = Self.reconnectDelay
+            subscribe()
             // A caller that returned from `open` has shaken hands; a listener has
             // only bound a port and is waiting for somebody to dial in.
             report(endpoint.role == .listener ? .waiting : .opened)
@@ -293,17 +178,38 @@ final class SRTVideoMirror: @unchecked Sendable {
         }
     }
 
+    /// Start taking samples, and ask for a keyframe with the first one.
+    ///
+    /// A reopened link is a NEW receiver as far as anything downstream knows,
+    /// and it needs the parameter sets before it needs a slice — otherwise it is
+    /// handed mid-GOP bytes it has no SPS for. The old code got that by throwing
+    /// the encoder away and building another, which is not available to a
+    /// session somebody else is also watching; `requestKeyframe` is what
+    /// replaced it, and it is cheaper than the rebuild ever was.
+    private func subscribe() {
+        // The weak reference is resolved ONCE, out here, and the strong one is
+        // what the inner block captures. Writing `self?.queue.async {
+        // self?.deliver(unit) }` captures the weak variable itself in a
+        // concurrently-executing closure, which the compiler is right to
+        // complain about: two threads would be reading the same optional while
+        // ARC writes it.
+        encoder.addSink(self) { [weak self] sample in
+            guard let mirror = self else { return }
+            mirror.queue.async { mirror.deliver(sample) }
+        }
+        encoder.requestKeyframe()
+    }
+
     /// The link is gone: drop it, say so once, and try again later.
     ///
-    /// The encoder is dropped with it rather than kept warm. A reopened link is a
-    /// new receiver as far as anything downstream knows, and a fresh session's
-    /// first frame is a keyframe carrying the parameter sets — keeping the old one
-    /// would send a receiver mid-GOP slices it has no SPS for.
+    /// The sink goes with it. That is what keeps the old promise — an idle
+    /// reconnect costs no encode at all — now that the session is shared: with
+    /// no SRT sink and no viewer, the encoder has nothing to fan out to and
+    /// drops the frame before compressing it.
     private func linkLost(_ reason: String) {
+        encoder.removeSink(self)
         stream?.close()
         stream = nil
-        encoder?.invalidate()
-        encoder = nil
         report(.lost(reason))
         scheduleReopen()
     }

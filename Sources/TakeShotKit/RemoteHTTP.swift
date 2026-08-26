@@ -130,6 +130,29 @@ enum RemoteResponse {
              body: Data("Bad request\n".utf8))
     }
 
+    /// The WebRTC answer. `application/sdp` is the registered type and the page
+    /// does not read it — it hands the text straight to
+    /// `setRemoteDescription` — but a route that answers SDP as `text/plain` is
+    /// a route somebody debugs with `curl` and misreads.
+    static func sdp(_ body: String) -> Data {
+        make(status: "200 OK", contentType: "application/sdp",
+             body: Data(body.utf8))
+    }
+
+    /// This app cannot answer, and offering again will not change that: a build
+    /// with no libdatachannel, a machine with no runtime, or every viewer slot
+    /// already taken.
+    ///
+    /// 503 rather than 400, because the two mean opposite things to the page —
+    /// one says stop and say why, the other says offer something else. The
+    /// reason is the BODY because it names what to install, which no status
+    /// code can.
+    static func unavailable(_ reason: String) -> Data {
+        make(status: "503 Service Unavailable",
+             contentType: "text/plain; charset=utf-8",
+             body: Data((reason + "\n").utf8))
+    }
+
     private static func make(status: String, contentType: String,
                              body: Data) -> Data {
         var head = "HTTP/1.1 \(status)\r\n"
@@ -151,7 +174,15 @@ enum RemoteResponse {
         // arrived over the socket and never left the page. 'self', blob: and
         // nothing else — the page still fetches nothing from off the set
         // network.
-        head += "img-src 'self' blob:; connect-src 'self' ws:\r\n"
+        head += "img-src 'self' blob:; connect-src 'self' ws:; "
+        // `media-src` is the WebRTC page's `<video>`. A MediaStream reaches an
+        // element through `srcObject` rather than through a URL, and browsers
+        // do not agree on whether `media-src` governs that — so it is named
+        // rather than left to the `default-src 'none'` above, where the
+        // disagreement would show as a video element that stays black on one
+        // browser and plays on another. `mediastream:` and `blob:` and nothing
+        // else: the page still fetches nothing from off the set network.
+        head += "media-src 'self' blob: mediastream:\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"
         head += "Connection: close\r\n\r\n"
         return Data(head.utf8) + body

@@ -41,20 +41,53 @@ extension RemoteClient {
     }
 
     private func drainRequest() {
+        if pendingRequest != nil {
+            drainBody()
+            return
+        }
         guard let end = RemoteRequest.headEnd(in: buffer) else { return }
         let head = Data(buffer[buffer.startIndex..<end])
         // Whatever followed the blank line stays: a browser can put its first
         // frame in the same packet as the upgrade request, and dropping it
-        // loses the hello that carries the PIN.
+        // loses the hello that carries the PIN. A POST's body arrives the same
+        // way, which is why it is read from here rather than from a second
+        // receive.
         buffer = Data(buffer[end...])
         guard let request = RemoteRequest.parse(head) else {
             writeAndClose(RemoteResponse.badRequest())
             return
         }
-        route(request)
+        guard request.method == "POST" else {
+            route(request, body: Data())
+            return
+        }
+        // A body has to be announced and has to be small. A `Content-Length`
+        // this route will not carry is refused before a byte of it is kept —
+        // the alternative is holding a connection slot open for a number a peer
+        // made up.
+        let announced = Int(request.headers["content-length"] ?? "") ?? -1
+        guard announced > 0, announced <= RemoteWebRTC.maximumBody else {
+            writeAndClose(RemoteResponse.badRequest())
+            return
+        }
+        pendingRequest = request
+        pendingBodyLength = announced
+        drainBody()
     }
 
-    private func route(_ request: RemoteRequest) {
+    /// The body of a POST whose head has already been parsed, once all of it is
+    /// here. Called again on every packet until it is.
+    private func drainBody() {
+        guard let request = pendingRequest,
+              buffer.count >= pendingBodyLength else { return }
+        let body = Data(buffer.prefix(pendingBodyLength))
+        buffer = Data(buffer.dropFirst(pendingBodyLength))
+        pendingRequest = nil
+        pendingBodyLength = 0
+        route(request, body: body)
+    }
+
+    private func route(_ request: RemoteRequest, body: Data) {
         // RFC 6455 §4.1: the handshake is a GET. Upgrading anything else would
         // let a method nothing sends reach the socket path.
         if request.method == "GET", request.path == "/ws", request.isWebSocketUpgrade,
@@ -62,6 +95,12 @@ extension RemoteClient {
             write(RemoteResponse.upgrade(key: key))
             upgraded = true
             drainFrames()
+            return
+        }
+        // The one POST this server answers: an offer in, an answer out. It is
+        // signalling entire — see `RemoteWebRTC` for why that is one request.
+        if request.method == "POST", request.path == RemoteWebRTC.offerPath {
+            serveWebRTCOffer(body)
             return
         }
         guard request.method == "GET" else {
@@ -79,6 +118,10 @@ extension RemoteClient {
             // Same rule: the markup is empty tiles, and every frame that
             // could fill them rides the socket behind the PIN.
             writeAndClose(RemoteResponse.page(server?.currentCamerasPage ?? Data()))
+        case RemotePage.livePath:
+            // Same rule again: the markup is an empty <video> element, and the
+            // offer that fills it goes through the PIN like everything else.
+            writeAndClose(RemoteResponse.page(server?.currentLivePage ?? Data()))
         case RemotePage.slatePath:
             // Same rule again: the slate's markup is an empty card, and the
             // timecode, the scene and the take that fill it arrive over the

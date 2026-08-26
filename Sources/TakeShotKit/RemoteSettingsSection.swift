@@ -81,6 +81,16 @@ struct RemoteSettingsSection: View {
     }
 
     /// Which page the address below is for.
+    ///
+    /// **The label is hidden and the control takes the whole row**, which is a
+    /// measurement rather than a preference. With a leading label the segments
+    /// share the row's width with it, and at five pages the Russian set no
+    /// longer fits: SwiftUI's grouped Form falls back to stacking the label
+    /// above the control, which made the Russian section 28 points taller than
+    /// the English one — a divergence `theRemoteSectionRendersExpandedInBoth-
+    /// Languages` exists to catch. Nothing is lost by hiding it: the section
+    /// header already says Remote, the segments are the page NAMES, and the
+    /// address row directly beneath is the answer to "for what".
     private var pageRow: some View {
         Picker(L("remote_page"), selection: $link) {
             ForEach(RemoteLink.allCases) { target in
@@ -88,6 +98,7 @@ struct RemoteSettingsSection: View {
             }
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     /// Which line is the one being handed out, given what was picked and what

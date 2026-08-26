@@ -79,7 +79,10 @@ extension CaptureController {
             mirrors.srtStreamFactory ?? { SRTStream.make($0) }
         let mirror = SRTVideoMirror(
             endpoint: endpoint,
-            bitsPerSecond: settings.srt.bitsPerSecondEffective,
+            // The session every live consumer shares. A WebRTC viewer already
+            // watching hands this link a warm encoder; the switch being thrown
+            // first builds one that a viewer joins later.
+            encoder: ensureLiveEncoder(),
             factory: factory,
             onEvent: { [weak self] event in
                 // The mirror's queue must never touch the controller: every event
@@ -102,8 +105,11 @@ extension CaptureController {
         mirrors.srt = nil
         mirrors.srtEndpoint = nil
         mirrors.srtState = .off
-        // Drop the display slot with it: with no mirror left, the handler goes
-        // back to nil and the display path stops calling anything at all.
+        // Drop the display slot with it — but only if nothing else is watching.
+        // The shared encoder outlives this switch when a browser is on it, and
+        // `releaseLiveEncoderIfIdle` is the one place that decides; it re-wires
+        // the display slot either way.
+        releaseLiveEncoderIfIdle()
         wireDisplayMirrors()
     }
 
@@ -150,6 +156,17 @@ extension CaptureController {
     // MARK: - settings changes (called from applySettingsChange)
 
     func applySRTChange(from oldValue: CaptureSettings) {
+        // The bitrate is the ONE field in this group that no longer needs a new
+        // link, and it is checked before the switch rather than inside it: the
+        // encoder is shared now, so an operator can be turning it down while
+        // the SRT switch is off and a browser is the only thing watching. It
+        // moves on the running session rather than rebuilding one — see
+        // `LiveVideoEncoder.setBitsPerSecond`.
+        if oldValue.srt.bitsPerSecondEffective
+            != settings.srt.bitsPerSecondEffective {
+            mirrors.liveEncoder?.setBitsPerSecond(
+                settings.srt.bitsPerSecondEffective)
+        }
         let wasOn = oldValue.srt.enabled == true
         let isOn = settings.srt.enabled == true
         if isOn, !wasOn {

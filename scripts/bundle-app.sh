@@ -64,6 +64,51 @@ else
     echo "No R3D runtime bundled — .r3d clips will report the SDK as missing"
 fi
 
+# libdatachannel, when this build was made against the header. THIS SLOT IS
+# DIFFERENT FROM EVERY OTHER ONE, and the difference decides whether the WebRTC
+# feature exists for anybody but the person who built it: libsrt is one
+# `brew install` away and the Blackmagic runtimes arrive with the vendor's own
+# software, but libdatachannel is in no macOS package manager at all. A release
+# that only ever dlopened a system copy would find one on nobody's machine.
+#
+# So it travels inside the app, and the dlopen search order in CDataChannel.mm
+# prefers Contents/Frameworks. It is MPL-2.0 and may be redistributed under
+# terms — see vendor/libdatachannel/README.md and NOTICE, both of which have to
+# be honoured before publishing a build that carries it.
+#
+# Two checks, and they FAIL the build rather than shipping something broken.
+# Both failures are the kind that test green on the machine that made them:
+#   * a non-system dependency means the dylib was linked against Homebrew's
+#     OpenSSL, which exists here and on no user's machine;
+#   * a mismatched architecture means CMake followed its own binary's arch
+#     (an x86_64 cmake under /usr/local is the usual cause).
+DC_RUNTIME="vendor/libdatachannel/lib/libdatachannel.dylib"
+if [ -f "$DC_RUNTIME" ]; then
+    FOREIGN=$(otool -L "$DC_RUNTIME" | tail -n +2 \
+        | grep -vE '^\s+(/usr/lib/|/System/Library/|@rpath/libdatachannel)' \
+        || true)
+    if [ -n "$FOREIGN" ]; then
+        echo "$DC_RUNTIME depends on libraries a user will not have:" >&2
+        echo "$FOREIGN" >&2
+        echo "Rebuild it with -DOPENSSL_USE_STATIC_LIBS=ON — see" \
+             "vendor/libdatachannel/README.md" >&2
+        exit 1
+    fi
+    APP_ARCH=$(lipo -archs "$APP/Contents/MacOS/TakeShot")
+    if ! lipo -archs "$DC_RUNTIME" | grep -qw "$APP_ARCH"; then
+        echo "$DC_RUNTIME is $(lipo -archs "$DC_RUNTIME"), the app is" \
+             "$APP_ARCH — rebuild it with" \
+             "-DCMAKE_OSX_ARCHITECTURES=$APP_ARCH" >&2
+        exit 1
+    fi
+    mkdir -p "$APP/Contents/Frameworks"
+    cp "$DC_RUNTIME" "$APP/Contents/Frameworks/"
+    echo "Bundled WebRTC runtime: libdatachannel.dylib ($APP_ARCH)"
+else
+    echo "No libdatachannel bundled — the /live page will report WebRTC as" \
+         "unavailable"
+fi
+
 # Which commit this build IS. The running app has no git around it, so the
 # answer has to be baked in here — "Collect diagnostics" reads it back out of
 # Info.plist (CaptureController.gitSHAInfoKey) and a bundle that cannot say
@@ -83,6 +128,17 @@ fi
 # Export CODESIGN_IDENTITY to a Developer ID ("Developer ID Application: Name
 # (TEAMID)") once you have one and the grants survive rebuilds.
 IDENTITY="${CODESIGN_IDENTITY:--}"
+# The one bundled library that is OURS to sign, and it has to be signed before
+# the app is: nested code is covered by the enclosing bundle's seal, and macOS
+# on Apple silicon refuses to `dlopen` an unsigned dylib at all — which would
+# show up as a WebRTC feature that reports itself missing on every machine
+# including this one. REDR3D.dylib is deliberately left alone above (RED signs
+# it, and re-signing another team's library is what library validation objects
+# to); this one has no other signature to preserve.
+if [ -f "$APP/Contents/Frameworks/libdatachannel.dylib" ]; then
+    codesign --force --timestamp=none --sign "$IDENTITY" \
+        "$APP/Contents/Frameworks/libdatachannel.dylib"
+fi
 # Library validation (part of the hardened runtime) refuses frameworks signed
 # by another team unless the app carries disable-library-validation — and
 # DeckLinkAPI/BlackmagicRAW ARE another team's frameworks. An ad-hoc identity

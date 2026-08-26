@@ -34,6 +34,19 @@ final class RemoteServer: @unchecked Sendable {
         /// which is what a server driven without a controller has.
         var poster: @Sendable (String, @escaping @Sendable (Data?) -> Void) -> Void
             = { _, reply in reply(nil) }
+        /// One WebRTC offer that passed the PIN check, and where to put the
+        /// answer.
+        ///
+        /// Asked for on the server's queue and answered from wherever the app
+        /// finishes gathering — which BLOCKS, and so is neither this queue nor
+        /// the MainActor — so the reply is a closure the app calls back rather
+        /// than a return value, exactly like `poster`. The default says the
+        /// feature is absent, which is what a server driven without a
+        /// controller has.
+        var webrtcOffer: @Sendable (String,
+                                    @escaping @Sendable (RemoteWebRTC.Answer)
+                                        -> Void) -> Void
+            = { _, reply in reply(.unavailable("No app is attached to this server.")) }
         /// Somebody started (true) or the last somebody stopped (false)
         /// watching the multiview stream. The app answers by building or
         /// tearing down the encoder, so an idle set encodes nothing. Called
@@ -50,6 +63,7 @@ final class RemoteServer: @unchecked Sendable {
         var page: Data
         var scriptPage: Data
         var camerasPage: Data
+        var livePage: Data
         var slatePage: Data
     }
 
@@ -142,15 +156,16 @@ final class RemoteServer: @unchecked Sendable {
     private var commandTokensAt = RemoteServer.monotonicNow()
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         camerasPage: Data = Data(), slatePage: Data = Data(),
-         handlers: Handlers,
+         camerasPage: Data = Data(), livePage: Data = Data(),
+         slatePage: Data = Data(), handlers: Handlers,
          handshakeDeadline: DispatchTimeInterval
             = RemoteClient.handshakeDeadline) {
         self.handlers = handlers
         self.handshakeDeadline = handshakeDeadline
         self.shared = OSAllocatedUnfairLock(
             initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
-                                 camerasPage: camerasPage, slatePage: slatePage))
+                                 camerasPage: camerasPage, livePage: livePage,
+                                 slatePage: slatePage))
     }
 
     /// Start listening. `port` 0 binds an ephemeral one and reports it through
@@ -233,6 +248,11 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.camerasPage = page }
     }
 
+    /// Replace the live page, for the same language switch.
+    func setLivePage(_ page: Data) {
+        shared.withLock { $0.livePage = page }
+    }
+
     /// Replace the slate's page, for the same language switch.
     func setSlatePage(_ page: Data) {
         shared.withLock { $0.slatePage = page }
@@ -262,6 +282,7 @@ final class RemoteServer: @unchecked Sendable {
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
     var currentCamerasPage: Data { shared.withLock { $0.camerasPage } }
+    var currentLivePage: Data { shared.withLock { $0.livePage } }
     var currentSlatePage: Data { shared.withLock { $0.slatePage } }
     var currentStatus: String? { lastStatus }
     var currentTakeLog: String? { lastTakeLog }

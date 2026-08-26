@@ -95,13 +95,16 @@ struct SRTPerformanceTests {
 
     /// A mirror over a counting link, with no pace ceiling: the cost of one frame
     /// is the question, not the rate frames are allowed at.
-    private func rig(_ stream: CountingStream) -> SRTVideoMirror {
-        let mirror = SRTVideoMirror(
-            endpoint: SRTFixtures.endpoint, bitsPerSecond: 8_000_000,
-            framesPerSecond: 100_000, factory: { _ in stream },
-            onEvent: { _ in })
-        mirror.start()
-        return mirror
+    private func rig(_ stream: CountingStream) -> SRTRig {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 8_000_000,
+                                       framesPerSecond: 100_000)
+        let rig = SRTRig(
+            encoder: encoder,
+            mirror: SRTVideoMirror(endpoint: SRTFixtures.endpoint,
+                                   encoder: encoder, factory: { _ in stream },
+                                   onEvent: { _ in }))
+        rig.start()
+        return rig
     }
 
     /// **What the DISPLAY QUEUE pays, which is the number that matters.**

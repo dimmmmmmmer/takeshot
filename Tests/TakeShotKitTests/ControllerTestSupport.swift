@@ -124,6 +124,15 @@ enum ControllerHarness {
         // has the real bridge compiled, and it works. Suites that want to look at
         // the datagrams install their own factory over this one.
         controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
+        // And the WebRTC peer, for a sharper reason than the SRT stream has: the
+        // real one generates a DTLS certificate and gathers ICE candidates off
+        // every interface the machine has, and a suite that reached it would do
+        // both once per test. It is also what makes the signalling route
+        // testable at all on a build with no libdatachannel in it — CI, and
+        // every machine that has not dropped the headers in.
+        controller.mirrors.webrtcPeerFactory = { plan, ssrc in
+            FakeWebRTCPeer(plan: plan, ssrc: ssrc)
+        }
         // belt and braces on the monitor: force the routing call even if the
         // stored setting ever stops reaching it, so the suite stays silent
         controller.monitorOn = false

@@ -1,0 +1,409 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover so the picture reaches under the notch; user-scalable=no
+     because a pinch here should never zoom the page around the video. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d">
+<title>TakeShot</title>
+<style>
+/* The app's own face, embedded at serve time — see remote.html for why, and
+   NOTICE for the licence. */
+__TAKESHOT_FONT__
+:root {
+  --bg: #0b0b0d;
+  --panel: #17171b;
+  --line: #2a2a31;
+  --text: #f2f2f5;
+  --dim: #8b8b96;
+  --rec: #e0323c;
+  --good: #37b24d;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: "Resist Sans Display", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  overscroll-behavior: none;
+}
+body {
+  display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button {
+  font: inherit; color: inherit; border: 1px solid var(--line);
+  background: var(--panel); border-radius: 10px;
+  touch-action: manipulation; cursor: pointer;
+}
+button:active { filter: brightness(1.35); }
+
+#stage { flex: 1; min-height: 0; position: relative; background: #000; }
+video { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Until the first frame arrives the stage says so, instead of showing a black
+   rectangle that reads as a dead camera. */
+#wait {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--dim); font-size: 14px; pointer-events: none; text-align: center;
+  padding: 24px;
+}
+body.playing #wait { display: none; }
+/* The socket is gone: what is on screen stopped moving, and the page says so by
+   dimming it rather than presenting a still as live video. */
+body.off video { opacity: 0.45; }
+
+footer {
+  display: flex; gap: 12px; justify-content: space-between; align-items: center;
+  padding: 10px 16px 16px; color: var(--dim); font-size: 13px;
+  border-top: 1px solid var(--line); flex-wrap: wrap;
+}
+#conn::before {
+  content: ""; display: inline-block; width: 9px; height: 9px;
+  border-radius: 50%; margin-right: 7px; background: var(--dim);
+  vertical-align: baseline;
+}
+#conn.live::before { background: var(--good); }
+#conn.down::before { background: var(--rec); }
+#tc {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+#rec { display: none; color: #ff6b73; font-weight: 700; letter-spacing: 0.04em; }
+body.rec #rec { display: inline; }
+
+#gate, #blocked {
+  position: fixed; inset: 0; background: rgba(11, 11, 13, 0.97);
+  display: none; flex-direction: column; justify-content: center;
+  align-items: center; gap: 16px; padding: 24px; text-align: center;
+  z-index: 10;
+}
+#gate.show, #blocked.show { display: flex; }
+#gate p, #blocked p { margin: 0; color: var(--dim); max-width: 24em; line-height: 1.4; }
+#blocked h1 { margin: 0; font-size: 19px; font-weight: 700; }
+#blocked pre {
+  margin: 0; max-width: 30em; white-space: pre-wrap; text-align: left;
+  color: var(--dim); font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px; line-height: 1.45;
+}
+#pin {
+  width: 100%; max-width: 260px; padding: 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  font-family: ui-monospace, Menlo, monospace; font-size: 34px;
+  text-align: center; letter-spacing: 0.4em;
+  -webkit-user-select: text; user-select: text;
+}
+#connect, #retry { padding: 16px 28px; font-size: 18px; font-weight: 700; }
+#gateError { color: var(--rec); min-height: 1.2em; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="video" autoplay playsinline muted></video>
+  <div id="wait"></div>
+</div>
+
+<footer>
+  <span id="conn"></span>
+  <span id="rec"></span>
+  <span id="tc">--:--:--:--</span>
+</footer>
+
+<div id="gate">
+  <p id="gateHint"></p>
+  <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+         autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="connect"></button>
+  <div id="gateError"></div>
+</div>
+
+<div id="blocked">
+  <h1 id="blockedTitle"></h1>
+  <pre id="blockedReason"></pre>
+  <button id="retry"></button>
+</div>
+
+<script>
+// Everything is inside a function on purpose, for the same reason as the other
+// pages: a top-level `var` becomes a window property, and several of the names
+// this page wants are already taken there.
+(function () {
+"use strict";
+// Injected by RemotePage: the app's current language and its labels.
+var CFG = __TAKESHOT_CONFIG__;
+var S = CFG.strings;
+// The operator page's key, on purpose: it is the same PIN for the same app, and
+// a phone that has opened one page should not retype the code on another.
+var PIN_KEY = "takeshot.remote.pin";
+
+document.documentElement.lang = CFG.lang;
+document.title = S.title;
+
+var el = function (id) { return document.getElementById(id); };
+var pin = "";
+var peer = null;
+var socket = null;
+var retryTimer = null;
+var retryDelay = 700;
+var watchdog = null;
+// True once this page has been told the feature is absent. Nothing retries
+// after that: offering again cannot install a library.
+var blocked = false;
+
+// ---------------------------------------------------------------- the picture
+
+// **Signalling is one POST and there is no second channel.** Both ends finish
+// gathering before they speak: this waits for its own candidates, sends them
+// all with the offer, and the answer comes back with every candidate the Mac
+// has. That is only affordable because there is no STUN and no TURN in the
+// path — see RemoteWebRTC.swift.
+function gathered(pc) {
+  return new Promise(function (done) {
+    if (pc.iceGatheringState === "complete") { done(); return; }
+    var finish = function () {
+      if (pc.iceGatheringState !== "complete") { return; }
+      pc.removeEventListener("icegatheringstatechange", finish);
+      done();
+    };
+    pc.addEventListener("icegatheringstatechange", finish);
+    // A gathering phase that never completes must not leave the page silent.
+    // Whatever candidates are in the description by then are host candidates on
+    // this network, which is all there ever were.
+    setTimeout(done, 3000);
+  });
+}
+
+function dropPeer() {
+  if (!peer) { return; }
+  var gone = peer;
+  peer = null;
+  gone.onconnectionstatechange = gone.ontrack = null;
+  try { gone.close(); } catch (e) {}
+  el("video").srcObject = null;
+  document.body.classList.remove("playing");
+}
+
+function offer() {
+  if (blocked || !pin || peer) { return; }
+  setConnection("wait");
+  var pc = new RTCPeerConnection({ iceServers: [] });
+  peer = pc;
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.ontrack = function (event) {
+    // `streams[0]` when the answer named a stream, the bare track otherwise:
+    // an answerer is not obliged to send an msid and a page that only read the
+    // first form shows nothing when it does not.
+    el("video").srcObject = event.streams[0] || new MediaStream([event.track]);
+    var played = el("video").play();
+    if (played && played.catch) { played.catch(function () {}); }
+    document.body.classList.add("playing");
+    setConnection("live");
+  };
+  pc.onconnectionstatechange = function () {
+    if (pc !== peer) { return; }
+    var state = pc.connectionState;
+    if (state === "connected") { retryDelay = 700; setConnection("live"); }
+    else if (state === "failed" || state === "closed" ||
+             state === "disconnected") { dropped(); }
+  };
+  negotiate(pc);
+}
+
+function negotiate(pc) {
+  pc.createOffer().then(function (description) {
+    return pc.setLocalDescription(description);
+  }).then(function () {
+    return gathered(pc);
+  }).then(function () {
+    if (pc !== peer) { return null; }
+    return fetch(CFG.offerPath, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pin, sdp: pc.localDescription.sdp })
+    });
+  }).then(function (response) {
+    if (!response || pc !== peer) { return null; }
+    return answered(pc, response);
+  }).catch(function () { dropped(); });
+}
+
+function answered(pc, response) {
+  if (response.status === 403) {
+    // The code is stale or wrong: back to the gate rather than into a retry
+    // loop that will be refused the same way every time.
+    pin = "";
+    try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+    dropPeer();
+    showGate(S.pinBad);
+    return null;
+  }
+  if (response.status === 503) {
+    // This app cannot answer and never will on this build. Say why and STOP —
+    // the body names what is missing.
+    return response.text().then(function (reason) {
+      dropPeer();
+      showBlocked(reason);
+    });
+  }
+  if (!response.ok) { dropped(); return null; }
+  return response.text().then(function (sdp) {
+    if (pc !== peer) { return null; }
+    return pc.setRemoteDescription({ type: "answer", sdp: sdp });
+  });
+}
+
+// A page that lost the picture offers again — WebRTC has no reconnect of its
+// own, and an offer is cheap.
+function dropped() {
+  dropPeer();
+  setConnection("down");
+  if (blocked || retryTimer) { return; }
+  retryTimer = setTimeout(function () { retryTimer = null; offer(); },
+                          retryDelay);
+  retryDelay = Math.min(5000, retryDelay * 2);
+}
+
+// ------------------------------------------------------------------ the socket
+
+// The same status stream every other page rides, for the timecode and the REC
+// light. It is also the page's watchdog: mobile Safari can stop delivering on a
+// socket with no close and no error, and a readout that silently froze looks
+// exactly like a locked-off camera.
+function connectStatus() {
+  if (socket && (socket.readyState === 0 || socket.readyState === 1)) { return; }
+  socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://")
+    + location.host + "/ws");
+  armWatchdog();
+  socket.onopen = function () {
+    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+  };
+  socket.onmessage = function (event) {
+    armWatchdog();
+    var msg;
+    try { msg = JSON.parse(event.data); } catch (e) { return; }
+    if (msg.type === "status") { render(msg); }
+    else if (msg.type === "auth" && !msg.ok) {
+      pin = "";
+      try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+      dropPeer();
+      showGate(S.pinBad);
+    }
+  };
+  socket.onclose = socket.onerror = function () {
+    if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+    socket = null;
+    setTimeout(function () { if (pin && !blocked) { connectStatus(); } }, 700);
+  };
+}
+
+function armWatchdog() {
+  if (watchdog) { clearTimeout(watchdog); }
+  watchdog = setTimeout(function () {
+    watchdog = null;
+    var dead = socket;
+    socket = null;
+    if (dead) {
+      dead.onopen = dead.onmessage = dead.onclose = dead.onerror = null;
+      try { dead.close(); } catch (e) {}
+    }
+    if (pin && !blocked) { connectStatus(); }
+  }, CFG.watchdogMs);
+}
+
+function render(next) {
+  el("tc").textContent = next.tc || "--:--:--:--";
+  document.body.classList.toggle("rec", !!next.recording);
+  el("rec").textContent = S.rec;
+}
+
+// ------------------------------------------------------------------- the chrome
+
+function setConnection(state) {
+  var node = el("conn");
+  node.className = state;
+  node.textContent = state === "live" ? S.connected
+    : (state === "down" ? S.disconnected : S.connecting);
+  document.body.classList.toggle("off", state !== "live");
+}
+
+function paintLabels() {
+  el("gateHint").textContent = S.pinPrompt;
+  el("connect").textContent = S.connect;
+  el("pin").placeholder = "····";
+  el("wait").textContent = S.wait;
+  el("blockedTitle").textContent = S.unavailable;
+  el("retry").textContent = S.retry;
+}
+
+function showGate(message) {
+  el("gateError").textContent = message || "";
+  el("gate").classList.add("show");
+  el("pin").value = "";
+  el("pin").focus();
+}
+
+function showBlocked(reason) {
+  blocked = true;
+  el("blockedReason").textContent = (reason || "").trim();
+  el("blocked").classList.add("show");
+  setConnection("down");
+}
+
+el("connect").addEventListener("click", function () {
+  var value = el("pin").value.replace(/\D/g, "");
+  if (!value) { return; }
+  pin = value;
+  try { localStorage.setItem(PIN_KEY, pin); } catch (e) {}
+  el("gate").classList.remove("show");
+  start();
+});
+el("pin").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") { el("connect").click(); }
+});
+el("retry").addEventListener("click", function () {
+  blocked = false;
+  el("blocked").classList.remove("show");
+  retryDelay = 700;
+  start();
+});
+// Tapping the picture recovers an autoplay a browser refused. Muted video
+// autoplays everywhere this page runs, but a phone with a strict media policy
+// would otherwise show a still first frame and nothing after it.
+el("stage").addEventListener("click", function () {
+  var played = el("video").play();
+  if (played && played.catch) { played.catch(function () {}); }
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible" && pin && !blocked) {
+    retryDelay = 700;
+    start();
+  }
+});
+window.addEventListener("online", function () { if (pin) { start(); } });
+
+function start() {
+  if (blocked || !pin) { return; }
+  connectStatus();
+  offer();
+}
+
+paintLabels();
+setConnection("down");
+// WebRTC is not in every browser, and some gate it on a secure context — which
+// a page served over plain HTTP on a set network is not. Saying so is the whole
+// of what this page can do about it, and it beats a blank rectangle.
+if (!window.RTCPeerConnection) {
+  showBlocked("");
+} else {
+  try { pin = localStorage.getItem(PIN_KEY) || ""; } catch (e) { pin = ""; }
+  if (pin) { start(); } else { showGate(""); }
+}
+}());
+</script>
+</body>
+</html>

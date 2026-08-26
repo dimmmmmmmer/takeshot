@@ -70,6 +70,7 @@ which is worth a great deal and is not the same as green.
 | `CDeckLink` | Obj-C++ bridge to the DeckLink SDK: `CDLCapture` (input), `CDLPlayout` (hardware monitor output) |
 | `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
 | `CSRT` | Obj-C++ bridge to libsrt (`CSRTSender`), for the SRT output |
+| `CDataChannel` | Obj-C++ bridge to libdatachannel (`CDCPeerConnection`): ICE, DTLS-SRTP and the RTP socket for the WebRTC output. No media pipeline — the app encodes and packetises |
 | `TakeShotKit` | The application layer, as a library so tests can reach it |
 | `TakeShot` | The executable entry point and nothing else |
 

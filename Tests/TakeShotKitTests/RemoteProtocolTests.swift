@@ -23,7 +23,8 @@ import Testing
             // it: the labels are baked in at render time.
             let pages = ViewRender.withLanguage(language) {
                 [RemotePage.html(), RemotePage.scriptHTML(),
-                 RemotePage.camerasHTML(), RemotePage.slateHTML()]
+                 RemotePage.camerasHTML(), RemotePage.liveHTML(),
+                 RemotePage.slateHTML()]
             }
             for page in pages {
                 let html = try #require(String(bytes: page, encoding: .utf8))
