@@ -24,9 +24,9 @@ Three things to know before you download, because they decide whether the
 build is any use to you:
 
 - **It cannot record from a capture board.** The published builds are made on a
-  machine with none of the vendor SDKs on it — Blackmagic's and RED's licences
-  both forbid redistributing them — so the DeckLink bridge is compiled
-  as a stub and no capture device is visible to it at all. It opens, plays back
+  machine with none of the vendor SDKs on it — Blackmagic's, RED's and
+  Vizrt's licences all forbid redistributing them — so the DeckLink bridge is
+  compiled as a stub and no capture device is visible to it at all. It opens, plays back
   and exports footage you already have, and it runs its built-in demo camera,
   which is enough to see whether you like the tool. To capture, build from
   source with Blackmagic's SDK: [`CONTRIBUTING.md`](CONTRIBUTING.md) says where
@@ -102,6 +102,13 @@ build is any use to you:
   cloud gateway. Caller or listener, with the latency, the bitrate and an
   optional AES passphrase as the only knobs. Off by default; needs libsrt at
   build time (`vendor/SRTSDK/README.md`) and installed to send.
+- NDI output: the same mirrored viewer announced as a source on the set network,
+  for a director's iPad or a client feed, with no second cable and no second
+  board output. Beside SRT rather than instead of it, because the two answer
+  different rooms — NDI announces itself and a receiver picks it out of a list,
+  so there is a switch and a name and nothing else to get wrong, which is what
+  makes it the one for a receiver on the same LAN. Off by default; needs the NDI
+  SDK at build time (`vendor/NDISDK/README.md`) and an NDI runtime installed.
 - Chroma key for the monitor: pull the green screen with an eyedropper,
   tolerance, softness and spill, and put a checkerboard, a colour or a still
   behind the actor. Preview and monitor output only — the take, the grabs and
@@ -191,15 +198,16 @@ wants a real camera's running timecode or a VANC trigger.
 
 What needs a vendor SDK you obtain yourself — free, but from the vendor, under
 their terms — is the hardware itself: capture and monitor output (DeckLink),
-`.braw` playback (Blackmagic RAW) and `.r3d` playback (RED). The SRT output
-needs libsrt, which is the one exception to "from the vendor, under their terms":
-it is MPL-2.0 and `brew install srt` away. The `/live` page needs
-libdatachannel, MPL-2.0 as well but in no package manager — which is why a
-published build carries the dylib inside the app rather than hoping to find one
-(`vendor/libdatachannel/README.md`, and the licence note in `NOTICE`).
-[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D, BRAW and SRT
-each say so at the point of use; a build with no DeckLink SDK simply lists no
-capture device, and **Collect diagnostics** is where it explains itself.
+`.braw` playback (Blackmagic RAW), `.r3d` playback (RED) and the NDI output
+(Vizrt). The SRT output needs libsrt, which is the one exception to "from the
+vendor, under their terms": it is MPL-2.0 and `brew install srt` away. The
+`/live` page needs libdatachannel, MPL-2.0 as well but in no package manager —
+which is why a published build carries the dylib inside the app rather than
+hoping to find one (`vendor/libdatachannel/README.md`, and the licence note in
+`NOTICE`). [`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D,
+BRAW, SRT and NDI each say so at the point of use; a build with no DeckLink SDK
+simply lists no capture device, and **Collect diagnostics** is where it
+explains itself.
 
 ## Usage
 

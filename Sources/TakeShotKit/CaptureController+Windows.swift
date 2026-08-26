@@ -8,8 +8,8 @@ import Foundation
 import SwiftUI
 import os.log
 
-/// Fullscreen surfaces and the mirrors of the viewer — the hardware playout
-/// and the SRT stream.
+/// Fullscreen surfaces and the mirrors of the viewer — the hardware playout,
+/// the NDI source and the SRT stream.
 ///
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
@@ -56,8 +56,9 @@ extension CaptureController {
         }
         wireDisplayMirrors()
     }
-    /// The mirrors show whatever the viewer shows: the hardware output, the SRT
-    /// stream when it is switched on, and any browser watching over WebRTC.
+    /// The mirrors show whatever the viewer shows: the hardware output, the NDI
+    /// source and the SRT stream when they are switched on, and any browser
+    /// watching over WebRTC.
     ///
     /// All of them take the SAME frame — the decorated one, aids and key
     /// included, which is what a director watches — so they share one handler
@@ -67,14 +68,29 @@ extension CaptureController {
     /// `CapturePipeline.publishDisplayFrame`), and what that costs the WebRTC
     /// feed is written down at the top of `CaptureController+WebRTC`.
     ///
-    /// The frame goes to the SHARED ENCODER rather than to each watcher: one
-    /// H.264 session serves every one of them, and the samples fan out from
-    /// there (`LiveVideoEncoder`). With no hardware output and nothing watching
-    /// the slots go back to nil, so an idle app calls nothing per frame.
+    /// **What the slot fans out to is at most three calls, and it is worth
+    /// counting because two network outputs at once is a case that did not
+    /// exist until NDI came back beside SRT.** SRT and WebRTC are consumers of
+    /// one shared H.264 session, so however many of them are watching this
+    /// handler makes ONE `offer` — the samples fan out downstream
+    /// (`LiveVideoEncoder`). The hardware feeder and the NDI mirror are
+    /// consumers of the display BUFFER, because a DeckLink output takes pixels
+    /// and NDI's SDK takes frames it compresses with a codec of its own. So the
+    /// per-frame cost on the display queue is one pixel-format test and one
+    /// `dispatch_async` per live output, and nothing else: every piece of real
+    /// work — the DeckLink submit, NDI's compression, the H.264 encode — is on a
+    /// queue of its own, and none of those queues is behind another. A wedged
+    /// NDI receiver cannot delay a browser's picture, an SRT reconnect cannot
+    /// delay NDI, and neither can reach the capture queue, which is the one that
+    /// owns the file.
+    ///
+    /// With no hardware output and nothing watching, the slots go back to nil,
+    /// so an idle app calls nothing per frame.
     func wireDisplayMirrors() {
         let feeder = mirrors.playout
         let mirror = mirrors.liveEncoder
-        guard feeder != nil || mirror != nil else {
+        let ndi = mirrors.ndi
+        guard feeder != nil || mirror != nil || ndi != nil else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
@@ -88,8 +104,16 @@ extension CaptureController {
         // keyframe interval and its rate controller, which is why a format change
         // with no hardware output still has to come through here.
         let rate = routeLive ? (signalFormat?.frameRate ?? 0) : playbackFPS
+        // …and NDI wants the same number as an exact RATIONAL, which is a
+        // difference between the two transports rather than a duplication. NDI
+        // declares the rate on every frame it sends, so 23.976 has to go out as
+        // 24000/1001 or a receiver guesses at the pull-down; MPEG-TS and RTP
+        // both timestamp on a 90 kHz clock and have no such field. Converted
+        // once per wiring, beside the number it comes from.
+        let ndiRate = NDIFrameRate(fps: rate)
         let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
             feeder?.submit(buffer)
+            ndi?.offer(buffer, rate: ndiRate)
             mirror?.offer(buffer, framesPerSecond: rate)
         }
         pipeline.setOnDisplayFrame(routeLive ? handler : nil)

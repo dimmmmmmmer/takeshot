@@ -142,6 +142,14 @@ Gatekeeper's refusal instead of the app.
   back by itself**, which on a venue network is the normal case rather than the
   exception — the status row says so and keeps trying, and none of it can touch a
   take. Needs a build made against libsrt (see the limits below).
+- **NDI output**: the same mirrored viewer announced as a source on the set
+  network, for a director's iPad or a client feed, with no second cable and no
+  second board output. It sits BESIDE the SRT output rather than replacing it,
+  because the two answer different rooms: NDI announces itself and a receiver
+  picks it out of a list, so there is a switch and a name and nothing else to be
+  on the wrong side of — which is the one to reach for when the receiver is on
+  the same LAN. Both can run at once and neither can slow the other down. Needs
+  a build made against the NDI SDK (see the limits below).
 - **R3D playback**: RED clips, spanned ones included, developed to Rec.709 with
   the camera's metadata and edge timecode. Also needs a build made against
   RED's SDK.
@@ -158,6 +166,20 @@ Gatekeeper's refusal instead of the app.
   vendors' SDKs it is MPL-2.0 and needs no registration — `brew install srt`.
   Without it the feature reports itself unavailable in Settings and says how to
   get it.
+- **NDI needs the NDI SDK at build time** (version 4 or newer), and an NDI
+  runtime installed to send — NDI Tools is enough. Without it the feature
+  reports itself unavailable in Settings and says so in a sentence rather than
+  asking you to rebuild anything. **Nothing about the NDI output has been
+  watched by a real receiver in this build either**, for the same reason as
+  SRT and one more: the machine it was written on has the runtime and not the
+  headers, so the bridge compiles as a stub there and the half that talks to
+  NDI has never executed. Try it before a job depends on it.
+- **Both network outputs are picture only.** NDI and MPEG-TS both carry audio
+  and neither is sent any, because the only stereo feed inside the app belongs
+  to the room speakers and is switched off with them — sound on a director's
+  iPad would become a side effect of whether the cart's monitors are up. It
+  needs a tap of its own, and one tap would serve both, which is why it is not
+  being built one output at a time.
 - **`v210` has never run against a board.** The 10-bit YCbCr path — now the
   default for every 4:2:2 signal — was built and measured against synthetic
   frames and through a real ProRes encode, but the rig it was written on feeds

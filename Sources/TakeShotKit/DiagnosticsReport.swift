@@ -130,6 +130,8 @@ enum DiagnosticsReport {
             pair("BRAW SDK", deck.brawSDKAvailable),
             pair("SRT (libsrt)", deck.srtSDKAvailable),
             pair("libsrt version", deck.srtRuntimeVersion ?? "—"),
+            pair("NDI SDK", deck.ndiSDKAvailable),
+            pair("libndi version", deck.ndiRuntimeVersion ?? "—"),
             pair("Diagnosis", deck.diagnosis.rawValue),
         ]
         out.append("")

@@ -9,7 +9,7 @@ import Testing
 /// What one phone tile costs: the encode pass, and the bytes it puts on the set
 /// network.
 ///
-/// The timings are opt-in, like the keyer's and the scopes':
+/// The timings are opt-in, like the keyer's, the scopes' and the NDI mirror's:
 ///
 ///     TAKESHOT_BENCH=1 scripts/test.sh --filter MultiviewPerformance
 ///

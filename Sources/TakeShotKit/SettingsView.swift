@@ -189,6 +189,7 @@ struct SettingsView: View {
             OffloadSettingsSection()
             RemoteSettingsSection()
             SRTSettingsSection()
+            NDISettingsSection()
             Section(L("settings_hotkeys")) {
                 // fifteen rows of label-plus-button used to live here and made
                 // everything below them a scroll away; the list is a sheet now

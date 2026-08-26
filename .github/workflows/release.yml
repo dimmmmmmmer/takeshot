@@ -1,7 +1,7 @@
 # Release on a vX.Y.Z tag: build TakeShot.app, wrap it in a .dmg, publish it
 # with the operator notes from CHANGELOG.md.
 #
-# Two things about the artifact this produces, both deliberate and both stated
+# What the artifact this produces is, all of it deliberate and all of it stated
 # on the release page itself by scripts/release-notes.sh:
 #
 #   * A GitHub runner has none of the CAMERA vendor SDKs — DeckLink, Blackmagic
@@ -10,6 +10,15 @@
 #     sees NO capture device: it plays back, it exports, it runs the demo
 #     source, and it cannot record from a board. Anyone who needs capture builds
 #     from source with the DeckLink SDK (CONTRIBUTING.md).
+#   * **The two network outputs are stubs as well, for two different reasons.**
+#     libsrt COULD be fetched — it is MPL-2.0 and one `brew install srt` away —
+#     and is not, because bundling it is a licence obligation to discharge
+#     rather than a build flag to flip (NOTICE and vendor/SRTSDK/README.md say
+#     what it would cost). NDI cannot be: the runtime may be redistributed only
+#     under Vizrt's own SDK licence and its attribution requirements, and the
+#     headers not at all. So a downloaded build has no SRT output and no NDI
+#     source, and each says so in its Settings row in a sentence written for
+#     somebody who is not going to rebuild anything.
 #   * **libdatachannel IS built and shipped** (owner: "в релиз либдатаченел
 #     клади"), so a downloaded build has a working live video page over WebRTC
 #     against the demo source. It is MPL-2.0, so shipping it is distribution

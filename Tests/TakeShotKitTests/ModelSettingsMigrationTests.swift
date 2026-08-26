@@ -210,21 +210,32 @@ import Testing
                 "the retired key was written back")
     }
 
-    /// A blob carrying the two NDI keys still decodes, and everything else in it
-    /// survives.
+    /// **A blob written before the NDI removal gets its source back**, and this
+    /// is the round trip no other key on this record has made.
     ///
-    /// The NDI output is gone — the owner replaced it — and its switch and source
-    /// name went off the record with it. Same shape of contract as the bit-depth
-    /// key above, and the same worst case: a decode that throws hands
-    /// `loaded(from:)` a fresh default object and silently replaces the
-    /// operator's destination folder, naming template, calibrated thresholds and
-    /// taught REC references, on a shooting day, with no error anywhere.
+    /// The two NDI keys went off the format when the owner dropped the feature,
+    /// and came back on it when the owner asked for NDI beside SRT rather than
+    /// instead of it. So an operator whose settings file predates the removal —
+    /// who never ran a build in between, which on a shooting machine is the
+    /// common case — has `ndiEnabled` and `ndiSourceName` sitting in their blob
+    /// right now, and this build has to read them as what they have always said.
     ///
-    /// Nothing carries either value across, deliberately. The SRT output that
-    /// replaces the feature wants an address, a port and a role; a source NAME
-    /// answers none of those, and `ndiEnabled == true` would turn on a network
-    /// output pointed nowhere. An operator who had NDI on gets SRT off.
-    @Test func anOldBlobWithRetiredNDIKeysStillDecodes() throws {
+    /// **Honouring the stored switch is the opposite of the call the removal
+    /// made, and deliberately.** That commit refused to carry `ndiEnabled` onto
+    /// the SRT switch because a source NAME answers none of SRT's questions and
+    /// an SRT output pointed nowhere would have come up on first launch. Nothing
+    /// is being migrated here: the key names the feature it has always named,
+    /// that feature is back, and the operator gets their source announced again
+    /// — the same promise the web remote and the menu-bar item already make
+    /// across a relaunch. What must NOT happen is the value leaking sideways
+    /// onto SRT, which is checked below and would pass every other assertion.
+    ///
+    /// The worst case if the decode threw instead is the one this whole file
+    /// exists for: `loaded(from:)` answers a throw with a fresh default object,
+    /// so the destination folder, the naming template, the calibrated thresholds
+    /// and the taught REC references are silently replaced by defaults, on a
+    /// shooting day, with no error anywhere.
+    @Test func aBlobFromBeforeTheNDIRemovalGetsItsSourceBack() throws {
         let settings = CaptureSettings.loaded(from: store("""
             ,"ndiEnabled":true,"ndiSourceName":"Nightfall B","ltcChannel":3
             """))
@@ -234,8 +245,10 @@ import Testing
         #expect(settings.capture.startDebounceFrames == 3)
         #expect(settings.schemaVersion == CaptureSettings.currentSchemaVersion)
 
-        let round: String = try #require(String(
-            data: try JSONEncoder().encode(settings), encoding: .utf8))
+        #expect(settings.ndi.enabled == true,
+                "the operator's NDI switch did not survive the round trip")
+        #expect(settings.ndi.sourceName == "Nightfall B")
+
         // …and nothing invented an SRT link out of them. `ndiEnabled == true`
         // carried onto `srtEnabled` would turn on a network output pointed
         // nowhere, on the first launch of the update, and every other assertion
@@ -243,10 +256,50 @@ import Testing
         #expect(settings.srt.enabled == nil,
                 "an NDI switch was migrated onto the SRT output")
         #expect(settings.srt.address == nil)
-        #expect(!round.contains("ndiEnabled"),
-                "the retired ndiEnabled key was written back")
-        #expect(!round.contains("ndiSourceName"),
-                "the retired ndiSourceName key was written back")
+
+        // The keys are written back, which is what tells this build apart from
+        // one of the middle period: that one dropped what it did not know.
+        let round: String = try #require(String(
+            data: try JSONEncoder().encode(settings), encoding: .utf8))
+        #expect(round.contains("ndiEnabled"),
+                "the restored ndiEnabled key was not written back")
+        #expect(round.contains("Nightfall B"),
+                "the restored source name was not written back")
+    }
+
+    /// **And a blob written by a build from the period when NDI was retired**,
+    /// which carries neither key at all.
+    ///
+    /// The other half of the same round trip, and the half that is really about
+    /// the Optional rule: an absent Optional decodes as nil, so the switch is
+    /// off — which is the default anyway, and the right answer. A `Bool` here
+    /// instead of a `Bool?` would make every one of these blobs throw, and the
+    /// operator would lose the whole record rather than one switch.
+    ///
+    /// The blob is BUILT by encoding today's settings and deleting the two keys
+    /// rather than typed out: that is exactly what a middle-period build wrote,
+    /// and it cannot drift away from the current format the way a literal would.
+    @Test func aBlobWrittenWhileNDIWasRetiredStillDecodes() throws {
+        var written = CaptureSettings()
+        written.capture.destinationPath = "/tmp/shoot"
+        written.naming.projectName = "Nightfall"
+        written.capture.ltcChannel = 3
+        written.ndi.enabled = true
+        written.ndi.sourceName = "Nightfall B"
+        let encoded: Data = try JSONEncoder().encode(written)
+        var raw: [String: Any] = try #require(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        raw.removeValue(forKey: "ndiEnabled")
+        raw.removeValue(forKey: "ndiSourceName")
+        let middle: Data = try JSONSerialization.data(withJSONObject: raw)
+
+        let settings: CaptureSettings =
+            try JSONDecoder().decode(CaptureSettings.self, from: middle)
+        #expect(settings.ndi.enabled == nil)
+        #expect(settings.ndi.sourceName == nil)
+        #expect(settings.capture.destinationPath == "/tmp/shoot")
+        #expect(settings.naming.projectName == "Nightfall")
+        #expect(settings.capture.ltcChannel == 3)
     }
 
     /// A blob written before `schemaVersion` existed is version 0: it still has
