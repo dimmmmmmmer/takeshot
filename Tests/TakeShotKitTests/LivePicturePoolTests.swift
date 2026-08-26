@@ -186,6 +186,41 @@ struct LivePicturePoolTests {
         }
     }
 
+    /// **Every session in the pool stamps against ONE clock.**
+    ///
+    /// The app-level half of `LiveClockTests`, and it needs saying here because
+    /// the unit suite builds its own encoders and would stay green while the
+    /// controller handed each one a clock of its own. What that costs is a
+    /// viewer changing picture: the session it moves onto would number the same
+    /// instant from ITS own zero, minutes lower, and the browser would stall on
+    /// a timestamp from the past.
+    ///
+    /// Asked with two different instants on purpose — a private clock and a
+    /// shared one both answer 0 for the first instant they are ever given, so a
+    /// single reading proves nothing.
+    @Test func everySessionStampsAgainstOneClock() async throws {
+        let peers = WebRTCPeerLog()
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
+            let served = try await RemoteHarness.serve(controller)
+            _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin,
+                                              picture: .decorated)
+            let first: LiveVideoEncoder =
+                try #require(controller.mirrors.liveEncoders[.decorated])
+            // The first session starts the clock…
+            #expect(first.ticks(at: 1000) == 0)
+
+            // …and a second picture, chosen five minutes later, joins it.
+            _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin,
+                                              picture: .clean)
+            let second: LiveVideoEncoder =
+                try #require(controller.mirrors.liveEncoders[.clean])
+            #expect(second.ticks(at: 1300) == first.ticks(at: 1300),
+                    "second \(second.ticks(at: 1300)) vs first \(first.ticks(at: 1300))")
+            #expect(second.ticks(at: 1300) == 300 * Int64(MPEGTSMuxer.clockHz))
+        }
+    }
+
     /// The operator's one bitrate dial reaches EVERY session, including one
     /// built for a picture the operator cannot see anybody watching.
     ///

@@ -13,11 +13,11 @@ import Foundation
 /// the grid is a PICTURE rather than a layout — one encode serves every phone
 /// watching it, exactly as the decorated picture does.
 ///
-/// **The main camera is the grid's clock.** A compose runs when camera 0
+/// **The MAIN camera is the grid's clock.** A compose runs when camera 0
 /// delivers and never when another camera does: the others replace their tile
 /// and wait. Composing on every camera's frame would run the pass once per
 /// camera per frame interval — four times the GPU work for a grid nobody can
-/// see change faster than the master signal — and pacing that back down would
+/// see change faster than the main signal — and pacing that back down would
 /// be a second rate limiter arguing with the encoder's. The cost of a tile that
 /// is one frame stale on a monitoring surface is nothing; the cost of the pass
 /// is real.
@@ -26,6 +26,15 @@ import Foundation
 /// queue drops a frame here and returns at once, only the newest frame per
 /// camera is kept, and the compose runs on THIS queue — never on capture, never
 /// on main, never on the display queue.
+///
+/// **What it costs, measured in release** (`MultiviewComposerTests`, signalled
+/// rather than polled, minimum of twenty runs on the development Mac): one
+/// camera 0.010 ms — the pass-through below, which is not a render at all — two
+/// cameras 0.72 ms at 1080p and 1.44 at UHD, four cameras 0.87 and 1.96. Every
+/// millisecond of that is on this composer's queue; the display queue's whole
+/// involvement is one `dispatch_async`, and the H.264 encode that follows is
+/// six milliseconds at 1080p, so this is a fraction of the work the picture was
+/// already going to cost.
 ///
 /// Nothing here exists while nobody is watching the grid: the controller builds
 /// one when a viewer chooses it and drops it when the last one goes
@@ -91,7 +100,7 @@ final class MultiviewComposer: @unchecked Sendable {
         return placed.letterboxed(in: cell, with: .black)
     }
 
-    /// `sink` receives the composed frame and the rate the master camera is
+    /// `sink` receives the composed frame and the rate the main camera is
     /// running at, on this composer's queue.
     typealias Sink = @Sendable (CVPixelBuffer, Double) -> Void
 
@@ -113,7 +122,7 @@ final class MultiviewComposer: @unchecked Sendable {
     private var tiles: [Int: CVPixelBuffer] = [:]
     private var cameraCount = 1
     private var scheduled = false
-    private var pendingMaster: CVPixelBuffer?
+    private var pendingMain: CVPixelBuffer?
     private var pendingRate = 0.0
     private var stopped = false
 
@@ -140,17 +149,17 @@ final class MultiviewComposer: @unchecked Sendable {
     /// Offer one camera's clean frame. Called on that camera's display queue;
     /// returns at once — the hop is an async dispatch, never a wait.
     ///
-    /// `framesPerSecond` is only read from the master camera: the grid runs at
-    /// the master's rate by construction, and a B-cam at a different rate is a
-    /// tile that refreshes when it refreshes.
+    /// `framesPerSecond` is only read from camera 0: the grid runs at the main
+    /// camera's rate by construction, and a B-cam at a different rate is a tile
+    /// that refreshes when it refreshes.
     func offer(_ buffer: CVPixelBuffer, camera: Int, framesPerSecond: Double) {
         queue.async { [self] in
             guard !stopped else { return }
             guard camera == 0 else {
-                tiles[camera] = buffer // latest wins; composed with the master
+                tiles[camera] = buffer // latest wins; composed with the main one
                 return
             }
-            pendingMaster = buffer // latest wins
+            pendingMain = buffer // latest wins
             pendingRate = framesPerSecond
             guard !scheduled else { return }
             scheduled = true
@@ -162,29 +171,29 @@ final class MultiviewComposer: @unchecked Sendable {
         queue.async { [self] in
             stopped = true
             tiles.removeAll()
-            pendingMaster = nil
+            pendingMain = nil
         }
     }
 
     private func composePending() {
         scheduled = false
-        guard !stopped, let master = pendingMaster else { return }
-        pendingMaster = nil
-        guard let composed = compose(master: master) else { return }
+        guard !stopped, let pending = pendingMain else { return }
+        pendingMain = nil
+        guard let composed = compose(main: pending) else { return }
         sink(composed, pendingRate)
     }
 
-    /// The grid, at the master camera's raster.
+    /// The grid, at the main camera's raster.
     ///
-    /// **The canvas follows the master and not the camera count**, which is what
+    /// **The canvas follows the main camera and not the camera count**, which is what
     /// keeps a multicam switch off the encoder: a raster change rebuilds the
     /// `VTCompressionSession` and costs every watcher a gap and a keyframe
     /// (`LiveVideoEncoder.session(for:)`), and adding a B-cam should not do
     /// that to the director. Tiles get smaller inside a canvas that does not
     /// move.
-    private func compose(master: CVPixelBuffer) -> CVPixelBuffer? {
-        let width = CVPixelBufferGetWidth(master)
-        let height = CVPixelBufferGetHeight(master)
+    private func compose(main: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(main)
+        let height = CVPixelBufferGetHeight(main)
         guard width > 0, height > 0,
               let out = pool.buffer(width: width, height: height) else {
             return nil
@@ -194,13 +203,13 @@ final class MultiviewComposer: @unchecked Sendable {
         // One camera and nothing else to draw: the grid IS the clean picture,
         // and a scale-to-self plus a letterbox with no bars is a full render
         // pass for an identity. Handed straight back instead.
-        guard cameraCount > 1 else { return master }
+        guard cameraCount > 1 else { return main }
         // Raw code values on both ends, like every other stage in the display
         // path: these buffers hold 709-encoded codes and a managed render here
         // would shift a picture the operator is judging exposure on.
         var image = CIImage(color: .black).cropped(to: canvas)
         for camera in 0..<cameraCount {
-            let source: CVPixelBuffer? = camera == 0 ? master : tiles[camera]
+            let source: CVPixelBuffer? = camera == 0 ? main : tiles[camera]
             guard let source else { continue }
             let tile = CIImage(cvPixelBuffer: source,
                                options: [.colorSpace: NSNull()])

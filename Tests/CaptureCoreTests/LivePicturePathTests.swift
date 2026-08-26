@@ -19,6 +19,16 @@ import Testing
 ///   each consumer then does with the buffer is its own queue's problem — the
 ///   encoders `dispatch_async` and return.
 ///
+/// **The numbers, measured in release on the development Mac** (minimum of two
+/// thousand runs, which is the run that got a whole core to itself): nobody
+/// watching 0.167 µs, one picture 0.208 µs, two pictures 0.208 µs. So a
+/// consumer costs about 40 ns a frame and the SECOND picture costs nothing
+/// measurable on this path at all — against an 80 ms frame stride at 25 fps,
+/// four ten-thousandths of one per cent. What a second picture really costs is
+/// a second H.264 encode, and that is not here: it is 6.0 ms at 1080p on
+/// `com.takeshot.encode` (`SRTPerformanceTests`), a queue the frame path never
+/// waits on.
+///
 /// The timings are opt-in, like the keyer's, the scopes' and the multiview's:
 ///
 ///     TAKESHOT_BENCH=1 scripts/test.sh --filter LivePicturePath

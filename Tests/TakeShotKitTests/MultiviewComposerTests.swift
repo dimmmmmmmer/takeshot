@@ -122,29 +122,39 @@ struct MultiviewComposerTests {
                 "the placement did not fill its cell: \(placed.extent)")
     }
 
-    /// **The grid, in pixels — and the codes come through untouched.**
+    /// **The grid, in pixels, through the composer itself — and the codes come
+    /// through untouched.**
     ///
-    /// Two cameras of two known levels come back side by side, in the order the
-    /// page labels them, at exactly the codes they went in as. The second half
-    /// of that is the contract every stage in this display path answers to: the
-    /// buffers hold 709-encoded codes, and a managed render here would shift a
-    /// picture the operator is judging exposure on. Colour-managing this pass
-    /// by accident reads as a grid a few per cent off the app's own picture,
-    /// which is the sort of thing nobody notices until a DP does.
-    @Test func theComposedGridPutsEachCameraInItsCellAtItsOwnCodes() throws {
-        let context = CIContext(options: [.cacheIntermediates: false])
-        let canvas = CGRect(x: 0, y: 0, width: 320, height: 180)
-        let left: CIImage = try Self.flat(0x40, width: 320, height: 180)
-        let right: CIImage = try Self.flat(0xC0, width: 320, height: 180)
-        let image = MultiviewComposer
-            .placed(right, in: MultiviewComposer.cell(camera: 1, cameras: 2,
-                                                      in: canvas))
-            .composited(over: MultiviewComposer
-                .placed(left, in: MultiviewComposer.cell(camera: 0, cameras: 2,
-                                                         in: canvas)))
-            .cropped(to: canvas)
-        let out: CVPixelBuffer = try Self.rendered(image, in: canvas,
-                                                   context: context)
+    /// Driven the way the app drives it (offer per camera, sink on the
+    /// composer's own queue) rather than by reassembling the layout here, so
+    /// what is checked is the pass that actually runs: camera 0 being
+    /// the clock, the tiles landing in the cells the page labels, and the codes
+    /// arriving unchanged. That last one is the contract every stage in this
+    /// display path answers to — the buffers hold 709-encoded codes, and a
+    /// managed render here would shift a picture the operator is judging
+    /// exposure on by a few per cent, which is the sort of thing nobody notices
+    /// until a DP does.
+    @Test func theComposerPutsEachCameraInItsCellAtItsOwnCodes() async throws {
+        let composed = Composed()
+        let composer = MultiviewComposer { buffer, rate in
+            composed.record(buffer, rate: rate)
+        }
+        composer.setCameraCount(2)
+        // The B-cam's tile arrives first and waits; camera 0 is the clock.
+        composer.offer(try Self.buffer(code: 0xC0, width: 320, height: 180),
+                       camera: 1, framesPerSecond: 0)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(composed.count == 0,
+                "a camera that is not camera 0 composed a frame on its own")
+
+        composer.offer(try Self.buffer(code: 0x40, width: 320, height: 180),
+                       camera: 0, framesPerSecond: 25)
+        #expect(await ControllerWait.untilWritten { composed.count > 0 },
+                "camera 0 composed nothing")
+        let out: CVPixelBuffer = try #require(composed.latest)
+        #expect(composed.rate == 25, "camera 0's rate did not travel with it")
+        #expect(CVPixelBufferGetWidth(out) == 320,
+                "the canvas did not follow camera 0's raster")
 
         // Sampled in the vertical middle of each half, where the letterbox bars
         // are not: a 16:9 source into an 8:9 cell keeps its width and gains
@@ -157,13 +167,119 @@ struct MultiviewComposerTests {
         // it stretched into the margin — which is the failure `letterboxed`
         // exists for, on the macOS 15 runner in particular.
         #expect(Self.level(of: out, atX: 80, y: 3) == 0,
-                "camera 0's letterbox bar is \(Self.level(of: out, atX: 80, y: 3))")
+                "the letterbox bar read \(Self.level(of: out, atX: 80, y: 3))")
+        composer.stop()
     }
 
-    /// A flat field of one code, read the way the display path reads a frame:
-    /// raw codes, no colour space.
-    private static func flat(_ code: UInt8, width: Int,
-                             height: Int) throws -> CIImage {
+    /// A single camera is handed straight back: the grid IS the clean picture
+    /// then, and a scale-to-self plus a letterbox with no bars would be a whole
+    /// render pass for an identity.
+    @Test func oneCameraIsPassedThroughWithoutARenderPass() async throws {
+        let composed = Composed()
+        let composer = MultiviewComposer { buffer, rate in
+            composed.record(buffer, rate: rate)
+        }
+        let source: CVPixelBuffer = try Self.buffer(code: 0x77, width: 320,
+                                                    height: 180)
+        composer.offer(source, camera: 0, framesPerSecond: 25)
+        #expect(await ControllerWait.untilWritten { composed.count > 0 })
+        #expect(composed.latest === source,
+                "one camera still cost a render pass")
+        composer.stop()
+    }
+
+    /// **What the grid picture costs per frame**, which is the one genuinely
+    /// new piece of per-frame work this choice adds.
+    ///
+    /// Opt-in like the rest of this project's timings:
+    ///
+    ///     TAKESHOT_BENCH=1 scripts/test.sh --filter MultiviewComposer
+    ///
+    /// and nothing here asserts on a clock. What it is NOT is a cost to the
+    /// frame path: this runs on `com.takeshot.multiview.compose`, and the
+    /// display queue's whole involvement is one `dispatch_async`. It is paid
+    /// only while somebody is watching the grid, and once however many phones
+    /// are watching it.
+    @Test(.enabled(if: MultiviewComposerTests.timed))
+    func theComposeCostPerFrame() async throws {
+        for (name, width, height) in [("1080p", 1920, 1080),
+                                      ("UHD", 3840, 2160)] {
+            for cameras: Int in [1, 2, 4] {
+                let composed = Composed()
+                let composer = MultiviewComposer { buffer, rate in
+                    composed.record(buffer, rate: rate)
+                }
+                composer.setCameraCount(cameras)
+                for camera: Int in 1..<max(1, cameras) {
+                    composer.offer(try Self.buffer(code: 0x80, width: width,
+                                                   height: height),
+                                   camera: camera, framesPerSecond: 25)
+                }
+                let lead: CVPixelBuffer = try Self.buffer(code: 0x40,
+                                                            width: width,
+                                                            height: height)
+                var samples: [Double] = []
+                for run: Int in 0..<25 {
+                    // Signalled rather than polled: a poll interval is tens of
+                    // milliseconds and would BE the measurement.
+                    composed.arm()
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    composer.offer(lead, camera: 0, framesPerSecond: 25)
+                    composed.waitForFrame()
+                    let elapsed = Double(
+                        DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                    if run >= 5 { samples.append(elapsed) } // warm the context
+                }
+                samples.sort()
+                print(String(format: "COMPOSEBENCH %@ x%d: min %.3f ms  median %.3f ms",
+                             name, cameras, samples[0],
+                             samples[samples.count / 2]))
+                composer.stop()
+            }
+        }
+    }
+
+    private static var timed: Bool {
+        ProcessInfo.processInfo.environment["TAKESHOT_BENCH"] != nil
+    }
+
+    /// What the composer handed back, from its own queue.
+    private final class Composed: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored = 0
+        private var buffer: CVPixelBuffer?
+        private var storedRate = 0.0
+        private var armed = false
+        private let done = DispatchSemaphore(value: 0)
+
+        func record(_ frame: CVPixelBuffer, rate: Double) {
+            let first: Bool = lock.withLock {
+                stored += 1
+                buffer = frame
+                storedRate = rate
+                guard armed else { return false }
+                armed = false
+                return true
+            }
+            if first { done.signal() }
+        }
+
+        /// Arm, then wait for the FIRST frame after arming — the same shape,
+        /// and for the same reason, as `SRTPerformanceTests.CountingStream`: a
+        /// plain counting semaphore leaves credits behind and the next wait
+        /// returns instantly on a frame that was already composed.
+        func arm() { lock.withLock { armed = true } }
+
+        func waitForFrame() { _ = done.wait(timeout: .now() + 5) }
+
+        var count: Int { lock.withLock { stored } }
+        var latest: CVPixelBuffer? { lock.withLock { buffer } }
+        var rate: Double { lock.withLock { storedRate } }
+    }
+
+    /// A flat field of one code, as a buffer the composer can be offered.
+    private static func buffer(code: UInt8, width: Int,
+                               height: Int) throws -> CVPixelBuffer {
         let out: CVPixelBuffer = try buffer(width: width, height: height)
         CVPixelBufferLockBaseAddress(out, [])
         if let base = CVPixelBufferGetBaseAddress(out) {
@@ -180,17 +296,6 @@ struct MultiviewComposerTests {
             }
         }
         CVPixelBufferUnlockBaseAddress(out, [])
-        return CIImage(cvPixelBuffer: out, options: [.colorSpace: NSNull()])
-    }
-
-    private static func rendered(_ image: CIImage, in canvas: CGRect,
-                                 context: CIContext) throws -> CVPixelBuffer {
-        let out: CVPixelBuffer = try buffer(width: Int(canvas.width),
-                                            height: Int(canvas.height))
-        let destination = CIRenderDestination(pixelBuffer: out)
-        destination.colorSpace = nil
-        let task = try context.startTask(toRender: image, to: destination)
-        try task.waitUntilCompleted()
         return out
     }
 

@@ -2,7 +2,6 @@ import CaptureCore
 import CoreMedia
 import Foundation
 import os
-import os.log
 
 /// One browser watching the viewer over WebRTC: its peer connection, its RTP
 /// packetizer, and the queue both live on.
