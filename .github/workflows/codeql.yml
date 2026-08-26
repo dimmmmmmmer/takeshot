@@ -74,14 +74,24 @@ jobs:
       # Between init and analyze, and traced by the extractor. Only the Swift
       # build: the app bundle and the tests are ci.yml's job.
       #
-      # This step has its OWN, shorter budget, and that is the point: a job
-      # killed by the job-level timeout has no retrievable log at all — the
-      # 17 and 24 August runs are both blank, which is why "where does it
-      # hang" was unanswerable. A step that fails on its own timeout keeps
-      # everything it printed, so the last "Compiling …" line survives.
-      - name: Build
+      # Split in two, and each half with its own budget, because that is what
+      # the first observable failure asked for. Measured on 26 August: the
+      # extractor took 16 minutes over CaptureCore's 115 files and then said
+      # nothing at all for the 29 the step had left — TakeShotKit had not
+      # emitted one line. A single step cannot tell "slow" from "stuck"; two
+      # can, because the second one's log starts empty.
+      #
+      # `-j 2` bounds the contention rather than guessing at it: the runner is
+      # x86_64 with a handful of cores, and each Swift frontend the extractor
+      # traces is shadowed by an `extractor.real` of its own — the orphan list
+      # after the timeout had three of them alive beside two frontends.
+      - name: Build the core
         timeout-minutes: 45
-        run: swift build
+        run: swift build -j 2 --target CaptureCore
+
+      - name: Build the app layer
+        timeout-minutes: 45
+        run: swift build -j 2
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3

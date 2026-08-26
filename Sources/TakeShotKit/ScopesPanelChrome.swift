@@ -37,9 +37,24 @@ extension ScopesPanel {
         case .vector:
             ScopeChipToggle(title: L("scope_skin_tone_short"), isOn: $skinToneOn)
                 .help(L("scope_skin_tone"))
+        case .cie:
+            // The chip names the OTHER gamut — the one the signal is not in —
+            // because that is what the switch adds. Which gamut that is follows
+            // the frame, so the label does too: on a Rec.709 signal the second
+            // triangle is 2020's, and on a Rec.2020 signal it is 709's.
+            ScopeChipToggle(title: cieOtherGamutLabel, isOn: $cieOtherGamutOn)
+                .help(L("scope_cie_gamuts"))
         case .parade:
             EmptyView()
         }
+    }
+
+    /// The name of the gamut the second triangle draws, from the analyzed
+    /// frame's own primaries — through the graticule's own two functions, so
+    /// the chip cannot end up naming a gamut other than the one being drawn.
+    var cieOtherGamutLabel: String {
+        CIEGraticule.name(of: CIEGraticule.other(
+            than: scopes.data?.primaries ?? .rec709))
     }
 
     /// Panel chrome: the scope toggles plus the display controls.

@@ -230,6 +230,32 @@ public enum HDRTransfer {
         guard y < 1 else { return pqPeakNits / referenceWhiteNits }
         return (1 - k) * (1 - k) / (1 - y) + 2 * k - 1
     }
+
+    // MARK: - the SDR inverse
+
+    /// The SDR case of `SignalTransfer.linearLight(forSignal:)`: BT.1886 with
+    /// black at zero, i.e. `signal^2.4`, in units of display white.
+    ///
+    /// It is the exact inverse of step 4 of the display transform above, which
+    /// is what makes it the right curve rather than merely a plausible one:
+    /// everything in this app that turns light into a code encodes with
+    /// BT.1886 at `displayGamma`, so everything that turns a code back into
+    /// light has to invert the same one. Using the Rec.709 camera OETF here
+    /// instead would answer a different question — SCENE light rather than
+    /// DISPLAY light — and the two differ by the OOTF, which is a per-channel
+    /// power and therefore moves a saturated colour's chromaticity. That is a
+    /// silent error: the chart still looks like a chart.
+    ///
+    /// Signals below 0 (the sub-black excursions a wire frame carries) floor at
+    /// zero rather than going negative: negative light is not a colour, and
+    /// flooring is what keeps every sample inside the frame's own gamut
+    /// triangle. Signals ABOVE 1 are left alone — a super-white is a real code
+    /// the camera sent, and clamping it would fold a bright saturated highlight
+    /// toward neutral, which is precisely the reading an instrument must not
+    /// invent.
+    public static func sdrLinearLight(_ signal: Double) -> Double {
+        pow(max(0, signal), displayGamma)
+    }
 }
 
 public extension SignalTransfer {
@@ -275,5 +301,33 @@ public extension SignalTransfer {
     func nits(forDisplaySignal display: Double) -> Double? {
         guard isHDR else { return nil }
         return HDRTransfer.nits(forDisplaySignal: display)
+    }
+
+    /// LINEAR light for a normalized wire signal, in units of diffuse white.
+    ///
+    /// The one thing on a signal that cannot be read off a code: a wire code is
+    /// gamma-encoded, and every colour question that is not "how bright" —
+    /// chromaticity above all — is a question about linear light. Computing a
+    /// chromaticity from the codes themselves puts every colour on the chart in
+    /// the wrong place, and it does so plausibly, which is why this exists as a
+    /// named function with a measured value at each case rather than as three
+    /// `pow`s at a call site.
+    ///
+    /// One scale for all three transfers, `1.0` = BT.2408 diffuse white:
+    /// - `sdr` — BT.1886 at gamma 2.4 (see `HDRTransfer.sdrLinearLight`), where
+    ///   diffuse white IS the top of the signal range.
+    /// - `pq` — ST 2084's absolute cd/m², divided by BT.2408's 203.
+    /// - `hlg` — the same, through the BT.2100 OOTF that puts HLG's diffuse
+    ///   white (signal 0.75) on those same 203 cd/m².
+    ///
+    /// So the three agree about what a picture's diffuse white is, and a
+    /// mid-shot switch from Rec.709 to PQ does not move the chart. Any common
+    /// factor cancels in a chromaticity anyway — the units are stated because a
+    /// reader should not have to work out that they cancel.
+    func linearLight(forSignal signal: Double) -> Double {
+        guard let nits = nits(forSignal: signal) else {
+            return HDRTransfer.sdrLinearLight(signal)
+        }
+        return nits / HDRTransfer.referenceWhiteNits
     }
 }

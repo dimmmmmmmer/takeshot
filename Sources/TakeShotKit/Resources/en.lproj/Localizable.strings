@@ -263,6 +263,13 @@
 "start_frames" = "REC start confirm (frames)";
 "stop_frames" = "REC stop confirm (frames)";
 "pre_roll_frames" = "Pre-roll (frames)";
+"pre_roll_seconds" = "Pre-roll (seconds)";
+"pre_roll_unit" = "Pre-roll in";
+"pre_roll_unit_frames" = "Frames";
+"pre_roll_unit_seconds" = "Seconds";
+"pre_roll_reading" = "Reads as";
+"pre_roll_reading_value" = "%1$@ frames · %2$@ s at %3$@";
+"pre_roll_reading_assumed" = "%1$@ frames · %2$@ s at %3$@ (assumed)";
 "lut_duplicate_title" = "LUT \"%@\" is already imported";
 "lut_duplicate_text" = "Choose what to do with the duplicate.";
 "lut_replace" = "Replace";
@@ -931,3 +938,10 @@
 "toast_metadata_log_not_saved" = "Metadata log NOT saved: %@";
 "toast_ranges_not_saved" = "Loop ranges NOT saved: %@";
 "toast_delete_failed" = "Delete: %@";
+
+/* CIE chromaticity chart: the scope name, and the chip that adds the second
+   gamut triangle. "CIE" is the instrument every colourist already knows by
+   that name, in every language. */
+"scope_cie" = "CIE";
+"scope_cie_gamuts" = "Also draw the gamut the signal is not in — a Rec.2020 source outside the Rec.709 triangle will not survive a Rec.709 delivery unchanged.";
+"scope_cie_hint" = "CIE 1931 chromaticity: the colours in the picture as (x, y), computed in linear light from the signal's own transfer and primaries. The bright triangle is the signal's gamut, the cross is D65.";

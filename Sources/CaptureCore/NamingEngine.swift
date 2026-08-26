@@ -54,8 +54,24 @@ public struct NamingEngine: Sendable {
         return formatter.string(from: date)
     }
 
-    /// Filename without extension.
+    /// Filename without extension, cut to what the file system will accept.
+    ///
+    /// See `fileNameByteBudget` for the length rule and `shortened` for what a
+    /// name over it gives up. Composition is unchanged for every name that
+    /// fits, which is all of them until an operator pastes a prefix.
     public func fileName(for context: NamingContext) -> String {
+        let composed = compose(context)
+        guard Self.exceedsBudget(composed, bytes: Self.fileNameByteBudget,
+                                 units: Self.fileNameUnitBudget) else {
+            return composed
+        }
+        return shortened(composed, for: context)
+    }
+
+    /// The template filled in — everything except the length budget.
+    /// Not private: `shortened` re-composes with a shortened prefix, and it
+    /// lives with the length rule in `NamingEngine+Length`.
+    func compose(_ context: NamingContext) -> String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")

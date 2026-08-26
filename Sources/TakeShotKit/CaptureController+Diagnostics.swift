@@ -134,7 +134,10 @@ extension CaptureController {
         capture.hdrSignal = signalColorimetry.badge ?? "SDR (Rec.709)"
         capture.hdrDisplayMetadata = diagnosticsDisplayMetadata()
         capture.detectionMode = settings.capture.detectionMode.rawValue
-        capture.preRollFrames = settings.capture.preRollFramesEffective
+        // at the signal's rate, so the bundle states the frame count the ring
+        // is really being asked for rather than one read at an assumed 25
+        capture.preRollFrames = settings.capture.preRollFramesEffective(
+            atFrameRate: signalFormat?.frameRate)
         capture.visualRec = diagnosticsVisualRec()
         return capture
     }

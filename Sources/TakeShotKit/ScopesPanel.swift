@@ -28,7 +28,7 @@ struct ScopesWindowView: View {
 
 /// The scope kinds, in user-configurable order.
 enum ScopeKind: String, CaseIterable, Identifiable {
-    case waveform, parade, histogram, vector
+    case waveform, parade, histogram, vector, cie
     var id: String { rawValue }
 
     var titleKey: String {
@@ -37,19 +37,20 @@ enum ScopeKind: String, CaseIterable, Identifiable {
         case .parade: return "scope_parade"
         case .histogram: return "scope_histogram"
         case .vector: return "scope_vector"
+        case .cie: return "scope_cie"
         }
     }
 
     /// How dim the trace-brightness slider is allowed to make this scope.
     ///
     /// The waveform and the parade are a spray of individual points and stay
-    /// legible all the way down. The histogram and the vectorscope are filled
-    /// shapes: below about 0.6 they stop reading as anything at all, so they
-    /// keep a floor the slider cannot go under.
+    /// legible all the way down. The histogram, the vectorscope and the
+    /// chromaticity chart are filled shapes: below about 0.6 they stop reading
+    /// as anything at all, so they keep a floor the slider cannot go under.
     var minimumTraceOpacity: Double {
         switch self {
         case .waveform, .parade: return 0
-        case .histogram, .vector: return 0.6
+        case .histogram, .vector, .cie: return 0.6
         }
     }
 }
@@ -85,11 +86,12 @@ struct ScopesPanel: View {
     @AppStorage("scopeParadeOn") private var paradeOn = false
     @AppStorage("scopeHistogramOn") private var histogramOn = false
     @AppStorage("scopeVectorOn") private var vectorOn = false
+    @AppStorage("scopeCIEOn") private var cieOn = false
     /// The overlay's own choice — one `ScopeKind` raw value, "" for none.
     @AppStorage("scopeOverlayKind") var overlayKind = ScopeKind.waveform.rawValue
     @AppStorage("scopeWaveformChannel") var waveformChannel = "y"
     @AppStorage("scopeHistogramChannel") var histogramChannel = "rgb"
-    @AppStorage("scopeOrder") var orderRaw = "waveform,parade,histogram,vector"
+    @AppStorage("scopeOrder") var orderRaw = "waveform,parade,histogram,vector,cie"
     /// Value scale for waveform/parade labels: "100" (%) or "1023" (10-bit).
     @AppStorage("scopeScale") var scaleMode = "100"
     /// Graticule and trace brightness (0.2…1).
@@ -99,6 +101,12 @@ struct ScopesPanel: View {
     /// operators look at a vectorscope at all — but a chart or a colour-bar
     /// check does not want a line across it.
     @AppStorage("scopeSkinTone") var skinToneOn = true
+    /// The chromaticity chart's second gamut triangle — the one the signal is
+    /// NOT in. On by default: "does this Rec.2020 source leave Rec.709" is the
+    /// question the chart answers that no other scope can, and it has no answer
+    /// at all unless both triangles are on it. Off for a chart being read on
+    /// its own terms, where the second triangle is a line through the trace.
+    @AppStorage("scopeCIEGamuts") var cieOtherGamutOn = true
     @State private var dragged: ScopeKind?
     /// The order while a box is being dragged, before it is committed.
     ///
@@ -133,6 +141,7 @@ struct ScopesPanel: View {
         case .parade: return $paradeOn
         case .histogram: return $histogramOn
         case .vector: return $vectorOn
+        case .cie: return $cieOn
         }
     }
 
@@ -273,6 +282,8 @@ struct ScopesPanel: View {
             HistogramView(data: data, channel: histogramChannel)
         case .vector:
             VectorscopeView(data: data, skinToneLine: skinToneOn)
+        case .cie:
+            CIEChartView(data: data, showsOtherGamut: cieOtherGamutOn)
         }
     }
 }

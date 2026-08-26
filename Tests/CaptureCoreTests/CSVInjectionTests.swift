@@ -177,6 +177,72 @@ import Testing
         }
     }
 
+    // MARK: - names this app SHORTENED
+
+    /// The whole point of a round trip is that the key comes back naming a file
+    /// that is really there, so the shortened name is written to disk first and
+    /// the row is looked up under what the file system actually called it.
+    ///
+    /// That pairing is the guarantee, and it is what the missing length rule
+    /// broke from the other end: the engine composed a name no file could have,
+    /// so a row keyed on it named nothing, and the take's rating, comment,
+    /// marks and loop range were filed under a clip that does not exist —
+    /// invisible until somebody goes looking for a note.
+    ///
+    /// The cut lands on a Cyrillic run on purpose: each letter is two UTF-8
+    /// bytes, so a budget counted in bytes has a boundary in the middle of one
+    /// of them, and a name cut there does not round-trip at all.
+    @Test func aShortenedTakeNameRoundTripsThroughEverySidecar() throws {
+        let root: URL = TestMedia.scratchDirectory("CSVShortenedName")
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let engine = NamingEngine(template: CaptureSettings().naming.namingTemplate)
+
+        for letters: Int in [128, 129, 200, 400] {
+            let name: String = engine.fileName(for: NamingContext(
+                project: String(repeating: "Ы", count: letters), take: 7,
+                reel: "002", camera: "B")) + ".mov"
+            let url: URL = root.appendingPathComponent(name)
+            #expect(FileManager.default.createFile(atPath: url.path,
+                                                   contents: Data([0x01])),
+                    "\(letters) letters: no file can be called \(name.utf8.count) bytes")
+            let onDisk: String = try #require(
+                FileManager.default.contentsOfDirectory(atPath: root.path)
+                    .first { $0 == name },
+                "\(letters) letters: the name on disk is not the name composed")
+
+            var take: Take = AwkwardText.take(named: onDisk, roll: "002",
+                                              comment: "-1 stop", note: "hit")
+            take.rating = .good
+            let key: String = take.url.lastPathComponent
+            #expect(key == onDisk,
+                    "\(letters) letters: the name did not survive the URL")
+
+            let csv: String = TakeLogExporter.resolveCSV(takes: [take])
+            let records: [[String]] = TakeLogExporter.parseCSVRecords(csv)
+            #expect(records.count == 2, "\(letters) letters: not one record")
+            #expect(records.last?.count == 5,
+                    "\(letters) letters: the frozen five fields moved")
+            let back: TakeLogExporter.TakeMeta? =
+                TakeLogExporter.parseMetadata(csv: csv)[key]
+            #expect(back?.comment == "-1 stop",
+                    "\(letters) letters: the row is filed under another name")
+            #expect(back?.rating == TakeRating.good,
+                    "\(letters) letters: the rating came back under another name")
+
+            let markers: String = TakeLogExporter.markersCSV(
+                takes: [take], other: [:])
+            #expect(TakeLogExporter.parseMarkerRows(csv: markers)[key]?.count == 1,
+                    "\(letters) letters: the mark lost the file it was on")
+            let ranges: String = TakeLogExporter.rangesCSV(
+                [key: ClipRange(inPoint: 1, outPoint: 2)])
+            #expect(TakeLogExporter.parseRanges(csv: ranges)[key] != nil,
+                    "\(letters) letters: the loop range lost its key")
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// The shift report is paperwork rather than a round trip, but it is still
     /// a table: fourteen columns, one row per take, whatever is typed.
     @Test func theShiftReportKeepsFourteenColumnsPerTake() {
