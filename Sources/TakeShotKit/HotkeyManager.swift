@@ -126,50 +126,137 @@ final class HotkeyManager: ObservableObject {
         isTyping && !modifiers.contains(.command)
     }
 
+    /// What one key press over a running app MEANS.
+    ///
+    /// A value rather than five branches inside the monitor, because the
+    /// monitor itself cannot be driven from a test: a local `NSEvent` monitor
+    /// wants a real application event queue, and a synthesized event cannot be
+    /// routed into one. Stated over the facts a press carries, the rule is
+    /// ordinary code — and it is worth pinning, because it decides whether the
+    /// key under the operator's finger reaches the app or the scene name they
+    /// are halfway through typing.
+    ///
+    /// The ORDER is the rule as much as the arms are. Esc leaves a fullscreen
+    /// surface before it cancels a recording, on the grounds that the
+    /// fullscreen is the bigger state and the only way out of it is this key.
+    /// The consequence, stated rather than left to be discovered: a combo row
+    /// armed in Settings while a fullscreen window is up stays armed until the
+    /// operator presses Esc a second time.
+    func outcome(for press: HotkeyPress,
+                 isPlaybackFullscreen: Bool,
+                 isLiveFullscreen: Bool) -> HotkeyOutcome {
+        if press.isEscape {
+            if isPlaybackFullscreen { return .leavePlaybackFullscreen }
+            if isLiveFullscreen { return .leaveLiveFullscreen }
+        }
+        // a new combo is being recorded in settings: the row swallows the
+        // press either way, so the operator is never stuck capturing keys
+        if let recording = recordingAction {
+            if press.isEscape { return .cancelRecording }
+            guard let combo = press.combo else { return .keepRecording }
+            return .bind(combo, to: recording)
+        }
+        if Self.typingKeepsTheKey(modifiers: press.modifiers,
+                                  isTyping: press.isTyping) {
+            return .passThrough
+        }
+        for (action, combo) in bindings where combo.matches(press) {
+            return .perform(action)
+        }
+        return .passThrough
+    }
+
     /// Intercept keys in all app windows (not system-global).
+    ///
+    /// Reads the facts off the event and applies the outcome; the RULE is
+    /// `outcome`, which is a function of those facts alone.
     func install(controller: CaptureController) {
         controller.hotkeysRef = self
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
-
-            // Esc closes the player fullscreens
-            if event.keyCode == 53, controller.isPlaybackFullscreen {
-                controller.togglePlaybackFullscreen()
-                return nil
-            }
-            if event.keyCode == 53, controller.isLiveFullscreen {
-                controller.toggleLiveFullscreen()
-                return nil
-            }
-
-            // a new combo is being recorded in settings
-            if let recording = self.recordingAction {
-                if event.keyCode == 53 { // Esc — cancel
-                    self.recordingAction = nil
-                    return nil
-                }
-                if let combo = KeyCombo.from(event: event) {
-                    // refused chords leave the row where it was and put the
-                    // owner's name on screen; the recording stops either way,
-                    // so the operator is never stuck capturing keys
-                    self.assign(combo, to: recording)
-                    self.recordingAction = nil
-                    return nil
-                }
-                return nil
-            }
-
-            let isTyping = event.window?.firstResponder is NSTextView
-            if Self.typingKeepsTheKey(modifiers: event.modifierFlags,
-                                      isTyping: isTyping) {
+            let press = HotkeyPress(
+                event: event,
+                isTyping: event.window?.firstResponder is NSTextView)
+            switch self.outcome(
+                for: press,
+                isPlaybackFullscreen: controller.isPlaybackFullscreen,
+                isLiveFullscreen: controller.isLiveFullscreen) {
+            case .passThrough:
                 return event
-            }
-
-            for (action, combo) in self.bindings where combo.matches(event: event) {
+            case .leavePlaybackFullscreen:
+                controller.togglePlaybackFullscreen()
+            case .leaveLiveFullscreen:
+                controller.toggleLiveFullscreen()
+            case .cancelRecording:
+                self.recordingAction = nil
+            case .keepRecording:
+                break
+            case .bind(let combo, let action):
+                // refused chords leave the row where it was and put the
+                // owner's name on screen; the recording stops either way
+                self.assign(combo, to: action)
+                self.recordingAction = nil
+            case .perform(let action):
                 self.perform(action, controller: controller)
-                return nil
             }
-            return event
+            return nil
         }
     }
+}
+
+/// What a key press carries that the hotkey rule needs, as a value.
+///
+/// A struct rather than four parameters, because that is what these are: one
+/// reading off one `NSEvent`, plus the single fact about the WINDOW that no
+/// event carries. It also lets a test state only what a case is about.
+struct HotkeyPress {
+    /// Escape. The one key the rule names outright, and it names it twice.
+    static let escapeKeyCode: UInt16 = 53
+
+    /// The physical key. Hotkeys are matched on it so a Cyrillic layout keeps
+    /// working (see `KeyCombo.matches`).
+    var keyCode: UInt16
+    var modifiers: NSEvent.ModifierFlags = []
+    /// The chord this press amounts to, or nil for a press nothing can be
+    /// bound to — a bare modifier, or a key that produces no character.
+    var combo: KeyCombo?
+    /// A text field owns the keyboard. Not read off the event: it is a fact
+    /// about the window, and the only one here a test cannot state.
+    var isTyping = false
+
+    var isEscape: Bool { keyCode == Self.escapeKeyCode }
+
+    init(keyCode: UInt16, modifiers: NSEvent.ModifierFlags = [],
+         combo: KeyCombo? = nil, isTyping: Bool = false) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.combo = combo
+        self.isTyping = isTyping
+    }
+
+    /// The whole of what the monitor does before the rule takes over.
+    init(event: NSEvent, isTyping: Bool) {
+        keyCode = event.keyCode
+        modifiers = event.modifierFlags
+        combo = KeyCombo.from(event: event)
+        self.isTyping = isTyping
+    }
+}
+
+/// What one key press amounts to.
+enum HotkeyOutcome: Equatable {
+    /// Not ours: hand the press on to whatever owns the keyboard.
+    case passThrough
+    /// Leave the playback fullscreen surface.
+    case leavePlaybackFullscreen
+    /// Leave the live fullscreen surface.
+    case leaveLiveFullscreen
+    /// Stop recording a combo, leaving the binding where it was.
+    case cancelRecording
+    /// Bind this chord to the row being recorded, and stop recording.
+    case bind(KeyCombo, to: HotkeyAction)
+    /// Swallowed, and the row stays armed: nothing can be bound to this press.
+    case keepRecording
+    /// Run this action.
+    case perform(HotkeyAction)
 }

@@ -36,17 +36,27 @@ struct KeyCombo: Codable, Equatable {
         return KeyCombo(key: key, modifiers: flags.rawValue, keyCode: event.keyCode)
     }
 
-    func matches(event: NSEvent) -> Bool {
-        let flags = event.modifierFlags
+    /// Whether this binding answers to `press`.
+    ///
+    /// Stated over the press rather than over an `NSEvent` so the hotkey rule
+    /// can ask it without one (see `HotkeyManager.outcome`) — and so the
+    /// modifier mask is spelled once instead of once here and once in
+    /// `from(event:)`.
+    func matches(_ press: HotkeyPress) -> Bool {
+        let flags = press.modifiers
             .intersection(.deviceIndependentFlagsMask)
             .intersection([.command, .option, .control, .shift])
         guard flags.rawValue == modifiers else { return false }
         if let keyCode {
             // by physical key — the keyboard layout doesn't matter (same key in Latin/Cyrillic)
-            return event.keyCode == keyCode
+            return press.keyCode == keyCode
         }
         // old saved combos without a keyCode — by symbol
-        return Self.from(event: event)?.key == key
+        return press.combo?.key == key
+    }
+
+    func matches(event: NSEvent) -> Bool {
+        matches(HotkeyPress(event: event, isTyping: false))
     }
 }
 
