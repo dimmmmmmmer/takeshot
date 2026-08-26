@@ -917,3 +917,10 @@
 "toast_metadata_log_not_saved" = "Журнал метаданных НЕ сохранён: %@";
 "toast_ranges_not_saved" = "Точки in/out НЕ сохранены: %@";
 "toast_delete_failed" = "Удаление: %@";
+
+/* CIE chromaticity chart: the scope name, and the chip that adds the second
+   gamut triangle. "CIE" is the instrument every colourist already knows by
+   that name, in every language. */
+"scope_cie" = "CIE";
+"scope_cie_gamuts" = "Показывать и тот охват, в котором сигнал не находится: то, что у источника Rec.2020 вышло за треугольник Rec.709, не переживёт доставку в Rec.709 без изменений.";
+"scope_cie_hint" = "Цветность CIE 1931: цвета кадра как (x, y), считанные в линейном свете по собственной передаточной функции и первичным цветам сигнала. Яркий треугольник — охват сигнала, крестик — D65.";

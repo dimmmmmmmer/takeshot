@@ -158,8 +158,20 @@ never bends it.
 
 ## Scopes and assists
 
-- Waveform, RGB parade, histogram and vectorscope, as an overlay over the player
-  or in a window of their own.
+- Waveform, RGB parade, histogram, vectorscope and a CIE chromaticity chart, as
+  an overlay over the player or in a window of their own.
+- The **CIE chart** answers the question none of the others can: what COLOUR the
+  picture is, rather than how much of each channel. The bright triangle is the
+  gamut the signal itself is in — Rec.709, or Rec.2020 from an HDR camera — the
+  quiet one is the other gamut, the horseshoe is the boundary of visible colour,
+  and the cross is D65, where a white card has to land. Trace outside the
+  Rec.709 triangle on a Rec.2020 source is footage that will change colour if it
+  is delivered to a Rec.709 master. The chart is computed in linear light from
+  the signal's own transfer function, so it does not move when a camera switches
+  between Rec.709, PQ and HLG. It is CIE 1931 xy — the space every camera manual
+  and monitor spec sheet states its gamut in — which is not perceptually
+  uniform: read it for whether a colour is inside a gamut, not for how far
+  outside it is.
 - On a 10-bit RGB source the scopes measure the signal ON THE WIRE, before the
   levels stage touches it — a WIRE badge in the toolbar says so. That is why the
   trace can sit below 0 % and above 100 %: those shaded bands are the camera's
