@@ -63,7 +63,9 @@ extension CapturePipeline {
             droppedFrames = 0
             gapFilledAudioPackets = 0
             reportedAudioConform = false
+            reportedAudioStarved = false
             mirroredAudioDrops = 0
+            mirroredAudioPadding = 0
             noteHealth {
                 $0.isRecording = true
                 $0.startTrigger = trigger
@@ -71,6 +73,7 @@ extension CapturePipeline {
                 $0.droppedVideoFramesInTake = 0
                 $0.droppedAudioPacketsInTake = 0
                 $0.gapFilledAudioPacketsInTake = 0
+                $0.paddedAudioPacketsInTake = 0
             }
             lastExternalAudioEnd = nil
             preRolledAudioEnd = nil
@@ -177,6 +180,7 @@ extension CapturePipeline {
         // no later packet to notice it on.
         noteAudioDrops(from: writer)
         noteAudioConform(from: writer)
+        noteAudioPadding(from: writer)
         noteHealth {
             $0.isRecording = false
             $0.takeFileName = nil
@@ -289,6 +293,14 @@ extension CapturePipeline {
         var notes: [String] = []
         if gapFilledAudioPackets > 0 {
             notes.append("USB audio lost — \(gapFilledAudioPackets) "
+                + "packet(s) padded with silence")
+        }
+        if writer.paddedAudioPackets > 0 {
+            // Its own line rather than folded into the one above: that one says
+            // a working source went quiet, this one says the track was never fed
+            // — post is laying out sound either way, and which of the two
+            // happened decides who gets asked about it.
+            notes.append("audio track starved — \(writer.paddedAudioPackets) "
                 + "packet(s) padded with silence")
         }
         if writer.conformedAudioPackets > 0 {

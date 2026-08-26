@@ -38,6 +38,8 @@ extension PipelineAlarm {
             L("alarm_ingress_overload", drops)
         case .externalAudioPadded:
             L("alarm_usb_audio_lost")
+        case .takeAudioStarved:
+            L("alarm_take_audio_starved")
         case .takeAudioChannelsConformed(let from, let to):
             L("alarm_audio_channels_conformed", from, to)
         case .recordingStartFailed(let reason):

@@ -37,7 +37,7 @@ import Testing
 
     /// Every alarm CaptureCore can raise, in call-site order.
     ///
-    /// Twelve of the fifteen are sticky. The three that toast are the take's
+    /// Thirteen of the sixteen are sticky. The three that toast are the take's
     /// closing tallies, reported after a take that DID finalize: the live alarm
     /// for them, where there is one, already fired while the take was rolling,
     /// and these are the totals stated quietly afterwards.
@@ -86,6 +86,13 @@ import Testing
               alarm: .externalAudioPadded,
               message: "USB AUDIO LOST — take continues, "
                   + "audio padded with silence",
+              sticky: true),
+        // CapturePipeline+Frame — the writer had to keep its own audio track
+        // alive so the file would still open
+        .init(site: "Frame.appendToTake/audioPadded",
+              alarm: .takeAudioStarved,
+              message: "AUDIO LOST — the take's audio track starved, "
+                  + "padded with silence",
               sticky: true),
         // CapturePipeline+Audio — the source changed its own channel count
         .init(site: "Audio.conformedToTake",

@@ -37,6 +37,14 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// (USB) source stopped delivering, current take / since launch.
     public var gapFilledAudioPacketsInTake = 0
     public var gapFilledAudioPacketsTotal = 0
+    /// Silence the WRITER padded into its own audio track, current take / since
+    /// launch. A different number from the two above and deliberately so: those
+    /// are about a take's SOUND being kept continuous for a source the pipeline
+    /// can name, this is about the FILE staying readable at all — an audio input
+    /// with no data holds every fragment shut (`TakeWriter.padAudioIfNeeded`).
+    /// Summing them would say one thing where two happened.
+    public var paddedAudioPacketsInTake = 0
+    public var paddedAudioPacketsTotal = 0
     /// Frames refused at ingress because the in-flight window was full — the
     /// pipeline being outrun rather than the encoder being behind.
     public var ingressDrops = 0
@@ -91,6 +99,33 @@ extension CapturePipeline {
         DispatchQueue.main.async {
             self.onError?(.takeAudioChannelsConformed(from: from, to: to))
         }
+    }
+
+    /// Say once per take that the writer had to keep its own audio track alive,
+    /// and mirror the running tally.
+    ///
+    /// The padding itself happens in the writer, which is the only place that
+    /// knows the fragment interval and the latched width (see
+    /// `TakeWriter.padAudioIfNeeded`); the ALARM has to happen here, because the
+    /// writer has no callbacks — exactly the split `noteAudioConform` has. Once
+    /// per take, because a starved track pads on every frame for the rest of the
+    /// take and the operator needs to be told the sound is gone, not how often.
+    ///
+    /// Called from the frame path, so the cheap case is the one that matters: a
+    /// take nobody starves costs one integer comparison per frame and never
+    /// takes the lock.
+    func noteAudioPadding(from writer: TakeWriter) {
+        let padded = writer.paddedAudioPackets
+        guard padded != mirroredAudioPadding else { return }
+        let delta = padded - mirroredAudioPadding
+        mirroredAudioPadding = padded
+        noteHealth {
+            $0.paddedAudioPacketsInTake = padded
+            $0.paddedAudioPacketsTotal += delta
+        }
+        guard !reportedAudioStarved else { return }
+        reportedAudioStarved = true
+        DispatchQueue.main.async { self.onError?(.takeAudioStarved) }
     }
 
     /// Mirror the writer's audio-drop tally, which lives on the writer and is

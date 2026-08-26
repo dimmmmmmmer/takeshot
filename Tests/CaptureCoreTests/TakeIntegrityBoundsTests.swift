@@ -418,10 +418,65 @@ extension TakeIntegrityBoundsTests {
                 "the abandoned take has \(audio.count) audio tracks")
     }
 
+    /// …and the take where the board DECLARED audio and then never delivered a
+    /// packet. The same shape the timecode track had, one input over: the writer
+    /// opens an audio input because the signal said it carried channels, the
+    /// embedded audio never arrives, and `movieFragmentInterval` will not cut a
+    /// fragment until EVERY input has passed the boundary.
+    ///
+    /// Measured on this tree before the fix, and it is the worst failure this
+    /// project has — not a degraded take but no take: the abandoned file is
+    /// `ftyp` plus one `mdat` with no `moov` at all, and
+    ///
+    ///     Error Domain=AVFoundationErrorDomain Code=-11829 "Cannot Open"
+    ///     NSLocalizedFailureReason=This media may be damaged.
+    ///
+    /// is what the operator's picture comes back as. Nothing exotic gets there:
+    /// `CDLCapture.embeddedAudioChannels` is a hard-coded 16 handed to the
+    /// pipeline at capture start, so an HDMI camera with its audio switched off
+    /// reaches this on every take it shoots.
+    ///
+    /// The track is asserted present as well as the file being readable, and
+    /// that is the other direction this can regress in: simply not opening an
+    /// audio input until the first packet arrived would satisfy every assertion
+    /// about the file OPENING while quietly costing the take its sound (see
+    /// `TakeWriter.padAudioIfNeeded` for why that was rejected).
+    @Test func anAbandonedTakeWithADeclaredButUnfedAudioTrackIsStillReadable()
+        async throws {
+        let root = TestMedia.scratchDirectory("AbandonedTakeUnfedAudio")
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url: URL = root.appendingPathComponent("abandoned-unfed.mov")
+
+        try await Self.abandonWriter(at: url, frames: 325, audioChannels: 2,
+                                     feedAudio: false)
+        let size: Int = (try FileManager.default.attributesOfItem(
+            atPath: url.path)[.size] as? Int) ?? 0
+        #expect(size > 100_000,
+                "the abandoned take left \(size) bytes — no picture at all")
+
+        let asset = AVURLAsset(url: url)
+        let duration: Double = (try await asset.load(.duration)).seconds
+        #expect(duration > 5,
+                "an abandoned 13 s take reads back as \(duration) s")
+        let tracks: [AVAssetTrack] = try await asset.tracks(ofType: .video)
+        #expect(tracks.count == 1,
+                "the abandoned take has \(tracks.count) video tracks")
+        let audio: [AVAssetTrack] = try await asset.tracks(ofType: .audio)
+        #expect(audio.count == 1,
+                "the abandoned take has \(audio.count) audio tracks")
+    }
+
     /// Write `frames` and let the writer go without finishing it. Its own
     /// function so the instance is released before the assertions run.
+    ///
+    /// `feedAudio` is what tells the two audio cases apart: `audioChannels`
+    /// opens the track (the board said it had channels), `feedAudio` decides
+    /// whether a single packet ever reaches it.
     private static func abandonWriter(at url: URL, frames: Int,
-                                      audioChannels: Int = 0) async throws {
+                                      audioChannels: Int = 0,
+                                      feedAudio: Bool = true) async throws {
         let writer = try TakeWriter(
             url: url, format: Self.format, codec: .proResProxy,
             startTimecode: Timecode(hours: 10, minutes: 0, seconds: 0,
@@ -436,7 +491,7 @@ extension TakeIntegrityBoundsTests {
                 attempts += 1
                 try await Task.sleep(for: .milliseconds(5))
             }
-            guard audioChannels > 0,
+            guard audioChannels > 0, feedAudio,
                   let packet: CMSampleBuffer = TestMedia.audioBuffer(
                     seconds: Double(index) * 0.04, channels: audioChannels,
                     cache: &cache) else { continue }

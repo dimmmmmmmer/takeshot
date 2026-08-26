@@ -33,7 +33,10 @@ public final class TakeWriter {
     private let writer: AVAssetWriter
     private let videoInput: AVAssetWriterInput
     private let pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor
-    private var audioInput: AVAssetWriterInput?
+    /// Internal rather than private: the audio track's own rules live in
+    /// `+Audio`, the way the timecode track's live in `+Timecode` — never
+    /// wider than the module.
+    var audioInput: AVAssetWriterInput?
     private let format: CaptureFormat
     private var appendedFrames = 0
 
@@ -56,6 +59,18 @@ public final class TakeWriter {
     /// to one `timecodeSampleInterval` (see `commitTimecodeSamples`). `.invalid`
     /// until the session starts.
     var tcWrittenUntil = CMTime.invalid
+    /// …and the same question for the audio track: the end of the last packet
+    /// the audio input accepted, real or padded. `.invalid` until the session
+    /// starts, and only ever read while there IS an audio input.
+    ///
+    /// The third input, and the third one that can hold a fragment shut — see
+    /// `padAudioIfNeeded`.
+    var audioWrittenUntil = CMTime.invalid
+    /// How far this writer has padded silence of its own, and `.invalid` while
+    /// it never has. A SEPARATE cursor from the one above so that a take which
+    /// is never starved takes exactly the path it took before the backstop
+    /// existed: one `isValid` test on a cursor that stays invalid.
+    var audioPaddedUntil = CMTime.invalid
     /// The session's span, which the timecode samples are placed against.
     var sessionStarted = false
     var firstPTS = CMTime.invalid
@@ -89,6 +104,41 @@ public final class TakeWriter {
     /// per second of take.
     public static let timecodeSampleInterval = CMTime(seconds: 1,
                                                       preferredTimescale: 600)
+
+    /// One padded audio packet, in sample frames — 40 ms at the 48 kHz every
+    /// audio path in this app runs at.
+    ///
+    /// The same 40 ms `CapturePipeline.padChunkFrames` pads the external
+    /// source's gaps in, stated twice rather than shared because the two pad at
+    /// different WIDTHS: the pipeline pads at the source's channel count and
+    /// lets the take's mask trim it, this pads at the count the track was
+    /// actually opened with.
+    static let audioPadFrames = 1920
+
+    /// How far the picture may run ahead of the audio track before this writer
+    /// fills the gap itself.
+    ///
+    /// One second, and it is the same second `timecodeSampleInterval` is: both
+    /// tracks then lag the picture by at most that, so what a crash costs is
+    /// still the fragment that was open and not a boundary more.
+    ///
+    /// Deliberately LOOSER than `CapturePipeline.externalStarvationThreshold`
+    /// (0.5 s). The pipeline pads a source it can name, counts it and raises the
+    /// alarm for it, and it does so on the frame path BEFORE the frame reaches
+    /// this writer — so for a USB source that path always fires first and this
+    /// one never pre-empts it. This is the backstop under all of them: the rule
+    /// it keeps is about the FILE, and no caller can keep it.
+    static let audioStarvationLead = CMTime(seconds: 1, preferredTimescale: 600)
+
+    /// How many silence packets ONE video frame may write, for the reason
+    /// `CapturePipeline.maximumPadPacketsPerFrame` has the same cap: the frame's
+    /// PTS is whatever the board says, and the first hard-won fact about this
+    /// hardware is that stream time can jump. Past the cap the cursor is moved
+    /// to the frame — the gap is abandoned rather than carried, because one
+    /// silence packet AT the picture releases every fragment boundary behind it
+    /// at once, while grinding through ten minutes of gap at 32 packets a frame
+    /// would leave them shut for the twenty seconds that took.
+    static let maximumAudioPadPacketsPerFrame = 32
 
     /// QuickTime metadata key TakeShot uses to tag its own files
     /// (lets the app tell its takes apart from foreign files in the folder).
@@ -209,20 +259,11 @@ public final class TakeWriter {
         }
     }
 
-    /// The take's audio track, or nil when the source has no channels or the
-    /// writer refuses the input. The format is known up front — PCM 48k/16-bit,
-    /// channel count from the pipeline.
-    private static func addAudioInput(channelCount: Int,
-                                      to writer: AVAssetWriter) -> AVAssetWriterInput? {
-        guard channelCount > 0 else { return nil }
-        let input = AVAssetWriterInput(
-            mediaType: .audio,
-            outputSettings: Self.audioSettings(channelCount: channelCount))
-        input.expectsMediaDataInRealTime = true
-        guard writer.canAdd(input) else { return nil }
-        writer.add(input)
-        return input
-    }
+    /// The writer is still open for business — what a bounded wait for an
+    /// input has to stop on, since an input of a writer that has finished or
+    /// failed will never become ready again. Named rather than reaching for
+    /// `writer` from `+Audio`, so the AVAssetWriter stays behind this type.
+    var isWriting: Bool { writer.status == .writing }
 
     /// True once AVAssetWriter has failed permanently. A dropped frame on its
     /// own is routine back-pressure; this is the difference between "the encoder
@@ -241,6 +282,23 @@ public final class TakeWriter {
     /// acceptable during live capture; the caller keeps the drop counter.
     @discardableResult
     public func append(pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
+        guard appendPicture(pixelBuffer, pts: pts) else { return false }
+        // …and the audio track, against the same boundary and for the same
+        // reason as the timecode samples inside that call. Nothing at all
+        // unless a track was opened and then starved (see `padAudioIfNeeded`).
+        //
+        // On the LIVE path only, which is why it is out here rather than beside
+        // the timecode commit. The pre-roll drain appends a whole window of
+        // picture BEFORE it offers the sound that goes under it, so a drain that
+        // padded would fill the window with silence and then refuse every real
+        // pre-roll packet as an overlap — the take's own head, invented.
+        padAudioIfNeeded(upTo: pts)
+        return true
+    }
+
+    /// The picture and the timecode that goes with it, with nothing said about
+    /// the audio track. Both append paths go through here.
+    private func appendPicture(_ pixelBuffer: CVPixelBuffer, pts: CMTime) -> Bool {
         // a duplicate/backwards PTS puts AVAssetWriter into .failed permanently —
         // dropping the frame keeps the take alive if the backend misdelivers PTS
         if lastPTS.isValid, pts <= lastPTS { return false }
@@ -268,98 +326,28 @@ public final class TakeWriter {
               Date() < deadline {
             usleep(2000)
         }
-        return append(pixelBuffer: pixelBuffer, pts: pts)
+        // Deliberately not the live `append`: the audio backstop must not run
+        // while the drain is halfway through the window (see there).
+        return appendPicture(pixelBuffer, pts: pts)
     }
 
     /// Audio packets discarded because the input wasn't ready — sync-critical
     /// gaps that used to vanish silently (video drops were always counted).
-    public private(set) var droppedAudioPackets = 0
+    public internal(set) var droppedAudioPackets = 0
 
     /// Audio packets that had to be re-shaped because the source's channel count
     /// was not the one this take's track was opened with, and the width the
     /// source last sent — the two values the alarm and the log row are built
     /// from (`CapturePipeline.noteAudioConform`).
-    public private(set) var conformedAudioPackets = 0
-    public private(set) var conformedFromChannels = 0
-    private var conformFormatCache: CMAudioFormatDescription?
+    public internal(set) var conformedAudioPackets = 0
+    public internal(set) var conformedFromChannels = 0
+    var conformFormatCache: CMAudioFormatDescription?
 
-    /// PCM audio from the capture board. The input is already created in init (before startWriting).
-    public func append(audioSampleBuffer: CMSampleBuffer) {
-        guard sessionStarted, let audioInput else { return }
-        // A re-shape that could not be built is a packet that never reaches the
-        // file, which is what `droppedAudioPackets` counts — silently losing one
-        // is the failure this whole path exists to stop.
-        guard let packet = conformed(audioSampleBuffer) else {
-            droppedAudioPackets += 1
-            return
-        }
-        guard audioInput.isReadyForMoreMediaData else {
-            droppedAudioPackets += 1
-            return
-        }
-        audioInput.append(packet)
-    }
-
-    /// The packet at exactly the width this take's audio track was opened with.
-    ///
-    /// Enforced HERE, at the one place that knows the latched count, rather than
-    /// at the callers: three paths reach the audio input — live packets, the
-    /// silence the external-audio watchdog pads with, and the pre-roll drain —
-    /// and a guard on any one of them leaves the other two able to put a packet
-    /// of the wrong width into the file. The pre-roll one is not hypothetical: a
-    /// source that changes its count while the app stands by leaves the ring
-    /// holding the OLD width and the take latching the NEW one.
-    ///
-    /// A mismatched packet is not refused by AVAssetWriter — measured, it is
-    /// MISREAD, because interleaved PCM has no framing to disagree with: 1920
-    /// frames of two channels are 480 frames of eight. A take whose 8-channel
-    /// embed dropped to 2 came out with 0.34 s of sound under 0.68 s of picture,
-    /// and nothing anywhere said so.
-    ///
-    /// **Conformed rather than closing the take, deliberately.** Closing costs the
-    /// rest of the shot's PICTURE — the deliverable — for a change in the
-    /// reference audio, and a device that renegotiates its count more than once
-    /// would turn one setup into a pile of takes each ended by the next
-    /// renegotiation. The pipeline already answers "the audio source went away
-    /// mid-take" with counted silence instead of a closed take
-    /// (`externalAudioPadded`); this is the same trade. What it costs is said out
-    /// loud rather than hidden: the channel MAP after the change is a guess —
-    /// channel 3 of the new packet need not be the microphone channel 3 of the
-    /// old one — so the pipeline raises the sticky alarm and marks the log row.
-    private func conformed(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer? {
-        let arrived = PCMAudio.channelCount(of: sampleBuffer)
-        guard arrived > 0, arrived != audioTrackChannels else { return sampleBuffer }
-        conformedAudioPackets += 1
-        conformedFromChannels = arrived
-        return PCMAudio.conformChannels(sampleBuffer, to: audioTrackChannels,
-                                        formatCache: &conformFormatCache)
-    }
-
-    /// A buffered (pre-roll) audio packet — the counterpart of
-    /// `appendBuffered(pixelBuffer:pts:)` and for the same reason.
-    ///
-    /// The pre-roll drain hands over a whole window's worth of packets in one
-    /// burst, which outruns the audio input exactly as the picture burst outruns
-    /// the video one. Offered through `append` they were simply refused and
-    /// counted: measured on a 20-frame pre-roll, 15 of a take's ~20 pre-roll
-    /// packets were dropped, so "pre-roll carries audio as well as picture" held
-    /// for the first fifth of the window and the rest of the take's head was
-    /// silent — reported afterwards as "audio packet(s) dropped", which reads
-    /// like a busy disk rather than the head of the take.
-    ///
-    /// The wait shares the video drain's deadline, so the whole drain still costs
-    /// the capture queue one bounded stall and not two.
-    @discardableResult
-    public func appendBuffered(audioSampleBuffer: CMSampleBuffer,
-                               deadline: Date) -> Bool {
-        guard sessionStarted, let audioInput else { return false }
-        while !audioInput.isReadyForMoreMediaData, writer.status == .writing,
-              Date() < deadline {
-            usleep(2000)
-        }
-        append(audioSampleBuffer: audioSampleBuffer)
-        return true
-    }
+    /// Silence this writer padded into its own audio track to keep the file
+    /// readable (`padAudioIfNeeded`). Public because only the pipeline can
+    /// raise an alarm about it — the same split `conformedAudioPackets` has.
+    public internal(set) var paddedAudioPackets = 0
+    var padFormatCache: CMAudioFormatDescription?
 
     /// Finish the take. Returns the URL of the finished file.
     public func finish() async throws -> URL {
@@ -396,6 +384,7 @@ public final class TakeWriter {
         sessionStarted = true
         firstPTS = pts
         tcWrittenUntil = pts // the timecode track starts where the picture does
+        audioWrittenUntil = pts // …and so does the audio track's own cursor
         writer.startSession(atSourceTime: pts)
     }
 }

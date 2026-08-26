@@ -112,6 +112,13 @@ import Testing
         pipeline.toggleManualRecord()
         #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
                 "the take never opened")
+        // The drain runs inside `beginTake`, on this queue, and `isRecording`
+        // is mirrored BEFORE it — so a barrier here is the drain having
+        // finished, rather than a guess about how long it takes. Nothing else
+        // has been offered to the writer yet: the feeder is not pushing.
+        let refusedInDrain: Int = pipeline.queue.sync {
+            pipeline.writer?.droppedAudioPackets ?? -1
+        }
         try await feeder.push(frames: 20, withAudio: true)
         pipeline.toggleManualRecord()
 
@@ -149,12 +156,137 @@ import Testing
         let picture: Double = (try await asset.load(.duration)).seconds
         #expect(audio.seconds > picture - 0.3,
                 "\(audio.seconds) s of audio for \(picture) s of picture")
-        // …and none of it merely refused, which is the third way this take can
-        // come out with a silent head: the pre-roll's packets arrive in one burst
-        // and used to be offered to the audio input without waiting for it.
-        let dropped: Int = pipeline.health.droppedAudioPacketsInTake
-        #expect(dropped == 0,
-                "\(dropped) of the take's audio packets were refused")
+        // …and none of the DRAIN's packets merely refused, which is the third
+        // way this take can come out with a silent head: the pre-roll's packets
+        // arrive in one burst and used to be offered to the audio input without
+        // waiting for it (measured then: 15 of ~20 lost).
+        //
+        // Read off the writer at the end of the drain rather than off the take
+        // at the end of the take, and that is the whole difference between a
+        // test about this code and a test about this machine.
+        // `droppedAudioPacketsInTake` is a WHOLE-TAKE counter, and the 0.8 s of
+        // live capture after the drain feeds it too — where the app deliberately
+        // does NOT wait for the input, because a live packet held back is a
+        // packet late rather than a packet saved. A refusal there is designed
+        // back-pressure, counted and reported as a notice, exactly like the
+        // video drop that already makes "virtually every take drop one frame"
+        // at take start. Asserting zero of THAT asserts that the machine kept
+        // up, and it went red once on a box running another full battery.
+        //
+        // What is left is bounded by the app's OWN budget instead, which is the
+        // point: the drain waits up to 1.5 s for the input, and measured on this
+        // tree it spends 22 ms of that (10 ms of picture, 12 ms of sound) on a
+        // quiet machine and 48 ms at load average 14 — a thirtyfold margin that
+        // barely moves with CPU load, because the wait is on the writer's input
+        // and not on the processor. A machine slow enough to fail this really
+        // did lose the head of the take, which is the thing being tested.
+        //
+        // Nor is it trivially zero: with the wait taken out of `drainPreRollAudio`
+        // it reads 17, and the file's sound drops from 1.64 s to 0.92 s.
+        #expect(refusedInDrain == 0,
+                "the drain refused \(refusedInDrain) of the pre-roll's packets")
+    }
+
+    /// The embedded source that DECLARED channels and delivers none, driven
+    /// through the pipeline rather than through the writer alone.
+    ///
+    /// The writer keeping the file readable is only half of it: silence in a
+    /// take's audio track is footage the operator does not have, and a take that
+    /// comes back silent with nothing said about it is found in the edit — which
+    /// is the failure `takeLostNoAudioTrack` already exists to prevent for the
+    /// case where there is no track at all. So the alarm is checked here, and
+    /// checked to fire ONCE: a starved track pads on every frame for the rest of
+    /// the take, and a sticky banner re-raised at frame rate is a banner nobody
+    /// reads. The log row is checked too, because that is the copy post gets.
+    @Test func anEmbeddedTakeThatIsDeclaredAndNeverFedSaysSo() async throws {
+        let root = TestMedia.scratchDirectory("EmbeddedAudioStarved")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = Self.pipeline(root: root, preRoll: 0)
+        let errors = EventCollector<PipelineAlarm>()
+        let recStates = EventCollector<Bool>()
+        let finished = TakeCollector()
+        pipeline.onError = { errors.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
+        pipeline.onTakeFinished = { finished.append($0) }
+        pipeline.handleFormat(TakeIntegrityBoundsTests.format)
+        // what the board says it carries, before a packet exists — the head
+        // start `setExpectedAudioChannels` is for, and the declaration this
+        // whole case is about
+        pipeline.setExpectedAudioChannels(2)
+
+        let feeder = Feeder(pipeline: pipeline, feed: HostFeed(channels: 2))
+        pipeline.toggleManualRecord()
+        #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
+                "the take never opened")
+        // 60 frames is 2.4 s: past the one-second lead twice over, so a
+        // backstop that fired once would be indistinguishable from one that
+        // never stopped.
+        try await feeder.push(frames: 60, withAudio: false)
+        pipeline.toggleManualRecord()
+
+        await TestWait.untilWritten { recStates.last == false }
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !finished.isEmpty }
+        let take: Take = try #require(finished.first,
+                                      "the take was never published")
+
+        let starved: [PipelineAlarm] = errors.all.filter { $0 == .takeAudioStarved }
+        #expect(starved.count == 1,
+                "the starved track raised \(starved.count) alarms")
+        let padded: Int = pipeline.health.paddedAudioPacketsInTake
+        #expect(padded > 0, "a declared-but-unfed track was left empty")
+        #expect(take.comment.contains("audio track starved"),
+                "the log row does not mention it: \(take.comment)")
+        // …and it is NOT reported as the USB cart having dropped out, which is
+        // the other padding mechanism and a different phone call.
+        #expect(!errors.contains(.externalAudioPadded),
+                "an embedded take blamed the USB source")
+        #expect(pipeline.health.gapFilledAudioPacketsInTake == 0,
+                "the writer's backstop was counted as the pipeline's padding")
+    }
+
+    /// …and the take that IS fed says nothing at all. The other direction of the
+    /// fix above, and the one that decides whether the alarm is worth anything:
+    /// a banner on every take is a banner nobody reads, and silence written over
+    /// a working microphone is footage lost rather than saved.
+    @Test func anEmbeddedTakeWithSoundUnderItIsNeitherPaddedNorBlamed()
+        async throws {
+        let root = TestMedia.scratchDirectory("EmbeddedAudioFed")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pipeline = Self.pipeline(root: root, preRoll: 0)
+        let errors = EventCollector<PipelineAlarm>()
+        let recStates = EventCollector<Bool>()
+        let finished = TakeCollector()
+        pipeline.onError = { errors.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
+        pipeline.onTakeFinished = { finished.append($0) }
+        pipeline.handleFormat(TakeIntegrityBoundsTests.format)
+        pipeline.setExpectedAudioChannels(16) // SignalDriver feeds 16
+
+        let driver = SignalDriver(pipeline: pipeline, withAudio: true)
+        pipeline.toggleManualRecord()
+        #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
+                "the take never opened")
+        try await driver.pushStalled(
+            Timecode(hours: 10, minutes: 0, seconds: 0, frames: 0, fps: 25),
+            count: 60, pixelBuffer: TestMedia.pixelBuffer())
+        pipeline.toggleManualRecord()
+
+        await TestWait.untilWritten { recStates.last == false }
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !finished.isEmpty }
+        let take: Take = try #require(finished.first,
+                                      "the take was never published")
+
+        #expect(!errors.contains(.takeAudioStarved),
+                "a take with sound under it was reported as starved")
+        let padded: Int = pipeline.health.paddedAudioPacketsInTake
+        #expect(padded == 0,
+                "\(padded) packets of silence invented for a take with sound")
+        #expect(take.comment.isEmpty,
+                "the log row blames the sound: \(take.comment)")
     }
 
     /// The padding loop advances a cursor in 40 ms steps until it reaches the

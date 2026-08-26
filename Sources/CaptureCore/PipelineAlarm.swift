@@ -50,6 +50,16 @@ public enum PipelineAlarm: Sendable, Equatable {
     /// continues on padded silence — honest silence beats splicing sources
     /// into a writer whose channel count is already latched.
     case externalAudioPadded
+    /// The take's audio track ran dry under the picture — the source declared
+    /// channels and then delivered nothing to cover the span, so the writer
+    /// filled it with silence rather than leave the input empty.
+    ///
+    /// Not a cosmetic difference: `movieFragmentInterval` releases a fragment
+    /// only once EVERY input has data past the boundary, so an audio input with
+    /// no data at all costs a crashed take the WHOLE file and not merely its
+    /// sound (see `TakeWriter.padAudioIfNeeded`). Sticky, because the operator's
+    /// take has no sound and the only other way to find that out is the edit.
+    case takeAudioStarved
     /// The audio source changed its own channel count under a writer whose
     /// count is latched for the take. The packets are conformed to the latched
     /// count and the take survives; the map its later channels carry is a
@@ -97,7 +107,8 @@ public enum PipelineAlarm: Sendable, Equatable {
         case .takeLostWriterFailed, .recordingFramesDropped, .preRollIncomplete,
              .takeClosedFormatChanged, .takeClosedSignalLost,
              .takeClosedFramesStopped, .ingressOverload,
-             .externalAudioPadded, .takeAudioChannelsConformed,
+             .externalAudioPadded, .takeAudioStarved,
+             .takeAudioChannelsConformed,
              .recordingStartFailed,
              .takeLostNoAudioTrack, .takeLostFinalizeFailed:
             .integrity
@@ -129,6 +140,8 @@ public enum PipelineAlarm: Sendable, Equatable {
             "Pipeline overloaded — \(drops) frame(s) dropped at ingress"
         case .externalAudioPadded:
             "USB AUDIO LOST — take continues, audio padded with silence"
+        case .takeAudioStarved:
+            "AUDIO LOST — the take's audio track starved, padded with silence"
         case .takeAudioChannelsConformed(let from, let to):
             "AUDIO CHANNELS CHANGED — source sent \(from), "
                 + "take conformed to \(to)"

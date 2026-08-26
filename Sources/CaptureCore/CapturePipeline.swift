@@ -373,6 +373,10 @@ public final class CapturePipeline: @unchecked Sendable {
     /// COUNT lives on the writer, which is where the conform happens; this is
     /// only the "said it once" latch (see `noteAudioConform`).
     var reportedAudioConform = false
+    /// The same latch for the writer's audio backstop, and the running mirror of
+    /// its tally (see `noteAudioPadding`).
+    var reportedAudioStarved = false
+    var mirroredAudioPadding = 0
     var lastPublishedLevels: [Float] = []
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).
