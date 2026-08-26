@@ -62,20 +62,59 @@ final class SRTVideoEncoder {
         var keyframeInterval: Int { max(1, framesPerSecond) }
     }
 
-    /// Whether this machine can encode H.264 at all.
+    /// Whether this machine can encode H.264 **and hand the sample back**.
     ///
-    /// Probed rather than assumed: it gates the suites that measure a real
-    /// encode, and a headless runner is not a thing to guess about. One session
-    /// built and thrown away, once.
+    /// Probed by doing it, because creating a session and encoding a frame are
+    /// two different claims and a virtualised runner is exactly where they come
+    /// apart. It used to create a 64×64 session, throw it away, and call that
+    /// support — and on CI `VTCompressionSessionCreate` succeeds on a machine
+    /// whose paravirtualised GPU does not even match a driver
+    /// (`IOServiceMatching failed for: AppleM2ScalerParavirtDriver` is in the
+    /// log). Every suite gated on this then drove a real encode, waited out its
+    /// budget and failed — six of them in one run, and the comment above those
+    /// suites already promised they would report the code rather than the
+    /// machine. This is what makes that promise true.
+    ///
+    /// Only tests read it, so it can afford to be thorough. The wait is bounded
+    /// because the failure mode is not an error: the callback simply never
+    /// comes, and an unbounded wait would hang the suite it exists to skip.
     static let isSupported: Bool = {
-        var probe: VTCompressionSession?
-        let status = VTCompressionSessionCreate(
-            allocator: nil, width: 64, height: 64,
-            codecType: kCMVideoCodecType_H264, encoderSpecification: nil,
-            imageBufferAttributes: nil, compressedDataAllocator: nil,
-            outputCallback: nil, refcon: nil, compressionSessionOut: &probe)
-        if let probe { VTCompressionSessionInvalidate(probe) }
-        return status == noErr && probe != nil
+        let arrived = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            defer { finished.signal() }
+            var probe: VTCompressionSession?
+            let created = VTCompressionSessionCreate(
+                allocator: nil, width: 64, height: 64,
+                codecType: kCMVideoCodecType_H264, encoderSpecification: nil,
+                imageBufferAttributes: nil, compressedDataAllocator: nil,
+                outputCallback: nil, refcon: nil, compressionSessionOut: &probe)
+            guard created == noErr, let session = probe else { return }
+            defer { VTCompressionSessionInvalidate(session) }
+            VTSessionSetProperty(session,
+                                 key: kVTCompressionPropertyKey_RealTime,
+                                 value: kCFBooleanTrue)
+            var pixels: CVPixelBuffer?
+            CVPixelBufferCreate(kCFAllocatorDefault, 64, 64,
+                                kCVPixelFormatType_32BGRA, nil, &pixels)
+            guard let frame = pixels else { return }
+            let status = VTCompressionSessionEncodeFrame(
+                session, imageBuffer: frame,
+                presentationTimeStamp: CMTime(value: 0, timescale: 600),
+                duration: CMTime(value: 1, timescale: 600),
+                frameProperties: nil, infoFlagsOut: nil
+            ) { status, _, sample in
+                if status == noErr, sample != nil { arrived.signal() }
+            }
+            guard status == noErr else { return }
+            VTCompressionSessionCompleteFrames(
+                session, untilPresentationTimeStamp: .invalid)
+        }
+        // Ten seconds is not a performance budget — a machine that encodes at
+        // all answers in milliseconds. It is the line between slow and never.
+        let answered = arrived.wait(timeout: .now() + 10) == .success
+        _ = finished.wait(timeout: .now() + 1)
+        return answered
     }()
 
     let configuration: Configuration
