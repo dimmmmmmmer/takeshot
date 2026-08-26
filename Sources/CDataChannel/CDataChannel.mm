@@ -106,10 +106,10 @@ static CDCRuntime *CDCSharedRuntime(void) {
       if (handle == NULL) {
           runtime.failure = [NSString
               stringWithFormat:
-                  @"libdatachannel was not found on this machine. A release "
-                  @"that ships it carries its own copy; see "
-                  @"vendor/libdatachannel/README.md to build one. Looked for: "
-                  @"%@",
+                  @"Live video is not available: this build was made with "
+                  @"libdatachannel but cannot find it on this machine. A "
+                  @"release that ships it carries its own copy inside the app "
+                  @"— see vendor/libdatachannel/README.md. Looked for: %@",
                   [candidates componentsJoinedByString:@", "]];
           return;
       }
@@ -513,13 +513,21 @@ static void RTC_API CDCPliReceived(int tr, void *ptr) {
 
 #else // stub without the SDK headers
 
-/// What to do about a build that has no libdatachannel headers. Shown wherever
-/// the feature reports itself absent, so it has to read as an instruction
-/// rather than as a diagnosis.
+/// What a build with no libdatachannel headers says for itself.
+///
+/// **Written for two readers at once, and the first of them cannot rebuild
+/// anything.** This text is served to a phone on the set network by a build
+/// that may well have been downloaded as a DMG — a published release is made on
+/// a runner with no vendor drops at all, so every bridge in this app is a stub
+/// there by design. Telling that reader to "copy the headers and rebuild" is
+/// advice they cannot take, so the message leads with what is true of the app
+/// in front of them and what still works, and only then points a developer at
+/// the file that says how to change it.
 static NSString *const kCDCNoSDKMessage =
-    @"Built without libdatachannel. See vendor/libdatachannel/README.md: build "
-    @"it, copy its headers into vendor/libdatachannel/include and its dylib "
-    @"into vendor/libdatachannel/lib, then rebuild.";
+    @"This build has no WebRTC in it: it was compiled without libdatachannel, "
+    @"so live video is not available. Everything else on the remote works as "
+    @"usual, and the camera page still shows the signal. Building with it is "
+    @"described in vendor/libdatachannel/README.md.";
 
 @implementation CDCPeerConnection
 

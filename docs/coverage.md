@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **89.32 %** lines (4 258 of 39 856 lines uncovered) |
+| Measured | **89.70 %** lines (4 382 of 42 524 lines uncovered) |
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than
@@ -124,6 +124,7 @@ What is genuinely out of reach, and why:
 | ~37 | `DeckLinkBackendAdapter.swift` | Constructing it installs a process-wide hot-plug callback and adopts whatever board is attached. |
 | ~29 | `SingleInstanceGuard.swift` | Hands off to another running copy of the app via `NSRunningApplication`. |
 | ~41 | `FilePanel`, `AudioRenderRoute`, `PlayoutOutput` | The far side of the three new seams: `runModal()`, `audioOutputDeviceUniqueID` on a live renderer, and the `CDLPlayout` conformance. |
+| ~39 | `WebRTCPeer.swift` | The real peer connection, behind the `WebRTCPeering` seam. Reaching it means generating a DTLS certificate and gathering ICE candidates off every interface the machine has, once per test. `WebRTCBridgeTests` DOES exercise it — the offer, the answer, the candidate list — but only on a machine that has libdatachannel, which is not CI. The mappings that decide behaviour (`state`, `classify`) were pulled out as pure functions and are covered everywhere (`WebRTCMappingTests`). |
 | ~200 | `RawPlayback+*`, `RawClipSource` | The BRAW decode paths. `vendor/BRAWSDK/include` is not committed and is absent on CI, so `CBRClip.isSDKAvailable` is false and those branches cannot execute. The CinemaDNG half is reachable and partly covered. |
 
 And the ones the interruption wave went looking for and could not reach. Each
