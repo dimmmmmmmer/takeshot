@@ -147,8 +147,9 @@ extension CapturePipeline {
             // The head of the take goes through the same bakes its body will,
             // and with the same latched values: a pre-roll that arrived clean
             // while the body is a composite is a cut in the middle of one file.
-            var frame = lutRecord
-                ? (applyLUT(to: buffered.pixelBuffer) ?? buffered.pixelBuffer)
+            var frame = takeLUTRecord
+                ? (applyLUT(to: buffered.pixelBuffer, using: takeLUTFilter)
+                    ?? buffered.pixelBuffer)
                 : buffered.pixelBuffer
             if takeChromaRecord { frame = chromaBaked(frame) }
             if writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,

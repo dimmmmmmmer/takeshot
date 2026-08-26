@@ -130,7 +130,7 @@ extension CapturePipeline {
     /// holds what the writer gets, and the file's `levelsKey` states what the
     /// writer got — so a third bake added later cannot be wired into one of them
     /// and not the other. Queue-confined.
-    var recordBakesDisplayBuffer: Bool { lutRecord || bakesChromaKey }
+    var recordBakesDisplayBuffer: Bool { bakesLUT || bakesChromaKey }
 
     /// Whether the key is being composited into the file right now.
     ///
