@@ -106,15 +106,20 @@ struct ModelVectorscopeGamutTests {
     /// as constants: 2(1 − Yb) and 2(1 − Yr). Pinned against the numbers the
     /// two standards print, because that is the claim.
     @Test func theDenominatorsAreTheOnesTheStandardsPrint() {
-        let cases: [(SignalPrimaries, Double, Double)] = [
-            (.rec709, 1.8556, 1.5748), (.rec2020, 1.8814, 1.4746),
-        ]
-        for (primaries, cb, cr) in cases {
-            let w = primaries.rgbToXYZ.lumaWeights
-            #expect(abs(2 * (1 - w.b) - cb) < 5e-4,
-                    "\(primaries) Cb denominator is \(2 * (1 - w.b))")
-            #expect(abs(2 * (1 - w.r) - cr) < 5e-4,
-                    "\(primaries) Cr denominator is \(2 * (1 - w.r))")
+        /// What a standard prints for one gamut's chroma denominators.
+        struct Printed {
+            let primaries: SignalPrimaries
+            let cb: Double
+            let cr: Double
+        }
+        let cases = [Printed(primaries: .rec709, cb: 1.8556, cr: 1.5748),
+                     Printed(primaries: .rec2020, cb: 1.8814, cr: 1.4746)]
+        for printed in cases {
+            let w = printed.primaries.rgbToXYZ.lumaWeights
+            #expect(abs(2 * (1 - w.b) - printed.cb) < 5e-4,
+                    "\(printed.primaries) Cb denominator is \(2 * (1 - w.b))")
+            #expect(abs(2 * (1 - w.r) - printed.cr) < 5e-4,
+                    "\(printed.primaries) Cr denominator is \(2 * (1 - w.r))")
         }
     }
 }

@@ -55,6 +55,16 @@ extension ScopeAnalyzer {
         /// the AXIS can be labelled in the units those codes are in. The
         /// chromaticity map is the exception and says why at `addToCIE`.
         private let colorimetry: WireColorimetry
+        /// This frame's luma coefficients, off the same derived matrix the
+        /// chromaticity chart and the vectorscope's targets read. Held rather
+        /// than looked up per sample: this runs 829 k times a frame at 1080p.
+        ///
+        /// Rec.2020 codes luma with different weights, and a waveform drawn
+        /// with 709's on a 2020 signal reads a saturated green too dark and a
+        /// saturated blue too bright — an exposure judgement made against the
+        /// wrong number, which is the one thing this instrument exists to get
+        /// right.
+        private let lumaWeights: LinearRGB
         /// This frame's own RGB→XYZ matrix, from its own primaries.
         private let toXYZ: RGBToXYZ
         /// Wire code → linear light, all 1024 of them, built once per frame.
@@ -100,6 +110,7 @@ extension ScopeAnalyzer {
             self.levels = levels
             self.colorimetry = colorimetry
             toXYZ = colorimetry.primaries.rgbToXYZ
+            lumaWeights = toXYZ.lumaWeights
             chromaGain = levels.chromaGain
             func zeroed(_ count: Int) -> UnsafeMutablePointer<Int32> {
                 let buffer = UnsafeMutablePointer<Int32>.allocate(capacity: count)
@@ -198,10 +209,14 @@ extension ScopeAnalyzer {
         func add(col: Int, r: Int, g: Int, b: Int,
                  nativeChroma: (cb: Double, cr: Double)? = nil,
                  nativeLuma: Int? = nil) {
+            // The weights are THIS frame's, from its own primaries — see
+            // `lumaWeights`. A YCbCr source passes `nativeLuma`, which the
+            // camera already coded with its own matrix, so only the RGB path
+            // has a choice to get wrong.
             let luma = nativeLuma
                 ?? min(ScopeAnalyzer.sampleLevels - 1,
-                       Int((0.2126 * Double(r) + 0.7152 * Double(g)
-                            + 0.0722 * Double(b)).rounded()))
+                       Int((lumaWeights.r * Double(r) + lumaWeights.g * Double(g)
+                            + lumaWeights.b * Double(b)).rounded()))
             // 256 bins over the 10-bit scale: a histogram with 1024 of them is
             // a comb on any real signal, and 256 is already more points than
             // the box it is drawn in has pixels across

@@ -14,49 +14,6 @@ import Testing
 /// looks exactly like a working chart, with every colour in the wrong place.
 struct ScopeCIETests {
     /// One pixel's wire codes.
-    private struct Codes {
-        let r: Int
-        let g: Int
-        let b: Int
-    }
-
-    /// A flat r210 frame of one colour, in 10-bit wire codes.
-    private func r210(width: Int = 320, height: Int = 180,
-                      r: Int, g: Int, b: Int) throws -> CVPixelBuffer {
-        try r210(width: width, height: height) { _, _ in
-            Codes(r: r, g: g, b: b)
-        }
-    }
-
-    /// An r210 frame whose colour is a function of the pixel.
-    private func r210(width: Int = 320, height: Int = 180,
-                      code: (_ x: Int, _ y: Int) -> Codes) throws
-        -> CVPixelBuffer {
-        var out: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, width, height,
-                            TenBitConverter.r210,
-                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
-                            &out)
-        let buffer = try #require(out, "no r210 buffer was allocated")
-        CVPixelBufferLockBaseAddress(buffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-        let base = try #require(CVPixelBufferGetBaseAddress(buffer),
-                                "the r210 buffer has no base address")
-        let rowBytes: Int = CVPixelBufferGetBytesPerRow(buffer)
-        for y: Int in 0..<height {
-            let row = base.advanced(by: y * rowBytes)
-                .assumingMemoryBound(to: UInt32.self)
-            for x: Int in 0..<width {
-                let pixel: Codes = code(x, y)
-                let red = UInt32(pixel.r & 0x3FF)
-                let green = UInt32(pixel.g & 0x3FF)
-                let blue = UInt32(pixel.b & 0x3FF)
-                row[x] = ((red << 20) | (green << 10) | blue).bigEndian
-            }
-        }
-        return buffer
-    }
-
     /// The chromaticity of a cell of the map — the inverse of
     /// `ScopeData.cieUnit`, which is what the analyzer deposits through.
     private func chromaticity(ofCell index: Int) -> Chromaticity {
@@ -86,7 +43,7 @@ struct ScopeCIETests {
                           levels: ScopeWireLevels = .limited,
                           colorimetry: WireColorimetry = .sdr) throws
         -> ScopeData {
-        let frame: CVPixelBuffer = try r210(r: r, g: g, b: b)
+        let frame: CVPixelBuffer = try R210Fixtures.make(r: r, g: g, b: b)
         return try #require(
             ScopeAnalyzer.analyze(frame, wireLevels: levels,
                                   colorimetry: colorimetry),
@@ -287,10 +244,11 @@ struct ScopeCIETests {
     /// each axis, and the worst case is a corner, where that is 2.6 cells of
     /// perpendicular distance from both edges at once (measured).
     @Test func everyPlottedColourIsInsideTheFramesOwnGamut() throws {
-        let frame: CVPixelBuffer = try r210 { x, y in
+        let frame: CVPixelBuffer = try R210Fixtures.make { x, y in
             // the whole code range, excursions and all
-            Codes(r: 4 + (x * 1015) / 319, g: 4 + (y * 1015) / 179,
-                  b: 4 + ((x + y) * 1015) / 498)
+            R210Fixtures.Codes(r: 4 + (x * 1015) / 319,
+                               g: 4 + (y * 1015) / 179,
+                               b: 4 + ((x + y) * 1015) / 498)
         }
         let data: ScopeData = try #require(
             ScopeAnalyzer.analyze(frame, wireLevels: .limited),
