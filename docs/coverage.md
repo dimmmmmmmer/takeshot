@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **89.70 %** lines (4 382 of 42 524 lines uncovered) |
+| Measured | **89.69 %** lines (4 383 of 42 529 lines uncovered) |
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than
