@@ -25,3 +25,10 @@ Without the headers it builds as a stub: no devices are found and
 The runtime half, `/Library/Frameworks/DeckLinkAPI.framework`, ships with
 Blackmagic Desktop Video and is loaded dynamically, so a build made without the
 headers still runs on a machine that has Desktop Video installed.
+
+## After you copy them in
+
+SwiftPM does not watch this directory, so a target already built as a stub
+stays a stub: `isSDKAvailable` keeps answering NO with the headers sitting
+right here. Touch the bridge's `.mm` (or delete `.build`) and rebuild.
+Measured once on BRAW, where it cost a confused half hour.

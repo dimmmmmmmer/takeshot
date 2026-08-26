@@ -138,3 +138,10 @@ Note the asymmetry with the camera vendors' SDKs: those may not be
 redistributed at all, so a published build simply cannot have them. This one
 may be redistributed, under terms — which is a decision to make rather than a
 door that is closed.
+
+## After you copy them in
+
+SwiftPM does not watch this directory, so a target already built as a stub
+stays a stub: `isSDKAvailable` keeps answering NO with the headers sitting
+right here. Touch the bridge's `.mm` (or delete `.build`) and rebuild.
+Measured once on BRAW, where it cost a confused half hour.
