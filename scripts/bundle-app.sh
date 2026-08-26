@@ -83,7 +83,11 @@ fi
 #   * a mismatched architecture means CMake followed its own binary's arch
 #     (an x86_64 cmake under /usr/local is the usual cause).
 DC_RUNTIME="vendor/libdatachannel/lib/libdatachannel.dylib"
-if [ -f "$DC_RUNTIME" ]; then
+DC_HEADER="vendor/libdatachannel/include/rtc/rtc.h"
+# BOTH halves or neither. A dylib bundled into a build whose bridge compiled as
+# a stub is 8 MB of code nothing can call — and worse, the line this script
+# prints would say the feature shipped when it did not.
+if [ -f "$DC_RUNTIME" ] && [ -f "$DC_HEADER" ]; then
     FOREIGN=$(otool -L "$DC_RUNTIME" | tail -n +2 \
         | grep -vE '^\s+(/usr/lib/|/System/Library/|@rpath/libdatachannel)' \
         || true)
@@ -104,6 +108,9 @@ if [ -f "$DC_RUNTIME" ]; then
     mkdir -p "$APP/Contents/Frameworks"
     cp "$DC_RUNTIME" "$APP/Contents/Frameworks/"
     echo "Bundled WebRTC runtime: libdatachannel.dylib ($APP_ARCH)"
+elif [ -f "$DC_RUNTIME" ]; then
+    echo "No libdatachannel bundled — the dylib is here but $DC_HEADER is not," \
+         "so the bridge compiled as a stub and could not call it"
 else
     echo "No libdatachannel bundled — the /live page will report WebRTC as" \
          "unavailable"

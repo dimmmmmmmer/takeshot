@@ -99,7 +99,7 @@ struct SRTPerformanceTests {
         let encoder = LiveVideoEncoder(bitsPerSecond: 8_000_000,
                                        framesPerSecond: 100_000)
         let rig = SRTRig(
-            encoder: encoder,
+            encoder: encoder, log: SRTEventLog(),
             mirror: SRTVideoMirror(endpoint: SRTFixtures.endpoint,
                                    encoder: encoder, factory: { _ in stream },
                                    onEvent: { _ in }))

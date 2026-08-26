@@ -130,7 +130,7 @@ enum SRTFixtures {
         let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000,
                                        framesPerSecond: framesPerSecond)
         return SRTRig(
-            encoder: encoder,
+            encoder: encoder, log: log,
             mirror: SRTVideoMirror(endpoint: endpoint, encoder: encoder,
                                    factory: { _ in stream },
                                    onEvent: { log.record($0) }))
@@ -140,9 +140,30 @@ enum SRTFixtures {
 /// One shared encoder with one SRT mirror on it, driven as a unit.
 struct SRTRig {
     let encoder: LiveVideoEncoder
+    let log: SRTEventLog
     let mirror: SRTVideoMirror
 
-    func start() { mirror.start() }
+    /// Open the link and come back once the mirror has SETTLED — either
+    /// subscribed to the encoder, or having reported why it could not be.
+    ///
+    /// **The wait is what the old design got for free, and losing it silently
+    /// was the one hazard in moving the encode out.** The mirror used to own
+    /// its encoder, so one serial queue ordered `start()`'s connect ahead of
+    /// every frame offered after it. Now the encode is shared and on a queue of
+    /// its own, so a frame offered in the same breath as `start()` can arrive
+    /// while the link is still opening — and it is dropped, because the mirror
+    /// has not subscribed yet. In the app that costs one frame at open and the
+    /// next one is 1/60 s behind it; in a test that offers exactly one frame it
+    /// costs the whole test, intermittently and only on a loaded machine. It
+    /// cost one, in a coverage run.
+    func start() {
+        mirror.start()
+        let deadline = Date().addingTimeInterval(5)
+        while !encoder.hasSinks, log.all.isEmpty, Date() < deadline {
+            usleep(2_000)
+        }
+    }
+
     func offer(_ buffer: CVPixelBuffer, framesPerSecond: Double) {
         encoder.offer(buffer, framesPerSecond: framesPerSecond)
     }
@@ -177,6 +198,57 @@ struct SRTRig {
         #expect(SRTVideoMirror.reconnectCeiling == 5)
         #expect(SRTVideoMirror.reconnectDelay < SRTVideoMirror.reconnectCeiling)
     }
+}
+
+/// **An idle set encodes nothing**, which is the property the whole shared-encoder
+/// design is arranged around — and the one that made a test flake when it was
+/// first put in, so it is worth pinning as arithmetic rather than as timing.
+///
+/// Nobody watching means no `VTCompressionSession` is ever created at all: not a
+/// session sitting idle, not a session encoding into a sink that discards. The
+/// consequence a caller has to know about is on the other side of the same
+/// coin — a frame offered while nothing is subscribed is DROPPED, not held, so
+/// whoever subscribes gets the next frame rather than the last one.
+@Suite(.enabled(if: SRTVideoEncoder.isSupported,
+                "no H.264 encoder on this machine"))
+struct LiveVideoEncoderIdleTests {
+    @Test func nothingIsEncodedWhileNothingIsWatching() async throws {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        defer { encoder.stop() }
+        let buffer = try SRTFixtures.displayBuffer()
+        for _ in 0..<5 {
+            encoder.offer(buffer, framesPerSecond: 25)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        #expect(!encoder.hasSinks)
+        #expect(encoder.appliedBitsPerSecond == nil,
+                "a session was built for nobody")
+    }
+
+    /// And the moment something IS watching, the next frame reaches it.
+    @Test func theFirstFrameAfterASinkArrivesReachesIt() async throws {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        defer { encoder.stop() }
+        let samples = SampleCounter()
+        encoder.addSink(samples) { _ in samples.count() }
+        let buffer = try SRTFixtures.displayBuffer()
+        let deadline = Date().addingTimeInterval(5)
+        while samples.total == 0, Date() < deadline {
+            encoder.offer(buffer, framesPerSecond: 25)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        #expect(samples.total > 0, "a subscribed sink got nothing")
+        #expect(encoder.appliedBitsPerSecond == 4_000_000)
+    }
+}
+
+/// Samples that reached a sink. Its identity is the sink's key, so it is a
+/// class; the count is touched from VideoToolbox's thread, so it is locked.
+final class SampleCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = 0
+    func count() { lock.withLock { stored += 1 } }
+    var total: Int { lock.withLock { stored } }
 }
 
 /// The frame path: off the caller's queue, latest-wins, and never able to hold it

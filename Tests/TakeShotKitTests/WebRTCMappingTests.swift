@@ -70,6 +70,56 @@ import Testing
             == .unavailable("no interfaces"))
     }
 
+    /// What a POST's `Content-Length` earns it, at every boundary.
+    ///
+    /// The rule the reader used to spell inline, out where a test can reach
+    /// each case rather than the one or two a socket test can afford. Each
+    /// refusal below is a different way to hold a connection slot open for
+    /// bytes that never arrive.
+    @Test func onlyAnAnnouncedAndBoundedBodyIsRead() {
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "400") == .read(400))
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: " 400 ") == .read(400))
+        // The line itself, from both sides.
+        let ceiling = RemoteWebRTC.maximumBody
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "\(ceiling)")
+            == .read(ceiling))
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "\(ceiling + 1)")
+            == .refuse)
+        // No header at all, an empty one, a body of nothing, and three shapes
+        // of number that are not one.
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: nil) == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "") == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "0") == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "-1") == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "+400") == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "4e3") == .refuse)
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "400 ,400") == .refuse)
+        // Digits, but not ASCII ones: `Int` accepts Eastern Arabic numerals and
+        // a socket does not send them in a header.
+        #expect(RemoteWebRTC.bodyVerdict(contentLength: "\u{0664}00") == .refuse)
+    }
+
+    /// And what each answer becomes on the wire, without a socket in the way.
+    ///
+    /// The status codes are the page's whole protocol here: 200 plays, 400
+    /// offers again, 503 stops and says why.
+    @Test func eachAnswerBecomesItsOwnStatusLine() {
+        func text(_ answer: RemoteWebRTC.Answer) -> String {
+            String(bytes: RemoteClient.response(for: answer),
+                   encoding: .utf8) ?? ""
+        }
+        func status(_ answer: RemoteWebRTC.Answer) -> String {
+            String(text(answer).prefix(15))
+        }
+        #expect(status(.answered("v=0\r\n")).hasPrefix("HTTP/1.1 200"))
+        #expect(status(.rejected).hasPrefix("HTTP/1.1 400"))
+        #expect(status(.unavailable("no library")).hasPrefix("HTTP/1.1 503"))
+        // The reason travels as the body, because it names what to install and
+        // a status code cannot.
+        #expect(text(.unavailable("install libX")).contains("install libX"))
+        #expect(text(.answered("v=0")).contains("application/sdp"))
+    }
+
     /// The offer body's shape, on its own: two string fields and nothing else
     /// accepted.
     ///

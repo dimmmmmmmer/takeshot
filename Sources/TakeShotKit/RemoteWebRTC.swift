@@ -67,3 +67,39 @@ enum RemoteWebRTC {
         return (pin, sdp)
     }
 }
+
+/// What to do with a POST whose head has arrived: read a body of this size, or
+/// refuse it.
+///
+/// **A rule rather than a condition inside the reader**, and for the reason
+/// `PunchEventView.decide` is one: the reader can only be reached through a
+/// socket, so a test there can afford one case or two — and every interesting
+/// case here is a boundary. A `Content-Length` a peer states and never sends
+/// holds a connection slot to its handshake deadline, a missing one leaves the
+/// reader waiting for bytes nobody promised, and a header of "16384" and one of
+/// "16385" have to land on opposite sides of a line drawn in one place.
+extension RemoteWebRTC {
+    enum BodyVerdict: Equatable, Sendable {
+        /// Wait for exactly this many bytes, then route the request.
+        case read(Int)
+        /// Answer 400 now. The body is absent, unreadable as a number, empty,
+        /// or larger than this route will ever carry.
+        case refuse
+    }
+
+    /// The verdict for a `Content-Length` header value; nil means the header
+    /// was absent, which is refused like any other body this route cannot
+    /// bound.
+    ///
+    /// Deliberately strict about the SHAPE of the number as well as its size:
+    /// `Int("16 384")` and `Int("+400")` are the sort of thing a hand-written
+    /// client sends, and a reader that took either would be waiting on a length
+    /// nobody agrees about.
+    static func bodyVerdict(contentLength: String?) -> BodyVerdict {
+        guard let text = contentLength?.trimmingCharacters(in: .whitespaces),
+              !text.isEmpty, text.allSatisfy(\.isASCII),
+              text.allSatisfy(\.isNumber), let announced = Int(text),
+              announced > 0, announced <= maximumBody else { return .refuse }
+        return .read(announced)
+    }
+}

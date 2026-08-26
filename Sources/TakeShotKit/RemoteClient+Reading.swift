@@ -61,12 +61,12 @@ extension RemoteClient {
             route(request, body: Data())
             return
         }
-        // A body has to be announced and has to be small. A `Content-Length`
-        // this route will not carry is refused before a byte of it is kept —
-        // the alternative is holding a connection slot open for a number a peer
-        // made up.
-        let announced = Int(request.headers["content-length"] ?? "") ?? -1
-        guard announced > 0, announced <= RemoteWebRTC.maximumBody else {
+        // A body has to be announced and has to be small. The rule lives in
+        // `RemoteWebRTC.bodyVerdict` rather than here — every case in it is a
+        // boundary, and a boundary reachable only through a socket is a
+        // boundary that gets one test instead of six.
+        guard case .read(let announced) = RemoteWebRTC.bodyVerdict(
+            contentLength: request.headers["content-length"]) else {
             writeAndClose(RemoteResponse.badRequest())
             return
         }

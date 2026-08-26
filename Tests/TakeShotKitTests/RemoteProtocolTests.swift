@@ -147,6 +147,13 @@ import Testing
         // to a console on a phone, which looks exactly like a 404 from the app.
         #expect(text.contains("img-src 'self' blob:"))
         #expect(!text.contains("img-src *"))
+        // And the live page's <video>, which takes a MediaStream through
+        // `srcObject` rather than a URL. Browsers do not agree on whether
+        // `media-src` governs that, so it is named rather than left to
+        // `default-src 'none'` — where the disagreement shows up as a video
+        // element that plays on one browser and stays black on another.
+        #expect(text.contains("media-src 'self' blob: mediastream:"))
+        #expect(!text.contains("media-src *"))
         #expect(text.contains("X-Content-Type-Options: nosniff"))
         #expect(text.hasSuffix("hi"))
     }

@@ -139,7 +139,7 @@ enum WebRTCHarness {
         return Reply(
             status: http.statusCode,
             contentType: http.value(forHTTPHeaderField: "Content-Type") ?? "",
-            body: String(decoding: data, as: UTF8.self))
+            body: String(bytes: data, encoding: .utf8) ?? "")
     }
 
     /// The ordinary case: a well-formed offer with a PIN on it.

@@ -2,7 +2,6 @@ import CoreMedia
 @preconcurrency import CoreVideo
 import Foundation
 import os
-import os.log
 
 /// **One H.264 encode of the viewer, for every live consumer there is.**
 ///
