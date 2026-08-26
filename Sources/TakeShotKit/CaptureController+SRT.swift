@@ -31,6 +31,13 @@ import Foundation
 /// clock. That is a path with a timing contract of its own and none of it can be
 /// checked without a real receiver, so it is not being guessed at here. The
 /// picture is the half that replaces a cable.
+///
+/// **The NDI output states the same gap for the same reason**, and the shared
+/// half is the tap rather than the codec: both feeds need one independent
+/// stereo tap in `CapturePipeline+Audio`, and only the leg after it differs (AAC
+/// and a second PID here, planar float and `NDIlib_send_send_audio_v3` there).
+/// Two outputs now want the same missing piece, which is an argument for
+/// building it once rather than per output — see `CaptureController+NDI`.
 extension CaptureController {
     /// How long a settings edit settles before the link is rebuilt.
     ///

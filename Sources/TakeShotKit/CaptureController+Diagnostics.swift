@@ -1,6 +1,7 @@
 import AppKit
 import CBraw
 import CDeckLink
+import CNDI
 import CSRT
 import CaptureCore
 import Foundation
@@ -107,6 +108,8 @@ extension CaptureController {
         deck.brawSDKAvailable = CBRClip.isSDKAvailable()
         deck.srtSDKAvailable = CSRTSender.isSDKAvailable()
         deck.srtRuntimeVersion = SRTStream.runtimeVersion
+        deck.ndiSDKAvailable = CNDSender.isSDKAvailable()
+        deck.ndiRuntimeVersion = NDISender.runtimeVersion
         return deck
     }
 

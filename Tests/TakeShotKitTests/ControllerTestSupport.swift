@@ -124,6 +124,26 @@ enum ControllerHarness {
         // has the real bridge compiled, and it works. Suites that want to look at
         // the datagrams install their own factory over this one.
         controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
+        // The NDI sender is faked on the same terms, and for a louder failure.
+        // The real one ANNOUNCES A SOURCE on the network the machine is on: a
+        // suite that reached it would put a phantom camera in every receiver's
+        // source list on the shoot, once per test. It cannot happen today because
+        // no build here has the NDI SDK headers, and this is what keeps it from
+        // starting to happen the day somebody drops them in. Suites that want to
+        // look at the frames install their own factory over this one.
+        //
+        // What this does NOT cover, and the SRT factory above has the same hole:
+        // both are installed AFTER `init`, and `init` runs `completeStartup`,
+        // which honours a stored `ndiEnabled`/`srtEnabled`. So a suite that
+        // presets either switch through `configure` reaches the real bridge
+        // once, at construction, before either line here has run. In a build
+        // with no vendor headers that is inert — the switch reports itself
+        // unavailable and nothing is built — but on a machine with the SDK
+        // dropped in it would be a real announcement. Drive the startup path by
+        // calling `startNDIIfEnabled()` after the factory is in place instead
+        // (`aStoredSwitchAnnouncesTheSourceAtStartup`), never by presetting the
+        // switch.
+        controller.mirrors.ndiSenderFactory = { FakeNDISender(name: $0) }
         // And the WebRTC peer, for a sharper reason than the SRT stream has: the
         // real one generates a DTLS certificate and gathers ICE candidates off
         // every interface the machine has, and a suite that reached it would do
@@ -172,6 +192,10 @@ enum ControllerHarness {
         // still pending would open one for a controller the next test has
         // finished with. This also drops the mirror, its encoder and its socket.
         controller.stopSRTOutput()
+        // The NDI name field re-announces the source on a 600 ms debounce; a task
+        // still pending would build a sender for a controller the next test has
+        // finished with. This also drops the mirror itself.
+        controller.stopNDIOutput()
         // the watcher re-creates the record folder when it sees it vanish, so it
         // has to go before the folder does
         controller.folderWatcher?.cancel()

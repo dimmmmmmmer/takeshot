@@ -847,8 +847,8 @@
 "menubar_status_recording" = "TakeShot — recording";
 
 /* === SRT output: the viewer encoded and sent to an address on the set network.
-   SRT is a transport and not an announcement, so unlike the NDI output this
-   replaced there is a where and a which-end to be told about. === */
+   SRT is a transport and not an announcement, so unlike the NDI output beside
+   it there is a where and a which-end to be told about. === */
 "settings_srt" = "SRT output";
 "srt_enable" = "Send the viewer over SRT";
 "srt_role" = "Connection";
@@ -869,6 +869,20 @@
 "srt_failed" = "SRT: %@";
 "srt_needs_address" = "Enter the receiver's address, or wait for the receiver instead.";
 "srt_passphrase_short" = "A passphrase has to be %d characters or more. Clear the field to send unencrypted.";
+
+/* === NDI output: the viewer announced as a source on the set network. Two
+   controls against SRT's six, and that is the difference between the two: NDI
+   announces itself and a receiver picks it out of a list, so there is no
+   address, no port and no end of a handshake to get wrong. === */
+"settings_ndi" = "NDI output";
+"ndi_enable" = "Send the viewer as an NDI source";
+"ndi_source_name" = "Source name";
+"ndi_status" = "Status";
+"ndi_sending" = "Sending";
+"ndi_not_sending" = "Not sending";
+"ndi_unavailable" = "Unavailable";
+"ndi_failed_short" = "Could not start";
+"ndi_failed" = "NDI: %@";
 
 /* the taught REC indicator — a third trigger beside VANC and running timecode */
 "visual_rec" = "REC indicator on the picture";

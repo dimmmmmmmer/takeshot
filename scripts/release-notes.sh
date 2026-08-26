@@ -78,6 +78,8 @@ sdk_state "RED R3D" "vendor/R3DSDK/Lib/mac64/libR3DSDK-libcpp.a" \
 sdk_state "SRT (libsrt)" "vendor/SRTSDK/include/srt/srt.h" \
     "the SRT output reports itself unavailable. Unlike the others this one is
   MPL-2.0 and needs no registration: \`brew install srt\` and rebuild."
+sdk_state "NDI" "vendor/NDISDK/include/Processing.NDI.Lib.h" \
+    "the NDI output reports itself unavailable."
 
 cat <<'FOOTER'
 

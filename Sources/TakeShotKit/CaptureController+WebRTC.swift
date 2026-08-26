@@ -25,6 +25,16 @@ private let webrtcSignallingQueue =
 /// session per distinct picture somebody is actually watching, so a DP on the
 /// decorated frame and a script supervisor on the clean one cost two, and two
 /// people on either cost the same as one.
+///
+/// **The other live outputs are not offered the choice, and the reasons
+/// differ.** SRT has no way to ask — there is no page at the far end, only a
+/// receiver — so it takes the picture named at `CaptureController.srtPicture`.
+/// NDI is not a consumer of an encoder here at all: its SDK compresses frames
+/// itself, so it hangs off the display buffer beside the hardware feeder and
+/// could take the clean picture for the price of no second encode whatsoever.
+/// It takes the decorated one anyway, on the merits stated at the top of
+/// `CaptureController+NDI` — which is independent evidence for the same answer
+/// rather than a cost anybody is avoiding.
 extension CaptureController {
     // MARK: - signalling
 

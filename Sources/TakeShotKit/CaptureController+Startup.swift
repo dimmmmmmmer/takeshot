@@ -86,6 +86,10 @@ extension CaptureController {
         // set network until the switch has been thrown once, and a shoot that
         // left it on gets its link back after a relaunch (see +SRT).
         startSRTIfEnabled()
+        // …the NDI source, on exactly the same terms: nothing is announced on
+        // the set network until the switch has been thrown once, and a shoot
+        // that left it on gets its source back after a relaunch (see +NDI).
+        startNDIIfEnabled()
         // …and the menu-bar item, on the same terms: off by default, and back
         // where it was left for anyone who switched it on (see +MenuBar).
         updateMenuBarPresence()

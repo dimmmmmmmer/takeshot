@@ -69,7 +69,9 @@ which is worth a great deal and is not the same as green.
 | `CaptureCore` | The SDK-free core |
 | `CDeckLink` | Obj-C++ bridge to the DeckLink SDK: `CDLCapture` (input), `CDLPlayout` (hardware monitor output) |
 | `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
+| `CR3D` | Obj-C++ bridge to RED's R3D SDK (`CR3DClip`), for `.r3d` playback |
 | `CSRT` | Obj-C++ bridge to libsrt (`CSRTSender`), for the SRT output |
+| `CNDI` | Obj-C++ bridge to the NDI SDK (`CNDSender`), for the NDI output. The one live output that is NOT behind the shared H.264 encoder: NDI takes frames and compresses them itself |
 | `CDataChannel` | Obj-C++ bridge to libdatachannel (`CDCPeerConnection`): ICE, DTLS-SRTP and the RTP socket for the WebRTC output. No media pipeline — the app encodes and packetises |
 | `TakeShotKit` | The application layer, as a library so tests can reach it |
 | `TakeShot` | The executable entry point and nothing else |
@@ -196,19 +198,25 @@ reduced 1920 → 640 the band past the target's Nyquist came back with 18.9 code
 of standard deviation against Lanczos' 1.5 — fine detail folding into moire.
 `MultiviewPerformanceTests` prints the timings and asserts the bytes.
 
-### The SRT output, and why it is not a like-for-like NDI swap
+### The SRT output, and why NDI is beside it rather than replaced by it
 
-The owner replaced the NDI output with SRT. It rides the same seam — the
-display-mirror slot, one handler per source, carrying the DECORATED frame the
-operator is looking at — and almost nothing else carries over, because the two
-are different kinds of thing.
+The owner replaced the NDI output with SRT, and then asked for NDI back — beside
+SRT, not instead of it. Both rulings are right and the second is not a reversal
+of the first: what the first established is that SRT is not an NDI rename, and
+what the second establishes is that a tool with one of them has a hole where the
+other is. Both ride the same seam — the display-mirror slot, one handler per
+source, carrying the DECORATED frame the operator is looking at — and almost
+nothing else is shared, because they are different kinds of thing.
 
-**NDI announced itself and took frames; SRT is a transport and takes a byte
-stream.** A receiver discovered an NDI source in a list, so the whole
-configuration was a name. An SRT link is an address, a port and a role, and it
-carries an MPEG-TS — so the feature needs an encoder, and the operator has to be
-told about things NDI never asked: where to send, which end dials, how much of a
-bad link to ride out, and how many bits it can carry.
+**NDI announces itself and takes frames; SRT is a transport and takes a byte
+stream.** A receiver discovers an NDI source in a list, so the whole
+configuration is a name. An SRT link is an address, a port and a role, and it
+carries an MPEG-TS — so that feature needs an encoder, and the operator has to be
+told about things NDI never asks: where to send, which end dials, how much of a
+bad link to ride out, and how many bits it can carry. Two controls against six is
+the difference, and the difference is which room each answers: NDI when the
+receiver is on the same LAN and nobody should have to be told an address, SRT
+when it is across a network somebody else runs.
 
 - **`CSRT`** is the bridge, wired the way `CDeckLink` and `CBraw` are: real
   against the headers in `vendor/SRTSDK/include`, a stub without them, runtime
@@ -234,12 +242,26 @@ bad link to ride out, and how many bits it can carry.
 
 **What the frame path pays, measured.** All figures release, M-series laptop.
 
-NDI cost 0.114 ms a frame at 1080p because there was nothing to do — its
-uncompressed RGB WAS the display buffer. Here the display queue's whole
+NDI's whole hop — offer, queue, coalesce, lock the buffer, walk it, unlock —
+costs **0.014 ms at 1080p and 0.018 ms at UHD** (median of 15, release), because
+there is nothing to convert: its uncompressed RGB IS the display buffer, so the
+mirror's queue hands NDI a base address. Here the display queue's whole
 involvement is a pixel-format test and one `dispatch_async`: **under 0.001 ms at
-1080p and at UHD**, 0.006 ms worst of 200 runs. That is the number to compare
-against NDI's, and it is two orders of magnitude under it because the work moved
-rather than shrank.
+1080p and at UHD**, 0.006 ms worst of 200 runs. Both are far under a frame
+interval; the comparison is only worth making because the two numbers measure
+different things — NDI's includes the sender's pass over the frame and SRT's
+stops at the dispatch, since everything expensive on this side happened on
+another queue.
+
+**The figure this paragraph used to carry was 0.114 ms at 1080p and 0.22 ms at
+UHD, and re-measuring it is how a stale number was caught.** Re-run on the
+restoration machine, the same benchmark gives 0.100 ms and 0.190 ms in DEBUG and
+0.014 ms and 0.018 ms in release — so the inherited pair matches this machine's
+debug numbers almost exactly, in a section whose first line says every figure is
+release. Two machines and two toolchains are between the runs, so that is
+evidence rather than proof; what is certain is that the numbers here now are
+release, on this machine, and were taken rather than copied. `TAKESHOT_BENCH=1
+scripts/test.sh -c release --filter NDIPerformance` reproduces them.
 
 Where it moved to, offer to first datagram out: **6.10 ms at 1080p, 20.9 ms at
 UHD**. That is a LATENCY and not an occupancy — VideoToolbox's encode is
@@ -277,6 +299,60 @@ runs only where the headers are — not on CI). What none of that touches: wheth
 VLC, OBS, Resolve or a hardware bridge actually decodes this stream; whether the
 latency figure behaves as expected on a lossy link; and what a receiver makes of
 the raster changing mid-stream when the operator switches to playback.
+
+### Two network outputs at once, which is the case NDI's return created
+
+While NDI and SRT were alternatives this question did not exist. Now both can be
+on together, and what has to be true of that is not "both work" but that they are
+INDEPENDENT.
+
+**They are independent because they consume different things.** SRT and every
+WebRTC viewer are sinks on one shared `LiveVideoEncoder` — one H.264 session,
+however many of them are watching. NDI is a consumer of the display BUFFER,
+because its SDK takes frames and compresses them with a codec of its own inside
+the send; forcing it through the encoder would mean handing it bytes it cannot
+use. So the display handler fans out to at most three calls (`PlayoutFeeder`,
+`NDIVideoMirror`, `LiveVideoEncoder`), and downstream of those three there is no
+shared queue at all: `com.takeshot.ndi`, `com.takeshot.encode`, and the playout's
+own.
+
+**What the second output costs the frame path is one pixel-format test and one
+`dispatch_async`.** Measured, release, 1080p, median of 15
+(`TAKESHOT_BENCH=1 scripts/test.sh -c release --filter NDIPerformance`): the
+display handler's offer to NDI alone and to the shared encoder alone each round
+to **0.000 ms**, and doing BOTH is **0.001 ms** — the whole additive cost of a
+second network output, against a 40 ms frame interval at 25 fps. Nothing else is
+additive, and nothing else can be: neither mirror waits on the other, and
+neither can reach the capture queue. The real work each one triggers is on its
+own queue and is not on this clock at all.
+`aParkedNDISendDoesNotStallTheSRTLink` holds the part that matters by wedging an
+NDI send inside the call for two seconds and requiring the transport stream to
+keep flowing through it.
+
+**They do NOT share the operator's bitrate dial, and that is not an oversight.**
+The SRT bitrate is the shared H.264 session's, so a WebRTC viewer inherits it;
+NDI has no such number because NDI's own codec decides its rate from the picture.
+One number for one encoder, and a feed that is not behind that encoder is not
+asked to pretend it is.
+
+**And both are picture only, for one shared reason.** NDI carries audio and so
+does MPEG-TS; neither is sent any, because the pipeline's only stereo feed is
+`onMonitorAudio` — a single slot owned by `AudioMonitor` and gated on
+`monitorEnabled`, so hanging either feed off it would make a director's sound a
+side effect of the cart's speakers. The missing piece is one independent tap in
+`CapturePipeline+Audio`, and only the leg after it differs (AAC and a second PID
+for SRT, planar float and `NDIlib_send_send_audio_v3` for NDI). Two outputs now
+want the same tap, which is an argument for building it once rather than per
+output. The gap has not moved since either feature was written; it has gained a
+second claimant.
+
+**Open in a way SRT's opening is not**: the machine this was restored on has the
+NDI runtime (`/usr/local/lib/libndi.4.dylib`) and no SDK headers anywhere, so
+`CNDI` compiles as a stub there and the real half of it has never executed.
+Everything above about queues, coalescing and the display-side cost is measured;
+everything about what `NDIlib_send_create` and `NDIlib_send_send_video_v2`
+actually do is inherited from the previous implementation of the same file.
+`vendor/NDISDK/README.md` says which claims those are.
 
 ### What the network can reach, and what it cannot
 
@@ -608,12 +684,12 @@ would drop a marker while a roll name is being typed.
   capped at 20). The record folder is emptied and re-pointed between shooting
   days, and the card being copied has nothing to do with it.
 
-## Settings: one flat record, fourteen grouped views of it
+## Settings: one flat record, fifteen grouped views of it
 
 `CaptureSettings` does two jobs and they pull in opposite directions.
 
 It is the **record**. One JSON blob in `UserDefaults` under
-`TakeShot.CaptureSettings`, 88 keys, and there is no error path for getting the
+`TakeShot.CaptureSettings`, 90 keys, and there is no error path for getting the
 shape wrong: a key that moves stops decoding, `loaded(from:)` answers the throw
 with a fresh default object, and the operator's destination folder, naming
 template, calibrated assist thresholds and taught REC references are silently
@@ -625,14 +701,14 @@ half of them carrying a hand-maintained prefix (`chromaKeyPlateOffsetX`)
 standing in for a namespace they could not have.
 
 The two are reconciled by grouping the TYPE while keeping the WIRE FORMAT flat.
-`CaptureSettings` holds fourteen domain groups (`capture`, `naming`, `audio`,
+`CaptureSettings` holds fifteen domain groups (`capture`, `naming`, `audio`,
 `theme`, `assist`, `review`, `lut`, `r3d`, `chromaKey`, `visualRec`, `remote`,
-`srt`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its own
-**synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)` delegate
-to all fourteen against a SINGLE keyed container, so every key still lands at
-the top level exactly where it always did. Nothing hand-writes a per-field
-encode or decode — the field-to-key mapping is still the compiler's, which is
-what makes the 88 keys unforgeable.
+`ndi`, `srt`, `dailies`, `offload`) plus `schemaVersion`. Each group carries its
+own **synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)`
+delegate to all fifteen against a SINGLE keyed container, so every key still
+lands at the top level exactly where it always did. Nothing hand-writes a
+per-field encode or decode — the field-to-key mapping is still the compiler's,
+which is what makes the 90 keys unforgeable.
 
 Flatness is load-bearing for a second consumer as well as for the stored blob:
 `DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by
@@ -654,11 +730,23 @@ rather than a claim:
   perfectly. It reflects each group's property labels, encodes the group, and
   requires every key to derive from its own property by one mechanical rule
   (group prefix + capitalised label, or the label verbatim for a key that
-  predates its group). It also checks the fourteen groups account for the whole
+  predates its group). It also checks the fifteen groups account for the whole
   format exactly once, which is what fails if a group is declared and never
   wired into the delegation.
 - `ModelSettingsMigrationTests` covers what happens to a blob written by an
   older build, against hand-written JSON.
+
+**Two keys have made the round trip off this record and back onto it**, which is
+the case the "make every added field Optional" rule exists for and the only time
+it has actually been exercised in both directions. `ndiEnabled` and
+`ndiSourceName` left with the NDI output and returned with it, so three blob
+shapes are in the wild — with them, without them, and with them again — and all
+three decode. The stored switch is HONOURED on the way back rather than ignored:
+nothing is being migrated, the key names the feature it has always named, and an
+operator who left NDI on gets their source announced again. What must not happen
+is the value leaking sideways onto the SRT switch, which would turn on a network
+output pointed nowhere; `aBlobFromBeforeTheNDIRemovalGetsItsSourceBack` checks
+both halves, and `aBlobWrittenWhileNDIWasRetiredStillDecodes` the middle shape.
 
 **Adding a setting**: put it in the group it belongs to, make it Optional, and
 add its key to the pinned list in `SettingsFormatFixture`. **Adding a group**

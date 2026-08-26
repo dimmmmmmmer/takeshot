@@ -68,6 +68,25 @@ var targets: [Target] = [
         name: "CR3D",
         dependencies: hasR3DSDK ? ["R3DSDK"] : []
     ),
+    // Obj-C++ bridge to the NDI SDK (announcing the viewer as a source on the
+    // set network). Headers go in vendor/NDISDK/include (see
+    // vendor/NDISDK/README.md); without them the target builds as a stub
+    // (CNDSender.isSDKAvailable == NO) and the feature reports itself
+    // unavailable, which is the shape of every build that has no SDK — CI
+    // included. The runtime libndi is opened with dlopen, so nothing links here
+    // either way.
+    //
+    // Unlike libsrt and libdatachannel this one is a VENDOR's own terms rather
+    // than MPL-2.0: the runtime may be redistributed inside an NDI-enabled
+    // application, but only under Vizrt's SDK licence and its attribution
+    // requirements. What that costs is written down in that README and in
+    // NOTICE, and no release bundles it today.
+    .target(
+        name: "CNDI",
+        cxxSettings: [
+            .headerSearchPath("../../vendor/NDISDK/include")
+        ]
+    ),
     // Obj-C++ bridge to libsrt (sending the viewer over the set network as an
     // SRT stream). Headers go in vendor/SRTSDK/include/srt (see
     // vendor/SRTSDK/README.md); without them the target builds as a stub
@@ -112,7 +131,7 @@ var targets: [Target] = [
     .target(
         name: "TakeShotKit",
         dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CSRT",
-                       "CDataChannel"],
+                       "CDataChannel", "CNDI"],
         resources: [.process("Resources")],
         swiftSettings: swift6Mode
     ),

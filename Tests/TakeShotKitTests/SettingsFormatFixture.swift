@@ -26,22 +26,28 @@ enum SettingsFormatFixture {
     /// The defaults key the blob is stored under.
     static let defaultsKey = "TakeShot.CaptureSettings"
 
-    /// Every key the current format has, sorted. 88 of them.
+    /// Every key the current format has, sorted. 90 of them.
     ///
     /// Adding a key here is how a new setting is declared to exist; a key that
     /// disappears from this list is a setting that every existing operator
     /// loses. Neither should ever happen by accident, which is the whole point
     /// of writing them out.
     ///
-    /// Three keys HAVE disappeared, in two retirements. `captureBitDepth`, when
-    /// capture bit depth stopped being a setting and started following the
-    /// signal; then `ndiEnabled` and `ndiSourceName` with the NDI output itself.
-    /// Nothing was lost with any of them, because there is nothing left for a
-    /// stored depth or a stored source name to mean — and an old blob that still
-    /// carries them decodes exactly as it did
-    /// (`anOldBlobWithARetiredBitDepthStillDecodes`,
-    /// `anOldBlobWithRetiredNDIKeysStillDecodes`), which is the contract this
-    /// list is really guarding.
+    /// One key has disappeared and stayed gone: `captureBitDepth`, when capture
+    /// bit depth stopped being a setting and started following the signal.
+    /// Nothing was lost with it, because there is nothing left for a stored
+    /// depth to mean, and an old blob that still carries it decodes exactly as
+    /// it did (`anOldBlobWithARetiredBitDepthStillDecodes`).
+    ///
+    /// **Two keys have made the ROUND TRIP, which is the case this list exists
+    /// for and had never actually been through.** `ndiEnabled` and
+    /// `ndiSourceName` went off the record with the NDI output, and came back
+    /// on it when the owner asked for NDI beside SRT rather than instead of it.
+    /// So three blob shapes are in the wild — with the keys, without them, and
+    /// with them again — and all three decode, because every one of these
+    /// fields is Optional and a synthesized decoder drops keys it does not know
+    /// (`aBlobFromBeforeTheNDIRemovalGetsItsSourceBack`,
+    /// `aBlobWrittenWhileNDIWasRetiredStillDecodes`).
     static let allKeys: [String] = [
         "accentHex", "appBackgroundHex", "appLanguage", "appearance",
         "audioChannelMask", "audioInputDeviceUID", "cameraLabel",
@@ -58,7 +64,7 @@ enum SettingsFormatFixture {
         "keepInMenuBar", "legendPlacement", "legendSize", "ltcChannel",
         "lutFileName", "lutIntensity", "lutPreviewEnabled", "lutRecordEnabled",
         "monitorDeviceID", "monitorDimmed", "monitorEnabled", "monitorMuted",
-        "monitorVolume", "namingTemplate",
+        "monitorVolume", "namingTemplate", "ndiEnabled", "ndiSourceName",
         "offerMountedCards", "offloadDestinationPaths", "peakingColor",
         "peakingIntensity", "playbackAudioDeviceUID", "playerBackgroundHex",
         "postfix", "preRollFrames", "preRollSeconds", "preRollUnit",
@@ -81,7 +87,7 @@ enum SettingsFormatFixture {
     /// back to a property's default, so a non-Optional field added today would
     /// make every settings blob written before today undecodable). And a nil
     /// Optional is OMITTED rather than written as null — `encodeIfPresent` —
-    /// so a default install stores eight keys, not eighty-eight.
+    /// so a default install stores eight keys, not ninety.
     static let alwaysWrittenKeys: [String] = [
         "cameraLabel", "codec", "destinationPath", "detectionMode",
         "namingTemplate", "projectName", "startDebounceFrames",
@@ -151,6 +157,8 @@ enum SettingsFormatFixture {
           "monitorMuted": false,
           "monitorVolume": 0.42,
           "namingTemplate": "{prefix}_{cam}{roll}C{clip}_{postfix}",
+          "ndiEnabled": true,
+          "ndiSourceName": "Nightfall B",
           "offerMountedCards": false,
           "offloadDestinationPaths": ["/Volumes/BACKUP_A", "/Volumes/BACKUP_B"],
           "peakingColor": "blue",
