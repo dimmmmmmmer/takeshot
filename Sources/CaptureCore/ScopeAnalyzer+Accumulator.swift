@@ -1,8 +1,8 @@
 import Foundation
 
 /// The scope accumulator: one pass over the sampling grid fills the waveform,
-/// histogram and vectorscope densities, and `finish()` turns them into a
-/// `ScopeData`.
+/// histogram, vectorscope and chromaticity densities, and `finish()` turns them
+/// into a `ScopeData`.
 ///
 /// Split out of ScopeAnalyzer, whose body had grown past the point where the
 /// three source-format readers at the top were still visible next to it.
@@ -30,26 +30,41 @@ extension ScopeAnalyzer {
         static let diffCells = width * (height + 1)
         static let vectorSize = ScopeData.vectorSize
         static let vectorCells = vectorSize * vectorSize
-        /// Fixed-point denominator for each axis of the vectorscope's split
-        /// deposit, chosen so the four corner weights sum to exactly
-        /// `vectorUnit * vectorUnit` with no division and no rounding loss:
+        static let cieSize = ScopeData.cieSize
+        static let cieCells = cieSize * cieSize
+        /// Fixed-point denominator for each axis of a split deposit — the
+        /// vectorscope's and the chromaticity chart's alike — chosen so the
+        /// four corner weights sum to exactly `splitUnit * splitUnit` with no
+        /// division and no rounding loss:
         /// (u−tx)(u−ty) + tx(u−ty) + (u−tx)ty + tx·ty = u² for any tx, ty.
         /// A sixteenth of a cell is about a fifth of a device pixel at the
-        /// sizes this map is drawn at, so nothing is lost by stopping there.
-        static let vectorUnit: Int32 = 16
+        /// sizes these maps are drawn at, so nothing is lost by stopping there.
+        static let splitUnit: Int32 = 16
         /// What one sample deposits in total, and therefore what `finish()`
         /// divides back out before the brightness curve.
-        static let vectorWeight = vectorUnit * vectorUnit
+        static let splitWeight = splitUnit * splitUnit
 
         /// What the wire codes mean, for the nominal range `finish()` publishes
         /// and for the vectorscope's chroma gain.
         private let levels: ScopeWireLevels
         private let chromaGain: Double
-        /// What those codes mean as luminance. Carried through untouched — the
-        /// accumulator does no transfer arithmetic at all, because a scope
-        /// plots the codes that arrived. It only has to hand the transfer on so
-        /// the AXIS can be labelled in the units those codes are in.
-        private let transfer: SignalTransfer
+        /// What those codes mean as luminance and as colour. Carried through
+        /// untouched for every TRACE — the waveform, the parade, the histogram
+        /// and the vectorscope do no transfer arithmetic at all, because a
+        /// scope plots the codes that arrived, and the transfer is handed on so
+        /// the AXIS can be labelled in the units those codes are in. The
+        /// chromaticity map is the exception and says why at `addToCIE`.
+        private let colorimetry: WireColorimetry
+        /// This frame's own RGB→XYZ matrix, from its own primaries.
+        private let toXYZ: RGBToXYZ
+        /// Wire code → linear light, all 1024 of them, built once per frame.
+        ///
+        /// The reason there is a table at all: linearizing costs a `pow` and
+        /// the grid walk takes 276 k samples of three components, so doing it
+        /// per sample is 829 k transcendental calls a frame. It is the same
+        /// answer `WireDisplayTable` gives for the display half — a transfer
+        /// function is a function of the CODE, and there are only 1024 codes.
+        private let linear: UnsafeMutablePointer<Double>
 
         // Trace densities as difference maps (row-major, `height + 1` rows).
         private let diffY: UnsafeMutablePointer<Int32>
@@ -64,6 +79,9 @@ extension ScopeAnalyzer {
         private let sumB: UnsafeMutablePointer<Int32>
         /// Vectorscope density — one cell per sample, no segments to fill.
         private let vector: UnsafeMutablePointer<Int32>
+        /// CIE chromaticity density — the same shape of map as the vectorscope's
+        /// and filled the same way.
+        private let cie: UnsafeMutablePointer<Int32>
         /// The four 256-bin histograms, back to back (R, G, B, Y).
         private let hist: UnsafeMutablePointer<Int32>
 
@@ -78,9 +96,10 @@ extension ScopeAnalyzer {
         private var prevR = -1, prevG = -1, prevB = -1
 
         init(levels: ScopeWireLevels = .full,
-             transfer: SignalTransfer = .sdr) {
+             colorimetry: WireColorimetry = .sdr) {
             self.levels = levels
-            self.transfer = transfer
+            self.colorimetry = colorimetry
+            toXYZ = colorimetry.primaries.rgbToXYZ
             chromaGain = levels.chromaGain
             func zeroed(_ count: Int) -> UnsafeMutablePointer<Int32> {
                 let buffer = UnsafeMutablePointer<Int32>.allocate(capacity: count)
@@ -95,14 +114,43 @@ extension ScopeAnalyzer {
             sumG = zeroed(Self.diffCells)
             sumB = zeroed(Self.diffCells)
             vector = zeroed(Self.vectorCells)
+            cie = zeroed(Self.cieCells)
             hist = zeroed(4 * 256)
+            linear = Self.linearTable(levels: levels,
+                                      transfer: colorimetry.transfer)
         }
 
         deinit {
             for buffer in [diffY, diffR, diffG, diffB, sumR, sumG, sumB,
-                           vector, hist] {
+                           vector, cie, hist] {
                 buffer.deallocate()
             }
+            linear.deallocate()
+        }
+
+        /// Linear light for every wire code on this frame's levels and
+        /// transfer, in units of diffuse white.
+        ///
+        /// The levels half is what turns a CODE into the 0…1 signal a transfer
+        /// function is defined on, and it is the same nominal pair every other
+        /// scope's graticule is placed by — so a studio-swing frame's code 64
+        /// is signal 0 here exactly as it is 0 % there, and a full-range one's
+        /// code 0 is. Getting this wrong is invisible on the chart and moves
+        /// every colour on it: a limited-range frame read as full puts black at
+        /// signal 0.063, whose 2.4 power is not zero, and every dark pixel then
+        /// drifts toward the white point instead of staying where it is.
+        private static func linearTable(levels: ScopeWireLevels,
+                                        transfer: SignalTransfer)
+            -> UnsafeMutablePointer<Double> {
+            let codes = levels.nominalCodes
+            let span = Double(codes.white - codes.black)
+            let table = UnsafeMutablePointer<Double>.allocate(
+                capacity: ScopeAnalyzer.sampleLevels)
+            for code in 0..<ScopeAnalyzer.sampleLevels {
+                let signal = (Double(code) - Double(codes.black)) / span
+                table[code] = transfer.linearLight(forSignal: signal)
+            }
+            return table
         }
 
         /// Scope row for a 10-bit code value: row 0 is the top of the trace.
@@ -180,26 +228,19 @@ extension ScopeAnalyzer {
             prevLuma = luma; prevR = r; prevG = g; prevB = b
 
             addToVector(r: r, g: g, b: b, nativeChroma: nativeChroma)
+            addToCIE(r: r, g: g, b: b)
         }
 
         /// Vectorscope: full-range BT.709 chroma, ±(scale/2) → ±half-size.
         /// `chromaGain` puts an unexpanded wire frame back on the full-range
         /// scale the graticule targets are positioned on.
         ///
-        /// The sample is SPLIT between the four cells around it, by how close
-        /// it lands to each — not dropped whole into the one it falls in. The
-        /// map is 256 cells across a box drawn at three or four times that in
-        /// device pixels, so a whole-cell deposit quantises every trace to the
-        /// cell grid, and the separable blur that follows turns that staircase
-        /// into haze rather than into detail. Splitting gives the trace a
-        /// position finer than a cell, which is what "higher resolution" on a
-        /// vectorscope actually means: the same samples, plotted where they
-        /// really are.
-        ///
-        /// Weights are fixed point out of `vectorUnit`, so the map stays
-        /// integer and one sample always deposits exactly `vectorWeight` —
-        /// `finish()` divides it back out, so the brightness curve is the one
-        /// it always was (see `toBytesLog(_:unit:)`).
+        /// The sample is SPLIT between the four cells around it rather than
+        /// dropped whole into the one it falls in — see
+        /// `split(into:size:x:y:)`, which the chromaticity chart shares. One
+        /// sample always deposits exactly `splitWeight`, and `finish()` divides
+        /// it back out, so the brightness curve is the one it always was (see
+        /// `toBytesLog(_:unit:)`).
         @inline(__always)
         private func addToVector(r: Int, g: Int, b: Int,
                                  nativeChroma: (cb: Double, cr: Double)?) {
@@ -208,18 +249,69 @@ extension ScopeAnalyzer {
             let cb = raw.cb * chromaGain, cr = raw.cr * chromaGain
             let size = Self.vectorSize
             let span = Double(ScopeAnalyzer.sampleLevels - 1)
-            // Cell centres sit at i + 0.5, so the neighbours of a point at `fx`
-            // are the cells either side of `fx - 0.5`.
-            let fx = Double(size) / 2 + cb * Double(size) / span - 0.5
-            let fy = Double(size) / 2 - cr * Double(size) / span - 0.5
+            split(into: vector, size: size,
+                  x: Double(size) / 2 + cb * Double(size) / span,
+                  y: Double(size) / 2 - cr * Double(size) / span)
+        }
+
+        /// CIE 1931 chromaticity: where this sample's colour sits on the
+        /// diagram, under THIS frame's transfer and THIS frame's primaries.
+        ///
+        /// The one accumulation in the walk that is not a function of the code
+        /// alone, and both halves of that are the point of the scope:
+        ///
+        /// - **Linear light first.** A chromaticity is a ratio between the
+        ///   three linear components, and a wire code is gamma-encoded, so
+        ///   computing x and y straight from the codes is wrong for every
+        ///   colour that is not neutral — and wrong quietly: the chart still
+        ///   looks like a chart. `linear` is the frame's own inverse transfer
+        ///   (`SignalTransfer.linearLight`) tabulated over all 1024 codes.
+        /// - **The frame's own matrix.** Rec.2020 codes mean different
+        ///   chromaticities than Rec.709 codes, which is exactly what an
+        ///   operator opens this scope to see. `toXYZ` comes from
+        ///   `WireColorimetry.primaries` and is derived from the same four
+        ///   chromaticities the graticule draws its triangle from.
+        ///
+        /// Everything after that is the vectorscope's machinery unchanged: the
+        /// same fixed-point split between the four cells around the point, so
+        /// the trace has a position finer than the grid, and the same
+        /// unit-aware log curve in `finish()`.
+        @inline(__always)
+        private func addToCIE(r: Int, g: Int, b: Int) {
+            guard let point = toXYZ.chromaticity(r: linear[r], g: linear[g],
+                                                 b: linear[b]) else { return }
+            let unit = ScopeData.cieUnit(point)
+            let size = Self.cieSize
+            split(into: cie, size: size,
+                  x: unit.x * Double(size), y: unit.y * Double(size))
+        }
+
+        /// Deposit one sample at a fractional position on a square map, split
+        /// between the four cells around it by how close it lands to each.
+        ///
+        /// Shared by the vectorscope and the chromaticity chart because they
+        /// have the identical problem: a 256-cell map drawn across three or
+        /// four times that in device pixels, one sample per position and no
+        /// segments to fill, so a whole-cell deposit quantises every trace to
+        /// the cell grid and the separable blur that follows turns that
+        /// staircase into haze rather than into detail. Splitting gives the
+        /// trace a position finer than a cell, which is what "higher
+        /// resolution" on a plot like this actually means: the same samples,
+        /// plotted where they really are.
+        @inline(__always)
+        private func split(into map: UnsafeMutablePointer<Int32>, size: Int,
+                           x: Double, y: Double) {
+            // Cell centres sit at i + 0.5, so the neighbours of a point at `x`
+            // are the cells either side of `x - 0.5`.
+            let fx = x - 0.5, fy = y - 0.5
             let ix = Int(fx.rounded(.down)), iy = Int(fy.rounded(.down))
-            let tx = Int32((fx - fx.rounded(.down)) * Double(Self.vectorUnit))
-            let ty = Int32((fy - fy.rounded(.down)) * Double(Self.vectorUnit))
-            let unit = Self.vectorUnit
-            deposit(ix, iy, (unit - tx) * (unit - ty))
-            deposit(ix + 1, iy, tx * (unit - ty))
-            deposit(ix, iy + 1, (unit - tx) * ty)
-            deposit(ix + 1, iy + 1, tx * ty)
+            let tx = Int32((fx - fx.rounded(.down)) * Double(Self.splitUnit))
+            let ty = Int32((fy - fy.rounded(.down)) * Double(Self.splitUnit))
+            let unit = Self.splitUnit
+            deposit(map, size, ix, iy, (unit - tx) * (unit - ty))
+            deposit(map, size, ix + 1, iy, tx * (unit - ty))
+            deposit(map, size, ix, iy + 1, (unit - tx) * ty)
+            deposit(map, size, ix + 1, iy + 1, tx * ty)
         }
 
         /// One corner of the split. A sample at the very edge of the map has
@@ -227,190 +319,48 @@ extension ScopeAnalyzer {
         /// rather than dropped, so a sample always deposits its whole weight
         /// and the totals stay a count of samples.
         @inline(__always)
-        private func deposit(_ x: Int, _ y: Int, _ weight: Int32) {
+        private func deposit(_ map: UnsafeMutablePointer<Int32>, _ size: Int,
+                             _ x: Int, _ y: Int, _ weight: Int32) {
             guard weight != 0 else { return }
-            let size = Self.vectorSize
             let cx = min(size - 1, max(0, x)), cy = min(size - 1, max(0, y))
-            vector[cy * size + cx] += weight
-        }
-
-        /// A difference map all the way to its softened density, in ONE sweep:
-        /// the column integration and the vertical 1-2-1 together.
-        ///
-        /// The VERTICAL blur of a prefix sum is expressible in terms of the sum
-        /// and the two differences bracketing it,
-        /// `J[y] = I[y−1] + 2·I[y] + I[y+1] = 4·I[y] − d[y] + d[y+1]`, and both
-        /// differences are already being read to compute `I[y]` — so the blur
-        /// costs two adds on a value that is in a register, instead of a second
-        /// pass over a megabyte.
-        ///
-        /// The map's spare row makes the bottom edge come out right with no
-        /// branch — every segment is closed by the time the walk ends, so
-        /// `d[height]` is exactly −I[height−1] and the formula degenerates to
-        /// the zero-padded `3·I[h−1] − d[h−1]` on its own. The top edge does the
-        /// same with `I[−1] = 0`.
-        ///
-        /// There is deliberately NO horizontal blur here, and that is the fix
-        /// for the waveform reading thick and hazy next to the parade. It filled
-        /// nothing: the accumulator writes EVERY column for every grid row (a
-        /// sample's segment reaches back to its left-hand neighbour's value), so
-        /// a trace map has no horizontal gaps for a blur to close — the pass
-        /// only widened the trace by a column each way. A column is sub-pixel in
-        /// a parade, whose three channels squeeze the whole map into a third of
-        /// the box, and it is several device pixels in a waveform, which
-        /// stretches one map across all of it. Same code, same map, and the
-        /// smear it added was invisible in one scope and the dominant blur in
-        /// the other. Measured on a detailed 1080p frame in a 472 pt box, the
-        /// horizontal detail surviving to the screen went from 0.35 of the
-        /// parade's to 0.57 with the pass gone, and to 1.05 once the map was
-        /// widened to match.
-        private static func softened(
-            _ diff: UnsafeMutablePointer<Int32>) -> [Int32] {
-            // one running total per column: 4 KB, so it stays in L1 for the
-            // whole sweep. Walking columns instead would stride a megabyte per
-            // step.
-            var running = [Int32](repeating: 0, count: width)
-            return Array(unsafeUninitializedCapacity: cells) { dst, count in
-                count = cells
-                running.withUnsafeMutableBufferPointer { totals in
-                    for y in 0..<height {
-                        softenRow(y, diff: diff, totals: totals, into: dst)
-                    }
-                }
-            }
-        }
-
-        /// One row of `softened`: integrate down into it, blurring as it goes.
-        @inline(__always)
-        private static func softenRow(
-            _ y: Int, diff: UnsafeMutablePointer<Int32>,
-            totals: UnsafeMutableBufferPointer<Int32>,
-            into dst: UnsafeMutableBufferPointer<Int32>) {
-            let base = y * width
-            for col in 0..<width {
-                let here = diff[base + col]
-                totals[col] += here
-                dst[base + col] = 4 * totals[col] - here + diff[base + width + col]
-            }
-        }
-
-        /// Separable 1-2-1 blur over the vectorscope's square density map.
-        ///
-        /// The trace maps do NOT go through this. They have one integration
-        /// sweep that carries their vertical softening, and they need no
-        /// horizontal one (see `softened`). The vectorscope is the opposite
-        /// case: one sample per cell, no segments, real gaps between the hits
-        /// in both directions — so it gets the full separable blur.
-        static func blurred(_ counts: [Int32], size: Int) -> [Int32] {
-            let row = (step: 1, count: size)
-            let column = (step: size, count: size)
-            return blurPass(blurPass(counts, along: row, across: column),
-                            along: column, across: row)
-        }
-
-        /// One pass of the separable blur. `along` is the direction being
-        /// blurred (step between neighbours, samples per line), `across` walks
-        /// the line starts — so the two passes are the same code with the two
-        /// descriptions swapped, and neither borrows across a line end.
-        private static func blurPass(_ counts: [Int32],
-                                     along: (step: Int, count: Int),
-                                     across: (step: Int, count: Int)) -> [Int32] {
-            counts.withUnsafeBufferPointer { src in
-                Array(unsafeUninitializedCapacity: counts.count) { dst, written in
-                    written = counts.count
-                    for line in 0..<across.count {
-                        let start = line * across.step
-                        for position in 0..<along.count {
-                            let index = start + position * along.step
-                            let before = position > 0 ? src[index - along.step] : 0
-                            let after = position < along.count - 1
-                                ? src[index + along.step] : 0
-                            dst[index] = src[index] * 2 + before + after
-                        }
-                    }
-                }
-            }
-        }
-
-        /// log(count + 1) for the densities that actually occur, precomputed.
-        /// Every cell of every map used to call `Foundation.log` twice (once for
-        /// the byte, once for the colored trace) — 600 k transcendental calls
-        /// per frame for a 255-level output.
-        /// Covers every density a softened trace map can reach (the grid puts
-        /// `gridRows` samples in a column and the vertical 1-2-1 multiplies by
-        /// 4); the vectorscope's few hottest cells fall through to `log`.
-        private static let logTable: [Double] =
-            (0...8192).map { Foundation.log(Double($0) + 1) }
-
-        @inline(__always)
-        private static func logOf(_ count: Int32) -> Double {
-            let index = Int(count)
-            return index <= 8192 ? logTable[index]
-                : Foundation.log(Double(index) + 1)
-        }
-
-        /// Adaptive log curve, for the waveforms and the vectorscope alike:
-        /// single hits stay visible and dense areas keep their gradation, where
-        /// a fixed gain either clips into a flat blob or hides the low
-        /// densities.
-        private static func toBytesLog(_ counts: [Int32],
-                                       unit: Int32 = 1) -> [UInt8] {
-            let peak = max(unit, counts.max() ?? unit)
-            let scale = 255.0 / logOf(peak, unit: unit)
-            var out = [UInt8](repeating: 0, count: counts.count)
-            counts.withUnsafeBufferPointer { src in
-                out.withUnsafeMutableBufferPointer { dst in
-                    for i in 0..<src.count where src[i] != 0 {
-                        dst[i] = UInt8(min(255.0,
-                                           scale * logOf(src[i], unit: unit)))
-                    }
-                }
-            }
-            return out
-        }
-
-        /// `log(count/unit + 1)` — the density in SAMPLES, whatever fixed-point
-        /// unit the map counts in.
-        ///
-        /// The vectorscope splits a sample between four cells, so its counts
-        /// are `vectorWeight` per sample rather than 1. Feeding those straight
-        /// to the curve would not merely rescale it: the log's shape changes
-        /// with the scale, and an isolated stray sample would have gone from
-        /// about 23 of 255 to about 108 — a noise floor lit up by arithmetic
-        /// nobody chose. `log(c/u + 1) = log(c + u) − log(u)` keeps the exact
-        /// curve the map always had, and keeps the integer table for the common
-        /// case.
-        @inline(__always)
-        private static func logOf(_ count: Int32, unit: Int32) -> Double {
-            guard unit != 1 else { return logOf(count) }
-            return logOf(count + unit) - Foundation.log(Double(unit))
+            map[cy * size + cx] += weight
         }
 
         func finish() -> ScopeData {
-            let softY = Self.softened(diffY)
+            let softY = DensityMap.softened(diffY)
             // colored luma trace: brightness from the softened density (log),
             // chroma from the blurred means so color follows the soft edge
             let colored = coloredTrace(density: softY)
             let codes = levels.nominalCodes
             return ScopeData(
-                waveformY: Self.toBytesLog(softY),
-                waveformR: Self.toBytesLog(Self.softened(diffR)),
-                waveformG: Self.toBytesLog(Self.softened(diffG)),
-                waveformB: Self.toBytesLog(Self.softened(diffB)),
+                waveformY: DensityMap.toBytesLog(softY),
+                waveformR: DensityMap.toBytesLog(DensityMap.softened(diffR)),
+                waveformG: DensityMap.toBytesLog(DensityMap.softened(diffG)),
+                waveformB: DensityMap.toBytesLog(DensityMap.softened(diffB)),
                 waveformYColor: colored,
                 histR: histogram(0), histG: histogram(1),
                 histB: histogram(2), histY: histogram(3),
                 // the vectorscope is softened in both directions: one sample per
                 // cell and no segments to fill left it a field of hard dots
                 // that read as a low-resolution scope rather than as a density
-                vector: Self.toBytesLog(Self.blurred(
+                vector: DensityMap.toBytesLog(DensityMap.blurred(
                     Array(UnsafeBufferPointer(start: vector,
                                               count: Self.vectorCells)),
                     size: Self.vectorSize),
-                    unit: Self.vectorWeight),
+                    unit: Self.splitWeight),
+                // the chromaticity map is softened and scaled exactly like the
+                // vectorscope's, for exactly the same reasons — one sample per
+                // position, real gaps in both directions, and counts that are
+                // `splitWeight` per sample rather than 1
+                cie: DensityMap.toBytesLog(DensityMap.blurred(
+                    Array(UnsafeBufferPointer(start: cie,
+                                              count: Self.cieCells)),
+                    size: Self.cieSize),
+                    unit: Self.splitWeight),
                 nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
                                            black: Self.unit(of: codes.black)),
-                transfer: transfer,
+                transfer: colorimetry.transfer,
+                primaries: colorimetry.primaries,
                 sequence: ScopeAnalyzer.nextSequence())
         }
 
@@ -421,15 +371,15 @@ extension ScopeAnalyzer {
         /// RGBA luma trace: brightness from the density, hue and saturation
         /// from the mean color of the pixels that made it.
         private func coloredTrace(density: [Int32]) -> [UInt8] {
-            let colorR = Self.softened(sumR)
-            let colorG = Self.softened(sumG)
-            let colorB = Self.softened(sumB)
+            let colorR = DensityMap.softened(sumR)
+            let colorG = DensityMap.softened(sumG)
+            let colorB = DensityMap.softened(sumB)
             var colored = [UInt8](repeating: 0, count: Self.cells * 4)
-            let yScale = 255.0 / Self.logOf(max(1, density.max() ?? 1))
+            let yScale = 255.0 / DensityMap.logOf(max(1, density.max() ?? 1))
             for i in 0..<Self.cells {
                 let count = density[i]
                 guard count > 0 else { continue }
-                let brightness = min(255.0, yScale * Self.logOf(count))
+                let brightness = min(255.0, yScale * DensityMap.logOf(count))
                 // one reciprocal, not three divisions: this runs once per cell
                 // of a 512x512 map and a divide is twenty times a multiply
                 let inverse = 1 / Double(count)

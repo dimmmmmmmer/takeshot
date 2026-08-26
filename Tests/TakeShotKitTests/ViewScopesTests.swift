@@ -46,7 +46,8 @@ struct ViewScopesTests {
         for (kind, key) in [(ScopeKind.waveform, "scopeWaveformOn"),
                             (.parade, "scopeParadeOn"),
                             (.histogram, "scopeHistogramOn"),
-                            (.vector, "scopeVectorOn")] {
+                            (.vector, "scopeVectorOn"),
+                            (.cie, "scopeCIEOn")] {
             probe.store.set(scopes.contains(kind), forKey: key)
         }
     }

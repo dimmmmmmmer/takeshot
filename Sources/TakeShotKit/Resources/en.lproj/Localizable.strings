@@ -930,3 +930,10 @@
 "toast_metadata_log_not_saved" = "Metadata log NOT saved: %@";
 "toast_ranges_not_saved" = "Loop ranges NOT saved: %@";
 "toast_delete_failed" = "Delete: %@";
+
+/* CIE chromaticity chart: the scope name, and the chip that adds the second
+   gamut triangle. "CIE" is the instrument every colourist already knows by
+   that name, in every language. */
+"scope_cie" = "CIE";
+"scope_cie_gamuts" = "Also draw the gamut the signal is not in — a Rec.2020 source outside the Rec.709 triangle will not survive a Rec.709 delivery unchanged.";
+"scope_cie_hint" = "CIE 1931 chromaticity: the colours in the picture as (x, y), computed in linear light from the signal's own transfer and primaries. The bright triangle is the signal's gamut, the cross is D65.";

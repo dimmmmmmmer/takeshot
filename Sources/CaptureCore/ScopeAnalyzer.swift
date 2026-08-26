@@ -2,11 +2,23 @@
 import Foundation
 
 /// One frame's worth of scope data: per-channel waveform density maps, RGB/luma
-/// histograms and a vectorscope density map. Computed on the CPU from a fixed
-/// sampling grid, on the scope queue — ~23 ms per 1080p frame in release on an
-/// idle machine, whatever the content and whatever the frame size, against a
-/// stride interval of 80 ms at 25 fps and 67 ms at 60. That is what makes a
-/// ~15 Hz update rate affordable.
+/// histograms, a vectorscope density map and a CIE chromaticity map. Computed on
+/// the CPU from a fixed sampling grid, on the scope queue — ~25 ms per 1080p
+/// frame in release on an idle machine, whatever the content and whatever the
+/// frame size, against a stride interval of 80 ms at 25 fps and 67 ms at 60.
+/// That is what makes a ~15 Hz update rate affordable.
+///
+/// The chromaticity map cost about 2 ms of that when it was added — measured as
+/// a PAIRED A/B in release, one line toggled and the two arms run alternately
+/// three times over, because the machine drifts by more than the effect between
+/// one run and the next: the best 1080p pass was 23.6-24.1 ms without the map
+/// and 25.5-26.6 ms with it, across all four source formats. That is ~7 ns per
+/// grid sample for three table lookups, a 3×3 and a split deposit, and it is
+/// this small only because it is one more accumulation in the SAME walk — a
+/// second pass over the frame would have cost the walk again.
+///
+/// It is 2.5 % of the 80 ms stride interval at 25 fps, and the delivered rate
+/// is unchanged: 20 of 20 offered passes still land.
 ///
 /// It was ~12 ms while the trace maps were 512 columns wide. Doubling them
 /// doubled the sampling grid and every sweep over it, and the horizontal blur
@@ -67,6 +79,36 @@ public struct ScopeData: Sendable {
     /// and it wants a real signal and the owner's eye rather than a synthetic
     /// one and mine. The evidence is here so that decision starts from it.
     public static let vectorSize = 256
+    /// CIE chromaticity map resolution (square), and the same size as the
+    /// vectorscope's for the same reason: the grid puts ~138 k samples on it,
+    /// and a map fine enough to hold fewer than one sample per cell does not
+    /// gain detail, it gains gaps. Where a sample lands INSIDE its cell is
+    /// carried by the split deposit both maps share, not by the cell count.
+    public static let cieSize = 256
+    /// The xy square the map covers, both axes on the same scale.
+    ///
+    /// 0…0.85 holds the whole spectral locus with room to spare — its extremes
+    /// are x = 0.7347 at 700 nm and y = 0.8338 at 520 nm — and holds it on ONE
+    /// scale in both directions, which a chromaticity diagram has to be drawn
+    /// on: the distance between two points is the only thing the chart says
+    /// beyond where they are, and a stretched axis makes that distance a lie in
+    /// one direction. Square also means the box is square, which is what
+    /// `ScopeGridLayout` already assumes of this scope.
+    public static let cieSpan = 0.85
+    /// Where a chromaticity sits inside the map's square, 0…1 from the LEFT and
+    /// from the TOP — so y is flipped, as on every map here (row 0 is the high
+    /// end).
+    ///
+    /// The analyzer deposits through this and the graticule draws the spectral
+    /// locus, both gamut triangles and the white point through it, so a corner
+    /// and the trace that should land on it are placed by one function. It is
+    /// the vectorscope's rule (`ScopeAnalyzer.chroma` positions both ends of
+    /// that scope) applied to the scope that needs it more: nobody can tell by
+    /// eye that a chromaticity is a percent off.
+    public static func cieUnit(_ point: Chromaticity) -> (x: Double, y: Double) {
+        (point.x / cieSpan, 1 - point.y / cieSpan)
+    }
+
     /// Grayscale density maps, row-major `waveWidth * waveHeight`;
     /// row 0 is the highest code value (the top of the scope).
     public let waveformY: [UInt8]
@@ -85,6 +127,9 @@ public struct ScopeData: Sendable {
     /// Vectorscope density: x = Cb (right = +), y = Cr (top = +), center at
     /// (vectorSize/2, vectorSize/2), full-range chroma ±511 maps to ±half-size.
     public let vector: [UInt8]
+    /// CIE 1931 chromaticity density, row-major `cieSize * cieSize`: column 0 is
+    /// x = 0, row 0 is y = `cieSpan`. Placed by `cieUnit`.
+    public let cie: [UInt8]
     /// Where 0 % and 100 % sit on the trace maps. `.full` for an already
     /// expanded frame; a wire frame leaves room for the excursions.
     public let nominal: ScopeNominalRange
@@ -96,6 +141,14 @@ public struct ScopeData: Sendable {
     /// was analyzed before the camera switched to PQ must not be labelled in
     /// nits for one refresh.
     public let transfer: SignalTransfer
+    /// What the traced codes mean as a COLOUR — the primaries the chromaticity
+    /// map was computed against, and the gamut the chart draws loudest.
+    ///
+    /// Carried on the data for the same reason `transfer` is: the frame states
+    /// it, a take latches what it opened with, and a chart labelled Rec.2020
+    /// over a map computed from Rec.709 would be wrong in the one way nobody
+    /// looking at the picture can catch.
+    public let primaries: SignalPrimaries
     /// Monotonic frame counter — views cache derived images against it so a
     /// window resize doesn't rebuild them.
     public let sequence: Int
@@ -154,6 +207,11 @@ public enum ScopeAnalyzer {
     /// on `ScopeData.transfer` so the axis can be labelled in cd/m². It changes
     /// no trace and no sample — an instrument plots the codes that arrived,
     /// whatever curve they were encoded with.
+    ///
+    /// The CIE chromaticity map is the one exception, and necessarily so: a
+    /// chromaticity is a function of LINEAR light and of the primaries the
+    /// codes are stated against, so that map — and only that map — is computed
+    /// through both halves of this value. See `Accumulator.addToCIE`.
     public static func analyze(_ pixelBuffer: CVPixelBuffer,
                                region: ScopeRegion = .full,
                                wireLevels: ScopeWireLevels = .full,
@@ -169,7 +227,7 @@ public enum ScopeAnalyzer {
         case TenBitConverter.r210:
             return PackedPlane(pixelBuffer).flatMap {
                 analyzed(R210Reader(plane: $0), region: region,
-                         levels: wireLevels, transfer: colorimetry.transfer)
+                         levels: wireLevels, colorimetry: colorimetry)
             }
         case R12BPacking.pixelFormat: // 'R12B', 12-bit RGB
             return PackedPlane(pixelBuffer).flatMap {
@@ -178,8 +236,7 @@ public enum ScopeAnalyzer {
                 guard CVPixelBufferGetBytesPerRow(pixelBuffer)
                     >= R12BPacking.blockRowBytes(width: $0.width) else { return nil }
                 return analyzed(R12BReader(plane: $0), region: region,
-                                levels: wireLevels,
-                                transfer: colorimetry.transfer)
+                                levels: wireLevels, colorimetry: colorimetry)
             }
         case V210Packing.pixelFormat: // 'v210', 10-bit YCbCr 4:2:2
             return PackedPlane(pixelBuffer).flatMap {
@@ -190,7 +247,7 @@ public enum ScopeAnalyzer {
                 return analyzed(V210Reader(plane: $0, levels: wireLevels,
                                            primaries: colorimetry.primaries),
                                 region: region, levels: wireLevels,
-                                transfer: colorimetry.transfer)
+                                colorimetry: colorimetry)
             }
         case kCVPixelFormatType_422YpCbCr8: // '2vuy': Cb Y0 Cr Y1
             return PackedPlane(pixelBuffer).flatMap {
@@ -245,10 +302,10 @@ public enum ScopeAnalyzer {
     /// trace density as a full-frame one.
     private static func analyzed<Reader: FrameReader>(
         _ reader: Reader, region: ScopeRegion, levels: ScopeWireLevels,
-        transfer: SignalTransfer = .sdr) -> ScopeData? {
+        colorimetry: WireColorimetry = .sdr) -> ScopeData? {
         guard reader.width > 1, reader.height > 0 else { return nil }
         let window = region.pixels(width: reader.width, height: reader.height)
-        let acc = Accumulator(levels: levels, transfer: transfer)
+        let acc = Accumulator(levels: levels, colorimetry: colorimetry)
         for gy in 0..<gridRows {
             let y = window.y + gy * window.height / gridRows
             for gx in 0..<gridCols {

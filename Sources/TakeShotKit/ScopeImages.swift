@@ -62,6 +62,7 @@ enum ScopeImageCache {
         case green
         case blue
         case vector
+        case cie
     }
 
     private static var sequence = -1
@@ -90,6 +91,7 @@ enum ScopeImageCache {
         case .green: return grayscaleImage(from: data.waveformG)
         case .blue: return grayscaleImage(from: data.waveformB)
         case .vector: return VectorscopeView.coloredVector(data)
+        case .cie: return CIEChartView.coloredChart(data)
         }
     }
 }
