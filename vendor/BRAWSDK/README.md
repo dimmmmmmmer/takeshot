@@ -18,3 +18,10 @@ Without the headers `CBraw` builds as a stub (`CBRClip.isSDKAvailable == NO`)
 and `.braw` files are shown as unsupported. The runtime framework is loaded
 dynamically — the app bundle's `Frameworks/` first, then
 `/Applications/Blackmagic RAW/Blackmagic RAW SDK/Mac/Libraries/`.
+
+## After you copy them in
+
+SwiftPM does not watch this directory, so a target already built as a stub
+stays a stub: `isSDKAvailable` keeps answering NO with the headers sitting
+right here. Touch the bridge's `.mm` (or delete `.build`) and rebuild.
+Measured once on BRAW, where it cost a confused half hour.
