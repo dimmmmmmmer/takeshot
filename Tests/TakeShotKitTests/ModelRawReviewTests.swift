@@ -121,8 +121,11 @@ import Testing
         async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
+        // From frame 4 to the end, not frame 4 alone: the play loop skips
+        // frames it cannot keep up with, so a single broken frame asks the
+        // machine to land on it rather than asking the app anything.
         let (model, _) = try RawClipFixtures.player(frames: 12, in: root,
-                                                    brokenAt: 4)
+                                                    brokenFrom: 4)
         let toasts = RawClipFixtures.Toasts()
         model.onPlaybackError = { toasts.record($0) }
 
@@ -154,8 +157,11 @@ import Testing
     @Test func playingAgainClearsTheLastFailure() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
+        // From frame 4 to the end, not frame 4 alone: the play loop skips
+        // frames it cannot keep up with, so a single broken frame asks the
+        // machine to land on it rather than asking the app anything.
         let (model, _) = try RawClipFixtures.player(frames: 12, in: root,
-                                                    brokenAt: 4)
+                                                    brokenFrom: 4)
 
         model.play()
         #expect(await ControllerWait.untilWritten { model.playbackError != nil })

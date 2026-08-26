@@ -38,17 +38,27 @@ enum RawClipFixtures {
     /// `brokenAt` replaces that one frame with bytes no decoder will open —
     /// the corrupt block, or the card going away mid-clip, that the player has
     /// to tell the operator about instead of quietly looking like the end.
+    ///
+    /// `brokenFrom` breaks that frame AND every frame after it, and exists
+    /// because the play loop deliberately SKIPS frames it cannot keep up with
+    /// (`RawPlayback+PlayLoop`: `startFrame + Int(elapsed * fps) + 1`). A test
+    /// that breaks exactly one frame is therefore asking the machine to land on
+    /// it in real time, and a loaded one steps straight over it — which is how
+    /// `playingAgainClearsTheLastFailure` came to pass here every time and fail
+    /// on CI. Breaking a RUN asks the question the test means: does a decode
+    /// failure reach the operator.
     @discardableResult
     static func clip(frames: Int, in root: URL,
                      named name: String = "clip.dng-sequence",
-                     brokenAt broken: Int? = nil) throws -> URL {
+                     brokenAt broken: Int? = nil,
+                     brokenFrom: Int? = nil) throws -> URL {
         let folder = root.appendingPathComponent(name)
         try FileManager.default.createDirectory(at: folder,
                                                 withIntermediateDirectories: true)
         for index in 0..<frames {
             let url = folder.appendingPathComponent(
                 String(format: "frame_%06d.dng", index + 1))
-            if index == broken {
+            if index == broken || (brokenFrom.map { index >= $0 } ?? false) {
                 try Data("not a frame".utf8).write(to: url)
             } else {
                 try frame(columns: index + 1).write(to: url)
@@ -127,9 +137,11 @@ enum RawClipFixtures {
     /// feeds both from one line) and needs no window.
     @MainActor
     static func player(frames: Int, in root: URL,
-                       brokenAt broken: Int? = nil) throws
+                       brokenAt broken: Int? = nil,
+                       brokenFrom: Int? = nil) throws
         -> (model: RawPlayerModel, presented: Presented) {
-        let folder = try clip(frames: frames, in: root, brokenAt: broken)
+        let folder = try clip(frames: frames, in: root, brokenAt: broken,
+                              brokenFrom: brokenFrom)
         var error: String?
         let model = try #require(RawPlayerModel(url: folder, error: &error),
                                  "the engine refused a DNG folder: \(error ?? "-")")
