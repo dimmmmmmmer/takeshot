@@ -34,7 +34,7 @@ import Testing
     @Test func aLimitedRangeSourceIsExpandedOnTheDisplayFrame() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setVideoLevels("limited")
 
@@ -74,7 +74,7 @@ import Testing
     @Test func autoLevelsAssumeLimitedForRGB444() async throws {
         let pipeline = PreviewProbe.makePipeline(isRGB444: true)
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         // nominal white rather than a mid-grey: unexpanded it stays 235, so the
@@ -93,7 +93,7 @@ import Testing
     @Test func thePreviewLUTIsAppliedToTheDisplayFrame() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setLUT(try CubeLUT.parse(Self.redCube), preview: true,
                         record: false, intensity: 1)

@@ -121,20 +121,27 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
     /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
     public let displaySinks = PreviewSinkRegistry()
-    /// Every displayed frame, on the display queue — hardware playout mirror.
+    /// Every displayed frame, on the display queue — the mirrors of the viewer
+    /// (hardware playout, and the live encoders behind SRT and the browsers).
     /// Re-routed from the main actor on every record/playback switch while the
     /// display queue is calling it, so it goes through a lock: a plain closure
     /// property is a two-word value with an ARC-managed context, and a torn
     /// read releases the box under the reader's feet.
+    ///
+    /// It is handed the whole `LiveFrame` rather than one buffer: WHICH picture
+    /// a given wire carries is the consumer's choice now, and it is made by
+    /// naming a `LivePicture` and nowhere else.
     let displayFrameLock = NSLock()
-    var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
-    /// A second mirror for the phone camera grid — of the CLEAN processed
-    /// frame, not of what the viewer draws (see `enqueuePreview`).
+    var displayFrameHandler: (@Sendable (LiveFrame) -> Void)?
+    /// A second slot for the crew monitoring surfaces — the phone camera grid's
+    /// JPEGs and the composed grid picture a browser can watch.
+    ///
     /// Its own slot rather than a list: `displayFrameHandler` is owned by the
-    /// hardware playout mirror and re-routed on every record/playback switch,
-    /// and sharing it would take the operator's monitor output away. Behind
-    /// the same lock, for the same torn-closure-read reason.
-    var multiviewFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+    /// viewer's mirrors and re-routed on every record/playback switch, and
+    /// sharing it would take the operator's monitor output away — while these
+    /// two follow the LIVE camera whatever the viewer is showing. Behind the
+    /// same lock, for the same torn-closure-read reason.
+    var monitorFrameHandler: (@Sendable (LiveFrame) -> Void)?
 
     // LUT (all access on queue)
     let ciContext = CIContext(options: [.cacheIntermediates: false])

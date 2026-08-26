@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 import Network
 import os
@@ -43,10 +44,23 @@ final class RemoteServer: @unchecked Sendable {
         /// than a return value, exactly like `poster`. The default says the
         /// feature is absent, which is what a server driven without a
         /// controller has.
-        var webrtcOffer: @Sendable (String,
+        var webrtcOffer: @Sendable (String, LivePicture,
                                     @escaping @Sendable (RemoteWebRTC.Answer)
                                         -> Void) -> Void
-            = { _, reply in reply(.unavailable("No app is attached to this server.")) }
+            = { _, _, reply in
+                reply(.unavailable("No app is attached to this server."))
+            }
+        /// One already-connected browser wants a different picture, and where
+        /// to put the verdict.
+        ///
+        /// `false` means there is no such viewer, which the route answers 404
+        /// to — see `RemoteClient.dispatchPictureChange` for why that is news
+        /// rather than an error. Asked for on the server's queue and answered
+        /// from the MainActor, like `poster`. The default says no, which is the
+        /// truth for a server driven without a controller: it has no viewers.
+        var webrtcPicture: @Sendable (String, LivePicture,
+                                      @escaping @Sendable (Bool) -> Void) -> Void
+            = { _, _, reply in reply(false) }
         /// Somebody started (true) or the last somebody stopped (false)
         /// watching the multiview stream. The app answers by building or
         /// tearing down the encoder, so an idle set encodes nothing. Called

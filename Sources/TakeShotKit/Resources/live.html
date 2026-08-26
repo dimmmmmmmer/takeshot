@@ -76,6 +76,20 @@ footer {
 #rec { display: none; color: #ff6b73; font-weight: 700; letter-spacing: 0.04em; }
 body.rec #rec { display: inline; }
 
+/* The picture switch. A segmented control rather than a menu: three choices
+   that a director changes with one thumb while looking at the picture, not at
+   the control. */
+#pictures { display: flex; gap: 0; margin-left: auto; }
+#pictures button {
+  padding: 7px 13px; font-size: 13px; font-weight: 700; border-radius: 0;
+  border-left-width: 0; color: var(--dim);
+}
+#pictures button:first-child {
+  border-left-width: 1px; border-radius: 10px 0 0 10px;
+}
+#pictures button:last-child { border-radius: 0 10px 10px 0; }
+#pictures button[aria-pressed="true"] { color: var(--text); background: #2f2f38; }
+
 #gate, #blocked {
   position: fixed; inset: 0; background: rgba(11, 11, 13, 0.97);
   display: none; flex-direction: column; justify-content: center;
@@ -111,6 +125,7 @@ body.rec #rec { display: inline; }
   <span id="conn"></span>
   <span id="rec"></span>
   <span id="tc">--:--:--:--</span>
+  <div id="pictures" role="group"></div>
 </footer>
 
 <div id="gate">
@@ -139,6 +154,11 @@ var S = CFG.strings;
 // The operator page's key, on purpose: it is the same PIN for the same app, and
 // a phone that has opened one page should not retype the code on another.
 var PIN_KEY = "takeshot.remote.pin";
+// **The choice is remembered per PHONE, which is the point of it.** A DP who
+// watches the monitor picture and a script supervisor who watches the clean one
+// are looking at one app from two handsets, so the choice cannot live in the
+// app; it lives in each browser and travels with every offer that browser makes.
+var PICTURE_KEY = "takeshot.live.picture";
 
 document.documentElement.lang = CFG.lang;
 document.title = S.title;
@@ -153,6 +173,11 @@ var watchdog = null;
 // True once this page has been told the feature is absent. Nothing retries
 // after that: offering again cannot install a library.
 var blocked = false;
+// What this phone is watching, and the id the app gave this connection. The id
+// is what lets the picture change WITHOUT a new offer; without one (nothing
+// connected yet) the choice is simply carried into the next offer.
+var picture = CFG.pictures[0];
+var viewerID = "";
 
 // ---------------------------------------------------------------- the picture
 
@@ -181,6 +206,7 @@ function dropPeer() {
   if (!peer) { return; }
   var gone = peer;
   peer = null;
+  viewerID = "";
   gone.onconnectionstatechange = gone.ontrack = null;
   try { gone.close(); } catch (e) {}
   el("video").srcObject = null;
@@ -223,7 +249,12 @@ function negotiate(pc) {
     return fetch(CFG.offerPath, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pin, sdp: pc.localDescription.sdp })
+      // The picture goes with the offer, so the app builds (or joins) the right
+      // session before it answers — a connection that started on one picture
+      // and was moved onto another a moment later would cost an encode nobody
+      // watched and a keyframe everybody did.
+      body: JSON.stringify({ pin: pin, sdp: pc.localDescription.sdp,
+                             picture: picture })
     });
   }).then(function (response) {
     if (!response || pc !== peer) { return null; }
@@ -250,9 +281,53 @@ function answered(pc, response) {
     });
   }
   if (!response.ok) { dropped(); return null; }
+  // The id this connection is known by, for as long as it lasts. A header
+  // rather than a field in the body, because the body is the SDP — see
+  // RemoteWebRTC.viewerHeader.
+  var named = response.headers.get(CFG.viewerHeader);
   return response.text().then(function (sdp) {
     if (pc !== peer) { return null; }
+    viewerID = named || "";
     return pc.setRemoteDescription({ type: "answer", sdp: sdp });
+  });
+}
+
+// ------------------------------------------------------------------ the choice
+
+// **Changing picture does not touch the connection when it does not have to.**
+// With a viewer id the app moves this stream onto the other session and the
+// video carries on; without one — nothing connected yet, or a connection the app
+// has already forgotten — the choice is stored and the next offer carries it,
+// which is the same result one handshake later.
+function choose(next) {
+  if (picture === next) { return; }
+  picture = next;
+  try { localStorage.setItem(PICTURE_KEY, picture); } catch (e) {}
+  paintPictures();
+  if (!pin || blocked || !viewerID) { return; }
+  var asked = picture;
+  fetch(CFG.picturePath, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: pin, viewer: viewerID, picture: asked })
+  }).then(function (response) {
+    // 404: this connection is gone as far as the app is concerned. Offer again
+    // rather than sit on a picture that is no longer arriving.
+    if (!response.ok && picture === asked) { dropped(); }
+  }).catch(function () { if (picture === asked) { dropped(); } });
+}
+
+function paintPictures() {
+  var row = el("pictures");
+  row.setAttribute("aria-label", S.picture);
+  row.textContent = "";
+  CFG.pictures.forEach(function (name) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.textContent = S["picture_" + name] || name;
+    button.setAttribute("aria-pressed", name === picture ? "true" : "false");
+    button.addEventListener("click", function () { choose(name); });
+    row.appendChild(button);
   });
 }
 
@@ -337,6 +412,7 @@ function paintLabels() {
   el("wait").textContent = S.wait;
   el("blockedTitle").textContent = S.unavailable;
   el("retry").textContent = S.retry;
+  paintPictures();
 }
 
 function showGate(message) {
@@ -391,6 +467,14 @@ function start() {
   connectStatus();
   offer();
 }
+
+// The stored choice, checked against what this build actually offers: a phone
+// holding a name from an older page must fall back to the default rather than
+// offer a word the app will refuse.
+try {
+  var stored = localStorage.getItem(PICTURE_KEY);
+  if (CFG.pictures.indexOf(stored) >= 0) { picture = stored; }
+} catch (e) {}
 
 paintLabels();
 setConnection("down");

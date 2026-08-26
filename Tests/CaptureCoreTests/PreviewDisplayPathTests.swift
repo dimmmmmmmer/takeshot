@@ -120,7 +120,7 @@ enum PreviewProbe {
     @Test func aFrameReachesTheDisplayHandlerAndTheCompareProvider() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         PreviewProbe.push(pipeline, PreviewProbe.frame(0x40), frame: 1)
@@ -138,7 +138,7 @@ enum PreviewProbe {
     @Test func clearingTheDisplayHandlerStopsDeliveries() async {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
 
         PreviewProbe.push(pipeline, PreviewProbe.frame(0x40), frame: 1)
         await TestWait.until { collector.count > 0 }
@@ -160,7 +160,7 @@ enum PreviewProbe {
         let pipeline = PreviewProbe.makePipeline()
         // 20 ms a delivery: a surface parked the way an occluded window is
         let collector = PreviewCollector(stall: 0.02)
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         let pushed = 40
@@ -191,7 +191,7 @@ enum PreviewProbe {
     @Test func thePinnedReferenceGoesToTheScreenAndNotToTheProvider() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         pipeline.setPreviewReference(buffer: PreviewProbe.frame(0xE0))
@@ -217,7 +217,7 @@ enum PreviewProbe {
     @Test func aPinnedReferenceWithTheCompareOffChangesNothing() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         pipeline.setPreviewReference(buffer: PreviewProbe.frame(0xE0))
@@ -269,11 +269,11 @@ enum PreviewProbe {
         let pipeline = PreviewProbe.makePipeline()
         let screen = PreviewCollector()
         let grid = PreviewCollector()
-        pipeline.setOnDisplayFrame { screen.record($0) }
-        pipeline.setOnMultiviewFrame { grid.record($0) }
+        pipeline.setOnDisplayFrame { screen.record($0[.decorated]) }
+        pipeline.setOnMonitorFrame { grid.record($0[.clean]) }
         defer {
             pipeline.setOnDisplayFrame(nil)
-            pipeline.setOnMultiviewFrame(nil)
+            pipeline.setOnMonitorFrame(nil)
         }
 
         // Everything the operator can switch on, on at once.
@@ -320,11 +320,11 @@ enum PreviewProbe {
         let pipeline = PreviewProbe.makePipeline()
         let screen = PreviewCollector()
         let grid = PreviewCollector()
-        pipeline.setOnDisplayFrame { screen.record($0) }
-        pipeline.setOnMultiviewFrame { grid.record($0) }
+        pipeline.setOnDisplayFrame { screen.record($0[.decorated]) }
+        pipeline.setOnMonitorFrame { grid.record($0[.clean]) }
         defer {
             pipeline.setOnDisplayFrame(nil)
-            pipeline.setOnMultiviewFrame(nil)
+            pipeline.setOnMonitorFrame(nil)
         }
 
         let source = PreviewProbe.frame(0x55)
@@ -345,11 +345,11 @@ enum PreviewProbe {
     @Test func clearingTheGridHandlerStopsDeliveries() async {
         let pipeline = PreviewProbe.makePipeline()
         let grid = PreviewCollector()
-        pipeline.setOnMultiviewFrame { grid.record($0) }
+        pipeline.setOnMonitorFrame { grid.record($0[.clean]) }
 
         PreviewProbe.push(pipeline, PreviewProbe.frame(0x40), frame: 1)
         await TestWait.until { grid.count > 0 }
-        pipeline.setOnMultiviewFrame(nil)
+        pipeline.setOnMonitorFrame(nil)
         let settled = grid.count
 
         for index in 2...6 {

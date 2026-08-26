@@ -31,7 +31,7 @@ import Testing
         let cube = try CubeLUT.load(url: MediaFixtures.writeRedCube(
             at: directory.appendingPathComponent("red.cube")))
         let collector = MediaFixtures.FrameCollector()
-        controller.playbackTap.setOnDisplayFrame { collector.record($0) }
+        controller.playbackTap.setOnDisplayFrame { collector.record($0[.decorated]) }
         return Rig(cube: cube,
                    source: MediaFixtures.pixelBuffer(level: 0x80, width: 64,
                                                      height: 64),

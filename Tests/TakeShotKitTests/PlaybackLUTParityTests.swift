@@ -44,7 +44,7 @@ import Testing
                                             frameRate: 25, timecodeFPS: 25,
                                             name: "test"))
         let collector = MediaFixtures.FrameCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setLUT(cube, preview: true, record: false, intensity: 1)
 
@@ -76,7 +76,7 @@ import Testing
         // playback: the same grey, encoded, decoded, and graded by the tap
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         tap.setLUT({ cube.makeFilter() }, intensity: 1)
         let item = AVPlayerItem(url: clip)
         let player = AVPlayer(playerItem: item)

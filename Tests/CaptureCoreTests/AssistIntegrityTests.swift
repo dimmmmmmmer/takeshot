@@ -101,7 +101,7 @@ struct AssistIntegrityTests {
                                     _ source: CVPixelBuffer) async throws
         -> CVPixelBuffer {
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         // read first, push second: a poll that pushed and then answered would
         // leave a frame in flight behind it, and the caller that goes on to
@@ -174,8 +174,8 @@ struct AssistIntegrityTests {
         let pipeline = legendPipeline()
         pipeline.setViewAssist(loudAssist())
         let collector = PreviewCollector()
-        pipeline.setOnMultiviewFrame { collector.record($0) }
-        defer { pipeline.setOnMultiviewFrame(nil) }
+        pipeline.setOnMonitorFrame { collector.record($0[.clean]) }
+        defer { pipeline.setOnMonitorFrame(nil) }
 
         // polled, not a fixed dozen frames: see `presentedDecorated` for the
         // runner that presented nothing inside that window
@@ -239,7 +239,7 @@ struct AssistIntegrityTests {
         pipeline.setViewAssist(loudAssist())
         let grabs = EventCollector<Data?>()
         let shown = EventCollector<Bool>()
-        pipeline.setOnDisplayFrame { shown.append(Self.isMetered($0)) }
+        pipeline.setOnDisplayFrame { shown.append(Self.isMetered($0[.decorated])) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.grabNextFrame { grabs.append($0) }
 
@@ -294,7 +294,7 @@ struct AssistIntegrityTests {
         let takes = TakeCollector()
         pipeline.onTakeFinished = { takes.append($0) }
         let shown = EventCollector<Bool>()
-        pipeline.setOnDisplayFrame { shown.append(Self.isMetered($0)) }
+        pipeline.setOnDisplayFrame { shown.append(Self.isMetered($0[.decorated])) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         let source = LegendProbe.frame(Self.flat, width: 320, height: 180)
@@ -364,7 +364,7 @@ struct AssistIntegrityTests {
         let settledDrops = pipeline.assistStage.lateDrops
 
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.displayQueue.async { Thread.sleep(forTimeInterval: 0.2) }
         PreviewProbe.push(pipeline, source, frame: 20)

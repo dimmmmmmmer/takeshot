@@ -34,9 +34,10 @@ import Testing
             #expect(peer.offers.count == 1)
             #expect(peer.offers[0].contains("a=ice-ufrag:STJI"),
                     "the browser's own offer did not reach the peer")
-            // And a viewer is being held for it, with the shared encoder built.
+            // And a viewer is being held for it, with the session for the
+            // picture it asked for built.
             #expect(controller.mirrors.webrtcViewers.count == 1)
-            #expect(controller.mirrors.liveEncoder != nil)
+            #expect(controller.mirrors.liveEncoders[.decorated] != nil)
         }
     }
 
@@ -56,7 +57,7 @@ import Testing
             #expect(reply.status == 403)
             #expect(log.all.isEmpty, "a wrong code still built a peer")
             #expect(controller.mirrors.webrtcViewers.isEmpty)
-            #expect(controller.mirrors.liveEncoder == nil,
+            #expect(controller.mirrors.liveEncoders.isEmpty,
                     "a refused offer built an encoder")
         }
     }
@@ -179,7 +180,7 @@ import Testing
                 controller.mirrors.webrtcViewers.isEmpty
             }, "a viewer that never answered kept its slot")
             #expect(await ControllerWait.until {
-                controller.mirrors.liveEncoder == nil
+                controller.mirrors.liveEncoders.isEmpty
             }, "the encoder outlived the last viewer")
         }
     }
@@ -232,8 +233,47 @@ struct WebRTCUnavailableTests {
             #expect(reply.body.lowercased().contains("libdatachannel"),
                     "the reason did not name what is missing: \(reply.body)")
             #expect(controller.mirrors.webrtcViewers.isEmpty)
-            #expect(controller.mirrors.liveEncoder == nil,
+            #expect(controller.mirrors.liveEncoders.isEmpty,
                     "an unavailable feature built an encoder")
+        }
+    }
+
+    /// **Every picture degrades the same way, and the picture change route
+    /// too.**
+    ///
+    /// The failure this catches is a choice that half-works: an offer refused
+    /// with the honest 503 for one picture and a silent 400 (or worse, a
+    /// session built for nobody) for another. There is nothing to choose
+    /// between on a build with no library, and each of the three has to say so
+    /// identically.
+    @Test func everyPictureIsAbsentTheSameWay() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.webrtcPeerFactory = nil
+            let served = try await RemoteHarness.serve(controller)
+            for picture in LivePicture.allCases {
+                #expect(await RemoteHarness.pinSlotFree(
+                    try #require(controller.remoteServer)))
+                let reply = try await WebRTCHarness.offer(
+                    port: served.port, pin: served.pin, picture: picture)
+                #expect(reply.status == 503, "\(picture) answered \(reply.status)")
+                #expect(reply.body.lowercased().contains("libdatachannel"),
+                        "\(picture): \(reply.body)")
+                #expect(reply.viewer.isEmpty,
+                        "\(picture) was given a viewer id it cannot use")
+            }
+            #expect(controller.mirrors.liveEncoders.isEmpty)
+            #expect(controller.mirrors.gridComposer == nil,
+                    "the grid picture built a composer with nothing to send it to")
+
+            // And the change route has nothing to move, which is a 404 rather
+            // than a 503: the app CAN answer it, and the honest answer is that
+            // there is no such viewer.
+            #expect(await RemoteHarness.pinSlotFree(
+                try #require(controller.remoteServer)))
+            let change = try await WebRTCHarness.changePicture(
+                port: served.port, pin: served.pin, viewer: UUID().uuidString,
+                to: LivePicture.clean.rawValue)
+            #expect(change.status == 404)
         }
     }
 

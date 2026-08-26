@@ -65,7 +65,7 @@ extension CaptureController {
                         reply(self?.remoteTakePoster(id: takeID))
                     }
                 },
-                webrtcOffer: { [weak self] offer, reply in
+                webrtcOffer: { [weak self] offer, picture, reply in
                     // The registry of viewers is controller state, so the
                     // decision hops here like a command does. What it starts
                     // does NOT run here: answering blocks on ICE gathering, and
@@ -75,7 +75,17 @@ extension CaptureController {
                             reply(.unavailable("The app is shutting down."))
                             return
                         }
-                        self.answerWebRTCOffer(offer, reply: reply)
+                        self.answerWebRTCOffer(offer, picture: picture,
+                                               reply: reply)
+                    }
+                },
+                webrtcPicture: { [weak self] viewer, picture, reply in
+                    // Same hop, same reason: the registry and the encoder pool
+                    // are controller state. This one does not block, so the
+                    // verdict is known here and answered from here.
+                    Task { @MainActor in
+                        reply(self?.changeWebRTCPicture(viewer: viewer,
+                                                        to: picture) ?? false)
                     }
                 },
                 multiviewDemand: { [weak self] active in

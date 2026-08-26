@@ -97,10 +97,16 @@ extension RemoteClient {
             drainFrames()
             return
         }
-        // The one POST this server answers: an offer in, an answer out. It is
-        // signalling entire — see `RemoteWebRTC` for why that is one request.
+        // The two POSTs this server answers, and they are the same page saying
+        // the same kind of thing: an offer in and an answer out (signalling
+        // entire — see `RemoteWebRTC` for why that is one request), and a
+        // picture change for a connection it already has.
         if request.method == "POST", request.path == RemoteWebRTC.offerPath {
             serveWebRTCOffer(body)
+            return
+        }
+        if request.method == "POST", request.path == RemoteWebRTC.picturePath {
+            serveLivePictureChange(body)
             return
         }
         guard request.method == "GET" else {

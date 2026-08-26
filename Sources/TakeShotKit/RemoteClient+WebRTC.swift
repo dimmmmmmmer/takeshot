@@ -1,7 +1,9 @@
+import CaptureCore
 import Foundation
 
 /// The signalling route, on the connection that carried it: one POST in, one
-/// SDP answer out, behind the same PIN as everything else.
+/// SDP answer out, behind the same PIN as everything else — and beside it the
+/// one route that changes what an already-connected browser is watching.
 ///
 /// Split out of `RemoteClient+Reading` the way the frame stream is — this is
 /// its own discipline, and the reading half is about HTTP rather than about
@@ -20,8 +22,8 @@ import Foundation
 /// grid's JPEGs are gated for exactly this reason and this is the same footage
 /// at a better frame rate.
 extension RemoteClient {
-    /// `POST /webrtc-offer` — `{"pin":"1234","sdp":"v=0…"}` in, the answer SDP
-    /// out.
+    /// `POST /webrtc-offer` — `{"pin":"1234","sdp":"v=0…","picture":"clean"}`
+    /// in, the answer SDP out with the viewer's id on it.
     func serveWebRTCOffer(_ body: Data) {
         guard let server, let parsed = RemoteWebRTC.parse(body) else {
             // Not a request this route understands, and NOT a PIN guess: it
@@ -44,11 +46,68 @@ extension RemoteClient {
             close(code: nil)
         case .accepted(let hold):
             holdForTarpit(hold) { [weak self] in
-                self?.dispatchWebRTCOffer(parsed.sdp)
+                self?.dispatchWebRTCOffer(parsed.sdp, picture: parsed.picture)
             }
         case .refused(let hold):
             holdForTarpit(hold) { [weak self] in
                 self?.writeAndClose(RemoteResponse.forbidden())
+            }
+        }
+    }
+
+    /// `POST /live-picture` — `{"pin":"1234","viewer":"…","picture":"grid"}`
+    /// in, nothing but a status out.
+    ///
+    /// The same door, the same tarpit and the same refusals as the offer route,
+    /// deliberately: this carries the PIN too, so an endpoint that answered it
+    /// for free would be the same four digits with the delay switched off. The
+    /// viewer id is NOT a second secret and is not treated as one — it names a
+    /// connection somebody already got past the PIN to make, and the worst a
+    /// guessed one can do to a crew is move a colleague's picture, which they
+    /// can move straight back.
+    func serveLivePictureChange(_ body: Data) {
+        guard let server,
+              let parsed = RemoteWebRTC.parsePictureChange(body) else {
+            writeAndClose(RemoteResponse.badRequest())
+            return
+        }
+        switch server.checkPIN(parsed.pin, peer: peer, exempt: false) {
+        case .silent:
+            close(code: nil)
+        case .accepted(let hold):
+            holdForTarpit(hold) { [weak self] in
+                self?.dispatchPictureChange(parsed.viewer,
+                                            picture: parsed.picture)
+            }
+        case .refused(let hold):
+            holdForTarpit(hold) { [weak self] in
+                self?.writeAndClose(RemoteResponse.forbidden())
+            }
+        }
+    }
+
+    /// Hand the change to the app and answer with whether it landed.
+    ///
+    /// 404 for a viewer the app does not have, which is not an error so much as
+    /// news: the connection ended while the tap was in flight. The page answers
+    /// it by offering again with the picture it wanted, so the worst case is
+    /// the re-offer this route exists to avoid rather than a page stuck on the
+    /// wrong picture.
+    private func dispatchPictureChange(_ viewer: String,
+                                       picture: LivePicture) {
+        guard let server, let queue else {
+            writeAndClose(RemoteResponse.notFound())
+            return
+        }
+        let id = ObjectIdentifier(self)
+        server.handlers.webrtcPicture(viewer, picture) { [weak server] changed in
+            guard let server else { return }
+            queue.async { [weak server] in
+                guard let client = server?.clients[id], !client.closed else {
+                    return
+                }
+                client.writeAndClose(changed ? RemoteResponse.done()
+                                        : RemoteResponse.notFound())
             }
         }
     }
@@ -60,13 +119,13 @@ extension RemoteClient {
     /// work finishes — here a queue that BLOCKS on ICE gathering — and the
     /// connection is looked up again on the server's queue once it does. A
     /// client dropped in the meantime is simply no longer in the registry.
-    private func dispatchWebRTCOffer(_ sdp: String) {
+    private func dispatchWebRTCOffer(_ sdp: String, picture: LivePicture) {
         guard let server, let queue else {
             writeAndClose(RemoteResponse.notFound())
             return
         }
         let id = ObjectIdentifier(self)
-        server.handlers.webrtcOffer(sdp) { [weak server] answer in
+        server.handlers.webrtcOffer(sdp, picture) { [weak server] answer in
             // Resolved HERE, once — a weak capture is a variable in the closure
             // that holds it, and reading it again inside the hop below would be
             // two threads reading one variable.
@@ -89,7 +148,8 @@ extension RemoteClient {
     /// because it names what to install, and a status code cannot.
     static func response(for answer: RemoteWebRTC.Answer) -> Data {
         switch answer {
-        case .answered(let sdp): return RemoteResponse.sdp(sdp)
+        case .answered(let sdp, let viewer):
+            return RemoteResponse.sdp(sdp, viewer: viewer)
         case .rejected: return RemoteResponse.badRequest()
         case .unavailable(let reason):
             return RemoteResponse.unavailable(reason)

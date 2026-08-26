@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 
 /// One of the four pages the remote serves, as a link the operator can hand
@@ -23,17 +24,16 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     case cameras
     /// The viewer itself, as video.
     ///
-    /// Not the same thing as `cameras`, and the difference is the point: that
-    /// page is one JPEG per board at five a second, of the CLEAN signal,
-    /// several tiles at once. This is ONE picture — the decorated viewer, the
-    /// frame the SRT output carries — as an H.264 track over WebRTC, at the
-    /// signal's own rate.
+    /// Not the same thing as `cameras`, and the difference is the transport
+    /// rather than the subject now: that page is one JPEG per board at five a
+    /// second, and this is an H.264 track over WebRTC at the signal's own rate.
+    /// WHAT it carries is the viewer's choice — the decorated frame the SRT
+    /// output carries, the clean camera picture, or every camera tiled — and
+    /// the three of them are named at `LivePicture`.
     ///
-    /// The two stand side by side deliberately and not forever. The grid is
-    /// what still works on a build with no libdatachannel in it, which is every
-    /// build until the library is dropped in; removing it is a separate piece
-    /// of work with a decision in it (see `CaptureController+WebRTC` for which
-    /// picture the grid would then be showing).
+    /// The two stand side by side deliberately and not forever. The grid page
+    /// is what still works on a build with no libdatachannel in it, which is
+    /// every build until the library is dropped in.
     case live
     /// The digital slate, on a phone held up in front of a lens.
     ///
@@ -229,7 +229,25 @@ enum RemotePage {
     /// because it is the same sentence about the same signal. What is its own
     /// is the pair this page needs and no other does: a title for the state
     /// where the app cannot answer at all, and the button that tries again.
-    static let liveLabels: [(field: String, key: String)] = [
+    ///
+    /// **The picture buttons are GENERATED from `LivePicture`, not listed.** A
+    /// case added there produces a `picture_<raw>` field the page will render
+    /// and a `live_picture_<raw>` key that does not exist yet — which is a
+    /// `LocalizationTests` failure naming exactly what to write, in both files.
+    /// Listing them here instead would produce a button with no label on a
+    /// phone, weeks later.
+    static let liveLabels: [(field: String, key: String)] =
+        baseLiveLabels + LivePicture.allCases.map {
+            (field: pictureField(for: $0), key: "live_picture_\($0.rawValue)")
+        }
+
+    /// The JS field one picture's label arrives in. Stated once so the page's
+    /// lookup and this table cannot disagree.
+    static func pictureField(for picture: LivePicture) -> String {
+        "picture_\(picture.rawValue)"
+    }
+
+    private static let baseLiveLabels: [(field: String, key: String)] = [
         ("title", "live_title"),
         ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
@@ -241,6 +259,7 @@ enum RemotePage {
         ("rec", "cameras_rec"),
         ("unavailable", "live_unavailable"),
         ("retry", "live_retry"),
+        ("picture", "live_picture"),
     ]
 
     /// Where the slate lives.
@@ -351,11 +370,22 @@ enum RemotePage {
         let strings = labels
             .map { "\($0.field):\(RemoteJSON.quoted(L($0.key)))" }
             .joined(separator: ",")
+        // The picture names come out of `LivePicture` rather than being typed
+        // into the page: they are the words that go on the wire, and a page
+        // spelling one of them differently is a 400 nobody can see from a
+        // phone. Order is the enum's, which is also the order the buttons sit
+        // in.
+        let pictures = LivePicture.allCases
+            .map { RemoteJSON.quoted($0.rawValue) }
+            .joined(separator: ",")
         return "{lang:\(RemoteJSON.quoted(L10n.current.pageCode)),"
             + "watchdogMs:\(watchdogMilliseconds),"
             + "holdMs:\(slateHoldMilliseconds),"
             + "posterPath:\(RemoteJSON.quoted(posterPath)),"
             + "offerPath:\(RemoteJSON.quoted(RemoteWebRTC.offerPath)),"
+            + "picturePath:\(RemoteJSON.quoted(RemoteWebRTC.picturePath)),"
+            + "viewerHeader:\(RemoteJSON.quoted(RemoteWebRTC.viewerHeader)),"
+            + "pictures:[\(pictures)],"
             + "strings:{\(strings)}}"
     }
 }

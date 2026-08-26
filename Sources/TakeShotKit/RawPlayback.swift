@@ -84,10 +84,10 @@ final class RawPlayerModel: ObservableObject {
     /// actor, read on the decode task; a tiny lock keeps it honest.
     private let displayFrameLock = NSLock()
     nonisolated(unsafe) private var displayFrameHandler:
-        (@Sendable (CVPixelBuffer) -> Void)?
+        (@Sendable (LiveFrame) -> Void)?
 
     nonisolated func setOnDisplayFrame(
-        _ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+        _ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
         displayFrameHandler = handler
         displayFrameLock.unlock()
@@ -186,7 +186,10 @@ final class RawPlayerModel: ObservableObject {
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
-        handler?(shown)
+        // Which is also what makes the clean picture free here: the decoded
+        // frame IS `LivePicture.clean` for a RAW clip, and only the copy on its
+        // way to the surfaces carries the aids.
+        handler?(LiveFrame(decorated: shown, clean: buffer))
     }
 }
 

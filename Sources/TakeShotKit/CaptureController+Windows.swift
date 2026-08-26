@@ -56,25 +56,39 @@ extension CaptureController {
         }
         wireDisplayMirrors()
     }
-    /// The mirrors show whatever the viewer shows: the hardware output, the SRT
-    /// stream when it is switched on, and any browser watching over WebRTC.
+    /// The mirrors of whatever the viewer shows: the hardware output, the SRT
+    /// stream when it is switched on, and every browser watching a picture that
+    /// comes off this surface.
     ///
-    /// All of them take the SAME frame — the decorated one, aids and key
-    /// included, which is what a director watches — so they share one handler
-    /// slot per source rather than each claiming its own. That is only true
-    /// because they want the same picture: the phone camera grid has a slot of
-    /// its own precisely because it wants the CLEAN frame (see
-    /// `CapturePipeline.publishDisplayFrame`), and what that costs the WebRTC
-    /// feed is written down at the top of `CaptureController+WebRTC`.
+    /// They share one handler slot per source and each takes the picture it
+    /// asked for out of the frame that arrives. The hardware output has no
+    /// choice and wants none — it is the operator's own monitor, so it takes
+    /// the decorated frame, aids and key included. Everything else names a
+    /// `LivePicture`, and `LiveFrame`'s subscript is where that name becomes a
+    /// buffer.
     ///
-    /// The frame goes to the SHARED ENCODER rather than to each watcher: one
-    /// H.264 session serves every one of them, and the samples fan out from
-    /// there (`LiveVideoEncoder`). With no hardware output and nothing watching
-    /// the slots go back to nil, so an idle app calls nothing per frame.
+    /// **Only the `.viewer`-sourced pictures are wired here.** `.grid` is built
+    /// from every live camera rather than from this surface, so it rides the
+    /// monitor taps instead (`CaptureController+RemoteMultiview`) and keeps
+    /// moving while the operator scrubs a take. That split is stated once, at
+    /// `LivePicture.source`.
+    ///
+    /// The frame goes to an ENCODER PER PICTURE rather than to each watcher:
+    /// one H.264 session serves everybody watching the same thing, and the
+    /// samples fan out from there (`LiveVideoEncoder`). With no hardware output
+    /// and nothing watching, the slots go back to nil — so an idle app calls
+    /// nothing per frame, and `publishDisplayFrame` does not even pair the two
+    /// pictures up.
     func wireDisplayMirrors() {
         let feeder = mirrors.playout
-        let mirror = mirrors.liveEncoder
-        guard feeder != nil || mirror != nil else {
+        // Flattened HERE, once per wiring, and never looked up per frame: the
+        // pool is MainActor state and the handler runs on the display queue.
+        // Every change to it re-wires, which is what makes that safe and what
+        // keeps the per-frame cost a walk of at most two entries.
+        let encoders: [(LivePicture, LiveVideoEncoder)] = mirrors.liveEncoders
+            .filter { $0.key.source == .viewer }
+            .map { ($0.key, $0.value) }
+        guard feeder != nil || !encoders.isEmpty else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
@@ -88,9 +102,11 @@ extension CaptureController {
         // keyframe interval and its rate controller, which is why a format change
         // with no hardware output still has to come through here.
         let rate = routeLive ? (signalFormat?.frameRate ?? 0) : playbackFPS
-        let handler: @Sendable (CVPixelBuffer) -> Void = { buffer in
-            feeder?.submit(buffer)
-            mirror?.offer(buffer, framesPerSecond: rate)
+        let handler: @Sendable (LiveFrame) -> Void = { frame in
+            feeder?.submit(frame[.decorated])
+            for (picture, encoder) in encoders {
+                encoder.offer(frame[picture], framesPerSecond: rate)
+            }
         }
         pipeline.setOnDisplayFrame(routeLive ? handler : nil)
         playbackTap.setOnDisplayFrame(routeLive ? nil : handler)

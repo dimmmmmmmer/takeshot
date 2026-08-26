@@ -82,7 +82,7 @@ struct ModelPlaybackTapTests {
     private func tapWithCollector() -> (PlaybackFrameTap, Collector) {
         let tap = PlaybackFrameTap()
         let collector = Collector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         return (tap, collector)
     }
 

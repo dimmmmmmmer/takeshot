@@ -48,17 +48,35 @@ final class DisplayMirrors: ObservableObject {
     /// Debounces the rebuild a settings edit causes (see `applySRTChange`).
     var srtRestartTask: Task<Void, Never>?
 
-    /// **The one H.264 session every live consumer shares.** nil while nothing
-    /// is watching, which is the default: it is built when the first consumer
-    /// appears — the SRT switch, or a browser that offered — and dropped when
-    /// the last one goes. See `LiveVideoEncoder` for why there is exactly one.
-    var liveEncoder: LiveVideoEncoder?
+    /// **One H.264 session per DISTINCT picture somebody is watching**, and
+    /// empty while nobody is — which is the default.
+    ///
+    /// The rule this pool exists to keep, stated once: a session is built when
+    /// the first consumer of its picture appears (the SRT switch, or a browser
+    /// that offered) and dropped when the last one goes, so a set with nothing
+    /// watching encodes nothing at all and a second viewer of a picture that is
+    /// already going costs no encode. See `CaptureController+LivePictures` for
+    /// the arithmetic, and `LiveVideoEncoder` for why one session cannot carry
+    /// two pictures.
+    var liveEncoders: [LivePicture: LiveVideoEncoder] = [:]
+
+    /// The 90 kHz origin every one of them stamps against — one per app, so a
+    /// browser moved from one picture to another is not handed a timestamp from
+    /// a different clock. See `LiveClock`.
+    let liveClock = LiveClock()
+
+    /// The grid picture, while somebody is watching it: every camera's clean
+    /// frame tiled into one buffer for `liveEncoders[.grid]`. nil otherwise, so
+    /// an unwatched grid costs no compose (see `MultiviewComposer`).
+    var gridComposer: MultiviewComposer?
 
     /// Browsers watching over WebRTC, by the id their events carry.
     ///
     /// A dictionary rather than an array because a viewer's own callbacks are
     /// what remove it — a page closed, an ICE agent that gave up — and those
-    /// arrive out of order with everything else.
+    /// arrive out of order with everything else. The id is also what the page
+    /// sends back to change its picture, which is why it leaves the app at all
+    /// (`RemoteWebRTC.viewerHeader`).
     var webrtcViewers: [UUID: WebRTCViewer] = [:]
 
     /// Overridden in tests, for a sharper reason than the SRT factory has: the

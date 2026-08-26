@@ -111,13 +111,21 @@ import Testing
         func status(_ answer: RemoteWebRTC.Answer) -> String {
             String(text(answer).prefix(15))
         }
-        #expect(status(.answered("v=0\r\n")).hasPrefix("HTTP/1.1 200"))
+        #expect(status(.answered(sdp: "v=0\r\n", viewer: "abc"))
+            .hasPrefix("HTTP/1.1 200"))
         #expect(status(.rejected).hasPrefix("HTTP/1.1 400"))
         #expect(status(.unavailable("no library")).hasPrefix("HTTP/1.1 503"))
         // The reason travels as the body, because it names what to install and
         // a status code cannot.
         #expect(text(.unavailable("install libX")).contains("install libX"))
-        #expect(text(.answered("v=0")).contains("application/sdp"))
+        #expect(text(.answered(sdp: "v=0", viewer: "abc"))
+            .contains("application/sdp"))
+        // And the viewer's id travels as a HEADER, so the body stays the SDP
+        // the page hands straight to setRemoteDescription.
+        let answered: String = text(.answered(sdp: "v=0", viewer: "abc"))
+        #expect(answered.contains("\(RemoteWebRTC.viewerHeader): abc"))
+        #expect(answered.hasSuffix("\r\n\r\nv=0"),
+                "the body is not the bare SDP: \(answered)")
     }
 
     /// The offer body's shape, on its own: two string fields and nothing else

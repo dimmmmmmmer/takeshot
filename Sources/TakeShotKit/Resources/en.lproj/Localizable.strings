@@ -730,12 +730,22 @@
 "cameras_rec" = "REC";
 "cameras_wait" = "No video yet";
 
-/* === the live page: the viewer itself as video over WebRTC. One picture, the
-   decorated one the SRT output carries — where the cameras page above is one
-   JPEG per board. === */
+/* === the live page: the viewer itself as video over WebRTC, and the choice of
+   which picture — where the cameras page above is one JPEG per board. === */
 "live_title" = "TakeShot Live";
 "live_unavailable" = "Live video is not available";
 "live_retry" = "Try again";
+/* The picture switch. One label per LivePicture case, and the key is built
+   from the case's raw value — a case with no string here is a build that fails
+   LocalizationTests rather than a phone showing a blank button.
+   Named for what the viewer would call each of them, not for what the code
+   does: "Monitor" is the operator's own monitor, aids and key and all;
+   "Camera" is what the lens sees; "Grid" is every camera at once. Kept to one
+   word each — they sit in a segmented switch on a handset. */
+"live_picture" = "Picture";
+"live_picture_decorated" = "Monitor";
+"live_picture_clean" = "Camera";
+"live_picture_grid" = "Grid";
 
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Sync play";

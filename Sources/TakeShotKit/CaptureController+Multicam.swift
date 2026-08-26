@@ -71,7 +71,7 @@ extension CaptureController {
         // camera that joined starts feeding its tile, and switching multicam
         // off leaves only the main tap (the stopped channels' pipelines went
         // with them). A no-op while nobody is watching.
-        defer { refreshRemoteMultiviewTaps() }
+        defer { refreshMonitorTaps() }
         guard on else { return }
 
         let nextLetter = FieldStepper.stepLetter(settings.naming.cameraLabel, by: 1)

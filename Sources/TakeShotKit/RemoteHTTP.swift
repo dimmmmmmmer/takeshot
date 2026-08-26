@@ -134,9 +134,23 @@ enum RemoteResponse {
     /// does not read it — it hands the text straight to
     /// `setRemoteDescription` — but a route that answers SDP as `text/plain` is
     /// a route somebody debugs with `curl` and misreads.
-    static func sdp(_ body: String) -> Data {
+    ///
+    /// `viewer` names the connection this answer sets up, and it is a HEADER so
+    /// that the body stays the SDP the page passes straight on. See
+    /// `RemoteWebRTC.viewerHeader`.
+    static func sdp(_ body: String, viewer: String) -> Data {
         make(status: "200 OK", contentType: "application/sdp",
-             body: Data(body.utf8))
+             body: Data(body.utf8),
+             extra: ["\(RemoteWebRTC.viewerHeader): \(viewer)"])
+    }
+
+    /// The request was understood and acted on, and there is nothing to say
+    /// back. A body of one word rather than a 204: every response this server
+    /// sends carries a `Content-Length` and closes, and a status with no body
+    /// permitted would be the one exception to that in the whole file.
+    static func done() -> Data {
+        make(status: "200 OK", contentType: "text/plain; charset=utf-8",
+             body: Data("OK\n".utf8))
     }
 
     /// This app cannot answer, and offering again will not change that: a build
@@ -154,7 +168,7 @@ enum RemoteResponse {
     }
 
     private static func make(status: String, contentType: String,
-                             body: Data) -> Data {
+                             body: Data, extra: [String] = []) -> Data {
         var head = "HTTP/1.1 \(status)\r\n"
         head += "Content-Type: \(contentType)\r\n"
         head += "Content-Length: \(body.count)\r\n"
@@ -184,6 +198,7 @@ enum RemoteResponse {
         // else: the page still fetches nothing from off the set network.
         head += "media-src 'self' blob: mediastream:\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"
+        for line in extra { head += line + "\r\n" }
         head += "Connection: close\r\n\r\n"
         return Data(head.utf8) + body
     }

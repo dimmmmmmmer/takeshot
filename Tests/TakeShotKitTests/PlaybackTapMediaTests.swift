@@ -49,7 +49,7 @@ import Testing
 
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         let player = startPlayback(of: clip, through: tap)
         defer { stop(player, tap) }
 
@@ -74,7 +74,7 @@ import Testing
 
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         let live = MediaFixtures.pixelBuffer(level: 0xE0)
         tap.setLiveBufferProvider { live }
         tap.setCompare(.wipe(axis: .vertical, position: 0.5))
@@ -107,7 +107,7 @@ import Testing
 
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         // a mid-grey live signal, so a back half that came from the camera
         // instead of the B clip is unmistakable
         let live = MediaFixtures.pixelBuffer(level: 0x80)
@@ -146,7 +146,7 @@ import Testing
 
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         // mid-grey live signal: an A pane still on the camera reads as 0x80
         let live = MediaFixtures.pixelBuffer(level: 0x80)
         tap.setLiveBufferProvider { live }
@@ -242,7 +242,7 @@ import Testing
 
         let tap = PlaybackFrameTap()
         let collector = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { collector.record($0) }
+        tap.setOnDisplayFrame { collector.record($0[.decorated]) }
         tap.setLUT({ cube.makeFilter() }, intensity: 1)
         let player = startPlayback(of: clip, through: tap)
         defer { stop(player, tap) }
