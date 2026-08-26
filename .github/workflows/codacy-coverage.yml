@@ -18,6 +18,20 @@ on:
 
 # Coverage is pushed to Codacy with its own token; the GitHub token needs
 # nothing beyond reading the checkout.
+# Only the newest commit's answer is worth a machine here. This workflow scans
+# the STATE of the code, so a queued run for a commit that has stopped being
+# the head is a scan nobody will read, holding a macOS runner while the run
+# that matters waits behind it — measured: a superseded CodeQL sat queued while
+# CI for the new head had no machine at all.
+#
+# Deliberately NOT done in ci.yml. CI answers "is THIS commit sound", and an
+# answer that is thrown away because a later push arrived leaves a commit in
+# the history that was never verified — which is exactly what somebody
+# bisecting a year from now needs. Two workflows, two questions, two answers.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
