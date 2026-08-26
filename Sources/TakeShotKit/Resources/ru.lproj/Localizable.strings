@@ -158,6 +158,12 @@
 "audio_panel_hint" = "Клик по каналу — вкл/выкл запись.";
 "channel_on_help" = "Пишется — клик исключит из файла";
 "channel_off_help" = "Отключён — клик вернёт канал в запись";
+"audio_channels_auto" = "Авто";
+"audio_channels_auto_help" = "Авто пишет каналы, на которых был сигнал в режиме ожидания. Клик по каналу — выбрать вручную; во время записи заблокировано.";
+"audio_channels_auto_listening" = "слушаю — пишутся все каналы";
+"audio_channels_auto_detected" = "сигнал на %@";
+"audio_channels_manual" = "выбрано вручную: %@";
+"audio_channels_all" = "все каналы";
 "meters_click_help" = "Аудиоканалы — клик открывает крупную панель с dB и вкл/выкл каналов";
 "playback_output" = "Аудиовыход плейбека";
 "system_default" = "Системный";

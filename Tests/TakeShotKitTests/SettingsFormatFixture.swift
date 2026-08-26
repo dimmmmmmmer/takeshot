@@ -26,7 +26,7 @@ enum SettingsFormatFixture {
     /// The defaults key the blob is stored under.
     static let defaultsKey = "TakeShot.CaptureSettings"
 
-    /// Every key the current format has, sorted. 88 of them.
+    /// Every key the current format has, sorted. 89 of them.
     ///
     /// Adding a key here is how a new setting is declared to exist; a key that
     /// disappears from this list is a setting that every existing operator
@@ -44,7 +44,8 @@ enum SettingsFormatFixture {
     /// list is really guarding.
     static let allKeys: [String] = [
         "accentHex", "appBackgroundHex", "appLanguage", "appearance",
-        "audioChannelMask", "audioInputDeviceUID", "cameraLabel",
+        "audioChannelAuto", "audioChannelMask", "audioInputDeviceUID",
+        "cameraLabel",
         "chromaKeyBackground", "chromaKeyBackgroundHex",
         "chromaKeyBackgroundImagePath", "chromaKeyColorHex",
         "chromaKeyPlateFit", "chromaKeyPlateOffsetX", "chromaKeyPlateOffsetY",
@@ -104,6 +105,7 @@ enum SettingsFormatFixture {
           "appBackgroundHex": "#131415",
           "appLanguage": "ru",
           "appearance": "dark",
+          "audioChannelAuto": false,
           "audioChannelMask": 5,
           "audioInputDeviceUID": "com.focusrite.usb:Scarlett18i20",
           "cameraLabel": "B",

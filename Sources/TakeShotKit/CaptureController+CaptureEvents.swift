@@ -65,6 +65,9 @@ extension CaptureController {
             self?.vancStats = stats
         }
         pipeline.onAudioLevels = { [weak self] in self?.adoptAudioLevels($0) }
+        pipeline.onAudioChannelsDetected = { [weak self] mask in
+            self?.detectedAudioChannelMask = mask
+        }
         pipeline.onVisualRecReading = { [weak self] reading in
             self?.visualRecReading = reading
         }

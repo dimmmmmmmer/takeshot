@@ -16,7 +16,13 @@ extension CapturePipeline {
     func beginTake(timecode rawTimecode: Timecode?, recStartIndex: Int? = nil,
                    trigger: RecTrigger = .manual) {
         guard writer == nil, let format else { return }
-        recordingMask = config.settings.audio.audioChannelMask // latched for the take
+        // Latched for the take, and it is the EFFECTIVE mask — the operator's
+        // channels when they have chosen any, and what the meters measured
+        // carrying a stream during standby when they have not (see
+        // `AudioChannelDetector`). Latched for the same reason it always was:
+        // the writer's channel count is fixed at start, so a mask that moved
+        // under an open file would desync the trim from the track.
+        recordingMask = effectiveAudioChannelMask
         takeColorimetry = signalColorimetry            // …and so is this
         // …and the chroma key, values and all. Not merely tidiness like the
         // slate: the record buffer's PIXEL FORMAT follows this answer, and
@@ -150,7 +156,7 @@ extension CapturePipeline {
             // choice the operator has.
             colorTagPreset: takeColorimetry.filePreset,
             displayMetadata: takeColorimetry.displayMetadata,
-            audioChannelCount: recordChannelCount)
+            audioChannelCount: recordChannelCount(under: recordingMask))
     }
 
     /// The writer's audio input is created from the channel count learned
@@ -161,7 +167,7 @@ extension CapturePipeline {
     /// discarded without a counter. Say so: silent scratch audio is only
     /// discovered in the edit.
     private func warnIfTakeHasNoAudioTrack(url: URL) {
-        guard recordChannelCount == 0 else { return }
+        guard recordChannelCount(under: recordingMask) == 0 else { return }
         DispatchQueue.main.async {
             self.onError?(.takeLostNoAudioTrack(file: url.lastPathComponent))
         }

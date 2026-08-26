@@ -108,6 +108,11 @@ extension CapturePipeline {
         monitorFormatCache = nil
         padFormatCache = nil
         sourceAudioChannels = max(0, expectedChannels)
+        // A different source is a different channel LAYOUT, so what the old
+        // one was measured carrying says nothing about this one — a 16-channel
+        // embed's answer applied to a 2-channel USB cart would be a mask made
+        // of another device's channels.
+        resetAudioChannelDetection()
         lastPublishedLevels = []
         // stale columns from a 16-channel embed must not sit behind a
         // 2-channel USB source's meters

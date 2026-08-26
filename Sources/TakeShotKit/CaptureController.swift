@@ -427,6 +427,17 @@ final class CaptureController: ObservableObject {
     /// `toggleAudioChannelBank`). Session state, like the level above: the mask
     /// itself is what gets persisted, and 0xFFFF is how "all channels" is spelled.
     var audioMaskBeforeMixOnly: Int = 0xFFFF
+    /// …and whether the MEASUREMENT was deciding before the mix key was pressed,
+    /// which the mask alone cannot say. Session state for the same reason.
+    var audioAutoBeforeMixOnly: Bool = true
+    /// Which channels the standby measurement says carry a stream, as a bit
+    /// mask; nil — it has no answer and every declared channel is recorded.
+    ///
+    /// Published because the channels panel draws it: an automatic mask the
+    /// operator cannot see is a mask nobody can trust. Arrives on the
+    /// pipeline's `onAudioChannelsDetected`, which fires only when the answer
+    /// moves — a handful of times a session, not at meter rate.
+    @Published var detectedAudioChannelMask: Int?
 
     /// Live audio monitoring on/off; persisted — a 100% volume slider with a
     /// crossed-out speaker at every launch read as a bug, not caution.
