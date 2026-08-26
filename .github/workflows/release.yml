@@ -18,13 +18,17 @@
 #     stay true. It is built here rather than fetched because it exists in no
 #     macOS package manager, which is also why the app has to carry its own
 #     copy at all.
-#   * **The runner is x86_64** (measured: a CodeQL run on this same image
-#     reported `Target: x86_64-apple-macosx15.0`), so a tagged release is an
-#     Intel build that runs under Rosetta on every Apple Silicon Mac. For a
-#     capture and preview application that is a real cost, not a footnote, and
-#     it is the reason the owner builds releases on his own machine and uploads
-#     those. Anything published from here should be understood as the fallback
-#     path, not the good one.
+#   * **The runner is Apple Silicon** — `macos-15` resolves to the
+#     `macos-15-arm64` image, and the build lands in `.build/arm64-apple-macosx`
+#     — so a tagged release is an arm64 build, which is the only kind this
+#     project ships (owner: "мы ориентированы только на М чипы"). The build
+#     guard in `scripts/bundle-app.sh` enforces that rather than trusting it.
+#     (An earlier version of this comment claimed the runner was x86_64, on the
+#     strength of a `Target: x86_64-apple-macosx15.0` line in a CodeQL log. That
+#     line describes the toolchain the CodeQL action sets up inside its own job,
+#     not the machine — which is worth knowing, because it is also the best
+#     current explanation for why Swift extraction there is an order of
+#     magnitude slower than an ordinary build on the same image.)
 #   * Ad-hoc signing, no Developer ID, no notarization. First launch of a
 #     download therefore needs right-click → Open, or
 #     `xattr -d com.apple.quarantine /Applications/TakeShot.app`.
