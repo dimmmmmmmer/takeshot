@@ -30,6 +30,16 @@ extension ScopeAnalyzer {
         static let diffCells = width * (height + 1)
         static let vectorSize = ScopeData.vectorSize
         static let vectorCells = vectorSize * vectorSize
+        /// Fixed-point denominator for each axis of the vectorscope's split
+        /// deposit, chosen so the four corner weights sum to exactly
+        /// `vectorUnit * vectorUnit` with no division and no rounding loss:
+        /// (u−tx)(u−ty) + tx(u−ty) + (u−tx)ty + tx·ty = u² for any tx, ty.
+        /// A sixteenth of a cell is about a fifth of a device pixel at the
+        /// sizes this map is drawn at, so nothing is lost by stopping there.
+        static let vectorUnit: Int32 = 16
+        /// What one sample deposits in total, and therefore what `finish()`
+        /// divides back out before the brightness curve.
+        static let vectorWeight = vectorUnit * vectorUnit
 
         /// What the wire codes mean, for the nominal range `finish()` publishes
         /// and for the vectorscope's chroma gain.
@@ -175,6 +185,21 @@ extension ScopeAnalyzer {
         /// Vectorscope: full-range BT.709 chroma, ±(scale/2) → ±half-size.
         /// `chromaGain` puts an unexpanded wire frame back on the full-range
         /// scale the graticule targets are positioned on.
+        ///
+        /// The sample is SPLIT between the four cells around it, by how close
+        /// it lands to each — not dropped whole into the one it falls in. The
+        /// map is 256 cells across a box drawn at three or four times that in
+        /// device pixels, so a whole-cell deposit quantises every trace to the
+        /// cell grid, and the separable blur that follows turns that staircase
+        /// into haze rather than into detail. Splitting gives the trace a
+        /// position finer than a cell, which is what "higher resolution" on a
+        /// vectorscope actually means: the same samples, plotted where they
+        /// really are.
+        ///
+        /// Weights are fixed point out of `vectorUnit`, so the map stays
+        /// integer and one sample always deposits exactly `vectorWeight` —
+        /// `finish()` divides it back out, so the brightness curve is the one
+        /// it always was (see `toBytesLog(_:unit:)`).
         @inline(__always)
         private func addToVector(r: Int, g: Int, b: Int,
                                  nativeChroma: (cb: Double, cr: Double)?) {
@@ -183,9 +208,30 @@ extension ScopeAnalyzer {
             let cb = raw.cb * chromaGain, cr = raw.cr * chromaGain
             let size = Self.vectorSize
             let span = Double(ScopeAnalyzer.sampleLevels - 1)
-            let vx = min(size - 1, max(0, Int(Double(size) / 2 + cb * Double(size) / span)))
-            let vy = min(size - 1, max(0, Int(Double(size) / 2 - cr * Double(size) / span)))
-            vector[vy * size + vx] += 1
+            // Cell centres sit at i + 0.5, so the neighbours of a point at `fx`
+            // are the cells either side of `fx - 0.5`.
+            let fx = Double(size) / 2 + cb * Double(size) / span - 0.5
+            let fy = Double(size) / 2 - cr * Double(size) / span - 0.5
+            let ix = Int(fx.rounded(.down)), iy = Int(fy.rounded(.down))
+            let tx = Int32((fx - fx.rounded(.down)) * Double(Self.vectorUnit))
+            let ty = Int32((fy - fy.rounded(.down)) * Double(Self.vectorUnit))
+            let unit = Self.vectorUnit
+            deposit(ix, iy, (unit - tx) * (unit - ty))
+            deposit(ix + 1, iy, tx * (unit - ty))
+            deposit(ix, iy + 1, (unit - tx) * ty)
+            deposit(ix + 1, iy + 1, tx * ty)
+        }
+
+        /// One corner of the split. A sample at the very edge of the map has
+        /// neighbours outside it: their share is folded onto the edge cell
+        /// rather than dropped, so a sample always deposits its whole weight
+        /// and the totals stay a count of samples.
+        @inline(__always)
+        private func deposit(_ x: Int, _ y: Int, _ weight: Int32) {
+            guard weight != 0 else { return }
+            let size = Self.vectorSize
+            let cx = min(size - 1, max(0, x)), cy = min(size - 1, max(0, y))
+            vector[cy * size + cx] += weight
         }
 
         /// A difference map all the way to its softened density, in ONE sweep:
@@ -307,18 +353,37 @@ extension ScopeAnalyzer {
         /// single hits stay visible and dense areas keep their gradation, where
         /// a fixed gain either clips into a flat blob or hides the low
         /// densities.
-        private static func toBytesLog(_ counts: [Int32]) -> [UInt8] {
-            let peak = max(1, counts.max() ?? 1)
-            let scale = 255.0 / logOf(peak)
+        private static func toBytesLog(_ counts: [Int32],
+                                       unit: Int32 = 1) -> [UInt8] {
+            let peak = max(unit, counts.max() ?? unit)
+            let scale = 255.0 / logOf(peak, unit: unit)
             var out = [UInt8](repeating: 0, count: counts.count)
             counts.withUnsafeBufferPointer { src in
                 out.withUnsafeMutableBufferPointer { dst in
                     for i in 0..<src.count where src[i] != 0 {
-                        dst[i] = UInt8(min(255.0, scale * logOf(src[i])))
+                        dst[i] = UInt8(min(255.0,
+                                           scale * logOf(src[i], unit: unit)))
                     }
                 }
             }
             return out
+        }
+
+        /// `log(count/unit + 1)` — the density in SAMPLES, whatever fixed-point
+        /// unit the map counts in.
+        ///
+        /// The vectorscope splits a sample between four cells, so its counts
+        /// are `vectorWeight` per sample rather than 1. Feeding those straight
+        /// to the curve would not merely rescale it: the log's shape changes
+        /// with the scale, and an isolated stray sample would have gone from
+        /// about 23 of 255 to about 108 — a noise floor lit up by arithmetic
+        /// nobody chose. `log(c/u + 1) = log(c + u) − log(u)` keeps the exact
+        /// curve the map always had, and keeps the integer table for the common
+        /// case.
+        @inline(__always)
+        private static func logOf(_ count: Int32, unit: Int32) -> Double {
+            guard unit != 1 else { return logOf(count) }
+            return logOf(count + unit) - Foundation.log(Double(unit))
         }
 
         func finish() -> ScopeData {
@@ -341,7 +406,8 @@ extension ScopeAnalyzer {
                 vector: Self.toBytesLog(Self.blurred(
                     Array(UnsafeBufferPointer(start: vector,
                                               count: Self.vectorCells)),
-                    size: Self.vectorSize)),
+                    size: Self.vectorSize),
+                    unit: Self.vectorWeight),
                 nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
                                            black: Self.unit(of: codes.black)),
                 transfer: transfer,

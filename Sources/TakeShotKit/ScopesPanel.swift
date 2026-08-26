@@ -165,8 +165,8 @@ struct ScopesPanel: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     GeometryReader { geo in
-                        let columns = max(1, min(visible.count,
-                                                 Int(geo.size.width / 360)))
+                        let columns = ScopeGridLayout.columns(
+                            for: visible.count, in: geo.size)
                         let rows = (visible.count + columns - 1) / columns
                         Grid(horizontalSpacing: 12, verticalSpacing: 10) {
                             ForEach(0..<rows, id: \.self) { row in
