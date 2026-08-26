@@ -183,7 +183,7 @@ import Testing
     private func rendered(_ controller: CaptureController,
                           level: UInt8 = 0x80) -> MediaFixtures.Pixel {
         let collector = MediaFixtures.FrameCollector()
-        controller.playbackTap.setOnDisplayFrame { collector.record($0) }
+        controller.playbackTap.setOnDisplayFrame { collector.record($0[.decorated]) }
         controller.playbackTap.attachStill(
             MediaFixtures.pixelBuffer(level: level, width: 64, height: 64))
         controller.playbackTap.queue.sync {}

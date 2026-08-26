@@ -738,12 +738,18 @@
 "cameras_rec" = "REC";
 "cameras_wait" = "Видео ещё нет";
 
-/* === the live page: the viewer itself as video over WebRTC. One picture, the
-   decorated one the SRT output carries — where the cameras page above is one
-   JPEG per board. === */
+/* === the live page: the viewer itself as video over WebRTC, and the choice of
+   which picture — where the cameras page above is one JPEG per board. === */
 "live_title" = "TakeShot: видео";
 "live_unavailable" = "Видео недоступно";
 "live_retry" = "Повторить";
+/* The picture switch. One label per LivePicture case; see the English file for
+   why the keys are built from the raw values. One word each — they sit in a
+   segmented switch on a handset. */
+"live_picture" = "Картинка";
+"live_picture_decorated" = "Монитор";
+"live_picture_clean" = "Камера";
+"live_picture_grid" = "Сетка";
 
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Синхронный просмотр";

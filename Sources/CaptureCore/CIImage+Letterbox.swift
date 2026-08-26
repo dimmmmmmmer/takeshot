@@ -32,7 +32,7 @@ extension CIImage {
     /// so no pixel of the frame is ever the picture's edge stretched into the
     /// margin. An image that covers the frame pays for the backing and nothing
     /// else — all four bars are empty and drop out.
-    func letterboxed(in frame: CGRect, with color: CIColor) -> CIImage {
+    public func letterboxed(in frame: CGRect, with color: CIColor) -> CIImage {
         guard frame.width > 0, frame.height > 0 else { return self }
         let fill = CIImage(color: color)
         let covered = extent.intersection(frame)

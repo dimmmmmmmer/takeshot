@@ -259,7 +259,7 @@ import Testing
             }
             let tap = controller.playbackTap
             let collector = MediaFixtures.FrameCollector()
-            tap.setOnDisplayFrame { collector.record($0) }
+            tap.setOnDisplayFrame { collector.record($0[.decorated]) }
             defer { tap.setOnDisplayFrame(nil) }
 
             try await probe.mounted(PlaybackFullscreenView()) {
@@ -307,7 +307,7 @@ import Testing
             let tap = controller.playbackTap
             let collector = MediaFixtures.FrameCollector()
             // what rebuildPlayout wires up when a DeckLink output is chosen
-            tap.setOnDisplayFrame { collector.record($0) }
+            tap.setOnDisplayFrame { collector.record($0[.decorated]) }
             defer { tap.setOnDisplayFrame(nil) }
 
             try await probe.mounted(PlaybackFullscreenView()) {

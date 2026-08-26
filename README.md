@@ -136,11 +136,17 @@ network with no route out. Settings shows a QR code for each.
 - `/cameras` — every board's live signal as tiles, each labelled and with its
   own REC light. No frames are encoded at all unless somebody has it open.
 - `/live` — the viewer as actual video: H.264 over WebRTC, at the signal's own
-  rate, the same decorated picture the SRT output carries. One encode serves
-  it, the SRT link and every other watcher between them, and nothing is encoded
-  at all while nobody is watching. Needs libdatachannel
-  (`vendor/libdatachannel/README.md`); a build made without it says so on the
-  page and the tiles above keep working.
+  rate. **The phone chooses what it is watching** — Monitor (the operator's own
+  picture, aids and chroma key included, which is what the SRT output carries),
+  Camera (the clean signal, nothing switched on), or Grid (every camera at
+  once). The choice is remembered per phone and changes without the picture
+  dropping, so a DP can watch the monitor feed while a script supervisor on the
+  same app watches the clean one. One encode serves everybody watching the same
+  thing — a second person on your picture costs nothing, a second PICTURE costs
+  a second encode and a second stream's worth of bitrate, and it stops the
+  moment the last person on it leaves. Nothing is encoded at all while nobody
+  is watching. Needs libdatachannel (`vendor/libdatachannel/README.md`); a
+  build made without it says so on the page and the tiles above keep working.
 - `/slate` — the digital slate on a phone held in front of the lens: running
   timecode, the scene and take card, and a sync flash.
 

@@ -5,8 +5,8 @@ import Foundation
 /// down, and what the operator is told when it cannot be had.
 ///
 /// The frames come off the SAME display-mirror slot the hardware monitor, the
-/// SRT stream and every WebRTC viewer ride (see `wireDisplayMirrors`), so NDI
-/// carries the DECORATED frame — the picture the operator and the director are
+/// SRT stream and every WebRTC viewer ride (see `wireDisplayMirrors`), and NDI
+/// names `LivePicture.decorated` out of it — the picture the operator and the director are
 /// looking at, aids and chroma key included. That is the hardware monitor's case
 /// and not the phone grid's: the grid gets the clean frame because it is a crew
 /// monitoring surface where the operator's own tools would lie to it, and an NDI
@@ -14,17 +14,18 @@ import Foundation
 /// watching over the operator's shoulder, and should see the same picture.
 ///
 /// **That reason is worth restating rather than inheriting, because the
-/// argument that binds SRT and WebRTC does NOT bind this one.** Those two take
-/// the decorated frame partly because they share `LiveVideoEncoder` and one
-/// H.264 session cannot compress two different pictures — the open question
-/// written at the top of `CaptureController+WebRTC`. NDI is not behind that
-/// encoder at all: it takes the display buffer, so it could have taken the CLEAN
-/// frame for the cost of a second handler slot and no second encode. It takes
-/// the decorated one anyway, on the merits — an NDI source is a cable to a
-/// director's monitor, and a director watching a picture the operator is not
-/// looking at is the failure this decision exists to avoid. Whoever settles the
-/// grid's question should know that NDI answered it on its own terms and would
-/// not change if the encoder argument went away.
+/// argument that used to bind SRT and WebRTC never bound this one.** Those two
+/// took the decorated frame partly because they shared one `LiveVideoEncoder`
+/// and one H.264 session cannot compress two different pictures. That is
+/// settled now — there is a session per distinct picture somebody is watching
+/// (`CaptureController+LivePictures`), and a browser chooses. NDI was never
+/// behind that encoder at all: it takes the display buffer, so it could have
+/// taken the CLEAN frame for the cost of a second handler slot and no second
+/// encode. It takes the decorated one anyway, on the merits — an NDI source is
+/// a cable to a director's monitor, and a director watching a picture the
+/// operator is not looking at is the failure this decision exists to avoid. It
+/// is not offered a choice for the same reason SRT is not: there is a receiver
+/// at the far end and no page, so nobody there could make one.
 ///
 /// Nothing here exists while the switch is off: `mirrors.ndi` is nil, the display
 /// slot holds no NDI consumer, and the SDK has not even been loaded — the

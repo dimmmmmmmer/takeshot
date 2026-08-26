@@ -27,7 +27,8 @@ import Testing
                                          formatParameters: "")
         let peer = FakeWebRTCPeer(plan: plan, ssrc: 7)
         let encoder = LiveVideoEncoder(bitsPerSecond: 1_000_000)
-        return (WebRTCViewer(peer: peer, plan: plan, ssrc: 7, encoder: encoder,
+        return (WebRTCViewer(peer: peer, plan: plan, ssrc: 7,
+                             picture: .decorated, encoder: encoder,
                              connectDeadline: deadline) { reports.record($0) },
                 peer)
     }
@@ -85,7 +86,7 @@ struct WebRTCStreamTests {
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
             let encoder: LiveVideoEncoder =
-                try #require(controller.mirrors.liveEncoder,
+                try #require(controller.mirrors.liveEncoders[.decorated],
                              "the switch built no encoder")
             let served = try await RemoteHarness.serve(controller)
 
@@ -94,8 +95,10 @@ struct WebRTCStreamTests {
             #expect(reply.status == 200)
             // THE assertion: the browser joined the session that was already
             // running rather than starting one of its own.
-            #expect(controller.mirrors.liveEncoder === encoder,
+            #expect(controller.mirrors.liveEncoders[.decorated] === encoder,
                     "answering an offer replaced the shared encoder")
+            #expect(controller.mirrors.liveEncoders.count == 1,
+                    "a viewer on the same picture built a second session")
 
             let peer: FakeWebRTCPeer = try #require(peers.latest)
             peer.report(.connected)
@@ -198,17 +201,17 @@ struct WebRTCStreamTests {
             let served = try await RemoteHarness.serve(controller)
             _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin)
             let encoder: LiveVideoEncoder =
-                try #require(controller.mirrors.liveEncoder)
+                try #require(controller.mirrors.liveEncoders[.decorated])
 
             controller.settings.srt.enabled = nil
             #expect(controller.mirrors.srt == nil)
-            #expect(controller.mirrors.liveEncoder === encoder,
+            #expect(controller.mirrors.liveEncoders[.decorated] === encoder,
                     "switching SRT off blacked out the browser")
 
             let peer: FakeWebRTCPeer = try #require(peers.latest)
             peer.report(.failed)
             #expect(await ControllerWait.until {
-                controller.mirrors.liveEncoder == nil
+                controller.mirrors.liveEncoders.isEmpty
             }, "the encoder outlived the last viewer")
             #expect(await ControllerWait.until { peer.isClosed })
             #expect(controller.mirrors.webrtcViewers.isEmpty)
@@ -233,7 +236,7 @@ struct WebRTCStreamTests {
             let served = try await RemoteHarness.serve(controller)
             _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin)
             let encoder: LiveVideoEncoder =
-                try #require(controller.mirrors.liveEncoder)
+                try #require(controller.mirrors.liveEncoders[.decorated])
             let peer: FakeWebRTCPeer = try #require(peers.latest)
             peer.report(.connected)
             #expect(await ControllerWait.untilWritten {
@@ -249,7 +252,7 @@ struct WebRTCStreamTests {
                 encoder.appliedBitsPerSecond == 2_000_000
             }, "the session is at \(encoder.appliedBitsPerSecond ?? -1)")
             // Same session, not a new one — a rebuild is what this avoids.
-            #expect(controller.mirrors.liveEncoder === encoder)
+            #expect(controller.mirrors.liveEncoders[.decorated] === encoder)
         }
     }
 
@@ -265,7 +268,7 @@ struct WebRTCStreamTests {
             #expect(controller.mirrors.webrtcViewers.count == 1)
             controller.stopRemoteServer()
             #expect(controller.mirrors.webrtcViewers.isEmpty)
-            #expect(controller.mirrors.liveEncoder == nil)
+            #expect(controller.mirrors.liveEncoders.isEmpty)
             #expect(peers.latest?.isClosed == true)
         }
     }

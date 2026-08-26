@@ -3,7 +3,7 @@ import CoreMedia
 import Foundation
 import os
 
-/// **One H.264 encode of the viewer, for every live consumer there is.**
+/// **One H.264 encode, for every live consumer watching the same picture.**
 ///
 /// This is the piece that was inside `SRTVideoMirror` while SRT was the only
 /// thing watching, and the reason it is out here is arithmetic rather than
@@ -12,6 +12,14 @@ import os
 /// writing ProRes to a card. The encode is the expensive thing in this path —
 /// everything downstream of it is byte shuffling — so it happens once and the
 /// SAMPLE is what fans out.
+///
+/// **One of these per DISTINCT picture, and not one per app.** A browser can
+/// choose what it is watching (`LivePicture`), and one compression session
+/// cannot carry two pictures — so the controller keeps a pool of these keyed by
+/// picture (`CaptureController+LivePictures`). Four viewers on the decorated
+/// frame still cost one encode; one viewer who wants the clean frame costs a
+/// second, and only while they are there. Which of them a given frame's
+/// pictures reaches is decided by `LiveFrame`'s subscript and nowhere else.
 ///
 /// Two consumers exist today and they want the same frame in two wire formats:
 /// `SRTVideoMirror` puts it in a transport stream and `WebRTCViewer` puts it in
@@ -86,17 +94,23 @@ final class LiveVideoEncoder: @unchecked Sendable {
     private var scheduled = false
     private var stopped = false
     private var lastEncodeAt: TimeInterval = 0
-    /// Monotonic clock at the first frame, and the last stamp handed to the
-    /// encoder. The stream's clock is the app's own send clock: a monitoring
-    /// feed's timing is when it went out, and the camera's timecode belongs to
-    /// the file. 90 kHz, which is the transport stream's clock and RTP's alike.
-    private var origin: TimeInterval?
+    /// The last stamp handed to the encoder. The stream's clock is the app's own
+    /// send clock: a monitoring feed's timing is when it went out, and the
+    /// camera's timecode belongs to the file. 90 kHz, which is the transport
+    /// stream's clock and RTP's alike.
     private var lastTicks: Int64 = -1
 
+    /// Where the zero of that clock is, and it is SHARED with every other live
+    /// encoder — see `LiveClock` for what a private one would cost a viewer
+    /// changing picture.
+    private let clock: LiveClock
+
     init(bitsPerSecond: Int,
+         clock: LiveClock = LiveClock(),
          framesPerSecond: Double = LiveVideoEncoder.framesPerSecond,
          onFailure: @escaping @Sendable (String) -> Void = { _ in }) {
         self.bitsPerSecond = bitsPerSecond
+        self.clock = clock
         self.onFailure = onFailure
         interval = framesPerSecond > 0 ? 1 / framesPerSecond
             : LiveVideoEncoder.minimumInterval
@@ -140,6 +154,16 @@ final class LiveVideoEncoder: @unchecked Sendable {
             encoder?.setBitsPerSecond(rate)
         }
     }
+
+    /// The rate this encoder would build a session at, or has moved a running
+    /// one to. Not a claim that any session is at it — see
+    /// `appliedBitsPerSecond` for that.
+    ///
+    /// For the tests, and the distinction is the point: a pool of sessions the
+    /// operator's dial reached and a pool where one entry was missed are
+    /// indistinguishable until somebody's phone is the one at the old rate, and
+    /// most of those sessions have never seen a frame in a headless suite.
+    var wantedBitsPerSecond: Int { queue.sync { bitsPerSecond } }
 
     /// What the running session is actually set to, read back out of it; nil
     /// before the first frame, when there is no session yet.
@@ -215,11 +239,19 @@ final class LiveVideoEncoder: @unchecked Sendable {
     /// encoder rejects a timestamp that does not, and two frames closer
     /// together than 11 µs cannot happen under the pace ceiling anyway.
     private func nextTicks(at now: TimeInterval) -> Int64 {
-        let start = origin ?? now
-        origin = start
-        let ticks = Int64((now - start) * Double(MPEGTSMuxer.clockHz))
-        lastTicks = max(ticks, lastTicks + 1)
+        lastTicks = max(ticks(at: now), lastTicks + 1)
         return lastTicks
+    }
+
+    /// The 90 kHz stamp `now` gets, against the SHARED origin.
+    ///
+    /// Split out of `nextTicks` because it is the half that has to agree
+    /// between sessions and the half a test can ask about: the monotonic
+    /// forcing above is per session and would make two readings of the same
+    /// instant differ by construction. Touches no queue-confined state — the
+    /// origin is behind `LiveClock`'s own lock — so it answers from anywhere.
+    func ticks(at now: TimeInterval) -> Int64 {
+        Int64((now - clock.origin(at: now)) * Double(MPEGTSMuxer.clockHz))
     }
 
     /// An encoder built for this raster and rate, rebuilt when either changes.

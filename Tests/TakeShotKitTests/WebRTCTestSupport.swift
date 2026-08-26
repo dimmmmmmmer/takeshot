@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 import Testing
 
@@ -122,14 +123,18 @@ enum WebRTCHarness {
         var status: Int
         var contentType: String
         var body: String
+        /// The viewer id the answer named, or "" when it named none. What the
+        /// page sends back to change its picture without re-offering.
+        var viewer: String = ""
     }
 
-    /// One POST at `/webrtc-offer`, with whatever body the caller wants —
-    /// including one that is not JSON at all, which is half of what this route
-    /// has to survive.
-    static func post(port: Int, body: Data) async throws -> Reply {
+    /// One POST at `path`, with whatever body the caller wants — including one
+    /// that is not JSON at all, which is half of what these routes have to
+    /// survive.
+    static func post(port: Int, body: Data,
+                     path: String = RemoteWebRTC.offerPath) async throws -> Reply {
         let url: URL = try #require(
-            URL(string: "http://127.0.0.1:\(port)\(RemoteWebRTC.offerPath)"))
+            URL(string: "http://127.0.0.1:\(port)\(path)"))
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = body
@@ -139,17 +144,33 @@ enum WebRTCHarness {
         return Reply(
             status: http.statusCode,
             contentType: http.value(forHTTPHeaderField: "Content-Type") ?? "",
-            body: String(bytes: data, encoding: .utf8) ?? "")
+            body: String(bytes: data, encoding: .utf8) ?? "",
+            viewer: http.value(forHTTPHeaderField: RemoteWebRTC.viewerHeader) ?? "")
     }
 
-    /// The ordinary case: a well-formed offer with a PIN on it.
+    /// The ordinary case: a well-formed offer with a PIN on it, naming the
+    /// picture the page wants.
     static func offer(port: Int, pin: String,
+                      picture: LivePicture = .decorated,
                       sdp: String = WebRTCOfferFixture.chromeRecvOnlyVideo)
         async throws -> Reply {
         let object: [String: Any] = [RemoteWebRTC.pinField: pin,
-                                     RemoteWebRTC.sdpField: sdp]
+                                     RemoteWebRTC.sdpField: sdp,
+                                     RemoteWebRTC.pictureField: picture.rawValue]
         return try await post(
             port: port,
             body: try JSONSerialization.data(withJSONObject: object))
+    }
+
+    /// One picture change for a viewer that already has a connection.
+    static func changePicture(port: Int, pin: String, viewer: String,
+                              to picture: String) async throws -> Reply {
+        let object: [String: Any] = [RemoteWebRTC.pinField: pin,
+                                     RemoteWebRTC.viewerField: viewer,
+                                     RemoteWebRTC.pictureField: picture]
+        return try await post(
+            port: port,
+            body: try JSONSerialization.data(withJSONObject: object),
+            path: RemoteWebRTC.picturePath)
     }
 }

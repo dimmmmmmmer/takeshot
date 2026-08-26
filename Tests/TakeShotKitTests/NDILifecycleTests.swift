@@ -285,7 +285,7 @@ struct NDIBesideSRTTests {
 
             #expect(controller.mirrors.srt != nil)
             #expect(controller.mirrors.ndi != nil)
-            #expect(controller.mirrors.liveEncoder != nil,
+            #expect(controller.mirrors.liveEncoders[.decorated] != nil,
                     "the SRT link did not build the shared encoder")
 
             let sender: FakeNDISender = try #require(log.latest)
@@ -319,7 +319,7 @@ struct NDIBesideSRTTests {
 
             controller.settings.srt.enabled = nil
             #expect(controller.mirrors.srt == nil)
-            #expect(controller.mirrors.liveEncoder == nil,
+            #expect(controller.mirrors.liveEncoders.isEmpty,
                     "the shared encoder outlived the last thing watching it")
             #expect(controller.mirrors.ndi != nil)
             #expect(controller.mirrors.ndiState == NDIOutputState.sending)
@@ -349,7 +349,7 @@ struct NDIBesideSRTTests {
             #expect(controller.mirrors.ndi == nil)
             #expect(await ControllerWait.until { log.latest?.isStopped == true })
             #expect(controller.mirrors.srt != nil)
-            #expect(controller.mirrors.liveEncoder != nil,
+            #expect(controller.mirrors.liveEncoders[.decorated] != nil,
                     "the NDI switch took the shared encoder with it")
 
             let before = stream.datagrams.count
@@ -491,7 +491,7 @@ struct NDIStubBuildTests {
             controller.settings.ndi.enabled = true
             try await Task.sleep(for: .milliseconds(300))
             #expect(controller.mirrors.ndi == nil)
-            #expect(controller.mirrors.liveEncoder == nil,
+            #expect(controller.mirrors.liveEncoders.isEmpty,
                     "an unavailable feature built an encoder")
         }
     }

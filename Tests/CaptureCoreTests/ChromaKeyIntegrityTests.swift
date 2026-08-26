@@ -42,8 +42,8 @@ struct ChromaKeyIntegrityTests {
         pipeline.setChromaKey(ChromaProbe.magentaKey())
         let grabs = EventCollector<Data?>()
         let shown = EventCollector<Int>()
-        pipeline.setOnDisplayFrame { buffer in
-            shown.append(ChromaProbe.pixel(of: buffer,
+        pipeline.setOnDisplayFrame { frame in
+            shown.append(ChromaProbe.pixel(of: frame[.decorated],
                                            atFractionX: ChromaProbe.screenX).r)
         }
         defer { pipeline.setOnDisplayFrame(nil) }
@@ -79,8 +79,8 @@ struct ChromaKeyIntegrityTests {
         let takes = TakeCollector()
         pipeline.onTakeFinished = { takes.append($0) }
         let shown = EventCollector<Int>()
-        pipeline.setOnDisplayFrame { buffer in
-            shown.append(ChromaProbe.pixel(of: buffer,
+        pipeline.setOnDisplayFrame { frame in
+            shown.append(ChromaProbe.pixel(of: frame[.decorated],
                                            atFractionX: ChromaProbe.screenX).r)
         }
         defer { pipeline.setOnDisplayFrame(nil) }
@@ -153,7 +153,7 @@ struct ChromaKeyIntegrityTests {
         // …and one that has been sitting behind a stalled display queue for
         // five frame intervals does not
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.displayQueue.async { Thread.sleep(forTimeInterval: 0.2) }
         PreviewProbe.push(pipeline, source, frame: 2)

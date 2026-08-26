@@ -25,7 +25,7 @@ import Testing
             #expect(controller.mirrors.playout == nil)
 
             let collector = MediaFixtures.FrameCollector()
-            controller.playbackTap.setOnDisplayFrame { collector.record($0) }
+            controller.playbackTap.setOnDisplayFrame { collector.record($0[.decorated]) }
             controller.rebuildPlayout()
 
             #expect(controller.mirrors.playout == nil)

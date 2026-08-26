@@ -10,22 +10,42 @@ import Foundation
 ///
 /// Split out of CapturePipeline, which had grown past 1300 lines.
 extension CapturePipeline {
-    public func setOnDisplayFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+    public func setOnDisplayFrame(_ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
         displayFrameHandler = handler
         displayFrameLock.unlock()
     }
-    /// The multiview mirror (see the handler's own comment in CapturePipeline).
-    /// Called on the display queue, like the playout mirror — never on the
-    /// capture queue.
+    /// The crew monitoring mirror (see the handler's own comment in
+    /// CapturePipeline). Called on the display queue, like the playout mirror —
+    /// never on the capture queue.
     ///
-    /// It is handed the CLEAN processed frame, not what the viewer draws: the
-    /// camera grid on a phone is a monitoring surface, not an assist one. See
-    /// `enqueuePreview` for what that distinction costs and buys.
-    public func setOnMultiviewFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+    /// Whoever rides this slot wants `LivePicture.clean` or the `.grid` built
+    /// out of it: a monitoring surface is not an assist one, and everything the
+    /// operator switched on for themselves is wrong on it. See `enqueuePreview`
+    /// for what that distinction costs and buys, and `LivePicture` for where it
+    /// is stated.
+    public func setOnMonitorFrame(_ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
-        multiviewFrameHandler = handler
+        monitorFrameHandler = handler
         displayFrameLock.unlock()
+    }
+    /// Whether anything is taking the viewer's mirrors, and whether anything is
+    /// taking the monitor picture.
+    ///
+    /// For the tests, and they need them: "an idle app costs nothing per frame"
+    /// is a claim about these two slots being EMPTY, and a slot that was never
+    /// cleared and one that was are indistinguishable from outside otherwise —
+    /// the app looks identical and pays a closure call and a `LiveFrame` per
+    /// frame for the rest of the shift.
+    public var publishesDisplayFrames: Bool {
+        displayFrameLock.lock()
+        defer { displayFrameLock.unlock() }
+        return displayFrameHandler != nil
+    }
+    public var publishesMonitorFrames: Bool {
+        displayFrameLock.lock()
+        defer { displayFrameLock.unlock() }
+        return monitorFrameHandler != nil
     }
     public func addDisplaySink(_ layer: MetalPreviewLayer) {
         displaySinks.add(layer)
@@ -184,12 +204,20 @@ extension CapturePipeline {
     /// Key first, aids second: a false colour has to meter the picture the
     /// monitor is actually showing, background and all.
     ///
-    /// `clean` is that same frame before the key and the aids, and it is what
-    /// the phone's camera grid gets. The grid is a MONITORING surface, so
-    /// everything the operator switched on for themselves is wrong on it: a
-    /// pinned-reference wipe would put half of an hour-old frame in a tile
-    /// labelled A-cam, the chroma key would show the crew a background that is
-    /// not in the shot, and false colour would tell them the scene is on fire.
+    /// `clean` is that same frame before the key and the aids, and it is what a
+    /// MONITORING surface gets — the phone's camera grid, and the composed grid
+    /// picture a browser can choose. Everything the operator switched on for
+    /// themselves is wrong on those: a pinned-reference wipe would put half of
+    /// an hour-old frame in a tile labelled A-cam, the chroma key would show
+    /// the crew a background that is not in the shot, and false colour would
+    /// tell them the scene is on fire.
+    ///
+    /// **The two pictures leave here as one value.** Which of them any given
+    /// consumer takes is stated by naming a `LivePicture`, and `LiveFrame`'s
+    /// subscript is the only place a name becomes a buffer — so a browser
+    /// asking for the clean picture and the phone grid cannot end up with two
+    /// readings of what clean means. The pair is built only when somebody is
+    /// there to take it: with both slots empty this returns before it exists.
     ///
     /// Display-queue only.
     func publishDisplayFrame(_ buffer: CVPixelBuffer, clean: CVPixelBuffer,
@@ -199,10 +227,12 @@ extension CapturePipeline {
         let shown = assistStage.rendered(keyed, deadline: deadline) ?? keyed
         displaySinks.present(shown)
         displayFrameLock.lock()
-        let handler = displayFrameHandler
-        let multiview = multiviewFrameHandler
+        let mirrors = displayFrameHandler
+        let monitors = monitorFrameHandler
         displayFrameLock.unlock()
-        handler?(shown)
-        multiview?(clean)
+        guard mirrors != nil || monitors != nil else { return }
+        let frame = LiveFrame(decorated: shown, clean: clean)
+        mirrors?(frame)
+        monitors?(frame)
     }
 }

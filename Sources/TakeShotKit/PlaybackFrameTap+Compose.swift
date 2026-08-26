@@ -75,7 +75,15 @@ extension PlaybackFrameTap {
         displayFrameLock.lock()
         let handler = displayFrameHandler
         displayFrameLock.unlock()
-        handler?(shown)
+        // The two pictures a take under review has, named the same way the live
+        // path names them (`LivePicture`): `output` is the clip composed —
+        // levels, the viewing LUT, the compare composite — and `shown` is that
+        // with the assists burned in on top. The compare composite is on BOTH
+        // sides here and deliberately: in playback it is not an operator aid
+        // laid over the picture, it IS the picture under review, and there is
+        // no un-composited buffer to hand over that would not cost a second
+        // render pass on the tap queue for a distinction nobody asked for.
+        handler?(LiveFrame(decorated: shown, clean: output))
     }
 
     /// LUT + compare composite in raw code values (color management off — the

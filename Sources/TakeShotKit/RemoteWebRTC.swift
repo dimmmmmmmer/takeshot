@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 
 /// Signalling, which on this network is one POST.
@@ -21,6 +22,19 @@ enum RemoteWebRTC {
     /// a page that is permanently "connecting".
     static let offerPath = "/webrtc-offer"
 
+    /// Where the page POSTs a picture it has already got a connection for.
+    ///
+    /// **A second route rather than a second offer**, and that is the whole
+    /// reason it exists: re-offering would mean a fresh DTLS handshake and a
+    /// fresh ICE check for a button somebody just pressed, and the picture
+    /// would be black until both finished. This changes which session the
+    /// existing connection is fed from and nothing else (`WebRTCViewer.watch`).
+    ///
+    /// Shaped exactly like the offer route — same PIN door, same tarpit, same
+    /// body ceiling — because it is the same kind of request from the same page
+    /// and a second set of rules would be a second thing to get wrong.
+    static let picturePath = "/live-picture"
+
     /// Longest request body the route will take.
     ///
     /// An offer is SDP, and a browser's video offer is two to four kilobytes:
@@ -36,6 +50,27 @@ enum RemoteWebRTC {
     static let pinField = "pin"
     /// The JSON field carrying the offer SDP.
     static let sdpField = "sdp"
+    /// The JSON field naming which picture the page wants to watch — a
+    /// `LivePicture` raw value. Both routes carry it, because both are the page
+    /// stating the same choice.
+    static let pictureField = "picture"
+    /// The JSON field carrying the viewer id the answer handed out.
+    static let viewerField = "viewer"
+
+    /// The response header the answer's viewer id travels in.
+    ///
+    /// A header rather than a field in the body, because the body IS the SDP:
+    /// wrapping it in JSON to carry one identifier would make the answer route
+    /// stop answering `application/sdp`, and the page would have to unwrap
+    /// something before handing it to `setRemoteDescription`. Reading a custom
+    /// response header is free on a same-origin `fetch`, which every request
+    /// this page makes is.
+    ///
+    /// Deliberately NOT the SSRC out of the answer SDP, which is also an
+    /// identifier the page could read: that SDP is written by libdatachannel
+    /// and its formatting is the one thing in this feature no test here can
+    /// pin (see the note at the top of `WebRTCOffer`).
+    static let viewerHeader = "X-TakeShot-Viewer"
 
     /// What the app answers a POSTed offer with.
     ///
@@ -46,25 +81,71 @@ enum RemoteWebRTC {
     /// made without the library gives everybody, and the one that has to read
     /// as an explanation rather than as a network fault.
     enum Answer: Equatable, Sendable {
-        case answered(String)
+        /// The SDP to play, and the id that names this viewer for as long as it
+        /// lasts — what the page sends back to change its picture.
+        case answered(sdp: String, viewer: String)
         case rejected
         case unavailable(String)
     }
 
-    /// `{"pin":"1234","sdp":"v=0\r\n…"}` as its two fields.
+    /// One offer, as the page sends it.
+    struct Offer: Equatable, Sendable {
+        var pin: String
+        var sdp: String
+        var picture: LivePicture
+    }
+
+    /// One picture change, as the page sends it.
+    struct PictureChange: Equatable, Sendable {
+        var pin: String
+        var viewer: String
+        var picture: LivePicture
+    }
+
+    /// `{"pin":"1234","sdp":"v=0\r\n…","picture":"clean"}` as its fields.
     ///
-    /// nil for anything else, which the route answers 400 to. Strict about both
+    /// nil for anything else, which the route answers 400 to. Strict about the
     /// fields being strings: a body with a number where the PIN should be must
     /// not be read as an empty code and charged to the tarpit as a guess.
     ///
     /// Pure, so the shape of what the page sends is checkable without a socket.
-    static func parse(_ body: Data) -> (pin: String, sdp: String)? {
-        guard let object = try? JSONSerialization.jsonObject(with: body),
-              let dictionary = object as? [String: Any],
+    static func parse(_ body: Data) -> Offer? {
+        guard let dictionary = object(in: body),
               let pin = dictionary[pinField] as? String,
-              let sdp = dictionary[sdpField] as? String,
-              !sdp.isEmpty else { return nil }
-        return (pin, sdp)
+              let sdp = dictionary[sdpField] as? String, !sdp.isEmpty,
+              let picture = picture(in: dictionary) else { return nil }
+        return Offer(pin: pin, sdp: sdp, picture: picture)
+    }
+
+    /// `{"pin":"1234","viewer":"…","picture":"grid"}` as its fields.
+    static func parsePictureChange(_ body: Data) -> PictureChange? {
+        guard let dictionary = object(in: body),
+              let pin = dictionary[pinField] as? String,
+              let viewer = dictionary[viewerField] as? String, !viewer.isEmpty,
+              let picture = picture(in: dictionary) else { return nil }
+        return PictureChange(pin: pin, viewer: viewer, picture: picture)
+    }
+
+    /// The picture a body names.
+    ///
+    /// **Absent means `.decorated`, and present-but-unknown means refuse.** The
+    /// two are different mistakes: a body with no `picture` in it is a client
+    /// that predates the choice — including every `curl` anybody has written
+    /// against this route — and the picture this seam has always carried is the
+    /// honest answer for it. A body naming a word this app does not have is a
+    /// client asking for something specific, and quietly giving it the other
+    /// picture is how a stream ends up carrying a burn-in nobody asked for.
+    /// Same reasoning as `RemoteCommand.parse`'s unknown rating word.
+    private static func picture(in dictionary: [String: Any]) -> LivePicture? {
+        guard let named = dictionary[pictureField] else { return .decorated }
+        guard let text = named as? String else { return nil }
+        return LivePicture(rawValue: text)
+    }
+
+    private static func object(in body: Data) -> [String: Any]? {
+        guard let parsed = try? JSONSerialization.jsonObject(with: body)
+        else { return nil }
+        return parsed as? [String: Any]
     }
 }
 

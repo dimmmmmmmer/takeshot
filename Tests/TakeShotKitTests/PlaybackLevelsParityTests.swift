@@ -74,7 +74,7 @@ import Testing
                                             frameRate: 25, timecodeFPS: 25,
                                             name: "bands", isRGB444: true))
         let collector = MediaFixtures.FrameCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         let takes = TakeSink()
         pipeline.onTakeFinished = { takes.record($0) }
@@ -138,7 +138,7 @@ import Testing
         // file's own statement of what its codes mean
         let tap = PlaybackFrameTap()
         let shown = MediaFixtures.FrameCollector()
-        tap.setOnDisplayFrame { shown.record($0) }
+        tap.setOnDisplayFrame { shown.record($0[.decorated]) }
         let item = AVPlayerItem(url: recorded.take.url)
         let player = AVPlayer(playerItem: item)
         player.volume = 0

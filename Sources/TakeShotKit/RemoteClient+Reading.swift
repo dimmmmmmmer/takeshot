@@ -97,10 +97,8 @@ extension RemoteClient {
             drainFrames()
             return
         }
-        // The one POST this server answers: an offer in, an answer out. It is
-        // signalling entire — see `RemoteWebRTC` for why that is one request.
-        if request.method == "POST", request.path == RemoteWebRTC.offerPath {
-            serveWebRTCOffer(body)
+        if request.method == "POST" {
+            routePost(request, body: body)
             return
         }
         guard request.method == "GET" else {
@@ -132,6 +130,28 @@ extension RemoteClient {
             servePoster(request)
         default:
             writeAndClose(RemoteResponse.notFound())
+        }
+    }
+
+    /// The two POSTs this server answers, and they are the same page saying the
+    /// same kind of thing: an offer in and an answer out (signalling entire —
+    /// see `RemoteWebRTC` for why that is one request), and a picture change
+    /// for a connection it already has.
+    ///
+    /// Its own function rather than two more branches in `route`, and the
+    /// project's complexity ceiling is what said so: a router that grows a
+    /// branch per route is the shape that ends up impossible to read, and the
+    /// POSTs are a family of their own — same body ceiling, same PIN door, same
+    /// tarpit. A path this does not know is a 400 exactly as it was when the
+    /// method check answered it.
+    private func routePost(_ request: RemoteRequest, body: Data) {
+        switch request.path {
+        case RemoteWebRTC.offerPath:
+            serveWebRTCOffer(body)
+        case RemoteWebRTC.picturePath:
+            serveLivePictureChange(body)
+        default:
+            writeAndClose(RemoteResponse.badRequest())
         }
     }
 

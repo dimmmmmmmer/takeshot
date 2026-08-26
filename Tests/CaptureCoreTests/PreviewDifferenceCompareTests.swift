@@ -52,7 +52,7 @@ import Testing
     @Test func differenceAgainstThePinnedReferenceReachesTheScreen() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         pipeline.setPreviewReference(buffer: PreviewProbe.frame(0x40))
@@ -79,7 +79,7 @@ import Testing
     @Test func identicalFramesDifferenceToExactBlackThroughTheRealPath() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
 
         pipeline.setPreviewReference(buffer: PreviewProbe.frame(0x40))
@@ -101,7 +101,7 @@ import Testing
     @Test func differenceIsMeasuredBeforeThePreviewLUT() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setLUT(try CubeLUT.parse(Self.redCube), preview: true,
                         record: false, intensity: 1)
@@ -130,7 +130,7 @@ import Testing
     @Test func aPinTakenUnderTheLUTStillMeasuresTheCleanSignal() async throws {
         let pipeline = PreviewProbe.makePipeline()
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         pipeline.setLUT(try CubeLUT.parse(Self.redCube), preview: true,
                         record: false, intensity: 1)

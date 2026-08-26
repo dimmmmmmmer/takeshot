@@ -134,7 +134,7 @@ enum RawClipFixtures {
         let model = try #require(RawPlayerModel(url: folder, error: &error),
                                  "the engine refused a DNG folder: \(error ?? "-")")
         let presented = Presented()
-        model.setOnDisplayFrame { presented.record($0) }
+        model.setOnDisplayFrame { presented.record($0[.decorated]) }
         return (model, presented)
     }
 }

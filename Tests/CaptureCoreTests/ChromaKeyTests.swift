@@ -96,7 +96,7 @@ enum ChromaProbe {
     static func presented(_ pipeline: CapturePipeline, _ buffer: CVPixelBuffer,
                           frame index: Int = 1) async throws -> CVPixelBuffer {
         let collector = PreviewCollector()
-        pipeline.setOnDisplayFrame { collector.record($0) }
+        pipeline.setOnDisplayFrame { collector.record($0[.decorated]) }
         defer { pipeline.setOnDisplayFrame(nil) }
         PreviewProbe.push(pipeline, buffer, frame: index)
         await TestWait.until { collector.count > 0 }

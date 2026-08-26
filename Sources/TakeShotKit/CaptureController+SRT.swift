@@ -5,13 +5,12 @@ import Foundation
 /// and what the operator is told when it goes.
 ///
 /// The frames come off the SAME display-mirror slot the hardware monitor rides
-/// (see `wireDisplayMirrors`), so SRT carries the DECORATED frame — the picture
-/// the operator and the director are looking at, aids and chroma key included.
-/// That is the hardware monitor's case and not the phone grid's: the grid gets
-/// the clean frame because it is a crew monitoring surface where the operator's
-/// own tools would lie to it, and an SRT feed exists to replace a cable to a
-/// director's monitor. Whoever watches it is watching over the operator's
-/// shoulder, and should see the same picture.
+/// (see `wireDisplayMirrors`), and the picture SRT takes is named once, at
+/// `CaptureController.srtPicture` — the decorated frame, aids and chroma key
+/// included, because an SRT feed exists to replace a cable to a director's
+/// monitor and whoever watches it is watching over the operator's shoulder.
+/// Unlike a browser it is offered no choice, and the reason is written at that
+/// constant.
 ///
 /// Nothing here exists while the switch is off: `mirrors.srt` is nil, the display
 /// slot holds no SRT consumer, and libsrt has not even been loaded — the runtime
@@ -86,10 +85,10 @@ extension CaptureController {
             mirrors.srtStreamFactory ?? { SRTStream.make($0) }
         let mirror = SRTVideoMirror(
             endpoint: endpoint,
-            // The session every live consumer shares. A WebRTC viewer already
-            // watching hands this link a warm encoder; the switch being thrown
-            // first builds one that a viewer joins later.
-            encoder: ensureLiveEncoder(),
+            // The session for the picture this link carries. A browser already
+            // watching the same one hands this link a warm encoder; the switch
+            // being thrown first builds one that a viewer joins later.
+            encoder: ensureLiveEncoder(for: Self.srtPicture),
             factory: factory,
             onEvent: { [weak self] event in
                 // The mirror's queue must never touch the controller: every event
@@ -113,11 +112,10 @@ extension CaptureController {
         mirrors.srtEndpoint = nil
         mirrors.srtState = .off
         // Drop the display slot with it — but only if nothing else is watching.
-        // The shared encoder outlives this switch when a browser is on it, and
-        // `releaseLiveEncoderIfIdle` is the one place that decides; it re-wires
-        // the display slot either way.
-        releaseLiveEncoderIfIdle()
-        wireDisplayMirrors()
+        // The session outlives this switch when a browser is on the same
+        // picture, and `releaseIdleLivePictures` is the one place that decides;
+        // it re-wires every slot either way.
+        releaseIdleLivePictures()
     }
 
     /// What the mirror says about the link, turned into what Settings shows.
@@ -165,14 +163,18 @@ extension CaptureController {
     func applySRTChange(from oldValue: CaptureSettings) {
         // The bitrate is the ONE field in this group that no longer needs a new
         // link, and it is checked before the switch rather than inside it: the
-        // encoder is shared now, so an operator can be turning it down while
-        // the SRT switch is off and a browser is the only thing watching. It
-        // moves on the running session rather than rebuilding one — see
+        // sessions outlive this switch, so an operator can be turning it down
+        // while the SRT switch is off and a browser is the only thing watching.
+        // It moves on the running sessions rather than rebuilding them — see
         // `LiveVideoEncoder.setBitsPerSecond`.
         if oldValue.srt.bitsPerSecondEffective
             != settings.srt.bitsPerSecondEffective {
-            mirrors.liveEncoder?.setBitsPerSecond(
-                settings.srt.bitsPerSecondEffective)
+            // Every session, not one: the dial is the only bitrate the app has
+            // and each picture being watched is paying it (see
+            // `CaptureController+LivePictures`).
+            for encoder in mirrors.liveEncoders.values {
+                encoder.setBitsPerSecond(settings.srt.bitsPerSecondEffective)
+            }
         }
         let wasOn = oldValue.srt.enabled == true
         let isOn = settings.srt.enabled == true

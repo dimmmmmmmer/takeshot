@@ -31,9 +31,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// main actor while the tap queue reads it, so it goes through a lock (see
     /// the same pattern in CapturePipeline and RawPlayerModel).
     let displayFrameLock = NSLock()
-    var displayFrameHandler: (@Sendable (CVPixelBuffer) -> Void)?
+    var displayFrameHandler: (@Sendable (LiveFrame) -> Void)?
 
-    func setOnDisplayFrame(_ handler: (@Sendable (CVPixelBuffer) -> Void)?) {
+    func setOnDisplayFrame(_ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
         displayFrameHandler = handler
         displayFrameLock.unlock()

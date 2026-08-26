@@ -6,7 +6,10 @@ import Foundation
 /// The hardware playout output, the NDI source and the SRT stream are the same
 /// kind of thing: all three show whatever the viewer shows, all three take the
 /// DECORATED frame, and all three ride the one display-mirror handler slot per
-/// source that `CaptureController.wireDisplayMirrors` installs. Holding them
+/// source that `CaptureController.wireDisplayMirrors` installs. The browsers
+/// ride it too and are the exception that proves it — each of them names the
+/// picture it wants (`LivePicture`), which is why the slot now carries the
+/// whole frame rather than one buffer. Holding them
 /// together is what makes that function readable, and it is also what keeps
 /// `CaptureController` off its type-body ceiling — the controller is a
 /// stored-state inventory that is deliberately capped, and a subsystem that
@@ -14,11 +17,12 @@ import Foundation
 /// already do.
 ///
 /// **Riding one slot is not the same as sharing one encoder, and the two facts
-/// diverge here.** `srt` and `webrtcViewers` are consumers of `liveEncoder`;
+/// diverge here.** `srt` and `webrtcViewers` are consumers of `liveEncoders`;
 /// `playout` and `ndi` are consumers of the display BUFFER, because a DeckLink
 /// output takes pixels and NDI's SDK takes frames it compresses itself. So the
-/// slot fans out to at most two things per frame — the pixel consumers directly
-/// and the one H.264 session — and what that costs is written at
+/// slot fans out to the pixel consumers directly plus ONE H.264 session per
+/// distinct picture somebody is watching — two at most from this slot, since
+/// the third picture is built elsewhere — and what that costs is written at
 /// `wireDisplayMirrors`.
 ///
 /// An ObservableObject for two fields: `srtState` and `ndiState` are what the
@@ -77,17 +81,35 @@ final class DisplayMirrors: ObservableObject {
     /// Debounces the rebuild a settings edit causes (see `applySRTChange`).
     var srtRestartTask: Task<Void, Never>?
 
-    /// **The one H.264 session every live consumer shares.** nil while nothing
-    /// is watching, which is the default: it is built when the first consumer
-    /// appears — the SRT switch, or a browser that offered — and dropped when
-    /// the last one goes. See `LiveVideoEncoder` for why there is exactly one.
-    var liveEncoder: LiveVideoEncoder?
+    /// **One H.264 session per DISTINCT picture somebody is watching**, and
+    /// empty while nobody is — which is the default.
+    ///
+    /// The rule this pool exists to keep, stated once: a session is built when
+    /// the first consumer of its picture appears (the SRT switch, or a browser
+    /// that offered) and dropped when the last one goes, so a set with nothing
+    /// watching encodes nothing at all and a second viewer of a picture that is
+    /// already going costs no encode. See `CaptureController+LivePictures` for
+    /// the arithmetic, and `LiveVideoEncoder` for why one session cannot carry
+    /// two pictures.
+    var liveEncoders: [LivePicture: LiveVideoEncoder] = [:]
+
+    /// The 90 kHz origin every one of them stamps against — one per app, so a
+    /// browser moved from one picture to another is not handed a timestamp from
+    /// a different clock. See `LiveClock`.
+    let liveClock = LiveClock()
+
+    /// The grid picture, while somebody is watching it: every camera's clean
+    /// frame tiled into one buffer for `liveEncoders[.grid]`. nil otherwise, so
+    /// an unwatched grid costs no compose (see `MultiviewComposer`).
+    var gridComposer: MultiviewComposer?
 
     /// Browsers watching over WebRTC, by the id their events carry.
     ///
     /// A dictionary rather than an array because a viewer's own callbacks are
     /// what remove it — a page closed, an ICE agent that gave up — and those
-    /// arrive out of order with everything else.
+    /// arrive out of order with everything else. The id is also what the page
+    /// sends back to change its picture, which is why it leaves the app at all
+    /// (`RemoteWebRTC.viewerHeader`).
     var webrtcViewers: [UUID: WebRTCViewer] = [:]
 
     /// Overridden in tests, for a sharper reason than the SRT factory has: the
