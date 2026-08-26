@@ -80,13 +80,13 @@ struct ModelVectorscopeTests {
     /// The graticule the operator lines a chart up on: six 75 % boxes and six
     /// 100 % marks, no more and no fewer.
     @Test func theGraticuleCarriesBothBarAmplitudes() {
-        #expect(VectorscopeView.targets75.count == 6)
-        #expect(VectorscopeView.targets100.count == 6)
-        #expect(Set(VectorscopeView.targets75.map(\.id))
+        #expect(VectorscopeView.targets75(.rec709).count == 6)
+        #expect(VectorscopeView.targets100(.rec709).count == 6)
+        #expect(Set(VectorscopeView.targets75(.rec709).map(\.id))
             == ["R", "G", "B", "Cy", "Mg", "Yl"])
         // 100 % of a hue is further from the centre than 75 % of it
-        for (full, three) in zip(VectorscopeView.targets100,
-                                 VectorscopeView.targets75) {
+        for (full, three) in zip(VectorscopeView.targets100(.rec709),
+                                 VectorscopeView.targets75(.rec709)) {
             let centre = CGPoint(x: 0.5, y: 0.5)
             #expect(distance(CGPoint(x: full.x, y: full.y), centre)
                 > distance(CGPoint(x: three.x, y: three.y), centre))
@@ -107,8 +107,8 @@ struct ModelVectorscopeTests {
                              "Cy": 0.768, "G": 0.892, "Mg": 0.892]
         let atFull = ["B": 1.004, "Yl": 1.004, "R": 1.026,
                       "Cy": 1.026, "G": 1.191, "Mg": 1.191]
-        for (targets, expected) in [(VectorscopeView.targets75, atSeventyFive),
-                                    (VectorscopeView.targets100, atFull)] {
+        for (targets, expected) in [(VectorscopeView.targets75(.rec709), atSeventyFive),
+                                    (VectorscopeView.targets100(.rec709), atFull)] {
             for target in targets {
                 let want = try #require(expected[target.id])
                 let radius = distance(CGPoint(x: target.x, y: target.y),
@@ -118,9 +118,17 @@ struct ModelVectorscopeTests {
             }
         }
         // and every 100 % mark is still inside the square it is drawn in, so
-        // the radial tick has somewhere to land instead of being clipped off
-        for target in VectorscopeView.targets100 {
-            #expect((0...1).contains(target.x) && (0...1).contains(target.y),
+        // the radial tick has somewhere to land instead of being clipped off.
+        //
+        // With a rounding epsilon, because ON the edge is where these belong:
+        // full-amplitude chroma reaches exactly ±127.5, which is exactly the
+        // half-width, so R lands on y = 0 and Cy on y = 1 by construction. The
+        // last bit of that zero is a rounding artefact of the luma weights —
+        // −1.1e−16 with the derived ones, +4e−8 with the printed ones — and a
+        // test that flips on it is measuring the arithmetic, not the drawing.
+        let edge = -1e-9...(1 + 1e-9)
+        for target in VectorscopeView.targets100(.rec709) {
+            #expect(edge.contains(target.x) && edge.contains(target.y),
                     "\(target.id) at (\(target.x), \(target.y)) is off the scope")
         }
     }
@@ -146,7 +154,7 @@ struct ModelVectorscopeTests {
             let data = try #require(ScopeAnalyzer.analyze(
                 try flat(r: bar.red, g: bar.green, b: bar.blue)))
             let target = try #require(
-                VectorscopeView.targets75.first { $0.id == bar.id })
+                VectorscopeView.targets75(.rec709).first { $0.id == bar.id })
             let landed = try peak(data)
             let miss = distance(landed, CGPoint(x: target.x, y: target.y))
             // one cell of a 256-wide map is 1/256 = 0.004 of the square, and
@@ -163,7 +171,7 @@ struct ModelVectorscopeTests {
     /// the box, about 12 % short — which looks exactly like a camera that is
     /// slightly desaturated rather than like a scope with the wrong scale on it.
     @Test func aWireBarLandsOnTheSameBoxAsTheExpandedOne() throws {
-        let target = try #require(VectorscopeView.targets75.first { $0.id == "R" })
+        let target = try #require(VectorscopeView.targets75(.rec709).first { $0.id == "R" })
         let data = try #require(ScopeAnalyzer.analyze(
             try flatWire(r: wireCode(191), g: wireCode(0), b: wireCode(0)),
             wireLevels: .limited))
