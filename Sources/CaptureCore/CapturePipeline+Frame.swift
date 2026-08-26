@@ -97,8 +97,16 @@ extension CapturePipeline {
     /// Hand the frame to the writer, and turn a refusal into either a closed
     /// take or a drop count.
     private func appendToTake(_ recordBuffer: CVPixelBuffer, pts: CMTime) {
-        guard let writer,
-              !writer.append(pixelBuffer: recordBuffer, pts: pts) else { return }
+        guard let writer else { return }
+        if writer.append(pixelBuffer: recordBuffer, pts: pts) {
+            // That call may have padded the take's own audio track to keep a
+            // fragment from staying shut (`TakeWriter.padAudioIfNeeded`). The
+            // writer has no callbacks, so the alarm is raised from here — the
+            // same split the conform has, and it costs an accepted frame one
+            // integer comparison.
+            noteAudioPadding(from: writer)
+            return
+        }
         if writer.hasFailed {
             // permanent: the volume went away, the disk filled, the encoder
             // died. Counting drops here would keep REC red for the rest of

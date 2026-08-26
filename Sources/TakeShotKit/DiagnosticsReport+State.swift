@@ -71,6 +71,8 @@ enum DiagnosticsStateReport {
                  + "in this take, \(health.droppedAudioPacketsTotal) since launch"),
             pair("Gap-filled audio", "\(health.gapFilledAudioPacketsInTake) "
                  + "in this take, \(health.gapFilledAudioPacketsTotal) since launch"),
+            pair("Padded audio track", "\(health.paddedAudioPacketsInTake) "
+                 + "in this take, \(health.paddedAudioPacketsTotal) since launch"),
             pair("Ingress drops", health.ingressDrops),
             pair("Chroma late drops", health.chromaLateDrops),
             pair("Takes closed", health.takesClosed),

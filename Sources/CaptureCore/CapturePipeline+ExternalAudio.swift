@@ -28,6 +28,12 @@ extension CapturePipeline {
 
     /// Silence is padded in 40 ms packets at the pipeline's 48 kHz — the
     /// cadence and rate the converted external packets arrive at.
+    ///
+    /// `TakeWriter.audioPadFrames` is the same 40 ms one level down. Two
+    /// constants rather than one because the two pad at different WIDTHS: this
+    /// pads at the SOURCE's channel count so the take's latched mask trims it
+    /// exactly like a real packet, and the writer's pads at the count the track
+    /// was opened with, which needs no trim at all.
     static let padChunkFrames = 1920
     /// How long external packets may stop arriving before the take is padded
     /// even without a disconnect event — a wedged device must not leave a
