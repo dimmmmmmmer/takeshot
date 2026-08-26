@@ -289,9 +289,9 @@ struct PlayerTopBadgeRow: View {
     }
 
     @ViewBuilder private var multicamBadge: some View {
-        if controller.devices.filter({
-            $0.id.hasPrefix("decklink:")
-        }).count > 1 {
+        // the rule is on the controller, beside the one that decides which
+        // board becomes which camera — see `multicamOffered`
+        if controller.multicamOffered {
             playerOverlayBadge {
                 Button {
                     controller.toggleMulticam()

@@ -29,7 +29,7 @@ struct OutputSettingsSection: View {
                 get: { controller.settings.capture.monitorDeviceID },
                 set: { controller.settings.capture.monitorDeviceID = $0 })) {
                 Text(L("external_off")).tag(String?.none)
-                ForEach(controller.devices.filter { $0.id.hasPrefix("decklink:") }) { device in
+                ForEach(controller.deckLinkDevices) { device in
                     Text(device.name).tag(String?.some(device.id))
                 }
             }
