@@ -92,6 +92,30 @@ Gatekeeper's refusal instead of the app.
   instead of the board's embedded audio. Off by default; if the interface is
   missing at launch or is unplugged mid-shoot, it falls back to embedded audio
   and tells you.
+- **A chromaticity chart** joins the waveform, parade, histogram and
+  vectorscope: CIE 1931 xy with the spectral horseshoe, both gamut triangles
+  and D65 drawn on it. It reads the signal's OWN primaries, so a Rec.2020
+  camera's colours sit in the 2020 triangle and you can see at a glance what
+  will move when the day is delivered to a Rec.709 master.
+- **The scopes read the signal's own matrix.** Rec.2020 codes luma with
+  different weights than Rec.709, so on a 2020 signal the waveform used to read
+  saturated greens too dark, and the vectorscope's colour-bar boxes sat about a
+  box-width off. Both follow the signal now. Nothing changes for a Rec.709
+  camera — that is pinned to four decimal places.
+- **The vectorscope is sharper.** Each sample is placed between cells rather
+  than rounded into one, so the trace lands where it actually is. The most
+  visible consequence: a neutral frame now sits exactly on the centre instead
+  of half a cell off it.
+- **The scopes window makes a square grid** instead of a row of thin slivers
+  when the window is wide.
+- **Pre-roll can be typed in seconds** as well as frames, and the reading shows
+  both — "12 frames · 0.5 s at 23.976" — so the number you set means the same
+  thing whatever the camera is running at.
+- **The channels that carry sound are the channels that get recorded.** A
+  camera embedding a stereo pair no longer opens a sixteen-channel track with
+  fourteen silent ones. It is measured, not guessed, during standby, and the
+  panel says whether the choice is the app's or yours — click any channel to
+  take it over.
 
 ### New for the phone on set
 
@@ -100,6 +124,12 @@ Gatekeeper's refusal instead of the app.
 - **Camera grid** at `/cameras` — every board's live signal as tiles, each
   labelled and with its own REC light. It is the live signal, not the takes,
   and no encoding happens at all unless somebody has the page open.
+- **Live video at `/live`**, over WebRTC rather than a stream of JPEGs — and
+  the phone chooses what it watches: the monitor picture with your aids and
+  framelines on it, the clean camera, or the multi-camera grid. Each picture
+  somebody is actually watching costs one encode and no more; two people
+  watching the same thing cost one between them, and an empty page costs
+  nothing at all.
 - Both sit behind the same PIN as the operator remote, and the remote is still
   off until you switch it on.
 
@@ -108,6 +138,14 @@ Gatekeeper's refusal instead of the app.
 - **Dailies**: batch-transcode the day's takes to H.264 with timecode, clip
   name, project and camera burned in. The queue pauses itself while a take is
   recording.
+- **Dailies of an HDR take are tone mapped**, through the same curve the player
+  uses — so a PQ or HLG take comes out of the batch looking like it looked
+  while you were watching it, instead of dark. Measured: diffuse white lands
+  where the monitor put it rather than at 148 of 255.
+- **A note on a take reaches the paper.** The shift report used to lay comments
+  out in the width left over after the other columns, which was about sixteen
+  characters, cut mid-word. A note is now a line of its own under the take,
+  running the full width of the page.
 - **Contact sheet**: the day as one PDF of poster frames, one cell per take,
   with the shift report's header on every page.
 - **Scene, shot and take** are recorded per take beside the rating and the
@@ -129,6 +167,24 @@ Gatekeeper's refusal instead of the app.
   a bug report and the first three questions are already answered.
 - The build's own version and commit are stamped into the app, so a report can
   say exactly which build produced it.
+- **A take abandoned by a crash or a power cut opens.** The app was already
+  writing the file in fragments so that this would be true, and it was not:
+  a fragment is only released once every track has data past it, and the
+  timecode track was written at the end. It is written as the take runs now,
+  and so is silence on an audio track the board declared and never fed —
+  measured on a 13-second abandoned take, 10 seconds come back with picture and
+  sound where none of it did before.
+- **A camera that stops sending without saying so closes the take.** A wedged
+  board stays in the device list, raises no error and simply stops calling
+  back; one second of silence now ends the take the way a real signal loss
+  does, instead of leaving a recording that is not recording.
+- **A source that changes its channel count mid-take no longer costs the rest
+  of the shot.** The sound is conformed to what the take opened with, the take
+  keeps rolling, and the alarm and the log row say it happened.
+- **A very long name cannot lose a take.** A project name plus scene, shot and
+  take could exceed what the file system accepts, and the take then did not
+  open at all — with the camera already rolling. Names are now shortened to fit
+  and kept unique.
 
 ### Also new
 
@@ -174,6 +230,16 @@ Gatekeeper's refusal instead of the app.
   SRT and one more: the machine it was written on has the runtime and not the
   headers, so the bridge compiles as a stub there and the half that talks to
   NDI has never executed. Try it before a job depends on it.
+- **No browser has ever decoded the live video.** The offer and the answer are
+  checked against a real Chrome offer captured off this machine, the RTP
+  packetising is checked byte for byte, and the page is checked — but nothing
+  has yet put a phone on a set network and seen a picture. If it gathers and
+  never connects, the first thing to look at is that Chrome sends `.local`
+  candidate names rather than addresses. Try it before a job depends on it.
+- **Live video needs libdatachannel at build time.** A published build carries
+  it inside the app; a build made from source does not unless you build the
+  library too, and the page then says so and stops asking. The camera grid at
+  `/cameras` keeps working either way, which is why it is still there.
 - **Both network outputs are picture only.** NDI and MPEG-TS both carry audio
   and neither is sent any, because the only stereo feed inside the app belongs
   to the room speakers and is switched off with them — sound on a director's
