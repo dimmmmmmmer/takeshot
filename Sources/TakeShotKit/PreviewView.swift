@@ -12,29 +12,6 @@ struct PreviewView: View {
         return CGFloat(format.width) / CGFloat(format.height)
     }
 
-    /// Whether to show the AVPlayer transport (video, not photo/RAW).
-    /// The still-image list is the folder scanner's own — a second copy here
-    /// would eventually drift, and a still on the drifted side gets a video
-    /// transport drawn over a photo.
-    private var showsTransport: Bool {
-        guard controller.viewerMode == .playback, controller.syncPlay == nil,
-              let url = controller.playbackURL
-        else { return false }
-        let ext = url.pathExtension.lowercased()
-        return !CaptureController.imageExtensions.contains(ext)
-            && !CaptureController.rawExtensions.contains(ext)
-            && controller.rawPlayer?.url != url
-    }
-
-    /// RAW clips get the engine's own transport.
-    private var showsRawTransport: Bool {
-        guard controller.viewerMode == .playback, controller.syncPlay == nil,
-              let url = controller.playbackURL
-        else { return false }
-        if controller.rawPlayer?.url == url { return true }
-        return CaptureController.rawExtensions.contains(url.pathExtension.lowercased())
-    }
-
     /// What feeds the unified surface right now (stills go through the tap
     /// too — the same render/LUT/compare path as video).
     private var surfaceSource: ViewerSurface.Source {
@@ -107,15 +84,23 @@ struct PreviewView: View {
                     }
                 }
             }
-            if showsTransport {
+            // which bar, if any, is `controller.transportBarKind` and not a
+            // rule of this view's own: the toast over the picture has to clear
+            // whatever is drawn here, and two spellings of it drifted
+            switch controller.transportBarKind {
+            case .video:
                 TransportBar(player: controller.player, model: controller.transport)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(6)
-            } else if showsRawTransport, let model = controller.rawPlayer {
-                RawTransportBar(model: model)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .padding(6)
+            case .raw:
+                if let model = controller.rawPlayer {
+                    RawTransportBar(model: model)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(6)
+                }
+            case .none:
+                EmptyView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -161,12 +146,21 @@ struct CompareWipeOverlay: View {
 }
 
 /// Draggable compare wipe (line + handle, any direction).
+///
+/// Where the line goes and where a drag puts it are `CompareWipeGeometry`,
+/// which states both over the same axis the compositor cuts on — see there for
+/// why that had to leave this closure.
 private struct WipeHandle: View {
     @EnvironmentObject private var controller: CaptureController
 
+    private var axis: CompareCompositor.Axis {
+        CaptureController.compareAxis(controller.wipeOrientation)
+    }
+
     var body: some View {
         GeometryReader { geo in
-            let (p1, p2) = endpoints(in: geo.size)
+            let (p1, p2) = CompareWipeGeometry.endpoints(
+                position: controller.wipePosition, in: geo.size, axis: axis)
             ZStack {
                 Path { path in
                     path.move(to: p1)
@@ -181,35 +175,9 @@ private struct WipeHandle: View {
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                let size = geo.size
-                let raw: Double
-                switch controller.wipeOrientation {
-                case .vertical:
-                    raw = value.location.x / size.width
-                case .horizontal:
-                    raw = value.location.y / size.height
-                case .diagonal:
-                    raw = (value.location.x + value.location.y)
-                        / (size.width + size.height)
-                }
-                controller.wipePosition = min(1, max(0, raw))
+                controller.wipePosition = CompareWipeGeometry.position(
+                    at: value.location, in: geo.size, axis: axis)
             })
-        }
-    }
-
-    private func endpoints(in size: CGSize) -> (CGPoint, CGPoint) {
-        switch controller.wipeOrientation {
-        case .vertical:
-            let x = size.width * controller.wipePosition
-            return (CGPoint(x: x, y: 0), CGPoint(x: x, y: size.height))
-        case .horizontal:
-            let y = size.height * controller.wipePosition
-            return (CGPoint(x: 0, y: y), CGPoint(x: size.width, y: y))
-        case .diagonal:
-            let t = controller.wipePosition * (size.width + size.height)
-            let p1 = CGPoint(x: max(0, t - size.height), y: min(t, size.height))
-            let p2 = CGPoint(x: min(t, size.width), y: max(0, t - size.width))
-            return (p1, p2)
         }
     }
 }

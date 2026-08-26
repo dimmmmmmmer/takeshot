@@ -239,14 +239,12 @@ private struct BottomHoverReveal<Strip: View>: ViewModifier {
                     }
                 }
                 .onContinuousHover { phase in
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        switch phase {
-                        case .active(let point):
-                            shown = point.y > geo.size.height - height
-                        case .ended:
-                            shown = false
-                        }
-                    }
+                    // the rule is `ChromeReveal`, shared with the badge row at
+                    // the top of the same two windows
+                    let reveal = ChromeReveal.shows(phase, edge: .bottom,
+                                                    band: height,
+                                                    in: geo.size.height)
+                    withAnimation(.easeOut(duration: 0.15)) { shown = reveal }
                 }
         }
         .ignoresSafeArea()
@@ -280,7 +278,7 @@ struct LiveFullscreenView: View {
                 .padding(14)
             }
         }
-        .modifier(BottomHoverReveal(height: 150, shown: $footerHover) {
+        .modifier(BottomHoverReveal(height: ChromeReveal.footerBand, shown: $footerHover) {
             BottomBarView()
                 .background(.ultraThinMaterial,
                             in: RoundedRectangle(cornerRadius: 18))
@@ -311,7 +309,7 @@ struct PlaybackFullscreenView: View {
             }
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
         }
-        .modifier(BottomHoverReveal(height: 130, shown: $transportHover) {
+        .modifier(BottomHoverReveal(height: ChromeReveal.transportBand, shown: $transportHover) {
             TransportBar(player: controller.player, model: controller.transport)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         })

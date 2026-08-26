@@ -192,7 +192,13 @@ extension CaptureController {
         referencePinned = false
         pushCompare()
     }
-    private static func compareAxis(
+    /// The operator's orientation as the axis the compositor cuts on.
+    ///
+    /// Internal rather than private because the wipe HANDLE needs the same
+    /// mapping: the line the operator drags has to sit on the seam the
+    /// compositor draws, and two spellings of "diagonal" is how they would
+    /// come to disagree (see `CompareWipeGeometry`).
+    static func compareAxis(
         _ orientation: WipeOrientation) -> CompareCompositor.Axis {
         switch orientation {
         case .vertical: return .vertical

@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **89.32 %** lines (4 258 of 39 856 lines uncovered) |
+| Measured | **90.35 %** lines (4 025 of 41 716 lines uncovered) |
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than
@@ -103,13 +103,69 @@ watchdog tick that nothing can drive (the same split `bitDepthNotice` already
 had from its reporter), and `TestWait.becomesTrue` gives the CaptureCore suites
 the answering poll `ControllerWait.until` already had.
 
+## The long-tail wave
+
+The wave that took the number from 89.68 % to 90.35 % went after what the next
+section calls "a long tail of view bodies, AppKit window paths and error
+branches that are reachable with more work". Almost none of it was writing more
+tests against the code as it stood.
+
+**One part was a fixture that had never been right.** Every CinemaDNG folder the
+suites built held files no decoder opens — enough for `RawPlayerModel.init` to
+accept the folder and for the transport arithmetic to be measured, which is why
+the RAW transport looked half covered while the decode loop sat at 43 % and its
+scope path at 10 %. The only arm of that loop which had ever executed was the
+failure one, reached by accident. `DNGSequenceSource` develops each frame
+through `CIRAWFilter` with a plain ImageIO decode behind it, and CIRAWFilter
+opens whatever ImageIO opens — so a PNG under a `.dng` name is a frame the
+player really decodes. That is measured, and `RawClipFixtures` is it. Frames
+carry a PATTERN rather than a level (index + 1 white columns), because a test
+that can say WHICH picture is on screen is the only kind that catches the
+playhead and the picture disagreeing; a level would not survive the develop,
+which converts sRGB to Rec.709 and moves a flat grey by up to eleven codes.
+
+What that unlocked is the half of review a DIT spends the day in: the picture
+following the playhead, a decode failure REPORTED rather than pausing in silence
+(which is exactly what reaching the end looks like — the operator reads "short
+clip" where the truth is "bad card"), the last frame refusing to decode being
+the end rather than a failure, the loop resuming at the in point, and the scope
+cadence both while playing and on a paused clip.
+
+**The rest was five decisions that lived where nothing could ask them.** Same
+shape as `ScopeGridLayout.columns` and `PunchEventView.decide`: the rule comes
+out as a function over its inputs, what stays unreachable shrinks to the reading
+and the applying, and the coverage is a side effect. Three of the five found a
+disagreement that was already there:
+
+| Extraction | What it decides, and what it found |
+| --- | --- |
+| `HotkeyManager.outcome` | Whether the key under the operator's finger reaches the app or the scene name they are halfway through typing. The ORDER is now written down with the arms, including its consequence: Esc leaves a fullscreen surface before it cancels a combo recording, so a row armed while a fullscreen window is up stays armed until Esc is pressed a second time. |
+| `CompareWipeGeometry` | Where the wipe seam is, and where a drag of its handle puts it. The handle and the seam are drawn by two different things in two different coordinate systems — SwiftUI top-left, Core Image bottom-left — and nothing held them against each other. The suite composes through the real `CompareCompositor` and checks the front image is on one side of the handle and the back on the other. |
+| `CaptureController.transportBarKind` and `PlayerToastPlan` | Which bar is under the picture, and what the player says over it. **Already drifted.** `PlayerToast` carried a note saying a drifted copy of its inset is "the take-failed message hidden behind the play button"; the bar asked a careful question and the toast asked "is a clip loaded in playback", so over a still and over a sync-play grid the toast floated 42 points above a bar that was not there. |
+| `ChromeReveal` | When a fullscreen window shows its chrome. Three strips spelled the rule out separately and in two different SHAPES — one against a bare number, two against a band measured off the view's own height — so nothing showed they were the same rule. The three bands are now three named constants twenty points apart, and that spread is itself a test. |
+| `CaptureController.multicamPlan` and `deckLinkDevices` | Which board becomes which camera. The label goes through `NamingEngine` into the FILE NAMES, so a board that answered to a different letter between two sessions of the same shoot is a day of footage that will not sort. Three places spelled out "which of these is a board", and two of them have to agree or the badge is a lit button that adds no camera. |
+
+Every suite here was checked by breaking the rule and watching the test name the
+break: twenty-two mutations, of which twenty-one turned a test red — each by the
+test that describes it, and, where the claim is narrow enough for that to mean
+anything, by no others. The twenty-second is worth writing down for what it
+showed rather than for what it caught:
+`restartLoop(fromInPoint:)` going to frame 0 changes NOTHING on its own, because
+`startOfPlayback` re-imposes the in point underneath it. That rule is defended
+twice and either line alone is redundant; breaking both is what turns
+`aLoopWithAnInPointResumesAtTheInPoint` red.
+
 ## The honest ceiling
 
-Roughly **1 000 lines — about 2.7 points — cannot be covered by a headless
-suite at all.** That puts the arithmetic ceiling near 97 %, and the gap between
-that and the measured 89 % is not unreachable code: it is a long tail of view
-bodies, AppKit window paths and error branches that are reachable with more work.
-95 % is a question of how many more waves, not of whether it is possible.
+Roughly **1 000 lines — about 2.4 points — cannot be covered by a headless
+suite at all.** That puts the arithmetic ceiling near 97.6 %, and the gap
+between that and the measured 90 % is not unreachable code: it is a long tail of
+view bodies, AppKit window paths and error branches that are reachable with more
+work. 95 % is a question of how many more waves, not of whether it is possible.
+
+The long-tail wave below is one measurement of what "more work" costs: six
+changes, +0.67 points, and five of the six were a rule leaving a place nothing
+could ask it rather than a new assertion about code that stayed where it was.
 
 What is genuinely out of reach, and why:
 
@@ -124,7 +180,7 @@ What is genuinely out of reach, and why:
 | ~37 | `DeckLinkBackendAdapter.swift` | Constructing it installs a process-wide hot-plug callback and adopts whatever board is attached. |
 | ~29 | `SingleInstanceGuard.swift` | Hands off to another running copy of the app via `NSRunningApplication`. |
 | ~41 | `FilePanel`, `AudioRenderRoute`, `PlayoutOutput` | The far side of the three new seams: `runModal()`, `audioOutputDeviceUniqueID` on a live renderer, and the `CDLPlayout` conformance. |
-| ~200 | `RawPlayback+*`, `RawClipSource` | The BRAW decode paths. `vendor/BRAWSDK/include` is not committed and is absent on CI, so `CBRClip.isSDKAvailable` is false and those branches cannot execute. The CinemaDNG half is reachable and partly covered. |
+| ~39 | `RawPlayback+*`, `RawClipSource` | **This row said ~200 and was wrong — not about the SDK, about what the SDK was being blamed for.** `vendor/BRAWSDK/include` really is absent, so `BRAWSource` and `R3DSource` cannot execute; but most of the 200 was the DECODE LOOP, which is format-agnostic and was uncovered because every fixture was a folder of files that would not decode, not because of any SDK (see the long-tail wave). What is left is the two SDK-gated sources, and the timecode readouts underneath them — `parseTimecode` and the R3D half-rate `timecodeFrames` need a clip that carries a start timecode, which a folder of CinemaDNG frames does not. `R3DClipSource.swift` (~52) is the same story. |
 
 And the ones the interruption wave went looking for and could not reach. Each
 was tried, so these are measurements rather than guesses:
@@ -134,9 +190,9 @@ was tried, so these are measurements rather than guesses:
 | `CapturePipeline+Frame.appendToTake`, the `writer.hasFailed` arm (~8 lines), and `TakeWriter.failureReason` | **There is no deterministic way to fail an `AVAssetWriter` from a test.** Measured on macOS 26: a grayscale or 16-bit-grey buffer into a ProRes writer is accepted, an off-size buffer is accepted, unlinking the whole output directory and then writing 400 more frames is accepted, `cancelWriting` leaves `.cancelled` and not `.failed`, and `AVAssetWriter(outputURL:)` no longer throws on an existing file. The *decision* the branch guards is covered from the other side (`routineDropsAreNotReportedAsWriterFailure`) and the failure itself is covered on device. Reaching it headlessly needs a protocol in front of `TakeWriter`, which is a bigger change than the branch is worth. |
 | `CaptureController.availableScreens` | Reads `NSApp.mainWindow`. `NSApp` is an implicitly unwrapped global that is nil until an `NSApplication` exists, and a test binary has none — touching it traps. Harmless in the app (the property is only ever read from a view inside a running application) and not worth instantiating `NSApplication` in the suite to reach. |
 | `makeBorderlessWindow` and the three fullscreen surfaces in `CaptureController+Windows` (~40 lines) | They put a black `.statusBar`-level window over the whole screen of whoever runs the suite and take the keyboard focus with it. The half that decides — a stored display that is no longer attached builds nothing — is covered. |
-| `HotkeyManager.install` (~45 lines) | An `NSEvent` local monitor. Driving it means posting real events into an application event queue there is none of; the two decidable parts (`typingKeepsTheKey`, and `perform` behind it) are covered. |
+| `HotkeyManager.install`, what is left of it | An `NSEvent` local monitor: driving it means posting real events into an application event queue there is none of. This row used to say only that "the two decidable parts are covered", which understated how much of it WAS decidable. The rule has since been pulled out into `HotkeyManager.outcome`, a function over the facts a press carries (`HotkeyPress`) and the two fullscreen flags, with its own suite — so what stays unreachable is the reading of those facts off an `NSEvent`, the one fact no event carries (`firstResponder is NSTextView`), and the calls that apply the answer. |
 | `PunchEventView.handle`, what is left of it | Same shape: a local monitor over synthesized `.magnify` and `.scrollWheel` events, which cannot be built with a window number that matches. The DECISION has since been pulled out into `PunchEventView.decide`, a function over (type, magnification, modifiers, deltas, precise, pointer, bounds, punched-in) with its own suite — so what remains unreachable is the reading of those facts off an `NSEvent` and the two calls that apply the outcome. That is the shape to copy for the rest of this table's monitor rows. |
-| `CaptureController.setMulticam`, the hardware arm (~22 lines) | Constructing the `DeckLinkBackendAdapter` it needs is the thing `ControllerHarness` exists to avoid: on a machine with the SDK dropped in it adopts whatever board is attached. Safe on a runner with no SDK and unsafe on the developer's, which is not a difference a suite may depend on. |
+| `CaptureController.setMulticam`, the hardware arm (~22 lines) | Constructing the `DeckLinkBackendAdapter` it needs is the thing `ControllerHarness` exists to avoid: on a machine with the SDK dropped in it adopts whatever board is attached. Safe on a runner with no SDK and unsafe on the developer's, which is not a difference a suite may depend on. The PLAN in front of it is not that and is covered now — `multicamPlan` says which board becomes which camera, which is the half that reaches the file names. |
 | `CapturePipeline.uniqueURL`'s 1000-attempt fallback (4 lines) | Needs a thousand colliding files in the record folder. |
 | `CaptureController.askDuplicateLUT` (~13 lines) | An `NSAlert.runModal()`. Everything either side of it is covered; making the choice injectable the way `FilePanel` is would unlock it. |
 
@@ -148,6 +204,27 @@ Two more, worth naming because they look coverable and are not:
   `panelActionTargets` — are covered on the controller side instead.
 - **Popover bodies** (`TakeLogButton.editor`) are not built until the popover is
   presented. What they read and write (`setComment`, `setSlate`) is covered.
+
+And what the long-tail wave deliberately did NOT touch, so the next one starts
+from a list rather than from the report again:
+
+- `AppCommands.swift` (~344, 6 %) is still the largest single file in the table
+  and the reasoning above still holds — checked rather than assumed this time.
+  The two things that CAN regress silently are already covered from outside:
+  `ModelAppCommandsTests` walks every title key in both languages (a typo
+  renders as `menu_play_pause`, which no build step notices) and pins the
+  shortcut rule, and `ViewDisabledRuleTests` walks the sources so all 22
+  `.disabled(` sites there name a controller rule. Hosting the groups as plain
+  views would execute 34 `Button` bodies and assert none of it.
+- The view files with the most left (`TakeRowControls` 159, `FooterBar` 76,
+  `TransportBar` 72, `MediaSourcePicker` 69, `ChromaKeyControls` 65) are mostly
+  menu content and popover bodies — the two categories above — plus body arms
+  reachable only by rendering a state. Rendering for its own sake is what this
+  file exists to say no to; rendering to measure a SIZE budget is what the
+  `View*` suites already do, and that is where the honest next wave is.
+- `RawPlayback+Transport`'s last six lines: clearing an in or out point by
+  clicking it again, a seek that resumes playback, and the scope callback on a
+  paused seek. Small, reachable, and left because the wave had run its length.
 
 ## Rules that outrank the number
 

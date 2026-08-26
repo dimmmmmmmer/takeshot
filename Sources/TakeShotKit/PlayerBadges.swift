@@ -184,18 +184,16 @@ struct PlayerTopBadgesModifier: ViewModifier {
     }
 
     /// Auto-hide: the chrome comes back while the pointer visits the top edge.
+    /// The rule itself is `ChromeReveal`, shared with the two strips at the
+    /// bottom of the same windows.
     private func hoverChanged(_ phase: HoverPhase) {
         guard autoHide else { return }
-        switch phase {
-        case .active(let point):
-            withAnimation(.easeOut(duration: 0.15)) {
-                topVisible = point.y < 140
-            }
-        case .ended:
-            withAnimation(.easeOut(duration: 0.15)) {
-                topVisible = false
-            }
-        }
+        // no height: a band measured from the TOP does not need one, which is
+        // the whole reason this and the bottom strips did not look like the
+        // same rule before
+        let shows = ChromeReveal.shows(phase, edge: .top,
+                                       band: ChromeReveal.topBand, in: 0)
+        withAnimation(.easeOut(duration: 0.15)) { topVisible = shows }
     }
 
     @ViewBuilder private var scopesOverlay: some View {
@@ -291,9 +289,9 @@ struct PlayerTopBadgeRow: View {
     }
 
     @ViewBuilder private var multicamBadge: some View {
-        if controller.devices.filter({
-            $0.id.hasPrefix("decklink:")
-        }).count > 1 {
+        // the rule is on the controller, beside the one that decides which
+        // board becomes which camera — see `multicamOffered`
+        if controller.multicamOffered {
             playerOverlayBadge {
                 Button {
                     controller.toggleMulticam()
