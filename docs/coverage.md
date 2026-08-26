@@ -43,7 +43,7 @@ the week it lands teaches everyone to ignore it.
 
 | | |
 | --- | --- |
-| Floor | **87.5 %** lines |
+| Floor | **88.0 %** lines |
 | Measured | **89.32 %** lines (4 258 of 39 856 lines uncovered) |
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
