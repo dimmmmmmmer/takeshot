@@ -553,6 +553,7 @@
 "remote_link_script" = "Script";
 "remote_link_cameras" = "Cameras";
 "remote_link_slate" = "Slate";
+"remote_link_live" = "Live";
 "remote_no_network" = "This Mac is on no network";
 "remote_not_listening" = "Not listening";
 "remote_failed" = "Web remote: %@";
@@ -728,6 +729,13 @@
 "cameras_title" = "TakeShot Cameras";
 "cameras_rec" = "REC";
 "cameras_wait" = "No video yet";
+
+/* === the live page: the viewer itself as video over WebRTC. One picture, the
+   decorated one the SRT output carries — where the cameras page above is one
+   JPEG per board. === */
+"live_title" = "TakeShot Live";
+"live_unavailable" = "Live video is not available";
+"live_retry" = "Try again";
 
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Sync play";

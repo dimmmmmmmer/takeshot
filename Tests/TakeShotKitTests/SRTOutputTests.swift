@@ -115,15 +115,62 @@ enum SRTFixtures {
                                       port: 9000, latencyMs: 120,
                                       passphrase: nil)
 
-    /// A mirror over a fake link, with its events recorded.
-    static func mirror(_ stream: SRTStreamSending, log: SRTEventLog,
-                       endpoint: SRTEndpoint = endpoint,
-                       framesPerSecond: Double = SRTVideoMirror.framesPerSecond)
-        -> SRTVideoMirror {
-        SRTVideoMirror(endpoint: endpoint, bitsPerSecond: 4_000_000,
-                       framesPerSecond: framesPerSecond,
-                       factory: { _ in stream },
-                       onEvent: { log.record($0) })
+    /// A mirror over a fake link, with its events recorded, and the shared
+    /// encoder in front of it.
+    ///
+    /// The two travel together because the mirror is a CONSUMER now: the frames
+    /// are offered to the encoder, and the mirror only ever sees the samples it
+    /// fans out. `SRTRig` is what keeps the suites below reading as they did —
+    /// offer a frame, look at the link — while the encode has moved out from
+    /// under them.
+    static func rig(_ stream: SRTStreamSending, log: SRTEventLog,
+                    endpoint: SRTEndpoint = endpoint,
+                    framesPerSecond: Double = LiveVideoEncoder.framesPerSecond)
+        -> SRTRig {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000,
+                                       framesPerSecond: framesPerSecond)
+        return SRTRig(
+            encoder: encoder, log: log,
+            mirror: SRTVideoMirror(endpoint: endpoint, encoder: encoder,
+                                   factory: { _ in stream },
+                                   onEvent: { log.record($0) }))
+    }
+}
+
+/// One shared encoder with one SRT mirror on it, driven as a unit.
+struct SRTRig {
+    let encoder: LiveVideoEncoder
+    let log: SRTEventLog
+    let mirror: SRTVideoMirror
+
+    /// Open the link and come back once the mirror has SETTLED — either
+    /// subscribed to the encoder, or having reported why it could not be.
+    ///
+    /// **The wait is what the old design got for free, and losing it silently
+    /// was the one hazard in moving the encode out.** The mirror used to own
+    /// its encoder, so one serial queue ordered `start()`'s connect ahead of
+    /// every frame offered after it. Now the encode is shared and on a queue of
+    /// its own, so a frame offered in the same breath as `start()` can arrive
+    /// while the link is still opening — and it is dropped, because the mirror
+    /// has not subscribed yet. In the app that costs one frame at open and the
+    /// next one is 1/60 s behind it; in a test that offers exactly one frame it
+    /// costs the whole test, intermittently and only on a loaded machine. It
+    /// cost one, in a coverage run.
+    func start() {
+        mirror.start()
+        let deadline = Date().addingTimeInterval(5)
+        while !encoder.hasSinks, log.all.isEmpty, Date() < deadline {
+            usleep(2_000)
+        }
+    }
+
+    func offer(_ buffer: CVPixelBuffer, framesPerSecond: Double) {
+        encoder.offer(buffer, framesPerSecond: framesPerSecond)
+    }
+
+    func stop() {
+        mirror.stop()
+        encoder.stop()
     }
 }
 
@@ -135,10 +182,10 @@ enum SRTFixtures {
     /// switched on over a paused picture, a playback scrub), not to throttle a
     /// signal — so it has to sit above every rate the app captures.
     @Test func theCeilingIsAboveEveryRateTheAppCaptures() {
-        #expect(SRTVideoMirror.framesPerSecond >= 60)
-        #expect(SRTVideoMirror.minimumInterval <= 1.0 / 60)
+        #expect(LiveVideoEncoder.framesPerSecond >= 60)
+        #expect(LiveVideoEncoder.minimumInterval <= 1.0 / 60)
         for fps in [23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 60.0] {
-            #expect(1 / fps >= SRTVideoMirror.minimumInterval,
+            #expect(1 / fps >= LiveVideoEncoder.minimumInterval,
                     "\(fps) would be throttled by the ceiling")
         }
     }
@@ -151,6 +198,57 @@ enum SRTFixtures {
         #expect(SRTVideoMirror.reconnectCeiling == 5)
         #expect(SRTVideoMirror.reconnectDelay < SRTVideoMirror.reconnectCeiling)
     }
+}
+
+/// **An idle set encodes nothing**, which is the property the whole shared-encoder
+/// design is arranged around — and the one that made a test flake when it was
+/// first put in, so it is worth pinning as arithmetic rather than as timing.
+///
+/// Nobody watching means no `VTCompressionSession` is ever created at all: not a
+/// session sitting idle, not a session encoding into a sink that discards. The
+/// consequence a caller has to know about is on the other side of the same
+/// coin — a frame offered while nothing is subscribed is DROPPED, not held, so
+/// whoever subscribes gets the next frame rather than the last one.
+@Suite(.enabled(if: SRTVideoEncoder.isSupported,
+                "no H.264 encoder on this machine"))
+struct LiveVideoEncoderIdleTests {
+    @Test func nothingIsEncodedWhileNothingIsWatching() async throws {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        defer { encoder.stop() }
+        let buffer = try SRTFixtures.displayBuffer()
+        for _ in 0..<5 {
+            encoder.offer(buffer, framesPerSecond: 25)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        #expect(!encoder.hasSinks)
+        #expect(encoder.appliedBitsPerSecond == nil,
+                "a session was built for nobody")
+    }
+
+    /// And the moment something IS watching, the next frame reaches it.
+    @Test func theFirstFrameAfterASinkArrivesReachesIt() async throws {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        defer { encoder.stop() }
+        let samples = SampleCounter()
+        encoder.addSink(samples) { _ in samples.count() }
+        let buffer = try SRTFixtures.displayBuffer()
+        let deadline = Date().addingTimeInterval(5)
+        while samples.total == 0, Date() < deadline {
+            encoder.offer(buffer, framesPerSecond: 25)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        #expect(samples.total > 0, "a subscribed sink got nothing")
+        #expect(encoder.appliedBitsPerSecond == 4_000_000)
+    }
+}
+
+/// Samples that reached a sink. Its identity is the sink's key, so it is a
+/// class; the count is touched from VideoToolbox's thread, so it is locked.
+final class SampleCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = 0
+    func count() { lock.withLock { stored += 1 } }
+    var total: Int { lock.withLock { stored } }
 }
 
 /// The frame path: off the caller's queue, latest-wins, and never able to hold it
@@ -170,7 +268,7 @@ struct SRTVideoMirrorTests {
     @Test func theNewestFrameWinsAndTheRestAreDropped() async throws {
         let stream = FakeSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log, framesPerSecond: 5)
+        let mirror = SRTFixtures.rig(stream, log: log, framesPerSecond: 5)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         for index in 0..<4 {
@@ -194,7 +292,7 @@ struct SRTVideoMirrorTests {
     @Test func thePaceIsACeiling() async throws {
         let stream = FakeSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log, framesPerSecond: 10)
+        let mirror = SRTFixtures.rig(stream, log: log, framesPerSecond: 10)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         let buffer = try SRTFixtures.displayBuffer()
@@ -217,7 +315,7 @@ struct SRTVideoMirrorTests {
     @Test func aFrameInAnotherPixelFormatNeverReachesTheLink() async throws {
         let stream = FakeSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         mirror.offer(try SRTFixtures.recordBuffer(), framesPerSecond: 25)
@@ -232,7 +330,7 @@ struct SRTVideoMirrorTests {
     @Test func theWorkNeverRunsOnTheCallersQueue() async throws {
         let stream = FakeSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         let buffer = try SRTFixtures.displayBuffer()
@@ -252,7 +350,7 @@ struct SRTVideoMirrorTests {
     @Test func offerReturnsWhileTheSendIsStillInFlight() throws {
         let stream = BlockingSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         let buffer = try SRTFixtures.displayBuffer()
         mirror.offer(buffer, framesPerSecond: 25)
@@ -277,7 +375,7 @@ struct SRTVideoMirrorTests {
     @Test func aBrokenLinkIsReportedAndReopened() async throws {
         let stream = FakeSRTStream(outcomes: [.sent, .broken])
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         for _ in 0..<3 {
@@ -300,7 +398,7 @@ struct SRTVideoMirrorTests {
         let stream = FakeSRTStream(
             openFailures: [.configuration("cannot listen on port 9000")])
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until {
             log.all.contains(SRTVideoMirror.Event
@@ -318,7 +416,7 @@ struct SRTVideoMirrorTests {
     @Test func aListenerWithNoReceiverWaitsWithoutComplaining() async throws {
         let stream = FakeSRTStream(outcomes: [.noPeer])
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(
+        let mirror = SRTFixtures.rig(
             stream, log: log,
             endpoint: SRTEndpoint(role: .listener, address: "", port: 9000,
                                   latencyMs: 120, passphrase: nil))
@@ -340,7 +438,7 @@ struct SRTVideoMirrorTests {
     @Test func aFullSendBufferIsNotReportedAsAFailure() async throws {
         let stream = FakeSRTStream(outcomes: [.dropped])
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         for _ in 0..<3 {
@@ -365,7 +463,7 @@ struct SRTVideoMirrorTests {
     @Test func theStreamClockOnlyGoesForwardAcrossAReconnect() async throws {
         let stream = FakeSRTStream(outcomes: [.sent, .broken, .sent])
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log, framesPerSecond: 20)
+        let mirror = SRTFixtures.rig(stream, log: log, framesPerSecond: 20)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         let buffer = try SRTFixtures.displayBuffer()
@@ -388,7 +486,7 @@ struct SRTVideoMirrorTests {
     @Test func stoppingClosesTheLinkAndSilencesLaterFrames() async throws {
         let stream = FakeSRTStream()
         let log = SRTEventLog()
-        let mirror = SRTFixtures.mirror(stream, log: log)
+        let mirror = SRTFixtures.rig(stream, log: log)
         mirror.start()
         #expect(await ControllerWait.until { stream.opens == 1 })
         mirror.stop()
@@ -403,10 +501,10 @@ struct SRTVideoMirrorTests {
     /// switched on over a paused picture, a playback scrub), not to throttle a
     /// signal — so it has to sit above every rate the app captures.
     @Test func theCeilingIsAboveEveryRateTheAppCaptures() {
-        #expect(SRTVideoMirror.framesPerSecond >= 60)
-        #expect(SRTVideoMirror.minimumInterval <= 1.0 / 60)
+        #expect(LiveVideoEncoder.framesPerSecond >= 60)
+        #expect(LiveVideoEncoder.minimumInterval <= 1.0 / 60)
         for fps in [23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 60.0] {
-            #expect(1 / fps >= SRTVideoMirror.minimumInterval,
+            #expect(1 / fps >= LiveVideoEncoder.minimumInterval,
                     "\(fps) would be throttled by the ceiling")
         }
     }

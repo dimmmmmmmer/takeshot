@@ -85,13 +85,34 @@ var targets: [Target] = [
             .headerSearchPath("../../vendor/SRTSDK/include")
         ]
     ),
+    // Obj-C++ bridge to libdatachannel (sending the viewer to a browser on the
+    // set network as a WebRTC track). Headers go in
+    // vendor/libdatachannel/include/rtc (see vendor/libdatachannel/README.md);
+    // without them the target builds as a stub
+    // (CDCPeerConnection.isSDKAvailable == NO) and the feature reports itself
+    // unavailable, which is the shape of every build that has no SDK — CI
+    // included. The runtime dylib is opened with dlopen, so nothing links here
+    // either way.
+    //
+    // The second vendor slot whose library MAY be redistributed, and the first
+    // one that HAS to be: libdatachannel is MPL-2.0 like libsrt, but unlike
+    // libsrt it is in no macOS package manager, so a release that did not carry
+    // it would find one on nobody's machine. What that costs is written down in
+    // that README and in NOTICE.
+    .target(
+        name: "CDataChannel",
+        cxxSettings: [
+            .headerSearchPath("../../vendor/libdatachannel/include")
+        ]
+    ),
     // The application layer. A library rather than part of the executable:
     // SwiftPM cannot import an executable target from tests, so everything
     // here — CaptureController, the session logic, the mock backend — was
     // untestable while it lived in the executable.
     .target(
         name: "TakeShotKit",
-        dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CSRT"],
+        dependencies: ["CaptureCore", "CDeckLink", "CBraw", "CR3D", "CSRT",
+                       "CDataChannel"],
         resources: [.process("Resources")],
         swiftSettings: swift6Mode
     ),

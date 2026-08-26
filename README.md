@@ -118,7 +118,7 @@ build is any use to you:
 
 ### The phone on set
 
-The web remote is off until you switch it on, serves three pages behind one
+The web remote is off until you switch it on, serves five pages behind one
 four-digit PIN, and loads nothing from the internet — the pages work on a set
 network with no route out. Settings shows a QR code for each.
 
@@ -128,6 +128,14 @@ network with no route out. Settings shows a QR code for each.
   comment typed straight into the take.
 - `/cameras` — every board's live signal as tiles, each labelled and with its
   own REC light. No frames are encoded at all unless somebody has it open.
+- `/live` — the viewer as actual video: H.264 over WebRTC, at the signal's own
+  rate, the same decorated picture the SRT output carries. One encode serves
+  it, the SRT link and every other watcher between them, and nothing is encoded
+  at all while nobody is watching. Needs libdatachannel
+  (`vendor/libdatachannel/README.md`); a build made without it says so on the
+  page and the tiles above keep working.
+- `/slate` — the digital slate on a phone held in front of the lens: running
+  timecode, the scene and take card, and a sync flash.
 
 ### Handover
 
@@ -185,7 +193,10 @@ What needs a vendor SDK you obtain yourself — free, but from the vendor, under
 their terms — is the hardware itself: capture and monitor output (DeckLink),
 `.braw` playback (Blackmagic RAW) and `.r3d` playback (RED). The SRT output
 needs libsrt, which is the one exception to "from the vendor, under their terms":
-it is MPL-2.0 and `brew install srt` away.
+it is MPL-2.0 and `brew install srt` away. The `/live` page needs
+libdatachannel, MPL-2.0 as well but in no package manager — which is why a
+published build carries the dylib inside the app rather than hoping to find one
+(`vendor/libdatachannel/README.md`, and the licence note in `NOTICE`).
 [`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D, BRAW and SRT
 each say so at the point of use; a build with no DeckLink SDK simply lists no
 capture device, and **Collect diagnostics** is where it explains itself.

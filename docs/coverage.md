@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.35 %** lines (4 025 of 41 716 lines uncovered) |
+| Measured | **to be measured on the merged tree** |
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than
@@ -180,7 +180,8 @@ What is genuinely out of reach, and why:
 | ~37 | `DeckLinkBackendAdapter.swift` | Constructing it installs a process-wide hot-plug callback and adopts whatever board is attached. |
 | ~29 | `SingleInstanceGuard.swift` | Hands off to another running copy of the app via `NSRunningApplication`. |
 | ~41 | `FilePanel`, `AudioRenderRoute`, `PlayoutOutput` | The far side of the three new seams: `runModal()`, `audioOutputDeviceUniqueID` on a live renderer, and the `CDLPlayout` conformance. |
-| ~39 | `RawPlayback+*`, `RawClipSource` | **This row said ~200 and was wrong — not about the SDK, about what the SDK was being blamed for.** `vendor/BRAWSDK/include` really is absent, so `BRAWSource` and `R3DSource` cannot execute; but most of the 200 was the DECODE LOOP, which is format-agnostic and was uncovered because every fixture was a folder of files that would not decode, not because of any SDK (see the long-tail wave). What is left is the two SDK-gated sources, and the timecode readouts underneath them — `parseTimecode` and the R3D half-rate `timecodeFrames` need a clip that carries a start timecode, which a folder of CinemaDNG frames does not. `R3DClipSource.swift` (~52) is the same story. |
+| ~39 | `RawPlayback+*`, `RawClipSource` | **This row said ~200 and was wrong — not about the SDK, about what the SDK was being blamed for.** BRAW's headers are absent on CI, so `BRAWSource` and `R3DSource` cannot execute there; but most of the 200 was the DECODE LOOP, which is format-agnostic and was uncovered because every fixture was a folder of files that would not decode, not because of any SDK (see the long-tail wave). What is left is the two SDK-gated sources, and the timecode readouts underneath them — `parseTimecode` and the R3D half-rate `timecodeFrames` need a clip that carries a start timecode, which a folder of CinemaDNG frames does not. `R3DClipSource.swift` (~52) is the same story. Note the developer machine now HAS the BRAW headers, so a local run covers more of this than CI does: the number in this file is CI's. |
+| ~39 | `WebRTCPeer.swift` | The real peer connection, behind the `WebRTCPeering` seam. Reaching it means generating a DTLS certificate and gathering ICE candidates off every interface the machine has, once per test. `WebRTCBridgeTests` DOES exercise it — the offer, the answer, the candidate list — but only on a machine that has libdatachannel, which is not CI. The mappings that decide behaviour (`state`, `classify`) were pulled out as pure functions and are covered everywhere (`WebRTCMappingTests`). |
 
 And the ones the interruption wave went looking for and could not reach. Each
 was tried, so these are measurements rather than guesses:

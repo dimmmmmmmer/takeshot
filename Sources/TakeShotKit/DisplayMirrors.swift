@@ -47,4 +47,24 @@ final class DisplayMirrors: ObservableObject {
 
     /// Debounces the rebuild a settings edit causes (see `applySRTChange`).
     var srtRestartTask: Task<Void, Never>?
+
+    /// **The one H.264 session every live consumer shares.** nil while nothing
+    /// is watching, which is the default: it is built when the first consumer
+    /// appears — the SRT switch, or a browser that offered — and dropped when
+    /// the last one goes. See `LiveVideoEncoder` for why there is exactly one.
+    var liveEncoder: LiveVideoEncoder?
+
+    /// Browsers watching over WebRTC, by the id their events carry.
+    ///
+    /// A dictionary rather than an array because a viewer's own callbacks are
+    /// what remove it — a page closed, an ICE agent that gave up — and those
+    /// arrive out of order with everything else.
+    var webrtcViewers: [UUID: WebRTCViewer] = [:]
+
+    /// Overridden in tests, for a sharper reason than the SRT factory has: the
+    /// real peer generates a DTLS certificate and puts UDP on the set network,
+    /// and a suite that reached it would do both once per test.
+    /// `ControllerHarness` fills it in for every controller it builds.
+    var webrtcPeerFactory:
+        (@Sendable (WebRTCOffer.VideoPlan, UInt32) -> WebRTCPeering)?
 }

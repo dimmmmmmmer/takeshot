@@ -15,6 +15,7 @@ described in the matching vendor/<sdk>/README.md.
   Blackmagic RAW SDK        <https://www.blackmagicdesign.com/developer/>
   RED R3D SDK               <https://www.red.com/developers>
   libsrt (MPL-2.0)          <https://github.com/Haivision/srt>
+  libdatachannel (MPL-2.0)  <https://github.com/paullouisageneau/libdatachannel>
   AJA NTV2 SDK (MIT)        <https://github.com/aja-video/libajantv2>
 
 Without the Blackmagic SDKs the corresponding targets build as stubs and the
@@ -28,6 +29,22 @@ libsrt. A release that BUNDLED the runtime would distribute it, and the MPL then
 requires that the source of the covered files be made available to recipients
 and that the licence travel with the binary — see vendor/SRTSDK/README.md before
 shipping such a build.
+
+libdatachannel is licensed under the Mozilla Public License 2.0 and is used for
+the WebRTC output (the /live page the web remote serves). Its header is not
+committed here and its runtime is loaded dynamically, so nothing in this
+repository distributes any part of it.
+
+Unlike libsrt, it is in no macOS package manager, so a published release
+BUNDLES the runtime into TakeShot.app/Contents/Frameworks — which does
+distribute it, and the MPL then requires that the source of the covered files be
+made available to recipients and that the licence travel with the binary.
+libdatachannel is unmodified, so the tag it was built from at the URL above
+satisfies that. The same applies to the MPL-2.0 components it links in
+(libjuice, plog), to the BSD-3-Clause ones (usrsctp, libsrtp), and to OpenSSL
+(Apache-2.0), which the recommended build links statically. Read
+vendor/libdatachannel/README.md before publishing a build that carries the
+dylib.
 
 Runtime frameworks installed by Blackmagic Desktop Video and Blackmagic RAW are
 loaded dynamically at run time and are likewise not redistributed here.
