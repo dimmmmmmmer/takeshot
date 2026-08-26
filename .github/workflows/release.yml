@@ -4,20 +4,27 @@
 # Two things about the artifact this produces, both deliberate and both stated
 # on the release page itself by scripts/release-notes.sh:
 #
-#   * A GitHub runner has none of the vendor SDKs — they are not redistributable
-#     and nothing here fetches them — so the DeckLink, Blackmagic RAW, R3D, SRT
-#     and WebRTC bridges are compiled as stubs. (libsrt and libdatachannel are
-#     the two that COULD be fetched: both are MPL-2.0 rather than a camera
-#     vendor's licence, and `scripts/bundle-app.sh` already knows how to carry
-#     libdatachannel inside the app. Neither is, because a published build with
-#     two live bridges and three stubs would be harder to explain than one with
-#     none — and because bundling either one distributes it, which is a licence
-#     obligation to discharge rather than a build flag to flip. See NOTICE and
-#     vendor/libdatachannel/README.md before changing this.) In particular the
-#     published build sees NO capture device and has no live video page: it
-#     plays back, it exports, it runs the demo source,
-#     and it cannot record from a board. Anyone who needs capture builds from
-#     source with the DeckLink SDK (CONTRIBUTING.md).
+#   * A GitHub runner has none of the CAMERA vendor SDKs — DeckLink, Blackmagic
+#     RAW and R3D are not redistributable and nothing here fetches them — so
+#     those three bridges are compiled as stubs. The published build therefore
+#     sees NO capture device: it plays back, it exports, it runs the demo
+#     source, and it cannot record from a board. Anyone who needs capture builds
+#     from source with the DeckLink SDK (CONTRIBUTING.md).
+#   * **libdatachannel IS built and shipped** (owner: "в релиз либдатаченел
+#     клади"), so a downloaded build has a working live video page over WebRTC
+#     against the demo source. It is MPL-2.0, so shipping it is distribution
+#     under terms rather than a build flag — NOTICE and
+#     vendor/libdatachannel/README.md carry the obligation, and both have to
+#     stay true. It is built here rather than fetched because it exists in no
+#     macOS package manager, which is also why the app has to carry its own
+#     copy at all.
+#   * **The runner is x86_64** (measured: a CodeQL run on this same image
+#     reported `Target: x86_64-apple-macosx15.0`), so a tagged release is an
+#     Intel build that runs under Rosetta on every Apple Silicon Mac. For a
+#     capture and preview application that is a real cost, not a footnote, and
+#     it is the reason the owner builds releases on his own machine and uploads
+#     those. Anything published from here should be understood as the fallback
+#     path, not the good one.
 #   * Ad-hoc signing, no Developer ID, no notarization. First launch of a
 #     download therefore needs right-click → Open, or
 #     `xattr -d com.apple.quarantine /Applications/TakeShot.app`.
@@ -63,6 +70,44 @@ jobs:
 
       - name: Test
         run: ./scripts/test.sh
+
+      # Built, not fetched: libdatachannel is in no macOS package manager, which
+      # is the same fact that makes the app carry its own copy. Pinned to a tag
+      # so a release is reproducible and cannot change under us between two
+      # builds of the same version.
+      #
+      # The architecture follows the RUNNER's, deliberately — the vendor README
+      # pins arm64 because that is the developer's machine, and hard-coding it
+      # here would hand `bundle-app.sh` a dylib of the wrong architecture, which
+      # it refuses (correctly). `OPENSSL_USE_STATIC_LIBS` is what makes the
+      # result shippable at all: linked dynamically it would carry a Homebrew
+      # path that exists on this runner and on no user's Mac.
+      - name: Build libdatachannel
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          git clone --depth 1 --branch v0.24.5 --recurse-submodules \
+            https://github.com/paullouisageneau/libdatachannel.git /tmp/ldc
+          cmake -S /tmp/ldc -B /tmp/ldc/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNO_EXAMPLES=ON -DNO_TESTS=ON \
+            -DCMAKE_OSX_ARCHITECTURES="$ARCH" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+            -DOPENSSL_USE_STATIC_LIBS=ON
+          cmake --build /tmp/ldc/build -j
+          mkdir -p vendor/libdatachannel/lib vendor/libdatachannel/include
+          cp -R /tmp/ldc/include/rtc vendor/libdatachannel/include/
+          cp /tmp/ldc/build/include/rtc/version.h \
+            vendor/libdatachannel/include/rtc/
+          # -L on purpose: what CMake leaves at that name is a symlink, and a
+          # symlink inside Contents/Frameworks is not a thing to sign or ship.
+          cp -L /tmp/ldc/build/libdatachannel.dylib \
+            vendor/libdatachannel/lib/libdatachannel.dylib
+          # Say what shipped, so a release page can be checked against it.
+          otool -L vendor/libdatachannel/lib/libdatachannel.dylib
+          lipo -archs vendor/libdatachannel/lib/libdatachannel.dylib
 
       - name: Build TakeShot.app
         run: ./scripts/bundle-app.sh
