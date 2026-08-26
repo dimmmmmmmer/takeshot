@@ -184,4 +184,39 @@ import Testing
         #expect(abs(PCMAudio.seconds(of: buffer) - 0.04) < 0.0005,
                 "1920 frames at 48 kHz measured \(PCMAudio.seconds(of: buffer)) s")
     }
+
+    /// …and a packet that does NOT state its own duration is measured from its
+    /// sample count and the stream's rate instead.
+    ///
+    /// The fallback is the whole reason the helper exists rather than a call to
+    /// `CMSampleBufferGetDuration` at the site. A source whose buffers carry no
+    /// timing would otherwise accumulate nothing for ever, the measurement
+    /// would never answer, and the feature would be indistinguishable from one
+    /// that had been left out — the failure mode with no symptom.
+    @Test func aPacketWithNoStatedDurationIsMeasuredFromItsSamples() throws {
+        var cache: CMAudioFormatDescription?
+        let samples = [Int16](repeating: 0, count: 1920 * 2)
+        let stated: CMSampleBuffer = try #require(
+            samples.withUnsafeBytes { raw in
+                PCMAudio.makeSampleBuffer(bytes: raw.baseAddress!,
+                                          sampleFrames: 1920, channelCount: 2,
+                                          ptsSeconds: 0, formatCache: &cache)
+            }, "the fixture packet could not be built")
+        var timing = CMSampleTimingInfo(duration: CMTime.invalid,
+                                        presentationTimeStamp: CMTime.zero,
+                                        decodeTimeStamp: CMTime.invalid)
+        var untimed: CMSampleBuffer?
+        let status: OSStatus = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault, sampleBuffer: stated,
+            sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+            sampleBufferOut: &untimed)
+        let packet: CMSampleBuffer = try #require(
+            status == noErr ? untimed : nil,
+            "an untimed copy could not be made (status \(status))")
+        try #require(!CMSampleBufferGetDuration(packet).isNumeric,
+                     "the copy still states a duration, so this proves nothing")
+
+        #expect(abs(PCMAudio.seconds(of: packet) - 0.04) < 0.0005,
+                "an untimed packet measured \(PCMAudio.seconds(of: packet)) s")
+    }
 }

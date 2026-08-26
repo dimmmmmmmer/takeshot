@@ -54,24 +54,40 @@ extension CaptureController {
         playbackTap.onScopeData = { [weak self] data in
             self?.scopes.data = data
         }
-        // capture the monitor object itself: this fires on the pipeline queue
-        // and must not touch the MainActor-isolated controller
-        let monitor = audioMonitor
-        pipeline.onMonitorAudio = { monitor.enqueue($0) }
+        bindAudioReporting()
         pipeline.onError = { [weak self] alarm in
             self?.reportPipelineError(alarm)
         }
         pipeline.onVancStats = { [weak self] stats in
             self?.vancStats = stats
         }
-        pipeline.onAudioLevels = { [weak self] in self?.adoptAudioLevels($0) }
-        pipeline.onAudioChannelsDetected = { [weak self] mask in
-            self?.detectedAudioChannelMask = mask
-        }
         pipeline.onVisualRecReading = { [weak self] reading in
             self?.visualRecReading = reading
         }
     }
+
+    /// What the audio path reports, on its own three publishers.
+    ///
+    /// Its own function because the three answer at three different rates and
+    /// the split is the whole point: the monitor feed arrives on the pipeline
+    /// queue, the meters on main at packet rate, and the channel measurement a
+    /// handful of times a session. Wiring them together above also pushed
+    /// `bindPipeline` past the house function length, which is the kind of
+    /// nudge worth taking rather than silencing.
+    private func bindAudioReporting() {
+        // capture the monitor object itself: this fires on the pipeline queue
+        // and must not touch the MainActor-isolated controller
+        let monitor = audioMonitor
+        pipeline.onMonitorAudio = { monitor.enqueue($0) }
+        pipeline.onAudioLevels = { [weak self] in self?.adoptAudioLevels($0) }
+        // Which channels are carrying a stream (see `AudioChannelDetector`) —
+        // nil when the measurement has no answer, which is what the panel reads
+        // as "listening" and what leaves every declared channel recorded.
+        pipeline.onAudioChannelsDetected = { [weak self] mask in
+            self?.detectedAudioChannelMask = mask
+        }
+    }
+
     /// The meters, and — on its own publisher and only when it MOVES — how many
     /// channels the signal is carrying.
     ///
