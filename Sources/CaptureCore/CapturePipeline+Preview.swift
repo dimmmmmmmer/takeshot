@@ -83,15 +83,19 @@ extension CapturePipeline {
         queue.async { self.frameGrabHandler = handler }
     }
 
-    /// one-shot frame grab: stills are deliverables like the recording — the
-    /// preview LUT is never baked in, only a look that is being recorded
+    /// one-shot frame grab: stills are deliverables like the recording — a
+    /// display decision is never baked in, only one that is being recorded
     func serveFrameGrab(record recordBuffer: CVPixelBuffer,
                         leveled: CVPixelBuffer) {
         guard let grab = frameGrabHandler else { return }
         frameGrabHandler = nil
-        // the clean 8-bit frame: CI can't read r210, and the record look
-        // without a baked LUT IS the leveled frame
-        let png = Self.pngData(from: lutRecord ? recordBuffer : leveled,
+        // the clean 8-bit frame: CI can't read r210, and the record look with
+        // nothing baked in IS the leveled frame. With a bake on, the grab is
+        // the take's own picture — including the chroma composite while a take
+        // is rolling, and the camera's picture when none is (there is then no
+        // deliverable for the still to match, and no pass has been spent).
+        let png = Self.pngData(from: recordBakesDisplayBuffer
+                                   ? recordBuffer : leveled,
                                ciContext: ciContext)
         DispatchQueue.main.async { grab(png) }
     }

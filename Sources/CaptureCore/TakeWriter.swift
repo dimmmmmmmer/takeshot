@@ -69,6 +69,23 @@ public final class TakeWriter {
     /// Name of the LUT baked into the file (absent — the file is clean).
     public static let lutKey = "com.takeshot.lut"
 
+    /// The take's picture is a chroma-key COMPOSITE, and this is what was put
+    /// behind the actor — a `ChromaKey.Background` raw value (`checkerboard`,
+    /// `color`, `image`, `matte`). Absent means the picture is the camera's.
+    ///
+    /// A closed vocabulary rather than free text, for the reason `levelsKey` has
+    /// one value: this is read by machines as well as people, and "what kind of
+    /// deliverable is this" has four answers, not an operator's phrasing of
+    /// them. A `matte` take is not a comp at all — it is a black-and-white
+    /// channel — and telling those apart in the file is worth the key on its own.
+    ///
+    /// Unlike `lutKey` this exists for no double-application guard: the key is
+    /// never applied on playback, so nothing downstream has to be stopped from
+    /// applying it twice. It exists because it is the one fact about the file
+    /// that the picture cannot give back — the cyc is gone, and a take that
+    /// looks finished is not camera original.
+    public static let chromaKeyKey = "com.takeshot.chromakey"
+
     /// What the picture codes in this file MEAN — `wireValue` when they are the
     /// camera's studio-swing wire codes, absent when they are display values
     /// that fill the scale.

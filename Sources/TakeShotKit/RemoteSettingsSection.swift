@@ -1,18 +1,19 @@
 import SwiftUI
 
 /// The Remote section of the settings window: the switch, the port, the code,
-/// and the address a phone can reach one of the three pages on.
+/// and the address a phone can reach one of the four pages on.
 ///
 /// Its own file rather than another block in `SettingsView`: that view is
 /// already the densest localized surface in the app and close enough to the
 /// file-length ceiling that the next section would have pushed a comment out to
 /// make room.
 ///
-/// One link row, not three. Each page used to get its own row and its own QR
-/// code, which made this section taller than the settings window on a laptop
-/// screen — and two of the three codes were always the wrong one to scan. The
-/// page is picked with a segmented switch (the idiom the exposure tool and the
-/// rec/playback control already use) and the row below it follows.
+/// One link row, whatever the page count. Each page used to get its own row and
+/// its own QR code, which made this section taller than the settings window on a
+/// laptop screen — and all but one of the codes was always the wrong one to
+/// scan. The page is picked with a segmented switch (the idiom the exposure tool
+/// and the rec/playback control already use) and the row below it follows, so a
+/// page added later costs a segment rather than a section.
 struct RemoteSettingsSection: View {
     @EnvironmentObject private var controller: CaptureController
 

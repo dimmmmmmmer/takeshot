@@ -51,17 +51,18 @@ import Testing
             == "http://h:1/")
     }
 
-    /// Each of the three pages is reachable as its own link, and no two of
-    /// them share a path — the switch in Settings has three distinct targets
-    /// or it is a switch that does nothing.
+    /// Every page is reachable as its own link, and no two of them share a
+    /// path — the switch in Settings has one distinct target per segment or it
+    /// is a switch that does nothing.
     @Test func theLinkSwitcherExposesEveryTarget() {
-        let paths = RemoteLink.allCases.map(\.path)
-        #expect(paths == ["/", "/script", "/cameras"])
+        let paths: [String] = RemoteLink.allCases.map(\.path)
+        #expect(paths == ["/", "/script", "/cameras", "/slate"])
         #expect(Set(paths).count == RemoteLink.allCases.count)
         #expect(RemoteLink.allCases.map(\.labelKey).allSatisfy { !$0.isEmpty })
         // The routes the server answers are these and not copies of them.
         #expect(RemotePage.scriptPath == RemoteLink.script.path)
         #expect(RemotePage.camerasPath == RemoteLink.cameras.path)
+        #expect(RemotePage.slatePath == RemoteLink.slate.path)
     }
 
     /// The whole-list call composes the same way, for every page.

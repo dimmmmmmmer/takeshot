@@ -50,6 +50,7 @@ final class RemoteServer: @unchecked Sendable {
         var page: Data
         var scriptPage: Data
         var camerasPage: Data
+        var slatePage: Data
     }
 
     /// A handful of phones is the whole use case. The cap is what stops a
@@ -141,14 +142,15 @@ final class RemoteServer: @unchecked Sendable {
     private var commandTokensAt = RemoteServer.monotonicNow()
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         camerasPage: Data = Data(), handlers: Handlers,
+         camerasPage: Data = Data(), slatePage: Data = Data(),
+         handlers: Handlers,
          handshakeDeadline: DispatchTimeInterval
             = RemoteClient.handshakeDeadline) {
         self.handlers = handlers
         self.handshakeDeadline = handshakeDeadline
         self.shared = OSAllocatedUnfairLock(
             initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
-                                 camerasPage: camerasPage))
+                                 camerasPage: camerasPage, slatePage: slatePage))
     }
 
     /// Start listening. `port` 0 binds an ephemeral one and reports it through
@@ -231,6 +233,11 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.camerasPage = page }
     }
 
+    /// Replace the slate's page, for the same language switch.
+    func setSlatePage(_ page: Data) {
+        shared.withLock { $0.slatePage = page }
+    }
+
     /// Push one camera's fresh JPEG to every client that asked for frames.
     /// Fire-and-forget from the encoder's queue; each client applies its own
     /// one-in-flight rule, so a slow phone holds nothing up (see
@@ -255,6 +262,7 @@ final class RemoteServer: @unchecked Sendable {
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
     var currentCamerasPage: Data { shared.withLock { $0.camerasPage } }
+    var currentSlatePage: Data { shared.withLock { $0.slatePage } }
     var currentStatus: String? { lastStatus }
     var currentTakeLog: String? { lastTakeLog }
 

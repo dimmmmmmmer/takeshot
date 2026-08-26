@@ -22,11 +22,39 @@ extension CaptureController {
     var chromaKeyOn: Bool {
         get { liveAssist.chroma.isOn }
         set {
-            setAssist { $0.chroma.isOn = newValue }
+            setAssist {
+                $0.chroma.isOn = newValue
+                // …and the bake goes with it. A bake left armed over no key is a
+                // switch describing a take nobody can produce, and it would come
+                // back armed the moment the key was switched on again — which is
+                // the one state this feature must not be able to reach quietly.
+                if !newValue { $0.chroma.record = false }
+            }
             // an armed eyedropper with the key switched off has nothing to pick
             // for; leaving the crosshair on the picture reads as a stuck mode
             if !newValue { chromaPickArmed = false }
         }
+    }
+
+    /// Whether the bake switch is there to be reached at all.
+    ///
+    /// Stated as a rule and asserted as one, the way `canApplyLUT` is: there is
+    /// nothing to bake without a key, and a switch offered over no key would
+    /// write a stored flag claiming a composite that cannot happen. The way IN
+    /// is the key's own toggle right above it — `chromaKeyOn = true` opens this
+    /// gate and nothing else is required, which is what keeps the bake from
+    /// living behind a condition only the bake could satisfy.
+    var canBakeChromaKey: Bool { chromaKeyOn }
+
+    /// Composite the key into the recording as well as onto the monitor.
+    ///
+    /// A click, not a drag, so it goes through `setAssist`. Turning the KEY off
+    /// disarms it too (`chromaKeyOn`): a bake armed over no key would sit there
+    /// claiming the next take is a composite when the pipeline would bake
+    /// nothing, and the pipeline's own answer already reads both flags.
+    var chromaRecordOn: Bool {
+        get { liveAssist.chroma.record }
+        set { setAssist { $0.chroma.record = newValue } }
     }
 
     var chromaBackground: ChromaKey.Background {
@@ -171,7 +199,11 @@ extension CaptureController {
         settings = updated
     }
 
-    /// Restore the dial-in at launch — switched OFF, whatever it was left at.
+    /// Restore the dial-in at launch — switched OFF, whatever it was left at,
+    /// and the BAKE off with it: neither flag is in `ChromaKeySettings` at all,
+    /// so `ChromaKey()`'s defaults are the whole of what comes back. See
+    /// `ChromaKey.record` for why a stored bake would be the worst thing in this
+    /// feature.
     func restoreChroma(from stored: ChromaKeySettings) {
         var key = ChromaKey()
         if let hex = stored.colorHex,

@@ -1,6 +1,6 @@
 import Foundation
 
-/// One of the three pages the remote serves, as a link the operator can hand
+/// One of the four pages the remote serves, as a link the operator can hand
 /// out: the path it lives at, and the label Settings puts on it.
 ///
 /// A type rather than three loose constants because Settings offers them as
@@ -21,6 +21,13 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     /// (see `MultiviewEncoder`), and a phone is being offered a link, not a
     /// piece of the architecture.
     case cameras
+    /// The digital slate, on a phone held up in front of a lens.
+    ///
+    /// The Mac already has one (`SlateView`), and it is on the cart. This is the
+    /// same identification — timecode plus the creative card — on the device that
+    /// can physically be put where the camera is looking. It is the only page
+    /// here that sends the app NOTHING: see `slate.html`.
+    case slate
 
     var id: String { rawValue }
 
@@ -31,6 +38,7 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         case .remote: return "/"
         case .script: return "/script"
         case .cameras: return "/cameras"
+        case .slate: return "/slate"
         }
     }
 
@@ -40,12 +48,14 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         case .remote: return "remote_link_remote"
         case .script: return "remote_link_script"
         case .cameras: return "remote_link_cameras"
+        case .slate: return "remote_link_slate"
         }
     }
 }
 
 /// The pages the remote serves: the operator remote at `/`, the script
-/// supervisor's take log at `/script` and the camera grid at `/cameras`.
+/// supervisor's take log at `/script`, the camera grid at `/cameras` and the
+/// slate at `/slate`.
 ///
 /// The markup is a bundle resource, not a Swift string literal: it is HTML,
 /// CSS and JavaScript, and none of those are readable once they are escaped
@@ -193,6 +203,60 @@ enum RemotePage {
         ("rec", "cameras_rec"),
     ]
 
+    /// Where the slate lives.
+    static let slatePath = RemoteLink.slate.path
+
+    /// How long the slate keeps advancing its own clock after the last status
+    /// before it freezes the readout and marks it held.
+    ///
+    /// **This is the whole of the slate's timekeeping honesty.** The status
+    /// arrives four times a second (`CaptureController.remoteTick`), so a page
+    /// that only showed what it was told would step six frames at a time at 25p,
+    /// and an editor reading one frame of the slate off the footage would be up
+    /// to a quarter of a second out. So the page interpolates — it counts frames
+    /// forward from the last status against its own clock, and every status
+    /// re-seeds it, which bounds the drift to what one tick can accumulate
+    /// (a fiftieth of a frame at the 1000/1001 rates, which is why the page does
+    /// not bother with 1000/1001 at all).
+    ///
+    /// Past this window it stops. Three ticks: long enough that ordinary Wi-Fi
+    /// jitter does not flicker the readout, short enough that a number nobody is
+    /// confirming any more is marked before it can be photographed and trusted.
+    /// A slate that keeps counting off a stale seed is the worst failure this
+    /// page has — it looks exactly like a live one. `theSlateOutwaitsOneTick`
+    /// holds this against `CaptureController.remoteTick` so the two cannot drift.
+    static let slateHoldMilliseconds = 750
+
+    /// The slate's label → key table.
+    ///
+    /// The gate and connection strings are shared with the other three pages —
+    /// same socket, same PIN. What is its own is the card, and the two words that
+    /// say the clock has stopped: HOLD (no fresh status, socket still up) and
+    /// OFFLINE (the socket is gone). Two words rather than one because they mean
+    /// different things to whoever is holding the phone — one is "wait a beat",
+    /// the other is "go and look at the Mac" — and because a single word covering
+    /// both would have to be the vaguer of the two.
+    static let slateLabels: [(field: String, key: String)] = [
+        ("title", "slate_page_title"),
+        ("connected", "remote_online"),
+        ("connecting", "remote_connecting"),
+        ("disconnected", "remote_offline"),
+        ("connect", "remote_connect"),
+        ("pinPrompt", "remote_pin_prompt"),
+        ("pinBad", "remote_pin_bad"),
+        ("noSignal", "remote_no_signal"),
+        ("rec", "remote_rec"),
+        ("next", "slate_next"),
+        ("scene", "scene"),
+        ("shot", "slate_shot"),
+        ("take", "slate_take"),
+        ("roll", "roll_label"),
+        ("sync", "slate_sync_tag"),
+        ("hold", "slate_page_hold"),
+        ("offline", "slate_page_offline"),
+        ("hint", "slate_page_hint"),
+    ]
+
     /// The operator page with the current language's labels baked in.
     ///
     /// Called on the MainActor whenever the language changes; the server holds
@@ -211,6 +275,11 @@ enum RemotePage {
         render(resource: "cameras", labels: camerasLabels)
     }
 
+    /// The slate, same discipline again.
+    static func slateHTML() -> Data {
+        render(resource: "slate", labels: slateLabels)
+    }
+
     private static func render(resource: String,
                                labels: [(field: String, key: String)]) -> Data {
         guard let url = Bundle.module.url(forResource: resource,
@@ -226,14 +295,20 @@ enum RemotePage {
             .replacingOccurrences(of: fontToken, with: fontCSS).utf8)
     }
 
-    /// `{"lang":"en","watchdogMs":12000,"posterPath":"…","strings":{…}}` — a
+    /// `{"lang":"en","watchdogMs":12000,"holdMs":750,"posterPath":"…",…}` — a
     /// JSON object literal spliced straight into the script.
+    ///
+    /// One object for all four pages rather than one per page: every field in it
+    /// is a number or a string a page may ignore, and a per-page config would be
+    /// four places to forget the language in. `holdMs` is the slate's alone and
+    /// costs the other three nine bytes each.
     static func config(labels: [(field: String, key: String)]) -> String {
         let strings = labels
             .map { "\($0.field):\(RemoteJSON.quoted(L($0.key)))" }
             .joined(separator: ",")
         return "{lang:\(RemoteJSON.quoted(L10n.current.pageCode)),"
             + "watchdogMs:\(watchdogMilliseconds),"
+            + "holdMs:\(slateHoldMilliseconds),"
             + "posterPath:\(RemoteJSON.quoted(posterPath)),"
             + "strings:{\(strings)}}"
     }

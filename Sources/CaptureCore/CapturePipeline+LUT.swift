@@ -23,13 +23,47 @@ extension CapturePipeline {
         let display = leveled.display
         let displayBuffer = lutPreview
             ? (applyLUT(to: display) ?? display) : display
-        // LUT baking is an 8-bit creative decision — it keeps the BGRA record
-        // path; otherwise the wire-code record buffer (10- or 12-bit) goes to
-        // the writer verbatim
-        let recordBuffer = lutRecord
-            ? (lutPreview ? displayBuffer : (applyLUT(to: display) ?? display))
-            : (leveled.wireRecord ?? display)
-        return FrameProducts(display: displayBuffer, record: recordBuffer)
+        return FrameProducts(display: displayBuffer,
+                             record: recordProduct(leveled: leveled,
+                                                   previewed: displayBuffer))
+    }
+
+    /// Which frame the writer gets.
+    ///
+    /// Baking is an 8-bit creative decision either way, so both bakes keep the
+    /// BGRA display path; with neither of them on, the wire-code record buffer
+    /// (10- or 12-bit) goes to the writer verbatim, which is the rule the whole
+    /// colour pipeline rests on.
+    ///
+    /// The two bakes COMPOSE, in the order the monitor shows them: the LUT is a
+    /// stage before the key, so a take that bakes both carries the look under the
+    /// composite. A key baked with the LUT on preview only lands on the
+    /// un-LUT'd frame — which is what two separate switches mean, and is the
+    /// LUT's own established behaviour rather than something new here.
+    private func recordProduct(leveled: LevelledFrame,
+                               previewed: CVPixelBuffer) -> CVPixelBuffer {
+        let display = leveled.display
+        guard !lutRecord else {
+            let looked = lutPreview
+                ? previewed : (applyLUT(to: display) ?? display)
+            return bakingIntoOpenTake ? chromaBaked(looked) : looked
+        }
+        guard bakesChromaKey else { return leveled.wireRecord ?? display }
+        // Armed but nothing is rolling: the format is already the display
+        // buffer's (the pre-roll ring is filling with these frames), and the
+        // composite itself would be a CoreImage pass on the capture queue for a
+        // file that does not exist. The still grab reads this frame too, and
+        // WYSIWYG for a grab means what the take would carry — with no take, the
+        // camera.
+        return bakingIntoOpenTake ? chromaBaked(display) : display
+    }
+
+    /// The key is being composited into a file that is actually open. Split from
+    /// `bakesChromaKey` because that one answers "what will this take be", which
+    /// the ring needs before a take exists, and this one answers "is there a
+    /// frame to spend a GPU pass on".
+    private var bakingIntoOpenTake: Bool {
+        writer != nil && takeChromaRecord
     }
 
     /// Run a frame through the LUT (CoreImage, GPU). nil — if no LUT set/on error.

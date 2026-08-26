@@ -23,7 +23,7 @@ import Testing
             // it: the labels are baked in at render time.
             let pages = ViewRender.withLanguage(language) {
                 [RemotePage.html(), RemotePage.scriptHTML(),
-                 RemotePage.camerasHTML()]
+                 RemotePage.camerasHTML(), RemotePage.slateHTML()]
             }
             for page in pages {
                 let html = try #require(String(bytes: page, encoding: .utf8))
@@ -47,7 +47,7 @@ import Testing
     /// cannot quietly reintroduce a third wording.
     @Test func thePagesShareTheConnectionKeys() {
         for labels in [RemotePage.labels, RemotePage.scriptLabels,
-                       RemotePage.camerasLabels] {
+                       RemotePage.camerasLabels, RemotePage.slateLabels] {
             let table = Dictionary(uniqueKeysWithValues:
                 labels.map { ($0.field, $0.key) })
             #expect(table["connected"] == "remote_online")

@@ -79,6 +79,12 @@ extension RemoteClient {
             // Same rule: the markup is empty tiles, and every frame that
             // could fill them rides the socket behind the PIN.
             writeAndClose(RemoteResponse.page(server?.currentCamerasPage ?? Data()))
+        case RemotePage.slatePath:
+            // Same rule again: the slate's markup is an empty card, and the
+            // timecode, the scene and the take that fill it arrive over the
+            // socket behind the same PIN. This is also the only page that sends
+            // nothing BACK — see `slate.html`.
+            writeAndClose(RemoteResponse.page(server?.currentSlatePage ?? Data()))
         case RemotePage.posterPath:
             servePoster(request)
         default:

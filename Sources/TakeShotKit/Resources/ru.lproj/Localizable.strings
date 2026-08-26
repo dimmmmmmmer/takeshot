@@ -550,6 +550,7 @@
 "remote_link_remote" = "Пульт";
 "remote_link_script" = "Скрипт";
 "remote_link_cameras" = "Камеры";
+"remote_link_slate" = "Хлопушка";
 "remote_no_network" = "Этот Mac не в сети";
 "remote_not_listening" = "Не слушает";
 "remote_failed" = "Веб-пульт: %@";
@@ -713,6 +714,10 @@
 "slate_fps" = "FPS";
 "slate_sync_tag" = "СИНХРО";
 "slate_sync_hint" = "Клик или пробел — синхровспышка";
+"slate_page_title" = "TakeShot: хлопушка";
+"slate_page_hold" = "СТОП";
+"slate_page_offline" = "НЕТ СВЯЗИ";
+"slate_page_hint" = "Тап — синхровспышка. Автоблокировку экрана поставьте на «Никогда».";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.
    Not "playback" (owner item 13d): nothing recorded is shown here. === */
 "cameras_title" = "TakeShot: камеры";
@@ -804,6 +809,8 @@
 "chroma_plate_reset" = "Вернуть по центру";
 "media_group_takes" = "Дубли";
 "chroma_preview_only" = "Только превью и выход на монитор — в дубли, кадры и экспорт идёт исходная картинка.";
+"chroma_record" = "Запекать в запись";
+"chroma_record_warning" = "Следующий дубль пишется композитом: фон в файле уже заменён, перекеить его нельзя и это больше не исходник камеры. Осциллографы по-прежнему измеряют камеру, а не файл.";
 /* === the menu bar (status item): state at a glance, essentials in a menu === */
 "menubar_keep" = "Держать TakeShot в строке меню";
 "menubar_take" = "Дубль: %@";
