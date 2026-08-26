@@ -113,7 +113,11 @@ error instead.
   MPEG-TS and RTP both timestamp on a 90 kHz clock and have no rate field.
 - **Never on the capture queue.** The send runs on `com.takeshot.ndi` with
   latest-wins coalescing, so a slow network drops frames instead of delaying the
-  recorder.
+  recorder. Measured app-side cost of the whole hop, release, median of 15:
+  0.014 ms at 1080p, 0.018 ms at UHD, against a 40 ms frame interval at 25 fps.
+  NDI's own compression happens inside the send and is not in that figure — it
+  cannot be measured until the headers are here, and the budget above is what is
+  left for it.
 - **Picture only.** NDI carries audio and this does not send any. The obstacle is
   not the NDI leg — it is that the pipeline's only stereo feed is the room
   monitor's, owned by `AudioMonitor` and gated on its switch, so a feed hung off

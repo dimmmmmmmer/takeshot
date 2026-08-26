@@ -242,14 +242,26 @@ when it is across a network somebody else runs.
 
 **What the frame path pays, measured.** All figures release, M-series laptop.
 
-NDI costs 0.114 ms a frame at 1080p because there is nothing to do — its
-uncompressed RGB IS the display buffer, so the mirror's queue locks the buffer,
-hands NDI its base address and unlocks. Here the display queue's whole
+NDI's whole hop — offer, queue, coalesce, lock the buffer, walk it, unlock —
+costs **0.014 ms at 1080p and 0.018 ms at UHD** (median of 15, release), because
+there is nothing to convert: its uncompressed RGB IS the display buffer, so the
+mirror's queue hands NDI a base address. Here the display queue's whole
 involvement is a pixel-format test and one `dispatch_async`: **under 0.001 ms at
-1080p and at UHD**, 0.006 ms worst of 200 runs. That is the number to compare
-against NDI's, and it is two orders of magnitude under it because the work moved
-rather than shrank — NDI's 0.114 ms is the whole hop INCLUDING the sender's pass
-over the frame, which is why the two numbers are not measuring the same thing.
+1080p and at UHD**, 0.006 ms worst of 200 runs. Both are far under a frame
+interval; the comparison is only worth making because the two numbers measure
+different things — NDI's includes the sender's pass over the frame and SRT's
+stops at the dispatch, since everything expensive on this side happened on
+another queue.
+
+**The figure this paragraph used to carry was 0.114 ms at 1080p and 0.22 ms at
+UHD, and re-measuring it is how a stale number was caught.** Re-run on the
+restoration machine, the same benchmark gives 0.100 ms and 0.190 ms in DEBUG and
+0.014 ms and 0.018 ms in release — so the inherited pair matches this machine's
+debug numbers almost exactly, in a section whose first line says every figure is
+release. Two machines and two toolchains are between the runs, so that is
+evidence rather than proof; what is certain is that the numbers here now are
+release, on this machine, and were taken rather than copied. `TAKESHOT_BENCH=1
+scripts/test.sh -c release --filter NDIPerformance` reproduces them.
 
 Where it moved to, offer to first datagram out: **6.10 ms at 1080p, 20.9 ms at
 UHD**. That is a LATENCY and not an occupancy — VideoToolbox's encode is
@@ -305,9 +317,14 @@ shared queue at all: `com.takeshot.ndi`, `com.takeshot.encode`, and the playout'
 own.
 
 **What the second output costs the frame path is one pixel-format test and one
-`dispatch_async`**, which is what `NDIPerformanceTests` prints for one output
-against two. Nothing else is additive, and nothing else can be: neither mirror
-waits on the other, and neither can reach the capture queue.
+`dispatch_async`.** Measured, release, 1080p, median of 15
+(`TAKESHOT_BENCH=1 scripts/test.sh -c release --filter NDIPerformance`): the
+display handler's offer to NDI alone and to the shared encoder alone each round
+to **0.000 ms**, and doing BOTH is **0.001 ms** — the whole additive cost of a
+second network output, against a 40 ms frame interval at 25 fps. Nothing else is
+additive, and nothing else can be: neither mirror waits on the other, and
+neither can reach the capture queue. The real work each one triggers is on its
+own queue and is not on this clock at all.
 `aParkedNDISendDoesNotStallTheSRTLink` holds the part that matters by wedging an
 NDI send inside the call for two seconds and requiring the transport stream to
 keep flowing through it.
