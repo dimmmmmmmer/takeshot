@@ -273,6 +273,13 @@ public final class CapturePipeline: @unchecked Sendable {
     /// an open session. Queue-confined.
     var takeChromaKey = ChromaKey()
     var takeChromaRecord = false
+    /// The LUT bake as the OPEN take does it: the flag, the filter and the name
+    /// this take started with. Read by `bakesLUT`, the pre-roll drain and the
+    /// `lutKey` tag, so all three answer with one value. Queue-confined, like
+    /// the chroma pair above and for the same reason.
+    var takeLUTRecord = false
+    var takeLUTFilter: CIFilter?
+    var takeLUTName: String?
     /// Frames written into a baking take WITHOUT the key because the render
     /// failed. Cumulative for the session, and a diagnostic rather than a
     /// control: any value above zero means some file on the disk has

@@ -43,9 +43,8 @@ extension CapturePipeline {
     private func recordProduct(leveled: LevelledFrame,
                                previewed: CVPixelBuffer) -> CVPixelBuffer {
         let display = leveled.display
-        guard !lutRecord else {
-            let looked = lutPreview
-                ? previewed : (applyLUT(to: display) ?? display)
+        guard !bakesLUT else {
+            let looked = recordLook(display, previewed: previewed)
             return bakingIntoOpenTake ? chromaBaked(looked) : looked
         }
         guard bakesChromaKey else { return leveled.wireRecord ?? display }
@@ -58,6 +57,32 @@ extension CapturePipeline {
         return bakingIntoOpenTake ? chromaBaked(display) : display
     }
 
+    /// Whether the LUT is being baked into the file right now.
+    ///
+    /// The LATCHED answer while a take is open and the armed one otherwise,
+    /// which is `bakesChromaKey`'s rule and for the same reason: what a rolling
+    /// take does was settled at `beginTake` and cannot change under it, and what
+    /// an idle pipeline reports is what the NEXT take will do — which is what
+    /// the pre-roll ring has to be holding by then.
+    var bakesLUT: Bool {
+        guard writer == nil else { return takeLUTRecord }
+        return lutRecord
+    }
+
+    /// The look the FILE gets, which is not always the look the monitor shows.
+    ///
+    /// The preview frame is reused when it already carries this exact filter,
+    /// because that is the common case and a second CoreImage pass per frame is
+    /// not free. An operator who swaps the LUT mid-take leaves the display
+    /// carrying the new one while the file must keep the latched one — so
+    /// identity is checked rather than assumed.
+    private func recordLook(_ display: CVPixelBuffer,
+                            previewed: CVPixelBuffer) -> CVPixelBuffer {
+        let latched = writer == nil ? lutFilter : takeLUTFilter
+        if lutPreview, latched === lutFilter { return previewed }
+        return applyLUT(to: display, using: latched) ?? display
+    }
+
     /// The key is being composited into a file that is actually open. Split from
     /// `bakesChromaKey` because that one answers "what will this take be", which
     /// the ring needs before a take exists, and this one answers "is there a
@@ -67,8 +92,13 @@ extension CapturePipeline {
     }
 
     /// Run a frame through the LUT (CoreImage, GPU). nil — if no LUT set/on error.
-    func applyLUT(to pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-        guard let filter = lutFilter else { return nil }
+    ///
+    /// `using` defaults to the armed filter, which is what the preview wants.
+    /// The RECORD path passes the take's latched filter instead, so a look
+    /// swapped mid-take cannot reach a file that is already open.
+    func applyLUT(to pixelBuffer: CVPixelBuffer,
+                  using chosen: CIFilter? = nil) -> CVPixelBuffer? {
+        guard let filter = chosen ?? lutFilter else { return nil }
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
         guard let outBuffer = lutBufferPool.buffer(width: width, height: height) else {

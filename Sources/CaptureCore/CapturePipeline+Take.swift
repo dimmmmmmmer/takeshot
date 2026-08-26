@@ -29,6 +29,19 @@ extension CapturePipeline {
         // middle is worse than either version of it.
         takeChromaKey = recordChromaKey
         takeChromaRecord = recordChromaKey.record && recordChromaKey.isOn
+        // …and the LUT bake, for exactly the same reason and it was NOT latched:
+        // `recordProduct` read `lutRecord` per frame, so the switch handed the
+        // writer BGRA display frames while it was on and the wire-code record
+        // buffer while it was off — a pixel-format change inside an open
+        // AVAssetWriter session. The `lutKey` tag is written just below, once,
+        // so a take that changed halfway also lied about itself.
+        //
+        // The filter and the name are latched with the flag, not out of
+        // tidiness: a look swapped mid-take would put two grades in one file,
+        // and the tag would name whichever was selected at the start.
+        takeLUTRecord = lutRecord
+        takeLUTFilter = lutFilter
+        takeLUTName = lutName
         let startIndex = recStartIndex ?? frameIndex
         let timecode = preRollShiftedTimecode(rawTimecode, startIndex: startIndex)
         // takes are never overwritten: on a name collision — suffix _2, _3…
@@ -82,8 +95,8 @@ extension CapturePipeline {
                     TakeWriter.clipKey: String(config.takeNumber),
                 ]
                 // tag a file with a baked-in LUT: playback won't apply the LUT again
-                if lutRecord, let lutName {
-                    meta[TakeWriter.lutKey] = lutName
+                if takeLUTRecord, let takeLUTName {
+                    meta[TakeWriter.lutKey] = takeLUTName
                 }
                 // …and a file whose picture is a COMPOSITE, with what went
                 // behind the actor. Not to stop the app applying it twice — a
