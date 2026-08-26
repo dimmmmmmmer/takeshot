@@ -628,7 +628,6 @@
 "report_col_tc_out" = "TC КОН";
 "report_col_dur" = "ДЛИТ";
 "report_col_ok" = "ОЦЕНКА";
-"report_col_notes" = "ЗАМЕТКИ";
 "report_duration_fmt" = "%.1f с";
 "report_rating_good" = "ГОДЕН";
 "report_rating_bad" = "БРАК";
