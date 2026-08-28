@@ -16,15 +16,37 @@ extension CaptureController {
     /// `otherMarkers`. Every caller in the app — the ticks, the list editor,
     /// navigation, the hotkeys — reads through here, so which store a clip
     /// belongs to is decided once.
+    ///
+    /// **A grid has none of its own, and it does not borrow the parked take's.**
+    /// `startSyncPlay` leaves `playbackURL` exactly where it was, so without the
+    /// guard this listed the markers of a file that is not on screen — which is
+    /// the number the phone's footer showed, the ticks the transport drew, and
+    /// (through `hasPlaybackMarkers`) what enabled the menu item that CLEARS
+    /// them. Empty is the honest answer for the same reason
+    /// `playbackTimecodeText` gives none: 2–4 takes on one master timeline are
+    /// not one clip's list.
     var playbackMarkers: [TakeMarker] {
-        guard let url = playbackURL else { return [] }
+        guard syncPlay == nil, let url = playbackURL else { return [] }
         if let take = takes.first(where: { $0.url == url }) { return take.markers }
         return otherMarkers[Self.markerKey(url)] ?? []
     }
 
     /// There is a marker to go to, or to clear. What the three navigation items
     /// in the Markers menu are enabled by — one rule, three surfaces.
-    var hasPlaybackMarkers: Bool { !playbackMarkers.isEmpty }
+    ///
+    /// **It asks `isReviewingSingleClip` and not just "is the list non-empty".**
+    /// The submenu around these three is enabled by `canDropMarker`, which is
+    /// `isReviewingSingleClip || isRecording` — and the second half is about the
+    /// take being WRITTEN, not about the clip in the player. So with the camera
+    /// rolling the submenu opened whatever the viewer was showing, and these
+    /// three act on `playbackMarkers`: over a grid, and in record mode with a
+    /// clip still loaded from an earlier review, "clear all markers" was offered
+    /// for a file the operator could not see and took EVERY marker on it. That
+    /// is the same shape as the delete this rule already covers, one blast
+    /// radius up — the ±2 frame reach costs one flag, this costs the take's.
+    var hasPlaybackMarkers: Bool {
+        isReviewingSingleClip && !playbackMarkers.isEmpty
+    }
 
     /// A marker can be DROPPED: either a clip is under review in the single
     /// player or the camera is rolling. Both are timelines a flag belongs on;
@@ -62,9 +84,21 @@ extension CaptureController {
     /// restore only fills keys it has never seen — so the empty entry is what
     /// stops the next scan, a minute later, from bringing back the markers the
     /// operator has just deleted.
+    ///
+    /// **This is the one place a marker can be written into a take, so the rule
+    /// is asked HERE and not once per verb.** `addMarker` and
+    /// `removeNearestMarker` learned to ask `isReviewingSingleClip` after the
+    /// menu had asked it for a wave without them; the other four writers
+    /// (`updatePlaybackMarker`, `removePlaybackMarker`, `clearPlaybackMarkers`,
+    /// `appendPlaybackMarker`) never did, and they are reachable from the
+    /// Markers menu whenever the camera is rolling — `canDropMarker` is true on
+    /// the strength of the RECORDING, and these five act on the clip in the
+    /// PLAYER. Guarding the funnel rather than the verbs is what makes the
+    /// count of protected paths stop mattering: a sixth writer added tomorrow
+    /// goes through here too.
     private func editPlaybackMarkers(
         _ change: (inout [TakeMarker]) -> Bool) {
-        guard let url = playbackURL else { return }
+        guard isReviewingSingleClip, let url = playbackURL else { return }
         if let index = takes.firstIndex(where: { $0.url == url }) {
             guard change(&takes[index].markers) else { return }
         } else {

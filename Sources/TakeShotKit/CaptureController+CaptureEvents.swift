@@ -54,8 +54,16 @@ extension CaptureController {
         pipeline.onScopeData = { [weak self] data in
             self?.scopes.data = data
         }
+        // The tap hands its trace over on the MAIN queue, so a frame analyzed a
+        // moment before a grid opened can still land after `updateScopesRunning`
+        // has cleared the panel — one stale measurement of the parked take,
+        // arriving under four others and staying there because nothing else is
+        // producing. Refusing it here rather than relying on the clear winning
+        // the race is what makes "a grid is measured by nothing" a property of
+        // the app instead of a property of the ordering.
         playbackTap.onScopeData = { [weak self] data in
-            self?.scopes.data = data
+            guard let self, self.syncPlay == nil else { return }
+            self.scopes.data = data
         }
         bindAudioReporting()
         pipeline.onError = { [weak self] alarm in

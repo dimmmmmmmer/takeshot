@@ -172,7 +172,7 @@ struct PlayerFormatBadge: View {
     private var formatLabel: some View {
         Group {
             if controller.viewerMode == .playback,
-               let info = controller.playbackFormatText {
+               let info = controller.playbackFormatBadgeText {
                 Text(info).monospacedDigit()
             } else if let format = controller.signalFormat {
                 Text(playerShortFormat(format)).monospacedDigit()
