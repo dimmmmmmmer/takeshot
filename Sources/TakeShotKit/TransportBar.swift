@@ -43,24 +43,7 @@ struct TransportBar: View {
 
             MarkerButton()
 
-            if controller.playbackFileHasBakedLUT {
-                Image(systemName: "camera.filters")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .help(L("lut_baked_indicator"))
-            } else if controller.lutPreviewOn {
-                Button {
-                    controller.playbackLUTSuppressed.toggle()
-                } label: {
-                    Image(systemName: "camera.filters")
-                        .font(.system(size: 11))
-                        .foregroundStyle(controller.playbackLUTSuppressed
-                                         ? AnyShapeStyle(.secondary)
-                                         : AnyShapeStyle(controller.accentColor))
-                }
-                .buttonStyle(.plain)
-                .help(L("lut_playback_toggle"))
-            }
+            PlaybackLookButton(look: controller.playbackLook)
 
             TransportVolume(live: controller.live)
                 .help(L("playback_volume"))
@@ -88,6 +71,51 @@ struct TransportBar: View {
         guard seconds.isFinite else { return "0:00" }
         let total = Int(seconds.rounded(.down))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// The filter control beside the transport: what the look is doing to the clip
+/// under review, and — when there is something to do about it — the switch.
+///
+/// The reading is `PlaybackLook`, which is also what decides whether the tap
+/// gets the cube, so the icon and the picture cannot disagree. They could
+/// before: this asked whether preview was on and never whether there was a
+/// LOOK, so with the library cleared and preview still on it lit in the accent
+/// colour over an ungraded picture.
+///
+/// Its own view rather than three arms inline: the whole point is that the
+/// state is one value, and a `switch` over it is what makes the four cases
+/// visible side by side.
+struct PlaybackLookButton: View {
+    @EnvironmentObject private var controller: CaptureController
+    let look: PlaybackLook
+
+    var body: some View {
+        switch look {
+        case .none:
+            EmptyView()
+        case .baked:
+            // an indicator, not a button: the look is in the file's codes and
+            // no press can reach it
+            icon(tint: AnyShapeStyle(.secondary))
+                .help(L("lut_baked_indicator"))
+        case .applied, .suppressed:
+            Button {
+                controller.playbackLUTSuppressed.toggle()
+            } label: {
+                icon(tint: look == .suppressed
+                     ? AnyShapeStyle(.secondary)
+                     : AnyShapeStyle(controller.accentColor))
+            }
+            .buttonStyle(.plain)
+            .help(L("lut_playback_toggle"))
+        }
+    }
+
+    private func icon(tint: AnyShapeStyle) -> some View {
+        Image(systemName: "camera.filters")
+            .font(.system(size: 11))
+            .foregroundStyle(tint)
     }
 }
 

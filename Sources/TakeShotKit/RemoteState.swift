@@ -300,17 +300,19 @@ enum RemoteCommand: Equatable, Sendable {
         }
     }
 
-    /// The slate's take number off the wire. Empty — and anything that is not
-    /// a positive whole number — means "not logged", which is a state the page
-    /// can express by clearing the field.
+    /// The slate's take number off the wire, read by `SlateTakeField` — the
+    /// same rule the two TAKE fields on the desktop are read by. The scripty on
+    /// the phone and the operator at the cart are logging the same take into
+    /// the same sidecar, and this used to refuse anything that was not purely a
+    /// number (so "12A" logged nothing at all, where the desktop read 12) and
+    /// to accept any number at all (so a phone could log take 99999, which no
+    /// field on the desktop will hold).
     ///
     /// Bounded before it is parsed, like the two text fields beside it: `Int`
     /// answers nil to a hundred kilobytes of digits, but only after reading all
     /// of them.
     private static func slateTake(_ text: String) -> Int {
-        guard let value = Int(bounded(text).trimmingCharacters(in: .whitespaces)),
-              value > 0 else { return 0 }
-        return value
+        SlateTakeField.number(from: bounded(text))
     }
 }
 

@@ -30,6 +30,17 @@ extension CaptureController {
         }
     }
 
+    /// What the look is doing to the clip under review. The transport bar's
+    /// filter control is drawn from this and `applyPlaybackLUT` decides from
+    /// it, so the control cannot show a state the picture is not in — see
+    /// `PlaybackLook` for the one it used to show.
+    var playbackLook: PlaybackLook {
+        PlaybackLook.current(previewEnabled: settings.lut.previewEnabled ?? false,
+                             hasCube: currentCube != nil,
+                             fileHasBakedLook: playbackFileHasBakedLUT,
+                             suppressed: playbackLUTSuppressed)
+    }
+
     var lutRecordOn: Bool {
         get { settings.lut.recordEnabled ?? false }
         set {
@@ -90,11 +101,10 @@ extension CaptureController {
     /// already-baked look: our file tagged com.takeshot.lut or a manual
     /// per-clip off — the LUT isn't applied twice.
     func applyPlaybackLUT() {
-        guard settings.lut.previewEnabled ?? false, !playbackFileHasBakedLUT,
-              !playbackLUTSuppressed,
-              let cube = currentCube else {
-            os_log("playback LUT OFF: preview=%d baked=%d suppressed=%d cube=%d",
+        guard playbackLook.appliesCube, let cube = currentCube else {
+            os_log("playback LUT OFF (%{public}s): preview=%d baked=%d suppressed=%d cube=%d",
                    log: CapturePipeline.levelsLog, type: .default,
+                   String(describing: playbackLook),
                    (settings.lut.previewEnabled ?? false) ? 1 : 0,
                    playbackFileHasBakedLUT ? 1 : 0,
                    playbackLUTSuppressed ? 1 : 0,

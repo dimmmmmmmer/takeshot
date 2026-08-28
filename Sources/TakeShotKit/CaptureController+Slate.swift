@@ -65,18 +65,19 @@ extension CaptureController {
     /// field, not a 0: blank is how the operator sees that numbering is still
     /// following the clip counter.
     var slateTakeFieldText: String {
-        slateTakeNumber > 0 ? String(slateTakeNumber) : ""
+        SlateTakeField.text(for: slateTakeNumber)
     }
 
-    /// Apply the TAKE field: digits become an explicit override, an emptied
-    /// field hands numbering back to the clip counter.
+    /// Apply the TAKE field: a number becomes an explicit override, a field
+    /// naming none hands numbering back to the clip counter.
+    ///
+    /// What counts as a number is `SlateTakeField`, shared with the takes
+    /// panel's copy of this field and with the phone — the three used to read
+    /// the same typing three different ways, and all three write the same take
+    /// number into the file's metadata and the sidecars.
     func commitSlateTakeText(_ text: String) {
-        let digits = text.filter(\.isNumber)
-        guard !digits.isEmpty else {
-            slateTakeOverride = nil
-            return
-        }
-        slateTakeOverride = min(9999, max(1, Int(digits) ?? 1))
+        let number = SlateTakeField.number(from: text)
+        slateTakeOverride = number > 0 ? number : nil
     }
 
     /// A new scene restarts its own take numbering; clearing the scene hands
@@ -97,7 +98,7 @@ extension CaptureController {
     /// is the number, and it advances on its own.
     func advanceSlateTake() {
         guard let slateTakeOverride else { return }
-        self.slateTakeOverride = min(9999, slateTakeOverride + 1)
+        self.slateTakeOverride = min(SlateTakeField.maximum, slateTakeOverride + 1)
     }
 
     // MARK: - correcting a take that has already been recorded

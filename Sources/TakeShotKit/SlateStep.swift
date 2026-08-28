@@ -23,8 +23,10 @@ import Foundation
 /// from empty gives the field's first value, which is why `seed` is a parameter:
 /// scenes and takes start at 1, shots at A.
 enum SlateStep {
-    /// Nothing pages past this. The take number is clamped to the same ceiling
-    /// by the controller and the field itself takes four digits at most.
+    /// Nothing pages past this, and nothing TYPED past it either:
+    /// `SlateTakeField.maximum` is defined as this number rather than as a
+    /// second `9999`, which is what makes the arrows and the keyboard one
+    /// control. The field itself takes four digits at most.
     static let maxNumber = 9999
 
     /// The value after one press, or `value` unchanged when there is nothing to

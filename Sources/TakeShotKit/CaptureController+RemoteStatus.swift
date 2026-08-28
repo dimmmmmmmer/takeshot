@@ -92,9 +92,9 @@ extension CaptureController {
                                 scene: take.slate.scene,
                                 shot: take.slate.shot,
                                 // empty, not "0": the page shows an unlogged
-                                // take number as a blank field
-                                take: take.slate.take > 0
-                                    ? String(take.slate.take) : "",
+                                // take number as a blank field, the same way
+                                // the two fields on the desktop do
+                                take: SlateTakeField.text(for: take.slate.take),
                                 poster: RemoteTakeLog.Entry.posterReference(
                                     takeID: take.id.uuidString))
         })
