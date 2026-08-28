@@ -127,10 +127,15 @@ enum ControllerHarness {
         // The NDI sender is faked on the same terms, and for a louder failure.
         // The real one ANNOUNCES A SOURCE on the network the machine is on: a
         // suite that reached it would put a phantom camera in every receiver's
-        // source list on the shoot, once per test. It cannot happen today because
-        // no build here has the NDI SDK headers, and this is what keeps it from
-        // starting to happen the day somebody drops them in. Suites that want to
-        // look at the frames install their own factory over this one.
+        // source list on the shoot, once per test. **This is no longer belt and
+        // braces.** The NDI SDK headers are now dropped in on the development
+        // machine, so `CNDSender` is the REAL bridge here and a sender it
+        // creates really does announce — the same standing this line has always
+        // had on the SRT factory above it, arrived at the day the drop landed.
+        // Suites that want to look at the frames or the sound install their own
+        // factory over this one; the one suite that deliberately creates a real
+        // sender (`NDILiveSenderTests`) is opt-in behind TAKESHOT_NDI_LIVE for
+        // exactly this reason.
         //
         // What this does NOT cover, and the SRT factory above has the same hole:
         // both are installed AFTER `init`, and `init` runs `completeStartup`,
@@ -139,7 +144,10 @@ enum ControllerHarness {
         // once, at construction, before either line here has run. In a build
         // with no vendor headers that is inert — the switch reports itself
         // unavailable and nothing is built — but on a machine with the SDK
-        // dropped in it would be a real announcement. Drive the startup path by
+        // dropped in it is a real announcement, which is the case HERE now.
+        // The one suite that presets the switch (`NDIStubBuildTests`) is gated
+        // on `!CNDSender.isSDKAvailable()` for that reason and no other. Drive
+        // the startup path by
         // calling `startNDIIfEnabled()` after the factory is in place instead
         // (`aStoredSwitchAnnouncesTheSourceAtStartup`), never by presetting the
         // switch.

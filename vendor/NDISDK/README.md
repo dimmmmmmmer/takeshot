@@ -73,13 +73,25 @@ SDK-3 era leaves one behind, and this bridge is compiled against SDK 4 spellings
 — loading a 3 runtime would resolve some names and not others, which is a worse
 failure than not finding it at all.
 
-Only five symbols are resolved — `NDIlib_initialize`, `NDIlib_version`,
-`NDIlib_send_create`, `NDIlib_send_destroy` and `NDIlib_send_send_video_v2` — and
-each takes its type from the SDK header via `decltype`. No part of the NDI ABI is
-hand-declared anywhere in this project: guessing a struct layout or an argument
-list would be silent memory corruption, invisible until it mattered on a set, so
-the bridge is arranged such that a wrong name or a changed signature is a compile
-error instead.
+Only six symbols are resolved — `NDIlib_initialize`, `NDIlib_version`,
+`NDIlib_send_create`, `NDIlib_send_destroy`, `NDIlib_send_send_video_v2` and
+`NDIlib_send_send_audio_v3` — and each takes its type from the SDK header via
+`decltype`. No part of the NDI ABI is hand-declared anywhere in this project:
+guessing a struct layout or an argument list would be silent memory corruption,
+invisible until it mattered on a set, so the bridge is arranged such that a wrong
+name or a changed signature is a compile error instead.
+
+**Five of the six are REQUIRED and the audio one is not**, which is a promise
+rather than a leniency: adding sound must not be able to take the picture away.
+The header this build compiles against declares `NDIlib_send_send_audio_v3` (it
+is SDK 4 and newer, the same floor the FourCC spellings already set), but the
+dylib loaded at runtime is whatever the machine has — two different facts. A
+runtime that resolves the picture send and not the sound one therefore stays
+fully available and carries picture; `CNDSender.isAudioAvailable` answers NO and
+the leg above it stops. Folding it into the required set would turn a mismatched
+runtime into "NDI unavailable", i.e. a director's monitor going dark over their
+sound. Measured here: both `/usr/local/lib/libndi.4.dylib` and
+`/Library/NDI SDK for Apple/lib/macOS/libndi.dylib` export it.
 
 ## What the app does with it
 
@@ -118,28 +130,77 @@ error instead.
   NDI's own compression happens inside the send and is not in that figure — it
   cannot be measured until the headers are here, and the budget above is what is
   left for it.
-- **Picture only.** NDI carries audio and this does not send any. The obstacle is
-  not the NDI leg — it is that the pipeline's only stereo feed is the room
-  monitor's, owned by `AudioMonitor` and gated on its switch, so a feed hung off
-  it would tie a director's sound to whether the operator has the cart's speakers
-  up. The SRT output is blocked on exactly the same missing piece: one
-  independent tap in `CapturePipeline+Audio`. The reasoning and where each leg
-  attaches is at the top of `Sources/TakeShotKit/CaptureController+NDI.swift`
-  and `CaptureController+SRT.swift`. This gap has not moved since the feature
-  was first written; it has only gained a second claimant.
+- **Sound goes too, off the tap the SRT output already uses.**
+  `CapturePipeline.feedStereo` builds ONE stereo mix per packet — after
+  `recordAudio`, so nothing it does can reach the file — and hands the same
+  buffer to the cart's speakers and to every registered consumer, independent of
+  the monitor switch. `NDIAudioMirror` is the NDI consumer, and the only thing
+  that differs from SRT's leg is what happens after: interleaved 16-bit becomes
+  the de-interleaved 32-bit float `NDIlib_FourCC_audio_type_FLTP` names, scaled
+  by 1/32768 (so −32768 lands on exactly −1.0). The channels are the first two
+  ENABLED by the mask in force — the same expression the record path reads — so
+  what goes out is always a prefix of what is being written, and a rig whose
+  only live channel is 6 sends MONO rather than a doubled fake pair.
+- **The sound is on its OWN queue** (`com.takeshot.ndi-audio`), not the
+  picture's. Both sends are synchronous and either can park for as long as its
+  receiver makes it, so one queue would mean a stalled picture holding up its own
+  sound. `CNDSender` serializes the sender's LIFETIME and nothing else: `stop`
+  marks it closed without waiting, and whichever send is last out destroys the
+  instance. A rwlock would have been the obvious primitive and is the wrong one —
+  a `stop` waiting for the write lock behind a wedged picture send blocks the
+  next sound send behind it.
+- **No timecode is stated on either leg.** Both ask the runtime to synthesize
+  (`NDIlib_send_timecode_synthesize`), which is the SDK's own documented
+  configuration for two streams staying in sync: one sender takes the system time
+  as its origin once and generates both series from it. The packet's own
+  presentation time is the pipeline's stream clock and has no defined
+  relationship to NDI's 100 ns timecode domain, so converting it would be
+  inventing an origin.
+- **Unlike the picture, the sound is not coalesced.** The frame leg keeps only
+  the newest frame; sound cannot, because NDI synthesizes the audio timecode from
+  the samples it is handed, so a dropped packet is both a hole and a permanent
+  shift against the picture. The sound queue is a FIFO with a one-second backlog
+  ceiling (48 000 sample frames, ~384 KB of stereo); past it a packet is refused
+  and counted, which only happens once the receiver has stopped taking sound at
+  all.
+- **Measured cost on the capture queue** — release, minimum of nine passes over
+  400 packets, 8-channel source, against a 40 ms packet interval:
+  12.9 µs/packet with NDI off, 12.9 with NDI's PICTURE up (the sound leg is the
+  only part of this feature that touches this queue at all), 18.4 with any one
+  consumer on the tap (the stereo mix, which the first consumer pays for
+  whichever transport it is) and 22.9 with NDI's sound. The conversion itself is
+  1.17 µs mono and 2.29 µs stereo for a 1920-frame packet, and it is NOT on that
+  queue — it runs behind the hop, on the sound's own. The frame path is unmoved
+  by the sound being up: 0.008 ms at 1080p either way.
 
-## Not measured on this machine
+## What has now been executed, and what still has not
 
-Everything under "The runtime" and the real half of `CNDI.mm` is **unverified
-code**. The development machine has the NDI runtime installed
-(`/usr/local/lib/libndi.4.dylib`) and no SDK headers anywhere, so the bridge
-compiles as a stub here and every claim about what happens with the headers in
-place — that the five symbols resolve, that `NDIlib_send_create` announces a
-source a receiver can find, that BGRX at the buffer's own stride reads correctly
-on the far end, and that the app-side cost holds up once NDI's own compression is
-inside the send — rests on the previous implementation of this file rather than
-on a measurement taken since it came back. Drop the headers in and it is one
-`swift build` and one receiver away from being checked.
+The headers are in on the development machine, so the real half of `CNDI.mm`
+compiles and RUNS here for the first time. What that has established, by running
+it rather than by reading it:
+
+- `CNDSender.isSDKAvailable()` and `isAudioAvailable()` are both true here: the
+  runtime loaded, `NDIlib_initialize` returned true, and all six symbols resolved
+  out of the installed dylib. `NDIRealBridgeTests` asserts it and runs in the
+  normal battery wherever the headers are.
+- `NDIlib_send_send_audio_v3` is CALLABLE with the frame this bridge builds — the
+  FLTP FourCC, the plane stride, the synthesized timecode — against a real sender
+  on a real runtime, without the runtime rejecting it or walking off the end of
+  the planes. That is `NDILiveSenderTests`, and it is OPT-IN
+  (`TAKESHOT_NDI_LIVE=1`) because creating a sender ANNOUNCES a source on
+  whatever LAN the machine is on, which on a shoot is the set network. It has
+  been run deliberately and it passes.
+- The shape guard on the audio send is not defensive politeness. With it removed,
+  the real runtime handed `no_samples = 0` kills the process with SIGFPE —
+  measured, as a planted regression.
+
+**Still unverified, and only a receiver can answer it.** Nothing here proves that
+a receiver DECODES any of it: that VLC, OBS, Resolve or an NDI monitor shows the
+picture, that the sound plays, that the two land in lip sync, or that the
+synthesized timecode behaves as the SDK's note describes when the picture leg is
+dropping frames and the sound leg is not. Those need a receiver, a network and a
+person. The app-side costs above are measured; NDI's own compression, which
+happens inside the send, is still not separable from here.
 
 ## Licence note
 

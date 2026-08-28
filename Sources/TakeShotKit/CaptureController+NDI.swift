@@ -32,36 +32,41 @@ import Foundation
 /// runtime dlopen happens on the first `NDISender.unavailable` read, which is the
 /// moment the operator asks for the feature.
 ///
-/// **Picture only — and what is missing is now the LEG, not the tap.** NDI
-/// carries audio and an iPad with no sound is half a monitor, which is the
-/// sentence the SRT output used to carry at the top of
-/// `CaptureController+SRT`. The obstacle both of them named was one and the
-/// same: the pipeline's only stereo feed was `onMonitorAudio`, a single slot
-/// owned by `AudioMonitor` (the room speakers) and gated on `monitorEnabled`,
-/// so either feed hung off it would have made the sound on a director's iPad a
-/// side effect of whether the operator has the cart's speakers up — and forcing
-/// that switch on to get audio is precisely the bug `ControllerHarness` goes
-/// out of its way to prevent. That half is built:
-/// `CapturePipeline.addAudioTap` is one stereo mix per packet, taken once,
-/// served to every outgoing transport, delivered whatever the monitor switch
-/// says. SRT is the leg that came off it.
+/// **Picture and sound, off one tap.** NDI carries audio and an iPad with no
+/// sound is half a monitor. Both this output and SRT used to be picture only
+/// for one shared reason: the pipeline's only stereo feed was `onMonitorAudio`,
+/// a single slot owned by `AudioMonitor` (the room speakers) and gated on
+/// `monitorEnabled`, so either feed hung off it would have made the sound on a
+/// director's iPad a side effect of whether the operator has the cart's
+/// speakers up — and forcing that switch on to get audio is precisely the bug
+/// `ControllerHarness` goes out of its way to prevent.
 ///
-/// **What is left here is the NDI leg, and the reason it is left is that none
-/// of it can be executed on this machine.** It is a planar-float conversion —
-/// `NDIlib_send_send_audio_v3` takes de-interleaved 32-bit float where the tap
-/// produces interleaved 16-bit integer — and a call into `CNDSender`, which is
-/// a STUB in any build without the SDK headers, and there are no vendor drops
-/// here or on CI at all. Written now it would be a conversion nothing calls and
-/// a bridge call that compiles to nothing, shipped on the strength of having
-/// been read rather than run.
+/// `CapturePipeline.addAudioTap` is that feed without the gate: ONE stereo mix
+/// per packet, built after `recordAudio` so nothing it does can reach the file,
+/// handed to the speakers and to every registered consumer alike. This file
+/// registers one of those consumers and only the LEG after it is NDI's own:
+/// `NDIAudioMirror` converts the tap's interleaved 16-bit packet to the
+/// de-interleaved 32-bit float `NDIlib_send_send_audio_v3` takes, on a queue of
+/// its own. There is no second tap, no second mix and no second channel rule —
+/// the channels are `stereoChannelIndices`, the same expression the record path
+/// reads, so what goes out is always a prefix of what is being written.
 ///
-/// What it costs when the headers land is small and known, which is the point
-/// of stating the seam rather than guessing at the leg: `CapturePipeline+Audio`
-/// does not change at all, `LiveAudioEncoder` is not involved (NDI takes PCM
-/// and codes it itself), and the wiring is one more term in
-/// `releaseIdleLiveAudio`'s `wanted` plus a consumer registered the way
-/// `ensureLiveAudioEncoder` registers the first. The tap was the half both
-/// outputs were waiting on, and it is the half that is here.
+/// **`LiveAudioEncoder` is not involved, and that is not an omission.** The AAC
+/// session exists for the transport stream, which needs an elementary stream;
+/// NDI takes PCM and codes it itself, exactly as it takes frames rather than
+/// H.264. So the NDI switch changes nothing in `CaptureController+LiveAudio`
+/// and nothing in `CapturePipeline+Audio` — an NDI source with no SRT link
+/// builds no AAC encoder at all, which is what
+/// `theNDILegBuildsNoAACEncoder` pins.
+///
+/// **Two queues for one source, which is a claim about failure rather than
+/// about speed.** `NDIVideoMirror` sends on `com.takeshot.ndi` and
+/// `NDIAudioMirror` on `com.takeshot.ndi-audio`, against the same `CNDSender`.
+/// Both sends are synchronous and either can park for as long as its receiver
+/// makes it, so one queue would mean a stalled picture holding up its own sound
+/// — the same coupling `aParkedNDISendDoesNotStallTheSRTLink` rules out between
+/// the two OUTPUTS, now ruled out inside this one. What is serialized between
+/// them is the sender's lifetime and nothing else; see `CNDSender.stop`.
 extension CaptureController {
     /// How long a name edit settles before the source is re-announced. The field
     /// writes on every keystroke and NDI has no way to rename a live sender, so
@@ -96,6 +101,7 @@ extension CaptureController {
             let sender = try factory(
                 settings.ndi.sourceNameEffective(settings.naming))
             mirrors.ndi = NDIVideoMirror(sender: sender)
+            startNDIAudio(on: sender)
             mirrors.ndiState = .sending
             wireDisplayMirrors()
         } catch {
@@ -103,9 +109,39 @@ extension CaptureController {
         }
     }
 
+    /// Put the sound leg on the same sender and register it on the pipeline's
+    /// stereo tap.
+    ///
+    /// The tap closure holds the mirror WEAKLY, for the reason
+    /// `ensureLiveAudioEncoder`'s does: the closure is owned by the PIPELINE and
+    /// runs on the capture queue, and it must not be what keeps a mirror the
+    /// controller has already dropped alive. `stopNDIAudio` removes it anyway —
+    /// this is the belt on the braces, and it is the half that survives a path
+    /// that forgets to.
+    private func startNDIAudio(on sender: NDISending) {
+        let mirror = NDIAudioMirror(sender: sender)
+        mirrors.ndiAudio = mirror
+        pipeline.addAudioTap(mirror) { [weak mirror] packet in
+            mirror?.offer(packet)
+        }
+    }
+
+    /// …and take it off, tap first.
+    ///
+    /// The ORDER is the point: the tap is removed while the mirror still
+    /// exists, so the capture queue stops being handed packets before anything
+    /// is torn down. `stop()` then makes the ones already in flight inert.
+    private func stopNDIAudio() {
+        guard let mirror = mirrors.ndiAudio else { return }
+        pipeline.removeAudioTap(mirror)
+        mirror.stop()
+        mirrors.ndiAudio = nil
+    }
+
     func stopNDIOutput() {
         mirrors.ndiRenameTask?.cancel()
         mirrors.ndiRenameTask = nil
+        stopNDIAudio()
         mirrors.ndi?.stop()
         mirrors.ndi = nil
         mirrors.ndiState = .off
@@ -129,6 +165,11 @@ extension CaptureController {
     /// status, only exists while the switch is on. Turning it off would hide
     /// both the reason and the fix.
     func ndiFailed(_ message: String) {
+        // The sound goes with the picture on every path that drops the mirror,
+        // and it goes FIRST for `stopNDIAudio`'s reason. A leg left registered
+        // on the pipeline over a source that no longer exists is a per-packet
+        // conversion for nobody, on the queue that owns the file.
+        stopNDIAudio()
         mirrors.ndi?.stop()
         mirrors.ndi = nil
         mirrors.ndiState = .failed(message)
@@ -168,6 +209,7 @@ extension CaptureController {
             try? await Task.sleep(for: CaptureController.ndiRenameDebounce)
             guard !Task.isCancelled, let self,
                   self.settings.ndi.enabled == true else { return }
+            self.stopNDIAudio()
             self.mirrors.ndi?.stop()
             self.mirrors.ndi = nil
             self.startNDIOutput()

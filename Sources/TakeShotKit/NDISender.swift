@@ -64,29 +64,53 @@ struct NDIFrameRate: Equatable, Sendable {
 ///
 /// `Sendable` on the same terms the SRT stream is: a sender is BUILT by the
 /// factory, which the controller calls on the MainActor, and then used on the
-/// mirror's queue. What makes that safe is the confinement rather than any
-/// locking — `NDIVideoMirror` is the only thing that ever touches one, on one
-/// serial queue, and the implementations say so at their declaration.
-protocol NDIVideoSending: AnyObject, Sendable {
+/// mirrors' queues.
+///
+/// **Two queues, not one, and that is what the name lost the word "Video"
+/// for.** One NDI source carries picture and sound, and they are two calls:
+/// `NDIVideoMirror` makes the first on `com.takeshot.ndi` and `NDIAudioMirror`
+/// the second on `com.takeshot.ndi-audio`. Each send blocks for as long as its
+/// receiver makes it, so putting them on one queue would mean a slow receiver's
+/// picture holding up its own sound — which is the failure the split exists to
+/// rule out. What makes that safe is stated at `CNDSender.stop`: the two sends
+/// are concurrent and only the sender's LIFETIME is serialized.
+protocol NDISending: AnyObject, Sendable {
     /// The name the source is announced under.
     var sourceName: String { get }
     /// Push one frame. Blocking; called only on `NDIVideoMirror`'s own queue.
     /// Returns false for a frame that was refused (see `CNDSender`).
     @discardableResult
     func send(_ buffer: CVPixelBuffer, rate: NDIFrameRate) -> Bool
-    /// Take the source off the network. Idempotent.
+    /// Push one packet of sound as `channels` contiguous planes of
+    /// `framesPerChannel` 32-bit floats — the layout NDI's FLTP names.
+    ///
+    /// Blocking, and called only on `NDIAudioMirror`'s own queue, which is not
+    /// the one above. Returns false for a packet that was refused: a runtime
+    /// with no audio entry point, or a shape that does not describe the buffer.
+    @discardableResult
+    func send(audio planar: [Float], framesPerChannel: Int, channels: Int,
+              sampleRate: Int) -> Bool
+    /// Take the source off the network — picture and sound, since they are one
+    /// sender. Idempotent, and called by the VIDEO mirror alone: the source
+    /// exists exactly as long as that mirror does, and a second leg tearing
+    /// down a source it did not announce is how one of them ends up sending
+    /// into a destroyed instance.
     func stop()
 }
 
 /// The real sender: a thin Swift face on `CNDSender`, which is a stub in any
 /// build without the SDK headers (see `vendor/NDISDK/README.md`).
 ///
-/// `@unchecked Sendable`, and the invariant is the confinement rather than a
-/// lock: `CNDSender` owns a runtime instance and is explicitly not thread-safe,
-/// and the ONLY thing that calls into one is `NDIVideoMirror`, on
-/// `com.takeshot.ndi`, one call at a time. `theSendNeverRunsOnTheCallersQueue`
-/// is what holds that.
-final class NDISender: NDIVideoSending, @unchecked Sendable {
+/// `@unchecked Sendable`, and what makes it so is now stated INSIDE the bridge
+/// rather than inherited from confinement. Two mirrors call into one of these
+/// from two queues — `NDIVideoMirror` on `com.takeshot.ndi` and
+/// `NDIAudioMirror` on `com.takeshot.ndi-audio` — because the alternative is
+/// one leg parking the other. `CNDSender` serializes its instance's LIFETIME
+/// and nothing else (see the note on its `stop`), which is exactly the amount
+/// of ordering two concurrent sends against one sender need.
+/// `theSendNeverRunsOnTheCallersQueue` and `theAudioSendRunsOnItsOwnQueue` are
+/// what hold the two halves of that.
+final class NDISender: NDISending, @unchecked Sendable {
     private let sender: CNDSender
     let sourceName: String
 
@@ -106,7 +130,7 @@ final class NDISender: NDIVideoSending, @unchecked Sendable {
     static var runtimeVersion: String? { CNDSender.runtimeVersion() }
 
     /// The factory shape `DisplayMirrors.ndiSenderFactory` overrides.
-    static func make(name: String) throws -> NDIVideoSending {
+    static func make(name: String) throws -> NDISending {
         try NDISender(name: name)
     }
 
@@ -115,10 +139,30 @@ final class NDISender: NDIVideoSending, @unchecked Sendable {
         sourceName = name
     }
 
+    /// Whether the loaded runtime can carry sound at all. Separate from
+    /// `unavailable` on purpose — a runtime that exports the picture send and
+    /// not the sound one keeps its picture; see `CNDSender.isAudioAvailable`.
+    static var isAudioAvailable: Bool { CNDSender.isAudioAvailable() }
+
     @discardableResult
     func send(_ buffer: CVPixelBuffer, rate: NDIFrameRate) -> Bool {
         sender.sendFrame(buffer, frameRateN: rate.numerator,
                          frameRateD: rate.denominator)
+    }
+
+    @discardableResult
+    func send(audio planar: [Float], framesPerChannel: Int, channels: Int,
+              sampleRate: Int) -> Bool {
+        // Lent, not copied: the bridge's send is synchronous, so the planes are
+        // still the caller's when it returns. The same argument the video leg
+        // makes about a locked base address, one media type along.
+        planar.withUnsafeBufferPointer { planes in
+            guard let base = planes.baseAddress else { return false }
+            return sender.sendAudio(base,
+                                    framesPerChannel: Int32(framesPerChannel),
+                                    channels: Int32(channels),
+                                    sampleRate: Int32(sampleRate))
+        }
     }
 
     func stop() {
