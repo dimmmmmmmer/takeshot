@@ -1,6 +1,10 @@
+import CBraw
 import CDataChannel
+import CDeckLink
 import CNDI
+import CR3D
 import CSRT
+import CaptureCore
 import Foundation
 import Testing
 
@@ -11,7 +15,7 @@ import Testing
 /// direction.
 ///
 /// **Machine-independent on purpose, and that is the whole design of this
-/// file.** Which of the twelve codes a bridge is actually holding depends on
+/// file.** Which of the codes a bridge is actually holding depends on
 /// which vendor drops the machine has, which runtimes are installed, and —
 /// measured rather than assumed — what is sitting in `/usr/local/include`: the
 /// NDI SDK arrived on the developer's Mac while this was being written, and a
@@ -22,29 +26,6 @@ import Testing
 /// that do read the real bridges assert only relationships that hold in every
 /// configuration.
 struct BridgeLocalizationTests {
-    /// Every code the three bridges can state, read from the bridges' own
-    /// constants rather than typed out here.
-    ///
-    /// That is what makes this list unable to go stale: renaming a code in the
-    /// Obj-C without adding the key fails `everyCodeHasWordsInBothLanguages`
-    /// by name, where a copied list would keep asserting about a string
-    /// nothing produces any more.
-    static let codes: [String] = [
-        CSRTUnavailableNotBuilt, CSRTUnavailableRuntimeMissing,
-        CSRTUnavailableRuntimeIncomplete, CSRTUnavailableRuntimeRefused,
-        CNDUnavailableNotBuilt, CNDUnavailableRuntimeMissing,
-        CNDUnavailableRuntimeIncomplete, CNDUnavailableRuntimeRefused,
-        CDCUnavailableNotBuilt, CDCUnavailableRuntimeMissing,
-        CDCUnavailableRuntimeIncomplete, CDCUnavailableRuntimeNoMedia,
-    ]
-
-    /// The three that name the paths a dlopen looked at, and so are the only
-    /// three whose sentence may carry a placeholder.
-    static let codesCarryingPaths: [String] = [
-        CSRTUnavailableRuntimeMissing, CNDUnavailableRuntimeMissing,
-        CDCUnavailableRuntimeMissing,
-    ]
-
     /// Runs `body` with the app in `language` and puts English back, whatever
     /// happens. `L10n` is process-global; the suite runs `--no-parallel`.
     private func inLanguage(_ language: AppLanguage,
@@ -69,7 +50,7 @@ struct BridgeLocalizationTests {
             + "invented after this app shipped. Rebuild it with that thing."
         let unavailable = BridgeUnavailable(
             code: "srt_runtime_invented_after_this_build",
-            english: english, searchPaths: [])
+            english: english, details: [])
         for language in [AppLanguage.english, .russian, .system] {
             inLanguage(language) {
                 #expect(unavailable.localizedText == english,
@@ -87,7 +68,7 @@ struct BridgeLocalizationTests {
         let code = "ndi_runtime_invented_after_this_build"
         let unavailable = BridgeUnavailable(
             code: code, english: "The NDI runtime said something new.",
-            searchPaths: [])
+            details: [])
         inLanguage(.russian) {
             #expect(unavailable.localizedText != code)
             #expect(unavailable.localizedText
@@ -134,7 +115,7 @@ struct BridgeLocalizationTests {
     @Test func everyCodeHasWordsInBothLanguages() {
         for language in [AppLanguage.english, .russian] {
             inLanguage(language) {
-                for code in Self.codes {
+                for code in BridgeVocabulary.codes {
                     let key = BridgeUnavailable.key(for: code)
                     let words: String? = L10n.translation(key)
                     #expect(words != nil,
@@ -152,7 +133,7 @@ struct BridgeLocalizationTests {
     /// test perfectly and leaves the operator reading exactly what they read
     /// before — which is the defect this whole change is about.
     @Test func theRussianSaysSomethingOfItsOwn() {
-        for code in Self.codes {
+        for code in BridgeVocabulary.codes {
             let key = BridgeUnavailable.key(for: code)
             L10n.apply(.english)
             let en: String? = L10n.translation(key)
@@ -175,6 +156,9 @@ struct BridgeLocalizationTests {
     /// "скопируйте заголовки" would be advice its reader cannot take.
     @Test func theRussianStubMessagesStillAddressTheirReader() {
         inLanguage(.russian) {
+            // The three lines the media bridges added are held to the same
+            // shape by `theRussianStubMessagesOfTheMediaBridgesDoToo` next
+            // door, where the rest of those bridges' rules live.
             let ndi: String = L("bridge_ndi_not_built")
             // What this build IS, and that it is the build rather than the Mac.
             #expect(ndi.contains("сборке"), "\(ndi)")
@@ -207,9 +191,9 @@ struct BridgeLocalizationTests {
     @Test func onlyTheCodesThatNameASearchTakeAnArgument() {
         for language in [AppLanguage.english, .russian] {
             inLanguage(language) {
-                for code in Self.codes {
+                for code in BridgeVocabulary.codes {
                     let words: String = L(BridgeUnavailable.key(for: code))
-                    let carries: Bool = Self.codesCarryingPaths.contains(code)
+                    let carries: Bool = BridgeVocabulary.codesCarryingAValue.contains(code)
                     let has: Bool = words.contains("%@")
                     #expect(has == carries,
                             "\(language) \(code) has placeholder \(has), expected \(carries): \(words)")
@@ -226,7 +210,7 @@ struct BridgeLocalizationTests {
         let unavailable = BridgeUnavailable(
             code: CSRTUnavailableRuntimeMissing,
             english: "libsrt not found. Looked for: \(paths.joined(separator: ", "))",
-            searchPaths: paths)
+            details: paths)
         for language in [AppLanguage.english, .russian] {
             inLanguage(language) {
                 let shown: String = unavailable.localizedText
@@ -251,7 +235,7 @@ struct BridgeLocalizationTests {
     @Test func aSearchCodeWithNoPathsIsStillASentence() {
         let unavailable = BridgeUnavailable(
             code: CSRTUnavailableRuntimeMissing,
-            english: "libsrt not found.", searchPaths: [])
+            english: "libsrt not found.", details: [])
         inLanguage(.russian) {
             #expect(!unavailable.localizedText.contains("%@"),
                     "\(unavailable.localizedText)")
@@ -360,8 +344,16 @@ struct BridgeLocalizationTests {
             .appendingPathComponent("Sources/TakeShotKit")
         // The two settings rows, and the route that answers the /live page —
         // the third surface, and the one whose reader cannot read a log.
+        // The two settings rows and the /live route, plus the four surfaces
+        // the media bridges reach: the MAIN WINDOW's banner (+Capture), the
+        // hardware-output toast (+Windows), a multicam channel's toast
+        // (+Multicam) and the RAW player's open failure (RawPlayback). The
+        // banner is the one that matters most — it is read while a camera is
+        // rolling, not on a settings page somebody visits once.
         for name in ["NDISettingsSection", "SRTSettingsSection",
-                     "CaptureController+WebRTC"] {
+                     "CaptureController+WebRTC", "CaptureController+Capture",
+                     "CaptureController+Windows", "CaptureController+Multicam",
+                     "RawPlayback"] {
             let url: URL = root.appendingPathComponent("\(name).swift")
             let source: String = try String(contentsOf: url, encoding: .utf8)
             let code: String = source
@@ -395,14 +387,25 @@ struct BridgeLocalizationTests {
             == (CNDSender.unavailableCode() == nil))
         #expect((CDCPeerConnection.unavailableReason() == nil)
             == (CDCPeerConnection.unavailableCode() == nil))
+        #expect((CR3DClip.unavailableReason() == nil)
+            == (CR3DClip.unavailableCode() == nil))
     }
 
     /// …and when it states one, it is one of the codes this app knows, with the
     /// English still the bridge's own sentence character for character.
     ///
-    /// The second half is what says this pass changed which LAYER picks the
-    /// words and did not change the words — the same claim
+    /// The second half is what says the first pass changed which LAYER picks
+    /// the words and did not change the words — the same claim
     /// `ControllerAlarmSeverityTests` makes about the alarms.
+    ///
+    /// **It is asserted for these three bridges and deliberately not for the
+    /// media ones**, which is why `r3d` is not in this list and has
+    /// `theMediaBridgesEnglishIsWrittenForAnOperator` of its own. libsrt, NDI
+    /// and libdatachannel already reported themselves in sentences written for
+    /// a settings row, so keeping them word for word cost nothing. A board says
+    /// "Failed to allocate an output frame" and RED's SDK says "built without
+    /// RED's R3D SDK (vendor/R3DSDK)" — diagnostics, and pinning the operator's
+    /// line to them would pin the defect.
     ///
     /// Whichever bridges are stubs on the machine running this are the ones
     /// asserted; on CI that is all three.
@@ -423,7 +426,7 @@ struct BridgeLocalizationTests {
         for (name, unavailable) in bridges {
             guard let unavailable else { continue }
             let code: String = try #require(unavailable.code)
-            #expect(Self.codes.contains(code),
+            #expect(BridgeVocabulary.codes.contains(code),
                     "\(name) states \(code), which is not in the vocabulary")
             L10n.apply(.english)
             let row: String = unavailable.localizedText

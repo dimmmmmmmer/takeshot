@@ -114,7 +114,7 @@ struct ViewSRTSettingsTests {
         let unavailable = BridgeUnavailable(
             code: CSRTUnavailableRuntimeMissing,
             english: L10n.translation("bridge_srt_runtime_missing") ?? "",
-            searchPaths: paths.isEmpty
+            details: paths.isEmpty
                 ? ["/opt/homebrew/lib/libsrt.dylib",
                    "/opt/homebrew/lib/libsrt.1.5.dylib",
                    "/usr/local/lib/libsrt.dylib",

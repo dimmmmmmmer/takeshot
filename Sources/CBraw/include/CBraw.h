@@ -3,6 +3,31 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Why a BRAW open failed, as stable identifiers rather than as prose — the
+/// same split `CSRTUnavailableNotBuilt` and its siblings make, read by the same
+/// `BridgeUnavailable`.
+///
+/// Three of the four are the library vocabulary unchanged, because a
+/// dynamically loaded framework is in exactly the states any dlopen-ed SDK is
+/// in. Only the fourth is new, and it is new because it is not about a library
+/// at all.
+extern NSString *const CBRUnavailableNotBuilt;
+extern NSString *const CBRUnavailableRuntimeMissing;
+/// The runtime is there and it would not make a codec. Borrowed rather than
+/// invented: "a complete one declined" is the same dead end here as in libsrt.
+extern NSString *const CBRUnavailableRuntimeRefused;
+/// The library is fine and this CLIP is not — the only one of the four the
+/// operator answers by looking at the card rather than at the machine.
+/// Carries the file's name (`CBRBridgeDetailKey`).
+extern NSString *const CBRUnavailableClipUnreadable;
+
+/// `userInfo` key carrying the code above; byte for byte `CDLBridgeCodeKey`.
+/// See the note there for why it is declared three times.
+extern NSString *const CBRBridgeCodeKey;
+/// `userInfo` key carrying the one value a code's sentence splices in — here,
+/// a file name. Absent on the three codes whose sentence takes no argument.
+extern NSString *const CBRBridgeDetailKey;
+
 /// Obj-C bridge to the Blackmagic RAW SDK: opens a .braw clip and decodes
 /// frames to 8-bit BGRA CVPixelBuffers (full-range, Rec.709 by the clip's
 /// processing defaults — the same representation the rest of the app draws).

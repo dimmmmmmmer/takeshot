@@ -326,10 +326,16 @@ struct ModelR3DClipTests {
             #expect(reason.contains("A001_C001_0101XX_001.R3D"),
                     "a real bridge names the file it refused: \(reason)")
         } else {
-            #expect(reason.hasPrefix(L("r3d_sdk_unavailable")),
-                    "a stub build says the SDK is missing: \(reason)")
-            #expect(reason.count > L("r3d_sdk_unavailable").count,
-                    "and appends why: \(reason)")
+            // One sentence chosen by the app off the bridge's code, not a
+            // localized label with the bridge's English glued behind a dash —
+            // see `BridgeLocalizationTests`.
+            let words: String = try #require(
+                L10n.translation(
+                    BridgeUnavailable.key(for: CR3DUnavailableNotBuilt)))
+            #expect(reason == words,
+                    "a stub build says the SDK is missing, in one sentence: \(reason)")
+            #expect(!reason.contains(" — "),
+                    "the English detail is still glued on: \(reason)")
         }
     }
 

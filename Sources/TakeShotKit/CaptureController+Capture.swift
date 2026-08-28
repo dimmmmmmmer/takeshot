@@ -86,7 +86,14 @@ extension CaptureController {
             isCapturing = true
             lastError = nil
         } catch {
-            lastError = error.localizedDescription
+            // The banner an operator reads while a camera is rolling, and for a
+            // long time the one surface in this file that contradicted the line
+            // above it: `device_disconnected` was localized and the board's own
+            // refusal — "Device \"…\" not found", "Failed to open video input"
+            // — arrived here in English out of `CDeckLink`. The bridge states a
+            // code now and this picks the words; an error carrying none (the
+            // demo source, a future backend) still renders its own sentence.
+            lastError = BridgeUnavailable(error: error).localizedText
         }
     }
     func stopCapture() {

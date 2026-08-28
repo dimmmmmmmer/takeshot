@@ -32,6 +32,43 @@
 
 static NSString *const CDLErrorDomain = @"com.takeshot.cdecklink";
 
+// The code vocabulary. Declared in the header, defined here once for both the
+// real bridge and the stub — the stub raises one of them too, and a second
+// spelling of a code is a string that silently stops matching.
+NSString *const CDLUnavailableNotBuilt = @"decklink_not_built";
+NSString *const CDLUnavailableDeviceMissing = @"decklink_device_missing";
+NSString *const CDLUnavailableDeviceBusy = @"decklink_device_busy";
+NSString *const CDLUnavailableWrongDevice = @"decklink_wrong_device";
+NSString *const CDLUnavailableModeUnsupported = @"decklink_mode_unsupported";
+NSString *const CDLUnavailableRuntimeRefused = @"decklink_runtime_refused";
+
+// Byte for byte what `CBraw` spells, because ONE Swift reader looks them up.
+// Two declarations rather than one shared header: the two targets have no
+// dependency on each other, and inventing a third target to hold two strings
+// would be worse than a test that pins them equal
+// (`theTwoPerCallBridgesSpellOneKey`).
+NSString *const CDLBridgeCodeKey = @"com.takeshot.bridge-code";
+NSString *const CDLBridgeDetailKey = @"com.takeshot.bridge-detail";
+
+/// One place the three keys of a bridge error are assembled, so a site cannot
+/// state a sentence and forget the fact beside it.
+///
+/// `detail` is nil for every code whose sentence takes no argument, and the key
+/// is then absent rather than empty: an empty string spliced into `%@` reads as
+/// a bug, and a missing one is what `BridgeUnavailable` already handles.
+static NSError *CDLMakeError(NSInteger errorCode, NSString *bridgeCode,
+                             NSString *english, NSString *_Nullable detail) {
+    NSMutableDictionary<NSString *, id> *info =
+        [@{NSLocalizedDescriptionKey : english,
+           CDLBridgeCodeKey : bridgeCode} mutableCopy];
+    if (detail != nil) {
+        info[CDLBridgeDetailKey] = detail;
+    }
+    return [NSError errorWithDomain:CDLErrorDomain
+                               code:errorCode
+                           userInfo:info];
+}
+
 @implementation CDLDeviceInfo
 @end
 
@@ -536,19 +573,18 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     _deckLink = CDLFindDevice(deviceID);
     if (!_deckLink) {
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:1 userInfo:@{
-                NSLocalizedDescriptionKey :
-                    [NSString stringWithFormat:@"Device \"%@\" not found", deviceID]
-            }];
+            *error = CDLMakeError(
+                1, CDLUnavailableDeviceMissing,
+                [NSString stringWithFormat:@"Device \"%@\" not found", deviceID],
+                deviceID);
         }
         return NO;
     }
     if (_deckLink->QueryInterface(IID_IDeckLinkInput, (void **)&_input) != S_OK) {
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:2 userInfo:@{
-                NSLocalizedDescriptionKey : @"Device does not support capture"
-            }];
+            *error = CDLMakeError(2, CDLUnavailableWrongDevice,
+                                  @"Device does not support capture", nil);
         }
         return NO;
     }
@@ -608,10 +644,11 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:3 userInfo:@{
-                NSLocalizedDescriptionKey : @"Failed to open video input "
-                    @"(the input may be in use by another application)"
-            }];
+            *error = CDLMakeError(
+                3, CDLUnavailableDeviceBusy,
+                @"Failed to open video input "
+                @"(the input may be in use by another application)",
+                nil);
         }
         return NO;
     }
@@ -625,9 +662,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         }
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:4 userInfo:@{
-                NSLocalizedDescriptionKey : @"Failed to start capture streams"
-            }];
+            *error = CDLMakeError(4, CDLUnavailableRuntimeRefused,
+                                  @"Failed to start capture streams", nil);
         }
         return NO;
     }
@@ -1055,11 +1091,11 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     _deckLink = CDLFindDevice(deviceID);
     if (!_deckLink) {
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:10 userInfo:@{
-                NSLocalizedDescriptionKey :
-                    [NSString stringWithFormat:@"Output device \"%@\" not found",
-                                               deviceID]
-            }];
+            *error = CDLMakeError(
+                10, CDLUnavailableDeviceMissing,
+                [NSString stringWithFormat:@"Output device \"%@\" not found",
+                                           deviceID],
+                deviceID);
         }
         return nil;
     }
@@ -1068,9 +1104,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         _output = NULL;
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:11 userInfo:@{
-                NSLocalizedDescriptionKey : @"Device does not support playout"
-            }];
+            *error = CDLMakeError(11, CDLUnavailableWrongDevice,
+                                  @"Device does not support playout", nil);
         }
         return nil;
     }
@@ -1098,11 +1133,14 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
     if (!chosen) {
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:12 userInfo:@{
-                NSLocalizedDescriptionKey : [NSString
-                    stringWithFormat:@"No %dx%d@%.3f output mode on this device",
-                                     width, height, frameRate]
-            }];
+            NSString *raster =
+                [NSString stringWithFormat:@"%dx%d@%.3f", width, height,
+                                           frameRate];
+            *error = CDLMakeError(
+                12, CDLUnavailableModeUnsupported,
+                [NSString stringWithFormat:
+                              @"No %@ output mode on this device", raster],
+                raster);
         }
         return nil;
     }
@@ -1112,10 +1150,9 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         != S_OK) {
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:13 userInfo:@{
-                NSLocalizedDescriptionKey :
-                    @"Failed to open video output (output may be in use)"
-            }];
+            *error = CDLMakeError(
+                13, CDLUnavailableDeviceBusy,
+                @"Failed to open video output (output may be in use)", nil);
         }
         return nil;
     }
@@ -1125,9 +1162,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
         _frame = NULL;
         [self stop];
         if (error) {
-            *error = [NSError errorWithDomain:CDLErrorDomain code:14 userInfo:@{
-                NSLocalizedDescriptionKey : @"Failed to allocate an output frame"
-            }];
+            *error = CDLMakeError(14, CDLUnavailableRuntimeRefused,
+                                  @"Failed to allocate an output frame", nil);
         }
         return nil;
     }
@@ -1239,9 +1275,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
 
 - (BOOL)startWithDeviceID:(NSString *)deviceID error:(NSError **)error {
     if (error) {
-        *error = [NSError errorWithDomain:CDLErrorDomain code:100 userInfo:@{
-            NSLocalizedDescriptionKey : @"Built without DeckLink SDK"
-        }];
+        *error = CDLMakeError(100, CDLUnavailableNotBuilt,
+                              @"Built without the DeckLink SDK", nil);
     }
     return NO;
 }
@@ -1261,9 +1296,8 @@ static CDLDiscoveryCallback *sDiscoveryCallback = NULL;
                                     error:(NSError **)error {
     (void)deviceID; (void)width; (void)height; (void)frameRate;
     if (error) {
-        *error = [NSError errorWithDomain:CDLErrorDomain code:0 userInfo:@{
-            NSLocalizedDescriptionKey : @"Built without the DeckLink SDK"
-        }];
+        *error = CDLMakeError(0, CDLUnavailableNotBuilt,
+                              @"Built without the DeckLink SDK", nil);
     }
     return nil;
 }

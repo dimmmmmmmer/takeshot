@@ -1,5 +1,7 @@
 import CDataChannel
+import CDeckLink
 import CNDI
+import CR3D
 import CSRT
 import Foundation
 
@@ -23,11 +25,18 @@ import Foundation
 /// Why one of the SDK bridges cannot be used: the bridge's FACT, the bridge's
 /// own English sentence, and the detail a code may need.
 ///
-/// Deliberately one type for all three bridges rather than one each. They ask
-/// the same question and their codes are drawn from the same four states any
-/// dlopen-ed SDK can be in (see `CSRTUnavailableNotBuilt` and its siblings), so
-/// a second copy of this would be a second place for the fallback rule to be
-/// got wrong.
+/// Deliberately one type for all six bridges rather than one each. They ask
+/// the same question and most of their codes are drawn from the same four
+/// states any dlopen-ed SDK can be in (see `CSRTUnavailableNotBuilt` and its
+/// siblings), so a second copy of this would be a second place for the fallback
+/// rule to be got wrong.
+///
+/// **Two ways a bridge states its fact, and the type does not care which.**
+/// libsrt, NDI, libdatachannel and RED's SDK are process-wide: the bridge is
+/// usable or it is not, so a class method answers and `init?(reason:code:…)`
+/// reads it. DeckLink and Blackmagic RAW fail per CALL — a board that is not
+/// plugged in, a clip that will not open — so there is nothing process-wide to
+/// ask and the fact rides on the `NSError`, which is what `init(error:)` is.
 struct BridgeUnavailable: Equatable, Sendable {
     /// The stable identifier the words are keyed off, as the bridge states it
     /// — `"srt_not_built"`, `"ndi_runtime_missing"`, and so on.
@@ -42,14 +51,22 @@ struct BridgeUnavailable: Equatable, Sendable {
     /// The bridge's own English. What a diagnostics bundle carries, and what
     /// this shows for a code this build has no words for.
     let english: String
-    /// The paths the bridge's dlopen looked at. Empty for every code but
-    /// `…RuntimeMissing`, and empty in a stub build, which searched nowhere.
-    let searchPaths: [String]
+    /// The values this code's sentence splices into its single `%@`, joined
+    /// with ", ". Empty for every code whose sentence takes no argument, which
+    /// is most of them.
+    ///
+    /// One field rather than one per kind, because there is one splice rule and
+    /// a second field would be a second way to get it wrong. What arrives here
+    /// is whatever the code is defined to carry: the paths a dlopen looked at
+    /// for `…RuntimeMissing` (empty in a stub build, which searched nowhere), a
+    /// device id for `decklink_device_missing`, a raster for
+    /// `decklink_mode_unsupported`, a file name for `braw_clip_unreadable`.
+    let details: [String]
 
-    init(code: String?, english: String, searchPaths: [String] = []) {
+    init(code: String?, english: String, details: [String] = []) {
         self.code = code
         self.english = english
-        self.searchPaths = searchPaths
+        self.details = details
     }
 
     /// Built from one bridge's three answers; nil when the bridge is usable.
@@ -58,10 +75,39 @@ struct BridgeUnavailable: Equatable, Sendable {
     /// any of this: a bridge cannot be unavailable with nothing to say, so
     /// there is no state where the app has a code and no sentence to fall back
     /// on.
-    init?(reason: String?, code: String?, searchPaths: [String]) {
+    init?(reason: String?, code: String?, details: [String] = []) {
         guard let reason else { return nil }
-        self.init(code: code, english: reason, searchPaths: searchPaths)
+        self.init(code: code, english: reason, details: details)
     }
+
+    /// A per-call bridge failure, read off the `NSError` it arrived as.
+    ///
+    /// Not failable, and that is the whole point: EVERY error that reaches an
+    /// operator's surface goes through here, including the ones no bridge
+    /// raised — a `MockCaptureBackend` refusal, an R3D clip the SDK would not
+    /// take, a CinemaDNG folder with nothing in it. Those carry no code, so
+    /// `code` is nil, so `localizedText` is `localizedDescription` and the
+    /// surface reads exactly what it read before. The fallback is not a
+    /// separate path a caller has to remember; it is the same path.
+    init(error: Error) {
+        let error = error as NSError
+        let code: String? = error.userInfo[Self.codeKey] as? String
+        let detail: String? = error.userInfo[Self.detailKey] as? String
+        self.init(code: code, english: error.localizedDescription,
+                  details: detail.map { [$0] } ?? [])
+    }
+
+    /// The `userInfo` key a per-call bridge states its code under.
+    ///
+    /// Spelled `CDLBridgeCodeKey` here and `CBRBridgeCodeKey` in `CBraw`, and
+    /// the two are the same string — one reader means one key, and two Obj-C
+    /// targets that have no dependency on each other mean two declarations of
+    /// it. Reading DeckLink's constant rather than a literal keeps this side
+    /// free of the string entirely; `theTwoPerCallBridgesSpellOneKey` is what
+    /// keeps the other side honest.
+    static var codeKey: String { CDLBridgeCodeKey }
+    /// The companion key, same arrangement.
+    static var detailKey: String { CDLBridgeDetailKey }
 
     /// The .strings key a code is looked up under. One prefix so the whole
     /// vocabulary sorts together in both files and a translator can see at a
@@ -88,7 +134,7 @@ struct BridgeUnavailable: Equatable, Sendable {
         // stray `%` is still wrong, and nothing here can see that — it is a
         // translator's error in a string this app supplies the format for.
         guard words.contains("%@") else { return words }
-        return String(format: words, searchPaths.joined(separator: ", "))
+        return String(format: words, details.joined(separator: ", "))
     }
 }
 
@@ -101,20 +147,32 @@ extension BridgeUnavailable {
     static var srt: BridgeUnavailable? {
         BridgeUnavailable(reason: CSRTSender.unavailableReason(),
                           code: CSRTSender.unavailableCode(),
-                          searchPaths: CSRTSender.runtimeSearchPaths())
+                          details: CSRTSender.runtimeSearchPaths())
     }
 
     /// NDI's answer, or nil when a source can be announced.
     static var ndi: BridgeUnavailable? {
         BridgeUnavailable(reason: CNDSender.unavailableReason(),
                           code: CNDSender.unavailableCode(),
-                          searchPaths: CNDSender.runtimeSearchPaths())
+                          details: CNDSender.runtimeSearchPaths())
     }
 
     /// WebRTC's answer, or nil when an offer can be answered.
     static var webrtc: BridgeUnavailable? {
         BridgeUnavailable(reason: CDCPeerConnection.unavailableReason(),
                           code: CDCPeerConnection.unavailableCode(),
-                          searchPaths: CDCPeerConnection.runtimeSearchPaths())
+                          details: CDCPeerConnection.runtimeSearchPaths())
+    }
+
+    /// R3D's answer, or nil when an .r3d clip can be opened.
+    ///
+    /// The fourth process-wide bridge and the odd one out: RED's SDK is
+    /// statically LINKED rather than dlopen-ed, so there is no candidate list
+    /// to name and its `runtime_missing` sentence points at an environment
+    /// variable instead. No `details`, and `bridge_r3d_runtime_missing`
+    /// therefore takes no argument.
+    static var r3d: BridgeUnavailable? {
+        BridgeUnavailable(reason: CR3DClip.unavailableReason(),
+                          code: CR3DClip.unavailableCode())
     }
 }

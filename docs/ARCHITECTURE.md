@@ -872,10 +872,10 @@ column of `takeshot-log.csv` and of the ALE. A paragraph an OPERATOR reads on
 screen is localized wherever it was written, `CaptureCore` and the Obj-C
 bridges included. Where those two meet, the module that knows states a value
 the app can put words to and keeps its English beside it: `PipelineAlarm`
-carries a case and a `message` (`AlarmLocalization`), each bridge carries an
-`unavailableCode` and an `unavailableReason` (`BridgeUnavailable`). The English
-is what an app with no words for a case or a code falls back to, so a failure
-this build has never heard of is a sentence rather than a blank row.
+carries a case and a `message` (`AlarmLocalization`), each bridge carries a
+CODE beside its English (`BridgeUnavailable`). The English is what an app with
+no words for a case or a code falls back to, so a failure this build has never
+heard of is a sentence rather than a blank row.
 
 ### What crosses the CaptureCore boundary, and what does not
 
@@ -925,9 +925,71 @@ A bridge is the one place here that can grow a failure mode the app layer has
 never heard of, and `BridgeUnavailable.localizedText` answers an unrecognised
 code — or a reason that arrived with no code at all — with the bridge's own
 English. Never a blank row. `BridgeLocalizationTests` holds that from both
-directions, and holds the English wording as the bridge's own sentence
-character for character, so the pass that moved the choosing is visibly not a
-pass that changed the words.
+directions, and for the three network bridges it holds the English wording as
+the bridge's own sentence character for character, so the pass that moved the
+choosing is visibly not a pass that changed the words.
+
+#### The three bridges that fail per CALL
+
+`CDeckLink`, `CBraw` and `CR3D` came second and one of them is shaped
+differently. libsrt, NDI, libdatachannel and RED's SDK are process-wide — the
+bridge is usable or it is not, so a class method answers and `CR3DClip` simply
+grew an `unavailableCode` beside its `unavailableReason` like the others. A
+BOARD is not: it is present or absent, free or held, the right kind or the
+wrong one, per call. So `CDeckLink` and `CBraw` state their fact on the
+`NSError` instead, under one `userInfo` key (`CDLBridgeCodeKey`, spelled
+identically as `CBRBridgeCodeKey` because two targets with no dependency on
+each other cannot share a header — `theTwoPerCallBridgesSpellOneKey` pins it),
+with a second key for the one value a sentence splices in: a device id, a
+`W×H@fps`, a file name. `BridgeUnavailable(error:)` reads them, and it is NOT
+failable: every failure reaching an operator's surface goes through it,
+including the ones no bridge raised, and those carry no code and render their
+own English. The fallback is the same path rather than one a caller has to
+remember.
+
+**Where they land is the reason this mattered.** A settings row is visited
+once; `CaptureController+Capture.startCapture` writes the MAIN WINDOW's error
+banner, which an operator reads while a camera is rolling — and two lines above
+it the same file already said `L("device_disconnected")`. The other three
+surfaces are the hardware-output toast (`+Windows`), a multicam channel's toast
+(`+Multicam`) and the RAW player's open failure (`RawPlayback`).
+
+**The vocabulary grew by five, not by eighteen.** DeckLink's eleven English
+sentences map onto six codes and BRAW's four onto four, of which
+`not_built`, `runtime_missing` and `runtime_refused` are the library
+vocabulary reused unchanged — "a complete one declined" is the same dead end
+whether the thing that said it is libsrt or Desktop Video. The five that are
+new are new because a board is hardware: `decklink_device_missing` (connect
+it), `decklink_device_busy` (the fix is in another application),
+`decklink_wrong_device` (a capture-only board cannot feed a monitor),
+`decklink_mode_unsupported` (change the raster, not the device) and
+`braw_clip_unreadable` (look at the card, not at the machine). None is
+answered by installing anything, which is what the four borrowed codes all
+assume. `CR3D` added nothing at all: its seven sentences are four borrowed
+codes, because a statically linked SDK with a dlopen-ed dylib is in exactly
+the states any library is in.
+
+Four DeckLink codes stand for an input message AND its output twin, and
+nothing is lost by that: `CDLCapture`'s errors reach the banner and
+`CDLPlayout`'s reach the "Output:" toast, so within one surface a code still
+means exactly one sentence. What folds is the direction, which the surface has
+already told the operator.
+
+**These three are also the first bridge strings whose English is deliberately
+NOT the bridge's own sentence.** It cannot be, for the folded codes; and for
+the rest it should not be, because a board says "Failed to allocate an output
+frame" and RED's SDK says "built without RED's R3D SDK (vendor/R3DSDK)" —
+diagnostics, not something a person on set can act on. What
+`theMediaBridgesEnglishIsWrittenForAnOperator` pins instead is that every one
+of the fourteen lines names a remedy. The bridge's own words stay reachable as
+`english`, which is what `unavailableReason`, `localizedDescription` and the
+diagnostics bundle carry, and what a code with no line falls back to.
+
+`RawPlayback.r3dUnavailableText()` is gone with this. It was
+`L("r3d_sdk_unavailable")` plus `" — "` plus `CR3DClip.unavailableReason()` — a
+localized label glued to an English detail, which is the defect in miniature —
+and it is now `BridgeUnavailable.r3d?.localizedText`: one sentence, chosen
+once.
 
 `/live` needed nothing of its own for this. Every string on that page is
 resolved by `L()` on the Mac and spliced into the markup when it is served

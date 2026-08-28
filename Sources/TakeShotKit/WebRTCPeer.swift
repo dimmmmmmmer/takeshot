@@ -151,7 +151,7 @@ final class WebRTCPeer: WebRTCPeering, @unchecked Sendable {
             // NSError to carry it.
             return .unavailable(BridgeUnavailable(
                 code: CDCPeerConnection.unavailableCode(), english: message,
-                searchPaths: CDCPeerConnection.runtimeSearchPaths()))
+                details: CDCPeerConnection.runtimeSearchPaths()))
         case .offer: return .offer(message)
         default: return .runtime(message)
         }
