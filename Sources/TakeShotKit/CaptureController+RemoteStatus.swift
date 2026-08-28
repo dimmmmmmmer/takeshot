@@ -64,8 +64,17 @@ extension CaptureController {
     /// a marker placed on the clip being reviewed — including from the phone
     /// itself — never changed the number, which is the "shows 0 even when I
     /// place one" of owner item 28.
+    ///
+    /// **Mirroring means asking the same rule, not spelling out the same
+    /// words.** This was written as `viewerMode == .playback, playbackURL != nil`
+    /// while `addMarker` moved to `isReviewingSingleClip`, and the two then
+    /// disagreed about exactly one state — a grid, where `playbackURL` still
+    /// names the parked take. The phone's footer counted that take's flags, and
+    /// over a grid with the camera rolling it kept counting them while the press
+    /// it claims to describe was landing on the take being written: the same
+    /// "shows 0 even when I place one" report, from the other side.
     private var remoteMarkerCount: Int {
-        if viewerMode == .playback, playbackURL != nil {
+        if isReviewingSingleClip {
             return playbackMarkers.count
         }
         if isRecording { return recordingMarkers.count }

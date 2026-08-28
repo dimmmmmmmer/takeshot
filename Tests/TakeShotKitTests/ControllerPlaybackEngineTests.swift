@@ -249,7 +249,14 @@ import Testing
             controller.takes[0].markers = [
                 TakeMarker(seconds: 0, timecodeText: "10:00:00:00")
             ]
-            try #require(controller.playbackMarkers.count == 1)
+            // Asked of the TAKE, not of `playbackMarkers`: the property is now
+            // empty over a grid (it stopped lending the parked take's list to
+            // whatever is on screen), so the thing this test needs to establish
+            // — that there is a real marker here to lose — has to be asserted
+            // where it actually lives.
+            try #require(controller.takes[0].markers.count == 1)
+            try #require(controller.playbackMarkers.isEmpty,
+                         "the grid is still showing the parked take's list")
 
             controller.removeNearestMarker()
             let hotkeys = HotkeyManager(defaults: InMemoryDefaults())

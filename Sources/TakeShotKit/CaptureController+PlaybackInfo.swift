@@ -59,6 +59,27 @@ extension CaptureController {
                         fps: tc.fps, isDropFrame: start.isDropFrame).description
     }
 
+    /// What the raster-and-rate badge states for the picture under review, or
+    /// nil to let the live badge answer instead.
+    ///
+    /// The neighbour of `playbackTimecodeText`, and it was wrong over a grid in
+    /// exactly the same way: the badge read the stored `playbackFormatText`,
+    /// which `loadPlaybackInfo` fills from the file the SINGLE player opened, so
+    /// with four takes on screen the top-right readout stated the raster and
+    /// rate of the one parked underneath them. 2–4 takes need not share either
+    /// number — mixing a 4K B-cam into a 1080 comparison is a reason to open one
+    /// — so there is nothing to state and it says so, the way the timecode does.
+    ///
+    /// Non-nil for the grid on purpose: nil here means "the live badge answers",
+    /// and falling through to the camera's own format while a comparison is on
+    /// screen would trade a wrong clip's number for a wrong source's.
+    var playbackFormatBadgeText: String? {
+        switch playbackEngine {
+        case .grid: return formatFallbackText
+        case .raw, .single: return playbackFormatText
+        }
+    }
+
     /// TC text for an arbitrary player position (transport readouts).
     func playbackTC(atSeconds seconds: Double) -> String {
         let fps = max(1, playbackFPS)

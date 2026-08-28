@@ -29,6 +29,16 @@ extension CaptureController {
         Self.syncPlayTakeCounts.contains(syncPlayTakes.count)
     }
 
+    /// Whether the grid on screen is showing `url` in one of its tiles.
+    ///
+    /// The grid is the one place in the app that holds a clip OPEN without
+    /// `playbackURL` naming it, so a file leaving the session has to be asked
+    /// about here as well — see `trashAndRelease`, whose release list is
+    /// otherwise complete and did not have the grid on it.
+    func syncPlayShows(_ url: URL) -> Bool {
+        syncPlay?.tiles.contains { $0.source.url == url } ?? false
+    }
+
     /// Open the selected takes side by side, transport-locked.
     func startSyncPlay() {
         guard canStartSyncPlay else { return }
@@ -49,6 +59,13 @@ extension CaptureController {
         model.setVolume(live.volume)
         syncPlay = model
         viewerMode = .playback
+        // The tap and the analyzers are pointed at whatever is on screen, and
+        // what is on screen has just changed without the viewer MODE changing —
+        // which is the path `applyViewerModeChange` covers and the reason these
+        // are called here as well. Coming from playback (the ordinary way in:
+        // review a take, then select four) the didSet does not fire at all.
+        updateTapRunning()
+        updateScopesRunning()
     }
 
     /// Back to normal playback (Esc, the close button, a mode switch, or a
@@ -57,5 +74,10 @@ extension CaptureController {
         guard let model = syncPlay else { return }
         model.shutDown()
         syncPlay = nil
+        // …and back: the single player's picture is the one on screen again, so
+        // the tap and the analyzers have to be told before the first frame the
+        // operator judges anything by.
+        updateTapRunning()
+        updateScopesRunning()
     }
 }

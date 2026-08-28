@@ -25,7 +25,17 @@ extension CaptureController {
     /// a frame in hand; this is the same question asked before the click, and it
     /// is one rule with two surfaces (the footer's camera button and File →
     /// Grab Frame), which is why it is named here rather than at each of them.
-    var canGrabFrame: Bool { isCapturing || playbackURL != nil }
+    ///
+    /// **A sync-play grid is not a clip under review.** `startSyncPlay` leaves
+    /// `playbackURL` on the take that was open before, so the bare test was true
+    /// over a grid and the grab wrote a PNG of a file that is not on screen —
+    /// a deliverable, named and dropped beside the footage, of the wrong take.
+    /// The grid is 2–4 pictures and the app composites none of them, so there
+    /// is no frame here to write; `grabFrame` is silent for the same reason the
+    /// marker press is.
+    var canGrabFrame: Bool {
+        isCapturing || (playbackURL != nil && syncPlay == nil)
+    }
 
     /// Decode a still into Rec.709 display code values and hand it to the tap.
     func loadStill(url: URL) {
@@ -62,7 +72,14 @@ extension CaptureController {
 
     /// Grab the current frame as a PNG next to the takes. In playback it grabs the
     /// current player frame (with the LUT); otherwise the live processed frame.
+    ///
+    /// The grid is refused first, and pointedly not by falling through to the
+    /// arms below: the next one down grabs the LIVE camera, which is exactly the
+    /// "silently arming a LIVE-camera grab" the RAW/still branch inside already
+    /// exists to prevent. Silent rather than an error toast, matching the greyed
+    /// control (`canGrabFrame`) and `addMarker`'s own behaviour over a grid.
     func grabFrame() {
+        guard syncPlay == nil else { return }
         if viewerMode == .playback, playbackURL != nil {
             // RAW engine and stills have no AVPlayer item — grab what's on
             // screen instead of silently arming a LIVE-camera grab

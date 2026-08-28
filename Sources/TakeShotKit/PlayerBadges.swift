@@ -7,6 +7,14 @@ import SwiftUI
 /// read the same on every readout.
 let timecodeFallbackText = "--:--:--:--"
 
+/// What the raster-and-rate readout shows when the picture on screen has no
+/// single format to state — the sync-play grid's 2–4 takes.
+///
+/// Un-localized for the same reason `timecodeFallbackText` is: it is
+/// punctuation standing in for a number, not a sentence, and an em dash means
+/// the same thing in every language the app ships.
+let formatFallbackText = "—"
+
 /// TC readout that updates every frame — isolated so only this text
 /// re-renders at frame rate (see LiveSignal). Internal, not private: the badge
 /// that hosts it lives in `PlayerBadgeMenus.swift`.

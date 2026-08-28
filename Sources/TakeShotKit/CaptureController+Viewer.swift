@@ -44,10 +44,16 @@ extension CaptureController {
     }
 
     /// Polling playback frames is only needed when the view is actually visible.
+    ///
+    /// A grid is the case where "in playback with a clip loaded" and "the single
+    /// player's picture is on screen" come apart: `PreviewView` mounts
+    /// `SyncPlayView` and leaves the shared `ViewerSurface` out of the tree
+    /// entirely, so the tap was decoding, LUT-ing and compositing a parked take
+    /// at 60 Hz into no sink at all. It is asked through `isReviewingSingleClip`
+    /// so the reading cannot drift from the one the mount takes.
     func updateTapRunning() {
         // stills tick through the tap too (compare keeps the live half moving)
-        let loaded = playbackURL != nil && rawPlayer == nil
-        playbackTap.setRunning(viewerMode == .playback && loaded)
+        playbackTap.setRunning(isReviewingSingleClip && rawPlayer == nil)
     }
 
     /// Any scope surface visible (drives the analyzers and the badge tint).
@@ -81,14 +87,28 @@ extension CaptureController {
     }
 
     /// Route scope analysis to whichever source is actually on screen.
+    ///
+    /// **A grid is analyzed by nothing, and the last trace is dropped with it.**
+    /// The two playback analyzers asked `viewerMode == .playback`, which is true
+    /// over a grid — so with a waveform open the scopes went on measuring the
+    /// PARKED take, at its paused frame, while four other takes were on screen.
+    /// A readout that states another clip's timecode is a wrong number; a scope
+    /// that states another clip's exposure is a wrong MEASUREMENT, and it is the
+    /// one an operator judges a take by. Keeping the last trace is right when a
+    /// panel closes over a picture that is still there and wrong here, where the
+    /// picture it describes has gone — so `scopes.data` is cleared and the panel
+    /// says it is waiting, which is the same answer `playbackTimecodeText` gives
+    /// a grid.
     func updateScopesRunning() {
+        let single = isReviewingSingleClip
         pipeline.setScopesEnabled(showScopes && viewerMode == .record)
-        playbackTap.setScopesEnabled(showScopes && viewerMode == .playback)
-        rawPlayer?.scopesEnabled = showScopes && viewerMode == .playback
+        playbackTap.setScopesEnabled(showScopes && single)
+        rawPlayer?.scopesEnabled = showScopes && single
         updateScopeRegion()
         rawPlayer?.refreshScopes()
         // scopeData is kept on close — reopening shows the last picture
         // immediately instead of flashing "waiting for signal"
+        if syncPlay != nil { scopes.data = nil }
     }
 
     /// What the scopes analyze: the crop the viewer is showing.
