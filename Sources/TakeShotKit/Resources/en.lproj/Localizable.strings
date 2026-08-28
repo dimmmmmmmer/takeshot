@@ -328,11 +328,11 @@
 "ale_no_takes" = "No takes to export";
 "ale_saved" = "ALE saved: %@";
 
-"r3d_sdk_unavailable" = "R3D playback needs RED\u2019s R3D SDK";
+"r3d_sdk_unavailable" = "R3D playback needs RED’s R3D SDK";
 "r3d_edge_tc" = "Edge TC";
 "raw_color_showing" = "Showing:";
 "raw_decode_scale" = "Decoded at 1/%d for the viewer";
-"raw_camera_lut_skipped" = "Clip carries a camera 3D LUT (%@) \u2014 not applied";
+"raw_camera_lut_skipped" = "Clip carries a camera 3D LUT (%@) — not applied";
 "raw_camera_lut_applied" = "Camera 3D LUT applied (%@)";
 "raw_decode_stopped" = "Playback stopped: a frame could not be decoded";
 
@@ -1014,6 +1014,35 @@
 "bridge_webrtc_runtime_missing" = "Live video is not available: this build was made with libdatachannel but cannot find it on this machine. A release that ships it carries its own copy inside the app — see vendor/libdatachannel/README.md. Looked for: %@";
 "bridge_webrtc_runtime_incomplete" = "libdatachannel on this machine is missing entry points this app needs. Build 0.20 or newer.";
 "bridge_webrtc_runtime_no_media" = "libdatachannel on this machine was built without media support (RTC_ENABLE_MEDIA). Rebuild it with media enabled.";
+
+/* The three bridges whose reader is NOT looking at a settings row.
+
+   DeckLink's errors land in the main window's error banner while a camera is
+   rolling, and BRAW's and R3D's in the player. That changes what the sentence
+   has to be, and it is why these are the first bridge strings whose English is
+   NOT the bridge's own sentence character for character: the board says
+   "Failed to allocate an output frame", which is a diagnostic and not
+   something a person on set can act on. The bridge's own words are still what
+   `unavailableReason`, `localizedDescription` and the diagnostics bundle
+   carry, and still the fallback for a code with no line here.
+
+   Four DeckLink codes stand for an input message AND its output twin, and
+   nothing is lost: capture failures reach the banner, playout failures reach
+   the "Output:" toast, so within one surface a code still means one thing. */
+"bridge_decklink_not_built" = "This build has no DeckLink in it: it was compiled without the DeckLink SDK, so no board can be used, whatever is connected. The demo source still records takes from end to end. Building with it is described in vendor/DeckLinkSDK/README.md.";
+"bridge_decklink_device_missing" = "DeckLink device \"%@\" is not connected. Check its cable and power, or choose another device in Settings.";
+"bridge_decklink_device_busy" = "Another application is holding this DeckLink device. Quit it and try again.";
+"bridge_decklink_wrong_device" = "This DeckLink device has no connection of the kind this needs: a capture-only board cannot feed a monitor, and a monitor-only board cannot capture. Choose another device in Settings.";
+"bridge_decklink_mode_unsupported" = "This DeckLink device has no %@ output mode. Choose another output device, or run the viewer at a raster the board can send.";
+"bridge_decklink_runtime_refused" = "The DeckLink driver refused. Reconnect the device, or reinstall Blackmagic Desktop Video.";
+"bridge_braw_not_built" = "This build has no Blackmagic RAW in it: it was compiled without the BRAW SDK, so .braw clips cannot be played. Everything else works as usual, and recorded takes and CinemaDNG still open. Building with it is described in vendor/BRAWSDK/README.md.";
+"bridge_braw_runtime_missing" = "Blackmagic RAW is not installed on this Mac. Install Blackmagic RAW Player from blackmagicdesign.com, then open the clip again.";
+"bridge_braw_runtime_refused" = "Blackmagic RAW is installed and would not start a decoder. Restart the app; if it keeps happening, reinstall Blackmagic RAW Player.";
+"bridge_braw_clip_unreadable" = "Can’t open %@ — it is not a Blackmagic RAW clip this version can read, or the copy is incomplete. Copy it from the card again.";
+"bridge_r3d_not_built" = "This build has no R3D in it: it was compiled without RED’s R3D SDK, so .r3d clips cannot be played. Everything else works as usual, and .braw and CinemaDNG clips still open. Building with it is described in vendor/R3DSDK/README.md.";
+"bridge_r3d_runtime_missing" = "RED’s R3D runtime libraries are not on this Mac. Put REDR3D.dylib in the app’s Frameworks folder, or point TAKESHOT_R3D_LIBS at the folder holding it, and start the app again.";
+"bridge_r3d_runtime_incomplete" = "The REDR3D.dylib on this Mac is not the one this build needs. Replace it with the redistributable from the R3D SDK the app was built against.";
+"bridge_r3d_runtime_refused" = "RED’s R3D runtime would not start on this Mac. Restart the app; if it keeps happening, install RED’s redistributable libraries again.";
 
 /* The other three things the /live page's blocked box can say. Not bridge
    codes — these are the app's own, and they sat in English in the same box for

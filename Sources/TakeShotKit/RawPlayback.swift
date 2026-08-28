@@ -110,7 +110,8 @@ final class RawPlayerModel: ObservableObject {
                 // sentence about the app; anything else is a sentence about the
                 // clip, and the bridge writes it.
                 guard CR3DClip.isSDKAvailable() else {
-                    errorText = Self.r3dUnavailableText()
+                    errorText = BridgeUnavailable.r3d?.localizedText
+                        ?? L("r3d_sdk_unavailable")
                     return nil
                 }
                 clip = try R3DSource(url: url, scale: scale,
@@ -119,7 +120,11 @@ final class RawPlayerModel: ObservableObject {
                 clip = try DNGSequenceSource(folder: url)
             }
         } catch {
-            errorText = error.localizedDescription
+            // BRAW states a code on its `NSError` and gets the operator's own
+            // words; R3D's per-clip refusals and the CinemaDNG reader state
+            // none and render their English here, which is the fallback doing
+            // its job rather than a gap left open.
+            errorText = BridgeUnavailable(error: error).localizedText
             return nil
         }
         self.url = url
@@ -134,15 +139,6 @@ final class RawPlayerModel: ObservableObject {
         // track's rate — see `timecodeFrameRate`.
         startTimecode = Self.parseTimecode(
             clip.startTimecodeText, fps: Int(timecodeFrameRate.rounded()))
-    }
-
-    /// Why R3D playback is not available in this build, in the operator's
-    /// language, with the bridge's English detail appended — the same split the
-    /// rest of the app uses for core errors.
-    static func r3dUnavailableText() -> String {
-        let sentence = L("r3d_sdk_unavailable")
-        guard let reason = CR3DClip.unavailableReason() else { return sentence }
-        return "\(sentence) — \(reason)"
     }
 
     deinit {

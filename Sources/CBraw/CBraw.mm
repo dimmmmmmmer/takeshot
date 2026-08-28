@@ -31,6 +31,32 @@
 
 static NSString *const CBRErrorDomain = @"com.takeshot.cbraw";
 
+// Defined once for both the real bridge and the stub — the stub raises one of
+// them too, and a second spelling of a code is a string that silently stops
+// matching.
+NSString *const CBRUnavailableNotBuilt = @"braw_not_built";
+NSString *const CBRUnavailableRuntimeMissing = @"braw_runtime_missing";
+NSString *const CBRUnavailableRuntimeRefused = @"braw_runtime_refused";
+NSString *const CBRUnavailableClipUnreadable = @"braw_clip_unreadable";
+
+NSString *const CBRBridgeCodeKey = @"com.takeshot.bridge-code";
+NSString *const CBRBridgeDetailKey = @"com.takeshot.bridge-detail";
+
+/// One place the three keys of a bridge error are assembled — see the twin in
+/// `CDeckLink.mm`.
+static NSError *CBRMakeError(NSInteger errorCode, NSString *bridgeCode,
+                             NSString *english, NSString *_Nullable detail) {
+    NSMutableDictionary<NSString *, id> *info =
+        [@{NSLocalizedDescriptionKey : english,
+           CBRBridgeCodeKey : bridgeCode} mutableCopy];
+    if (detail != nil) {
+        info[CBRBridgeDetailKey] = detail;
+    }
+    return [NSError errorWithDomain:CBRErrorDomain
+                               code:errorCode
+                           userInfo:info];
+}
+
 #if TAKESHOT_HAS_BRAW_SDK
 
 #pragma mark - Factory (shared, loaded once)
@@ -188,25 +214,18 @@ class CBRCallback : public IBlackmagicRawCallback {
     IBlackmagicRawFactory *factory = CBRSharedFactory();
     if (factory == NULL) {
         if (error) {
-            *error = [NSError
-                errorWithDomain:CBRErrorDomain
-                           code:1
-                       userInfo:@{
-                           NSLocalizedDescriptionKey :
-                               @"Blackmagic RAW runtime not found — install "
-                               @"Blackmagic RAW Player (blackmagicdesign.com)"
-                       }];
+            *error = CBRMakeError(
+                1, CBRUnavailableRuntimeMissing,
+                @"Blackmagic RAW runtime not found — install "
+                @"Blackmagic RAW Player (blackmagicdesign.com)",
+                nil);
         }
         return nil;
     }
     if (factory->CreateCodec(&_codec) != S_OK || _codec == NULL) {
         if (error) {
-            *error = [NSError errorWithDomain:CBRErrorDomain
-                                         code:2
-                                     userInfo:@{
-                                         NSLocalizedDescriptionKey :
-                                             @"BRAW codec creation failed"
-                                     }];
+            *error = CBRMakeError(2, CBRUnavailableRuntimeRefused,
+                                  @"BRAW codec creation failed", nil);
         }
         return nil;
     }
@@ -216,14 +235,11 @@ class CBRCallback : public IBlackmagicRawCallback {
         _codec->Release();
         _codec = NULL;
         if (error) {
-            *error = [NSError
-                errorWithDomain:CBRErrorDomain
-                           code:3
-                       userInfo:@{
-                           NSLocalizedDescriptionKey : [NSString
-                               stringWithFormat:@"Can't open BRAW clip %@",
-                                                path.lastPathComponent]
-                       }];
+            *error = CBRMakeError(
+                3, CBRUnavailableClipUnreadable,
+                [NSString stringWithFormat:@"Can't open BRAW clip %@",
+                                           path.lastPathComponent],
+                path.lastPathComponent);
         }
         return nil;
     }
@@ -315,14 +331,10 @@ class CBRCallback : public IBlackmagicRawCallback {
                                 error:(NSError **)error {
     (void)path;
     if (error) {
-        *error = [NSError
-            errorWithDomain:CBRErrorDomain
-                       code:0
-                   userInfo:@{
-                       NSLocalizedDescriptionKey :
-                           @"Built without the Blackmagic RAW SDK "
-                           @"(vendor/BRAWSDK/include)"
-                   }];
+        *error = CBRMakeError(0, CBRUnavailableNotBuilt,
+                              @"Built without the Blackmagic RAW SDK "
+                              @"(vendor/BRAWSDK/include)",
+                              nil);
     }
     return nil;
 }

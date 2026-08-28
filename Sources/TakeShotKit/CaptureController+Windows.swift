@@ -51,7 +51,8 @@ extension CaptureController {
             do {
                 mirrors.playout = try PlayoutFeeder.factory(board, 1920, 1080, 25)
             } catch {
-                lastError = L("toast_output_failed", error.localizedDescription)
+                lastError = L("toast_output_failed",
+                              BridgeUnavailable(error: error).localizedText)
             }
         }
         wireDisplayMirrors()

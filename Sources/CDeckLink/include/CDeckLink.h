@@ -3,6 +3,62 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Why a DeckLink call failed, as stable identifiers rather than as prose —
+/// the same split `CSRTUnavailableNotBuilt` and its siblings make, and read by
+/// the same `BridgeUnavailable`.
+///
+/// Named for what the READER has to do, never for what the sentence says, and
+/// deliberately six against the eleven English sentences they stand for. Four
+/// of them are shared by an input message and its output twin, and nothing is
+/// lost by that: `CDLCapture`'s errors reach the main window's banner and
+/// `CDLPlayout`'s reach the "Output:" toast, so within ONE surface a code still
+/// stands for exactly one sentence. What folds is the direction, which the
+/// surface has already told the operator.
+///
+/// None of them names a driver version, a product or a path — those live in
+/// the prose, and the prose changes.
+///
+/// Where a board differs from a dlopen-ed library is that four of these are
+/// about HARDWARE rather than about a binary, which is why four are new rather
+/// than borrowed: a device that is not plugged in, a device held by another
+/// application, a device of the wrong kind and a raster the board cannot make
+/// are four different things to go and change, and none of them is answered by
+/// installing anything. The other two are borrowed unchanged.
+extern NSString *const CDLUnavailableNotBuilt;
+/// The board named is not attached — plug it in, or choose one that is.
+/// Carries the device id (`CDLBridgeDetailKey`).
+extern NSString *const CDLUnavailableDeviceMissing;
+/// The board is attached and something else holds it. The fix is in the OTHER
+/// application, which is what makes it its own sentence: nothing in this app,
+/// and no other device, changes the answer.
+extern NSString *const CDLUnavailableDeviceBusy;
+/// The board is attached and free and is the wrong KIND — a monitor-only
+/// device asked to capture, a capture-only device asked to feed a monitor.
+/// Choose a device that has the connection.
+extern NSString *const CDLUnavailableWrongDevice;
+/// The board is right and the PICTURE asked of it is not one of its modes —
+/// change the raster or the rate, not the device. Carries `W×H@fps`
+/// (`CDLBridgeDetailKey`).
+extern NSString *const CDLUnavailableModeUnsupported;
+/// Everything was there and the driver declined anyway. Borrowed from the
+/// library bridges unchanged: "a complete one said no" is the same dead end
+/// whether the thing that said it is libsrt or Desktop Video.
+extern NSString *const CDLUnavailableRuntimeRefused;
+
+/// `userInfo` key carrying the code above.
+///
+/// A board's failures are per-call `NSError`s rather than the process-wide
+/// singleton the dlopen bridges answer with, so the fact has to ride on the
+/// error. Same string in `CBraw` — `CR3D` needs none, because RED's SDK IS
+/// process-wide and answers with `unavailableCode` like the rest — and
+/// `theTwoPerCallBridgesSpellOneKey` pins that they agree: one reader in Swift
+/// means one key, and two targets that cannot share a header mean two
+/// declarations of it.
+extern NSString *const CDLBridgeCodeKey;
+/// `userInfo` key carrying the one value a code's sentence splices in — a
+/// device id, a raster. Absent on every code whose sentence takes no argument.
+extern NSString *const CDLBridgeDetailKey;
+
 /// Description of a DeckLink device.
 @interface CDLDeviceInfo : NSObject
 @property (nonatomic, copy) NSString *name;

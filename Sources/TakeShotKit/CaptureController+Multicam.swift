@@ -111,8 +111,9 @@ extension CaptureController {
                     let name = devices.first {
                         $0.id == Self.deckLinkPrefix + rawID
                     }?.name ?? rawID
-                    lastError = Self.tagged(error.localizedDescription,
-                                            source: name)
+                    lastError = Self.tagged(
+                        BridgeUnavailable(error: error).localizedText,
+                        source: name)
                 }
             }
             extraChannels = channels

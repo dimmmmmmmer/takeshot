@@ -32,6 +32,14 @@
 
 static NSString *const CR3DErrorDomain = @"com.takeshot.cr3d";
 
+// Defined once for both the real bridge and the stub — the stub raises one of
+// them too, and a second spelling of a code is a string that silently stops
+// matching.
+NSString *const CR3DUnavailableNotBuilt = @"r3d_not_built";
+NSString *const CR3DUnavailableRuntimeMissing = @"r3d_runtime_missing";
+NSString *const CR3DUnavailableRuntimeIncomplete = @"r3d_runtime_incomplete";
+NSString *const CR3DUnavailableRuntimeRefused = @"r3d_runtime_refused";
+
 /// The scale rule. `Auto` takes the most reduction that still fills a
 /// 1080-class viewer: an assist does not need 8K pixels to judge focus, and
 /// each halving is a quarter of the decode work rather than a resize after it.
@@ -102,32 +110,48 @@ static NSString *CR3DLibraryFolder(void) {
     return nil;
 }
 
-static NSString *CR3DInitFailureText(R3DSDK::InitializeStatus status) {
+/// The sentence AND the code for one initialize status, from one switch.
+///
+/// Two switches on the same enum is exactly how a code and the sentence beside
+/// it come apart, so the code is an out-parameter rather than a function of its
+/// own. Five sentences, three codes: "not found" is one thing to do whichever
+/// status said it, and a version mismatch and a dylib that will not load are
+/// both "the copy on this machine is not the one this build needs".
+static NSString *CR3DInitFailureText(R3DSDK::InitializeStatus status,
+                                     NSString *__strong *codeOut) {
     switch (status) {
         case R3DSDK::ISR3DSDKLibraryNotFound:
         case R3DSDK::ISInvalidPath:
+            *codeOut = CR3DUnavailableRuntimeMissing;
             return @"REDR3D.dylib not found";
         case R3DSDK::ISLibraryVersionMismatch:
+            *codeOut = CR3DUnavailableRuntimeIncomplete;
             return @"REDR3D.dylib is a different version than this build";
         case R3DSDK::ISInvalidR3DSDKLibrary:
+            *codeOut = CR3DUnavailableRuntimeIncomplete;
             return @"REDR3D.dylib could not be loaded";
         case R3DSDK::ISR3DSDKLibraryInitializeFailed:
+            *codeOut = CR3DUnavailableRuntimeRefused;
             return @"the R3D runtime failed to initialize";
         default:
+            *codeOut = CR3DUnavailableRuntimeRefused;
             return [NSString stringWithFormat:@"R3D runtime error %d",
                                               (int)status];
     }
 }
 
-static BOOL CR3DInitialized(NSString *_Nullable *_Nullable reasonOut) {
+static BOOL CR3DInitialized(NSString *_Nullable *_Nullable reasonOut,
+                            NSString *_Nullable *_Nullable codeOut) {
     static BOOL ok = NO;
     static NSString *reason = nil;
+    static NSString *code = nil;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
       NSString *folder = CR3DLibraryFolder();
       if (folder == nil) {
           reason = @"RED's R3D runtime libraries (REDR3D.dylib) were not found "
                    @"— set TAKESHOT_R3D_LIBS or bundle them in Frameworks/";
+          code = CR3DUnavailableRuntimeMissing;
           return;
       }
       // OPTION_RED_NONE: CPU decoding only. GPU decode needs REDMetal/REDCuda
@@ -136,13 +160,16 @@ static BOOL CR3DInitialized(NSString *_Nullable *_Nullable reasonOut) {
       R3DSDK::InitializeStatus status =
           R3DSDK::InitializeSdk(folder.fileSystemRepresentation, OPTION_RED_NONE);
       if (status != R3DSDK::ISInitializeOK) {
-          reason = CR3DInitFailureText(status);
+          reason = CR3DInitFailureText(status, &code);
           return;
       }
       ok = YES;
     });
     if (reasonOut != NULL) {
         *reasonOut = reason;
+    }
+    if (codeOut != NULL) {
+        *codeOut = code;
     }
     return ok;
 }
@@ -266,12 +293,17 @@ static R3DSDK::VideoDecodeMode CR3DDecodeMode(uint32_t divisor) {
 }
 
 + (BOOL)isSDKAvailable {
-    return CR3DInitialized(NULL);
+    return CR3DInitialized(NULL, NULL);
 }
 
 + (nullable NSString *)unavailableReason {
     NSString *reason = nil;
-    return CR3DInitialized(&reason) ? nil : reason;
+    return CR3DInitialized(&reason, NULL) ? nil : reason;
+}
+
++ (nullable NSString *)unavailableCode {
+    NSString *code = nil;
+    return CR3DInitialized(NULL, &code) ? nil : code;
 }
 
 + (nullable NSString *)sdkVersion {
@@ -294,7 +326,7 @@ static R3DSDK::VideoDecodeMode CR3DDecodeMode(uint32_t divisor) {
     }
     NSString *filename = path.lastPathComponent;
     NSString *reason = nil;
-    if (!CR3DInitialized(&reason)) {
+    if (!CR3DInitialized(&reason, NULL)) {
         [self failWith:error code:1 text:reason];
         return nil;
     }
@@ -578,6 +610,10 @@ static R3DSDK::VideoDecodeMode CR3DDecodeMode(uint32_t divisor) {
 
 + (nullable NSString *)unavailableReason {
     return @"built without RED's R3D SDK (vendor/R3DSDK)";
+}
+
++ (nullable NSString *)unavailableCode {
+    return CR3DUnavailableNotBuilt;
 }
 
 + (nullable NSString *)sdkVersion {

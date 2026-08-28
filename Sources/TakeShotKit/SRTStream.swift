@@ -142,7 +142,7 @@ final class SRTStream: SRTStreamSending, @unchecked Sendable {
             // NSError to carry it.
             return .unavailable(BridgeUnavailable(
                 code: CSRTSender.unavailableCode(), english: message,
-                searchPaths: CSRTSender.runtimeSearchPaths()))
+                details: CSRTSender.runtimeSearchPaths()))
         default: return .configuration(message)
         }
     }

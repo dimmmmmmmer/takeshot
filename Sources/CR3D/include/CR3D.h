@@ -3,6 +3,21 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Why R3D playback is unavailable, as stable identifiers rather than as prose
+/// — the same split `CSRTUnavailableNotBuilt` and its siblings make, read by
+/// the same `BridgeUnavailable`.
+///
+/// All four are borrowed and none is new, which is the point: RED's SDK is
+/// statically linked and its REDR3D.dylib is dlopen-ed, so every way it can be
+/// missing is a way a library can be missing, and the four questions a reader
+/// asks of a library are already spelled. Seven English sentences map onto them
+/// — the two "not found" statuses and the folder search are one thing to do,
+/// and so are a version mismatch and a dylib that will not load.
+extern NSString *const CR3DUnavailableNotBuilt;
+extern NSString *const CR3DUnavailableRuntimeMissing;
+extern NSString *const CR3DUnavailableRuntimeIncomplete;
+extern NSString *const CR3DUnavailableRuntimeRefused;
+
 /// Resolution the R3D decoder is asked for. The SDK decodes natively at 1/1,
 /// 1/2, 1/4, 1/8 and 1/16 — a reduction is not a resize afterwards, it is less
 /// work, which is the whole reason a video-assist player wants one.
@@ -48,7 +63,16 @@ typedef NS_ENUM(NSInteger, CR3DDecodeScale) {
 + (BOOL)isSDKAvailable;
 
 /// Why `isSDKAvailable` is NO, in one sentence. nil when it is YES.
+///
+/// English, and it stays English: this is what a diagnostics bundle and
+/// `takeshot-r3d` carry, and it is the app's fallback for a code it has no
+/// words for.
 + (nullable NSString *)unavailableReason;
+
+/// The same answer as a code the app can key words off. nil exactly when
+/// `unavailableReason` is nil — the two are set together and read separately,
+/// which is the one thing that could drift silently.
++ (nullable NSString *)unavailableCode;
 
 /// The SDK's own version string, for the diagnostics bundle. nil in a stub
 /// build.

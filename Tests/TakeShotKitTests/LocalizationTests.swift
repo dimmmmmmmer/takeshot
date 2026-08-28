@@ -39,4 +39,37 @@ struct LocalizationTests {
         #expect(extra.isEmpty,
                 "no longer in the base language: \(extra.joined(separator: ", "))")
     }
+
+    /// **A lowercase `\u` escape is not decoded, and nothing else notices.**
+    ///
+    /// Foundation's .strings parser takes `\U2019` and does NOT take `’`:
+    /// it drops the backslash and leaves the four digits standing, so the
+    /// operator reads "RED​u2019s R3D SDK" and every test that only compares
+    /// two tables, or asserts a line is non-empty, passes. Two lines in this
+    /// project were shipping exactly that — one of them the live toast for a
+    /// clip whose camera LUT was withheld — and they were found by a mutation
+    /// aimed at something else entirely.
+    ///
+    /// The rule this pins is the simple one: write the character. Every other
+    /// line in both files already does, `—` and `’` included, and a literal
+    /// cannot be half-decoded.
+    @Test func noStringHidesAnUndecodedEscape() throws {
+        let bundle = Bundle.module
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                bundle.path(forResource: language, ofType: "lproj"))
+            let text: String = try String(
+                contentsOfFile: folder + "/Localizable.strings",
+                encoding: .utf8)
+            let offenders: [String] = text
+                .components(separatedBy: "\n")
+                .filter { $0.contains("\\u") }
+            #expect(offenders.isEmpty,
+                    """
+                    \(language) carries a lowercase \\u escape, which the \
+                    .strings parser leaves undecoded — write the character:
+                    \(offenders.joined(separator: "\n"))
+                    """)
+        }
+    }
 }
