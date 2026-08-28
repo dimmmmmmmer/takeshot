@@ -22,6 +22,34 @@ import Foundation
 /// is one frame stale on a monitoring surface is nothing; the cost of the pass
 /// is real.
 ///
+/// **…and that is a statement about LIVE cameras, which is why `Pacing`
+/// exists.** This composer was written for boards, where every tile is its own
+/// running signal and "one frame stale" is bounded by that signal's own frame
+/// interval. A sync-play grid is the other case — 2-4 takes being played back
+/// against ONE master transport (`SyncPlayModel`) — and two of the three
+/// assumptions above do not survive the move:
+///
+/// - **The clock tile and the top-left tile are not the same tile.** Camera 0
+///   is the clock here because on a multicam rig the main board is both. A
+///   comparison's tiles have different LENGTHS, so the first one can freeze on
+///   its last frame while the others are still rolling, and a compose paced to
+///   it would freeze the whole grid on the director's monitor while the
+///   operator watches three takes carry on. `SyncPlayModel` already names the
+///   tile that plays longest — its `anchorIndex` — for exactly this reason, and
+///   `.clock(camera:)` is how that name reaches here.
+/// - **A paused grid has no clock at all.** A stepped comparison delivers ONE
+///   frame per tile per step, in whatever order four independent 60 Hz taps
+///   happen to tick, and then nothing. Paced to one tile, every tile that
+///   ticked after it stays a step behind — permanently, and invisibly, because
+///   the operator's own screen is right. `.everyFrame` is for that: when
+///   nothing is delivering at a rate worth pacing to, there is nothing to pace,
+///   and the cost is four composes per STEP rather than four per frame
+///   interval.
+///
+/// Neither is a live-camera concern and neither changes what a live grid does:
+/// the default is `.clock(camera: 0)`, which is this file as it was written,
+/// and `CaptureController+LivePictures` never sets it.
+///
 /// The discipline is the one every other display consumer follows: the display
 /// queue drops a frame here and returns at once, only the newest frame per
 /// camera is kept, and the compose runs on THIS queue — never on capture, never
@@ -40,6 +68,32 @@ import Foundation
 /// one when a viewer chooses it and drops it when the last one goes
 /// (`CaptureController+LivePictures`).
 final class MultiviewComposer: @unchecked Sendable {
+    /// **What runs the compose pass** — the one concept a transport-locked grid
+    /// needed that a rig of live boards did not. See the note at the top of this
+    /// file for why there are two answers rather than one.
+    enum Pacing: Equatable, Sendable {
+        /// One tile is the clock: it composes, the others replace their tile
+        /// and wait. The live rule, and the default.
+        ///
+        /// The camera is nameable rather than fixed at 0 because the clock and
+        /// the top-left cell are two different questions — they coincide on a
+        /// multicam rig and come apart in a comparison, where the tile that
+        /// plays longest is the only one guaranteed to still be delivering.
+        case clock(camera: Int)
+        /// No tile is running at a rate worth pacing to, so every arrival
+        /// composes. What a PAUSED comparison needs: its tiles deliver once
+        /// each per step and then stop.
+        case everyFrame
+
+        /// Whether a frame from `camera` runs the pass.
+        func composes(on camera: Int) -> Bool {
+            switch self {
+            case .clock(let clock): return camera == clock
+            case .everyFrame: return true
+            }
+        }
+    }
+
     /// Tiles across, by camera count.
     ///
     /// The same shape the `/cameras` page draws — one camera full frame, two
@@ -117,13 +171,14 @@ final class MultiviewComposer: @unchecked Sendable {
 
     // MARK: - queue-confined state
 
-    /// Newest frame per camera. Camera 0's is not kept: it is composed at once
-    /// and never waits for anything.
+    /// Newest frame per camera, camera 0's included — the canvas is sized off
+    /// it (see `compose`), and under `.everyFrame` the pass can be run by a
+    /// tile that is not camera 0 at all, so it has to be here to be found.
     private var tiles: [Int: CVPixelBuffer] = [:]
     private var cameraCount = 1
     private var scheduled = false
-    private var pendingMain: CVPixelBuffer?
     private var pendingRate = 0.0
+    private var pacing = Pacing.clock(camera: 0)
     private var stopped = false
 
     init(sink: @escaping Sink) {
@@ -146,20 +201,25 @@ final class MultiviewComposer: @unchecked Sendable {
         }
     }
 
+    /// What runs the pass. Hopped onto this queue like every other read of this
+    /// state; never called by the live grid, which keeps the default.
+    func setPacing(_ pacing: Pacing) {
+        queue.async { [self] in self.pacing = pacing }
+    }
+
     /// Offer one camera's clean frame. Called on that camera's display queue;
     /// returns at once — the hop is an async dispatch, never a wait.
     ///
-    /// `framesPerSecond` is only read from camera 0: the grid runs at the main
-    /// camera's rate by construction, and a B-cam at a different rate is a tile
-    /// that refreshes when it refreshes.
+    /// `framesPerSecond` is read from whichever camera runs the pass: under the
+    /// live rule that is camera 0 alone, so the grid runs at the main camera's
+    /// rate by construction and a B-cam at a different rate is a tile that
+    /// refreshes when it refreshes. A comparison's tiles are all offered the
+    /// master transport's one rate, so there is nothing to choose between.
     func offer(_ buffer: CVPixelBuffer, camera: Int, framesPerSecond: Double) {
         queue.async { [self] in
             guard !stopped else { return }
-            guard camera == 0 else {
-                tiles[camera] = buffer // latest wins; composed with the main one
-                return
-            }
-            pendingMain = buffer // latest wins
+            tiles[camera] = buffer // latest wins, every camera
+            guard pacing.composes(on: camera) else { return }
             pendingRate = framesPerSecond
             guard !scheduled else { return }
             scheduled = true
@@ -171,21 +231,23 @@ final class MultiviewComposer: @unchecked Sendable {
         queue.async { [self] in
             stopped = true
             tiles.removeAll()
-            pendingMain = nil
         }
     }
 
     private func composePending() {
         scheduled = false
-        guard !stopped, let pending = pendingMain else { return }
-        pendingMain = nil
-        guard let composed = compose(main: pending) else { return }
+        // The canvas is camera 0's raster whoever ran the pass, so a grid whose
+        // top-left tile has not delivered yet composes nothing rather than
+        // guessing at a size. Self-healing: the first frame from camera 0
+        // composes the tiles already waiting.
+        guard !stopped, let main = tiles[0] else { return }
+        guard let composed = compose(main: main) else { return }
         sink(composed, pendingRate)
     }
 
-    /// The grid, at the main camera's raster.
+    /// The grid, at camera 0's raster.
     ///
-    /// **The canvas follows the main camera and not the camera count**, which is what
+    /// **The canvas follows camera 0 and not the camera count**, which is what
     /// keeps a multicam switch off the encoder: a raster change rebuilds the
     /// `VTCompressionSession` and costs every watcher a gap and a keyframe
     /// (`LiveVideoEncoder.session(for:)`), and adding a B-cam should not do
@@ -209,8 +271,7 @@ final class MultiviewComposer: @unchecked Sendable {
         // would shift a picture the operator is judging exposure on.
         var image = CIImage(color: .black).cropped(to: canvas)
         for camera in 0..<cameraCount {
-            let source: CVPixelBuffer? = camera == 0 ? main : tiles[camera]
-            guard let source else { continue }
+            guard let source = tiles[camera] else { continue }
             let tile = CIImage(cvPixelBuffer: source,
                                options: [.colorSpace: NSNull()])
             image = Self.placed(tile, in: Self.cell(camera: camera,

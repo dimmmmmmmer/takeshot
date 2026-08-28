@@ -193,6 +193,63 @@ import Testing
                 "the short take looped after freezing: \(frozen)")
     }
 
+    /// A counter a stored callback can reach without capturing a local `var`.
+    private final class Pushes {
+        var count = 0
+    }
+
+    /// **What paces the composed grid picture — and why it is not tile 0.**
+    ///
+    /// The same unequal-length case as `shorterClipsFreezeOnTheirLastFrame`,
+    /// asked one level down. Tile 0 freezes at 0.6 s and tile 1 plays to 1.6, so
+    /// a grid picture paced to tile 0 would stop composing the moment it froze:
+    /// the hardware output, NDI, SRT and every browser would hold a still of a
+    /// comparison the operator can still see moving, and nothing on those
+    /// surfaces says so. The anchor is the tile that plays longest, which is the
+    /// one guaranteed to still be delivering.
+    ///
+    /// And a PAUSED comparison is paced by nothing at all: its tiles deliver one
+    /// frame each per step, in whatever order their taps happen to tick, so a
+    /// clock would leave whichever tiles arrived after it showing the previous
+    /// step — see `MultiviewComposer.Pacing`.
+    @Test func theGridIsPacedByTheTileThatPlaysLongestAndByNothingWhenPaused()
+        async throws {
+        let media = try MediaFixtures.makeDirectory("sync-pacing")
+        defer { try? FileManager.default.removeItem(at: media) }
+        let sources = try await writeSources(
+            [(MediaFixtures.startTimecode, 15), (MediaFixtures.startTimecode, 40)],
+            in: media)
+        let model = SyncPlayModel(sources: sources)
+        defer { model.shutDown() }
+
+        #expect(model.gridPacing == MultiviewComposer.Pacing.everyFrame,
+                "a comparison that has not started named a clock")
+
+        let pushes = Pushes()
+        model.onGridPacingChange = { pushes.count += 1 }
+
+        model.play()
+        #expect(model.isPlaying)
+        #expect(pushes.count >= 1,
+                "the transport changed the pacing and told nobody")
+        #expect(model.gridPacing == MultiviewComposer.Pacing.clock(camera: 1),
+                "the grid is paced by the tile that runs out first")
+
+        // …and it stays there once that tile really has frozen.
+        let froze = await ControllerWait.untilWritten {
+            model.tiles[0].player.rate == 0 && model.tiles[1].player.rate == 1
+        }
+        #expect(froze, "the short take did not freeze while the long one played")
+        #expect(model.gridPacing == MultiviewComposer.Pacing.clock(camera: 1),
+                "the clock moved onto the frozen tile")
+
+        let before = pushes.count
+        model.pause()
+        #expect(model.gridPacing == MultiviewComposer.Pacing.everyFrame,
+                "a paused comparison is still paced by one tile")
+        #expect(pushes.count > before, "pausing did not push the new pacing")
+    }
+
     /// One take audible at a time: the first by default, the speaker toggle
     /// moves it, and it is never a mix.
     @Test func exactlyOneTakeIsAudible() async throws {

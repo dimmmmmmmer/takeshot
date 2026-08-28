@@ -121,8 +121,16 @@ extension CaptureController {
     /// reference, or there is no B side and the seam divides a picture from
     /// itself — which is `compareHasBSide`, shared with the bar so the two
     /// cannot come to disagree about what a B side is.
+    ///
+    /// **And not over a comparison**, the same guard `showsCompareBar` carries
+    /// and for the same reason: the wipe is composited by the single player's
+    /// tap, which is parked underneath a sync-play grid, so the seam divides
+    /// nothing that is on screen. `PreviewView` hid it by accident — the
+    /// overlay sits inside the branch the grid replaces — while the fullscreen
+    /// player and the external display mount it beside the picture and drew a
+    /// draggable seam across four takes.
     var showsWipeHandle: Bool {
-        compareMode == .wipe && compareHasBSide
+        syncPlay == nil && compareMode == .wipe && compareHasBSide
     }
 
     /// The aspect the wipe seam rides: the composite is letterboxed into a

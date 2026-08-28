@@ -50,6 +50,78 @@ struct ViewSyncPlayTests {
         }
     }
 
+    /// **The fullscreen player draws the comparison, not the take under it.**
+    ///
+    /// `startSyncPlay` leaves the single player parked and loaded on purpose, so
+    /// every condition this window used to branch on stayed true underneath a
+    /// grid and it drew `PlaybackContent` — the parked take, frozen. Asserted at
+    /// the MOUNTS, which is where it is decidable without a screenshot: each
+    /// tile gains its own layer, and the single player's tap gains none.
+    @Test func theFullscreenPlayerMountsTheComparison() async throws {
+        try await ViewProbe.run { probe in
+            let model = try startSession(probe, count: 3)
+            defer { probe.controller.endSyncPlay() }
+            // The take the operator was reviewing before they picked three to
+            // compare. Without it the window's other branch draws a "pick a
+            // take" placeholder and the parked-take half of this test is inert.
+            probe.controller.playbackURL = probe.controller.takes.first?.url
+
+            await probe.mounted(PlaybackFullscreenView()) {
+                for tile in model.tiles {
+                    #expect(tile.tap.sinks.all().count == 1,
+                            "the fullscreen player did not mount a tile")
+                }
+                #expect(probe.controller.playbackTap.sinks.all().isEmpty,
+                        "the fullscreen player is still drawing the parked take")
+            }
+        }
+    }
+
+    /// …and so does the director's external display, for the same reason and
+    /// with the same failure: it is the surface the client watches, so a parked
+    /// take there reads as "the comparison is off".
+    @Test func theExternalDisplayMountsTheComparison() async throws {
+        try await ViewProbe.run { probe in
+            let model = try startSession(probe, count: 2)
+            defer { probe.controller.endSyncPlay() }
+            probe.controller.playbackURL = probe.controller.takes.first?.url
+
+            await probe.mounted(ExternalOutputView()) {
+                for tile in model.tiles {
+                    #expect(tile.tap.sinks.all().count == 1,
+                            "the external display did not mount a tile")
+                }
+                #expect(probe.controller.playbackTap.sinks.all().isEmpty,
+                        "the external display is still drawing the parked take")
+            }
+        }
+    }
+
+    /// The wipe seam belongs to the single player's composite, and that player
+    /// is parked underneath a comparison — so the handle divides nothing that is
+    /// on screen. `PreviewView` hid it by accident (the overlay lives inside the
+    /// branch the grid replaces); the other two mount it beside the picture and
+    /// drew a draggable seam across the tiles.
+    @Test func theWipeHandleIsNotOfferedOverAComparison() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            let takes = try GridFixture.seedTakes(controller, in: probe.root,
+                                                  count: 2)
+            MediaFixtures.silence(controller)
+            controller.viewerMode = .playback
+            controller.playbackURL = takes[0].url
+            controller.compareMode = .wipe
+            #expect(controller.showsWipeHandle,
+                    "the handle is not offered on a single clip; this is moot")
+
+            controller.selectedItems = Set(takes.map(\.url))
+            controller.startSyncPlay()
+            defer { controller.endSyncPlay() }
+            #expect(!controller.showsWipeHandle,
+                    "a draggable wipe seam is offered over the comparison")
+        }
+    }
+
     /// Ending the session releases the mounts: nothing keeps feeding layers
     /// nobody is looking at.
     @Test func closingTheSessionUnmountsTheTiles() async throws {

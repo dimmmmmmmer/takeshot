@@ -135,8 +135,26 @@ struct ModelSyncPlayAlignmentTests {
     /// Two takes sit side by side; three and four fill a 2×2.
     /// `@MainActor` because the rule lives on the view that lays the grid out.
     @Test @MainActor func gridColumnsMatchTheTileCount() {
-        #expect(SyncPlayView.columns(for: 2) == 2)
-        #expect(SyncPlayView.columns(for: 3) == 2)
-        #expect(SyncPlayView.columns(for: 4) == 2)
+        #expect(SyncPlayGrid.columns(for: 2) == 2)
+        #expect(SyncPlayGrid.columns(for: 3) == 2)
+        #expect(SyncPlayGrid.columns(for: 4) == 2)
+    }
+
+    /// **The tiles on screen and the composed picture are laid out by ONE
+    /// rule.**
+    ///
+    /// The same comparison is drawn as SwiftUI tiles for the operator and
+    /// composed into one buffer for the hardware output, NDI, SRT and every
+    /// browser. Two spellings of "how many across" is how the director's
+    /// monitor comes to disagree with the operator's screen about which take is
+    /// which — and the labels are only on one of them, so nobody downstream can
+    /// tell. Checked across the whole range rather than at the three counts the
+    /// mode offers: the agreement is the property, not the three values.
+    @Test @MainActor func theTilesAndTheComposedPictureShareOneLayoutRule() {
+        for count: Int in 1...6 {
+            #expect(SyncPlayGrid.columns(for: count)
+                        == MultiviewComposer.columns(cameras: count),
+                    "\(count) tiles: the screen and the composed picture disagree")
+        }
     }
 }

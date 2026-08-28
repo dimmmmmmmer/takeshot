@@ -82,9 +82,16 @@ struct ExternalOutputView: View {
     var body: some View {
         ZStack {
             Color.black
+            // A comparison FIRST, for the reason `PreviewView` orders it that
+            // way: `startSyncPlay` leaves the single player parked and loaded,
+            // so both conditions below stayed true underneath a grid and the
+            // director's monitor showed the parked take for its whole length.
+            if let sync = controller.syncPlay {
+                SyncPlayGrid(model: sync)
+                    .padding(8)
             // A/B is a split of two surfaces; wipe and blend arrive already
             // composited in the one picture PlaybackContent draws.
-            if controller.showsCompareSplit {
+            } else if controller.showsCompareSplit {
                 ComparePlaybackSplit()
             } else if controller.viewerMode == .playback,
                       controller.playbackURL != nil {

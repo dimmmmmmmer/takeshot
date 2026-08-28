@@ -135,19 +135,19 @@ struct MultiviewComposerTests {
     /// exposure on by a few per cent, which is the sort of thing nobody notices
     /// until a DP does.
     @Test func theComposerPutsEachCameraInItsCellAtItsOwnCodes() async throws {
-        let composed = Composed()
+        let composed = ComposedFrames()
         let composer = MultiviewComposer { buffer, rate in
             composed.record(buffer, rate: rate)
         }
         composer.setCameraCount(2)
         // The B-cam's tile arrives first and waits; camera 0 is the clock.
-        composer.offer(try Self.buffer(code: 0xC0, width: 320, height: 180),
+        composer.offer(try ComposerProbe.buffer(code: 0xC0, width: 320, height: 180),
                        camera: 1, framesPerSecond: 0)
         try await Task.sleep(for: .milliseconds(50))
         #expect(composed.count == 0,
                 "a camera that is not camera 0 composed a frame on its own")
 
-        composer.offer(try Self.buffer(code: 0x40, width: 320, height: 180),
+        composer.offer(try ComposerProbe.buffer(code: 0x40, width: 320, height: 180),
                        camera: 0, framesPerSecond: 25)
         #expect(await ControllerWait.untilWritten { composed.count > 0 },
                 "camera 0 composed nothing")
@@ -159,15 +159,15 @@ struct MultiviewComposerTests {
         // Sampled in the vertical middle of each half, where the letterbox bars
         // are not: a 16:9 source into an 8:9 cell keeps its width and gains
         // bars above and below.
-        let leftLevel: Int = Self.level(of: out, atX: 80, y: 90)
-        let rightLevel: Int = Self.level(of: out, atX: 240, y: 90)
+        let leftLevel: Int = ComposerProbe.level(of: out, atX: 80, y: 90)
+        let rightLevel: Int = ComposerProbe.level(of: out, atX: 240, y: 90)
         #expect(leftLevel == 0x40, "camera 0 read \(leftLevel)")
         #expect(rightLevel == 0xC0, "camera 1 read \(rightLevel)")
         // And the bars really are black, so a tile is never the picture beside
         // it stretched into the margin — which is the failure `letterboxed`
         // exists for, on the macOS 15 runner in particular.
-        #expect(Self.level(of: out, atX: 80, y: 3) == 0,
-                "the letterbox bar read \(Self.level(of: out, atX: 80, y: 3))")
+        #expect(ComposerProbe.level(of: out, atX: 80, y: 3) == 0,
+                "the letterbox bar read \(ComposerProbe.level(of: out, atX: 80, y: 3))")
         composer.stop()
     }
 
@@ -175,11 +175,11 @@ struct MultiviewComposerTests {
     /// then, and a scale-to-self plus a letterbox with no bars would be a whole
     /// render pass for an identity.
     @Test func oneCameraIsPassedThroughWithoutARenderPass() async throws {
-        let composed = Composed()
+        let composed = ComposedFrames()
         let composer = MultiviewComposer { buffer, rate in
             composed.record(buffer, rate: rate)
         }
-        let source: CVPixelBuffer = try Self.buffer(code: 0x77, width: 320,
+        let source: CVPixelBuffer = try ComposerProbe.buffer(code: 0x77, width: 320,
                                                     height: 180)
         composer.offer(source, camera: 0, framesPerSecond: 25)
         #expect(await ControllerWait.untilWritten { composed.count > 0 })
@@ -200,22 +200,22 @@ struct MultiviewComposerTests {
     /// display queue's whole involvement is one `dispatch_async`. It is paid
     /// only while somebody is watching the grid, and once however many phones
     /// are watching it.
-    @Test(.enabled(if: MultiviewComposerTests.timed))
+    @Test(.enabled(if: ComposerProbe.timed))
     func theComposeCostPerFrame() async throws {
         for (name, width, height) in [("1080p", 1920, 1080),
                                       ("UHD", 3840, 2160)] {
             for cameras: Int in [1, 2, 4] {
-                let composed = Composed()
+                let composed = ComposedFrames()
                 let composer = MultiviewComposer { buffer, rate in
                     composed.record(buffer, rate: rate)
                 }
                 composer.setCameraCount(cameras)
                 for camera: Int in 1..<max(1, cameras) {
-                    composer.offer(try Self.buffer(code: 0x80, width: width,
+                    composer.offer(try ComposerProbe.buffer(code: 0x80, width: width,
                                                    height: height),
                                    camera: camera, framesPerSecond: 25)
                 }
-                let lead: CVPixelBuffer = try Self.buffer(code: 0x40,
+                let lead: CVPixelBuffer = try ComposerProbe.buffer(code: 0x40,
                                                             width: width,
                                                             height: height)
                 var samples: [Double] = []
@@ -237,86 +237,5 @@ struct MultiviewComposerTests {
                 composer.stop()
             }
         }
-    }
-
-    private static var timed: Bool {
-        ProcessInfo.processInfo.environment["TAKESHOT_BENCH"] != nil
-    }
-
-    /// What the composer handed back, from its own queue.
-    private final class Composed: @unchecked Sendable {
-        private let lock = NSLock()
-        private var stored = 0
-        private var buffer: CVPixelBuffer?
-        private var storedRate = 0.0
-        private var armed = false
-        private let done = DispatchSemaphore(value: 0)
-
-        func record(_ frame: CVPixelBuffer, rate: Double) {
-            let first: Bool = lock.withLock {
-                stored += 1
-                buffer = frame
-                storedRate = rate
-                guard armed else { return false }
-                armed = false
-                return true
-            }
-            if first { done.signal() }
-        }
-
-        /// Arm, then wait for the FIRST frame after arming — the same shape,
-        /// and for the same reason, as `SRTPerformanceTests.CountingStream`: a
-        /// plain counting semaphore leaves credits behind and the next wait
-        /// returns instantly on a frame that was already composed.
-        func arm() { lock.withLock { armed = true } }
-
-        func waitForFrame() { _ = done.wait(timeout: .now() + 5) }
-
-        var count: Int { lock.withLock { stored } }
-        var latest: CVPixelBuffer? { lock.withLock { buffer } }
-        var rate: Double { lock.withLock { storedRate } }
-    }
-
-    /// A flat field of one code, as a buffer the composer can be offered.
-    private static func buffer(code: UInt8, width: Int,
-                               height: Int) throws -> CVPixelBuffer {
-        let out: CVPixelBuffer = try buffer(width: width, height: height)
-        CVPixelBufferLockBaseAddress(out, [])
-        if let base = CVPixelBufferGetBaseAddress(out) {
-            let stride = CVPixelBufferGetBytesPerRow(out)
-            let bytes = base.assumingMemoryBound(to: UInt8.self)
-            for y in 0..<height {
-                for x in 0..<width {
-                    let pixel = bytes + y * stride + x * 4
-                    pixel[0] = code
-                    pixel[1] = code
-                    pixel[2] = code
-                    pixel[3] = 0xFF
-                }
-            }
-        }
-        CVPixelBufferUnlockBaseAddress(out, [])
-        return out
-    }
-
-    private static func buffer(width: Int,
-                               height: Int) throws -> CVPixelBuffer {
-        var made: CVPixelBuffer?
-        let attributes: CFDictionary =
-            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary
-        CVPixelBufferCreate(kCFAllocatorDefault, width, height,
-                            kCVPixelFormatType_32BGRA, attributes, &made)
-        return try #require(made)
-    }
-
-    private static func level(of buffer: CVPixelBuffer, atX x: Int,
-                              y: Int) -> Int {
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return -1 }
-        let stride = CVPixelBufferGetBytesPerRow(buffer)
-        let pixel = base.advanced(by: y * stride + x * 4)
-            .assumingMemoryBound(to: UInt8.self)
-        return Int(pixel[2]) // BGRA: red
     }
 }
