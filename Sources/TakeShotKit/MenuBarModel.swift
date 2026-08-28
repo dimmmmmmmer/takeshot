@@ -152,12 +152,13 @@ final class MenuBarModel: ObservableObject {
                  enabled: controller.isCapturing),
             Item(command: nil, title: L("menubar_take", takeName), enabled: false),
             .separator,
-            // The same gate the Playback menu's marker group uses: a marker
-            // needs either a take being written or a clip in the SINGLE player
-            // — a grid of two to four has no one file to put it in.
+            // `canDropMarker` itself, not a copy of it: a marker needs either a
+            // take being written or a clip in the SINGLE player — a grid of two
+            // to four has no one file to put it in. This was that rule spelled
+            // out a second time, which is how the METHOD came to be missing it
+            // (see `addMarker`).
             Item(command: .addMarker, title: L("hotkey_marker"),
-                 enabled: controller.isRecording
-                    || controller.isReviewingSingleClip),
+                 enabled: controller.canDropMarker),
             // Deliberately ungated, unlike the footer's speaker (which greys
             // with no capture and no clip): "kill the sound NOW" is the one
             // thing the status item exists for with the window closed, and the

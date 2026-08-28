@@ -11,10 +11,38 @@ import SwiftUI
 /// file asynchronously is another, and the timecode arithmetic below is the
 /// part the transport and the badges both depend on.
 extension CaptureController {
+    /// Which engine is driving the picture under review. The one place that
+    /// says so; see `PlaybackEngine` for why it is not asked inline.
+    var playbackEngine: PlaybackEngine {
+        PlaybackEngine.current(hasGrid: syncPlay != nil,
+                               hasRawPlayer: rawPlayer != nil)
+    }
+
+    /// Whether the picture is actually moving right now.
+    ///
+    /// What the TC badge's 10 Hz tick is gated on — a paused readout is static
+    /// and re-rendering it at 10 Hz is work with nothing to show for it. It
+    /// asks the engine rather than two of the three engines, which is what it
+    /// used to do: over a grid the badge simply stopped updating.
+    var playbackIsRunning: Bool {
+        switch playbackEngine {
+        case .grid: return syncPlay?.isPlaying == true
+        case .raw: return rawPlayer?.isPlaying == true
+        case .single: return player.rate != 0
+        }
+    }
+
     /// Playback position as timecode (start TC + elapsed at the file's fps).
     var playbackTimecodeText: String {
-        if let raw = rawPlayer {
-            return raw.timecodeText
+        switch playbackEngine {
+        case .grid:
+            // 2–4 takes on one master timeline have no single timecode, and
+            // each tile carries its own — see `PlaybackEngine`.
+            return timecodeFallbackText
+        case .raw:
+            return rawPlayer?.timecodeText ?? timecodeFallbackText
+        case .single:
+            break
         }
         let elapsed = max(0, player.currentTime().seconds)
         let fps = max(1, playbackFPS)

@@ -18,22 +18,18 @@ struct ChromaKeyRows: View {
             set: { on in controller.chromaKeyOn = on }))
         if controller.chromaKeyOn {
             screenColorRow
-            ChromaSliderRow(label: L("chroma_tolerance"),
-                            value: Binding(get: { controller.chromaTolerance },
-                                           set: { controller.chromaTolerance = $0 }),
-                            range: 0...ChromaKey.maxTolerance,
-                            readout: percent(controller.chromaTolerance
-                                             / ChromaKey.maxTolerance))
-            ChromaSliderRow(label: L("chroma_softness"),
-                            value: Binding(get: { controller.chromaSoftness },
-                                           set: { controller.chromaSoftness = $0 }),
-                            range: 0...ChromaKey.maxSoftness,
-                            readout: percent(controller.chromaSoftness))
-            ChromaSliderRow(label: L("chroma_spill"),
-                            value: Binding(get: { controller.chromaSpill },
-                                           set: { controller.chromaSpill = $0 }),
-                            range: 0...1,
-                            readout: percent(controller.chromaSpill))
+            percentRow(L("chroma_tolerance"),
+                       value: Binding(get: { controller.chromaTolerance },
+                                      set: { controller.chromaTolerance = $0 }),
+                       range: 0...ChromaKey.maxTolerance)
+            percentRow(L("chroma_softness"),
+                       value: Binding(get: { controller.chromaSoftness },
+                                      set: { controller.chromaSoftness = $0 }),
+                       range: 0...ChromaKey.maxSoftness)
+            percentRow(L("chroma_spill"),
+                       value: Binding(get: { controller.chromaSpill },
+                                      set: { controller.chromaSpill = $0 }),
+                       range: 0...1)
             backgroundRows
             bakeRow
         }
@@ -59,8 +55,22 @@ struct ChromaKeyRows: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func percent(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))"
+    /// One of the three dials the operator reads as a percentage of its own
+    /// travel — tolerance, softness, spill.
+    ///
+    /// The three share a helper rather than each naming
+    /// `ChromaSliderReadout.percentOfTravel` for themselves, and that is the
+    /// same lesson one turn further on: which KIND of readout a dial gets is
+    /// still a per-call-site choice, and a call site given the wrong one reads
+    /// "+30" where it should read "50". Nothing can catch that — the readout
+    /// sits in a fixed-width column, so it does not move a measurable size, and
+    /// ink is not portable between the runner and this Mac (see
+    /// `ViewRenderSupport`). One site that can be wrong instead of three is what
+    /// is available; docs/coverage.md carries it as a stated limit.
+    private func percentRow(_ label: String, value: Binding<Double>,
+                            range: ClosedRange<Double>) -> some View {
+        ChromaSliderRow(label: label, value: value, range: range,
+                        readout: .percentOfTravel)
     }
 
     /// The screen color: what it is now, the eyedropper that takes it off the
@@ -179,13 +189,37 @@ struct ChromaColorField: View {
         }
     }
 
-    /// An unparseable hex is put back rather than swallowed — a field that
-    /// keeps a value nothing on screen matches is worse than one that reverts.
     private func commit() {
-        if let parsed = ChromaKey.RGB(hex: text) {
-            color = parsed
-        }
-        text = color.hexString
+        let outcome = Self.committed(text: text, current: color)
+        color = outcome.color
+        text = outcome.text
+    }
+
+    /// What committing `text` over `current` leaves behind: the color the keyer
+    /// adopts, and the text the field is left showing.
+    ///
+    /// A function rather than four lines inside the view, because this is the
+    /// only decision in the field and it was unreachable: `commit()` is private
+    /// to a body SwiftUI does not build until the popover is presented, and it
+    /// is reached from `onSubmit` and from focus LEAVING the field — neither of
+    /// which a headless render performs.
+    ///
+    /// Two claims, and the second is the one worth writing down:
+    ///
+    /// - **An unparseable hex is put back rather than swallowed.** A field
+    ///   keeping a value nothing on screen matches is worse than one that
+    ///   reverts — the operator would be reading a screen colour the keyer is
+    ///   not using.
+    /// - **A parseable one is normalized, not echoed.** `abcdef` and `#ABCDEF`
+    ///   are the same colour and the field settles on one spelling of it, so
+    ///   what is on screen is what `hexString` would print for the colour the
+    ///   keyer actually holds. That is what makes this an inverse of the
+    ///   `onChange` above, which writes `value.hexString` into the same field.
+    static func committed(text: String,
+                          current: ChromaKey.RGB) -> (color: ChromaKey.RGB,
+                                                      text: String) {
+        let color = ChromaKey.RGB(hex: text) ?? current
+        return (color, color.hexString)
     }
 }
 
@@ -211,7 +245,7 @@ struct ChromaPlateControls: View {
             value: Binding(get: { controller.chromaPlateScale },
                            set: { controller.chromaPlateScale = $0 }),
             range: ChromaKey.PlateLayout.minScale...ChromaKey.PlateLayout.maxScale,
-            readout: String(format: "%.2f", controller.chromaPlateScale))
+            readout: .multiplier)
         offsetRow(L("chroma_plate_offset_x"),
                   value: Binding(get: { controller.chromaPlateOffsetX },
                                  set: { controller.chromaPlateOffsetX = $0 }))
@@ -263,19 +297,22 @@ struct ChromaPlateControls: View {
         let limit = ChromaKey.PlateLayout.maxOffset
         return ChromaSliderRow(
             label: label, value: value, range: -limit...limit,
-            readout: String(format: "%+d", Int((value.wrappedValue * 100).rounded())))
+            readout: .signedPercentOfFrame)
     }
 }
 
-/// One dial: a label, a mini slider and the value it is on. The readout is
-/// given rather than derived — these rows carry percentages, multipliers and
-/// signed offsets, and the fixed width is what keeps the slider from jumping as
-/// the number grows a digit.
+/// One dial: a label, a mini slider and the value it is on. These rows carry
+/// percentages, multipliers and signed offsets, so the KIND of readout is given
+/// — but the text itself is derived here, from the same range the slider is
+/// laid out on, because the row is the one place that holds both. Handing the
+/// row a finished string beside the range is what let the two disagree; see
+/// `ChromaSliderReadout`. The fixed width is what keeps the slider from jumping
+/// as the number grows a digit.
 struct ChromaSliderRow: View {
     let label: String
     @Binding var value: Double
     let range: ClosedRange<Double>
-    let readout: String
+    let readout: ChromaSliderReadout
 
     var body: some View {
         HStack(spacing: 6) {
@@ -284,7 +321,7 @@ struct ChromaSliderRow: View {
                 .foregroundStyle(.secondary)
             Slider(value: $value, in: range)
                 .controlSize(.mini)
-            Text(verbatim: readout)
+            Text(verbatim: readout.text(for: value, in: range))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 30, alignment: .trailing)

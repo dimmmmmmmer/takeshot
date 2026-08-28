@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.57 %** lines (4 185 of 44 380 lines uncovered) |
+| Measured | **90.66 %** lines (4 150 of 44 431 lines uncovered) |
 
 Measured in the ORDINARY configuration, which is what `scripts/coverage.sh`
 runs and what CI runs. `-DTAKESHOT_FORCE_STUBS=1` is a different build with
@@ -96,6 +96,7 @@ same:
 
 | Seam | Real | Fake | What it unlocks |
 | --- | --- | --- | --- |
+| `DuplicateLookPrompt.handler` | `NSAlert.runModal()` | a closure answering one of the three | re-importing a look that is already in the library |
 | `CaptureBackend` | `DeckLinkBackendAdapter` | `MockCaptureBackend`, `SyntheticSignalBackend`, `StubCaptureBackend` | the whole capture session |
 | `AudioInputDeviceProviding` | `SystemAudioInputProvider` | `FakeAudioInputProvider` | the USB input path |
 | `VolumeWatching` | `WorkspaceVolumeWatch` | `FakeVolumeWatch` | the card watch |
@@ -253,6 +254,177 @@ are worth writing down for what they showed rather than for what they caught:
   asserting a control separately from the frame it claims to describe, and it is
   why every case in that suite is checked against both.
 
+## The forgotten-engine wave
+
+The wave that took the number from 90.61 % to 90.66 % started from the list the
+shared-rule wave left, and its first item was the one that wave had measured as
+paying **zero** coverage. That turned out to be the right place to start for a
+reason that is not about the number: pulling on it led to four more instances of
+the same shape, and two of those are the worst defects in this file's history —
+a marker written into the wrong file, and one silently deleted out of it.
+
+Five hundredths of a point for five changes, which is the shared-rule wave's
+shape again and for the shared-rule wave's reason: deduplicating a decision
+deletes lines from several places and adds one covered function. Read that
+paragraph before copying the method. The two defects are the return here; the
+number is not.
+
+**A note on the starting figure.** This wave measured 90.61 % (4 169 of 44 380
+uncovered) on the very commit the table above recorded as 90.57 % (4 185). That
+is sixteen lines, where the jitter this file documents is one to four, so it is
+NOT the same phenomenon and no explanation was established. Both numbers came
+from `coverage.sh` on this Mac. Treat a starting figure as something to
+re-measure rather than to read out of this file — which is the rule the file
+already states for the ending one. The 90.66 % above is ONE run of the finished
+tree, so it carries the usual few lines of jitter and no second run to average
+against.
+
+**And a note on how not to measure it.** Editing a source file while a battery
+is in flight fails the build outright — `input file '…' was modified during the
+build` — which cost this wave a run of both phases. SwiftPM catching it is the
+good case: the bad one is an edit that lands between the build and the report,
+where the number comes out looking like a number. The existing rule is "never
+run two SwiftPM invocations against one tree"; the same tree also has to hold
+STILL for the one that is running.
+
+### The dial that was right by coincidence
+
+`ChromaKeyControls` asked one question — what fraction of this slider's travel
+is the dial at — in three spellings: tolerance divided by
+`ChromaKey.maxTolerance`, softness divided by nothing at all, spill divided by
+nothing because its range is a literal 1. All three were right and two only by
+coincidence. The range and the readout were separate arguments to
+`ChromaSliderRow`, so nothing held them together; `ChromaSliderReadout` derives
+the text from the range the slider is already laid out on, and the three
+readouts, the plate's signed offsets and the plate's scale multiplier are now
+three named cases instead of three ad-hoc expressions.
+
+The mutation is the clearest statement of it: made to divide by nothing — which
+is what SOFTNESS did — the tolerance dial reads **60 at the end of its travel**.
+
+Two things came out of the mutations rather than out of the design:
+
+- The zero-width-range guard is not protecting what its comment claimed.
+  `Int(Double.nan)` does trap, but the clamp absorbs the NaN first
+  (`max(0, .nan)` is 0, because `nan >= 0` is false), so `0` on `0...0` answers
+  "0" with or without the guard. What the guard actually stops is a value OFF a
+  degenerate range: `5` on `3...3` divides to +∞, clamps to 1 and reads **100**
+  — "all the way along" a travel of zero. The comment and the test both say the
+  measured thing now, and a test that had only asked the first case would have
+  been green against the bug.
+- **Which KIND of readout a dial is given is still a per-call-site choice and
+  nothing can catch a wrong one.** Given `.signedPercentOfFrame`, the tolerance
+  dial reads "+30" where it should read "50" and the whole suite stays green:
+  the readout sits in a fixed-width 30pt column so it moves no measurable size,
+  and ink is not portable between the runner and this Mac. The three percent
+  dials share one private helper now, so there is one site that can be wrong
+  instead of three. That is what was available, not a fix.
+
+### The modal the previous table predicted
+
+`askDuplicateLUT` was an `NSAlert.runModal()` with all three arms of
+`adoptLooks` behind it — file operations on the operator's look library, one of
+which DELETES — and none of them had ever executed. `DuplicateLookPrompt` is the
+`FilePanel` shape applied to it.
+
+The part worth copying is not the seam, it is what the seam made visible.
+`NSAlert` answers with a POSITION, so the buttons and the response mapping are
+two halves of one list; written apart (three `addButton` calls, then a `switch`
+over three response constants) inserting or reordering a button leaves both
+halves compiling and swaps what two of the three buttons DO. They come from one
+ordered list now. The mutation that reverses the mapping prints the hazard
+exactly: `(choice → .replace) != .replace` for `.alertThirdButtonReturn` — the
+operator presses **Skip** and the look is overwritten.
+
+### The grid every surface forgets
+
+Playback is three engines — the sync-play GRID, the RAW engine, the single
+`AVPlayer` — and `startSyncPlay` pauses the single player without clearing
+`playbackURL`, so every question asked of the parked engines still has a
+plausible-looking answer while the grid is up. That is why `transportBarKind`
+guards `syncPlay == nil` before reading `playbackURL`, and why
+`isReviewingClip` and `isReviewingSingleClip` both exist. The transport verbs
+(`togglePlayPause`, `skipPlayback`, `stepPlayback`) all route grid → raw →
+single. Five other places did not, and four of them were found by pulling on
+the first:
+
+| Surface | What it did over a grid |
+| --- | --- |
+| the TC badge's text | Read `player.currentTime()` of the PARKED player and showed the previous take's timecode — `10:00:00:00`, verbatim from the mutation — on the readout the brief puts top left. |
+| the TC badge's 10 Hz tick | Asked `player.rate != 0 \|\| rawPlayer?.isPlaying`, so it declined to re-read anything: the badge went still while the grid rolled. Fixing the text alone would have changed nothing visible. |
+| **`addMarker()`** | Wrote a marker into the parked take, at the paused player's position. |
+| **`removeNearestMarker()`** | DELETED one from the parked take, within ±2 frames of the paused position. |
+| `playbackPositionSeconds` | Answered the parked player's position. Every caller is gated, so this one cost nothing yet. |
+
+The two marker rows are the real defects, and they are ones the codebase had
+already diagnosed and half-fixed. `canDropMarker` has said since the long-tail
+wave that "the sync-play grid is not [a timeline a flag belongs on]" — and that
+fix reached the MENU ITEM and never the methods. Of the four surfaces that drop
+a marker, two were safe by accident (the menu greys; the transport button is not
+mounted over a grid) and two were not: the hotkey and the phone both call
+`addMarker()` directly. `playbackAcceptsMarkers` cannot catch it, because
+`playbackURL` is exactly where it was. A marker in a file the operator cannot
+see, at a position that is not the one on screen, in the sidecar editorial
+reads.
+
+**The delete is the one that costs something, and its reach is what makes it
+reachable.** `removeNearestMarker` takes the marker within ±2 frames of the
+playhead — so the case is not a coincidence but the ordinary one: an operator
+marks a moment in a take, then selects that take and three others to compare,
+and the parked playhead is sitting exactly on the marker they just placed. The
+remove hotkey over the grid took it, out of a file not on screen, with a toast
+naming a timecode from somewhere else.
+
+`playbackPositionSeconds` was fixed too, though nothing steps on it: every
+caller is gated to the single clip. It is in the table because "wrong but
+currently unreachable" is precisely what the marker rule was before the hotkey
+found it, and leaving one more of them lying about is how the first one survived
+a wave that had already named it.
+
+`PlaybackEngine` names the three and their precedence once; the badge, the
+clock and the position read it, both marker methods ask `isReviewingSingleClip`,
+and the menu bar — which was `canDropMarker` spelled out a second time, which is
+how the methods came to be missing it — asks the rule itself.
+
+`seekPlayback` is left asking raw → single on purpose, and that is worth stating
+so the next reader does not "finish the job": its only caller is `jumpToMarker`,
+which is menu-only and gated to the single clip, and seeking a GRID is
+`SyncPlayModel.seek`, which re-issues a synchronized start across every tile
+rather than moving one player. It would need routing to a different verb, not an
+extra arm.
+
+What a grid's timecode IS turned out to be the interesting half: nothing. Two to
+four takes with two to four start timecodes against one master timeline have no
+single timecode, which is why the grid's own transport shows elapsed time and
+each TILE carries its own. So the badge shows `timecodeFallbackText` — the same
+"no timecode here" string the live badge, the multicam tiles and the slate use.
+A readout that says it has no number is worth more than one that states another
+clip's.
+
+### Mutations
+
+Eighteen, of which seventeen turned a test red — each by the test that
+describes it. Three are worth writing down for what they showed rather than for
+what they caught:
+
+- **Reordering `DuplicateLookPrompt.order` leaves the CONSISTENCY loop green**,
+  correctly: the buttons and the mapping still agree, because they now come
+  from the one list. Only the two explicit position assertions catch it. That
+  is the design working rather than a gap, and it is the answer to "what would
+  still pass if this regressed in a different direction" — a divergence is
+  impossible, so the test that mattered before is now the one about which
+  answer is FIRST.
+- **The zero-width-range guard is not protecting what its comment claimed**, and
+  the mutation is how that was found: removing it leaves `0` on `0...0`
+  answering "0" anyway. The comment and the test both say the measured thing
+  now. This is the one place in the wave where a mutation failing "correctly"
+  would have let a wrong sentence stand in the source.
+- **The eighteenth does not fail and is not a bug in the test to be fixed.**
+  Given `.signedPercentOfFrame`, the tolerance dial reads "+30" instead of "50"
+  and all 2 543 tests stay green. It is the test and not the configuration —
+  the suite tests the function, and the wiring is a per-call-site choice with
+  no portable observable. Stated as a limit above.
+
 ## The honest ceiling
 
 Roughly **1 000 lines — about 2.4 points — cannot be covered by a headless
@@ -261,13 +433,14 @@ between that and the measured 90 % is not unreachable code: it is a long tail of
 view bodies, AppKit window paths and error branches that are reachable with more
 work. 95 % is a question of how many more waves, not of whether it is possible.
 
-There are now two measurements of what "more work" costs, and they are an order
-of magnitude apart, which is the useful part:
+There are now three measurements of what "more work" costs, and the spread — an
+order of magnitude between the first and the other two — is the useful part:
 
 | Wave | Changes | Points | What the changes were |
 | --- | --- | --- | --- |
 | long-tail | 6 | +0.67 | a fixture that had never decoded, plus five rules leaving places nothing could ask them |
 | shared-rule | 4 | +0.07 | four rules leaving places nothing could ask them, three of which were spelled out in several places at once |
+| forgotten-engine | 5 | +0.05 | one seam in front of the app's only modal, plus four rules leaving places nothing could ask them |
 
 The difference is not effort. A rule that was in ONE unreachable place moves the
 number when it comes out; a rule that was in FOUR unreachable places deletes
@@ -276,6 +449,18 @@ denominator as fast as the new function raises the numerator. Both leave the
 suite defending more than it did. Only one of them shows up in the report, and a
 wave planned against the report alone will keep picking the first kind and never
 find a disagreement — because a rule stated once cannot disagree with itself.
+
+Two waves in a row have now landed on the low number, and both found real
+defects doing it — which is the correlation worth reading. The measure of the
+second kind is not points; it is that the forgotten-engine wave started from one
+readout stated twice and ended with five surfaces asking about a grid, two of
+them writing to a file that was not on screen. **95 % will not be reached by
+this kind of wave**, and that is not an argument against it. It is an argument
+for planning both: a points wave has to go at the view bodies and the AppKit
+paths the table below describes, and a wave that wants the number to MEAN
+something goes where two things claim to answer the same question. The honest
+version of the owner's target is that those are different afternoons and only
+one of them shows up in the report.
 
 What is genuinely out of reach, and why:
 
@@ -305,7 +490,7 @@ was tried, so these are measurements rather than guesses:
 | `PunchEventView.handle`, what is left of it | Same shape: a local monitor over synthesized `.magnify` and `.scrollWheel` events, which cannot be built with a window number that matches. The DECISION has since been pulled out into `PunchEventView.decide`, a function over (type, magnification, modifiers, deltas, precise, pointer, bounds, punched-in) with its own suite — so what remains unreachable is the reading of those facts off an `NSEvent` and the two calls that apply the outcome. That is the shape to copy for the rest of this table's monitor rows. |
 | `CaptureController.setMulticam`, the hardware arm (~22 lines) | Constructing the `DeckLinkBackendAdapter` it needs is the thing `ControllerHarness` exists to avoid: on a machine with the SDK dropped in it adopts whatever board is attached. Safe on a runner with no SDK and unsafe on the developer's, which is not a difference a suite may depend on. The PLAN in front of it is not that and is covered now — `multicamPlan` says which board becomes which camera, which is the half that reaches the file names. |
 | `CapturePipeline.uniqueURL`'s 1000-attempt fallback (4 lines) | Needs a thousand colliding files in the record folder. |
-| `CaptureController.askDuplicateLUT` (~13 lines) | An `NSAlert.runModal()`. Everything either side of it is covered; making the choice injectable the way `FilePanel` is would unlock it. |
+| `DuplicateLookPrompt.handler`'s default body (2 lines) | **This row said `askDuplicateLUT` (~13 lines) and predicted its own fix**, which the forgotten-engine wave carried out: "making the choice injectable the way `FilePanel` is would unlock it." What is left is `configured(name:).runModal()` and nothing else — the alert's construction and the response mapping are `configured(name:)` and `choice(for:)`, both pure and both covered, and the three arms of `adoptLooks` behind it are covered now too. Same residue as `FilePanel`: the modal itself. |
 
 Two more, worth naming because they look coverable and are not:
 
@@ -319,9 +504,12 @@ Two more, worth naming because they look coverable and are not:
   five `@State` strings between the take and those two calls. The draft is a
   value now (`TakeLogDraft`), so the load, the save and the fact that they are
   inverses are all covered, and what is left unreachable is the LAYOUT.
+  `ChromaColorField.commit()` was the same shape one popover along — reached
+  from `onSubmit` and from focus LEAVING the field, neither of which a headless
+  render performs — and went the same way (`committed(text:current:)`).
 
-And what the shared-rule wave deliberately did NOT touch, so the next one starts
-from a list rather than from the report again:
+And what the forgotten-engine wave deliberately did NOT touch, so the next one
+starts from a list rather than from the report again:
 
 - `AppCommands.swift` (~344, 6 %) is still the largest single file in the table
   and the reasoning above still holds — checked rather than assumed by the
@@ -339,28 +527,37 @@ from a list rather than from the report again:
   list will meet this file with no idea it is settled — which is the general
   hazard of reading the report instead of this document, and the reason the
   table names SYMBOLS and the report names files.
-- **`ChromaKeyControls`' three slider readouts, found and left.** They ask one
-  question — what fraction of this slider's travel is the dial at — in two
-  spellings: tolerance divides by `ChromaKey.maxTolerance`, softness does not
-  divide at all. Both are right today and one of them only because
-  `maxSoftness` happens to be 1.0; move that constant and the softness dial
-  silently stops reaching 100 while its slider still reaches the end. Worth
-  stating once, and worth knowing before starting: **it pays no coverage at
-  all.** The `percent` helper already executes when the body renders, and the
-  65 uncovered lines in that file are button action closures, the eyedropper's
-  cursor handling, and `ChromaColorField.commit()` — which is the one real
-  decision left there (an unparseable hex is put back rather than swallowed).
-- The view files with the most left after this wave — `TakeRowControls` 143,
-  `PlayerBadges` 78, `MediaSourcePicker` 69, `FooterBar` 76, `TransportBar` 66 —
-  are still mostly menu content and popover bodies (the two categories above)
-  plus body arms reachable only by rendering a state. `PlayerBadges` is the one
-  of these that no table row explains yet, and the decidable part of it is the
-  badge clock: it re-renders at 10 Hz only while something is actually running,
-  which is a rule about `player.rate` and `rawPlayer?.isPlaying` that lives
-  inside a `TimelineView` closure. `MediaSourcePicker`'s residue is 13 lines of
-  menu body plus three `Identifiable` `id` accessors — a picker row is
-  identified by its URL and not its name, so two files of the same name in two
-  folders stay two rows, which is a claim worth one assertion and three lines.
+- **`ChromaKeyControls`, now that both of its decisions are out.** The readouts
+  are `ChromaSliderReadout` and the hex field's commit is
+  `ChromaColorField.committed(text:current:)`. What is left in that file is
+  button action closures, the eyedropper's `NSCursor` push/pop (a pointer and a
+  window, same category as `AssistZoomCursor`), and the layout — and the
+  shared-rule wave's measurement still holds for all of it: **it pays close to
+  no coverage**, because a body that renders already executes.
+- **Which readout KIND each dial is given** is the limit the section above
+  states, and it is deliberately not repaired: nothing portable can see it. If
+  somebody finds a way to assert a rendered STRING that survives macOS 15 and
+  macOS 26, this is the first thing to point it at — and `ViewRenderSupport`'s
+  note is the reason it has not been tried.
+- **`MediaSourcePicker`'s three `Identifiable` `id` accessors** are still open,
+  and the claim is unchanged: a picker row is identified by its URL and not its
+  name, so two files of the same name in two folders stay two rows. One
+  assertion, three lines. Left because it is the small end of the list, not
+  because it is settled.
+- `AppCommands.swift` is settled twice over, and this wave did not re-argue it
+  a third time.
+- **`TakeRowControls` (143), `FooterBar` (76), `TransportBar` (66)** are still
+  mostly menu content and popover bodies (the two categories above) plus body
+  arms reachable only by rendering a state. `PlayerBadges` has left this list:
+  the decidable part of it WAS the badge clock, and that rule is
+  `CaptureController.playbackIsRunning` now.
+- **The engine question is now asked in one place; whether every OTHER surface
+  reads it has not been audited.** `PlaybackEngine` was reached by pulling on
+  one readout and finding three. `playbackPositionSeconds`,
+  `playbackAcceptsMarkers` and `RemoteState.markerCount` were each read in
+  passing and none looked wrong, but none was mutated either. A sweep for
+  "what else asks about `player` or `rawPlayer` without asking about
+  `syncPlay`" is the obvious next thread and this wave did not pull it.
 - Rendering for its own sake is still what this file exists to say no to.
 
 ## Rules that outrank the number
