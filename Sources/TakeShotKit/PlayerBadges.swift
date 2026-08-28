@@ -36,11 +36,11 @@ struct PlaybackTimecodeText: View {
             .foregroundStyle(.white)
             .frame(width: 96, alignment: .leading)
             .onReceive(timer) { date in
-                // paused TC is static — don't re-render the badge at 10 Hz
-                if controller.player.rate != 0
-                    || controller.rawPlayer?.isPlaying == true {
-                    now = date
-                }
+                // paused TC is static — don't re-render the badge at 10 Hz.
+                // The rule is `playbackIsRunning` and not a copy of it: this
+                // asked two of the three playback engines and went still over a
+                // sync-play grid (see `PlaybackEngine`).
+                if controller.playbackIsRunning { now = date }
             }
     }
 }

@@ -1,4 +1,3 @@
-import AppKit
 import CaptureCore
 import Foundation
 import UniformTypeIdentifiers
@@ -8,7 +7,9 @@ import UniformTypeIdentifiers
 ///
 /// Split out of `+LUT`: getting a look onto the machine and applying it to a
 /// picture are separate jobs, and everything here is file management with a
-/// modal in the middle of it.
+/// modal in the middle of it — `DuplicateLookPrompt`, which is a seam for the
+/// same reason `FilePanel` is: the three arms below are file operations on the
+/// operator's library and one of them deletes.
 extension CaptureController {
     struct LUTInfo: Identifiable, Equatable {
         var id: String { fileName }
@@ -84,7 +85,7 @@ extension CaptureController {
             var dest = dir.appendingPathComponent(url.lastPathComponent)
             if FileManager.default.fileExists(atPath: dest.path) {
                 // duplicate name: let the user decide instead of silently replacing
-                switch Self.askDuplicateLUT(name: url.lastPathComponent) {
+                switch DuplicateLookPrompt.ask(name: url.lastPathComponent) {
                 case .replace:
                     try? FileManager.default.removeItem(at: dest)
                 case .keepBoth:
@@ -150,20 +151,6 @@ extension CaptureController {
         }
         selectLUT(fileName: nil)
         reloadLUTList()
-    }
-    /// Modal: what to do with an already-imported LUT of the same name.
-    private static func askDuplicateLUT(name: String) -> DuplicateLUTChoice {
-        let alert = NSAlert()
-        alert.messageText = L("lut_duplicate_title", name)
-        alert.informativeText = L("lut_duplicate_text")
-        alert.addButton(withTitle: L("lut_replace"))
-        alert.addButton(withTitle: L("lut_keep_both"))
-        alert.addButton(withTitle: L("lut_skip"))
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .replace
-        case .alertSecondButtonReturn: return .keepBoth
-        default: return .skip
-        }
     }
     /// Mirror an imported LUT into DaVinci Resolve's LUT/TakeShot folder.
     ///

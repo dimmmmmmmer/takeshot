@@ -49,8 +49,26 @@ extension CaptureController {
     /// clip has instead of a `Take` is a row in `otherMarkers` under its file
     /// name; the sidecar has always been keyed that way (see
     /// `CaptureController+MarkerList`).
+    ///
+    /// **The review arm asks `isReviewingSingleClip`, not the viewer mode.**
+    /// `canDropMarker` — what the Markers menu is enabled by — has said since
+    /// the long-tail wave that "the sync-play grid is not [a timeline a flag
+    /// belongs on]", and that fix reached the MENU ITEM and never the method.
+    /// The two surfaces that call this without going through the menu are the
+    /// hotkey (`HotkeyManager+Actions`) and the phone
+    /// (`perform(remote:)` — `.marker`), and both still landed a marker in the
+    /// take the single player is PARKED on while a grid is up: a flag written
+    /// into a file the operator cannot see, at a position that is not the one
+    /// on screen, and `playbackAcceptsMarkers` cannot catch it because
+    /// `startSyncPlay` leaves `playbackURL` exactly where it was.
+    ///
+    /// Over a grid with the camera rolling it falls through to the recording
+    /// arm, which is the other half of `canDropMarker` and is a real timeline.
+    /// Over a grid with nothing rolling it does nothing and says nothing —
+    /// matching the greyed menu item, the same way the record hotkey is silent
+    /// with no capture running.
     func addMarker() {
-        if viewerMode == .playback, let url = playbackURL {
+        if isReviewingSingleClip, let url = playbackURL {
             // the same reading marker navigation and removal use — the engine
             // the position comes from is decided in one place
             let seconds = playbackPositionSeconds
@@ -103,8 +121,16 @@ extension CaptureController {
 
     /// ⇧M: drop the marker under the playhead (±2 frames); while recording —
     /// the most recent one.
+    ///
+    /// Same guard as `addMarker`, and this is the half that DELETES. Over a
+    /// sync-play grid the old `viewerMode == .playback` read the parked
+    /// player's position and the parked take's marker list, so the press
+    /// removed a marker from a file that is not on screen — and the ±2 frame
+    /// reach makes it reachable rather than theoretical: an operator who marks
+    /// a moment, then selects that take and three others to compare, has left
+    /// the playhead exactly on the marker they just placed.
     func removeNearestMarker() {
-        if viewerMode == .playback {
+        if isReviewingSingleClip {
             let now = playbackPositionSeconds
             let tolerance = 2.0 / max(1, playbackFPS)
             guard let index = playbackMarkers.enumerated()

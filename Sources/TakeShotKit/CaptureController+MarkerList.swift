@@ -76,11 +76,26 @@ extension CaptureController {
     }
 
     /// Current playback position in seconds (marker navigation).
+    ///
+    /// All three engines, through `playbackEngine`. The grid arm changes no
+    /// behaviour today — every caller is gated to the single clip — and it is
+    /// here so the property is not a trap for the next one: asked over a grid
+    /// it used to answer the PARKED player's position, which is a plausible
+    /// number about a file that is not on screen. That is the shape of every
+    /// defect this rule was extracted for, and leaving one more of them lying
+    /// about because nothing currently steps on it is how the last one
+    /// survived a wave that had already named it.
     var playbackPositionSeconds: Double {
-        if let raw = rawPlayer {
+        switch playbackEngine {
+        case .grid:
+            // the master timeline the grid's own transport shows
+            return syncPlay?.position.currentTime ?? 0
+        case .raw:
+            guard let raw = rawPlayer else { return 0 }
             return Double(raw.currentFrame) / max(1, raw.frameRate)
+        case .single:
+            return max(0, player.currentTime().seconds)
         }
-        return max(0, player.currentTime().seconds)
     }
 
     /// Mutate a marker of the current playback clip (list editor).
