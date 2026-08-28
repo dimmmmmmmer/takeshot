@@ -16,13 +16,32 @@ import Testing
 /// Lock-guarded rather than main-actor-confined for the reason
 /// `FakeAudioCaptureDevice` carries a lock: it is called on `NDIVideoMirror`'s
 /// queue and read from the test, and TSan aborts a suite on a plain `var`.
-final class FakeNDISender: NDIVideoSending, @unchecked Sendable {
+final class FakeNDISender: NDISending, @unchecked Sendable {
     let sourceName: String
+
+    /// One packet of sound as it reached the sender: already de-interleaved,
+    /// already float, which is the point — the conversion is above this.
+    struct AudioPacket: Sendable {
+        var planes: [Float]
+        var framesPerChannel: Int
+        var channels: Int
+        var sampleRate: Int
+        /// The label of the queue it arrived on.
+        var queue: String
+
+        /// One channel's plane, which is what makes a de-interleave assertion
+        /// readable rather than an index expression.
+        func plane(_ channel: Int) -> [Float] {
+            let start = channel * framesPerChannel
+            return Array(planes[start..<(start + framesPerChannel)])
+        }
+    }
 
     private let lock = NSLock()
     private var storedFrames: [CVPixelBuffer] = []
     private var storedRates: [NDIFrameRate] = []
     private var storedQueues: [String] = []
+    private var storedAudio: [AudioPacket] = []
     private var storedStopped = false
 
     init(name: String) {
@@ -45,6 +64,13 @@ final class FakeNDISender: NDIVideoSending, @unchecked Sendable {
         lock.withLock { storedQueues }
     }
 
+    /// The sound that arrived, oldest first. Separate from `frames` because the
+    /// two legs are separate: they arrive on two queues and neither waits for
+    /// the other.
+    var audio: [AudioPacket] {
+        lock.withLock { storedAudio }
+    }
+
     var isStopped: Bool {
         lock.withLock { storedStopped }
     }
@@ -60,35 +86,63 @@ final class FakeNDISender: NDIVideoSending, @unchecked Sendable {
         return true
     }
 
+    @discardableResult
+    func send(audio planar: [Float], framesPerChannel: Int, channels: Int,
+              sampleRate: Int) -> Bool {
+        let label = String(cString: __dispatch_queue_get_label(nil))
+        lock.withLock {
+            storedAudio.append(AudioPacket(planes: planar,
+                                           framesPerChannel: framesPerChannel,
+                                           channels: channels,
+                                           sampleRate: sampleRate,
+                                           queue: label))
+        }
+        return true
+    }
+
     func stop() {
         lock.withLock { storedStopped = true }
     }
 }
 
-/// A sender that parks inside `send` for as long as it is told to.
+/// A sender that parks inside a send for as long as it is told to, with the
+/// two legs held INDEPENDENTLY.
 ///
-/// Stands in for the thing NDI's send really is: a synchronous call that
-/// compresses the frame before it returns, on a link that may be slow. What it
-/// is for is the case that did not exist before NDI came back beside SRT —
-/// proving that a wedged NDI receiver cannot reach any other output's queue.
-final class BlockingNDISender: NDIVideoSending, @unchecked Sendable {
+/// Stands in for the thing NDI's sends really are: two synchronous calls on one
+/// sender, each of which compresses before it returns, on a link that may be
+/// slow. Two holds rather than one because there are now two claims to make and
+/// they are different: that a wedged NDI receiver cannot reach another OUTPUT's
+/// queue (`aParkedNDISendDoesNotStallTheSRTLink`), and that inside this one
+/// output the picture and the sound cannot hold each other up.
+final class BlockingNDISender: NDISending, @unchecked Sendable {
     let sourceName = "blocking"
     private let hold: TimeInterval
+    private let audioHold: TimeInterval
     private let lock = NSLock()
     private var storedCount = 0
+    private var storedAudioCount = 0
     /// Signalled once the first send is INSIDE the block, so a test can wait for
     /// the wedge rather than sleeping and hoping.
     private let entered = DispatchSemaphore(value: 0)
+    private let enteredAudio = DispatchSemaphore(value: 0)
 
-    init(holding hold: TimeInterval) {
+    /// `holding` is the picture's hold; `holdingAudio` defaults to none, so
+    /// every existing caller wedges exactly what it used to.
+    init(holding hold: TimeInterval, holdingAudio audioHold: TimeInterval = 0) {
         self.hold = hold
+        self.audioHold = audioHold
     }
 
     var count: Int { lock.withLock { storedCount } }
+    var audioCount: Int { lock.withLock { storedAudioCount } }
 
     /// Wait for the first send to be in flight; false if it never started.
     func waitUntilInsideSend() -> Bool {
         entered.wait(timeout: .now() + 5) == .success
+    }
+
+    func waitUntilInsideAudioSend() -> Bool {
+        enteredAudio.wait(timeout: .now() + 5) == .success
     }
 
     @discardableResult
@@ -96,6 +150,15 @@ final class BlockingNDISender: NDIVideoSending, @unchecked Sendable {
         lock.withLock { storedCount += 1 }
         entered.signal()
         Thread.sleep(forTimeInterval: hold)
+        return true
+    }
+
+    @discardableResult
+    func send(audio planar: [Float], framesPerChannel: Int, channels: Int,
+              sampleRate: Int) -> Bool {
+        lock.withLock { storedAudioCount += 1 }
+        enteredAudio.signal()
+        Thread.sleep(forTimeInterval: audioHold)
         return true
     }
 

@@ -15,10 +15,10 @@ extern NSString *const CNDUnavailableRuntimeMissing;
 extern NSString *const CNDUnavailableRuntimeIncomplete;
 extern NSString *const CNDUnavailableRuntimeRefused;
 
-/// Obj-C bridge to the NDI SDK: announces ONE NDI video source on the local
-/// network and sends the app's 8-bit BGRA display frames to it, so a director's
-/// monitor on an iPad or a client feed in the production office needs neither
-/// another cable nor a second board output.
+/// Obj-C bridge to the NDI SDK: announces ONE NDI source on the local network
+/// and sends the app's 8-bit BGRA display frames AND its stereo sound to it, so
+/// a director's monitor on an iPad or a client feed in the production office
+/// needs neither another cable nor a second board output.
 ///
 /// **The odd one out among the network outputs, and deliberately so.** SRT and
 /// WebRTC both take H.264 samples off the one shared `LiveVideoEncoder`; NDI's
@@ -43,10 +43,21 @@ extern NSString *const CNDUnavailableRuntimeRefused;
 /// rather than BGRA deliberately: the alpha byte in a display buffer is
 /// padding, and a receiver told it is alpha may key on it.
 ///
-/// Sends are synchronous (`NDIlib_send_send_video_v2`, not the async variant),
-/// which is what makes handing over a borrowed base address safe: the call
-/// returns only once NDI is done with those bytes. Call it from a queue that
-/// may block — never the capture queue, and never the shared encoder's.
+/// Sends are synchronous (`NDIlib_send_send_video_v2` and
+/// `NDIlib_send_send_audio_v3`, not the async variants), which is what makes
+/// handing over a borrowed base address safe: the call returns only once NDI is
+/// done with those bytes. Call them from queues that may block — never the
+/// capture queue, and never the shared encoder's.
+///
+/// **The two sends are on two queues and are not ordered against each other**,
+/// which is the SDK's own supported arrangement: `NDIlib_send_create_t`'s
+/// documentation contemplates "submitting audio and video off separate
+/// threads" and says what to clock in that case (nothing, here — see the create
+/// settings). The reason it has to be two queues rather than one is the failure
+/// this app cares about: NDI's send parks for as long as its receiver makes it,
+/// and one queue would mean a slow receiver's video send holding the sound of
+/// the same feed — and the other way round. The only thing serialized here is
+/// the sender's LIFETIME; see `stop`.
 @interface CNDSender : NSObject
 
 /// Whether this build was compiled against the real SDK AND the runtime dylib
@@ -83,6 +94,21 @@ extern NSString *const CNDUnavailableRuntimeRefused;
 /// For diagnostics and the README's "what the app does with it" claim.
 + (nullable NSString *)runtimeVersion;
 
+/// Whether the loaded runtime exports the AUDIO send as well as the video one.
+///
+/// A separate question from `isSDKAvailable` on purpose, and the separation is
+/// the promise: adding sound must not be able to take the picture away. Every
+/// runtime this file will load declares `NDIlib_send_send_audio_v3` in its
+/// header (it is SDK 4 and newer, the same floor the FourCC spellings already
+/// set) — but the header is what THIS BUILD compiled against and the dylib is
+/// whatever is installed, and those are not the same fact. A runtime that
+/// resolves the video entry point and not the audio one therefore stays fully
+/// available and sends picture; `sendAudio…` answers NO and the leg above it
+/// stops. The alternative — folding it into the required set — would turn a
+/// mismatched runtime into "NDI unavailable", i.e. a director's monitor going
+/// dark because their sound could not be carried.
++ (BOOL)isAudioAvailable;
+
 /// Announce a source under `name`. NDI presents a source to receivers as
 /// "MACHINE (name)" — the machine half comes from the runtime — so `name`
 /// carries the project and the camera and nothing else.
@@ -104,7 +130,52 @@ extern NSString *const CNDUnavailableRuntimeRefused;
        frameRateN:(int32_t)frameRateN
        frameRateD:(int32_t)frameRateD;
 
+/// Send one packet of sound: DE-INTERLEAVED 32-bit float, which is what
+/// `NDIlib_FourCC_audio_type_FLTP` names and the only uncompressed audio layout
+/// the v3 frame carries. `planar` is `channels` contiguous planes of
+/// `framesPerChannel` samples each, so the channel stride is
+/// `framesPerChannel * sizeof(float)` and this file does not repack anything.
+///
+/// The conversion from the app's interleaved 16-bit packets happens ABOVE this
+/// call, in `NDIAudioMirror`, for the reason `sendFrame:` has no conversion at
+/// all: a bridge that reshaped its input would be a second place for the
+/// channel rule to live. Here the bytes are already the wire's.
+///
+/// NO when this build has no SDK, when the loaded runtime exports no audio send
+/// (`isAudioAvailable`), or when the arguments do not describe a packet.
+///
+/// **No timecode is stated, deliberately.** Both legs ask the runtime to
+/// synthesize (`NDIlib_send_timecode_synthesize`), which is the SDK's own
+/// documented configuration for two streams staying in sync: one sender takes
+/// the system time as its origin once and generates both series from it, so the
+/// picture and the sound are aligned by ONE clock rather than by two app-side
+/// stamps that would have to agree. The packet's own presentation time is the
+/// pipeline's stream clock and has no defined relationship to NDI's 100 ns
+/// timecode domain, so converting it would be inventing an origin.
+///
+/// Blocking for as long as NDI needs the bytes — and specifically NOT ordered
+/// against `sendFrame:`, which is the whole point of the pair: the two run
+/// concurrently from two queues and neither can hold the other up. See the note
+/// on `stop`.
+- (BOOL)sendAudio:(const float *)planar
+    framesPerChannel:(int32_t)framesPerChannel
+            channels:(int32_t)channels
+          sampleRate:(int32_t)sampleRate;
+
 /// Take the source off the network. Idempotent; also runs from `dealloc`.
+///
+/// **Non-blocking even while a send is inside the runtime**, which is what lets
+/// the picture and the sound run on two queues against one sender. The instance
+/// is destroyed by whichever call is LAST out: `stop` marks the sender closed
+/// and destroys only if nothing is in flight, and a send that finds itself the
+/// last one out of a closed sender destroys it on the way. A lock is held for
+/// the handful of instructions that read that state and never across a send, so
+/// a wedged picture send cannot delay a sound send, a `stop`, or each other.
+///
+/// A rwlock would have been the obvious primitive and is the wrong one here: a
+/// `stop` waiting for the write lock behind a wedged video send blocks the next
+/// AUDIO send behind it, which is exactly the coupling this pair exists to
+/// avoid.
 - (void)stop;
 
 @end

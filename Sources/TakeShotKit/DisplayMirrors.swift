@@ -16,6 +16,12 @@ import Foundation
 /// needs a dozen properties takes one, the way `live`, `scopes` and `transport`
 /// already do.
 ///
+/// The sound divides the same way and along the same line. `srt` takes AAC
+/// access units off the one shared `liveAudioEncoder`; `ndiAudio` takes the
+/// pipeline's stereo PCM packet directly, because NDI's SDK codes the sound
+/// itself exactly as it codes the picture. One tap, two legs — see
+/// `CapturePipeline+Audio`.
+///
 /// **Riding one slot is not the same as sharing one encoder, and the two facts
 /// diverge here.** `srt` and `webrtcViewers` are consumers of `liveEncoders`;
 /// `playout` and `ndi` are consumers of the display BUFFER, because a DeckLink
@@ -37,10 +43,17 @@ final class DisplayMirrors: ObservableObject {
     /// settings. Rebuilt on device/format changes; routed by viewer mode.
     var playout: PlayoutFeeder?
 
-    /// The NDI source; nil — off, which is the default. Built on the setting's
-    /// edge and dropped on the other, so with the switch off the display path
-    /// has no NDI consumer at all (see `CaptureController+NDI`).
+    /// The NDI source's PICTURE; nil — off, which is the default. Built on the
+    /// setting's edge and dropped on the other, so with the switch off the
+    /// display path has no NDI consumer at all (see `CaptureController+NDI`).
     var ndi: NDIVideoMirror?
+
+    /// The same source's SOUND, built and dropped with it and holding the same
+    /// sender. Two objects for one source because they are two blocking calls
+    /// on two queues: a receiver that stops taking picture must not be able to
+    /// hold up its own sound, or the other way round. Nil exactly when `ndi`
+    /// is, and with it gone the pipeline's stereo tap has no NDI consumer.
+    var ndiAudio: NDIAudioMirror?
 
     /// What Settings shows about the NDI output. Published because it is the
     /// only honest answer to "is it sending?": the switch is a wish, and a build
@@ -51,7 +64,7 @@ final class DisplayMirrors: ObservableObject {
     /// network; nil — the real sender. `ControllerHarness` fills it in for every
     /// controller it builds, so reaching the real one by omission is not
     /// possible from a test.
-    var ndiSenderFactory: ((String) throws -> NDIVideoSending)?
+    var ndiSenderFactory: ((String) throws -> NDISending)?
 
     /// Debounces the re-announce a name change causes (see `applyNDIChange`).
     var ndiRenameTask: Task<Void, Never>?

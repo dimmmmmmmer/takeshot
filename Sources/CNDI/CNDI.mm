@@ -46,6 +46,7 @@ NSString *const CNDUnavailableRuntimeRefused = @"ndi_runtime_refused";
 #if TAKESHOT_HAS_NDI_SDK
 
 #import <dlfcn.h>
+#import <os/lock.h>
 
 #pragma mark - Runtime (loaded once)
 
@@ -91,7 +92,18 @@ struct CNDRuntime {
     decltype(&NDIlib_send_create) send_create;
     decltype(&NDIlib_send_destroy) send_destroy;
     decltype(&NDIlib_send_send_video_v2) send_video;
-    /// nil once every pointer above resolved and the runtime initialised.
+    /// The audio send, and the ONE pointer here that is allowed to stay NULL.
+    ///
+    /// It is not in the required set below, and that is the promise stated at
+    /// `isAudioAvailable`: a runtime that exports the picture and not the sound
+    /// leaves the picture working. Every runtime old enough to miss it is
+    /// already excluded by the SDK-4 FourCC spellings this file compiles
+    /// against, so this is a guard against a case that should not arise rather
+    /// than a case that has been seen — and the cost of being wrong the other
+    /// way is a director's monitor going dark over their sound.
+    decltype(&NDIlib_send_send_audio_v3) send_audio;
+    /// nil once every REQUIRED pointer above resolved and the runtime
+    /// initialised.
     ///
     /// Set with `code` and never without it — they are one answer stated twice,
     /// for two readers (a diagnostics bundle and a translator), and a code that
@@ -133,6 +145,8 @@ static CNDRuntime *CNDSharedRuntime(void) {
           (decltype(&NDIlib_send_destroy))dlsym(handle, "NDIlib_send_destroy");
       runtime.send_video = (decltype(&NDIlib_send_send_video_v2))dlsym(
           handle, "NDIlib_send_send_video_v2");
+      runtime.send_audio = (decltype(&NDIlib_send_send_audio_v3))dlsym(
+          handle, "NDIlib_send_send_audio_v3");
       if (runtime.initialize == NULL || runtime.send_create == NULL ||
           runtime.send_destroy == NULL || runtime.send_video == NULL) {
           runtime.send_create = NULL;
@@ -161,10 +175,29 @@ static CNDRuntime *CNDSharedRuntime(void) {
     /// settings, but a dangling `const char *` is not a thing to be right about
     /// by inference.
     NSData *_nameBytes;
+    /// Guards the three fields below and NOTHING ELSE — never a send.
+    ///
+    /// Zero-initialised is the correct initial value (`OS_UNFAIR_LOCK_INIT` is
+    /// `{0}`), which is what makes it safe in an object whose `init` can return
+    /// nil: `dealloc` runs on a partially built one, and a lock that needed a
+    /// constructor call would be used before it had had one.
+    os_unfair_lock _lifetime;
+    /// `stop` has run. A send that sees this refuses rather than touching an
+    /// instance that is going away.
+    BOOL _closed;
+    /// How many sends are inside the runtime right now. At most two — the
+    /// picture's and the sound's — and the reason this is a count rather than a
+    /// flag.
+    int _inFlight;
 }
 
 + (BOOL)isSDKAvailable {
     return CNDSharedRuntime()->send_create != NULL;
+}
+
++ (BOOL)isAudioAvailable {
+    CNDRuntime *runtime = CNDSharedRuntime();
+    return runtime->send_create != NULL && runtime->send_audio != NULL;
 }
 
 + (nullable NSString *)unavailableReason {
@@ -243,18 +276,68 @@ static CNDRuntime *CNDSharedRuntime(void) {
     [self stop];
 }
 
-- (void)stop {
-    if (_sender == NULL) {
-        return;
+#pragma mark - lifetime, so two queues can send against one instance
+
+/// Claim the instance for one send, or NULL if there is nothing to send on.
+///
+/// The lock is held for these few instructions and never across the send
+/// itself, which is the whole design: the picture's send and the sound's are
+/// concurrent, and the only thing they contend for is this counter.
+- (NDIlib_send_instance_t)beginSend {
+    os_unfair_lock_lock(&_lifetime);
+    NDIlib_send_instance_t instance = _closed ? NULL : _sender;
+    if (instance != NULL) {
+        _inFlight += 1;
     }
-    CNDSharedRuntime()->send_destroy(_sender);
-    _sender = NULL;
+    os_unfair_lock_unlock(&_lifetime);
+    return instance;
 }
+
+/// Release the claim, and destroy the instance if this send was the last one
+/// out of a sender `stop` has already closed.
+///
+/// Deferred destruction rather than a lock `stop` waits on: `stop` is called
+/// from a mirror's own queue while the OTHER mirror may be parked inside a send
+/// for as long as its receiver makes it, and a `stop` that waited would put the
+/// two legs back behind one another at exactly the moment one of them is in
+/// trouble.
+- (void)endSend {
+    os_unfair_lock_lock(&_lifetime);
+    _inFlight -= 1;
+    NDIlib_send_instance_t doomed = NULL;
+    if (_closed && _inFlight == 0 && _sender != NULL) {
+        doomed = _sender;
+        _sender = NULL;
+    }
+    os_unfair_lock_unlock(&_lifetime);
+    if (doomed != NULL) {
+        CNDSharedRuntime()->send_destroy(doomed);
+    }
+}
+
+- (void)stop {
+    os_unfair_lock_lock(&_lifetime);
+    _closed = YES;
+    NDIlib_send_instance_t doomed = NULL;
+    // Nothing in flight: this call owns the teardown. Otherwise the last send
+    // out does it, and `_sender` is left in place until then so that send has
+    // something valid to be inside.
+    if (_inFlight == 0 && _sender != NULL) {
+        doomed = _sender;
+        _sender = NULL;
+    }
+    os_unfair_lock_unlock(&_lifetime);
+    if (doomed != NULL) {
+        CNDSharedRuntime()->send_destroy(doomed);
+    }
+}
+
+#pragma mark - the two sends
 
 - (BOOL)sendFrame:(CVPixelBufferRef)buffer
        frameRateN:(int32_t)frameRateN
        frameRateD:(int32_t)frameRateD {
-    if (_sender == NULL || buffer == NULL) {
+    if (buffer == NULL) {
         return NO;
     }
     // The one pixel format the display path produces. Refused rather than
@@ -263,8 +346,13 @@ static CNDRuntime *CNDSharedRuntime(void) {
     if (CVPixelBufferGetPixelFormatType(buffer) != kCVPixelFormatType_32BGRA) {
         return NO;
     }
+    NDIlib_send_instance_t instance = [self beginSend];
+    if (instance == NULL) {
+        return NO;
+    }
     if (CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly) !=
         kCVReturnSuccess) {
+        [self endSend];
         return NO;
     }
     void *base = CVPixelBufferGetBaseAddress(buffer);
@@ -291,11 +379,50 @@ static CNDRuntime *CNDSharedRuntime(void) {
         frame.line_stride_in_bytes = (int)CVPixelBufferGetBytesPerRow(buffer);
         // Synchronous: returns when NDI is done with these bytes, which is what
         // makes lending it the locked base address safe.
-        CNDSharedRuntime()->send_video(_sender, &frame);
+        CNDSharedRuntime()->send_video(instance, &frame);
         sent = YES;
     }
     CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+    [self endSend];
     return sent;
+}
+
+- (BOOL)sendAudio:(const float *)planar
+    framesPerChannel:(int32_t)framesPerChannel
+            channels:(int32_t)channels
+          sampleRate:(int32_t)sampleRate {
+    CNDRuntime *runtime = CNDSharedRuntime();
+    // A runtime with no audio entry point sends picture and refuses this, which
+    // is the whole reason it is not in the required set. See `isAudioAvailable`.
+    if (runtime->send_audio == NULL || planar == NULL) {
+        return NO;
+    }
+    // Refused rather than clamped: every one of these describes the SHAPE of
+    // the buffer being lent, so a wrong one is a read past the end of it.
+    if (framesPerChannel <= 0 || channels <= 0 || sampleRate <= 0) {
+        return NO;
+    }
+    NDIlib_send_instance_t instance = [self beginSend];
+    if (instance == NULL) {
+        return NO;
+    }
+    NDIlib_audio_frame_v3_t frame = NDIlib_audio_frame_v3_t();
+    frame.sample_rate = sampleRate;
+    frame.no_channels = channels;
+    frame.no_samples = framesPerChannel;
+    // Synthesized, exactly as the picture's is, and the pair is the point — see
+    // the note on this method in the header.
+    frame.timecode = NDIlib_send_timecode_synthesize;
+    // Planar 32-bit float. The one uncompressed layout `_v3` carries, and what
+    // the caller has already built: nothing is repacked here.
+    frame.FourCC = NDIlib_FourCC_audio_type_FLTP;
+    frame.p_data = (uint8_t *)planar;
+    frame.channel_stride_in_bytes = (int)(framesPerChannel * sizeof(float));
+    // Synchronous, like the video send, which is what makes lending the
+    // caller's planes safe: the call returns when NDI is done with them.
+    runtime->send_audio(instance, &frame);
+    [self endSend];
+    return YES;
 }
 
 @end
@@ -327,6 +454,14 @@ static NSString *const kCNDNoSDKMessage =
 @implementation CNDSender
 
 + (BOOL)isSDKAvailable {
+    return NO;
+}
+
++ (BOOL)isAudioAvailable {
+    // Nothing to send picture on, so nothing to send sound on either. Stated
+    // rather than inherited: the two questions are separate in the real bridge
+    // and a stub that answered them differently would be the only build where
+    // "audio available" did not imply "a sender exists".
     return NO;
 }
 
@@ -371,6 +506,17 @@ static NSString *const kCNDNoSDKMessage =
     (void)buffer;
     (void)frameRateN;
     (void)frameRateD;
+    return NO;
+}
+
+- (BOOL)sendAudio:(const float *)planar
+    framesPerChannel:(int32_t)framesPerChannel
+            channels:(int32_t)channels
+          sampleRate:(int32_t)sampleRate {
+    (void)planar;
+    (void)framesPerChannel;
+    (void)channels;
+    (void)sampleRate;
     return NO;
 }
 

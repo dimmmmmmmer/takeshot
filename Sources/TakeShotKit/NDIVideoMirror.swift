@@ -67,7 +67,7 @@ final class NDIVideoMirror: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: NDIVideoMirror.queueLabel,
                                       qos: .userInitiated)
-    private let sender: NDIVideoSending
+    private let sender: NDISending
     /// Shortest gap between two sends (1 / the pace this mirror was built with).
     private let interval: TimeInterval
 
@@ -82,7 +82,7 @@ final class NDIVideoMirror: @unchecked Sendable {
     /// `stop()` has run; late offers are inert.
     private var stopped = false
 
-    init(sender: NDIVideoSending,
+    init(sender: NDISending,
          framesPerSecond: Double = NDIVideoMirror.framesPerSecond) {
         self.sender = sender
         interval = framesPerSecond > 0 ? 1 / framesPerSecond

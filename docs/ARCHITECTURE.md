@@ -71,7 +71,7 @@ which is worth a great deal and is not the same as green.
 | `CBraw` | Obj-C++ bridge to the Blackmagic RAW SDK (`CBRClip`) |
 | `CR3D` | Obj-C++ bridge to RED's R3D SDK (`CR3DClip`), for `.r3d` playback |
 | `CSRT` | Obj-C++ bridge to libsrt (`CSRTSender`), for the SRT output |
-| `CNDI` | Obj-C++ bridge to the NDI SDK (`CNDSender`), for the NDI output. The one live output that is NOT behind the shared H.264 encoder: NDI takes frames and compresses them itself |
+| `CNDI` | Obj-C++ bridge to the NDI SDK (`CNDSender`), for the NDI output. The one live output that is NOT behind the shared encoders: NDI takes frames and PCM and codes both itself. Its two sends run on two queues against one sender, so neither media type can hold the other up |
 | `CDataChannel` | Obj-C++ bridge to libdatachannel (`CDCPeerConnection`): ICE, DTLS-SRTP and the RTP socket for the WebRTC output. No media pipeline — the app encodes and packetises |
 | `TakeShotKit` | The application layer, as a library so tests can reach it |
 | `TakeShot` | The executable entry point and nothing else |
@@ -319,7 +319,10 @@ the send; forcing it through the encoder would mean handing it bytes it cannot
 use. So the display handler fans out to at most three calls (`PlayoutFeeder`,
 `NDIVideoMirror`, `LiveVideoEncoder`), and downstream of those three there is no
 shared queue at all: `com.takeshot.ndi`, `com.takeshot.encode`, and the playout's
-own.
+own. The sound divides the same way and adds one more:
+`com.takeshot.audio-encode` for the AAC the transport stream needs, and
+`com.takeshot.ndi-audio` for NDI's PCM. Five queues, no two of which wait on
+each other.
 
 **What the second output costs the frame path is one pixel-format test and one
 `dispatch_async`.** Measured, release, 1080p, median of 15
@@ -340,7 +343,7 @@ NDI has no such number because NDI's own codec decides its rate from the picture
 One number for one encoder, and a feed that is not behind that encoder is not
 asked to pretend it is.
 
-**SRT carries sound now; NDI does not, and what separates them is the LEG rather
+**SRT and NDI both carry sound now, and what separates them is the LEG rather
 than the tap.** Both used to be picture only for one shared reason: the
 pipeline's only stereo feed was `onMonitorAudio`, a single slot owned by
 `AudioMonitor` and gated on `monitorEnabled`, so hanging either feed off it
@@ -350,13 +353,77 @@ mix per packet, taken once, served to the speakers and every outgoing transport
 alike, and delivered whatever the monitor switch says. See "The stereo tap"
 below. Only the leg after it differs: AAC and a second PID for SRT, planar float
 and `NDIlib_send_send_audio_v3` for NDI, Opus for WebRTC because AAC is not a
-browser codec. SRT's leg is written and executed here; the other two are stated
-seams, because neither can be RUN on a machine with no NDI headers and no
-libdatachannel — see `CaptureController+NDI` and `CaptureController+WebRTC` for
-what each one costs when it is built. (The Opus half of the WebRTC leg was
-assumed missing and turned out not to be: AudioToolbox encodes Opus on this
-machine, measured. What is missing there is the peer connection nothing here has
-ever run, not the codec.)
+browser codec. Two of the three are written and executed here; WebRTC's is still
+a stated seam, because it cannot be RUN on a machine with no libdatachannel —
+see `CaptureController+WebRTC` for what it costs when it is built. (The Opus half
+of that leg was assumed missing and turned out not to be: AudioToolbox encodes
+Opus on this machine, measured. What is missing there is the peer connection
+nothing here has ever run, not the codec.)
+
+**NDI's leg, and the two things about it that are not SRT's.**
+`LiveAudioEncoder` is not involved at all — NDI takes PCM and codes it itself,
+exactly as it takes frames rather than H.264 — so an NDI source with no SRT link
+builds no AAC session and no H.264 session. What it does instead is the one real
+per-sample conversion anywhere in this feature: the tap's interleaved signed
+16-bit becomes the de-interleaved 32-bit float `NDIlib_FourCC_audio_type_FLTP`
+names, scaled by 1/32768 so that −32768 lands on exactly −1.0 (1/32767 would put
+the full-scale negative sample, the one code a limiter is likeliest to have
+parked samples on, outside the range).
+
+And **the sound is not coalesced where the picture is**. `NDIVideoMirror` keeps
+only the newest frame, because a monitor wants fewer frames rather than older
+ones. Sound has no such freedom: NDI synthesizes the audio timecode from the
+samples it is handed, so a dropped packet is both a hole and a permanent shift
+against the picture. `NDIAudioMirror`'s queue is therefore a FIFO with a
+one-second backlog ceiling; past it a packet is refused and counted, which only
+happens once the receiver has stopped taking sound at all.
+
+**Two queues for one source, and it is a claim about failure rather than about
+speed.** NDI's video send and audio send are different calls on the same sender
+and both block for as long as the receiver makes them, so one queue would mean a
+stalled picture holding up its own sound. `com.takeshot.ndi` carries the picture
+and `com.takeshot.ndi-audio` the sound; `CNDSender` serializes the sender's
+LIFETIME and nothing else — `stop` marks it closed without waiting, and whichever
+send is last out destroys the instance. A rwlock would have been the obvious
+primitive and is the wrong one: a `stop` waiting for the write lock behind a
+wedged picture send blocks the next sound send behind it, which is the coupling
+the split exists to rule out. `aParkedPictureSendDoesNotStallTheSound` and
+`aParkedSoundSendDoesNotStallThePicture` hold both directions, and a planted
+single shared queue fails both.
+
+**Neither leg states a timecode.** Both ask the runtime to synthesize
+(`NDIlib_send_timecode_synthesize`), which is the SDK's own documented
+configuration for two streams staying in sync: one sender takes the system time
+as its origin once and generates both series from it, so a receiver aligns them
+on one clock rather than on two app-side stamps that would have to agree. The
+packet's own presentation time is the pipeline's stream clock and has no defined
+relationship to NDI's 100 ns timecode domain, so converting it would be inventing
+an origin. Whether that reads as lip sync on a real receiver is not something
+this machine can answer.
+
+**What the sound costs the capture queue, measured.** Release, minimum of nine
+passes over 400 packets from an 8-channel source, against a 40 ms packet
+interval: **12.9 µs/packet with NDI off, 12.9 with NDI's PICTURE up, 18.4 with
+any one consumer on the tap, and 22.9 with NDI's sound.** The second row is the
+finding rather than a gap — the sound leg is the only part of this feature that
+touches the capture queue at all — and the third is what attributes the rest: the
+stereo mix is the TAP's cost and the first consumer pays it whichever transport
+it is. The conversion itself is 1.17 µs mono and 2.29 µs stereo for a 1920-frame
+packet and is not on that queue: it runs behind the hop, on the sound's own. The
+frame path is unmoved by the sound being up — 0.008 ms at 1080p either way.
+`TAKESHOT_BENCH=1 scripts/test.sh -c release --filter NDIPerformance` reproduces
+all of it.
+
+**And it cannot reach the file**, which is the claim that matters most and is
+made in bytes. `NDIAudioRecordIdentityTests` shoots the same take twice with the
+leg attached and detached and compares the audio track's samples, in TWO channel
+configurations. The second is the sharp one and the SRT model does not have it:
+with a stereo source and no mask, `PCMAudio.selectChannels` hands the tap back
+the original buffer rather than packing a copy, so the leg is holding the very
+`CMSampleBuffer` the writer was handed a line earlier. A planted conversion that
+wrote through its input corrupts the file from byte 0 there — and changes nothing
+at all under the other configuration, where the tap's packet is a buffer of its
+own.
 
 ### The stereo tap, and which channels go out
 
