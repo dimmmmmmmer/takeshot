@@ -58,6 +58,25 @@ import Testing
 
     /// The slate travels the same way and pays the same bound — all three
     /// fields, because a slate commits as a unit.
+    ///
+    /// The two TEXT fields pay the text bound. The take number pays a different
+    /// one and always did: it is a number, so what protects it is the take
+    /// field's own ceiling (`SlateTakeField.maximum`) rather than a character
+    /// count.
+    ///
+    /// **This test used to expect 0 here, and the 0 was an accident.** The old
+    /// parse was `Int(bounded(text))`, so the answer turned over at the width of
+    /// `Int` and nowhere else — measured across lengths: 5 digits gave 99999,
+    /// **18 digits gave 999999999999999999**, and 19 gave 0. Five thousand
+    /// digits landed on the safe side of that cliff and the unsafe side was one
+    /// digit away, with nothing testing it. `slate.take` is written into the
+    /// .mov's metadata at `TakeWriter` time and into the Take column of
+    /// `takeshot-slate.csv` and the ALE, so an eighteen-digit take number off
+    /// the network reached the deliverables.
+    ///
+    /// Reading it with `SlateTakeField` — the same rule the two TAKE fields on
+    /// the desktop use — makes the bound the same at every length, which is
+    /// what this now pins.
     @Test func theSlateFieldsAreBoundedToo() throws {
         let long = String(repeating: "9", count: 5_000)
         let json: String = #"{"action":"slate","id":"a","scene":"\#(long)""#
@@ -69,9 +88,25 @@ import Testing
         }
         #expect(slate.scene.count == RemoteCommand.maximumTextLength)
         #expect(slate.shot.count == RemoteCommand.maximumTextLength)
-        // Cut, then read as a number — and an ellipsis is not one, which is
-        // the honest answer to five thousand digits nobody slated.
-        #expect(slate.take == 0)
+        #expect(slate.take == SlateTakeField.maximum)
+    }
+
+    /// The take number's bound does not move with the length of what was sent.
+    /// Every one of these used to give a different answer, and the two in the
+    /// middle reached the sidecars.
+    @Test func aTakeNumberOffTheWireIsBoundedAtEveryLength() throws {
+        for digits in [5, 18, 19, 60, 5_000] {
+            let long = String(repeating: "9", count: digits)
+            let json: String = #"{"action":"slate","id":"a","scene":"12""#
+                + #","shot":"B","take":"\#(long)","pin":"1"}"#
+            let message: RemoteMessage = try #require(RemoteMessage.parse(json))
+            guard case .slate(_, let slate) = message.command else {
+                Issue.record("a slate command did not parse at \(digits) digits")
+                return
+            }
+            #expect(slate.take == SlateTakeField.maximum,
+                    "\(digits) digits logged take \(slate.take)")
+        }
     }
 }
 

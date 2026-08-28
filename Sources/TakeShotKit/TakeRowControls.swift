@@ -15,23 +15,21 @@ struct TakeLogButton: View {
     @EnvironmentObject private var controller: CaptureController
     let take: Take
     @State private var showPopover = false
-    @State private var draft = ""
-    @State private var scene = ""
-    @State private var shot = ""
-    @State private var takeText = ""
-    @State private var logDescription = ""
+    /// Everything the editor is holding, as one value — see `TakeLogDraft` for
+    /// why the load and the save have to be inverses and why nothing could ask
+    /// whether they were.
+    @State private var draft = TakeLogDraft()
     @FocusState private var editorFocused: Bool
 
     /// Whether the take carries anything at all — the button is filled when it
-    /// does, so a glance down the panel finds the logged takes.
-    private var isLogged: Bool {
-        !take.comment.isEmpty || !take.slate.isEmpty
-            || !take.logDescription.isEmpty
-    }
+    /// does, so a glance down the panel finds the logged takes. The same four
+    /// fields the popover opens with, so a filled button never opens an empty
+    /// editor.
+    private var isLogged: Bool { !TakeLogDraft(of: take).isEmpty }
 
     var body: some View {
         Button {
-            loadDraft()
+            draft = TakeLogDraft(of: take)
             showPopover = true
         } label: {
             Image(systemName: isLogged ? "bubble.left.fill" : "bubble.left")
@@ -52,13 +50,14 @@ struct TakeLogButton: View {
     /// under it read as a mistake (see `SlateFieldsEditor.popoverContentWidth`).
     private var editor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SlateFieldsEditor(scene: $scene, shot: $shot, takeText: $takeText)
+            SlateFieldsEditor(scene: $draft.scene, shot: $draft.shot,
+                              takeText: $draft.takeText)
             Text(L("description_label")).font(.caption).foregroundStyle(.secondary)
-            TextField("", text: $logDescription)
+            TextField("", text: $draft.logDescription)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: SlateFieldsEditor.popoverContentWidth)
             Text(L("comment_label")).font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: $draft)
+            TextEditor(text: $draft.comment)
                 .font(.body)
                 .frame(width: SlateFieldsEditor.popoverContentWidth, height: 80)
                 .overlay(RoundedRectangle(cornerRadius: 4)
@@ -86,21 +85,16 @@ struct TakeLogButton: View {
         .padding(12)
     }
 
-    private func loadDraft() {
-        draft = take.comment
-        scene = take.slate.scene
-        shot = take.slate.shot
-        takeText = take.slate.take > 0 ? String(take.slate.take) : ""
-        logDescription = take.logDescription
-    }
-
+    /// Both writes go through the controller, which files them on the take list
+    /// and the sidecars and never on the recorded file (`CaptureController+Slate`
+    /// says why). The draft decides what they say — including how the TAKE
+    /// field is read, which this used to answer for itself by keeping the first
+    /// four DIGITS typed, so an operator who typed 12345 here logged take 1234
+    /// and one who typed it into the footer logged 9999.
     private func save() {
-        controller.setComment(draft, for: take)
-        let digits = takeText.filter(\.isNumber).prefix(4)
-        controller.setSlate(
-            SlateMetadata(scene: scene, shot: shot,
-                          take: max(0, Int(digits) ?? 0)),
-            description: logDescription, for: take)
+        controller.setComment(draft.comment, for: take)
+        controller.setSlate(draft.slate, description: draft.logDescription,
+                            for: take)
     }
 }
 

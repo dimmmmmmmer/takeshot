@@ -44,7 +44,11 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.38 %** lines (4 126 of 42 904 lines uncovered) |
+| Measured | **90.62 %** lines (4 145 of 44 183 lines uncovered) |
+
+Measured in the ORDINARY configuration, which is what `scripts/coverage.sh`
+runs and what CI runs. `-DTAKESHOT_FORCE_STUBS=1` is a different build with
+different reachable branches and is not what any number in this file refers to.
 
 The NDI output's return moved it up by five hundredths of a point while adding
 367 lines of measurable code, and for a related reason: the parts of it that do
@@ -170,6 +174,74 @@ showed rather than for what it caught:
 twice and either line alone is redundant; breaking both is what turns
 `aLoopWithAnInPointResumesAtTheInPoint` red.
 
+## The shared-rule wave
+
+The wave that took the number from 90.55 % to 90.62 % started from the list the
+long-tail wave left rather than from the report. Three of its four changes were
+one shape — a rule that several surfaces each spelled out for themselves,
+pulled into one place, where the copies could be compared for the first time —
+and two of those three had already drifted.
+
+Two runs of the finished tree measured 4 147 and 4 145 uncovered lines — two
+lines of jitter, the same order the long-tail wave saw. The figure above is the
+second run's, and both were re-derived from that run's own `coverage-report.txt`
+rather than from a log. The starting figure was measured the same way on the
+same machine, and it is NOT the 90.38 % this file carried before: the tree has
+grown 1 279 measurable lines since that number was written down, so the honest
+comparison is 90.55 → 90.62 and not 90.38 → 90.62.
+
+**Read the point move before copying the method.** Seven hundredths of a point
+for four changes is the smallest of the four waves in this file, and it is a
+fact about the SHAPE of the work rather than about how much of it there was:
+deduplicating a decision deletes lines from several places and adds one covered
+function, so it lowers the denominator about as fast as it raises the numerator.
+`RawPlayback+Transport` went 95 % → 100 % (6 lines), `TakeRowControls` moved 16
+and `TransportBar` 6, `CaptureController+LUT` was at 100 % lines before and
+after, and the three new files are 47 lines at 100 %. A wave that wants POINTS
+should go after the view bodies and the AppKit paths; a wave that wants the
+number to mean something should expect to find what this one found. Both are
+worth doing and they are not the same afternoon.
+
+| Extraction | What it decides, and what it found |
+| --- | --- |
+| `SlateTakeField` | What a TAKE field means, in both directions: typed text becomes a take number, a take number becomes the text the field shows. **Already drifted, three ways.** The same field is reachable from the footer, from the takes panel's popover and from the phone, and all three write the same `SlateMetadata.take` — into the .mov at `TakeWriter` time, and into `takeshot-slate.csv` and the ALE afterwards. `12345` was 9999 in the footer, 1234 in the popover (it kept the first four DIGITS) and 12345 on the phone; `12A` was 12, 12 and **0 — nothing logged**; `0` was **1**, 0 and 0. Two of the three are drawn by the SAME view (`SlateFieldsEditor`), which is why the control looked shared. The ceiling was three `9999` literals, one of them in `SlateStep`, whose comment already claimed the controller clamped "to the same ceiling". |
+| `PlaybackLook` | Whether a look is reaching the clip under review, and therefore what the filter control beside the transport may say about it. **Already drifted.** `applyPlaybackLUT` — what actually reaches the picture — asks four questions: preview on, look baked into the file, suppressed for this clip, and is there a cube. The bar asked two. It never asked whether there was a LOOK, so with the library cleared and preview still on (`selectLUT(fileName: nil)` deliberately leaves `previewEnabled` alone) it lit in the accent colour over an ungraded picture and offered to switch off something that was not on. Every case is now checked against the FRAME the tap delivers rather than against the flags. |
+| `TakeLogDraft` | What the take log popover holds while it is open, and the fact that its load and its save are inverses. It is the only way to correct what a take was slated as, and the correction lands on the sidecar that `+LibraryRestore` reads back as the newer of the two — so a slate changed by a save nobody meant travels into the next session as the truth. Both halves were private methods over five `@State` strings inside a body SwiftUI does not build until the popover is presented, and the take-number half was not an inverse. |
+
+The fourth is the six lines the previous section named and left, so
+`RawPlayback+Transport` is 100 % now: clearing an in or out point by clicking it
+again, a scrub that RESUMES playback instead of stopping it, and the scopes
+following a paused seek — which is the thing a DIT does all day.
+
+**One existing test had to change, and the reason is the finding.**
+`RemoteAbuseBoundsTests.theSlateFieldsAreBoundedToo` expected a take of five
+thousand digits off the wire to read as 0, on the argument that "an ellipsis is
+not a number". That 0 was an accident of where `Int(_:)` gives up. The old parse
+was `Int(bounded(text))`, so the answer turned over at the width of `Int` and
+nowhere else — measured across lengths: 5 digits gave 99999, **18 digits gave
+999999999999999999**, 19 gave 0. The test sat on the safe side of that cliff
+with the unsafe side one digit away and nothing looking at it, and `slate.take`
+goes into the .mov's metadata and the Take column of the sidecar and the ALE. It
+now pins the bound at every length, which is a stronger claim than the one it
+replaced.
+
+Every claim was checked by breaking it and watching a test name the break:
+twelve mutations, all twelve caught, each by the test that describes it. Three
+are worth writing down for what they showed rather than for what they caught:
+
+- Removing the take-number ceiling turned five assertions red across two suites
+  and left the round trip GREEN, correctly — a number under the ceiling still
+  comes back. The round trip and the ceiling are two claims and need two tests.
+- Putting the footer's own parse back — the exact state described above — is
+  caught by `theCartAndThePhoneLogTheSameTakeNumber` and by nothing else:
+  `(controller.slateTakeOverride → 1) == (expected → nil)`, which is typing `0`
+  into a field and being handed take 1.
+- Demoting `PlaybackLook.baked` below the preview guard changes NOTHING about
+  the picture: `appliesCube` is false either way, so only the READING moves, and
+  only the assertion about the reading catches it. That is the argument for
+  asserting a control separately from the frame it claims to describe, and it is
+  why every case in that suite is checked against both.
+
 ## The honest ceiling
 
 Roughly **1 000 lines — about 2.4 points — cannot be covered by a headless
@@ -178,9 +250,21 @@ between that and the measured 90 % is not unreachable code: it is a long tail of
 view bodies, AppKit window paths and error branches that are reachable with more
 work. 95 % is a question of how many more waves, not of whether it is possible.
 
-The long-tail wave below is one measurement of what "more work" costs: six
-changes, +0.67 points, and five of the six were a rule leaving a place nothing
-could ask it rather than a new assertion about code that stayed where it was.
+There are now two measurements of what "more work" costs, and they are an order
+of magnitude apart, which is the useful part:
+
+| Wave | Changes | Points | What the changes were |
+| --- | --- | --- | --- |
+| long-tail | 6 | +0.67 | a fixture that had never decoded, plus five rules leaving places nothing could ask them |
+| shared-rule | 4 | +0.07 | four rules leaving places nothing could ask them, three of which were spelled out in several places at once |
+
+The difference is not effort. A rule that was in ONE unreachable place moves the
+number when it comes out; a rule that was in FOUR unreachable places deletes
+three copies on the way, and deleting covered-by-nobody lines lowers the
+denominator as fast as the new function raises the numerator. Both leave the
+suite defending more than it did. Only one of them shows up in the report, and a
+wave planned against the report alone will keep picking the first kind and never
+find a disagreement — because a rule stated once cannot disagree with itself.
 
 What is genuinely out of reach, and why:
 
@@ -195,7 +279,7 @@ What is genuinely out of reach, and why:
 | ~37 | `DeckLinkBackendAdapter.swift` | Constructing it installs a process-wide hot-plug callback and adopts whatever board is attached. |
 | ~29 | `SingleInstanceGuard.swift` | Hands off to another running copy of the app via `NSRunningApplication`. |
 | ~41 | `FilePanel`, `AudioRenderRoute`, `PlayoutOutput` | The far side of the three new seams: `runModal()`, `audioOutputDeviceUniqueID` on a live renderer, and the `CDLPlayout` conformance. |
-| ~39 | `RawPlayback+*`, `RawClipSource` | **This row said ~200 and was wrong — not about the SDK, about what the SDK was being blamed for.** BRAW's headers are absent on CI, so `BRAWSource` and `R3DSource` cannot execute there; but most of the 200 was the DECODE LOOP, which is format-agnostic and was uncovered because every fixture was a folder of files that would not decode, not because of any SDK (see the long-tail wave). What is left is the two SDK-gated sources, and the timecode readouts underneath them — `parseTimecode` and the R3D half-rate `timecodeFrames` need a clip that carries a start timecode, which a folder of CinemaDNG frames does not. `R3DClipSource.swift` (~52) is the same story. The developer machine now HAS the BRAW headers, so `CBRClip.isSDKAvailable` is true here and false on CI — and this changes the coverage number by NOTHING, measured: 90.34 %, 4 108 uncovered, byte for byte the same before and after the headers landed. Availability is not exercise. No suite owns a real `.braw` file, so the decode path stays dark whether the bridge is a stub or not, and the two machines still agree. (An earlier version of this line claimed they would diverge. They do not, and the measurement is why.) |
+| ~33 | `RawClipSource` (and no longer `RawPlayback+*`) | **This row said ~200 and was wrong — not about the SDK, about what the SDK was being blamed for.** BRAW's headers are absent on CI, so `BRAWSource` and `R3DSource` cannot execute there; but most of the 200 was the DECODE LOOP, which is format-agnostic and was uncovered because every fixture was a folder of files that would not decode, not because of any SDK (see the long-tail wave). What is left is the two SDK-gated sources, and the timecode readouts underneath them — `parseTimecode` and the R3D half-rate `timecodeFrames` need a clip that carries a start timecode, which a folder of CinemaDNG frames does not. `R3DClipSource.swift` (~52) is the same story. The developer machine now HAS the BRAW headers, so `CBRClip.isSDKAvailable` is true here and false on CI — and this changes the coverage number by NOTHING, measured: 90.34 %, 4 108 uncovered, byte for byte the same before and after the headers landed. Availability is not exercise. No suite owns a real `.braw` file, so the decode path stays dark whether the bridge is a stub or not, and the two machines still agree. (An earlier version of this line claimed they would diverge. They do not, and the measurement is why.) The `RawPlayback+*` half of this row is now spent: `+Scopes` and `+Transport` are at 100 % and `+PlayLoop` at 98 %, so nothing in the RAW ENGINE is left here — only the two SDK-gated sources under it. |
 | ~39 | `WebRTCPeer.swift` | The real peer connection, behind the `WebRTCPeering` seam. Reaching it means generating a DTLS certificate and gathering ICE candidates off every interface the machine has, once per test. `WebRTCBridgeTests` DOES exercise it — the offer, the answer, the candidate list — but only on a machine that has libdatachannel, which is not CI. The mappings that decide behaviour (`state`, `classify`) were pulled out as pure functions and are covered everywhere (`WebRTCMappingTests`). |
 
 And the ones the interruption wave went looking for and could not reach. Each
@@ -219,28 +303,54 @@ Two more, worth naming because they look coverable and are not:
   construct until the menu opens. Their inputs — `mediaSources`,
   `panelActionTargets` — are covered on the controller side instead.
 - **Popover bodies** (`TakeLogButton.editor`) are not built until the popover is
-  presented. What they read and write (`setComment`, `setSlate`) is covered.
+  presented. What they read and write is covered, and that got narrower: it used
+  to mean "`setComment` and `setSlate` are tested", which said nothing about the
+  five `@State` strings between the take and those two calls. The draft is a
+  value now (`TakeLogDraft`), so the load, the save and the fact that they are
+  inverses are all covered, and what is left unreachable is the LAYOUT.
 
-And what the long-tail wave deliberately did NOT touch, so the next one starts
+And what the shared-rule wave deliberately did NOT touch, so the next one starts
 from a list rather than from the report again:
 
 - `AppCommands.swift` (~344, 6 %) is still the largest single file in the table
-  and the reasoning above still holds — checked rather than assumed this time.
-  The two things that CAN regress silently are already covered from outside:
-  `ModelAppCommandsTests` walks every title key in both languages (a typo
-  renders as `menu_play_pause`, which no build step notices) and pins the
-  shortcut rule, and `ViewDisabledRuleTests` walks the sources so all 22
-  `.disabled(` sites there name a controller rule. Hosting the groups as plain
-  views would execute 34 `Button` bodies and assert none of it.
-- The view files with the most left (`TakeRowControls` 159, `FooterBar` 76,
-  `TransportBar` 72, `MediaSourcePicker` 69, `ChromaKeyControls` 65) are mostly
-  menu content and popover bodies — the two categories above — plus body arms
-  reachable only by rendering a state. Rendering for its own sake is what this
-  file exists to say no to; rendering to measure a SIZE budget is what the
-  `View*` suites already do, and that is where the honest next wave is.
-- `RawPlayback+Transport`'s last six lines: clearing an in or out point by
-  clicking it again, a seek that resumes playback, and the scope callback on a
-  paused seek. Small, reachable, and left because the wave had run its length.
+  and the reasoning above still holds — checked rather than assumed by the
+  long-tail wave, and not re-argued since. The two things that CAN regress
+  silently are already covered from outside: `ModelAppCommandsTests` walks every
+  title key in both languages (a typo renders as `menu_play_pause`, which no
+  build step notices) and pins the shortcut rule, and `ViewDisabledRuleTests`
+  walks the sources so all 22 `.disabled(` sites there name a controller rule.
+  Hosting the groups as plain views would execute 34 `Button` bodies and assert
+  none of it.
+- **`AssistZoomEvents.swift` (56) is not a gap, and the report cannot say so.**
+  It is the file `PunchEventView.handle` lives in, which the table above already
+  accounts for; what is left in it is the reading of facts off an `NSEvent` and
+  the two calls that apply the outcome. Anyone working down the report's top-N
+  list will meet this file with no idea it is settled — which is the general
+  hazard of reading the report instead of this document, and the reason the
+  table names SYMBOLS and the report names files.
+- **`ChromaKeyControls`' three slider readouts, found and left.** They ask one
+  question — what fraction of this slider's travel is the dial at — in two
+  spellings: tolerance divides by `ChromaKey.maxTolerance`, softness does not
+  divide at all. Both are right today and one of them only because
+  `maxSoftness` happens to be 1.0; move that constant and the softness dial
+  silently stops reaching 100 while its slider still reaches the end. Worth
+  stating once, and worth knowing before starting: **it pays no coverage at
+  all.** The `percent` helper already executes when the body renders, and the
+  65 uncovered lines in that file are button action closures, the eyedropper's
+  cursor handling, and `ChromaColorField.commit()` — which is the one real
+  decision left there (an unparseable hex is put back rather than swallowed).
+- The view files with the most left after this wave — `TakeRowControls` 143,
+  `PlayerBadges` 78, `MediaSourcePicker` 69, `FooterBar` 76, `TransportBar` 66 —
+  are still mostly menu content and popover bodies (the two categories above)
+  plus body arms reachable only by rendering a state. `PlayerBadges` is the one
+  of these that no table row explains yet, and the decidable part of it is the
+  badge clock: it re-renders at 10 Hz only while something is actually running,
+  which is a rule about `player.rate` and `rawPlayer?.isPlaying` that lives
+  inside a `TimelineView` closure. `MediaSourcePicker`'s residue is 13 lines of
+  menu body plus three `Identifiable` `id` accessors — a picker row is
+  identified by its URL and not its name, so two files of the same name in two
+  folders stay two rows, which is a claim worth one assertion and three lines.
+- Rendering for its own sake is still what this file exists to say no to.
 
 ## Rules that outrank the number
 
