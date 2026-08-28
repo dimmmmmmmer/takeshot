@@ -4,7 +4,24 @@
 // vendor/DeckLinkSDK/include (see vendor/DeckLinkSDK/README.md).
 // The SDK's DeckLinkAPIDispatch.cpp dynamically loads /Library/Frameworks/DeckLinkAPI.framework,
 // so there's no need to link the framework at build time.
-#if __has_include("DeckLinkAPI.h")
+// A build can be FORCED to the stub, and that is not a convenience.
+//
+// `__has_include` answers about this machine, not about this project: a header
+// on clang's default search path satisfies it whatever `vendor/` holds, and it
+// does so silently. Measured — `/opt/homebrew/include` on the development Mac
+// carries both `srt/srt.h` and `DeckLinkAPI.h`, so the stub half of those two
+// bridges had never once been compiled here, and the suites that test what a
+// DOWNLOADED build does had never run. A planted regression that should have
+// turned a test red passed instead, which is the only way that gets noticed.
+//
+// So `-DTAKESHOT_FORCE_STUBS=1` (or the per-bridge name below) forces this
+// file to its stub, on any machine, whatever is installed. That configuration
+// IS the published release, so it is the one that most needs to be buildable
+// on purpose rather than by accident of what the developer has not installed.
+#if (defined(TAKESHOT_FORCE_STUBS) && TAKESHOT_FORCE_STUBS) \
+    || (defined(TAKESHOT_FORCE_STUB_DECKLINK) && TAKESHOT_FORCE_STUB_DECKLINK)
+#define TAKESHOT_HAS_DECKLINK_SDK 0
+#elif __has_include("DeckLinkAPI.h")
 #define TAKESHOT_HAS_DECKLINK_SDK 1
 #include "DeckLinkAPI.h"
 #include "DeckLinkAPIDispatch.cpp"

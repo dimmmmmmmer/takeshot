@@ -23,8 +23,17 @@ jobs:
           sw_vers
           swift --version
 
+      # Forced, not assumed. This job is meant to be the configuration a
+      # DOWNLOADED build has — no vendor SDKs — but until now it was that only
+      # because the runner happens not to carry the headers. `__has_include`
+      # answers about the machine, not the project: on the development Mac
+      # `/opt/homebrew/include` carries `srt/srt.h` and `DeckLinkAPI.h`, and
+      # those two bridges had therefore NEVER been compiled as stubs there,
+      # with the suites describing a downloaded build never running at all.
+      # A runner image that gains libsrt from Homebrew one week would do the
+      # same to CI, silently. So the flag says what this job is for.
       - name: Build
-        run: swift build
+        run: swift build -Xcc -DTAKESHOT_FORCE_STUBS=1
 
       - name: Lint
         # Style regressions are cheap to prevent and expensive to clean up in
@@ -34,9 +43,13 @@ jobs:
           ./scripts/lint.sh lint --strict
 
       - name: Test
-        run: ./scripts/test.sh
+        run: ./scripts/test.sh -Xcc -DTAKESHOT_FORCE_STUBS=1
 
       - name: Build TakeShot.app
+        env:
+          # The artifact is the same configuration the suite above ran: every
+          # bridge a stub, which is what a downloaded build is.
+          TAKESHOT_BUILD_FLAGS: -Xcc -DTAKESHOT_FORCE_STUBS=1
         run: ./scripts/bundle-app.sh
 
       - name: Zip the app
@@ -60,4 +73,4 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Tests under ThreadSanitizer
-        run: ./scripts/test.sh --sanitize=thread
+        run: ./scripts/test.sh --sanitize=thread -Xcc -DTAKESHOT_FORCE_STUBS=1

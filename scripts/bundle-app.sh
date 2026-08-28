@@ -3,7 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
+# `TAKESHOT_BUILD_FLAGS` is how the caller says which CONFIGURATION this
+# bundle is. CI sets it to force every bridge to its stub, so the artifact it
+# publishes is the same shape as the suite it just ran — without it the two
+# could differ the day a runner image starts carrying somebody's headers, and
+# the download would then contain a bridge nothing had tested.
+# shellcheck disable=SC2086
+swift build -c release ${TAKESHOT_BUILD_FLAGS:-}
 
 APP="build/TakeShot.app"
 rm -rf "$APP"
