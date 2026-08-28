@@ -135,6 +135,24 @@ final class DisplayMirrors: ObservableObject {
     /// an unwatched grid costs no compose (see `MultiviewComposer`).
     var gridComposer: MultiviewComposer?
 
+    /// **The SYNC-PLAY grid as the viewer's picture**, and the composer that
+    /// makes it — both nil unless a comparison is up AND something is mirroring
+    /// it, so a grid the operator is looking at alone costs no compose at all
+    /// (see `CaptureController+SyncPlayPicture`).
+    ///
+    /// Two fields for one lifetime, built and dropped together, the way `ndi`
+    /// and `ndiAudio` already are: the picture owns the handler slot the mirrors
+    /// install into, and the composer owns the pass. Nil exactly when the other
+    /// is.
+    ///
+    /// A different composer from `gridComposer` above and deliberately so: that
+    /// one is `LivePicture.grid`, built from every live BOARD, and it keeps
+    /// moving while the operator scrubs a take. This one IS what the operator is
+    /// looking at. Same definition of what a grid picture is — one
+    /// `MultiviewComposer` — two different sets of tiles.
+    var syncGrid: SyncPlayGridPicture?
+    var syncGridComposer: MultiviewComposer?
+
     /// Browsers watching over WebRTC, by the id their events carry.
     ///
     /// A dictionary rather than an array because a viewer's own callbacks are

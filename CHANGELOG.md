@@ -81,7 +81,14 @@ Gatekeeper's refusal instead of the app.
   see any other way.
 - **Sync-play**: select two to four takes and play them in one transport-locked
   grid, aligned either from each take's first frame or on the timecode they
-  share.
+  share. **The grid goes out with you**: the hardware monitor, the SDI output,
+  NDI, SRT and every phone watching all show the comparison, not the single
+  take that was open before you started it. Same on the fullscreen player and
+  on the director's second display, which used to draw that parked take frozen
+  on its last frame — so a client watching a comparison saw a still and had no
+  way to tell. Close the comparison and the take you had open comes straight
+  back; close one you opened with nothing loaded and the output goes black
+  rather than holding the last four-up frame.
 - **Menu bar item** (off by default): the recorder's state and the running
   take's timecode stay visible, and stoppable, with the main window closed or
   behind another application.
@@ -231,6 +238,16 @@ Gatekeeper's refusal instead of the app.
   quietly measuring a paused frame nobody is looking at.
 
 ### Known limits
+
+- **A comparison carries no assists and no LUT — on your screen or on anyone
+  else's.** Sync-play's tiles have never had a false-colour, a zebra, framelines
+  or a viewing LUT, and the picture the hardware output and the streams now
+  carry is exactly those tiles. So the director sees precisely what you see,
+  which is the point — but neither of you can meter a take inside a comparison.
+  The scopes say they are waiting rather than measuring, and the tile labels and
+  running timecodes are on your screen and not in the composed picture, so a
+  monitor at the far end shows four takes and no names. Use the single player
+  for anything you have to judge exposure by.
 
 - **The SRT output has never been watched by a real receiver.** The transport
   stream is checked byte for byte, the encode is measured through a real decode,

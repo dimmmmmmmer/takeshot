@@ -66,12 +66,25 @@ extension CaptureController {
         // review a take, then select four) the didSet does not fire at all.
         updateTapRunning()
         updateScopesRunning()
+        // …and so are the mirrors, which is the whole of "the director sees
+        // what the operator sees": the picture on the hardware output, NDI, SRT
+        // and every browser has just become the grid.
+        wireDisplayMirrors()
     }
 
     /// Back to normal playback (Esc, the close button, a mode switch, or a
     /// take opened in the single player).
     func endSyncPlay() {
         guard let model = syncPlay else { return }
+        // The tiles stop feeding the composed picture before they stop playing.
+        // Ordering the teardown is not what makes this safe — a compose already
+        // in flight is on its own queue — but it is what keeps the window
+        // small; `SyncPlayGridPicture.blank` carries the latch that closes it.
+        for tile in model.tiles {
+            tile.tap.setOnDisplayFrame(nil)
+        }
+        let grid = mirrors.syncGrid
+        model.onGridPacingChange = nil
         model.shutDown()
         syncPlay = nil
         // …and back: the single player's picture is the one on screen again, so
@@ -79,5 +92,10 @@ extension CaptureController {
         // operator judges anything by.
         updateTapRunning()
         updateScopesRunning()
+        // The mirrors hold their last frame, so a replacement has to be put on
+        // them rather than merely allowed to arrive. This owns the rewiring
+        // too, because which side of it the replacement goes out on depends on
+        // what is left underneath the comparison.
+        restoreMirrorsAfterComparison(grid)
     }
 }

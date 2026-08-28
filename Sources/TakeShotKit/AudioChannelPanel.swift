@@ -329,9 +329,16 @@ struct PlaybackFullscreenView: View {
         Group {
             ZStack {
                 Color.black
+                // A comparison FIRST, exactly as `PreviewView` orders it: a
+                // sync-play grid leaves the single player parked and loaded, so
+                // every condition below is still true underneath it and this
+                // window drew the parked take while the operator compared four.
+                if let sync = controller.syncPlay {
+                    SyncPlayGrid(model: sync)
+                        .padding(8)
                 // A/B is a split of two surfaces; wipe and blend arrive already
                 // composited in the one picture PlaybackContent draws.
-                if controller.showsCompareSplit {
+                } else if controller.showsCompareSplit {
                     ComparePlaybackSplit()
                 } else {
                     PlaybackContent()
@@ -343,8 +350,18 @@ struct PlaybackFullscreenView: View {
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
         }
         .modifier(BottomHoverReveal(height: ChromeReveal.transportBand, shown: $transportHover) {
-            TransportBar(player: controller.player, model: controller.transport)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            // The bar has to drive the picture that is on screen. Over a grid
+            // the single player's transport moves a take nobody can see — the
+            // same parked-engine mistake `transportBarKind` names for the main
+            // window, which this window does not read because its bar is
+            // hover-revealed rather than laid out.
+            if let sync = controller.syncPlay {
+                SyncPlayTransportBar(model: sync)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                TransportBar(player: controller.player, model: controller.transport)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
         })
     }
 }

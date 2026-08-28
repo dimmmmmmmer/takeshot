@@ -74,6 +74,15 @@ extension CaptureController {
     /// moving while the operator scrubs a take. That split is stated once, at
     /// `LivePicture.source`.
     ///
+    /// **The viewer has FOUR sources, not three.** The live pipeline, the
+    /// playback tap and the RAW engine each own a slot below — and during a
+    /// sync-play comparison none of them is what the operator is looking at.
+    /// That case is `SyncPlayGridPicture`, composed out of the comparison's own
+    /// tiles and installed into the same slot shape, so nothing downstream of
+    /// this function knows the difference: the feeder, NDI and every encoder
+    /// still name a `LivePicture` and read it through `LiveFrame`'s subscript.
+    /// See `CaptureController+SyncPlayPicture`.
+    ///
     /// **What the slot fans out to is worth counting, because two network
     /// outputs at once is a case that did not exist until NDI came back beside
     /// SRT — and a browser choosing its own picture is one more.** SRT and
@@ -110,6 +119,7 @@ extension CaptureController {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)
             rawPlayer?.setOnDisplayFrame(nil)
+            refreshSyncGridPicture(handler: nil)
             return
         }
         let routeLive = viewerMode == .record
@@ -134,9 +144,20 @@ extension CaptureController {
                 encoder.offer(frame[picture], framesPerSecond: rate)
             }
         }
+        // **A comparison is a FOURTH source, and it pre-empts the other three.**
+        // What the operator is looking at then is a grid of 2–4 takes, not any
+        // one surface, and `startSyncPlay` leaves the single player parked and
+        // loaded on purpose — so routing by viewer mode alone handed the
+        // mirrors a tap that had stopped delivering, and the board went on
+        // showing its last frame. The grid is composed and sent instead
+        // (`CaptureController+SyncPlayPicture`); the parked tap is disconnected
+        // rather than left half-wired, which is the same rule the mode switch
+        // above follows.
+        let comparing = syncPlay != nil
+        refreshSyncGridPicture(handler: routeLive || !comparing ? nil : handler)
         pipeline.setOnDisplayFrame(routeLive ? handler : nil)
-        playbackTap.setOnDisplayFrame(routeLive ? nil : handler)
-        rawPlayer?.setOnDisplayFrame(routeLive ? nil : handler)
+        playbackTap.setOnDisplayFrame(routeLive || comparing ? nil : handler)
+        rawPlayer?.setOnDisplayFrame(routeLive || comparing ? nil : handler)
     }
     /// Shared factory for the borderless full-screen output windows
     /// (playback fullscreen, live fullscreen, external monitor).

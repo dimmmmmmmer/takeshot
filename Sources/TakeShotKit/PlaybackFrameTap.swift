@@ -286,8 +286,20 @@ final class PlaybackFrameTap: @unchecked Sendable {
         }
     }
 
+    /// Poll for frames, or stop.
+    ///
+    /// **Switching ON drops the idle latch**, and that is what makes "the
+    /// parked take comes back" true rather than nearly true. `idleDelivered`
+    /// means "this paused picture has already been handed to my surfaces" — and
+    /// while the tap was OFF those surfaces were showing something else
+    /// entirely: the sync-play grid, the live signal. A paused clip has no next
+    /// frame to recover on, so without this the tap comes back on, finds the
+    /// latch still set from before it went off, delivers nothing at all, and the
+    /// picture that replaced it stays on the hardware output — which holds its
+    /// last frame — for the rest of the day.
     func setRunning(_ running: Bool) {
         queue.async {
+            if running, !self.running { self.idleDelivered = false }
             self.running = running
             self.startTimerIfNeeded()
         }

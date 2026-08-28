@@ -68,7 +68,14 @@ final class SyncPlayModel: ObservableObject {
     /// observable (the same one the main transport uses) so the 10 Hz tick
     /// re-renders the TC labels and the slider, not the whole grid.
     let position = TransportPosition()
-    @Published private(set) var isPlaying = false
+    @Published private(set) var isPlaying = false {
+        // Every transport verb writes this — play, pause, the end boundary, an
+        // alignment change — so the pacing is pushed from the assignment rather
+        // than from each of them. Four call sites is where a fifth gets
+        // forgotten, and a forgotten one is a director's monitor frozen on a
+        // grid that is still rolling.
+        didSet { pushGridPacing() }
+    }
     @Published private(set) var schedule: SyncPlaySchedule
     /// Rebuilds the schedule and rewinds: a master second means a different
     /// thing under the other alignment, so the session restarts from 0 paused.
@@ -101,7 +108,12 @@ final class SyncPlayModel: ObservableObject {
     /// The tile the transport reads its position from: the one that plays
     /// longest in the master domain, so the clock never stops early because a
     /// shorter clip froze.
-    private var anchorIndex = 0
+    ///
+    /// It is also the tile the composed grid picture is paced to, for the same
+    /// reason one level down — see `gridPacing`.
+    private(set) var anchorIndex = 0 {
+        didSet { pushGridPacing() }
+    }
     /// One-shot recheck after a synchronized start (see `play`).
     private var startCheckTask: Task<Void, Never>?
 
@@ -220,8 +232,48 @@ final class SyncPlayModel: ObservableObject {
     /// One master frame: the fastest rate among the takes, so a step is never
     /// coarser than what any tile can show.
     var frameDuration: Double {
+        1 / timelineFrameRate
+    }
+
+    /// The rate the master timeline runs at — the fastest among the takes.
+    ///
+    /// What the composed grid picture's encoder is built for, and the same
+    /// number `frameDuration` is the reciprocal of rather than a second reading
+    /// of it: a step and a frame interval are the same quantity, and this used
+    /// to be spelled only as its reciprocal.
+    var timelineFrameRate: Double {
         let fps = tiles.compactMap { $0.source.startTimecode?.fps }.max() ?? 25
-        return 1 / Double(max(1, fps))
+        return Double(max(1, fps))
+    }
+
+    // MARK: - the grid as a picture
+
+    /// **What paces the composed grid picture** (`MultiviewComposer.Pacing`).
+    ///
+    /// Rolling, the anchor is the clock: every tile is delivering at the clip
+    /// rate, and pacing to one of them is what keeps the compose off the
+    /// once-per-tile-per-interval ladder. The ANCHOR rather than tile 0 because
+    /// it is the tile that plays longest in the master domain — tile 0 can
+    /// freeze on its last frame while the others roll on, and a grid paced to a
+    /// frozen tile stops composing while the operator watches it move.
+    ///
+    /// Paused, there is no clock to pace to and every arrival composes: a
+    /// stepped grid delivers one frame per tile per step, in whatever order four
+    /// independent taps tick, so a clock-paced compose would leave every tile
+    /// that arrived after the anchor showing the PREVIOUS step — permanently,
+    /// and invisibly, because the operator's own screen is right. Four composes
+    /// per step is not a rate.
+    var gridPacing: MultiviewComposer.Pacing {
+        isPlaying ? .clock(camera: anchorIndex) : .everyFrame
+    }
+
+    /// Called whenever `gridPacing` changes. Installed by the controller while
+    /// the grid picture is going out to something, and nil otherwise — so a
+    /// comparison nobody is mirroring pays a nil check per transport verb.
+    var onGridPacingChange: (() -> Void)?
+
+    private func pushGridPacing() {
+        onGridPacingChange?()
     }
 
     /// Tile label TC: the take's start TC advanced by its own clip position

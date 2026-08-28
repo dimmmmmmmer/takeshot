@@ -9,16 +9,10 @@ struct SyncPlayView: View {
     @EnvironmentObject private var controller: CaptureController
     @ObservedObject var model: SyncPlayModel
 
-    /// Grid columns for a tile count: two takes sit side by side in one row,
-    /// three and four fill a 2×2.
-    static func columns(for count: Int) -> Int {
-        max(1, min(count, 2))
-    }
-
     var body: some View {
         VStack(spacing: 6) {
             SyncPlayHeader(model: model)
-            grid
+            SyncPlayGrid(model: model)
             SyncPlayTransportBar(model: model)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
         }
@@ -28,8 +22,38 @@ struct SyncPlayView: View {
             EscapeKeyCatcher { controller.endSyncPlay() }
         }
     }
+}
 
-    private var grid: some View {
+/// **The tiles themselves**, without the header plate or the transport.
+///
+/// Its own view because three surfaces draw the comparison and only one of them
+/// wants the chrome around it: the main viewer mounts `SyncPlayView`, and the
+/// fullscreen player and the director's external display mount this. That is
+/// the shape `ComparePlaybackSplit` already has, and it exists for the same
+/// reason — those two windows drew the take parked UNDER the comparison, which
+/// reads as "the comparison is off" on the surface a client is watching.
+///
+/// Each tile's `PreviewMount` builds its own layer against that tile's own tap,
+/// so a second mount of this view is a second layer per tile and never a shared
+/// one (the preview display rule).
+struct SyncPlayGrid: View {
+    @EnvironmentObject private var controller: CaptureController
+    @ObservedObject var model: SyncPlayModel
+
+    /// Grid columns for a tile count: two takes sit side by side in one row,
+    /// three and four fill a 2×2.
+    ///
+    /// **Answered by the composer**, not by a rule of this view's own. The same
+    /// comparison is drawn here as tiles and composed there as one picture for
+    /// the hardware output and every browser, and two spellings of "how many
+    /// across" is how the director's monitor comes to disagree with the
+    /// operator's screen about which take is which. The composer is where a grid
+    /// picture's arrangement is defined; this reads it.
+    static func columns(for count: Int) -> Int {
+        MultiviewComposer.columns(cameras: count)
+    }
+
+    var body: some View {
         let columns = Array(
             repeating: GridItem(.flexible(), spacing: 4),
             count: Self.columns(for: model.tiles.count))
