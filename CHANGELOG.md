@@ -209,6 +209,13 @@ Gatekeeper's refusal instead of the app.
 - **R3D playback**: RED clips, spanned ones included, developed to Rec.709 with
   the camera's metadata and edge timecode. Also needs a build made against
   RED's SDK.
+- **In Russian, "unavailable" now explains itself in Russian.** Turn SRT or NDI
+  on in a build that was made without that SDK — which every published download
+  is — and the Settings row said "Недоступно" and then a paragraph of English
+  underneath it. The same was true of the message the live page showed a phone.
+  All of them are translated now. What is deliberately NOT translated is what is
+  inside them: a shell command, a path, a file name and a library's name are
+  things to type and places to look, and they read the same in both languages.
 
 ### Known limits
 
