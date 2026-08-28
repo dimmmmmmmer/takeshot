@@ -217,6 +217,19 @@ Gatekeeper's refusal instead of the app.
   inside them: a shell command, a path, a file name and a library's name are
   things to type and places to look, and they read the same in both languages.
 
+- **Your markers cannot be taken by the wrong menu press.** "Clear all
+  markers" acted on whatever clip was last loaded, and the menu let you press
+  it *while the camera was rolling* — so a clip left on screen from an earlier
+  review could lose every flag on it, sidecar and all, with no grid and no
+  warning. The three items that act on a clip's whole list now ask whether you
+  are actually reviewing that clip.
+- **Binning takes you were comparing ends the comparison.** "Compare four, bin
+  the three that failed" used to leave the grid playing files that were already
+  in the Trash.
+- **Nothing writes to the take parked behind a comparison** — no markers, no
+  grabs, and the scopes and the format badge stop describing it instead of
+  quietly measuring a paused frame nobody is looking at.
+
 ### Known limits
 
 - **The SRT output has never been watched by a real receiver.** The transport
