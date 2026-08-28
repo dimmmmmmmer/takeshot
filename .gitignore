@@ -1,7 +1,8 @@
 .build/
 # The scratch path docs/ARCHITECTURE.md tells you to build the older SDK
 # into, so the two-SDK check does not leave the checkout dirty.
-.build-sdk15/
+.build-sdk15
+.build-stubs/
 build/
 .DS_Store
 # Coverage output (scripts/coverage.sh). The FLOOR is committed

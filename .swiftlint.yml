@@ -18,6 +18,12 @@ excluded:
   # .build — without this, running the documented check turns `lint --strict`
   # red on a resource_bundle_accessor.swift nobody wrote.
   - .build-sdk15
+  # And the forced-stub scratch path, for exactly the same reason: CLAUDE.md
+  # documents building the published configuration into its own scratch path,
+  # and generated sources in there are no more lintable than the ones in
+  # `.build`. Without this, running the documented check turns `lint --strict`
+  # red on 20 findings in code nobody wrote.
+  - .build-stubs
   - .claude
 
 identifier_name:
