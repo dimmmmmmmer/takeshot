@@ -33,6 +33,21 @@ typedef NS_ENUM(NSInteger, CDCAnswerFailure) {
     CDCAnswerFailureRuntime = 3,
 };
 
+/// Why WebRTC cannot be used, as stable identifiers rather than as prose.
+///
+/// The first three are the same three SRT's and NDI's codes answer, and named
+/// the same, because they are the same states any dlopen-ed library can be in.
+/// The fourth is this bridge's own and earns a code of its own because its FIX
+/// is its own: a copy built without `RTC_ENABLE_MEDIA` exports everything the
+/// symbol check asks for and still cannot carry a picture, so "get a newer
+/// one" is the wrong instruction and "rebuild it with media on" is the right
+/// one. Folding it into `RuntimeIncomplete` would have made two different
+/// answers share one sentence.
+extern NSString *const CDCUnavailableNotBuilt;
+extern NSString *const CDCUnavailableRuntimeMissing;
+extern NSString *const CDCUnavailableRuntimeIncomplete;
+extern NSString *const CDCUnavailableRuntimeNoMedia;
+
 /// Obj-C bridge to libdatachannel: one WebRTC peer connection carrying one
 /// send-only H.264 video track.
 ///
@@ -70,7 +85,29 @@ typedef NS_ENUM(NSInteger, CDCAnswerFailure) {
 /// nil when `isSDKAvailable`; otherwise why not — which of the two halves is
 /// missing, what to do about it, and, for the runtime, every path that was
 /// looked at.
+///
+/// **English, and it stays English.** This is the diagnostic line, and it is
+/// what the app falls back to for a code it has no words for. What a phone on
+/// the set network reads on the `/live` page is chosen from
+/// `unavailableCode` — see `BridgeUnavailable` in the app layer.
 + (nullable NSString *)unavailableReason;
+
+/// The same fact as a stable identifier, for the app to choose its own words
+/// from; nil exactly when `unavailableReason` is nil. One of the four
+/// `CDCUnavailable…` constants.
+///
+/// A CODE and deliberately not the sentence shortened — see the note on those
+/// constants. An app with no words for one shows `unavailableReason` instead,
+/// so a code added here is never a blank page in an older build.
++ (nullable NSString *)unavailableCode;
+
+/// Every path the runtime dlopen looked at, in order.
+///
+/// A FACT rather than a sentence, so `CDCUnavailableRuntimeMissing` can be
+/// said in any language without the app having to parse the list back out of
+/// English prose. Empty for every other code — a build with no headers
+/// searched nowhere.
++ (NSArray<NSString *> *)runtimeSearchPaths;
 
 /// The track the answer offers, all of it decided by the app from the browser's
 /// own offer (see `WebRTCOffer`).

@@ -14,7 +14,7 @@ import Foundation
 ///
 /// Nothing here exists while the switch is off: `mirrors.srt` is nil, the display
 /// slot holds no SRT consumer, and libsrt has not even been loaded — the runtime
-/// `dlopen` happens on the first `unavailableReason` read, which is the moment the
+/// `dlopen` happens on the first `SRTStream.unavailable` read, which is the moment the
 /// operator asks for the feature.
 ///
 /// **It carries sound now, and the tap it comes off is not the monitor's.**
@@ -77,7 +77,7 @@ extension CaptureController {
         // row shows. Checked only for the real stream: an injected one is the test
         // seam and is always available.
         if mirrors.srtStreamFactory == nil,
-           let reason = SRTStream.unavailableReason {
+           let reason = SRTStream.unavailable {
             mirrors.srtState = .unavailable(reason)
             return
         }

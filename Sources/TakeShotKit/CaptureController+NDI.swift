@@ -29,7 +29,7 @@ import Foundation
 ///
 /// Nothing here exists while the switch is off: `mirrors.ndi` is nil, the display
 /// slot holds no NDI consumer, and the SDK has not even been loaded — the
-/// runtime dlopen happens on the first `unavailableReason` read, which is the
+/// runtime dlopen happens on the first `NDISender.unavailable` read, which is the
 /// moment the operator asks for the feature.
 ///
 /// **Picture only — and what is missing is now the LEG, not the tap.** NDI
@@ -87,7 +87,7 @@ extension CaptureController {
         // again can change, so the switch is left exactly where the operator put
         // it and the reason is what the settings row shows. Checked only for the
         // real sender: an injected one is the test seam and is always available.
-        if mirrors.ndiSenderFactory == nil, let reason = NDISender.unavailableReason {
+        if mirrors.ndiSenderFactory == nil, let reason = NDISender.unavailable {
             mirrors.ndiState = .unavailable(reason)
             return
         }

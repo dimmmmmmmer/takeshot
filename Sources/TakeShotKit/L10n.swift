@@ -65,6 +65,24 @@ enum L10n {
         bundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
+    /// The string for `key`, or nil when this build has none for it.
+    ///
+    /// `string(_:)` cannot answer that question: a missing key comes back AS
+    /// the key, which is a plausible sentence to show and an implausible one to
+    /// test against. The sentinel is what makes the answer exact — a key whose
+    /// translation really is the key still resolves, because what comes back is
+    /// the key and not the sentinel.
+    ///
+    /// This exists for exactly one caller: `BridgeUnavailable`, which has to
+    /// tell "no words for this code yet" from "words that happen to look like
+    /// the code" and fall back to the bridge's own English for the first.
+    static func translation(_ key: String) -> String? {
+        let sentinel = "\u{0}no-translation"
+        let found = bundle.localizedString(forKey: key, value: sentinel,
+                                           table: nil)
+        return found == sentinel ? nil : found
+    }
+
     static func string(_ key: String, _ arguments: CVarArg...) -> String {
         String(format: string(key), arguments: arguments)
     }

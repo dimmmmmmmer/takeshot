@@ -48,7 +48,7 @@ final class RemoteServer: @unchecked Sendable {
                                     @escaping @Sendable (RemoteWebRTC.Answer)
                                         -> Void) -> Void
             = { _, _, reply in
-                reply(.unavailable("No app is attached to this server."))
+                reply(.unavailable(L("live_no_app")))
             }
         /// One already-connected browser wants a different picture, and where
         /// to put the verdict.

@@ -321,7 +321,19 @@ struct SRTStubBuildLifecycleTests {
                 Issue.record("state is \(controller.mirrors.srtState)")
                 return
             }
-            #expect(reason.contains("vendor/SRTSDK/include"))
+            // The bridge's own sentence, unchanged by this pass.
+            #expect(reason.english.contains("vendor/SRTSDK/include"))
+            // …and the row does not show it to a Russian operator. This is the
+            // end-to-end of the localization: the switch was thrown, the
+            // structural check ran, and what the row will draw follows the
+            // app's language rather than the bridge's.
+            L10n.apply(.russian)
+            let shown: String = reason.localizedText
+            L10n.apply(.english)
+            #expect(shown != reason.english,
+                    "the row reads English under a Russian label: \(shown)")
+            #expect(shown.contains("brew install srt"),
+                    "the Russian lost the command to type: \(shown)")
             #expect(controller.settings.srt.enabled == true,
                     "a structural absence turned the operator's switch off")
         }

@@ -81,13 +81,18 @@ extension CaptureController {
         // left retrying a route that will never work. Checked only for the real
         // peer: an injected one is the test seam and is always available.
         if mirrors.webrtcPeerFactory == nil,
-           let reason = WebRTCPeer.unavailableReason {
-            reply(.unavailable(reason))
+           let reason = WebRTCPeer.unavailable {
+            // Localized HERE, where the app's bundle is, and not on the page:
+            // every other word the phone is looking at was chosen the same way
+            // when the markup was served (`RemotePage.config`), so this one
+            // arriving in English was the one line on the page that did not
+            // follow the language switch.
+            reply(.unavailable(reason.localizedText))
             return
         }
         guard mirrors.webrtcViewers.count < WebRTCViewer.maximumViewers else {
-            reply(.unavailable("This Mac is already carrying "
-                    + "\(WebRTCViewer.maximumViewers) viewers."))
+            reply(.unavailable(L("live_too_many_viewers",
+                                 WebRTCViewer.maximumViewers)))
             return
         }
         // What the app decides about the picture's FORMAT, out of the browser's
@@ -137,10 +142,20 @@ extension CaptureController {
 
     /// A failed answer as what the route says back. `.offer` is the browser's
     /// fault and everything else is this machine's.
+    ///
+    /// `unavailable` is the one case with words of its own to choose: the
+    /// bridge's code goes through `BridgeUnavailable`, so the phone reads it in
+    /// the language the rest of the page is in. A `runtime` failure is what
+    /// libdatachannel itself said, verbatim and in English, because it is rare
+    /// enough that what it said IS the diagnosis and there is nothing to key a
+    /// translation off.
     nonisolated static func refusal(
         _ failure: WebRTCError) -> RemoteWebRTC.Answer {
-        if case .offer = failure { return .rejected }
-        return .unavailable(failure.message)
+        switch failure {
+        case .offer: return .rejected
+        case .unavailable(let bridge): return .unavailable(bridge.localizedText)
+        case .runtime(let text): return .unavailable(text)
+        }
     }
 
     // MARK: - the choice, changed

@@ -91,10 +91,16 @@ final class NDISender: NDIVideoSending, @unchecked Sendable {
     let sourceName: String
 
     /// nil when NDI can be used; otherwise what this build is and what still
-    /// works, in English like the other bridge errors. Structural — a build with
-    /// no SDK headers, or a machine with no runtime — as opposed to a sender
-    /// that could not be created, which is an error on the call.
-    static var unavailableReason: String? { CNDSender.unavailableReason() }
+    /// works. Structural — a build with no SDK headers, or a machine with no
+    /// runtime — as opposed to a sender that could not be created, which is an
+    /// error on the call.
+    ///
+    /// A `BridgeUnavailable` and no longer a String: the bridge states which of
+    /// its four causes this is and the app picks the words, so a Russian
+    /// operator does not read a localized "Недоступно" over an English
+    /// paragraph. The English is still in there and is still what a code this
+    /// build does not know renders as.
+    static var unavailable: BridgeUnavailable? { .ndi }
 
     /// The loaded runtime's version, for diagnostics; nil in a stub build.
     static var runtimeVersion: String? { CNDSender.runtimeVersion() }
@@ -134,7 +140,12 @@ enum NDIOutputState: Equatable {
     /// Distinct from `failed` because it is not something flicking the switch
     /// again can change, which is why the switch is left exactly where the
     /// operator put it — see `CaptureController.startNDIOutput`.
-    case unavailable(String)
+    ///
+    /// The whole `BridgeUnavailable` and not its text, so the row renders in
+    /// whatever language the app is in WHEN IT DRAWS. An operator who throws
+    /// this switch and then changes the language would otherwise be reading a
+    /// paragraph in the language they just left.
+    case unavailable(BridgeUnavailable)
     /// The SDK and the runtime are both there and creating the sender failed
     /// anyway (a name already announced by another process, a runtime refusing
     /// the CPU). Carries the reason.

@@ -17,9 +17,17 @@ final class AACConverter {
     /// The codec cannot be built on this machine, with what AudioToolbox said.
     /// Modelled on `SRTStreamError.unavailable` and reported the same way — an
     /// operator cannot fix it by flicking a switch.
+    ///
+    /// Coded `nil` deliberately: `BridgeUnavailable`'s codes name the states an
+    /// SDK BRIDGE can be in, and AudioToolbox is not one — it is in the OS, and
+    /// a machine without an AAC encoder has no vendor drop to be missing. So
+    /// there is no fact to key words off, and this sentence is shown as it
+    /// stands. That is the same fallback an unrecognised bridge code takes.
     static func unavailable(_ status: OSStatus) -> SRTStreamError {
-        .unavailable("AudioToolbox would not open an AAC encoder "
-            + "(status \(status)); the SRT stream carries picture only.")
+        .unavailable(BridgeUnavailable(
+            code: nil,
+            english: "AudioToolbox would not open an AAC encoder "
+                + "(status \(status)); the SRT stream carries picture only."))
     }
 
     /// Whether this machine has an AAC-LC encoder at all.

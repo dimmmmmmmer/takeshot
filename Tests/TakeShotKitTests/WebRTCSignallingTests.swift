@@ -232,6 +232,25 @@ struct WebRTCUnavailableTests {
             #expect(reply.status == 503)
             #expect(reply.body.lowercased().contains("libdatachannel"),
                     "the reason did not name what is missing: \(reply.body)")
+
+            // **And it comes back in the language the page is being served
+            // in.** This is the one end-to-end of the /live half: a real
+            // socket, the real (stub) bridge, and the body chosen at the
+            // moment the route answers rather than baked into the markup.
+            // Only reachable in a build with no libdatachannel, which is CI's
+            // and every published download's.
+            #expect(await RemoteHarness.pinSlotFree(
+                try #require(controller.remoteServer)))
+            L10n.apply(.russian)
+            let translated = try await WebRTCHarness.offer(port: served.port,
+                                                           pin: served.pin)
+            L10n.apply(.english)
+            #expect(translated.status == 503)
+            #expect(translated.body != reply.body,
+                    "the page reads English with the app set to Russian: \(translated.body)")
+            // The library's name is not translated: it is the thing to look up.
+            #expect(translated.body.lowercased().contains("libdatachannel"),
+                    "\(translated.body)")
             #expect(controller.mirrors.webrtcViewers.isEmpty)
             #expect(controller.mirrors.liveEncoders.isEmpty,
                     "an unavailable feature built an encoder")

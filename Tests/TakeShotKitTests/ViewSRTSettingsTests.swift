@@ -1,4 +1,5 @@
 import AppKit
+import CSRT
 import CaptureCore
 import SwiftUI
 import Testing
@@ -77,22 +78,58 @@ struct ViewSRTSettingsTests {
     }
 
     /// A build with no libsrt is the common case, so the section has to render the
-    /// reason without stretching the settings window. The reason is English in both
-    /// languages — it names a shell command and a directory, and a translated path
-    /// is a worse instruction than the path.
+    /// reason without stretching the settings window — **in either language, which
+    /// is what changed here.**
+    ///
+    /// It used to be one English paragraph laid out twice, so the two heights had
+    /// to agree and that agreement was the check. The reason is localized now
+    /// (`BridgeUnavailable`), so the Russian is a different paragraph and equal
+    /// heights is no longer a property anything should want. What has to hold
+    /// instead is the thing the old test was really after: NEITHER language pushes
+    /// the form wider than the window.
     @Test func theUnavailableReasonRendersInsideTheWindow() async throws {
+        // Built here rather than read off the bridge, so this measures the row
+        // and not which vendor drops the machine running it happens to have.
+        let unavailable = BridgeUnavailable(
+            code: CSRTUnavailableNotBuilt,
+            english: L10n.translation("bridge_srt_not_built") ?? "")
         try await ViewProbe.run { probe in
             probe.controller.settings.srt.enabled = true
-            probe.controller.mirrors.srtState = .unavailable(
-                "Built without libsrt. Install it with `brew install srt`, then "
-                    + "copy its headers into vendor/SRTSDK/include/srt and rebuild.")
+            probe.controller.mirrors.srtState = .unavailable(unavailable)
             let shown = probe.sizes(proposedWidth: SettingsView.width) {
                 Form { SRTSettingsSection() }.formStyle(.grouped)
             }
             #expect(shown.en.width <= SettingsView.width + 1,
                     "the reason pushed the form to \(shown.en.width)pt")
-            #expect(abs(shown.ru.height - shown.en.height) <= 8,
-                    "the reason wrapped differently by language: \(shown)")
+            #expect(shown.ru.width <= SettingsView.width + 1,
+                    "the Russian reason pushed the form to \(shown.ru.width)pt")
+        }
+    }
+
+    /// …and the longest of the four, which is the one that names every path the
+    /// dlopen looked at. Nothing else in the suite lays that out, and it is the
+    /// only line whose length is not something a translator controls.
+    @Test func theSearchedPathsRenderInsideTheWindowToo() async throws {
+        let paths: [String] = CSRTSender.runtimeSearchPaths()
+        let unavailable = BridgeUnavailable(
+            code: CSRTUnavailableRuntimeMissing,
+            english: L10n.translation("bridge_srt_runtime_missing") ?? "",
+            searchPaths: paths.isEmpty
+                ? ["/opt/homebrew/lib/libsrt.dylib",
+                   "/opt/homebrew/lib/libsrt.1.5.dylib",
+                   "/usr/local/lib/libsrt.dylib",
+                   "/usr/local/lib/libsrt.1.5.dylib"]
+                : paths)
+        try await ViewProbe.run { probe in
+            probe.controller.settings.srt.enabled = true
+            probe.controller.mirrors.srtState = .unavailable(unavailable)
+            let shown = probe.sizes(proposedWidth: SettingsView.width) {
+                Form { SRTSettingsSection() }.formStyle(.grouped)
+            }
+            #expect(shown.en.width <= SettingsView.width + 1,
+                    "the paths pushed the form to \(shown.en.width)pt")
+            #expect(shown.ru.width <= SettingsView.width + 1,
+                    "the Russian paths pushed the form to \(shown.ru.width)pt")
         }
     }
 

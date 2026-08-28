@@ -25,16 +25,23 @@ enum SRTSendOutcome: Equatable, Sendable {
 /// fix that a reconnect loop would hide forever.
 enum SRTStreamError: Error, Equatable {
     /// No SDK headers when this was built, or no libsrt on this machine.
-    case unavailable(String)
+    ///
+    /// Carries the bridge's coded answer rather than its prose, so a link that
+    /// reports this reaches the status row in the same words the switch's own
+    /// structural check would have used.
+    case unavailable(BridgeUnavailable)
     /// Something the operator has to change.
     case configuration(String)
     /// The far end is not there.
     case link(String)
 
+    /// The failure in one line. English for `unavailable`, which is the
+    /// bridge's own diagnostic sentence — the operator-facing wording comes off
+    /// `BridgeUnavailable.localizedText` at the row that shows it.
     var message: String {
         switch self {
-        case .unavailable(let text), .configuration(let text), .link(let text):
-            return text
+        case .unavailable(let bridge): return bridge.english
+        case .configuration(let text), .link(let text): return text
         }
     }
 
@@ -80,11 +87,16 @@ protocol SRTStreamSending: AnyObject, Sendable {
 final class SRTStream: SRTStreamSending, @unchecked Sendable {
     private let sender: CSRTSender
 
-    /// nil when SRT can be used; otherwise what is missing and what to install,
-    /// in English like the other bridge errors. Structural — a build with no
-    /// headers, or a machine with no runtime — as against a link that could not
-    /// be opened, which is an error on the call.
-    static var unavailableReason: String? { CSRTSender.unavailableReason() }
+    /// nil when SRT can be used; otherwise what is missing and what to install.
+    /// Structural — a build with no headers, or a machine with no runtime — as
+    /// against a link that could not be opened, which is an error on the call.
+    ///
+    /// A `BridgeUnavailable` and no longer a String: the bridge states which of
+    /// its four causes this is and the app picks the words, so a Russian
+    /// operator does not read a localized "Недоступно" over an English
+    /// paragraph. The English is still in there and is still what a code this
+    /// build does not know renders as.
+    static var unavailable: BridgeUnavailable? { .srt }
 
     /// The loaded runtime's version, for the status row; nil in a stub build.
     static var runtimeVersion: String? { CSRTSender.runtimeVersion() }
@@ -123,7 +135,14 @@ final class SRTStream: SRTStreamSending, @unchecked Sendable {
         let message = wrapped.localizedDescription
         switch CSRTOpenFailure(rawValue: wrapped.code) {
         case .link: return .link(message)
-        case .unavailable: return .unavailable(message)
+        case .unavailable:
+            // The error and the class methods read one `dispatch_once` runtime
+            // state, so the code that goes with this sentence is the one the
+            // bridge is holding right now — no second channel needed on the
+            // NSError to carry it.
+            return .unavailable(BridgeUnavailable(
+                code: CSRTSender.unavailableCode(), english: message,
+                searchPaths: CSRTSender.runtimeSearchPaths()))
         default: return .configuration(message)
         }
     }
@@ -175,7 +194,12 @@ enum SRTOutputState: Equatable {
     /// Distinct from `failed` because it is not something flicking the switch
     /// again can change, which is why the switch is left exactly where the
     /// operator put it.
-    case unavailable(String)
+    ///
+    /// The whole `BridgeUnavailable` and not its text, so the row renders in
+    /// whatever language the app is in WHEN IT DRAWS. An operator who throws
+    /// this switch and then changes the language would otherwise be reading a
+    /// paragraph in the language they just left.
+    case unavailable(BridgeUnavailable)
     /// Something the operator has to change: an address that resolves to
     /// nothing, a port already bound, a passphrase SRT will not take. Carries the
     /// reason, and the switch stays ON so the field to fix it stays on screen.

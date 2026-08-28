@@ -17,6 +17,15 @@
 
 static NSString *const CSRTErrorDomain = @"com.takeshot.csrt";
 
+// The reason vocabulary. Declared in the header, defined here once for
+// both the real bridge and the stub — the stub raises one of them too, and
+// a second spelling of a code is a string that silently stops matching.
+NSString *const CSRTUnavailableNotBuilt = @"srt_not_built";
+NSString *const CSRTUnavailableRuntimeMissing = @"srt_runtime_missing";
+NSString *const CSRTUnavailableRuntimeIncomplete =
+    @"srt_runtime_incomplete";
+NSString *const CSRTUnavailableRuntimeRefused = @"srt_runtime_refused";
+
 #if TAKESHOT_HAS_SRT_SDK
 
 #import <arpa/inet.h>
@@ -71,7 +80,14 @@ struct CSRTRuntime {
     decltype(&srt_getlasterror) lasterror;
     decltype(&srt_getlasterror_str) lasterror_str;
     /// nil once every pointer above resolved and the runtime started.
+    ///
+    /// Set with `code` and never without it — they are one answer stated twice,
+    /// for two readers (a diagnostics bundle and a translator), and a code that
+    /// did not travel with its sentence would be the drift this pair exists to
+    /// prevent.
     NSString *failure;
+    /// Which of the `CSRTUnavailable…` codes `failure` is.
+    NSString *code;
 };
 
 /// `srt_cleanup` is deliberately absent and never called. It tears down
@@ -90,6 +106,7 @@ static CSRTRuntime *CSRTSharedRuntime(void) {
           }
       }
       if (handle == NULL) {
+          runtime.code = CSRTUnavailableRuntimeMissing;
           runtime.failure = [NSString
               stringWithFormat:@"libsrt not found — install it with "
                                @"`brew install srt`. Looked for: %@",
@@ -123,6 +140,7 @@ static CSRTRuntime *CSRTSharedRuntime(void) {
           runtime.connect_socket == NULL || runtime.send_bytes == NULL ||
           runtime.close_socket == NULL || runtime.lasterror == NULL) {
           runtime.create_socket = NULL;
+          runtime.code = CSRTUnavailableRuntimeIncomplete;
           runtime.failure = @"libsrt on this machine is missing entry points "
                             @"this app needs. Install 1.5 or newer.";
           return;
@@ -131,6 +149,7 @@ static CSRTRuntime *CSRTSharedRuntime(void) {
       // machine where reporting "unavailable" beats failing on frame one.
       if (runtime.startup() < 0) {
           runtime.create_socket = NULL;
+          runtime.code = CSRTUnavailableRuntimeRefused;
           runtime.failure = @"libsrt declined to start on this machine.";
       }
     });
@@ -170,6 +189,15 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
 + (nullable NSString *)unavailableReason {
     CSRTRuntime *runtime = CSRTSharedRuntime();
     return runtime->create_socket != NULL ? nil : runtime->failure;
+}
+
++ (nullable NSString *)unavailableCode {
+    CSRTRuntime *runtime = CSRTSharedRuntime();
+    return runtime->create_socket != NULL ? nil : runtime->code;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    return CSRTRuntimeCandidates();
 }
 
 + (nullable NSString *)runtimeVersion {
@@ -521,6 +549,16 @@ static NSString *const kCSRTNoSDKMessage =
     // to be installed is not the next step and so is not mentioned: without
     // headers there is nothing to load it into.
     return kCSRTNoSDKMessage;
+}
+
++ (nullable NSString *)unavailableCode {
+    return CSRTUnavailableNotBuilt;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    // Nowhere. This build has nothing to load a runtime INTO, so it never
+    // looked — an empty list is the honest answer and not a missing one.
+    return @[];
 }
 
 + (nullable NSString *)runtimeVersion {

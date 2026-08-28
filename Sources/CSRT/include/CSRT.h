@@ -2,6 +2,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Why SRT cannot be used, as stable identifiers rather than as prose.
+///
+/// Four because they ask four different things of the person reading them:
+/// nothing you can do on this machine (it is this binary), install it,
+/// upgrade it, or this machine refused it. None of them names a package
+/// manager, a version or a path — all of which live in the prose, and all of
+/// which change.
+extern NSString *const CSRTUnavailableNotBuilt;
+extern NSString *const CSRTUnavailableRuntimeMissing;
+extern NSString *const CSRTUnavailableRuntimeIncomplete;
+extern NSString *const CSRTUnavailableRuntimeRefused;
+
 /// Which end of the handshake this app is.
 ///
 /// SRT has no discovery. Where NDI put a name in every receiver's list, an SRT
@@ -75,8 +87,34 @@ typedef NS_ENUM(NSInteger, CSRTOpenFailure) {
 
 /// nil when `isSDKAvailable`; otherwise why not — which of the two halves is
 /// missing, what to install, and, for the runtime, every path that was looked
-/// at. Shown verbatim in Settings, so it has to read as an instruction.
+/// at.
+///
+/// **English, and it stays English.** This is the diagnostic line: the
+/// diagnostics bundle carries it, and it is what the app falls back to for a
+/// code it has no words for. What the operator reads in Settings is chosen
+/// from `unavailableCode` — see `BridgeUnavailable` in the app layer.
 + (nullable NSString *)unavailableReason;
+
+/// The same fact as a stable identifier, for the app to choose its own words
+/// from; nil exactly when `unavailableReason` is nil.
+///
+/// One of the four `CSRTUnavailable…` constants. A CODE and deliberately not
+/// the sentence shortened: the prose beside it is written for whoever is
+/// holding the app and gets reworded (the version number in it will), and a
+/// translation keyed off one of these must not move when it is.
+///
+/// Adding a code is safe by construction and that is the point — an app with
+/// no words for one shows `unavailableReason` instead, so a bridge failure
+/// this build has never heard of is still a sentence rather than a blank row.
++ (nullable NSString *)unavailableCode;
+
+/// Every path the runtime dlopen looked at, in order.
+///
+/// A FACT rather than a sentence, so `CSRTUnavailableRuntimeMissing` can be
+/// said in any language without the app having to parse the list back out of
+/// English prose. Empty for every other code — a build with no headers
+/// searched nowhere.
++ (NSArray<NSString *> *)runtimeSearchPaths;
 
 /// The version the loaded runtime reports ("1.5.5"); nil when there is none.
 + (nullable NSString *)runtimeVersion;

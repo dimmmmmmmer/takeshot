@@ -17,6 +17,15 @@
 
 static NSString *const CNDErrorDomain = @"com.takeshot.cndi";
 
+// The reason vocabulary. Declared in the header, defined here once for
+// both the real bridge and the stub — the stub raises one of them too, and
+// a second spelling of a code is a string that silently stops matching.
+NSString *const CNDUnavailableNotBuilt = @"ndi_not_built";
+NSString *const CNDUnavailableRuntimeMissing = @"ndi_runtime_missing";
+NSString *const CNDUnavailableRuntimeIncomplete =
+    @"ndi_runtime_incomplete";
+NSString *const CNDUnavailableRuntimeRefused = @"ndi_runtime_refused";
+
 #if TAKESHOT_HAS_NDI_SDK
 
 #import <dlfcn.h>
@@ -66,7 +75,14 @@ struct CNDRuntime {
     decltype(&NDIlib_send_destroy) send_destroy;
     decltype(&NDIlib_send_send_video_v2) send_video;
     /// nil once every pointer above resolved and the runtime initialised.
+    ///
+    /// Set with `code` and never without it — they are one answer stated twice,
+    /// for two readers (a diagnostics bundle and a translator), and a code that
+    /// did not travel with its sentence would be the drift this pair exists to
+    /// prevent.
     NSString *failure;
+    /// Which of the `CNDUnavailable…` codes `failure` is.
+    NSString *code;
 };
 
 static CNDRuntime *CNDSharedRuntime(void) {
@@ -82,6 +98,7 @@ static CNDRuntime *CNDSharedRuntime(void) {
           }
       }
       if (handle == NULL) {
+          runtime.code = CNDUnavailableRuntimeMissing;
           runtime.failure = [NSString
               stringWithFormat:
                   @"NDI runtime (libndi) not found — install NDI Tools or the "
@@ -102,6 +119,7 @@ static CNDRuntime *CNDSharedRuntime(void) {
       if (runtime.initialize == NULL || runtime.send_create == NULL ||
           runtime.send_destroy == NULL || runtime.send_video == NULL) {
           runtime.send_create = NULL;
+          runtime.code = CNDUnavailableRuntimeIncomplete;
           runtime.failure =
               @"NDI runtime is too old — it exports no sender API. Install a "
               @"current NDI runtime from ndi.video.";
@@ -111,6 +129,7 @@ static CNDRuntime *CNDSharedRuntime(void) {
       // machine where reporting "unavailable" beats crashing on frame one.
       if (!runtime.initialize()) {
           runtime.send_create = NULL;
+          runtime.code = CNDUnavailableRuntimeRefused;
           runtime.failure = @"NDI runtime declined to initialise on this CPU.";
       }
     });
@@ -134,6 +153,15 @@ static CNDRuntime *CNDSharedRuntime(void) {
 + (nullable NSString *)unavailableReason {
     CNDRuntime *runtime = CNDSharedRuntime();
     return runtime->send_create != NULL ? nil : runtime->failure;
+}
+
++ (nullable NSString *)unavailableCode {
+    CNDRuntime *runtime = CNDSharedRuntime();
+    return runtime->send_create != NULL ? nil : runtime->code;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    return CNDRuntimeCandidates();
 }
 
 + (nullable NSString *)runtimeVersion {
@@ -290,6 +318,16 @@ static NSString *const kCNDNoSDKMessage =
     // to be installed is not the next step and so is not mentioned: without
     // headers there is nothing to load it into.
     return kCNDNoSDKMessage;
+}
+
++ (nullable NSString *)unavailableCode {
+    return CNDUnavailableNotBuilt;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    // Nowhere. This build has nothing to load a runtime INTO, so it never
+    // looked — an empty list is the honest answer and not a missing one.
+    return @[];
 }
 
 + (nullable NSString *)runtimeVersion {

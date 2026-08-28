@@ -67,9 +67,13 @@ struct NDISettingsSection: View {
 
 /// Sending, or the reason it is not.
 ///
-/// The reasons come from the bridge and are English, like every other
-/// CaptureCore/CDeckLink error: they name a file in the source tree and a site
-/// to download from, and a translated path is a worse instruction than the path.
+/// **The reason is a paragraph in a localized panel, so it is localized.** It
+/// used to come out of the bridge in English under a Russian label, which is
+/// the defect `BridgeUnavailable` exists to fix: the bridge states which of its
+/// four causes this is and the words are picked here, at draw time, so the row
+/// follows the language switch like every other string in this window. The path
+/// and the file name inside those sentences are NOT translated — they are
+/// things to type, and a translated path is a worse instruction than the path.
 struct NDIStatusRow: View {
     @ObservedObject private var mirrors: DisplayMirrors
 
@@ -93,7 +97,7 @@ struct NDIStatusRow: View {
                     Text(L("ndi_not_sending")).foregroundStyle(.secondary)
                 case .unavailable(let reason):
                     Text(L("ndi_unavailable")).foregroundStyle(.secondary)
-                    reasonText(reason)
+                    reasonText(reason.localizedText)
                 case .failed(let reason):
                     Text(L("ndi_failed_short")).foregroundStyle(.secondary)
                     reasonText(reason)

@@ -54,8 +54,9 @@ final class SRTMirror: @unchecked Sendable {
         case lost(String)
         /// It will not open until the operator changes something.
         case refused(String)
-        /// This build or this machine cannot send at all.
-        case unavailable(String)
+        /// This build or this machine cannot send at all. Carries the bridge's
+        /// coded answer, so the status row picks its own words for it.
+        case unavailable(BridgeUnavailable)
     }
 
     /// The queue everything here runs on. Named so a test can assert that the

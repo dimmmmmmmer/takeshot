@@ -567,7 +567,7 @@ struct SRTStubBuildTests {
     /// The reason has to be an instruction: what to install, and where to put it.
     /// English, like every other bridge error.
     @Test func theStubSaysWhatToInstall() throws {
-        let reason: String = try #require(SRTStream.unavailableReason)
+        let reason: String = try #require(SRTStream.unavailable?.english)
         #expect(reason.contains("brew install srt"),
                 "the reason does not say how to get it: \(reason)")
         #expect(reason.contains("vendor/SRTSDK/include"),

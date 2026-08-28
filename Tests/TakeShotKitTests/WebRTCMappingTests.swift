@@ -44,8 +44,17 @@ import Testing
             NSError(domain: domain, code: code.rawValue,
                     userInfo: [NSLocalizedDescriptionKey: text])
         }
-        #expect(WebRTCPeer.classify(error(.unavailable, "no library"))
-            == .unavailable("no library"))
+        // `unavailable` carries the bridge's coded answer now rather than its
+        // prose, so it is checked in the two halves it has: the library's
+        // sentence, verbatim, and whatever code the bridge is holding — which
+        // is what the page's words are chosen from.
+        guard case .unavailable(let bridge) =
+            WebRTCPeer.classify(error(.unavailable, "no library")) else {
+            Issue.record("an unavailable code did not classify as unavailable")
+            return
+        }
+        #expect(bridge.english == "no library")
+        #expect(bridge.code == CDCPeerConnection.unavailableCode())
         #expect(WebRTCPeer.classify(error(.offer, "bad offer"))
             == .offer("bad offer"))
         #expect(WebRTCPeer.classify(error(.runtime, "no interfaces"))
@@ -64,7 +73,11 @@ import Testing
     /// in it needs it to do.
     @Test func onlyABadOfferIsSomethingThePageCanFix() {
         #expect(CaptureController.refusal(.offer("no video")) == .rejected)
-        #expect(CaptureController.refusal(.unavailable("install it"))
+        // Code-less, so what the page is sent is the sentence as it stands —
+        // the fallback path, checked here as well as in
+        // `BridgeLocalizationTests` because this is the route that uses it.
+        #expect(CaptureController.refusal(
+            .unavailable(BridgeUnavailable(code: nil, english: "install it")))
             == .unavailable("install it"))
         #expect(CaptureController.refusal(.runtime("no interfaces"))
             == .unavailable("no interfaces"))

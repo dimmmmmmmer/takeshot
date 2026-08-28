@@ -862,8 +862,20 @@ switch swaps the `.lproj` bundle and is stored in `ThemeSettings.appLanguage`
 
 Make new settings fields **Optional** — otherwise saved JSON from an older
 build will not decode (see the settings section above for where a new field
-goes and what has to be told about it). Core errors (`CaptureCore`, `CDeckLink`) are English and
-not localized. Add every new string to both tables.
+goes and what has to be told about it). Add every new string to both tables.
+
+**English is for a diagnostic, not for a panel**, and the two used to be
+conflated as "core errors are English". A line whose reader is a log, a
+diagnostics bundle or a machine stays English whatever the UI is set to —
+`PipelineAlarm.message`, a bridge's `unavailableReason`, the frozen `Comments`
+column of `takeshot-log.csv` and of the ALE. A paragraph an OPERATOR reads on
+screen is localized wherever it was written, `CaptureCore` and the Obj-C
+bridges included. Where those two meet, the module that knows states a value
+the app can put words to and keeps its English beside it: `PipelineAlarm`
+carries a case and a `message` (`AlarmLocalization`), each bridge carries an
+`unavailableCode` and an `unavailableReason` (`BridgeUnavailable`). The English
+is what an app with no words for a case or a code falls back to, so a failure
+this build has never heard of is a sentence rather than a blank row.
 
 ### What crosses the CaptureCore boundary, and what does not
 
@@ -887,6 +899,45 @@ What does **not** get translated is anything post-production reads. The
 note (`CapturePipeline+Take.describeTake`), and it is written in English
 whatever the UI is set to — a frozen machine-read schema whose values must not
 depend on the operator's language setting.
+
+### What crosses an SDK bridge's boundary, and the code beside the prose
+
+The Obj-C bridges have the same problem CaptureCore had and the same answer.
+`CSRTSender.unavailableReason` and its two siblings are English sentences, and
+they were shown verbatim under a localized label: a Russian operator turning
+SRT or NDI on in a build without that SDK read "Состояние: Недоступно" and then
+a paragraph of English, and so did anyone opening `/live` on a phone.
+
+Each bridge now states a stable CODE beside the prose — `unavailableCode`,
+one of four constants declared in its header — and the app picks the words from
+it (`BridgeUnavailable`, keyed as `bridge_<code>` in both `.strings` files).
+The four are the four states a dlopen-ed SDK can be in, and they are named for
+what the reader has to DO about them rather than for what the sentence says:
+`not_built` (this binary; nothing on this machine can change it — the one a
+downloaded DMG shows), `runtime_missing` (install it; carries the searched paths
+through `runtimeSearchPaths`), `runtime_incomplete` (upgrade it) and
+`runtime_refused` (this machine). `CDataChannel` has a fifth,
+`runtime_no_media`, because a copy built without `RTC_ENABLE_MEDIA` passes the
+symbol check and still cannot carry a picture, and its fix is its own.
+
+**The prose does not go away, and that is the safety rather than a leftover.**
+A bridge is the one place here that can grow a failure mode the app layer has
+never heard of, and `BridgeUnavailable.localizedText` answers an unrecognised
+code — or a reason that arrived with no code at all — with the bridge's own
+English. Never a blank row. `BridgeLocalizationTests` holds that from both
+directions, and holds the English wording as the bridge's own sentence
+character for character, so the pass that moved the choosing is visibly not a
+pass that changed the words.
+
+`/live` needed nothing of its own for this. Every string on that page is
+resolved by `L()` on the Mac and spliced into the markup when it is served
+(`RemotePage.config`); the 503 body was the one line built per REQUEST rather
+than per page, so it is now chosen the same way, at the moment the route
+answers.
+
+The English sentence is still what a diagnostics bundle carries, and that is
+the line the i18n rule is really about: a diagnostic is English, a paragraph in
+a panel is not.
 
 The help page is the exception: it is prose, several pages of it, so it lives as
 `Help.md` in each `.lproj` rather than as escaped one-line strings. `HelpDocument`

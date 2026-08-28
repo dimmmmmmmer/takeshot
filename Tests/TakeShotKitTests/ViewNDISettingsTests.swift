@@ -1,4 +1,5 @@
 import AppKit
+import CNDI
 import SwiftUI
 import Testing
 
@@ -57,32 +58,86 @@ struct ViewNDISettingsTests {
     }
 
     /// A build with no SDK is the common case, so the section has to render the
-    /// reason without stretching the settings window. The reason is English in
-    /// both languages — it names a file in the source tree, and a translated
-    /// path is a worse instruction than the path.
+    /// reason without stretching the settings window — **in either language,
+    /// which is what changed here.**
     ///
-    /// The text used is the bridge's OWN, not a paraphrase: it is the longest
-    /// string this section can be asked to lay out, and a message rewritten to
-    /// read better for an operator is exactly the change that would push the
-    /// form wider without anyone measuring it again.
+    /// It used to be one English paragraph laid out twice, so the two heights
+    /// had to agree and that agreement was the check. The reason is localized
+    /// now (`BridgeUnavailable`), so the Russian is a different, longer
+    /// paragraph and equal heights is no longer a property anything should
+    /// want. What has to hold instead is the thing the old test was really
+    /// after: NEITHER language pushes the form wider than the window.
+    ///
+    /// The code used is the bridge's own `not_built`, which is the one a
+    /// downloaded DMG shows and the longest string this section can be asked to
+    /// lay out.
     @Test func theUnavailableReasonRendersInsideTheWindow() async throws {
-        // Not `#require`: the `??` already makes this non-optional, and
-        // wrapping a non-optional is a warning the build does not carry. The
-        // fallback is what a build WITH the SDK lays out — the point is that
-        // some real message fits, not which one.
-        let reason: String = NDISender.unavailableReason
-            ?? "Built without the NDI SDK. Building with it is described in "
-                + "vendor/NDISDK/README.md."
+        // Built here rather than read off the bridge: the NDI SDK is installed
+        // on the developer's Mac and absent on CI, so the real bridge answers
+        // differently in the two places and this test would measure the machine.
+        let unavailable = BridgeUnavailable(
+            code: CNDUnavailableNotBuilt,
+            english: L10n.translation("bridge_ndi_not_built") ?? "")
         try await ViewProbe.run { probe in
             probe.controller.settings.ndi.enabled = true
-            probe.controller.mirrors.ndiState = .unavailable(reason)
+            probe.controller.mirrors.ndiState = .unavailable(unavailable)
             let shown = probe.sizes(proposedWidth: SettingsView.width) {
                 Form { NDISettingsSection() }.formStyle(.grouped)
             }
             #expect(shown.en.width <= SettingsView.width + 1,
                     "the reason pushed the form to \(shown.en.width)pt")
-            #expect(abs(shown.ru.height - shown.en.height) <= 8,
-                    "the reason wrapped differently by language: \(shown)")
+            #expect(shown.ru.width <= SettingsView.width + 1,
+                    "the Russian reason pushed the form to \(shown.ru.width)pt")
+        }
+    }
+
+    /// **The defect this section had, stated as a render.**
+    ///
+    /// A Russian operator saw a localized "Состояние: Недоступно" over an
+    /// English paragraph. Two halves, because no single assertion covers it:
+    /// the WORDS the row is handed differ by language (exact), and the row
+    /// really draws them (a height against the same section saying only "not
+    /// sending").
+    ///
+    /// Deliberately NOT "the Russian section is a different height from the
+    /// English one". Two honest translations can wrap to the same number of
+    /// lines, and a test that assumed otherwise would be a coin toss on a
+    /// translator's word choice. What catches a row that went back to showing
+    /// the bridge's English is
+    /// `BridgeLocalizationTests.theSettingsRowsShowTheWordsAndNotTheDiagnostic`,
+    /// which reads the source instead of measuring it.
+    @Test func theReasonIsNotTheSameParagraphInBothLanguages() async throws {
+        let english: String = try #require(
+            L10n.translation("bridge_ndi_not_built"))
+        let unavailable = BridgeUnavailable(code: CNDUnavailableNotBuilt,
+                                            english: english)
+        L10n.apply(.russian)
+        let russian: String = unavailable.localizedText
+        L10n.apply(.english)
+        #expect(russian != english,
+                "the row would read English under a Russian label")
+        try await ViewProbe.run { probe in
+            probe.controller.settings.ndi.enabled = true
+            probe.controller.mirrors.ndiState = .off
+            // Ideal height, like `theNDISectionGrowsWhenItIsSwitchedOn`: a
+            // PROPOSED height saturates at the loose 4000 the probe offers and
+            // says nothing about what was drawn.
+            let quiet = probe.fittingSizes {
+                Form { NDISettingsSection() }.formStyle(.grouped)
+            }
+            probe.controller.mirrors.ndiState = .unavailable(unavailable)
+            let shown = probe.fittingSizes {
+                Form { NDISettingsSection() }.formStyle(.grouped)
+            }
+            // The paragraph is really drawn in Russian, not silently empty —
+            // which is what an unrecognised code with no fallback would have
+            // produced. Height against the same section saying only "not
+            // sending", rather than against the English, because two different
+            // paragraphs may honestly wrap to the same number of lines.
+            #expect(shown.ru.height > quiet.ru.height,
+                    "the Russian reason drew nothing: \(shown) vs \(quiet)")
+            #expect(shown.en.height > quiet.en.height,
+                    "the English reason drew nothing: \(shown) vs \(quiet)")
         }
     }
 }

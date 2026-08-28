@@ -25,6 +25,15 @@
 
 static NSString *const CDCErrorDomain = @"com.takeshot.cdatachannel";
 
+// The reason vocabulary. Declared in the header, defined here once for
+// both the real bridge and the stub — the stub raises one of them too, and
+// a second spelling of a code is a string that silently stops matching.
+NSString *const CDCUnavailableNotBuilt = @"webrtc_not_built";
+NSString *const CDCUnavailableRuntimeMissing = @"webrtc_runtime_missing";
+NSString *const CDCUnavailableRuntimeIncomplete =
+    @"webrtc_runtime_incomplete";
+NSString *const CDCUnavailableRuntimeNoMedia = @"webrtc_runtime_no_media";
+
 #if TAKESHOT_HAS_DATACHANNEL_SDK
 
 #import <dlfcn.h>
@@ -83,7 +92,14 @@ struct CDCRuntime {
     decltype(&rtcIsOpen) isOpen;
     decltype(&rtcChainPliHandler) chainPliHandler;
     /// nil once every pointer above resolved.
+    ///
+    /// Set with `code` and never without it — they are one answer stated twice,
+    /// for two readers (a diagnostics bundle and a translator), and a code that
+    /// did not travel with its sentence would be the drift this pair exists to
+    /// prevent.
     NSString *failure;
+    /// Which of the `CDCUnavailable…` codes `failure` is.
+    NSString *code;
 };
 
 /// The library is started once and never cleaned up.
@@ -104,6 +120,7 @@ static CDCRuntime *CDCSharedRuntime(void) {
           }
       }
       if (handle == NULL) {
+          runtime.code = CDCUnavailableRuntimeMissing;
           runtime.failure = [NSString
               stringWithFormat:
                   @"Live video is not available: this build was made with "
@@ -147,6 +164,7 @@ static CDCRuntime *CDCSharedRuntime(void) {
           runtime.getLocalDescription == NULL || runtime.addTrack == NULL ||
           runtime.sendMessage == NULL || runtime.isOpen == NULL) {
           runtime.createPeer = NULL;
+          runtime.code = CDCUnavailableRuntimeIncomplete;
           runtime.failure =
               @"libdatachannel on this machine is missing entry points this "
               @"app needs. Build 0.20 or newer.";
@@ -159,6 +177,7 @@ static CDCRuntime *CDCSharedRuntime(void) {
       // carries no picture.
       if (runtime.chainPliHandler == NULL) {
           runtime.createPeer = NULL;
+          runtime.code = CDCUnavailableRuntimeNoMedia;
           runtime.failure = @"libdatachannel on this machine was built without "
                             @"media support (RTC_ENABLE_MEDIA). Rebuild it "
                             @"with media enabled.";
@@ -210,6 +229,15 @@ static void RTC_API CDCPliReceived(int tr, void *ptr);
 + (nullable NSString *)unavailableReason {
     CDCRuntime *runtime = CDCSharedRuntime();
     return runtime->createPeer != NULL ? nil : runtime->failure;
+}
+
++ (nullable NSString *)unavailableCode {
+    CDCRuntime *runtime = CDCSharedRuntime();
+    return runtime->createPeer != NULL ? nil : runtime->code;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    return CDCRuntimeCandidates();
 }
 
 - (instancetype)initWithMid:(NSString *)mid
@@ -540,6 +568,16 @@ static NSString *const kCDCNoSDKMessage =
     // be installed is not the next step and so is not mentioned: without
     // headers there is nothing to load it into.
     return kCDCNoSDKMessage;
+}
+
++ (nullable NSString *)unavailableCode {
+    return CDCUnavailableNotBuilt;
+}
+
++ (NSArray<NSString *> *)runtimeSearchPaths {
+    // Nowhere. This build has nothing to load a runtime INTO, so it never
+    // looked — an empty list is the honest answer and not a missing one.
+    return @[];
 }
 
 - (instancetype)initWithMid:(NSString *)mid

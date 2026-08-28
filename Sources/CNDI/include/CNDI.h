@@ -3,6 +3,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Why NDI cannot be used, as stable identifiers rather than as prose.
+///
+/// The same four questions SRT's codes answer, and named the same, because
+/// they are the same four states any dlopen-ed SDK can be in: this binary was
+/// built without it, nothing is installed, what is installed is too old, or
+/// this machine refused it. None of them names a product, a version or a URL
+/// — all of which live in the prose, and all of which change.
+extern NSString *const CNDUnavailableNotBuilt;
+extern NSString *const CNDUnavailableRuntimeMissing;
+extern NSString *const CNDUnavailableRuntimeIncomplete;
+extern NSString *const CNDUnavailableRuntimeRefused;
+
 /// Obj-C bridge to the NDI SDK: announces ONE NDI video source on the local
 /// network and sends the app's 8-bit BGRA display frames to it, so a director's
 /// monitor on an iPad or a client feed in the production office needs neither
@@ -42,8 +54,30 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)isSDKAvailable;
 
 /// nil when `isSDKAvailable`; otherwise what this build is, in a sentence the
-/// person in front of it can act on. Shown verbatim in Settings.
+/// person in front of it can act on.
+///
+/// **English, and it stays English.** This is the diagnostic line: the
+/// diagnostics bundle carries it, and it is what the app falls back to for a
+/// code it has no words for. What the operator reads in Settings is chosen
+/// from `unavailableCode` — see `BridgeUnavailable` in the app layer.
 + (nullable NSString *)unavailableReason;
+
+/// The same fact as a stable identifier, for the app to choose its own words
+/// from; nil exactly when `unavailableReason` is nil. One of the four
+/// `CNDUnavailable…` constants.
+///
+/// A CODE and deliberately not the sentence shortened — see the note on those
+/// constants. An app with no words for one shows `unavailableReason` instead,
+/// so a code added here is never a blank row in an older build.
++ (nullable NSString *)unavailableCode;
+
+/// Every path the runtime dlopen looked at, in order.
+///
+/// A FACT rather than a sentence, so `CNDUnavailableRuntimeMissing` can be
+/// said in any language without the app having to parse the list back out of
+/// English prose. Empty for every other code — a build with no headers
+/// searched nowhere.
++ (NSArray<NSString *> *)runtimeSearchPaths;
 
 /// The version string the loaded runtime reports; nil when there is none.
 /// For diagnostics and the README's "what the app does with it" claim.

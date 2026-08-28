@@ -166,7 +166,7 @@ struct SRTStatusRow: View {
                     detail(reason)
                 case .unavailable(let reason):
                     Text(L("srt_unavailable")).foregroundStyle(.secondary)
-                    detail(reason)
+                    detail(reason.localizedText)
                 case .failed(let reason):
                     Text(L("srt_failed_short")).foregroundStyle(.secondary)
                     detail(reason)
@@ -183,9 +183,11 @@ struct SRTStatusRow: View {
         }
     }
 
-    /// The reasons come from the bridge and are English, like every other
-    /// CaptureCore/CDeckLink error: they name a shell command and a directory, and
-    /// a translated path is a worse instruction than the path.
+    /// One line of small secondary text under the status word: an endpoint URL,
+    /// a libsrt reconnect reason, or the localized paragraph a
+    /// `BridgeUnavailable` produces. The shell command and the directory inside
+    /// that paragraph are NOT translated — they are things to type, and a
+    /// translated path is a worse instruction than the path.
     private func detail(_ text: String) -> some View {
         Text(text)
             .font(.caption)

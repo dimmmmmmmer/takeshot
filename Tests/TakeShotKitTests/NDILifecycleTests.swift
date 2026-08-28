@@ -417,7 +417,7 @@ struct NDIStubBuildTests {
     /// developer would look.
     @Test func theStubSaysWhatThisBuildIsRatherThanWhatToCopy() throws {
         #expect(CNDSender.isSDKAvailable() == false)
-        let reason: String = try #require(NDISender.unavailableReason)
+        let reason: String = try #require(NDISender.unavailable?.english)
         #expect(reason.contains("NDI SDK"),
                 "the reason does not name what is missing: \(reason)")
         // What is true of the app in front of the reader, and what still works
@@ -450,7 +450,19 @@ struct NDIStubBuildTests {
                 Issue.record("state is \(controller.mirrors.ndiState)")
                 return
             }
-            #expect(reason.contains("NDI SDK"))
+            // The bridge's own sentence, unchanged by this pass.
+            #expect(reason.english.contains("NDI SDK"))
+            // …and the row does not show it to a Russian operator. This is the
+            // end-to-end of the localization: the switch was thrown, the
+            // structural check ran, and what the row will draw follows the
+            // app's language rather than the bridge's.
+            L10n.apply(.russian)
+            let shown: String = reason.localizedText
+            L10n.apply(.english)
+            #expect(shown != reason.english,
+                    "the row reads English under a Russian label: \(shown)")
+            #expect(shown.contains("vendor/NDISDK/README.md"),
+                    "the Russian lost the file to read: \(shown)")
             #expect(controller.settings.ndi.enabled == true,
                     "a structural absence turned the operator's switch off")
         }

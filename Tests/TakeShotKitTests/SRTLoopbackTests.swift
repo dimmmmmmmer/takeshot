@@ -64,7 +64,7 @@ struct SRTLoopbackTests {
         // 1.5 or newer, which is what the vendor README asks for.
         #expect(major > 1 || (major == 1 && minor >= 5),
                 "libsrt \(version) is older than this bridge expects")
-        #expect(SRTStream.unavailableReason == nil)
+        #expect(SRTStream.unavailable == nil)
     }
 
     /// **A real handshake and a real datagram.** A listener binds, a caller dials

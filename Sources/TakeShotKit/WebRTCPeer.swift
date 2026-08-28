@@ -31,14 +31,20 @@ enum WebRTCPeerState: Equatable, Sendable {
 /// and a library that refused a step it normally takes is worth showing
 /// verbatim because it is rare enough that what it said is the diagnosis.
 enum WebRTCError: Error, Equatable {
-    case unavailable(String)
+    /// Carries the bridge's coded answer rather than its prose, so an offer
+    /// refused this way reaches the page in the same words the route's own
+    /// structural check would have used.
+    case unavailable(BridgeUnavailable)
     case offer(String)
     case runtime(String)
 
+    /// The failure in one line. English for `unavailable`, which is the
+    /// bridge's own diagnostic sentence — what the page is sent comes off
+    /// `BridgeUnavailable.localizedText` at the route that answers it.
     var message: String {
         switch self {
-        case .unavailable(let text), .offer(let text), .runtime(let text):
-            return text
+        case .unavailable(let bridge): return bridge.english
+        case .offer(let text), .runtime(let text): return text
         }
     }
 }
@@ -98,10 +104,16 @@ final class WebRTCPeer: WebRTCPeering, @unchecked Sendable {
     private let connection: CDCPeerConnection
 
     /// nil when WebRTC can be used; otherwise what is missing and what to do
-    /// about it, in English like the other bridge errors. Structural — a build
-    /// with no headers, or a machine with no runtime — as against an offer that
-    /// could not be answered, which is an error on the call.
-    static var unavailableReason: String? { CDCPeerConnection.unavailableReason() }
+    /// about it. Structural — a build with no headers, or a machine with no
+    /// runtime — as against an offer that could not be answered, which is an
+    /// error on the call.
+    ///
+    /// A `BridgeUnavailable` and no longer a String: the bridge states which of
+    /// its four causes this is and the app picks the words, so the phone on the
+    /// set network reads the same language as the rest of the page it is
+    /// looking at. The English is still in there and is still what a code this
+    /// build does not know renders as.
+    static var unavailable: BridgeUnavailable? { .webrtc }
 
     /// The factory shape `CaptureController.mirrors.webrtcPeerFactory`
     /// overrides.
@@ -132,7 +144,14 @@ final class WebRTCPeer: WebRTCPeering, @unchecked Sendable {
     static func classify(_ error: NSError?) -> WebRTCError {
         let message = error?.localizedDescription ?? "WebRTC refused the offer"
         switch CDCAnswerFailure(rawValue: error?.code ?? 0) {
-        case .unavailable: return .unavailable(message)
+        case .unavailable:
+            // The error and the class methods read one `dispatch_once` runtime
+            // state, so the code that goes with this sentence is the one the
+            // bridge is holding right now — no second channel needed on the
+            // NSError to carry it.
+            return .unavailable(BridgeUnavailable(
+                code: CDCPeerConnection.unavailableCode(), english: message,
+                searchPaths: CDCPeerConnection.runtimeSearchPaths()))
         case .offer: return .offer(message)
         default: return .runtime(message)
         }

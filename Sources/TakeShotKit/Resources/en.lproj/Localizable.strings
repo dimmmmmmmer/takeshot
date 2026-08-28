@@ -975,3 +975,49 @@
 "scope_cie" = "CIE";
 "scope_cie_gamuts" = "Also draw the gamut the signal is not in — a Rec.2020 source outside the Rec.709 triangle will not survive a Rec.709 delivery unchanged.";
 "scope_cie_hint" = "CIE 1931 chromaticity: the colours in the picture as (x, y), computed in linear light from the signal's own transfer and primaries. The bright triangle is the signal's gamut, the cross is D65.";
+
+/* What an SDK bridge says about itself when it cannot be used.
+
+   These are the paragraph under "Status: Unavailable" in the SRT and NDI
+   sections, and the message the /live page shows a phone. They used to come
+   straight out of the Obj-C bridge in English under a localized label, which is
+   the whole reason this block exists.
+
+   WHICH of them is shown is decided by a stable code the bridge states beside
+   its own English prose (`CSRTUnavailableNotBuilt` and its siblings), never by
+   matching the words — so every line here can be reworded and translated
+   freely, and a bridge that grows a code no build has words for yet falls back
+   to that English rather than to a blank row. See `BridgeUnavailable`.
+
+   In English these are the bridge's own sentences character for character, and
+   `BridgeLocalizationTests` holds them that way: this pass changed which layer
+   picks the words, and deliberately changed no wording.
+
+   The shell commands, paths, file names and product names inside them are NOT
+   translated in either language. They are things to type and places to look,
+   and a translated path is a worse instruction than the path. */
+"bridge_srt_not_built" = "Built without libsrt. Install it with `brew install srt`, then copy its headers into vendor/SRTSDK/include/srt and rebuild.";
+"bridge_srt_runtime_missing" = "libsrt not found — install it with `brew install srt`. Looked for: %@";
+"bridge_srt_runtime_incomplete" = "libsrt on this machine is missing entry points this app needs. Install 1.5 or newer.";
+"bridge_srt_runtime_refused" = "libsrt declined to start on this machine.";
+/* Written for a person holding a downloaded DMG who cannot rebuild anything —
+   a published release is made with no vendor drops at all, so this is the line
+   most operators will ever see. It leads with what is true of the app in front
+   of them and what still works, and only then points a developer at the file. */
+"bridge_ndi_not_built" = "This build has no NDI in it: it was compiled without the NDI SDK, so the NDI output is not available. Everything else works as usual, and the web remote still carries the picture to a phone on the set network. Building with it is described in vendor/NDISDK/README.md.";
+"bridge_ndi_runtime_missing" = "NDI runtime (libndi) not found — install NDI Tools or the NDI SDK for Apple from ndi.video. Looked for: %@";
+"bridge_ndi_runtime_incomplete" = "NDI runtime is too old — it exports no sender API. Install a current NDI runtime from ndi.video.";
+"bridge_ndi_runtime_refused" = "NDI runtime declined to initialise on this CPU.";
+/* …and the same again for the /live page, whose reader is holding a phone on
+   the set network rather than the Mac. */
+"bridge_webrtc_not_built" = "This build has no WebRTC in it: it was compiled without libdatachannel, so live video is not available. Everything else on the remote works as usual, and the camera page still shows the signal. Building with it is described in vendor/libdatachannel/README.md.";
+"bridge_webrtc_runtime_missing" = "Live video is not available: this build was made with libdatachannel but cannot find it on this machine. A release that ships it carries its own copy inside the app — see vendor/libdatachannel/README.md. Looked for: %@";
+"bridge_webrtc_runtime_incomplete" = "libdatachannel on this machine is missing entry points this app needs. Build 0.20 or newer.";
+"bridge_webrtc_runtime_no_media" = "libdatachannel on this machine was built without media support (RTC_ENABLE_MEDIA). Rebuild it with media enabled.";
+
+/* The other three things the /live page's blocked box can say. Not bridge
+   codes — these are the app's own, and they sat in English in the same box for
+   the same reason. */
+"live_too_many_viewers" = "This Mac is already carrying %d viewers.";
+"live_shutting_down" = "The app is shutting down.";
+"live_no_app" = "No app is attached to this server.";

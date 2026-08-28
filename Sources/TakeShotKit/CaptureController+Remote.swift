@@ -72,7 +72,7 @@ extension CaptureController {
                     // `answerWebRTCOffer` puts that on a queue of its own.
                     Task { @MainActor in
                         guard let self else {
-                            reply(.unavailable("The app is shutting down."))
+                            reply(.unavailable(L("live_shutting_down")))
                             return
                         }
                         self.answerWebRTCOffer(offer, picture: picture,
