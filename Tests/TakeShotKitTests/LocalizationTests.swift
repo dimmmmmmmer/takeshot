@@ -87,11 +87,150 @@ struct LocalizationTests {
         }
     }
 
+    /// A key written twice in one file is silently the LAST one.
+    ///
+    /// Every other check in this suite reads the files through `NSDictionary`,
+    /// which is a dictionary and has already thrown the earlier entry away — so
+    /// none of them can see this, by construction. The failure it leaves is the
+    /// quiet kind: 804 entries is past the size where anyone scrolls, a key
+    /// gets a second home, and then editing the one you found changes nothing
+    /// on screen and nothing in any test.
+    @Test func noKeyIsDefinedTwiceInOneFile() throws {
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                Bundle.module.path(forResource: language, ofType: "lproj"))
+            let text: String = try String(
+                contentsOfFile: folder + "/Localizable.strings", encoding: .utf8)
+            var seen: Set<String> = []
+            var twice: [String] = []
+            for line: String in text.components(separatedBy: "\n") {
+                guard line.hasPrefix("\""),
+                      let end = line.dropFirst().firstIndex(of: "\"") else { continue }
+                let key = String(line[line.index(after: line.startIndex)..<end])
+                if !seen.insert(key).inserted { twice.append(key) }
+            }
+            // A floor under "the reader found the entries at all" — this parses
+            // the file by hand rather than through Foundation, which is the
+            // whole point, so it has to prove it read something.
+            try #require(seen.count > 700,
+                         "\(language): read only \(seen.count) keys, so a green run means nothing")
+            #expect(twice.isEmpty,
+                    """
+                    \(language) defines these keys more than once, and the LAST \
+                    one is what the app shows: \(twice.joined(separator: ", "))
+                    """)
+        }
+    }
+
+    /// A key that reaches `String(format:)` has to carry the SAME conversions
+    /// in both languages, in the same order.
+    ///
+    /// `L(_:_:)` splices values into the string the operator's language chose,
+    /// and the argument list is fixed by the CALL SITE. So the two directions
+    /// fail differently and only one of them is quiet: a translation with
+    /// FEWER conversions silently drops a value (a toast that names no file),
+    /// and one with MORE reads past the end of the argument list — undefined,
+    /// commonly a crash, in one language only, on a path an English-speaking
+    /// developer never walks.
+    ///
+    /// A bare `%` is the same defect wearing different clothes: `String(format:)`
+    /// reads `100% done` as a space-flagged `%d` and consumes an argument that
+    /// is not there. In a formatted string it has to be `%%`. (Plain keys are
+    /// handed back as written and may say `18%` freely — which several do, so
+    /// this cannot be a blanket rule about the files.)
+    ///
+    /// Positional forms (`%1$@`) count as themselves, which is right: a
+    /// translator who reorders values must use them, and a language that
+    /// reorders without them is the bug this catches.
+    @Test func aFormattedStringCarriesTheSameValuesInBothLanguages() throws {
+        let bundle = Bundle.module
+        var tables: [String: [String: String]] = [:]
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                bundle.path(forResource: language, ofType: "lproj"))
+            tables[language] = try #require(NSDictionary(
+                contentsOfFile: folder + "/Localizable.strings")
+                as? [String: String])
+        }
+        let english: [String: String] = try #require(tables["en"])
+        let russian: [String: String] = try #require(tables["ru"])
+
+        let formatted: [KeyUse] = try literalKeys().filter(\.takesArguments)
+        let keys: Set<String> = Set(formatted.map(\.key))
+        // A floor under "the walk found the formatted call sites at all".
+        try #require(keys.count > 80,
+                     "only \(keys.count) formatted keys found, so a green run here would mean nothing")
+
+        for use: KeyUse in formatted {
+            guard let base: String = english[use.key],
+                  let other: String = russian[use.key] else { continue }
+            let site = "\(use.key) (\(use.file):\(use.line))"
+            #expect(Self.conversions(in: base) == Self.conversions(in: other),
+                    """
+                    \(site) splices different values in the two languages, and \
+                    the call site can only pass one list:
+                      en \(Self.conversions(in: base)): \(base)
+                      ru \(Self.conversions(in: other)): \(other)
+                    """)
+            for (language, text) in [("en", base), ("ru", other)] {
+                #expect(!Self.hasBaredPercent(text),
+                        """
+                        \(site) [\(language)] carries a % that is not a \
+                        conversion and not an escaped %%, so String(format:) \
+                        reads it as one and consumes an argument that is not \
+                        there: \(text)
+                        """)
+            }
+        }
+    }
+
+    /// The printf conversions in a string, in order, `%%` excluded.
+    ///
+    /// Deliberately does NOT accept the space flag (`% d`): in these files a
+    /// space after a percent is prose — "18% grey", "0% and above 100%" — and
+    /// treating it as a conversion would report two hints that are never
+    /// formatted at all. `hasBaredPercent` is what catches the same characters
+    /// when the string IS formatted, where they really are a hazard.
+    static func conversions(in text: String) -> [String] {
+        Self.conversionMatches(in: text)
+            .map(\.token)
+            .filter { !$0.hasSuffix("%") }
+    }
+
+    /// True when a `%` survives after every conversion and every `%%` is
+    /// removed.
+    static func hasBaredPercent(_ text: String) -> Bool {
+        var remaining: String = text
+        for match in Self.conversionMatches(in: text).reversed() {
+            remaining.replaceSubrange(match.range, with: "")
+        }
+        return remaining.contains("%")
+    }
+
+    private static let conversionPattern =
+        "%(?:[0-9]+\\$)?[-+#0]*[0-9*]*(?:\\.[0-9]+)?"
+        + "(?:hh|h|ll|l|q|L|z|t|j)?[@dDuUxXoOfeEgGcCsSp%]"
+
+    /// Every conversion in `text`, with where it sits.
+    private static func conversionMatches(in text: String)
+        -> [(token: String, range: Range<String.Index>)] {
+        guard let expression = try? NSRegularExpression(
+            pattern: Self.conversionPattern) else { return [] }
+        let whole = NSRange(text.startIndex..., in: text)
+        return expression.matches(in: text, range: whole).compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            return (String(text[range]), range)
+        }
+    }
+
     /// One `L("…")` in the tree.
     struct KeyUse {
         let key: String
         let file: String
         let line: Int
+        /// The call passes arguments after the key, so its string goes through
+        /// `String(format:)` rather than being handed back as written.
+        let takesArguments: Bool
     }
 
     /// Every key written as a literal in the FIRST argument of an `L(` call.
@@ -117,10 +256,11 @@ struct LocalizationTests {
             else { continue }
             let lines: [String] = raw.components(separatedBy: "\n")
             for index: Int in lines.indices {
-                for key: String in Self.keys(inCallsOn: code(of: lines[index])) {
-                    found.append(KeyUse(key: key,
+                for call in Self.keys(inCallsOn: code(of: lines[index])) {
+                    found.append(KeyUse(key: call.key,
                                         file: url.lastPathComponent,
-                                        line: index + 1))
+                                        line: index + 1,
+                                        takesArguments: call.takesArguments))
                 }
             }
         }
@@ -135,14 +275,17 @@ struct LocalizationTests {
         return String(line[line.startIndex..<range.lowerBound])
     }
 
-    /// The literals in the first argument of every `L(` call on one line.
-    static func keys(inCallsOn line: String) -> [String] {
+    /// The literals in the first argument of every `L(` call on one line, each
+    /// carrying whether that call goes on to pass arguments.
+    static func keys(inCallsOn line: String)
+        -> [(key: String, takesArguments: Bool)] {
         let characters: [Character] = Array(line)
-        var keys: [String] = []
+        var calls: [(key: String, takesArguments: Bool)] = []
         for index: Int in characters.indices where isCallStart(characters, at: index) {
-            keys += keysInFirstArgument(characters, from: index + 2)
+            let call = keysInFirstArgument(characters, from: index + 2)
+            calls += call.keys.map { ($0, call.takesArguments) }
         }
-        return keys
+        return calls
     }
 
     /// An `L(` that is a call and not the tail of another identifier — `AL(`
@@ -166,8 +309,8 @@ struct LocalizationTests {
     /// `L(forward ? "menu_step_forward" : "menu_step_back")` contributes BOTH —
     /// a regex anchored on `L("` sees neither, and that call site is a menu
     /// item's label. (Both halves were planted and seen failing.)
-    private static func keysInFirstArgument(_ characters: [Character],
-                                            from start: Int) -> [String] {
+    private static func keysInFirstArgument(_ characters: [Character], from start: Int)
+        -> (keys: [String], takesArguments: Bool) {
         var keys: [String] = []
         var depth: Int = 1
         var scan: Int = start
@@ -181,13 +324,15 @@ struct LocalizationTests {
             case ")":
                 depth -= 1
             case "," where depth == 1:
-                return keys // past the key: what follows are format arguments
+                // Past the key. A comma here is the variadic overload, which
+                // means this string reaches `String(format:)`.
+                return (keys, true)
             default:
                 break
             }
             scan += 1
         }
-        return keys
+        return (keys, false)
     }
 
     /// The contents of the string literal opening at `scan`, leaving `scan` on
