@@ -84,11 +84,11 @@ import Testing
             #expect(controller.slateTakeNumber == 1)
             #expect(controller.slateDisplay == "12 T1")
 
-            controller.shot = "B"
+            controller.shot = "2"
             controller.slateTakeOverride = 3
             #expect(controller.pendingSlate
-                == SlateMetadata(scene: "12", shot: "B", take: 3))
-            #expect(controller.slateDisplay == "12/B T3")
+                == SlateMetadata(scene: "12", shot: 2, take: 3))
+            #expect(controller.slateDisplay == "12/2 T3")
 
             // the next scene starts over, and the clip counter is untouched
             controller.scene = "12A"
@@ -133,13 +133,13 @@ import Testing
         try await ControllerHarness.run(live: true) { controller, _ in
             await ControllerWait.until { controller.signalFormat != nil }
             controller.scene = "12"
-            controller.shot = "B"
+            controller.shot = "2"
 
             await record(controller)
             await ControllerWait.untilWritten { controller.takes.count == 1 }
 
             #expect(controller.takes.first?.slate
-                == SlateMetadata(scene: "12", shot: "B", take: 1))
+                == SlateMetadata(scene: "12", shot: 2, take: 1))
             #expect(controller.slateTakeNumber == 2)
             #expect(controller.nextTakeNumber == 2)
         }
@@ -153,7 +153,7 @@ import Testing
         try await ControllerHarness.run(live: true) { controller, root in
             await ControllerWait.until { controller.signalFormat != nil }
             controller.scene = "12A"
-            controller.shot = "B"
+            controller.shot = "2"
             controller.slateTakeOverride = 3
 
             await record(controller)
@@ -161,14 +161,14 @@ import Testing
             let take = try #require(controller.takes.first)
 
             #expect(try await embedded(TakeWriter.sceneKey, of: take.url) == "12A")
-            #expect(try await embedded(TakeWriter.shotKey, of: take.url) == "B")
+            #expect(try await embedded(TakeWriter.shotKey, of: take.url) == "2")
             #expect(try await embedded(TakeWriter.takeKey, of: take.url) == "3")
 
             // …and beside the footage, in the sidecar the corrections use
             let csv = await sidecar(root, TakeLogExporter.slateFileName,
                                     containing: take.url.lastPathComponent)
             #expect(csv.hasPrefix("File Name,Scene,Shot,Take,Description"))
-            #expect(csv.contains("\(take.url.lastPathComponent),12A,B,3,"))
+            #expect(csv.contains("\(take.url.lastPathComponent),12A,2,3,"))
         }
     }
 
@@ -210,18 +210,18 @@ import Testing
             let take = try #require(controller.takes.first)
             let before = try Data(contentsOf: take.url)
 
-            controller.setSlate(SlateMetadata(scene: "13", shot: "C", take: 7),
+            controller.setSlate(SlateMetadata(scene: "13", shot: 3, take: 7),
                                 description: "the corrected setup", for: take)
 
             #expect(controller.takes.first?.slate
-                == SlateMetadata(scene: "13", shot: "C", take: 7))
+                == SlateMetadata(scene: "13", shot: 3, take: 7))
             #expect(controller.takes.first?.logDescription
                 == "the corrected setup")
 
             let csv = await sidecar(root, TakeLogExporter.slateFileName,
                                     containing: "the corrected setup")
             #expect(csv.contains(
-                "\(take.url.lastPathComponent),13,C,7,the corrected setup"))
+                "\(take.url.lastPathComponent),13,3,7,the corrected setup"))
 
             // the recording is untouched — including its own, now older, slate
             #expect(try Data(contentsOf: take.url) == before,
@@ -239,14 +239,14 @@ import Testing
         try await ControllerHarness.run(live: true) { controller, root in
             await ControllerWait.until { controller.signalFormat != nil }
             controller.scene = "12"
-            controller.shot = "B"
+            controller.shot = "2"
             await record(controller)
             await ControllerWait.untilWritten { controller.takes.count == 1 }
             let take = try #require(controller.takes.first)
             let name = take.url.lastPathComponent
             controller.stopCapture()
 
-            controller.setSlate(SlateMetadata(scene: "13", shot: "C", take: 7),
+            controller.setSlate(SlateMetadata(scene: "13", shot: 3, take: 7),
                                 description: "corrected", for: take)
             _ = await sidecar(root, TakeLogExporter.slateFileName,
                               containing: "corrected")
@@ -256,7 +256,7 @@ import Testing
             let corrected = try #require(controller.takes.first)
             #expect(corrected.url.lastPathComponent == name)
             #expect(corrected.slate
-                == SlateMetadata(scene: "13", shot: "C", take: 7))
+                == SlateMetadata(scene: "13", shot: 3, take: 7))
             #expect(corrected.logDescription == "corrected")
 
             // now take the sidecar away, as a copy to another drive would
@@ -264,7 +264,7 @@ import Testing
                 at: root.appendingPathComponent(TakeLogExporter.slateFileName))
             await rescan(controller)
             let fromFile = try #require(controller.takes.first)
-            #expect(fromFile.slate == SlateMetadata(scene: "12", shot: "B",
+            #expect(fromFile.slate == SlateMetadata(scene: "12", shot: 2,
                                                     take: 1),
                     "the file's own slate did not survive the sidecar")
             #expect(fromFile.logDescription == "")

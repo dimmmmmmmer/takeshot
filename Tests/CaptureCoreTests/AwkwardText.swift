@@ -97,7 +97,7 @@ enum AwkwardText {
     /// corpus; `all` is still right for every field position.
     static func take(named name: String = "clip.mov", roll: String = "R001",
                      comment: String = "", scene: String = "",
-                     shot: String = "", logDescription: String = "",
+                     shot: Int = 0, logDescription: String = "",
                      note: String? = nil) -> Take {
         if name.unicodeScalars.contains("\u{0}") {
             Issue.record(

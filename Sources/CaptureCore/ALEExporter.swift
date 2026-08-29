@@ -93,7 +93,7 @@ public enum ALEExporter {
             // counter — the Avid's Take column is about the performance
             String(take.editorialTakeNumber),
             take.slate.scene,
-            take.slate.shot,
+            take.slate.shotText,
             TakeLogExporter.goodTakeField(rating: take.rating),
             TakeLogExporter.commentsField(rating: take.rating,
                                           comment: take.comment),

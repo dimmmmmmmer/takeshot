@@ -26,7 +26,7 @@ struct TakeLogSlateSidecarTests {
     /// exists and the temptation to "just add a column" is what this guards.
     @Test func theResolveSchemaIsUnchangedByTheCreativeFields() {
         let take = makeTake(name: "A001C01.mov", clip: 1) {
-            $0.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+            $0.slate = SlateMetadata(scene: "12A", shot: 2, take: 3)
             $0.logDescription = "wide on the door"
             $0.comment = "hero"
             $0.rating = .good
@@ -56,7 +56,7 @@ struct TakeLogSlateSidecarTests {
     @Test func theSidecarRoundTripsEveryCreativeField() {
         let takes = [
             makeTake(name: "A001C01.mov", clip: 1) {
-                $0.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+                $0.slate = SlateMetadata(scene: "12A", shot: 2, take: 3)
                 $0.logDescription = "wide on the door, then push in"
             },
             makeTake(name: "A001C02.mov", clip: 2) {
@@ -72,11 +72,11 @@ struct TakeLogSlateSidecarTests {
                 == "File Name,Scene,Shot,Take,Description")
         // a comma in a description has to survive as one field
         #expect(csv.contains(
-            "A001C01.mov,12A,B,3,\"wide on the door, then push in\""))
+            "A001C01.mov,12A,2,3,\"wide on the door, then push in\""))
 
         let parsed = TakeLogExporter.parseSlates(csv: csv)
         #expect(parsed["A001C01.mov"] == .init(
-            slate: SlateMetadata(scene: "12A", shot: "B", take: 3),
+            slate: SlateMetadata(scene: "12A", shot: 2, take: 3),
             logDescription: "wide on the door, then push in"))
         #expect(parsed["A001C02.mov"] == .init(
             slate: SlateMetadata(scene: "12A", take: 4)))
@@ -142,7 +142,7 @@ struct TakeLogSlateSidecarTests {
     /// this file exists to remove.
     @Test func theALECarriesSceneShotAndDescription() throws {
         let take = makeTake(name: "A001C01.mov", clip: 1) {
-            $0.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+            $0.slate = SlateMetadata(scene: "12A", shot: 2, take: 3)
             $0.logDescription = "wide on the door"
         }
         let ale = try #require(ALEExporter.ale(takes: [take]))
@@ -153,7 +153,7 @@ struct TakeLogSlateSidecarTests {
             .components(separatedBy: "\t")
 
         for (name, expected) in [("Take", "3"), ("Scene", "12A"),
-                                 ("Shot", "B"),
+                                 ("Shot", "2"),
                                  ("Description", "wide on the door")] {
             let index = try #require(columns.firstIndex(of: name),
                                      "the ALE lost its \(name) column")

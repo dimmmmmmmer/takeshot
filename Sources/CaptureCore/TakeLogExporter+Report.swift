@@ -70,7 +70,7 @@ extension TakeLogExporter {
                 // the creative columns sit next to the clip they belong to: the
                 // production office reads this table by scene, not by file
                 escape(flattened(take.slate.scene)),
-                escape(flattened(take.slate.shot)),
+                escape(flattened(take.slate.shotText)),
                 take.slate.take > 0 ? String(take.slate.take) : "",
                 take.startTimecode?.description ?? "",
                 endTimecode(of: take)?.description ?? "",

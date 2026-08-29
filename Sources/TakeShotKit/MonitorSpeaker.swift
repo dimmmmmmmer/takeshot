@@ -21,11 +21,20 @@ import Foundation
 ///   day, so it answers it for all three ways of getting there.
 /// - **The symbol says WHICH of the three, and how much level there is.** A
 ///   slashed speaker is a hold (filled: muted; hollow: the monitor path is
-///   off); an unslashed one carries the level as its wave count, down to no
-///   waves at all. A mute and a slider at zero are still told apart at a
-///   glance — `LiveSignal.muted` exists for exactly that reason — by the
-///   symbol rather than by the colour, which is the stronger of the two
-///   distinctions and the one macOS's own volume control uses.
+///   off); an unslashed one carries the level as its wave count. A mute and a
+///   slider at zero are still told apart at a glance — `LiveSignal.muted`
+///   exists for exactly that reason — by the symbol rather than by the colour,
+///   which is the stronger of the two distinctions and the one macOS's own
+///   volume control uses.
+/// - **A bare speaker means silence, and nothing else.** It used to mean two
+///   things: silence, AND any level in the bottom third of the slider. So the
+///   working icon was a plain speaker down there and grew waves further up,
+///   with only the colour separating "quiet" from "dead" (owner: "иконка
+///   включённого звука то с волнами то просто громкоговоритель. почему так?").
+///   That contradicted the rule directly above it — the symbol is supposed to
+///   say WHICH state — so an audible level now always carries at least one
+///   wave, and the ladder has three rungs inside the audible range instead of
+///   two plus an overload.
 /// - **DIM is not red, and neither is a level merely turned down.** DIM halves
 ///   the monitoring level so the crew can be talked over: it is audible by
 ///   design, its own badge says it is engaged, and an alarm colour on a working
@@ -68,12 +77,19 @@ struct MonitorSpeaker: Equatable {
         return MonitorSpeaker(symbol: waveSymbol(for: volume), isSilent: false)
     }
 
-    /// How many waves a level gets. The ladder has three rungs — two waves, one
-    /// wave, none — so the scale is split in thirds. DIM's half level lands on
-    /// one wave, which is exactly what DIM does to the sound.
+    /// How many waves an AUDIBLE level gets: three rungs across the audible
+    /// range, never none. A bare speaker is reserved for silence, so the icon
+    /// is monotonic — more waves is more level, all the way down to one — and
+    /// no level a room can hear draws the same glyph as a level it cannot.
+    ///
+    /// The range being split is the audible one (`silenceLevel`…1) rather than
+    /// the whole slider, so the thirds are thirds of what is actually being
+    /// shown. DIM's half level lands on the middle rung, which is exactly what
+    /// DIM does to the sound.
     private static func waveSymbol(for volume: Double) -> String {
-        if volume > 2.0 / 3.0 { return "speaker.wave.2.fill" }
-        if volume > 1.0 / 3.0 { return "speaker.wave.1.fill" }
-        return "speaker.fill"
+        let audible = (volume - silenceLevel) / (1 - silenceLevel)
+        if audible > 2.0 / 3.0 { return "speaker.wave.3.fill" }
+        if audible > 1.0 / 3.0 { return "speaker.wave.2.fill" }
+        return "speaker.wave.1.fill"
     }
 }

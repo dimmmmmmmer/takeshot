@@ -20,7 +20,7 @@ extension TakeWriter {
         var allMetadata = markerMetadata
         allMetadata[Self.markerKey] = "1"
         if !slate.scene.isEmpty { allMetadata[Self.sceneKey] = slate.scene }
-        if !slate.shot.isEmpty { allMetadata[Self.shotKey] = slate.shot }
+        if slate.shot > 0 { allMetadata[Self.shotKey] = slate.shotText }
         if slate.take > 0 { allMetadata[Self.takeKey] = String(slate.take) }
         return allMetadata.map { key, value in
             mdtaItem(key: key, value: value)
@@ -49,7 +49,7 @@ extension TakeWriter {
     /// half the rooms this footage lands in; writing both costs a few dozen
     /// bytes in the moov atom and no tracks at all.
     ///
-    /// The value is the human digest ("Scene 12A / Shot B / Take 3"), never the
+    /// The value is the human digest ("Scene 12A / Shot 2 / Take 3"), never the
     /// three fields concatenated blindly: this is the field a person reads, and
     /// the parseable copy already exists under the namespaced keys.
     private static func standardSlateItems(

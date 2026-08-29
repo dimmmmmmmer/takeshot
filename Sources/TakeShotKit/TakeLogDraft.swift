@@ -40,7 +40,7 @@ struct TakeLogDraft: Equatable {
     init(of take: Take) {
         comment = take.comment
         scene = take.slate.scene
-        shot = take.slate.shot
+        shot = take.slate.shotText
         takeText = SlateTakeField.text(for: take.slate.take)
         logDescription = take.logDescription
     }
@@ -48,7 +48,8 @@ struct TakeLogDraft: Equatable {
     /// What the fields say, as a slate. The take number is read the way every
     /// other TAKE field in the app is read.
     var slate: SlateMetadata {
-        SlateMetadata(scene: scene, shot: shot,
+        SlateMetadata(scene: scene,
+                      shot: SlateTakeField.number(from: shot),
                       take: SlateTakeField.number(from: takeText))
     }
 

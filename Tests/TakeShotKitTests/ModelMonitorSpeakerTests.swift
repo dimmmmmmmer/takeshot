@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import TakeShotKit
@@ -55,17 +56,17 @@ struct MonitorSpeakerTests {
         #expect(symbols.count == 3, "two silences render identically")
     }
 
-    /// A level dragged down is shown as down — the waves come off — and it is
-    /// NOT red. Red on a working monitor is how red stops being read, and the
-    /// level is the operator's own choice rather than a fault.
+    /// A level dragged down is shown as down — the waves come off one by one —
+    /// and it is NOT red. Red on a working monitor is how red stops being read,
+    /// and the level is the operator's own choice rather than a fault.
     @Test func theWaveCountFollowsTheLevelAndStaysAudible() {
         let ladder: [(level: Double, symbol: String)] = [
-            (1.0, "speaker.wave.2.fill"),
-            (0.7, "speaker.wave.2.fill"),
-            (0.5, "speaker.wave.1.fill"),
-            (0.34, "speaker.wave.1.fill"),
-            (0.2, "speaker.fill"),
-            (0.05, "speaker.fill"),
+            (1.0, "speaker.wave.3.fill"),
+            (0.7, "speaker.wave.3.fill"),
+            (0.5, "speaker.wave.2.fill"),
+            (0.34, "speaker.wave.2.fill"),
+            (0.2, "speaker.wave.1.fill"),
+            (0.05, "speaker.wave.1.fill"),
         ]
         for rung in ladder {
             let reading: MonitorSpeaker = MonitorSpeaker.reading(
@@ -78,6 +79,55 @@ struct MonitorSpeakerTests {
         }
     }
 
+    /// **No level a room can hear draws the glyph that means silence.**
+    ///
+    /// This is the rule the wave ladder exists to keep, and it was broken: a
+    /// bare `speaker.fill` meant BOTH "nothing is coming out" and "any level in
+    /// the bottom third of the slider", so the working icon lost its waves down
+    /// there and only the colour still separated quiet from dead (owner:
+    /// "иконка включённого звука то с волнами то просто громкоговоритель").
+    ///
+    /// Swept rather than sampled, because the defect was a whole third of the
+    /// slider rather than one point, and a handful of rungs is exactly what
+    /// missed it: the old ladder's own test asserted `speaker.fill` at 0.2 and
+    /// 0.05 and read as correct.
+    @Test func noAudibleLevelDrawsTheSymbolThatMeansSilence() {
+        let silent: String = MonitorSpeaker.reading(
+            muted: false, volume: 0, monitorOn: true, isPlayback: false).symbol
+        for step in 0...200 {
+            let level = Double(step) / 200
+            let reading: MonitorSpeaker = MonitorSpeaker.reading(
+                muted: false, volume: level, monitorOn: true, isPlayback: false)
+            guard !reading.isSilent else { continue }
+            #expect(reading.symbol != silent,
+                    """
+                    an audible level (\(level)) draws \(reading.symbol), which \
+                    is what silence draws — only the colour tells them apart
+                    """)
+        }
+    }
+
+    /// More level is never fewer waves. A ladder that dipped would read as a
+    /// fault at exactly the moment the operator turned the sound UP.
+    @Test func theLadderOnlyEverClimbs() {
+        let rung: (Double) -> Int = { level in
+            let symbol = MonitorSpeaker.reading(
+                muted: false, volume: level, monitorOn: true,
+                isPlayback: false).symbol
+            return ["speaker.wave.1.fill": 1, "speaker.wave.2.fill": 2,
+                    "speaker.wave.3.fill": 3][symbol] ?? 0
+        }
+        var previous: Int = 0
+        for step in 0...200 {
+            let level = Double(step) / 200
+            let now: Int = rung(level)
+            #expect(now >= previous,
+                    "turning up to \(level) took a wave OFF the icon")
+            previous = now
+        }
+        #expect(previous == 3, "full scale does not reach the top rung")
+    }
+
     /// DIM halves the level and is meant to be talked over. It reads as one
     /// wave and stays in the accent colour; the DIM badge beside the speaker is
     /// what says a hold is engaged.
@@ -86,8 +136,8 @@ struct MonitorSpeakerTests {
         let reading: MonitorSpeaker = MonitorSpeaker.reading(
             muted: false, volume: dimmed, monitorOn: true, isPlayback: false)
         #expect(!reading.isSilent, "DIM lit the alarm colour on a working monitor")
-        #expect(reading.symbol == "speaker.wave.1.fill",
-                "DIM at \(dimmed) draws \(reading.symbol)")
+        #expect(reading.symbol == "speaker.wave.2.fill",
+                "DIM at \(dimmed) draws \(reading.symbol) — the middle rung")
     }
 
     /// A slider dragged to the bottom does not always land on exactly zero, and
@@ -114,7 +164,7 @@ struct MonitorSpeakerTests {
             muted: false, volume: 0.9, monitorOn: false, isPlayback: true)
         #expect(!reading.isSilent,
                 "playback went red on a switch that only applies to the live feed")
-        #expect(reading.symbol == "speaker.wave.2.fill")
+        #expect(reading.symbol == "speaker.wave.3.fill")
     }
 
     /// The mute is answered first: one click undoes it, so it is the useful
@@ -125,5 +175,63 @@ struct MonitorSpeakerTests {
         #expect(reading.symbol == "speaker.slash.fill",
                 "a mute over a dead path drew \(reading.symbol)")
         #expect(reading.isSilent)
+    }
+}
+
+/// The icon changes shape as the level moves. Nothing around it may move with
+/// it.
+///
+/// The footer pins the speaker to a fixed 24x20 slot precisely because the SF
+/// Symbol variants differ in width, and the row would otherwise shuffle on
+/// every drag of the volume slider. Adding a THIRD wave made that slot a
+/// question again rather than a settled one (owner: "проверь что изменение вида
+/// иконки нигде не двигает интерфейс"), so the glyphs are measured against it
+/// instead of assumed to fit: a symbol wider than its slot is clipped, and a
+/// clipped speaker at full level is the state an operator most needs to read.
+@MainActor
+struct MonitorSpeakerSlotTests {
+    /// Every symbol the reading can return, at the footer's own size.
+    static var symbols: [String] {
+        var found: Set<String> = ["speaker.slash.fill", "speaker.slash"]
+        for step in 0...100 {
+            found.insert(MonitorSpeaker.reading(
+                muted: false, volume: Double(step) / 100, monitorOn: true,
+                isPlayback: false).symbol)
+        }
+        return found.sorted()
+    }
+
+    @Test func everySpeakerSymbolFitsTheFootersSlot() {
+        // FooterBar draws it at .system(size: 15) inside .frame(24, 20).
+        let slot = CGSize(width: 24, height: 20)
+        for symbol in Self.symbols {
+            let size: CGSize = ViewRender.fittingSize(
+                Image(systemName: symbol).font(.system(size: 15)))
+            #expect(size.width <= slot.width,
+                    "\(symbol) is \(size.width)pt wide in a \(slot.width)pt slot")
+            #expect(size.height <= slot.height,
+                    "\(symbol) is \(size.height)pt tall in a \(slot.height)pt slot")
+        }
+    }
+
+    /// …and the slot itself does not move. Measured through the frame the
+    /// footer actually applies, so this fails if that frame is ever removed
+    /// in favour of letting the symbol size the row.
+    @Test func theSpeakerSlotIsTheSameSizeInEveryState() {
+        let sizes: Set<CGSize> = Set(Self.symbols.map { symbol in
+            ViewRender.fittingSize(
+                Image(systemName: symbol)
+                    .font(.system(size: 15))
+                    .frame(width: 24, height: 20))
+        })
+        #expect(sizes.count == 1,
+                "the speaker slot takes \(sizes.count) different sizes: \(sizes)")
+    }
+}
+
+extension CGSize: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(width)
+        hasher.combine(height)
     }
 }

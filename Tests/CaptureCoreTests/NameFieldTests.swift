@@ -53,7 +53,9 @@ struct NameFieldTests {
     /// Free-text fields keep spaces and accents — a scene is "12 A" and a
     /// project can be called anything — and lose only what a path cannot hold.
     @Test func theFreeTextFieldsLoseOnlyWhatAPathCannotHold() {
-        for field in [NameField.prefix, .postfix, .scene, .shot] {
+        // Shot left this list when it became a number: it is digits only
+        // now, and the digit fields are covered with clip and take.
+        for field in [NameField.prefix, .postfix, .scene] {
             #expect(field.normalized("12 A") == "12 A")
             #expect(field.normalized("Сцена 4") == "Сцена 4")
             #expect(field.normalized("a/b") == "ab")
@@ -108,8 +110,10 @@ struct NameFieldTests {
     /// carries. Every CSV writer downstream has to flatten it (see
     /// `CSVInjectionTests`); this is where the fact that it gets in is pinned.
     @Test func theFreeTextFieldsAdmitAUnicodeLineSeparator() {
-        for field in [NameField.prefix, NameField.postfix, NameField.scene,
-                      NameField.shot] {
+        // Shot is NOT here any more: it holds a number since the slate
+        // stopped carrying a setup letter, so a pasted separator cannot get in
+        // at all rather than getting in and being flattened downstream.
+        for field in [NameField.prefix, NameField.postfix, NameField.scene] {
             #expect(field.accepts("12\u{2028}A"),
                     "\(field) is not the thing that stops a pasted separator")
             #expect(field.accepts("12\u{2029}A"),

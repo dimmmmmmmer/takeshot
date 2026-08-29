@@ -239,10 +239,10 @@ import Testing
             let id = try #require(controller.takes.first?.id.uuidString)
 
             try await client.send(["action": "slate", "id": id, "scene": "12A",
-                                   "shot": "B", "take": "3", "pin": pin])
+                                   "shot": "2", "take": "3", "pin": pin])
             let stored = await ControllerWait.until {
                 controller.takes.first?.slate
-                    == SlateMetadata(scene: "12A", shot: "B", take: 3)
+                    == SlateMetadata(scene: "12A", shot: 2, take: 3)
             }
             #expect(stored, "the slate never reached the controller")
             #expect(controller.takes.last?.slate.isEmpty == true,
@@ -251,14 +251,14 @@ import Testing
             let url = root.appendingPathComponent(TakeLogExporter.slateFileName)
             func text() -> String? { try? String(contentsOf: url, encoding: .utf8) }
             await ControllerWait.until { text()?.contains("12A") == true }
-            #expect(text()?.contains("A001C01.mov,12A,B,3,") == true,
+            #expect(text()?.contains("A001C01.mov,12A,2,3,") == true,
                     "the slate never reached the creative sidecar")
 
             // …and it comes straight back as pushed state, which is how the
             // page knows the save landed
             let echoed = try await nextTakes(from: client) { takes in
                 takes.first?["scene"] as? String == "12A"
-                    && takes.first?["shot"] as? String == "B"
+                    && takes.first?["shot"] as? String == "2"
                     && takes.first?["take"] as? String == "3"
             }
             #expect(echoed, "the slate edit never came back as pushed state")
@@ -339,10 +339,10 @@ import Testing
 
     @Test func slateMessagesCarryAllThreeFieldsAtOnce() throws {
         let slate = try #require(RemoteMessage.parse(
-            #"{"action":"slate","id":"AB-1","scene":"12A","shot":"B","take":"3","pin":"0417"}"#))
+            #"{"action":"slate","id":"AB-1","scene":"12A","shot":"2","take":"3","pin":"0417"}"#))
         #expect(slate.command == .slate(
             takeID: "AB-1",
-            slate: SlateMetadata(scene: "12A", shot: "B", take: 3)))
+            slate: SlateMetadata(scene: "12A", shot: 2, take: 3)))
         // an emptied take field is "not logged", not take 0
         #expect(RemoteMessage.parse(
             #"{"action":"slate","id":"A","scene":"12","shot":"","take":"","pin":"1"}"#)?
@@ -350,9 +350,9 @@ import Testing
                                slate: SlateMetadata(scene: "12")))
         // a missing field would CLEAR it, so the message is refused instead
         #expect(RemoteMessage.parse(
-            #"{"action":"slate","id":"A","scene":"12","shot":"B","pin":"1"}"#) == nil)
+            #"{"action":"slate","id":"A","scene":"12","shot":"2","pin":"1"}"#) == nil)
         #expect(RemoteMessage.parse(
-            #"{"action":"slate","scene":"12","shot":"B","take":"3","pin":"1"}"#) == nil)
+            #"{"action":"slate","scene":"12","shot":"2","take":"3","pin":"1"}"#) == nil)
     }
 
     @Test func malformedEditsAreNotCommands() {

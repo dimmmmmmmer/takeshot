@@ -110,6 +110,12 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
 /// into the footer, so it lives with the template rather than with the project.
 public struct NamingSettings: Codable, Equatable, Sendable {
     public var namingTemplate: String = "{prefix}_{cam}{roll}C{clip}_{postfix}"
+    /// Which half of the naming block the footer is showing: "file" or "meta".
+    ///
+    /// Optional and nil at the defaults, like every other added field, so JSON
+    /// written before this existed still decodes. nil means the file name —
+    /// what the footer showed on top when both halves were stacked.
+    public var namingPane: String?
     public var projectName: String = ""
     public var cameraLabel: String = "A"
     /// Filename postfix ({postfix} in the template).

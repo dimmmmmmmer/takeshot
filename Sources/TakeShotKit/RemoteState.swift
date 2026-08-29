@@ -313,7 +313,7 @@ enum RemoteCommand: Equatable, Sendable {
             else { return nil }
             return .slate(takeID: id,
                           slate: SlateMetadata(scene: bounded(scene),
-                                               shot: bounded(shot),
+                                               shot: slateTake(shot),
                                                take: slateTake(take)))
         case "multiview":
             // Strict, like `rate`: a missing flag must not be read as "on".

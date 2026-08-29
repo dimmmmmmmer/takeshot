@@ -77,14 +77,14 @@ import Testing
             #expect(slate.slateTakeText.isEmpty)
 
             controller.scene = "12A"
-            controller.shot = "B"
+            controller.shot = "2"
             controller.slateTakeOverride = 3
             #expect(slate.sceneText == "12A")
-            #expect(slate.shotText == "B")
+            #expect(slate.shotText == "2")
             #expect(slate.slateTakeText == "3")
             // and it is the same answer the writer is about to embed
             #expect(controller.pendingSlate
-                == SlateMetadata(scene: "12A", shot: "B", take: 3))
+                == SlateMetadata(scene: "12A", shot: 2, take: 3))
         }
     }
 

@@ -33,7 +33,7 @@ extension TakeLogExporter {
             lines.append([
                 escape(take.url.lastPathComponent),
                 escape(flattened(take.slate.scene)),
-                escape(flattened(take.slate.shot)),
+                escape(flattened(take.slate.shotText)),
                 take.slate.take > 0 ? String(take.slate.take) : "",
                 escape(flattened(take.logDescription)),
             ].joined(separator: ","))
@@ -88,7 +88,7 @@ extension TakeLogExporter {
             guard fields.count >= 5, !fields[0].isEmpty else { continue }
             let row = SlateRow(
                 slate: SlateMetadata(scene: unguarded(fields[1]),
-                                     shot: unguarded(fields[2]),
+                                     shot: takeNumberField(fields[2]),
                                      take: takeNumberField(fields[3])),
                 logDescription: unguarded(fields[4]))
             // a row that says nothing is not a row — it would only overwrite

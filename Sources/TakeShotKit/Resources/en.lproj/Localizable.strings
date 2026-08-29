@@ -116,6 +116,8 @@
 
 
 /* Playback */
+"naming_pane_file" = "File";
+"naming_pane_meta" = "Meta";
 "mode_record" = "Record";
 "mode_playback" = "Playback";
 "play" = "Play";

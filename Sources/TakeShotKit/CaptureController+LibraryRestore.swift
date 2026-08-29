@@ -137,7 +137,8 @@ extension CaptureController {
     /// number the slate never had into the day's log.
     private func embeddedSlate(scene: String?, shot: String?,
                                take: String?) -> SlateMetadata {
-        SlateMetadata(scene: scene ?? "", shot: shot ?? "",
+        SlateMetadata(scene: scene ?? "",
+                      shot: SlateTakeField.number(from: shot ?? ""),
                       take: max(0, Int(take ?? "") ?? 0))
     }
     /// Ratings, comments, markers and slates of the day, as saved next to the

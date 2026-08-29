@@ -186,7 +186,7 @@ private final class SheetPage {
         let tc = take.startTimecode?.description ?? "—"
         // The slate leads the detail line rather than taking a line of its
         // own: the cell's height puts exactly 12 takes on an A4 page, and a
-        // fifth text row would silently make it 9. "12A/B T3" is pure data,
+        // fifth text row would silently make it 9. "12A/2 T3" is pure data,
         // so the sheet still reads the same in both languages.
         let slate = take.slate.compact
         let detail = "\(tc) · \(L("report_duration_fmt", take.durationSeconds))"

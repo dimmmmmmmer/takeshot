@@ -51,7 +51,7 @@ struct ViewChangedSurfacesTests {
                         view: AnyView(NamingFieldsView())),
                 Surface(name: "slate row", width: half,
                         view: AnyView(SlateFieldsEditor(
-                            scene: .constant("112A"), shot: .constant("B"),
+                            scene: .constant("112A"), shot: .constant("2"),
                             takeText: .constant("4")))),
                 Surface(name: "footer", width: ViewBudget.footerWidth,
                         view: AnyView(BottomBarView())),

@@ -295,7 +295,7 @@ private final class ReportPage {
              offset: 2)
         // The slate under the file name, and above the markers: the production
         // office reads this table by scene, and the file name says nothing
-        // about which one it is. Pure data ("12A/B T3") — no words, so the row
+        // about which one it is. Pure data ("12A/2 T3") — no words, so the row
         // reads the same in both languages.
         if !layout.slate.isEmpty {
             draw(layout.slate, x: Self.xClip, width: Self.clipWidth,

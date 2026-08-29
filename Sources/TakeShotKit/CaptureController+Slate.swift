@@ -35,9 +35,21 @@ import Foundation
 /// sidecar is the newer of the two by construction. The restore in
 /// `+LibraryRestore` reads it that way round on purpose.
 extension CaptureController {
+    /// Which half of the naming block the footer shows. Persisted like the
+    /// operator's other choices; see `NamingPane` for why it is a switch.
+    var namingPane: NamingPane {
+        get { NamingPane(rawValue: settings.naming.namingPane ?? "") ?? .file }
+        set {
+            guard newValue != namingPane else { return }
+            settings.naming.namingPane = newValue == .file ? nil : newValue.rawValue
+        }
+    }
+
     /// The slate the next take will be recorded with.
     var pendingSlate: SlateMetadata {
-        SlateMetadata(scene: scene, shot: shot, take: slateTakeNumber)
+        SlateMetadata(scene: scene,
+                      shot: SlateTakeField.number(from: shot),
+                      take: slateTakeNumber)
     }
 
     /// The take number the next take gets inside its scene: the override when

@@ -115,6 +115,8 @@
 
 
 /* Playback */
+"naming_pane_file" = "Файл";
+"naming_pane_meta" = "Мета";
 "mode_record" = "Запись";
 "mode_playback" = "Просмотр";
 "play" = "Воспроизвести";

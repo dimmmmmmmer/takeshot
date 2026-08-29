@@ -123,7 +123,7 @@ import Testing
     /// The phone's parse, through the real message decoder.
     private static func slateOverTheWire(take: String) throws -> SlateMetadata {
         let payload: [String: String] = ["action": "slate", "id": "AB-1",
-                                         "scene": "12", "shot": "B",
+                                         "scene": "12", "shot": "2",
                                          "take": take, "pin": "0417"]
         let data: Data = try JSONSerialization.data(withJSONObject: payload)
         let json: String = try #require(String(data: data, encoding: .utf8))

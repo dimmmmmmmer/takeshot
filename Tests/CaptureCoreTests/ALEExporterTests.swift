@@ -36,7 +36,7 @@ import Testing
                   duration: 4) {
              // a fully slated take: the creative columns come from the slate,
              // and the Take column is the slate's number, not the clip's
-             $0.slate = SlateMetadata(scene: "12", shot: "B", take: 4)
+             $0.slate = SlateMetadata(scene: "12", shot: 2, take: 4)
              $0.rating = .good
              $0.comment = "hero"
              $0.logDescription = "wide on the door"
@@ -80,7 +80,7 @@ import Testing
             "",
             "Data",
             "A001C001.mov\tA001\t10:00:00:00\t10:00:04:00\t00:00:04:00\t25\t4\t12"
-                + "\tB\ttrue\thero\twide on the door",
+                + "\t2\ttrue\thero\twide on the door",
             // drop-frame: the semicolon separator, and 2 s is 60 real frames
             "B002C003.mov\tB002\t01:00:00;00\t01:00:02;00\t00:00:02;00\t29.97\t3\t12A"
                 + "\t\t\t\t",

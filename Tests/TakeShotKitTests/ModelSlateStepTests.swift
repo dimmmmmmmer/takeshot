@@ -110,7 +110,7 @@ struct SlateStepTests {
     @Test func everyPagedValueIsOneTheFieldAccepts() {
         let cases: [Ladder] = [
             Ladder(field: .scene, seed: "1", start: "12A"),
-            Ladder(field: .shot, seed: "A", start: "B"),
+            Ladder(field: .shot, seed: "1", start: "2"),
             Ladder(field: .take, seed: "1", start: "12"),
         ]
         for probe in cases {

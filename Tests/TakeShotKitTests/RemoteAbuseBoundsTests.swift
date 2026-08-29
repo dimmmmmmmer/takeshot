@@ -87,7 +87,10 @@ import Testing
             return
         }
         #expect(slate.scene.count == RemoteCommand.maximumTextLength)
-        #expect(slate.shot.count == RemoteCommand.maximumTextLength)
+        // Shot is a NUMBER now, so a long payload cannot be stored at all —
+        // it is bounded by the type rather than by a length check, and the
+        // ceiling it lands on is the field's own.
+        #expect(slate.shot == SlateTakeField.maximum)
         #expect(slate.take == SlateTakeField.maximum)
     }
 

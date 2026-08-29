@@ -99,7 +99,7 @@ extension CaptureController {
                                 rating: take.rating.rawValue,
                                 comment: take.comment,
                                 scene: take.slate.scene,
-                                shot: take.slate.shot,
+                                shot: take.slate.shotText,
                                 // empty, not "0": the page shows an unlogged
                                 // take number as a blank field, the same way
                                 // the two fields on the desktop do

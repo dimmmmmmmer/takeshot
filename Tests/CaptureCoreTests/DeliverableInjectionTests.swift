@@ -22,7 +22,7 @@ import Testing
         for (name, value) in AwkwardText.pathSafe {
             let take: Take = AwkwardText.take(
                 named: "a\(value)b.mov", roll: value, comment: value,
-                scene: value, shot: value, logDescription: value)
+                scene: value, logDescription: value)
             let ale: String = try #require(ALEExporter.ale(takes: [take]),
                                            "the shift exports")
             let rows: [String] = ale.components(separatedBy: "\r\n")

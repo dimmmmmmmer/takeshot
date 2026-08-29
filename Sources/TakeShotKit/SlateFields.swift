@@ -48,8 +48,10 @@ struct SlateFieldsEditor: View {
     static let captionWidth: CGFloat = 36
     /// One arrow. Both dimensions fixed: a chevron that resized with its state
     /// would shuffle the row under the operator's pointer.
-    private static let arrowWidth: CGFloat = 11
-    private static let arrowHeight: CGFloat = 18
+    private static let arrowWidth: CGFloat = 13
+    /// Half the row's height each, so the pair is the height one arrow used to
+    /// be and the row does not grow.
+    private static let arrowHeight: CGFloat = 9
 
     /// What the takes panel's popover sizes its other rows to, so the whole
     /// editor reads as one block rather than a wide slate row over narrow
@@ -61,7 +63,7 @@ struct SlateFieldsEditor: View {
             pagedField(L("scene"), field: .scene, width: Self.sceneWidth,
                        seed: "1", text: $scene)
             pagedField(L("slate_shot"), field: .shot, width: Self.shotWidth,
-                       seed: "A", text: $shot)
+                       seed: "1", text: $shot)
             pagedField(L("slate_take"), field: .take, width: Self.takeWidth,
                        seed: "1", text: $takeText)
                 .help(L("slate_take_help"))
@@ -70,11 +72,12 @@ struct SlateFieldsEditor: View {
 
     /// One slate field: its caption, the box, and the ‹ › that page it.
     ///
-    /// `seed` is what an empty field becomes on the first press of ›, and the
-    /// three differ because the values do — scenes and takes start at 1, shots
-    /// at A. Everything else about the stepping is `SlateStep`, including the
-    /// part that matters most here: ‹ off the first value empties the field
-    /// again, so "not logged" stays reachable without going for the keyboard.
+    /// `seed` is what an empty field becomes on the first press of ∧, and all
+    /// three are "1" now: scene, shot and take are counted the same way, which
+    /// is the change that took the setup LETTER off the shot. Everything else
+    /// about the stepping is `SlateStep`, including the part that matters most
+    /// here: ∨ off the first value empties the field again, so "not logged"
+    /// stays reachable without going for the keyboard.
     private func pagedField(_ caption: String, field: NameField, width: CGFloat,
                             seed: String,
                             text: Binding<String>) -> some View {
@@ -84,10 +87,21 @@ struct SlateFieldsEditor: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(width: Self.captionWidth, alignment: .leading)
-            arrow("chevron.left", delta: -1, seed: seed, text: text)
             NameTextField(field: field, text: text)
                 .frame(width: width)
-            arrow("chevron.right", delta: 1, seed: seed, text: text)
+            // **Up and down, stacked, on one side.** They were ‹ and › either
+            // side of the box, which reads as paging through a LIST — and these
+            // three fields hold numbers now, where the gesture everyone already
+            // knows is a stepper (owner: "стрелки у scene/shot/take не нужны,
+            // скорее стрелки вверх/вниз для выбора цифр").
+            //
+            // It also gives the row back an arrow's width per field: one 11pt
+            // column instead of two, which is 33pt of the footer half that the
+            // captions and boxes can spend instead.
+            VStack(spacing: 0) {
+                arrow("chevron.up", delta: 1, seed: seed, text: text)
+                arrow("chevron.down", delta: -1, seed: seed, text: text)
+            }
         }
     }
 

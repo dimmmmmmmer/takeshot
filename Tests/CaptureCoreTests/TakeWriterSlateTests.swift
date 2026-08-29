@@ -55,11 +55,11 @@ struct TakeWriterSlateTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let url = try await record(
-            SlateMetadata(scene: "12A", shot: "B", take: 3), into: directory)
+            SlateMetadata(scene: "12A", shot: 2, take: 3), into: directory)
         let items = try await metadata(of: url)
 
         #expect(try await value(TakeWriter.sceneKey, in: items) == "12A")
-        #expect(try await value(TakeWriter.shotKey, in: items) == "B")
+        #expect(try await value(TakeWriter.shotKey, in: items) == "2")
         #expect(try await value(TakeWriter.takeKey, in: items) == "3")
         // the file is still one of ours, and still says which roll/clip
         #expect(try await value(TakeWriter.markerKey, in: items) == "1")
@@ -75,9 +75,9 @@ struct TakeWriterSlateTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let url = try await record(
-            SlateMetadata(scene: "12A", shot: "B", take: 3), into: directory)
+            SlateMetadata(scene: "12A", shot: 2, take: 3), into: directory)
         let items = try await metadata(of: url)
-        let expected = "Scene 12A / Shot B / Take 3"
+        let expected = "Scene 12A / Shot 2 / Take 3"
 
         // modern QuickTime metadata ('mdta') — Final Cut, QuickTime Player
         #expect(try await value(
@@ -150,7 +150,7 @@ struct TakeWriterSlateTests {
         let writer = try TakeWriter(url: url, format: Self.format,
                                     codec: .proResProxy,
                                     startTimecode: startTC,
-                                    slate: SlateMetadata(scene: "12A", shot: "B",
+                                    slate: SlateMetadata(scene: "12A", shot: 2,
                                                          take: 3),
                                     audioChannelCount: 2)
         let picture = TestMedia.pixelBuffer(width: 320, height: 180)

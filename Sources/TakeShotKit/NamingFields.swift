@@ -44,13 +44,57 @@ struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 5) {
-            NamingFileNameRow()
-            slateRow
+        VStack(alignment: .trailing, spacing: 4) {
+            paneSwitch
+            switch controller.namingPane {
+            case .file: NamingFileNameRow()
+            case .meta: slateRow
+            }
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
         .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
     }
+
+    /// FILE or META, in the same shape as the viewer's record/playback switch
+    /// and for the same reason: it says which of two things the controls under
+    /// it are about, so the operator reads one word rather than scanning two
+    /// rows of captions. Both halves are recorded either way — this chooses
+    /// what is in FRONT of them, never what is written.
+    ///
+    /// **Above the row rather than beside it, and that is a measurement.**
+    /// Beside it, the switch charges its own width to a footer half that is
+    /// 363pt at the app's minimum window and was already spending 310 of it on
+    /// the file-name fields plus their collision badge — 410pt, over by nearly
+    /// fifty. Above, the block is as wide as its widest ROW and the switch is
+    /// free; what it spends instead is height, which is exactly what showing
+    /// one row instead of two just handed back.
+    private var paneSwitch: some View {
+        Picker("", selection: Binding(
+            get: { controller.namingPane },
+            set: { controller.namingPane = $0 })) {
+            ForEach(NamingPane.allCases) { pane in
+                Text(L(pane.titleKey)).tag(pane)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.mini)
+        // **A FIXED width, for the reason the slate captions are fixed.** This
+        // is the only other localized string in the footer's right half, and
+        // the REC button is centered by that half measuring the same in English
+        // and in Russian (`ViewFooterTests`). Left to size itself, FILE/META
+        // and ФАЙЛ/МЕТА differ by a few points and the button drifts off centre
+        // — which is exactly the failure that suite exists to catch, and it
+        // caught this one.
+        //
+        // The number holds the longer pair with room to spare and is measured
+        // against both languages rather than eyeballed.
+        .frame(width: Self.paneSwitchWidth)
+    }
+
+    /// The FILE/META switch. Must hold both languages; pinned in
+    /// `ViewNamingRowTests`, which measures the words rather than trusting it.
+    static let paneSwitchWidth: CGFloat = 92
 
     /// What was shot. NOT gated on the template like the row above: scene, shot
     /// and take describe the work, not the file name, so they are here whether

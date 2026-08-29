@@ -24,7 +24,7 @@ struct ViewNamingRowTests {
                 NameTextField(field: .scene, text: .constant("12A"))
                     .frame(width: 70))
             let row = probe.fittingSizes {
-                SlateFieldsEditor(scene: .constant("12A"), shot: .constant("B"),
+                SlateFieldsEditor(scene: .constant("12A"), shot: .constant("2"),
                                   takeText: .constant("3"))
             }
             #expect(box.height > 0, "the measurement of the box itself is broken")
@@ -143,9 +143,9 @@ struct ViewNamingRowTests {
     @Test func typingInTheSlateFieldsReachesThePendingTake() async throws {
         try await ViewProbe.run { probe in
             probe.controller.scene = "12A"
-            probe.controller.shot = "B"
+            probe.controller.shot = "2"
             #expect(probe.controller.pendingSlate.scene == "12A")
-            #expect(probe.controller.pendingSlate.shot == "B")
+            #expect(probe.controller.pendingSlate.shot == 2)
             // a new scene starts its own take numbering at 1
             #expect(probe.controller.slateTakeFieldText == "1")
 
@@ -257,7 +257,7 @@ struct ViewNamingRowTests {
             Keystroke(field: .clip, typed: "12345", kept: "1234"),
             Keystroke(field: .take, typed: "3.5", kept: "35"),
             Keystroke(field: .scene, typed: "12:A", kept: "12A"),
-            Keystroke(field: .shot, typed: "B*", kept: "B"),
+            Keystroke(field: .shot, typed: "2B", kept: "2"),
             Keystroke(field: .prefix, typed: "MARS?", kept: "MARS"),
             Keystroke(field: .postfix, typed: "v2|", kept: "v2"),
         ]

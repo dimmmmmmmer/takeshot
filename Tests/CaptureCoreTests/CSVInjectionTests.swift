@@ -73,7 +73,7 @@ import Testing
     /// operator's scene, shot and description were gone on the next scan.
     @Test func aPastedLineSeparatorInASceneDoesNotLoseTheSlateRow() {
         let csv: String = TakeLogExporter.slateCSV(takes: [
-            AwkwardText.take(scene: "12\u{2028}A", shot: "B",
+            AwkwardText.take(scene: "12\u{2028}A", shot: 2,
                              logDescription: "wide"),
         ])
         let back: [String: TakeLogExporter.SlateRow] =
@@ -90,7 +90,7 @@ import Testing
     @Test func everySceneAndShotSurvivesTheSlateSidecar() {
         for (name, value) in AwkwardText.nonEmpty {
             let csv: String = TakeLogExporter.slateCSV(takes: [
-                AwkwardText.take(scene: value, shot: "B"),
+                AwkwardText.take(scene: value, shot: 2),
             ])
             let back: [String: TakeLogExporter.SlateRow] =
                 TakeLogExporter.parseSlates(csv: csv)
@@ -247,9 +247,13 @@ import Testing
     /// a table: fourteen columns, one row per take, whatever is typed.
     @Test func theShiftReportKeepsFourteenColumnsPerTake() {
         for (name, value) in AwkwardText.pathSafe {
+            // Every free-text field the row carries. Shot is NOT among them
+            // any more and cannot be: it is an `Int` since the slate stopped
+            // holding a setup letter, so the column is structurally incapable
+            // of carrying a payload rather than defended against one.
             let csv: String = TakeLogExporter.reportCSV(takes: [
                 AwkwardText.take(named: "\(value).mov", roll: value,
-                                 comment: value, scene: value, shot: value,
+                                 comment: value, scene: value,
                                  logDescription: value, note: value),
             ])
             let records: [[String]] = TakeLogExporter.parseCSVRecords(csv)

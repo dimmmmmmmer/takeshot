@@ -18,7 +18,7 @@ import Testing
 /// view, over five `@State` strings, inside a body SwiftUI does not build until
 /// the popover is presented.
 @Suite struct ModelTakeLogDraftTests {
-    private func take(scene: String = "", shot: String = "", number: Int = 0,
+    private func take(scene: String = "", shot: Int = 0, number: Int = 0,
                       comment: String = "", description: String = "") -> Take {
         var take = Take(url: URL(fileURLWithPath: "/tmp/takeshot-draft/A001C001.mov"),
                         scene: "", roll: "001", takeNumber: 4,
@@ -40,10 +40,10 @@ import Testing
     @Test func openingTheLogAndSavingItChangesNothing() {
         let takes: [Take] = [
             take(),
-            take(scene: "12A", shot: "B", number: 3),
-            take(scene: "104", shot: "", number: 1, comment: "boom in frame"),
-            take(scene: "", shot: "", number: 0, description: "wide, no slate"),
-            take(scene: "7", shot: "C", number: SlateTakeField.maximum,
+            take(scene: "12A", shot: 2, number: 3),
+            take(scene: "104", shot: 0, number: 1, comment: "boom in frame"),
+            take(scene: "", shot: 0, number: 0, description: "wide, no slate"),
+            take(scene: "7", shot: 3, number: SlateTakeField.maximum,
                  comment: "circle", description: "insert"),
         ]
         for original in takes {
@@ -76,7 +76,7 @@ import Testing
         #expect(TakeLogDraft().isEmpty)
         let filled: [Take] = [
             take(scene: "12"),
-            take(shot: "B"),
+            take(shot: 2),
             take(number: 1),
             take(comment: "boom"),
             take(description: "wide"),
@@ -102,7 +102,7 @@ import Testing
 
             var draft = TakeLogDraft(of: take)
             draft.scene = "12A"
-            draft.shot = "B"
+            draft.shot = "2"
             draft.takeText = "3"
             draft.comment = "boom in frame"
             draft.logDescription = "wide"
@@ -111,7 +111,7 @@ import Testing
                                 for: take)
 
             let saved = try #require(controller.takes.first)
-            #expect(saved.slate == SlateMetadata(scene: "12A", shot: "B", take: 3))
+            #expect(saved.slate == SlateMetadata(scene: "12A", shot: 2, take: 3))
             #expect(saved.comment == "boom in frame")
             #expect(saved.logDescription == "wide")
             // and re-opening the log on the saved take shows what was typed

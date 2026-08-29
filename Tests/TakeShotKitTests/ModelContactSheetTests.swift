@@ -122,15 +122,15 @@ struct ModelContactSheetTests {
     /// takes on an A4 page — pinned here beside the page-count test above.
     @Test func cellsCarryTheSlateWithoutCostingAPageRow() throws {
         var slated = take(1)
-        slated.slate = SlateMetadata(scene: "12A", shot: "B", take: 3)
+        slated.slate = SlateMetadata(scene: "12A", shot: 2, take: 3)
         let body = text(of: try document([slated]))
-        #expect(body.contains("12A/B T3"))
+        #expect(body.contains("12A/2 T3"))
         #expect(body.contains(try #require(slated.startTimecode).description),
                 "the slate displaced the timecode")
 
         let twelve = (1...12).map { index -> Take in
             var subject = take(index)
-            subject.slate = SlateMetadata(scene: "12A", shot: "B", take: index)
+            subject.slate = SlateMetadata(scene: "12A", shot: 2, take: index)
             return subject
         }
         #expect(try document(twelve).pageCount == 1)

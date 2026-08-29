@@ -182,6 +182,24 @@ struct VisualRecTeachOverlay: View {
                             controller.placeVisualRecRegion(at: location,
                                                             viewport: geo.size)
                         }
+                        // Dragging, because tapping was the ONLY way to move
+                        // the box and nothing said so (owner: "бокс не могу
+                        // никуда подвинуть"). A guide you place by clicking
+                        // somewhere else is not how a box on a picture behaves;
+                        // every operator tries to drag it first, gets nothing,
+                        // and concludes it is fixed.
+                        //
+                        // The same setter as the tap, so the clamp and the
+                        // placement transform are still stated once —
+                        // `minimumDistance: 0` so a press that turns into a
+                        // drag does not need a threshold first, and the tap
+                        // above still answers a click that never moves.
+                        .gesture(DragGesture(minimumDistance: 0,
+                                             coordinateSpace: .local)
+                            .onChanged { value in
+                                controller.placeVisualRecRegion(
+                                    at: value.location, viewport: geo.size)
+                            })
                         .onHover { inside in
                             if inside {
                                 NSCursor.crosshair.push()

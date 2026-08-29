@@ -169,14 +169,35 @@ struct ComparePinControls: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        Button {
-            controller.pinReferenceFromCurrentFrame()
-        } label: {
-            Image(systemName: "pin")
-                .font(.system(size: 11))
+        // **The pin is offered where there is something worth pinning FROM.**
+        //
+        // It used to hang in the row permanently, including a record mode with
+        // nothing on screen but the live signal (owner: "даже в режиме record
+        // у меня всегда висит кнопка пина. она должна быть видна тогда когда я
+        // включил какой либо записанный шот/other content в просмотре").
+        //
+        // Reviewing a clip is also the case the method is BUILT around: from
+        // playback it takes the frame on screen, hands it to the pipeline as
+        // the reference and switches the viewer back to record — so the live
+        // picture is then being compared against a frame of a take, which is
+        // the reason live compare exists. `isReviewingSingleClip` rather than
+        // `playbackURL != nil` because a sync-play grid leaves the single
+        // player parked and loaded, and the frame it would pin is one nobody
+        // can see.
+        //
+        // The UNPIN stays unconditional, one line down: a reference pinned in
+        // playback outlives the mode switch that pinning performs, so the way
+        // out has to exist in the mode the pin drops you into.
+        if controller.isReviewingSingleClip {
+            Button {
+                controller.pinReferenceFromCurrentFrame()
+            } label: {
+                Image(systemName: "pin")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .help(L("pin_reference_help"))
         }
-        .buttonStyle(.plain)
-        .help(L("pin_reference_help"))
         if controller.referencePinned {
             Button {
                 controller.unpinReference()

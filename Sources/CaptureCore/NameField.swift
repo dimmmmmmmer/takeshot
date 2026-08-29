@@ -61,7 +61,11 @@ public enum NameField: String, CaseIterable, Sendable {
             // plain uppercase latin: a camera label lands in file names on
             // other people's systems, and "Б" is not a camera anybody can call
             return ("A"..."Z").contains(scalar)
-        case .clip, .take:
+        case .clip, .take, .shot:
+            // Shot joined these when it stopped being a setup LETTER and became
+            // a shot number — "сцена 1 кадр 1 дубль 1". A field that still
+            // accepted "A" would let an operator type a value the model has
+            // nowhere to put.
             return ("0"..."9").contains(scalar)
         case .roll:
             // a reel name goes into the CSV's Reel Name column and into every
@@ -69,7 +73,7 @@ public enum NameField: String, CaseIterable, Sendable {
             // has ever had trouble with
             return ("A"..."Z").contains(scalar) || ("a"..."z").contains(scalar)
                 || ("0"..."9").contains(scalar) || scalar == "-" || scalar == "_"
-        case .prefix, .postfix, .scene, .shot:
+        case .prefix, .postfix, .scene:
             // free text, minus what a file system cannot hold. Spaces stay —
             // "12 A" is a scene, and `NamingEngine.sanitize` turns the space
             // into an underscore when it builds the name.
