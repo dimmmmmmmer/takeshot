@@ -131,31 +131,42 @@ import Testing
         let out: CVPixelBuffer = try #require(composed.latest)
 
         for camera: Int in 0..<4 {
-            let cell = MultiviewComposer.cell(camera: camera, cameras: 4,
-                                              in: canvas)
-            // the sampler reads top row first; the layout is bottom-left origin
-            let middleY = Int(canvas.height - 1 - cell.midY)
-            let middle: Int = ComposerProbe.level(of: out, atX: Int(cell.midX),
-                                                  y: middleY)
-            #expect(middle == Int(codes[camera]),
-                    "camera \(camera)'s middle read \(middle)")
-
-            // …and the plate is on that picture. One inset in from the plate's
-            // left edge: inside it, and short of where the lamp and the text
-            // begin, so no glyph can be what is read.
-            let metrics = TileTypeMetrics(tileHeight: cell.height)
-            let plate = metrics.nameplateOrigin(in: cell,
-                                                height: metrics.plateHeight)
-            let plateX = Int(plate.x + metrics.textInset / 2)
-            let plateY = Int(canvas.height - 1
-                                - (plate.y + metrics.plateHeight / 2))
-            let under: Int = ComposerProbe.level(of: out, atX: plateX,
-                                                 y: plateY)
-            let want = Int(codes[camera])
-            #expect(under < want,
-                    "camera \(camera) read \(under), not darkened by a plate")
+            check(out, camera: camera, code: Int(codes[camera]), in: canvas)
         }
         composer.stop()
+    }
+
+    /// One tile of the composed frame: its picture untouched in the middle, and
+    /// BOTH badge corners darkened by a plate.
+    ///
+    /// The two corners are checked separately on purpose. A composite that drew
+    /// the names and silently dropped every timecode would satisfy every other
+    /// assertion in this file — the clocks are pushed, cached and rasterized on
+    /// their own, so nothing else notices whether they reach the picture.
+    private func check(_ out: CVPixelBuffer, camera: Int, code: Int,
+                       in canvas: CGRect) {
+        let cell = MultiviewComposer.cell(camera: camera, cameras: 4,
+                                          in: canvas)
+        let metrics = TileTypeMetrics(tileHeight: cell.height)
+        // the sampler reads top row first; the layout is bottom-left origin
+        func row(_ ciY: CGFloat) -> Int { Int(canvas.height - 1 - ciY) }
+        /// One inset in from a plate's left edge: inside it, and short of where
+        /// the lamp and the text begin, so no glyph can be what is read.
+        func inside(_ origin: CGPoint) -> Int {
+            ComposerProbe.level(of: out, atX: Int(origin.x + metrics.textInset / 2),
+                                y: row(origin.y + metrics.plateHeight / 2))
+        }
+        let middle: Int = ComposerProbe.level(of: out, atX: Int(cell.midX),
+                                              y: row(cell.midY))
+        #expect(middle == code, "camera \(camera)'s middle read \(middle)")
+
+        let under = inside(metrics.nameplateOrigin(in: cell,
+                                                   height: metrics.plateHeight))
+        #expect(under < code,
+                "camera \(camera) read \(under), no nameplate on the picture")
+        let below = inside(metrics.clockOrigin(in: cell))
+        #expect(below < code,
+                "camera \(camera) read \(below), no clock on the picture")
     }
 
     /// **The single-camera pass-through survives exactly as far as "nothing to

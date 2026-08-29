@@ -165,6 +165,36 @@ import Testing
         }
     }
 
+    /// **The burned-in clock follows the frame path's own timecode tick.**
+    ///
+    /// The gap this closes is not hypothetical: the identity is pushed from two
+    /// places, and the OPENING push (`refreshMonitorTaps`) is what every other
+    /// test here happens to exercise. Delete the per-tick push instead and the
+    /// grid would still open correctly labelled and then freeze — a name that is
+    /// right and a clock that stopped, on a surface where the operator's own
+    /// screen goes on being right.
+    ///
+    /// Driven through the very closure the controller installs on the pipeline,
+    /// not through a re-implementation of it, so what is checked is the wiring
+    /// that runs.
+    @Test func theBurnedInClockFollowsTheTimecodeTick() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.ensureLiveEncoder(for: .grid)
+            let composer: MultiviewComposer =
+                try #require(controller.mirrors.gridComposer)
+            #expect(composer.heldClock(camera: 0) == nil,
+                    "a signal with no timecode still put one in the picture")
+
+            let tick = Timecode(hours: 10, minutes: 0, seconds: 12, frames: 3,
+                                fps: 25)
+            controller.pipeline.onTimecode?(tick)
+            let held = composer.heldClock(camera: 0)
+            #expect(held == tick.description,
+                    "the tick did not reach the picture: \(held as Any)")
+            #expect(held == "10:00:12:03", "the clock reads \(held as Any)")
+        }
+    }
+
     /// Nobody watching the grid means nothing to push to — the same discipline
     /// the taps and the encoder pool already follow, checked here because the
     /// identity push is new per-frame work on the timecode tick and would
