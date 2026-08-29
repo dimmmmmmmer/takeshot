@@ -566,6 +566,33 @@ call is `Task { @MainActor }`; every app→remote call is `queue.async`. The onl
 synchronous crossings are `RemoteServer`'s read-only `queue.sync` accessors, all
 of which are read from the MainActor or from tests.
 
+### The pages themselves
+
+Five pages ship inside the binary — `remote`, `script`, `cameras`, `live`,
+`slate` — carrying about 71 kB of JavaScript between them. No compiler and no
+linter reads any of it, so two rules stand in for one, and both are asserted by
+`RemotePageSourceTests`.
+
+**Every value that a person typed reaches the document through `textContent`.**
+A take's comment, a roll name, a file name, a slate: all of them arrive over the
+socket and go in as text. No page uses `innerHTML`, `outerHTML`,
+`insertAdjacentHTML` or `document.write`, and none should — a PIN-gated page on
+a set network is not a trust boundary, it is four digits.
+
+**A string spliced into a `<script>` element is not safe because its JSON is
+correct.** `RemotePage.config` bakes the operator's language into the page, so
+the served program is a different program per language, and an HTML parser looks
+for `</script` in a script element's text before any JavaScript parser sees a
+string at all. Escaping quotes and backslashes does nothing about that.
+`RemoteJSON.quoted` therefore escapes `<` as `\u003c` — an ordinary JSON escape,
+so every parser hands back a plain `<` — which also disposes of `<!--` and makes
+`>` and `&` unnecessary.
+
+That was found by mutation rather than by reading: `</script>` planted in one
+Russian label split the live page into two programs, neither of which parsed,
+while English stayed green. Which is also why the parse check runs in BOTH
+languages, through JavaScriptCore rather than an installed toolchain.
+
 The chroma key runs on the display queue and never on the capture queue, it
 costs one `Bool` read per frame while it is off, and a frame that reaches the
 stage older than one frame interval is shown WITHOUT the key rather than held

@@ -325,11 +325,15 @@ enum ViewRender {
     /// Run `body` with the UI language forced, then put back whatever was in
     /// force before. The bundle L10n holds is process-wide state: a suite that
     /// walks away leaving it on Russian changes what every later suite asserts.
-    static func withLanguage<T>(_ language: AppLanguage, _ body: () -> T) -> T {
+    /// `rethrows` so a caller may `#require` inside it: the restore is a
+    /// `defer`, so a body that throws still leaves the language as it found it
+    /// — which is the whole reason this helper exists.
+    static func withLanguage<T>(_ language: AppLanguage,
+                                _ body: () throws -> T) rethrows -> T {
         let previous = L10n.current
         L10n.apply(language)
         defer { L10n.apply(previous) }
-        return body()
+        return try body()
     }
 }
 

@@ -372,6 +372,22 @@ enum RemoteJSON {
             switch character {
             case "\"": out += "\\\""
             case "\\": out += "\\\\"
+            // `<` is escaped for where this LANDS, not for JSON.
+            //
+            // `RemotePage.config` splices a quoted string straight into a
+            // `<script>` element, and an HTML parser looks for `</script` in
+            // that element's text before any JavaScript parser sees a string at
+            // all — so a value containing it closes the block early and the
+            // page becomes two broken programs. Correct JSON escaping does not
+            // help: the sequence is legal inside a JSON string, which is
+            // exactly why this is easy to miss. Escaping `<` also disposes of
+            // `<!--`, the other sequence that changes how a script element is
+            // read, so `>` and `&` need no treatment once this is here.
+            //
+            // `\u003c` is a JSON escape like any other, so every parser hands
+            // back a plain `<` and nothing downstream can tell — pinned in
+            // `RemotePageSourceTests` by parsing it back with JSON.parse.
+            case "<": out += "\\u003c"
             case "\n": out += "\\n"
             case "\r": out += "\\r"
             case "\t": out += "\\t"
