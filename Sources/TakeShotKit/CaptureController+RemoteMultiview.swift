@@ -64,6 +64,10 @@ extension CaptureController {
         let cameras = extraChannels.count + 1
         jpeg?.setCameraCount(cameras)
         composer?.setCameraCount(cameras)
+        // The names and lamps for the count just set, so a grid that opens
+        // mid-shift is labelled on its first composed frame rather than on
+        // its first timecode tick.
+        pushGridIdentities()
         // The rate is captured per WIRING and not read per frame, exactly as
         // `wireDisplayMirrors` does it and for the same reason: the handler runs
         // on the display queue and the frame rate is MainActor state. The
@@ -82,6 +86,46 @@ extension CaptureController {
                 composer?.offer(frame[.grid], camera: camera,
                                 framesPerSecond: channelRate)
             }
+        }
+    }
+
+    /// **Every live tile says which board it is, whether it is writing, and
+    /// what its own timecode reads.**
+    ///
+    /// `.camera`, from the same two expressions the operator's own grid and the
+    /// `/cameras` page already read — `settings.naming.cameraLabel` for the
+    /// main board and `CameraChannel.camLabel` for each extra — so a name
+    /// burned into the picture cannot disagree with either surface. The lamp is
+    /// each pipeline's OWN `isRecording` and never the app's: in multicam the
+    /// boards record apart, and a B-cam whose writer died must not glow red on
+    /// A-cam's word. That rule is already written out twice, at
+    /// `RemoteStatus.CameraState` and at `MulticamGrid`; this is the third
+    /// surface to answer it and it asks the same question rather than a
+    /// similar one.
+    ///
+    /// **Restated wholesale rather than diffed**, and that is the design. The
+    /// label, the lamp and the clock change at three different rates and from
+    /// three different places, so working out which of them moved would be
+    /// three subscriptions and three chances to miss one. Instead this says all
+    /// of it, the badge cache is keyed on what is drawn, and an unchanged
+    /// statement costs a dictionary lookup. Called from the frame path's own
+    /// timecode tick, so the picture is at most one frame behind the truth.
+    ///
+    /// Costs nothing while nobody is watching the grid: with no composer this
+    /// returns on the first line, which is the same discipline the taps
+    /// themselves follow.
+    func pushGridIdentities() {
+        guard let composer = mirrors.gridComposer else { return }
+        composer.setIdentity(
+            .camera(label: settings.naming.cameraLabel, recording: isRecording),
+            camera: 0)
+        composer.setClock(live.currentTimecode?.description, camera: 0)
+        for (index, channel) in extraChannels.enumerated() {
+            composer.setIdentity(
+                .camera(label: channel.camLabel, recording: channel.isRecording),
+                camera: index + 1)
+            composer.setClock(channel.currentTimecode?.description,
+                              camera: index + 1)
         }
     }
 

@@ -36,6 +36,11 @@ extension CaptureController {
         pipeline.onTimecode = { [weak self] timecode in
             guard let self, self.live.currentTimecode != timecode else { return }
             self.live.currentTimecode = timecode
+            // The grid picture's burned-in clocks and nameplates ride this
+            // tick: it is already the once-per-frame edge the whole app
+            // reads the running timecode off, it is already deduplicated,
+            // and it returns on a nil check when nobody is watching the grid.
+            self.pushGridIdentities()
         }
         pipeline.onRecStateChanged = { [weak self] recording in
             self?.handleRecState(recording)
@@ -136,6 +141,11 @@ extension CaptureController {
         refreshNameCollision() // start hides it, stop recomputes
         // multicam: the other cameras in sync with the main one
         for channel in extraChannels { channel.setRecording(recording) }
+        // The REC lamps in the composed grid. Pushed here as well as on the
+        // timecode tick because a take can roll on a signal carrying no
+        // timecode at all (manual detection), and that tick would then have
+        // fired once at startup and never again.
+        pushGridIdentities()
         // Recording protection (hard rule): a running dailies transcode holds
         // between frames while a take rolls and resumes when it ends — it
         // must never compete with TakeWriter for the disk or the encoder.

@@ -56,11 +56,57 @@ extension CaptureController {
                 guard let self, let model = self.syncPlay else { return }
                 self.mirrors.syncGridComposer?.setPacing(model.gridPacing)
             }
+            // …and the tile clocks on every move of the master playhead, which
+            // `SyncPlayModel.moveTimeline` is the single site of.
+            model.onTimelineMove = { [weak self] in
+                self?.pushSyncGridClocks()
+            }
         }
         picture.setOnDisplayFrame(handler)
         mirrors.syncGridComposer?.setCameraCount(model.tiles.count)
         mirrors.syncGridComposer?.setPacing(model.gridPacing)
+        pushSyncGridIdentities(model)
+        pushSyncGridClocks()
         wireSyncGridTaps(model)
+    }
+
+    /// **Every tile says which take it is.**
+    ///
+    /// `.take`, never `.camera`, and that is the whole of what the composer
+    /// needs to know about the difference: a comparison tile is a finished file
+    /// with a name, nothing is writing it, and `TileIdentity.take` accordingly
+    /// carries no lamp to leave switched off. The name is `Source.name`, which
+    /// is the take's `displayName` — the same string `SyncPlayView` puts in the
+    /// tile's own corner, so the director's monitor and the operator's screen
+    /// cannot be reading two different names for one cell.
+    ///
+    /// Pushed at wiring alone: a comparison's tiles are fixed for the length of
+    /// the session — selecting different takes builds a new `SyncPlayModel` and
+    /// comes back through here — so there is no rename to chase.
+    private func pushSyncGridIdentities(_ model: SyncPlayModel) {
+        guard let composer = mirrors.syncGridComposer else { return }
+        for (index, tile) in model.tiles.enumerated() {
+            composer.setIdentity(.take(label: tile.source.name), camera: index)
+        }
+    }
+
+    /// **Every tile's own position, which is the point of a comparison.**
+    ///
+    /// Each take counts from its OWN start timecode — that is what
+    /// `SyncPlayModel.tileTimecodeText` computes, and it is why a comparison's
+    /// clocks cannot be one clock drawn once: four takes aligned by timecode
+    /// read the same, and four aligned by START read four different values for
+    /// the same master second. Which is exactly the thing the director is
+    /// trying to see.
+    ///
+    /// Costs nothing when nobody is mirroring: the composer is nil then, and
+    /// `onTimelineMove` is not even installed.
+    func pushSyncGridClocks() {
+        guard let composer = mirrors.syncGridComposer,
+              let model = syncPlay else { return }
+        for index in model.tiles.indices {
+            composer.setClock(model.tileTimecodeText(index), camera: index)
+        }
     }
 
     /// Every tile's display-frame slot pointed at the composer.
@@ -101,6 +147,7 @@ extension CaptureController {
             tile.tap.setOnDisplayFrame(nil)
         }
         syncPlay?.onGridPacingChange = nil
+        syncPlay?.onTimelineMove = nil
         mirrors.syncGrid?.setOnDisplayFrame(nil)
         mirrors.syncGridComposer?.stop()
         mirrors.syncGridComposer = nil
