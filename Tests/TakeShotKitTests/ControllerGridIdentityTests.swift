@@ -46,7 +46,8 @@ import Testing
     /// **A comparison tile is a take and never a camera**, stated separately
     /// because it is the failure that would look fine.
     ///
-    /// `.camera(label:recording:)` with `recording` hard-coded false would draw
+    /// `.camera(label:recording:signalPresent:)` with `recording` hard-coded
+    /// false would draw
     /// exactly the same picture today and be wrong the moment anybody asked the
     /// identity a question — and it is the shortcut a single flattened struct
     /// would have made the natural thing to write.
@@ -58,6 +59,8 @@ import Testing
                 let identity = composer.heldIdentity(camera: index)
                 #expect(identity?.showsRecordingLamp == false,
                         "tile \(index) can light a REC lamp")
+                #expect(identity?.showsNoSignal == false,
+                        "tile \(index) can claim a take has no signal")
                 if case .camera = identity {
                     Issue.record("tile \(index) reached the picture as a camera")
                 }
@@ -130,7 +133,7 @@ import Testing
                 try #require(controller.mirrors.gridComposer,
                              "the grid picture came up with no composer")
             let held = composer.heldIdentity(camera: 0)
-            #expect(held == .camera(label: "A CAM", recording: false),
+            #expect(held == .camera(label: "A CAM", recording: false, signalPresent: true),
                     "camera 0 reached the picture as \(held as Any)")
         }
     }
@@ -160,8 +163,53 @@ import Testing
             #expect(composer.heldIdentity(camera: 0)?.showsRecordingLamp == true,
                     "the REC lamp did not light")
             #expect(composer.heldIdentity(camera: 0)
-                        == .camera(label: "A CAM", recording: true),
+                        == .camera(label: "A CAM", recording: true, signalPresent: true),
                     "the lamp moved but the name did not survive it")
+        }
+    }
+
+    /// **The legend follows the board's own signal, and reads the one property
+    /// that answers that question.**
+    ///
+    /// `CaptureController.signalPresent` is written by `CapturePipeline.onSignal`
+    /// and by nothing else, and it is what `LiveStatusOverlay` and the menu
+    /// bar's readiness dot already read — so this pins that the picture joined
+    /// them rather than acquiring an opinion of its own.
+    ///
+    /// **What it does and does not prove.** It sets the property directly, the
+    /// idiom the lamp's test above already uses, so it pins the READ. It does
+    /// not prove the badge appears at the instant a cable comes out: that is
+    /// the pipeline's own path and its own suites. Nor can it see the case that
+    /// matters most for the MAIN board — camera 0 losing signal also stops the
+    /// composer's clock, so nothing composes and the far end holds its last
+    /// grid. The identity below is correct and undrawn, which is stated at
+    /// `pushGridIdentities` and is the same hole the `/cameras` page has.
+    ///
+    /// The last assertion is the failure that would look fine: a legend wired
+    /// to something session-wide would light here too, and would also light on
+    /// a B-cam that is perfectly happy.
+    @Test func theLegendFollowsTheBoardsOwnSignal() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.settings.naming.cameraLabel = "A CAM"
+            controller.ensureLiveEncoder(for: .grid)
+            let composer: MultiviewComposer =
+                try #require(controller.mirrors.gridComposer)
+            #expect(composer.heldIdentity(camera: 0)?.showsNoSignal == false,
+                    "a feeding board opened the grid already dark")
+
+            controller.signalPresent = false
+            controller.pushGridIdentities()
+            #expect(composer.heldIdentity(camera: 0)?.showsNoSignal == true,
+                    "the dropout did not reach the picture")
+            #expect(composer.heldIdentity(camera: 0)
+                        == .camera(label: "A CAM", recording: false,
+                                   signalPresent: false),
+                    "the dropout landed but the name did not survive it")
+
+            controller.signalPresent = true
+            controller.pushGridIdentities()
+            #expect(composer.heldIdentity(camera: 0)?.showsNoSignal == false,
+                    "the legend outlived the dropout it describes")
         }
     }
 

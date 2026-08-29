@@ -88,6 +88,28 @@ struct RemoteStatus: Equatable, Sendable {
         var recording: Bool
     }
 
+    /// **How the composed grid picture is laid out for this camera count** —
+    /// sent so the `/live` page can read the rule instead of restating it.
+    ///
+    /// The page needs this to fill the screen with ONE tile of the composed
+    /// video: it is a single raster with the cameras tiled inside it, so
+    /// picking a tile is arithmetic on the layout, and a page carrying its own
+    /// copy of `cameras <= 1 ? 1 : 2` would be a second opinion that agrees
+    /// today. `MultiviewComposer.columns`/`rows` IS the layout — the same two
+    /// functions `cell(camera:cameras:in:)` places the tiles with — so this
+    /// asks them rather than computing anything.
+    ///
+    /// The count they are asked about is `cameras.count`, which is built from
+    /// `extraChannels` in the same statement that sizes the composer
+    /// (`refreshMonitorTaps`), so the page's grid and the picture's grid cannot
+    /// be told two different counts either.
+    ///
+    /// Two integers four times a second on a payload that already carries
+    /// twenty fields. A message type of its own would need its own
+    /// replay-on-auth to say the same thing at the same rate.
+    var gridColumns: Int { MultiviewComposer.columns(cameras: cameras.count) }
+    var gridRows: Int { MultiviewComposer.rows(cameras: cameras.count) }
+
     /// The wire form. Hand-built rather than Codable so the field names are
     /// visible next to the page that reads them.
     var json: String {
@@ -115,6 +137,8 @@ struct RemoteStatus: Equatable, Sendable {
             "\"diskGB\":\(RemoteJSON.number(diskFreeGB))",
             "\"markers\":\(markerCount)",
             "\"cameras\":[" + tiles.joined(separator: ",") + "]",
+            "\"gridCols\":\(gridColumns)",
+            "\"gridRows\":\(gridRows)",
         ]
         return "{" + fields.joined(separator: ",") + "}"
     }

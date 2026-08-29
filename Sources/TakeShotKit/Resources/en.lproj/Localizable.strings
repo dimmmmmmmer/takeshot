@@ -753,6 +753,18 @@
 "live_picture_clean" = "Camera";
 "live_picture_grid" = "Grid";
 
+/* === burned into the composed grid picture (TileBadge), so it reaches the
+   hardware monitor, the SDI output, NDI, SRT and every browser at once.
+   Its own key rather than a reuse of "no_signal", for the reason this file
+   already carries three of them: "no_signal" is a headline over the whole
+   player, "no_signal_short" fits a badge strip, "remote_no_signal" is a phone's
+   footer, and this one is drawn at a sixteenth of a TILE beside the camera's
+   name. Shortening any one of them for its own surface must not move the
+   others.
+   Unlike every other string here it ends up in a PICTURE, so it follows the
+   operator's language onto a director's monitor — see TileBadge.noSignal. */
+"tile_no_signal" = "NO SIGNAL";
+
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Sync play";
 /* Kept short like the compare segments: both labels ride one mini segmented

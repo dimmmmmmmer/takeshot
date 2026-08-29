@@ -376,13 +376,20 @@ final class MultiviewComposer: @unchecked Sendable {
     }
 
     /// One tile's identity drawn over its cell: the nameplate at the top left,
-    /// the clock at the bottom left.
+    /// the clock at the bottom left, and — when the board is not feeding — the
+    /// legend saying so in the middle.
     ///
     /// The corners are the ones `MulticamGrid` and `SyncPlayView` already put
     /// their SwiftUI overlays in, so an operator glancing between their own
     /// screen and the director's monitor reads one layout rather than two. The
     /// bitmaps come out of `TileBadge`'s cache, so what this costs on a settled
     /// grid is two dictionary lookups and two composites — see the note there.
+    ///
+    /// **The legend is drawn BESIDE the name, never instead of it.** A dark
+    /// cell with a legend and no name says some board is out; with both it says
+    /// WHICH one, which is the whole reason the names were burned in. It also
+    /// keeps the nameplate touched on every compose while a board is down,
+    /// which is what stops the LRU from evicting it — see `TileBadge`.
     private func marked(camera: Int, in cell: CGRect,
                         over base: CIImage) -> CIImage {
         let metrics = TileTypeMetrics(tileHeight: cell.height)
@@ -400,6 +407,14 @@ final class MultiviewComposer: @unchecked Sendable {
            let plate = TileBadge.clock(text: clock, metrics: metrics,
                                        maximumWidth: room) {
             let origin = metrics.clockOrigin(in: cell)
+            image = plate.transformed(by: CGAffineTransform(
+                translationX: origin.x, y: origin.y)).composited(over: image)
+        }
+        if identities[camera]?.showsNoSignal == true,
+           let plate = TileBadge.noSignal(metrics: metrics,
+                                          maximumWidth: room) {
+            let origin = metrics.noticeOrigin(in: cell,
+                                              size: plate.extent.size)
             image = plate.transformed(by: CGAffineTransform(
                 translationX: origin.x, y: origin.y)).composited(over: image)
         }

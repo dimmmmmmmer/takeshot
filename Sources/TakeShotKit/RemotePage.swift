@@ -378,7 +378,14 @@ enum RemotePage {
         let pictures = LivePicture.allCases
             .map { RemoteJSON.quoted($0.rawValue) }
             .joined(separator: ",")
+        // Which of those names is the composed grid, injected for the same
+        // reason the list itself is. The live page's tap-to-fill only means
+        // anything on the grid — the other two pictures are one camera and have
+        // no tiles to choose between — so the page has to test for it, and a
+        // page carrying the literal "grid" would be a second spelling of a wire
+        // word this file exists to state once.
         return "{lang:\(RemoteJSON.quoted(L10n.current.pageCode)),"
+            + "gridPicture:\(RemoteJSON.quoted(LivePicture.grid.rawValue)),"
             + "watchdogMs:\(watchdogMilliseconds),"
             + "holdMs:\(slateHoldMilliseconds),"
             + "posterPath:\(RemoteJSON.quoted(posterPath)),"

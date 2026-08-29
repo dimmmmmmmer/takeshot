@@ -36,12 +36,33 @@ import Foundation
 ///   tile's timecode frozen, so the case that composes most redundantly is the
 ///   case where the clock costs nothing. A rolling clock misses once per tick
 ///   per tile and pays for one short fixed-pitch line.
+/// - a **no-signal legend** is ONE entry for the whole grid however many tiles
+///   are dark, and that is the key's own doing rather than a special case:
+///   every cell of a given grid is the same size, so the type size and the room
+///   are the same, and the words are the same words. Four boards unplugged at
+///   once cost one bitmap between them. It is flat in TIME too — the key
+///   carries what is DRAWN and not the signal state, so a board flapping twice
+///   a second alternates between compositing that one cached bitmap and
+///   compositing nothing, and rasterizes neither.
 ///
 /// **The LRU bound matters more than it looks.** A rolling clock inserts a new
 /// key per tile per frame forever, so an unbounded table is a leak measured in
 /// hours. The limit is set above twice the largest tile count so that the
 /// nameplates — touched on every compose and therefore always freshest — are
 /// never the entries evicted by the clocks churning past them.
+///
+/// The legend narrows that headroom by exactly one entry, which is worth
+/// counting rather than assuming. The largest grid this app lays out is four
+/// tiles, and the worst case is every board dark with every clock rolling: one
+/// compose then touches four nameplates, four clocks and one legend — nine
+/// distinct keys, of which four are new — so those nine sit at the freshest end
+/// of the order and 15 of the 24 slots are left holding older clocks. Eviction
+/// takes from the stale end at four a frame, so it would have to run nearly
+/// four frames' worth in one pass to reach anything that is not a dead
+/// timecode. Before the legend it was eight touched and 16 slots of stale
+/// clocks in front of them; the margin went from four frames to three and
+/// three-quarters. `MultiviewIdentityCostTests` holds that as a number rather
+/// than as this paragraph.
 ///
 /// **What it measures**, in release on the development Mac, minimum of twenty
 /// runs, two runs agreeing within 0.1 ms (`MultiviewIdentityTests`,
@@ -67,6 +88,25 @@ import Foundation
 /// tiles and inside the noise at four, where the compose dominates. And all of
 /// it sits against the 6.0 ms (1080p) and 21.2 ms (UHD) the H.264 encode of the
 /// very same frame costs, on a queue that is not the frame path.
+///
+/// **What the legend adds to that**, measured the same way in release on the
+/// development Mac with a fourth `dark` row — rolling clocks AND every board
+/// showing the legend, which is the worst case there is. It is the cheapest of
+/// the three badges by construction: one more composited layer per dark tile
+/// and no rasterization at all, because its bitmap is a hit however fast the
+/// boards flap. Against the `rolling` column: a four-up with every board dark
+/// costs +0.30 ms at 1080p (1.19 → 1.50) and +0.9 ms at UHD (2.59 → 3.54), and
+/// ONE dark camera costs +0.11 ms at 1080p and +0.12 at UHD. The worst row in
+/// the whole table is then a UHD four-up with four dark boards at 3.5-3.8 ms,
+/// against the 21.2 ms the H.264 encode of that same frame costs on another
+/// queue.
+///
+/// Those deltas are from ONE run, and deliberately so: the three runs behind
+/// them agreed within 0.1 ms everywhere except the 1080p four-up, where a build
+/// sharing the machine moved every state's figure together. A delta taken
+/// inside one run survives that; a delta taken across two runs does not, which
+/// is why the numbers above are differences and not a fourth column of the
+/// table.
 ///
 /// **The one real bill is the single camera**, and it is not this file's doing:
 /// an anonymous single camera is handed back uncomposed at 0.012 ms, and one
@@ -147,6 +187,35 @@ enum TileBadge {
         return badge(text: identity.label, lamp: identity.showsRecordingLamp,
                      fixedPitch: false, metrics: metrics,
                      maximumWidth: maximumWidth)
+    }
+
+    /// **The tile's board is not feeding.** Drawn in the middle of the cell,
+    /// where the picture would have been.
+    ///
+    /// The words come from `L` at DRAW time and that is deliberate, even though
+    /// the REC lamp went the other way. The lamp is a dot rather than the word
+    /// "REC" partly because a word is a UI string, and a picture on a
+    /// director's monitor changing language with the operator's Settings is a
+    /// real cost. It was payable there because a red tally dot IS what that
+    /// fact looks like on every other monitoring surface in the building. There
+    /// is no such glyph for "no signal" — a crossed-out cable would be this app
+    /// inventing an icon nobody has seen — and the alternative on offer is the
+    /// named black cell this badge exists to replace. So the cost is paid here
+    /// instead, and it is worth naming exactly: the legend a director reads
+    /// follows the LANGUAGE THE OPERATOR SET, not the director's.
+    ///
+    /// What it does NOT cost is a second invalidation story. The resolved words
+    /// go into the cache key like everything else drawn, so a language switch
+    /// is a key that was never in the table and the old bitmap ages out on its
+    /// own — the same non-mechanism the rename and the REC press already use.
+    ///
+    /// Note this asks nothing about what "no signal" means: it draws when the
+    /// identity says so, and the identity carries `CapturePipeline.onSignal`'s
+    /// own value.
+    static func noSignal(metrics: TileTypeMetrics,
+                         maximumWidth: CGFloat) -> CIImage? {
+        badge(text: L("tile_no_signal"), lamp: false, fixedPitch: false,
+              metrics: metrics, maximumWidth: maximumWidth)
     }
 
     /// The running timecode. Fixed-pitch, like `DailiesStripMetrics.timecodeFont`
