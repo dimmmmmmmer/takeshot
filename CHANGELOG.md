@@ -237,6 +237,12 @@ Gatekeeper's refusal instead of the app.
   grabs, and the scopes and the format badge stop describing it instead of
   quietly measuring a paused frame nobody is looking at.
 
+- **Every tile says which take or camera it is.** The name, a red REC dot and
+  the tile's own running timecode are drawn into the picture rather than over
+  it, so they reach the director's monitor, the SDI output, NDI, SRT and the
+  phone — all of which used to show anonymous rectangles. The comparison grid
+  now carries a timecode PER TILE, which the camera page never did.
+
 ### Known limits
 
 - **A comparison carries no assists and no LUT — on your screen or on anyone
