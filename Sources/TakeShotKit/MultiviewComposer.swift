@@ -50,6 +50,18 @@ import Foundation
 /// the default is `.clock(camera: 0)`, which is this file as it was written,
 /// and `CaptureController+LivePictures` never sets it.
 ///
+/// **Each tile says what it is, in the picture.** The name, the REC lamp and
+/// the running timecode used to be SwiftUI chrome drawn over the grid on the
+/// operator's own screen — the one surface that never needed them — so every
+/// far end this composer feeds saw anonymous rectangles. They are composited in
+/// here now, once, so the hardware monitor, the SDI output, NDI, SRT and every
+/// browser get them together rather than four times or not at all. What a tile
+/// IS lives in `TileIdentity`, which has two cases because this composer has
+/// two callers and their tiles are two kinds of thing; what it costs and what
+/// is cached lives in `TileBadge`. The clock is pushed separately from the
+/// identity because it moves at a completely different rate — both notes say
+/// why at their own types.
+///
 /// The discipline is the one every other display consumer follows: the display
 /// queue drops a frame here and returns at once, only the newest frame per
 /// camera is kept, and the compose runs on THIS queue — never on capture, never
@@ -175,6 +187,15 @@ final class MultiviewComposer: @unchecked Sendable {
     /// it (see `compose`), and under `.everyFrame` the pass can be run by a
     /// tile that is not camera 0 at all, so it has to be here to be found.
     private var tiles: [Int: CVPixelBuffer] = [:]
+    /// **Who each tile is** — see `TileIdentity` for why the two callers' tiles
+    /// are two kinds rather than one with a flag. Slow-moving: a rename or a
+    /// REC press, restated on every tick by the wiring and absorbed by the
+    /// badge cache.
+    private var identities: [Int: TileIdentity] = [:]
+    /// **Where each tile is in time.** Separate from the identity because it
+    /// changes every frame and arrives from somewhere else entirely; separate
+    /// all the way down, so a tick does not rebuild a nameplate.
+    private var clocks: [Int: String] = [:]
     private var cameraCount = 1
     private var scheduled = false
     private var pendingRate = 0.0
@@ -198,7 +219,34 @@ final class MultiviewComposer: @unchecked Sendable {
             // sit in the grid for the rest of the day, and a grid showing a
             // board nobody is recording is worse than one tile short.
             tiles = tiles.filter { $0.key < cameraCount }
+            // …and must not keep its NAME either, which is the worse half: a
+            // stale picture at least looks like a picture, while a label left
+            // behind would sit over whatever tile inherits that cell and say it
+            // is a camera that is no longer in the session.
+            identities = identities.filter { $0.key < cameraCount }
+            clocks = clocks.filter { $0.key < cameraCount }
         }
+    }
+
+    /// Who a tile is. Hopped onto this queue like every other read of this
+    /// state, so a rename or a REC press cannot race a compose.
+    ///
+    /// Restating an unchanged identity is free — the badge cache is keyed on
+    /// what is drawn, so this is a dictionary write and a lookup — which is
+    /// what lets the wiring push it on every timecode tick and never have to
+    /// work out whether anything changed.
+    func setIdentity(_ identity: TileIdentity?, camera: Int) {
+        queue.async { [self] in identities[camera] = identity }
+    }
+
+    /// Where a tile is in time, already rendered to the string the picture
+    /// shows. A string rather than a `Timecode` because the two callers format
+    /// it differently and both formats already exist on the main actor: a live
+    /// board's is `Timecode.description` off `CapturePipeline.onTimecode`, a
+    /// comparison tile's is `SyncPlayModel.tileTimecodeText`, which counts
+    /// within the clip. Choosing between them here would be a third opinion.
+    func setClock(_ timecode: String?, camera: Int) {
+        queue.async { [self] in clocks[camera] = timecode }
     }
 
     /// What runs the pass. Hopped onto this queue like every other read of this
@@ -227,10 +275,34 @@ final class MultiviewComposer: @unchecked Sendable {
         }
     }
 
+    /// What the composer is holding for one tile, read by hopping onto its own
+    /// queue like every other access to this state.
+    ///
+    /// **For the suite, and it earns its place.** Most of this change shows up
+    /// in the picture — a lamp widens the plate, a badge is clamped inside its
+    /// cell — but two of its rules do not: a departed camera's NAME being
+    /// dropped rather than left over the tile that inherits its cell, and a
+    /// clock landing on the tile it belongs to. Both are only ever visible as
+    /// GLYPHS, and glyphs are what this project's tests may not read (the
+    /// centring test that measured drawn bounds and came back nil on a headless
+    /// runner). Asserting on the state the draw is made from is the portable
+    /// half of that; see `MultiviewIdentityTests` for what it still cannot see.
+    func heldIdentity(camera: Int) -> TileIdentity? {
+        queue.sync { identities[camera] }
+    }
+
+    /// The clock string this tile would be drawn with. Same reason as
+    /// `heldIdentity(camera:)`.
+    func heldClock(camera: Int) -> String? {
+        queue.sync { clocks[camera] }
+    }
+
     func stop() {
         queue.async { [self] in
             stopped = true
             tiles.removeAll()
+            identities.removeAll()
+            clocks.removeAll()
         }
     }
 
@@ -262,22 +334,38 @@ final class MultiviewComposer: @unchecked Sendable {
         }
         let canvas = CGRect(x: 0, y: 0, width: CGFloat(width),
                             height: CGFloat(height))
-        // One camera and nothing else to draw: the grid IS the clean picture,
-        // and a scale-to-self plus a letterbox with no bars is a full render
-        // pass for an identity. Handed straight back instead.
-        guard cameraCount > 1 else { return main }
+        // One camera with nothing to say about itself: the grid IS the clean
+        // picture, and a scale-to-self plus a letterbox with no bars is a full
+        // render pass for an identity. Handed straight back instead.
+        //
+        // **The pass-through survives exactly as far as "nothing to draw".**
+        // Once a single camera HAS a name or a clock, the picture is no longer
+        // the clean buffer and there is no way to hand back something that is
+        // not the buffer other consumers are sharing — burning a label into the
+        // clean picture is the one thing `LivePicture` exists to prevent. So a
+        // labelled single camera costs a render where an anonymous one costs
+        // 0.010 ms, and that is the honest price of the label rather than a
+        // regression to find later.
+        guard cameraCount > 1 || identities[0] != nil || clocks[0] != nil else {
+            return main
+        }
         // Raw code values on both ends, like every other stage in the display
         // path: these buffers hold 709-encoded codes and a managed render here
         // would shift a picture the operator is judging exposure on.
         var image = CIImage(color: .black).cropped(to: canvas)
         for camera in 0..<cameraCount {
-            guard let source = tiles[camera] else { continue }
-            let tile = CIImage(cvPixelBuffer: source,
-                               options: [.colorSpace: NSNull()])
-            image = Self.placed(tile, in: Self.cell(camera: camera,
-                                                    cameras: cameraCount,
-                                                    in: canvas))
-                .composited(over: image)
+            let cell = Self.cell(camera: camera, cameras: cameraCount,
+                                 in: canvas)
+            if let source = tiles[camera] {
+                let tile = CIImage(cvPixelBuffer: source,
+                                   options: [.colorSpace: NSNull()])
+                image = Self.placed(tile, in: cell).composited(over: image)
+            }
+            // Drawn whether or not the tile has delivered a frame: a board that
+            // has not sent one yet is a black cell, and a black cell with a name
+            // on it reads as a camera that is not sending. Without the name it
+            // reads as the grid being one tile short.
+            image = marked(camera: camera, in: cell, over: image)
         }
         let destination = CIRenderDestination(pixelBuffer: out)
         destination.colorSpace = nil
@@ -285,5 +373,36 @@ final class MultiviewComposer: @unchecked Sendable {
                                                 to: destination),
               (try? task.waitUntilCompleted()) != nil else { return nil }
         return out
+    }
+
+    /// One tile's identity drawn over its cell: the nameplate at the top left,
+    /// the clock at the bottom left.
+    ///
+    /// The corners are the ones `MulticamGrid` and `SyncPlayView` already put
+    /// their SwiftUI overlays in, so an operator glancing between their own
+    /// screen and the director's monitor reads one layout rather than two. The
+    /// bitmaps come out of `TileBadge`'s cache, so what this costs on a settled
+    /// grid is two dictionary lookups and two composites — see the note there.
+    private func marked(camera: Int, in cell: CGRect,
+                        over base: CIImage) -> CIImage {
+        let metrics = TileTypeMetrics(tileHeight: cell.height)
+        let room = metrics.maximumWidth(in: cell)
+        var image = base
+        if let identity = identities[camera],
+           let plate = TileBadge.nameplate(for: identity, metrics: metrics,
+                                           maximumWidth: room) {
+            let origin = metrics.nameplateOrigin(
+                in: cell, height: plate.extent.height)
+            image = plate.transformed(by: CGAffineTransform(
+                translationX: origin.x, y: origin.y)).composited(over: image)
+        }
+        if let clock = clocks[camera],
+           let plate = TileBadge.clock(text: clock, metrics: metrics,
+                                       maximumWidth: room) {
+            let origin = metrics.clockOrigin(in: cell)
+            image = plate.transformed(by: CGAffineTransform(
+                translationX: origin.x, y: origin.y)).composited(over: image)
+        }
+        return image
     }
 }

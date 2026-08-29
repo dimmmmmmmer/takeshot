@@ -201,7 +201,7 @@ final class SyncPlayModel: ObservableObject {
         // The pauses land a hair apart; a precise re-align parks every tile on
         // the exact frame the master stopped on.
         alignPaused(to: now)
-        position.currentTime = now
+        moveTimeline(to: now)
     }
 
     /// Move the master playhead. Playing, the synchronized start is re-issued
@@ -209,7 +209,7 @@ final class SyncPlayModel: ObservableObject {
     /// zero-tolerance seeked to its own offset position.
     func seek(to seconds: Double) {
         let target = min(max(0, seconds), schedule.length)
-        position.currentTime = target
+        moveTimeline(to: target)
         if isPlaying {
             syncPlayers(at: target)
         } else {
@@ -274,6 +274,28 @@ final class SyncPlayModel: ObservableObject {
 
     private func pushGridPacing() {
         onGridPacingChange?()
+    }
+
+    /// Called whenever the master playhead moves. Same shape and same lifetime
+    /// as `onGridPacingChange`: the controller installs it while the grid is
+    /// going out to something so the burned-in tile clocks follow the
+    /// transport, and a comparison nobody is mirroring pays a nil check.
+    var onTimelineMove: (() -> Void)?
+
+    /// **The one place the master playhead moves.**
+    ///
+    /// It was five assignments — the pause, the seek, the anchor's 10 Hz tick,
+    /// the rebuild and the end — which is fine while the playhead has exactly
+    /// one reader. It has two now: `SyncPlayView`'s per-tile label, which
+    /// observes `position` and re-reads it for free, and the tile clocks burned
+    /// into the composed picture, which have to be PUSHED. A push added at five
+    /// sites is four chances to miss one, and a missed one is a director's
+    /// monitor whose timecodes stopped somewhere the operator's screen is
+    /// still right — the exact failure `Pacing` was invented for one level
+    /// down.
+    private func moveTimeline(to seconds: Double) {
+        position.currentTime = seconds
+        onTimelineMove?()
     }
 
     /// Tile label TC: the take's start TC advanced by its own clip position
@@ -386,7 +408,7 @@ extension SyncPlayModel {
         anchorIndex = Self.anchorIndex(for: schedule,
                                        sources: tiles.map(\.source))
         installObservers() // the master and the end boundary both moved
-        position.currentTime = 0
+        moveTimeline(to: 0)
         alignPaused(to: 0)
     }
 
@@ -478,7 +500,7 @@ extension SyncPlayModel {
         // after a paused seek would stomp the target with a stale player time.
         guard isPlaying else { return }
         let now = currentTimelineSeconds
-        position.currentTime = now
+        moveTimeline(to: now)
         if now >= schedule.length - 0.001 {
             reachedEnd()
             return
@@ -537,6 +559,6 @@ extension SyncPlayModel {
         }
         isPlaying = false
         alignPaused(to: schedule.length)
-        position.currentTime = schedule.length
+        moveTimeline(to: schedule.length)
     }
 }

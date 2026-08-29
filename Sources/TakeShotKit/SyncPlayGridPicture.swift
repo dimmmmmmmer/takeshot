@@ -23,6 +23,16 @@ import Foundation
 /// assist stage, `.decorated` follows it here for free and `.clean` does not,
 /// which is the split every other source already has.
 ///
+/// **The tile names and timecodes ARE in this picture**, which they were not.
+/// They used to be SwiftUI chrome over the grid — `SyncPlayView`'s per-tile
+/// overlays — so every surface this file feeds saw anonymous rectangles and a
+/// director comparing four takes could not tell which was which. They are drawn
+/// into the composed frame now: `TileIdentity.take` per tile and the tile's own
+/// clock, pushed from `CaptureController+SyncPlayPicture` and rendered by
+/// `MultiviewComposer`. What that changed here is nothing at all — this file
+/// still publishes whatever the composer hands it — which is the point of the
+/// identity living down there rather than in each of the four sources.
+///
 /// Nothing here exists while nobody is watching: the controller builds one when
 /// a mirror appears under a comparison and drops it when the last one goes
 /// (`CaptureController+SyncPlayPicture`).
