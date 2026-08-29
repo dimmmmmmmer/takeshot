@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.70 %** lines (4 192 of 45 054 lines uncovered) |
+| Measured | **90.74 %** lines (4 172 of 45 063 lines uncovered) |
 
 Measured in the ORDINARY configuration, which is what `scripts/coverage.sh`
 runs and what CI runs. `-DTAKESHOT_FORCE_STUBS=1` is a different build with
@@ -75,6 +75,10 @@ point of run-to-run noise is worth knowing about before somebody chases a
 hundredth. It has not gone away and it is the same size: after the NDI sound
 leg, two runs measured 4 201 and 4 197 uncovered — four lines, still under a
 hundredth of a point, and the figure in the table is again the second run's.
+**It has since been located and it is bigger than four lines when the machine
+is busy** — three files in the take-writing path, up to sixteen lines between
+two runs of one tree; see "Where the run-to-run jitter actually is" under the
+out-point wave. The figure in the table above is that wave's second run.
 
 The SRT output moved it up by six hundredths of a point while adding 1 263 lines
 of measurable code, which is a fact about what SHAPE of code it is rather than
@@ -425,6 +429,227 @@ what they caught:
   the suite tests the function, and the wiring is a per-call-site choice with
   no portable observable. Stated as a limit above.
 
+## The out-point wave
+
+The wave that took the number from 90.73 % to 90.74 % started from the list the
+forgotten-engine wave left, and from one row of it: the takes panel, named
+there as "still mostly menu content and popover bodies". Two of the things in
+that panel which are NOT a menu or a popover turned out to be arithmetic —
+where a take runs from and to, and how long it is — and both were spellings of
+questions other surfaces answered differently. One of them had been wrong since
+it was written.
+
+**Read the point move as noise, not as a result.** Two runs of the finished
+tree measured 4 156 and 4 172 uncovered lines; the starting figure was one run
+at 4 176. The wave's whole effect on the number is smaller than the spread
+between two runs of the same tree, so the number cannot resolve it and nothing
+here should be read as "+0.04 points". What it bought is the defect below.
+
+### Where the run-to-run jitter actually is
+
+Worth writing down, because this file has recorded the spread three times and
+called it unexplained once. It is not spread across the tree — the two runs
+above differ in exactly **three files, all in the take-writing path**:
+
+| file | run 1 | run 2 |
+| --- | --- | --- |
+| `CapturePipeline+Health.swift` | 0 missed | 11 missed |
+| `CapturePipeline+Take.swift` | 3 | 6 |
+| `TakeWriter+Audio.swift` | 2 | 4 |
+
+Every other file in the report is identical between the runs. Those three hold
+the drop counters, the gap-fill counters and the audio padding, and those lines
+execute only when the real-time ProRes encode in the pipeline suite actually
+drops or pads something — which depends on what else the machine is doing. So
+the "one to four lines" this file documents and the sixteen the
+forgotten-engine wave could not explain are the same phenomenon at two
+severities, and it has a location. A figure quoted to a hundredth of a point is
+quoting that.
+
+### The out point that ran ahead of the paperwork
+
+"Start TC advanced by the recorded frames" is the only question a take's OUT
+point ever asks, and four surfaces asked it for themselves:
+
+| asked by | rate | no start TC |
+| --- | --- | --- |
+| `TakeLogExporter.endTimecode` — the shift report and its CSV | real | nil |
+| `ALEExporter.span` — the Avid log's Start/End | real | zero-based |
+| `EDLExporter.eventLines` — the conform's source side | real | zero-based |
+| the takes panel's row, under the file name | **nominal** | zero-based at 25 |
+
+`Timecode.frameNumber` is a count of REAL frames — its own comment says "two
+consecutive recorded frames always differ by exactly 1", drop-frame numbering
+already removed — so what is added to it has to be real frames too, and a
+drop-frame camera delivers `fps * 1000/1001` of them a second. The panel
+multiplied by the nominal fps. Measured, from a start of `10:00:00;00`:
+
+| rate | take | the panel | every export | apart by |
+| --- | --- | --- | --- | --- |
+| 29.97 DF | 10 min | `10:10:00;18` | `10:10:00;00` | 18 frames |
+| 29.97 DF | 2 min | `10:02:00;04` | `10:01:59;28` | 4 frames |
+| 29.97 DF | 1 min | `10:01:00;02` | `10:00:59;28` | 2 frames |
+| 59.94 DF | 10 min | `10:10:00;36` | `10:10:00;00` | 36 frames |
+| 24 / 25 / 30 ND / 50 ND | any | — | — | **0** |
+
+One frame per thousand, always ahead. It is the number an operator reads back
+over talkback while the office reads the shift report, and the number an
+assistant matches against the Avid log when a clip will not line up — and
+nothing about it looks wrong, because it is a plausible timecode a fraction of
+a second out, on the one rate family (29.97/59.94, i.e. every US broadcast job)
+where the nominal and the real rate are different numbers. **At every rate
+where they are the same number the wrong arithmetic gives the right answer**,
+which is why it survived: the app's own demo source generates 1080p25, so a
+suite built on the fixture everything else uses is green against it.
+`TakeSpanTests` walks 24/25/30 ND/50/60 for that reason and not for
+completeness.
+
+The panel's own doc comment said "start + duration at the TC's own fps", which
+is what `TakeSpan` does and what that code did not.
+
+### The clock that disagreed with the clock beside it
+
+Three spellings of "these seconds as a clock", differing in the two ways that
+matter:
+
+| spelled in | width | rounding | non-finite |
+| --- | --- | --- | --- |
+| `TransportBar.timeText` — sync-play transport, marker list | `m:ss` | down | guarded |
+| `durationText` — takes panel rows and tiles, Other content | `m:ss` | **nearest** | **traps** |
+| both report headers | `h:mm:ss` | down | **traps** |
+
+The panel and the sync-play transport show the same take's length at the same
+time, and printed different numbers for half of all lengths: a 59.6 s take was
+`1:00` in the panel and `0:59` on the transport under it, which counts to 0:59
+and stops. Down is the rule kept, because a POSITION has no choice — a clock
+reading `1:00` while the picture is still inside the 59th second is running
+ahead of the picture — and making a length agree with the position it is the
+ceiling of is then the only consistent move. Its cost is stated rather than
+hidden, and pinned: a take under a second reads `0:00`, and the row's timecode
+range beside it is what carries the frames.
+
+**The non-finite column is the half that is not cosmetic.** Both lengths the
+panel shows are read as `(try? await asset.load(.duration))?.seconds` — take
+adoption in `+LibraryRestore`, the Other-content probe in `+ThumbnailDecode` —
+and `CMTime.seconds` of an indefinite or invalid time is NaN, which the `?? 0`
+beside it cannot catch, because NaN is a Double and not a nil. `Int(Double.nan)`
+traps. `RemoteJSON.number` guards it and the phone gets `null`;
+`TransportBar.timeText` guarded it; the takes panel's copy did not, and the
+takes panel is where a file nobody wrote lands. The guard is also WIDER than
+the one that existed, which is a measurement rather than caution: `Int(_:)`
+refuses anything rounding past `Int.max` as well, and that is finite, so
+`isFinite` alone still traps — see the mutations.
+
+Whether a real file on a real card produces that NaN was NOT established, and
+this file should not claim it. What is established is that one of two copies of
+one function survived it and the other did not, and that the value reaching
+both comes from the one place in the app that reads a length off a file nobody
+wrote.
+
+### The header two documents had to share and nothing held
+
+`ContactSheet.drawHeader` carried the comment "the shift report's header, word
+for word except the title — the two documents leave set together and have to
+read as one family", and under it thirteen lines identical to
+`ShiftReport.drawHeader`'s. Nothing had drifted, which is the reason to do it
+now rather than the reason not to: the two sheets are handed over together, and
+the failure mode is two documents from one wrap disagreeing about how many
+takes there were, with no third thing to say which is right.
+
+It was also only reachable by rendering a PDF and reading the text back out of
+it, so what could be asserted about it was whatever survived PDFKit. Two
+mutations below say what that cost.
+
+### Mutations
+
+Fifteen, of which fifteen turned a test red — each by the test that describes
+it. Five are worth writing down for what they showed rather than for what they
+caught:
+
+- **Two of them do not fail, they CRASH the runner**, which is the guard doing
+  its job rather than a defect in the test. Dropping the `isFinite` arm:
+  `Fatal error: Double value cannot be converted to Int because it is either
+  infinite or NaN`, and the process exits with `signal code 5`. Keeping
+  `isFinite` and dropping only the `Int.max` clamp: `Fatal error: Double value
+  cannot be converted to Int because the result would be greater than Int.max`
+  — which is the measurement that says the guard that WAS there was not wide
+  enough, and the reason the new one clamps as well as guards.
+- **Counting at the nominal rate again turns `everyDocumentStatesTheSameOutPoint`
+  red through the EDL and through nothing else.** Three of the four surfaces
+  read `TakeSpan` now, so they move together and a cross-surface test cannot
+  see the shared rule change; the EDL still has its own arithmetic, and that is
+  why it was left with it. That is the answer to "what would still pass if this
+  regressed in a different direction": deduplicating a rule buys agreement and
+  spends the independent witness, so the LAST copy is worth keeping on purpose.
+  The explicit assertions catch it too, verbatim —
+  `(span.end.description → "10:10:00;18") == (row.end → "10:10:00;00")`.
+- **Swapping `good` and `bad` in the header tally is caught by the new suite and
+  by neither PDF suite**, and the same is true of making `endTimecode` answer
+  for a take with no start timecode: `ExporterEdgeTests` and
+  `ModelShiftReportTests` both stay green. Two claims about the paperwork that
+  nothing held — which is what "only reachable through PDFKit" cost.
+- **Giving the contact sheet the shift report's title key is caught by the PDF
+  suites and NOT by the new one.** That is the division working rather than a
+  gap: the new suite holds what the header SAYS, the PDF suites hold which
+  document gets which, and neither substitutes for the other.
+- **The "which KIND of readout" limit does not apply here**, and the contrast is
+  worth stating because the forgotten-engine wave left that limit open. Handing
+  the report header `.minutesSeconds` instead of `.hoursMinutesSeconds` turns
+  four assertions red across two suites — `footage 60:01` where
+  `footage 1:00:01` was expected. The chroma dial's equivalent mutation is
+  invisible because its readout sits in a fixed-width column and ink is not
+  portable; this one goes into a document that is read back AS TEXT. Where the
+  string is observable, the wrong case IS catchable, and the limit is about the
+  observable rather than about per-call-site choices in general.
+
+### What this wave deliberately did NOT touch
+
+- **`canGrabFrame` and `grabFrame()` disagree, and the lit button is the wrong
+  one.** `canGrabFrame` is `isCapturing || (playbackURL != nil && syncPlay ==
+  nil)`, so with the camera ROLLING and a sync-play grid on screen it answers
+  true — while `grabFrame()` opens with `guard syncPlay == nil else { return }`
+  and does nothing at all: no still, no toast, no error. The footer button is
+  enabled, the hotkey goes straight through, and the operator gets silence.
+  Not fixed here because it belongs to the sync-play-blindness class a parallel
+  sweep was closing, and doing it twice in two branches is worse than once.
+  **Whoever merges should check it was covered**; if it was not, it is the same
+  shape as the marker defects and the same size.
+- **`toggleMonitorMute` does not ask `canMonitorAudio`.** The ⌃A hotkey mutes,
+  un-mutes, forces `monitorOn` back to true and persists all of it while the
+  footer's speaker is disabled. Acting on a preference while idle is not
+  obviously wrong, which is why it is named rather than changed — but it is a
+  rule the button states and the method does not, which is the family that has
+  produced a defect in each of the last two waves.
+- **Which engine a URL belongs to is decided in three places and only one asks
+  about a CinemaDNG folder.** `play(url:)` asks
+  `rawExtensions.contains(ext) || isCinemaDNGFolder(url)`; `transportBarKind`
+  and `PreviewView.surfaceSource` ask the extension alone, and a folder has
+  none. So a DNG folder the RAW engine could not open gets a VIDEO transport
+  bar and a playback surface over a "could not open" notice, where a `.braw` in
+  the same state correctly gets neither — and `transportBarKind`'s own comment
+  claims the two agree. Left because the only way in is a race:
+  `isCinemaDNGFolder` and `DNGSequenceSource.init` test the same condition
+  microseconds apart, so the folder has to lose its frames between them. It is
+  written down because "wrong but currently unreachable" is exactly what the
+  marker rule was before the hotkey found it.
+- **The EDL's zero-based fallback is the MASTER timeline's rate**, not
+  `TakeLogExporter.fallbackRate` — so a take with no start timecode is written
+  zero-based at 30 DF in a 30 DF session and at 25 ND in the ALE beside it.
+  Arguably the better answer (there is no take rate to fall back to), and
+  folding it in would spend the independent witness the mutation above needs.
+- **The EDL's one-frame floor stays in the EDL.** `max(1, frames)` is a rule
+  about CMX 3600 — a zero-length event is invalid — and not about where a take
+  ended. `TakeSpan` answers 0 frames for a 0-length take and a test pins it.
+- `ShiftReport` still spells `take.url.deletingPathExtension().lastPathComponent`
+  where the contact sheet and the panel use `Take.displayName`. One expression,
+  the same answer today, and the small end of the list.
+- **`MediaSourcePicker`'s three `id` accessors are done** — the last small item
+  the previous wave left. 69 uncovered lines in that file became 66, and what
+  remains is `MediaSourceMenuItems.body`, menu content the table above already
+  accounts for.
+- `AppCommands.swift` is settled four times over and was not re-argued.
+- Rendering for its own sake is still what this file exists to say no to.
+
 ## The honest ceiling
 
 Roughly **1 000 lines — about 2.4 points — cannot be covered by a headless
@@ -433,14 +658,21 @@ between that and the measured 90 % is not unreachable code: it is a long tail of
 view bodies, AppKit window paths and error branches that are reachable with more
 work. 95 % is a question of how many more waves, not of whether it is possible.
 
-There are now three measurements of what "more work" costs, and the spread — an
-order of magnitude between the first and the other two — is the useful part:
+There are now four measurements of what "more work" costs, and the spread — an
+order of magnitude between the first and the rest — is the useful part:
 
 | Wave | Changes | Points | What the changes were |
 | --- | --- | --- | --- |
 | long-tail | 6 | +0.67 | a fixture that had never decoded, plus five rules leaving places nothing could ask them |
 | shared-rule | 4 | +0.07 | four rules leaving places nothing could ask them, three of which were spelled out in several places at once |
 | forgotten-engine | 5 | +0.05 | one seam in front of the app's only modal, plus four rules leaving places nothing could ask them |
+| out-point | 4 | **+0.01, i.e. nothing** | three rules each spelled out in three or four places at once |
+
+The fourth row is the honest end of that progression and the reason the column
+is worth reading with suspicion: the out-point wave's move is SMALLER than the
+spread between two runs of its own finished tree (sixteen lines, located — see
+that section). A wave of this kind can now be expected to move the number by
+zero. It found the worst arithmetic defect in this file's history anyway.
 
 The difference is not effort. A rule that was in ONE unreachable place moves the
 number when it comes out; a rule that was in FOUR unreachable places deletes
@@ -450,11 +682,13 @@ suite defending more than it did. Only one of them shows up in the report, and a
 wave planned against the report alone will keep picking the first kind and never
 find a disagreement — because a rule stated once cannot disagree with itself.
 
-Two waves in a row have now landed on the low number, and both found real
-defects doing it — which is the correlation worth reading. The measure of the
-second kind is not points; it is that the forgotten-engine wave started from one
-readout stated twice and ended with five surfaces asking about a grid, two of
-them writing to a file that was not on screen. **95 % will not be reached by
+Three waves in a row have now landed on the low number, and all three found
+real defects doing it — which is the correlation worth reading. The measure of
+the second kind is not points; it is that the forgotten-engine wave started
+from one readout stated twice and ended with five surfaces asking about a grid,
+two of them writing to a file that was not on screen, and that the out-point
+wave started from one row of a leftover list and ended with the takes panel's
+out point a frame per thousand ahead of every document about the same take. **95 % will not be reached by
 this kind of wave**, and that is not an argument against it. It is an argument
 for planning both: a points wave has to go at the view bodies and the AppKit
 paths the table below describes, and a wave that wants the number to MEAN
@@ -539,11 +773,11 @@ starts from a list rather than from the report again:
   somebody finds a way to assert a rendered STRING that survives macOS 15 and
   macOS 26, this is the first thing to point it at — and `ViewRenderSupport`'s
   note is the reason it has not been tried.
-- **`MediaSourcePicker`'s three `Identifiable` `id` accessors** are still open,
-  and the claim is unchanged: a picker row is identified by its URL and not its
-  name, so two files of the same name in two folders stay two rows. One
-  assertion, three lines. Left because it is the small end of the list, not
-  because it is settled.
+- **`MediaSourcePicker`'s three `Identifiable` `id` accessors** — done by the
+  out-point wave, exactly as costed here (one assertion, three lines: 69
+  uncovered became 66). The claim was the one stated: a picker row is
+  identified by its URL and not its name, so two files of the same name in two
+  folders stay two rows.
 - `AppCommands.swift` is settled twice over, and this wave did not re-argue it
   a third time.
 - **`TakeRowControls` (143), `FooterBar` (76), `TransportBar` (66)** are still

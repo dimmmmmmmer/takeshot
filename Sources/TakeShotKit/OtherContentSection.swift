@@ -204,6 +204,10 @@ extension CaptureController {
         if let size = otherPixelSizes[url] {
             return "\(Int(size.width))×\(Int(size.height))"
         }
-        return otherDurations[url].map(durationText)
+        // `ClipTimeText` and not a local spelling: this is the one duration in
+        // the app read straight off `AVAsset.duration.seconds` of a file
+        // nobody wrote, so it is the one most likely to be NaN — see the note
+        // on the type.
+        return otherDurations[url].map(ClipTimeText.minutesSeconds.text)
     }
 }

@@ -169,7 +169,8 @@ struct TakeDurationBadge: View {
     var onImage = true
 
     var body: some View {
-        TileMetricBadge(text: durationText(seconds), onImage: onImage)
+        TileMetricBadge(text: ClipTimeText.minutesSeconds.text(seconds),
+                        onImage: onImage)
     }
 }
 

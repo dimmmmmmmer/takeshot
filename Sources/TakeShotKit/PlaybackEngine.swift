@@ -54,7 +54,7 @@ import Foundation
 /// grid is 2–4 takes with 2–4 different start timecodes running against ONE
 /// master timeline, so there is no single timecode for the picture as a whole;
 /// that is why the grid's own transport shows elapsed time
-/// (`TransportBar.timeText`) rather than TC, and why each TILE carries its own
+/// (`ClipTimeText.minutesSeconds`) rather than TC, and why each TILE carries its own
 /// (`SyncPlayModel.tileTimecodeText`). The badge therefore shows
 /// `timecodeFallbackText`, the same "there is no timecode here" string the live
 /// badge, the multicam tiles and the slate all use. A readout that says it has

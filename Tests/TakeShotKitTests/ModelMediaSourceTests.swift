@@ -98,6 +98,32 @@ struct ModelMediaSourceTests {
         }
     }
 
+    /// What identifies a row, which is what SwiftUI's `ForEach` reuses views
+    /// by. A picker row is its URL and not its NAME: a reference plate copied
+    /// into two folders under one name is two files, and identifying them by
+    /// name would collapse them into one row that opens whichever the diff
+    /// happened to keep. The two group ids are the same claim one level up —
+    /// the heading a group keeps across a rebuild is its kind, not its
+    /// position in the array, because `mediaSources` drops empty groups and
+    /// the array's indices therefore move.
+    @Test func aPickerRowIsIdentifiedByItsFileAndNotItsName() {
+        let folderA = URL(fileURLWithPath: "/tmp/a/plate.png")
+        let folderB = URL(fileURLWithPath: "/tmp/b/plate.png")
+        let rowA = MediaSourceItem(url: folderA, name: "plate.png")
+        let rowB = MediaSourceItem(url: folderB, name: "plate.png")
+        #expect(rowA.id == folderA)
+        #expect(rowA.id != rowB.id, "two files of one name collapse to one row")
+        #expect(rowA.name == rowB.name, "the names really are the same")
+
+        for group in MediaSourceGroup.allCases {
+            #expect(group.id == group.rawValue)
+            #expect(MediaSourceGroupItems(group: group, items: [rowA]).id
+                    == group.rawValue)
+        }
+        #expect(Set(MediaSourceGroup.allCases.map(\.id)).count
+                == MediaSourceGroup.allCases.count)
+    }
+
     /// Both places really do use it, and the plate takes stills as well as
     /// clips — the compare bar's B menu and the plate row are measured with a
     /// seeded folder so a picker that lists nothing cannot pass.

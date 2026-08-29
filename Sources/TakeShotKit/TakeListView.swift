@@ -226,10 +226,10 @@ struct TakeRow: View {
                         .font(.system(.body, design: .monospaced))
                         .lineLimit(1)
                     HStack(spacing: 8) {
-                        if let tc = take.startTimecode {
-                            Text("\(tc.description) – \(endTimecode(of: take).description)")
+                        if let range = TakeRowTimes.timecodeRange(of: take) {
+                            Text(range)
                         }
-                        Text(durationText(take.durationSeconds))
+                        Text(TakeRowTimes.length(of: take))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -310,15 +310,7 @@ struct TakeCell: View {
     }
 }
 
-/// Take end TC: start + duration at the TC's own fps.
-private func endTimecode(of take: Take) -> Timecode {
-    let start = take.startTimecode ?? Timecode(frameNumber: 0, fps: 25, isDropFrame: false)
-    let frames = Int((take.durationSeconds * Double(max(1, start.fps))).rounded())
-    return Timecode(frameNumber: start.frameNumber + frames,
-                    fps: start.fps, isDropFrame: start.isDropFrame)
-}
-
-func durationText(_ seconds: Double) -> String {
-    let total = Int(seconds.rounded())
-    return String(format: "%d:%02d", total / 60, total % 60)
-}
+// The take row's two readouts used to live here as free functions — a private
+// end-TC that counted at the NOMINAL frame rate, and a duration that rounded
+// the opposite way from the transport's. Both are `TakeRowTimes` now, over
+// `TakeSpan` and `ClipTimeText`; both of those say what was wrong with them.
