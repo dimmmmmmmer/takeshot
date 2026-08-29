@@ -89,8 +89,8 @@ extension CaptureController {
         }
     }
 
-    /// **Every live tile says which board it is, whether it is writing, and
-    /// what its own timecode reads.**
+    /// **Every live tile says which board it is, whether it is writing, whether
+    /// it is feeding at all, and what its own timecode reads.**
     ///
     /// `.camera`, from the same two expressions the operator's own grid and the
     /// `/cameras` page already read — `settings.naming.cameraLabel` for the
@@ -102,6 +102,28 @@ extension CaptureController {
     /// `RemoteStatus.CameraState` and at `MulticamGrid`; this is the third
     /// surface to answer it and it asks the same question rather than a
     /// similar one.
+    ///
+    /// **`signalPresent` is per board for the identical reason**, and it is the
+    /// only reading of it anywhere: `CaptureController.signalPresent` for the
+    /// main board and `CameraChannel.signalPresent` for each extra, both of
+    /// them written by `CapturePipeline.onSignal` and by nothing else. A B-cam
+    /// whose cable is out must say so on its own tile while A-cam carries on,
+    /// which a session-wide flag could not express.
+    ///
+    /// **What the per-tick restatement buys here is the whole wiring.** A
+    /// dropout has no event of its own on this path — it is a value that
+    /// changes on the pipeline's own thread — and this method already says
+    /// everything on every tick, so a B-cam losing signal reaches the picture
+    /// within one frame of the main camera with nothing subscribed to it.
+    /// **The main board is the case that does not work that way**, and it is a
+    /// property of the pacing rather than of this push: camera 0 losing signal
+    /// stops the composer's clock (`MultiviewComposer.Pacing.clock`), so no
+    /// pass runs and the far end holds the last grid it was sent. Its own
+    /// legend is written into an identity nothing will draw until frames come
+    /// back. The `/cameras` page has exactly the same hole from the same cause
+    /// — no frames, no JPEGs, a tile frozen on its last one — so this is parity
+    /// with the page rather than a regression against it, and closing it is a
+    /// change to what runs a compose, not to what a badge says.
     ///
     /// **Restated wholesale rather than diffed**, and that is the design. The
     /// label, the lamp and the clock change at three different rates and from
@@ -117,12 +139,14 @@ extension CaptureController {
     func pushGridIdentities() {
         guard let composer = mirrors.gridComposer else { return }
         composer.setIdentity(
-            .camera(label: settings.naming.cameraLabel, recording: isRecording),
+            .camera(label: settings.naming.cameraLabel, recording: isRecording,
+                    signalPresent: signalPresent),
             camera: 0)
         composer.setClock(live.currentTimecode?.description, camera: 0)
         for (index, channel) in extraChannels.enumerated() {
             composer.setIdentity(
-                .camera(label: channel.camLabel, recording: channel.isRecording),
+                .camera(label: channel.camLabel, recording: channel.isRecording,
+                        signalPresent: channel.signalPresent),
                 camera: index + 1)
             composer.setClock(channel.currentTimecode?.description,
                               camera: index + 1)

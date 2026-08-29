@@ -24,6 +24,16 @@ import Foundation
 /// So the difference is an enum with two cases and no shared payload but the
 /// name, and `MultiviewComposer` draws what each case actually has.
 ///
+/// **"No signal" joins the camera case for the same reason the lamp did.** A
+/// board can stop feeding — the cable is out, the camera was switched off, the
+/// board wedged — and `CameraChannel.signalPresent` has always known it while
+/// no picture ever said so. A take cannot: a finished file has its frames, and
+/// there is no state in which a `.take` tile is waiting for one. So this is a
+/// third field on `.camera` and NOT a fourth field on both, for exactly the
+/// argument the lamp already makes: a flattened struct with `signalPresent`
+/// left true for takes would assert that a take is a camera which happens to be
+/// feeding, and the next person would wire a dropout badge to it.
+///
 /// **The clock is deliberately NOT in here**, and that is the second half of
 /// the modelling. A name and a lamp change on an operator's action — a rename,
 /// a REC press — a handful of times a shift. A timecode changes every frame by
@@ -35,14 +45,27 @@ import Foundation
 /// composer takes them separately — `setIdentity` and `setClock` — and the two
 /// rates stay apart all the way down to the raster cache.
 enum TileIdentity: Equatable, Sendable {
-    /// A live board: the name the operator set for it, and whether ITS OWN
-    /// pipeline is writing right now.
+    /// A live board: the name the operator set for it, whether ITS OWN
+    /// pipeline is writing right now, and whether ITS OWN input is feeding.
     ///
     /// The label is `CameraChannel.camLabel` for an extra channel and
     /// `settings.naming.cameraLabel` for the main one — the same two
     /// expressions `MulticamGrid` and the `/cameras` page's tag already read,
     /// so the burned-in name cannot disagree with either.
-    case camera(label: String, recording: Bool)
+    ///
+    /// `signalPresent` is spelled exactly as the two properties it is read from
+    /// — `CaptureController.signalPresent` for the main board and
+    /// `CameraChannel.signalPresent` for each extra, both of them written by
+    /// `CapturePipeline.onSignal` and by nothing else — so a grep for the name
+    /// finds the whole chain and there is nowhere for a second opinion to hide.
+    /// It carries the POSITIVE sense for the same reason those two do: the
+    /// state a board is in almost all day should not be the one spelled with a
+    /// negation.
+    ///
+    /// **No default.** Both real construction sites have to answer the
+    /// question, and a defaulted `signalPresent: Bool = true` is how a third
+    /// one would come to be written that never asks.
+    case camera(label: String, recording: Bool, signalPresent: Bool)
 
     /// A take being played back in a comparison: the file's display name.
     ///
@@ -58,7 +81,7 @@ enum TileIdentity: Equatable, Sendable {
     /// field in a common struct.
     var label: String {
         switch self {
-        case .camera(let label, _): return label
+        case .camera(let label, _, _): return label
         case .take(let label): return label
         }
     }
@@ -69,7 +92,24 @@ enum TileIdentity: Equatable, Sendable {
     /// the case carries no flag to be true.
     var showsRecordingLamp: Bool {
         switch self {
-        case .camera(_, let recording): return recording
+        case .camera(_, let recording, _): return recording
+        case .take: return false
+        }
+    }
+
+    /// Whether the tile says its board is not feeding.
+    ///
+    /// A take can never answer true — again not because a flag is false but
+    /// because the case carries no flag to be true. A finished file has its
+    /// frames; there is no dropout for a `.take` tile to be in.
+    ///
+    /// Nothing here decides WHAT no signal is. It is the negation of the one
+    /// value `CapturePipeline.onSignal` publishes, carried through unchanged,
+    /// so the burned-in badge, the viewer's own `LiveStatusOverlay` and the
+    /// menu bar's readiness dot are all answering one measurement.
+    var showsNoSignal: Bool {
+        switch self {
+        case .camera(_, _, let signalPresent): return !signalPresent
         case .take: return false
         }
     }
@@ -171,5 +211,24 @@ struct TileTypeMetrics: Equatable {
     /// the corner both SwiftUI grids already use for it.
     func clockOrigin(in cell: CGRect) -> CGPoint {
         CGPoint(x: cell.minX + margin, y: cell.minY + margin)
+    }
+
+    /// Where a notice about the whole tile sits: the MIDDLE of the cell.
+    ///
+    /// Not a third corner, and the reason is what the notice is for. A name and
+    /// a clock are captions — facts ABOUT a picture that is there, so they go
+    /// where they cover least of it. "No signal" is the opposite: there is no
+    /// picture, the cell is black, and the legend is the only content the tile
+    /// has. The `/cameras` page already reached that conclusion — its `.wait`
+    /// is `inset: 0` with the text centred — so a phone that flips between the
+    /// JPEG page and the video track reads one layout, which is the same
+    /// argument the two corners above are chosen by.
+    ///
+    /// Centring also keeps it clear of both corners by construction rather than
+    /// by arithmetic luck: the plate is 1.5 type sizes tall against a cell of
+    /// 16, so the middle band and the two inset corners cannot meet.
+    func noticeOrigin(in cell: CGRect, size: CGSize) -> CGPoint {
+        CGPoint(x: cell.midX - size.width / 2,
+                y: cell.midY - size.height / 2)
     }
 }

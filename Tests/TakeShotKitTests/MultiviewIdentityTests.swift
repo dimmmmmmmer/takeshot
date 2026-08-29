@@ -52,6 +52,14 @@ import Testing
 ///   belongs to the pipeline's own suites.
 /// - **the encode.** These badges exist to survive an H.264 pass at a
 ///   monitoring bitrate. Nothing here encodes anything.
+/// - **that the "no signal" legend is in a language its reader has.** It is
+///   the one badge made of WORDS rather than of a dot or a timecode, so it is
+///   burned in in whatever language the OPERATOR set — a Russian cart and an
+///   English-speaking director on the far end is a real configuration and this
+///   suite cannot tell that it went wrong, because nothing here reads a glyph.
+///   The trade is argued at `TileBadge.noSignal`; what is checked is that both
+///   files carry the key (`LocalizationTests`) and that the words reach the
+///   cache key rather than being baked in behind it.
 /// One pixel of a badge bitmap.
 ///
 /// A named type rather than a tuple of three, and it earns the name: `isLamp`
@@ -95,10 +103,44 @@ struct Ink: CustomStringConvertible {
                     "a take lit a REC lamp for \(label)")
             #expect(TileIdentity.take(label: label).label == label)
         }
-        #expect(TileIdentity.camera(label: "A", recording: true)
+        #expect(TileIdentity.camera(label: "A", recording: true, signalPresent: true)
                     .showsRecordingLamp)
-        #expect(TileIdentity.camera(label: "A", recording: false)
+        #expect(TileIdentity.camera(label: "A", recording: false, signalPresent: true)
                     .showsRecordingLamp == false)
+    }
+
+    /// **A take has no dropout to be in, for the same reason it has no lamp.**
+    ///
+    /// The second thing this modelling must not do, and the one a later hand is
+    /// likelier to get wrong than the lamp: `signalPresent` reads like a field
+    /// every tile could have — a take would simply always be feeding — and a
+    /// flattened struct would have made writing it that way the natural thing.
+    /// A finished file is not a camera that happens to be plugged in. `.take`
+    /// carries no such flag, and this pins the consequence.
+    ///
+    /// Again note what the test cannot state and the TYPE does: that there is
+    /// no spelling of `.take` that takes a signal argument. The compiler is
+    /// that assertion.
+    ///
+    /// The last two lines are the other half — the two camera states are
+    /// INDEPENDENT. A board whose cable is pulled mid-take goes on writing
+    /// until the pipeline closes the take, so "recording" and "feeding" are two
+    /// questions, and a tile has to be able to say both at once.
+    @Test func aTakeHasNoDropoutAndACameraHasItsOwn() {
+        for label in ["", "A", "TS_A001C003_long name"] {
+            #expect(TileIdentity.take(label: label).showsNoSignal == false,
+                    "a take said it had no signal for \(label)")
+        }
+        #expect(TileIdentity.camera(label: "A", recording: false,
+                                    signalPresent: false).showsNoSignal)
+        #expect(TileIdentity.camera(label: "A", recording: false,
+                                    signalPresent: true)
+                    .showsNoSignal == false)
+
+        let dark = TileIdentity.camera(label: "A", recording: true,
+                                       signalPresent: false)
+        #expect(dark.showsRecordingLamp, "the dropout put the lamp out")
+        #expect(dark.showsNoSignal, "the lamp swallowed the dropout")
     }
 
     // MARK: - the type size
@@ -148,7 +190,7 @@ struct Ink: CustomStringConvertible {
         #expect(TileTypeMetrics(tileHeight: 8).pointSize == 0.5)
         // …and below one point there is nothing worth rasterizing
         let metrics = TileTypeMetrics(tileHeight: 8)
-        #expect(TileBadge.nameplate(for: .camera(label: "A", recording: true),
+        #expect(TileBadge.nameplate(for: .camera(label: "A", recording: true, signalPresent: true),
                                     metrics: metrics,
                                     maximumWidth: 100) == nil,
                 "a half-point nameplate was rasterized anyway")
@@ -224,8 +266,8 @@ struct Ink: CustomStringConvertible {
                     "the plate height left the metrics")
             return image.extent.width
         }
-        let rolling = try width(.camera(label: "A CAM", recording: true))
-        let idle = try width(.camera(label: "A CAM", recording: false))
+        let rolling = try width(.camera(label: "A CAM", recording: true, signalPresent: true))
+        let idle = try width(.camera(label: "A CAM", recording: false, signalPresent: true))
         let take = try width(.take(label: "A CAM"))
         #expect(rolling > idle,
                 "the REC lamp took no room: \(rolling) against \(idle)")
@@ -247,7 +289,7 @@ struct Ink: CustomStringConvertible {
         let centre = (x: Int(metrics.textInset + metrics.lampDiameter / 2),
                       y: Int(metrics.plateHeight / 2))
         let lit: CIImage = try #require(
-            TileBadge.nameplate(for: .camera(label: "A CAM", recording: true),
+            TileBadge.nameplate(for: .camera(label: "A CAM", recording: true, signalPresent: true),
                                 metrics: metrics, maximumWidth: room))
         let unlit: CIImage = try #require(
             TileBadge.nameplate(for: .take(label: "A CAM"), metrics: metrics,
@@ -308,9 +350,69 @@ struct Ink: CustomStringConvertible {
     /// sitting in the corner of a picture somebody is judging exposure on.
     @Test func anEmptyNameDrawsNothing() {
         let metrics = TileTypeMetrics(tileHeight: 540)
-        #expect(TileBadge.nameplate(for: .camera(label: "", recording: true),
+        #expect(TileBadge.nameplate(for: .camera(label: "", recording: true, signalPresent: true),
                                     metrics: metrics, maximumWidth: 900) == nil)
         #expect(TileBadge.clock(text: "", metrics: metrics,
                                 maximumWidth: 900) == nil)
+    }
+
+    // MARK: - the tile that is not feeding
+
+    /// **The legend sits in the MIDDLE of the cell, and clear of both
+    /// captions.**
+    ///
+    /// Arithmetic, which is what makes it portable — the plate's WIDTH is the
+    /// font's business and is never asserted, only that it fits the room it was
+    /// given. Where the plate is put is this app's business and is exact.
+    ///
+    /// The centre is the assertion worth having. A name and a clock go where
+    /// they cover least of a picture that is there; this one is the only
+    /// content a dark tile has, so it goes where the picture would have been —
+    /// which is also where the `/cameras` page puts its own "no video yet", so
+    /// a phone flipping between the two reads one layout.
+    ///
+    /// The last two are the collision the centring has to survive: at a
+    /// sixteenth of the cell the three plates cannot meet, and stating it as a
+    /// non-intersection means a future change to the margins or the plate
+    /// height fails here rather than on a director's monitor.
+    @Test func theNoSignalLegendSitsInTheMiddleClearOfBothCaptions() throws {
+        TileBadge.resetForTesting()
+        let cell = MultiviewComposer.cell(camera: 1, cameras: 4,
+                                          in: Self.canvas)
+        let metrics = TileTypeMetrics(tileHeight: cell.height)
+        let room = metrics.maximumWidth(in: cell)
+        let plate: CIImage = try #require(
+            TileBadge.noSignal(metrics: metrics, maximumWidth: room))
+        #expect(plate.extent.height == metrics.plateHeight,
+                "the legend's plate left the metrics")
+        #expect(plate.extent.width <= room,
+                "the legend ran to \(plate.extent.width) in \(room) of room")
+
+        let notice = CGRect(origin: metrics.noticeOrigin(
+            in: cell, size: plate.extent.size), size: plate.extent.size)
+        #expect(abs(notice.midX - cell.midX) < 0.001,
+                "the legend is not centred across the cell: \(notice)")
+        #expect(abs(notice.midY - cell.midY) < 0.001,
+                "the legend is not centred down the cell: \(notice)")
+        #expect(cell.contains(notice), "the legend left its own cell")
+
+        let widest = CGSize(width: room, height: metrics.plateHeight)
+        let nameplate = CGRect(
+            origin: metrics.nameplateOrigin(in: cell,
+                                            height: metrics.plateHeight),
+            size: widest)
+        let clock = CGRect(origin: metrics.clockOrigin(in: cell), size: widest)
+        #expect(!notice.intersects(nameplate),
+                "the legend covers the camera's name")
+        #expect(!notice.intersects(clock),
+                "the legend covers the tile's clock")
+    }
+
+    /// A cell too small to carry type declines the legend too, rather than
+    /// stamping a black box in the middle of a tile that has no room for words.
+    /// The same guard the nameplate answers to — one rule, not three.
+    @Test func aTinyTileDrawsNoLegendEither() {
+        #expect(TileBadge.noSignal(metrics: TileTypeMetrics(tileHeight: 8),
+                                   maximumWidth: 100) == nil)
     }
 }

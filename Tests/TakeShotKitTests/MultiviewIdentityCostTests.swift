@@ -34,20 +34,20 @@ import Testing
         let metrics = TileTypeMetrics(tileHeight: 540)
         for _ in 0..<50 {
             _ = TileBadge.nameplate(for: .camera(label: "A CAM",
-                                                 recording: false),
+                                                 recording: false, signalPresent: true),
                                     metrics: metrics, maximumWidth: 900)
         }
         #expect(TileBadge.rasterCount == 1,
                 "50 restatements drew \(TileBadge.rasterCount) bitmaps")
-        _ = TileBadge.nameplate(for: .camera(label: "A CAM", recording: true),
+        _ = TileBadge.nameplate(for: .camera(label: "A CAM", recording: true, signalPresent: true),
                                 metrics: metrics, maximumWidth: 900)
         #expect(TileBadge.rasterCount == 2, "the REC press did not redraw")
-        _ = TileBadge.nameplate(for: .camera(label: "B CAM", recording: true),
+        _ = TileBadge.nameplate(for: .camera(label: "B CAM", recording: true, signalPresent: true),
                                 metrics: metrics, maximumWidth: 900)
         #expect(TileBadge.rasterCount == 3, "the rename did not redraw")
         // and the tile getting bigger is a different picture too — the type
         // size is a fraction of the cell, so a multicam change resizes it
-        _ = TileBadge.nameplate(for: .camera(label: "B CAM", recording: true),
+        _ = TileBadge.nameplate(for: .camera(label: "B CAM", recording: true, signalPresent: true),
                                 metrics: TileTypeMetrics(tileHeight: 1080),
                                 maximumWidth: 900)
         #expect(TileBadge.rasterCount == 4, "a resized cell reused its bitmap")
@@ -115,7 +115,8 @@ import Testing
         composer.setCameraCount(4)
         for camera: Int in 0..<4 {
             composer.setIdentity(.camera(label: "CAM \(camera)",
-                                         recording: camera == 0),
+                                         recording: camera == 0,
+                                         signalPresent: true),
                                  camera: camera)
             composer.setClock("01:00:00:0\(camera)", camera: camera)
         }
@@ -191,7 +192,7 @@ import Testing
         #expect(composed.latest === source,
                 "an anonymous single camera cost a render pass")
 
-        composer.setIdentity(.camera(label: "A CAM", recording: true), camera: 0)
+        composer.setIdentity(.camera(label: "A CAM", recording: true, signalPresent: true), camera: 0)
         composed.arm()
         composer.offer(source, camera: 0, framesPerSecond: 25)
         composed.waitForFrame()
@@ -216,9 +217,9 @@ import Testing
     @Test func aCameraThatGoesAwayTakesItsNameWithIt() {
         let composer = MultiviewComposer { _, _ in }
         composer.setCameraCount(3)
-        composer.setIdentity(.camera(label: "A", recording: false), camera: 0)
-        composer.setIdentity(.camera(label: "B", recording: true), camera: 1)
-        composer.setIdentity(.camera(label: "C", recording: false), camera: 2)
+        composer.setIdentity(.camera(label: "A", recording: false, signalPresent: true), camera: 0)
+        composer.setIdentity(.camera(label: "B", recording: true, signalPresent: true), camera: 1)
+        composer.setIdentity(.camera(label: "C", recording: false, signalPresent: true), camera: 2)
         composer.setClock("01:00:00:00", camera: 2)
         #expect(composer.heldIdentity(camera: 2) != nil)
 
@@ -228,14 +229,14 @@ import Testing
         #expect(composer.heldClock(camera: 2) == nil,
                 "C's clock outlived C")
         #expect(composer.heldIdentity(camera: 1)
-                    == .camera(label: "B", recording: true),
+                    == .camera(label: "B", recording: true, signalPresent: true),
                 "the reshape took a camera that was still there")
         composer.stop()
     }
 
     // MARK: - the cost
 
-    /// **What the identity adds to a compose**, in the three states that
+    /// **What the identity adds to a compose**, in the four states that
     /// actually occur, against the same pass with no identity at all.
     ///
     ///     TAKESHOT_BENCH=1 scripts/test.sh --filter MultiviewIdentity
@@ -245,7 +246,7 @@ import Testing
     /// it. The MINIMUM is the number to compare across builds, being the run
     /// that got a whole core to itself.
     ///
-    /// The three states are the ones the caching rule is about:
+    /// The four states are the ones the caching rule is about:
     ///
     /// - **anonymous** — the pass exactly as it was before this change, which
     ///   is the baseline every other row is read against;
@@ -255,7 +256,13 @@ import Testing
     ///   paused comparison, and it is also a live grid between timecode ticks;
     /// - **rolling** — the clock changes on every single compose, so every
     ///   tile pays one fresh CoreText line per frame on top of the composite.
-    ///   This is the live grid at rate, and it is the worst case there is.
+    ///   This is the live grid at rate;
+    /// - **dark** — rolling, and every board is also showing the "no signal"
+    ///   legend. One MORE composited layer per tile, and it is the worst case
+    ///   there is. Its badge is a cache hit throughout, however fast the boards
+    ///   flap, because the key is what is drawn and the legend's picture does
+    ///   not change with the state that decides whether to draw it — so what
+    ///   this row measures is the composite and nothing else.
     ///
     /// The figures to compare against are the ones already in CLAUDE.md for
     /// this same pass: one camera 0.010 ms (the pass-through, not a render),
@@ -267,7 +274,7 @@ import Testing
         for (name, width, height) in [("1080p", 1920, 1080),
                                       ("UHD", 3840, 2160)] {
             for cameras: Int in [1, 2, 4] {
-                for state in ["anonymous", "settled", "rolling"] {
+                for state in ["anonymous", "settled", "rolling", "dark"] {
                     try time(name, width: width, height: height,
                              cameras: cameras, state: state)
                 }
@@ -276,7 +283,7 @@ import Testing
     }
 
     /// One row of the table: `cameras` tiles at `width` x `height`, in one of
-    /// the three states, timed over twenty runs after five warm ones.
+    /// the four states, timed over twenty runs after five warm ones.
     private func time(_ name: String, width: Int, height: Int, cameras: Int,
                       state: String) throws {
                     let composed = ComposedFrames()
@@ -288,7 +295,8 @@ import Testing
                         for camera: Int in 0..<cameras {
                             composer.setIdentity(
                                 .camera(label: "CAM \(camera)",
-                                        recording: camera == 0),
+                                        recording: camera == 0,
+                                        signalPresent: state != "dark"),
                                 camera: camera)
                             composer.setClock("10:00:00:00", camera: camera)
                         }
@@ -302,7 +310,7 @@ import Testing
                         code: 0x40, width: width, height: height)
                     var samples: [Double] = []
                     for run: Int in 0..<25 {
-                        if state == "rolling" {
+                        if state == "rolling" || state == "dark" {
                             for camera: Int in 0..<cameras {
                                 composer.setClock(
                                     String(format: "10:00:%02d:%02d",

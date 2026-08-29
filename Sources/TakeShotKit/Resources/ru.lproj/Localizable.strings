@@ -751,6 +751,12 @@
 "live_picture_clean" = "Камера";
 "live_picture_grid" = "Сетка";
 
+/* === burned into the composed grid picture (TileBadge); see the English file
+   for why this is its own key and not a reuse of "no_signal". Upper case like
+   the English, and kept to two short words — it is drawn at a sixteenth of a
+   tile beside the camera's name. === */
+"tile_no_signal" = "НЕТ СИГНАЛА";
+
 /* === sync-play: 2-4 takes side by side, transport-locked === */
 "sync_play_menu" = "Синхронный просмотр";
 /* Kept short like the compare segments: both labels ride one mini segmented

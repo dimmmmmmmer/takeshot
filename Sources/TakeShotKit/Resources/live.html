@@ -42,8 +42,42 @@ button {
 }
 button:active { filter: brightness(1.35); }
 
-#stage { flex: 1; min-height: 0; position: relative; background: #000; }
+/* The stage CLIPS, and that is load-bearing for the solo below rather than
+   tidiness: the grid is ONE raster, so a tile blown up to fill the stage has its
+   neighbours around it, and they have to be cut off rather than merely pushed
+   out of the layout. */
+#stage {
+  flex: 1; min-height: 0; position: relative; background: #000;
+  overflow: hidden;
+}
 video { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* **One tile of the composed grid, filling the stage.** The video track is a
+   single picture with the cameras tiled inside it, so there is nothing to
+   subscribe to and nothing to re-offer — the tile is chosen by moving the
+   picture under the stage's clip, which is what makes this CSS rather than a
+   feature.
+
+   The whole rule is: contain the picture in a box `cols` stages wide and `rows`
+   stages tall, then slide it so the wanted cell's centre is the stage's centre.
+   Containing is done by the BROWSER — width and height stay auto and the two
+   maxima do the fitting, which for a replaced element preserves the intrinsic
+   ratio — so nothing here has to know the raster, and a camera changing format
+   mid-shift needs no recalculation. The cell then comes out at exactly the size
+   `object-fit: contain` would have given a tile-shaped picture, which is what
+   the /cameras page's fullscreen tile does with its single JPEG.
+
+   The two shifts are fractions of the VIDEO's own size, which is what a
+   percentage translate is measured in, so they are pure numbers of the layout
+   and of nothing else — see soloShift. */
+body.solo video {
+  position: absolute; left: 50%; top: 50%;
+  width: auto; height: auto;
+  max-width: calc(100% * var(--solo-cols, 1));
+  max-height: calc(100% * var(--solo-rows, 1));
+  transform: translate(calc(var(--solo-x, -0.5) * 100%),
+                       calc(var(--solo-y, -0.5) * 100%));
+}
 /* Until the first frame arrives the stage says so, instead of showing a black
    rectangle that reads as a dead camera. */
 #wait {
@@ -178,6 +212,14 @@ var blocked = false;
 // connected yet) the choice is simply carried into the next offer.
 var picture = CFG.pictures[0];
 var viewerID = "";
+// The grid's shape as the app lays it out, and which tile (if any) is filling
+// the stage. All three come off the status: the count from `cameras`, the
+// layout from `gridCols`/`gridRows`, which are MultiviewComposer.columns/rows
+// answered on the app's side so this page never restates the rule.
+var cameras = 0;
+var gridCols = 1;
+var gridRows = 1;
+var solo = -1;
 
 // ---------------------------------------------------------------- the picture
 
@@ -292,6 +334,100 @@ function answered(pc, response) {
   });
 }
 
+// -------------------------------------------------------------------- the solo
+
+// **Whether a tap leaves the tapped tile filling the stage.**
+//
+// The same shape as the /cameras page's `wantsFullscreen`, and it earns the
+// repetition by carrying the same hard-won half: LEAVING is never refused. A
+// board dropping out of the multicam set can take the count to one under a tile
+// that is already filling the stage, and a rule that refused both directions on
+// `count < 2` would strand the viewer on a picture with no way back — which on
+// that page cost a reload and here would cost the director the picture.
+//
+// Entering also needs the grid: the other two pictures are one camera, so there
+// are no tiles to choose between and blowing one up would just crop the frame.
+// `isGrid` is asked with CFG.gridPicture rather than a literal — the wire words
+// are the app's (see RemotePage.config).
+//
+// Pure, and the whole rule, so it can be checked without a DOM.
+function wantsSolo(wasSolo, count, isGrid) {
+  return !wasSolo && isGrid && count > 1;
+}
+
+// **Which cell of the composed grid a point landed on**, or -1 for none.
+//
+// The picture is contained in the stage, so it is centred with bars on one axis
+// and a tap on a bar is on no camera at all. Inside it the cells are the app's:
+// index = row * cols + col, reading across then down, which is
+// MultiviewComposer.cell's own numbering — the composer places camera `i` at
+// column `i % across` and row `i / across`, and the top-left cell is camera 0.
+//
+// A grid whose last row has a hole (three cameras on a 2x2) has a cell with no
+// camera in it, so the count is the last word: a tap there is -1 rather than a
+// solo of a board that is not in the session.
+function cellAt(x, y, stageW, stageH, videoW, videoH, cols, rows, count) {
+  if (!(stageW > 0 && stageH > 0 && videoW > 0 && videoH > 0)) { return -1; }
+  if (!(cols > 0 && rows > 0)) { return -1; }
+  var scale = Math.min(stageW / videoW, stageH / videoH);
+  var width = videoW * scale;
+  var height = videoH * scale;
+  var u = (x - (stageW - width) / 2) / width;
+  var v = (y - (stageH - height) / 2) / height;
+  if (u < 0 || u >= 1 || v < 0 || v >= 1) { return -1; }
+  var index = Math.floor(v * rows) * cols + Math.floor(u * cols);
+  return index < count ? index : -1;
+}
+
+// **Where the picture has to sit for one cell to be centred on the stage**, as
+// fractions of the picture's own width and height.
+//
+// The video is absolutely positioned with its top-left corner at the stage's
+// centre, so it must first come back by half of itself and then by the cell's
+// own offset from its middle: -0.5 - ((col + 0.5)/cols - 0.5), which collapses
+// to the expression below. cols = 1, col = 0 gives -0.5 — the plain centred
+// picture, which is what makes an ungridded solo a no-op rather than a special
+// case. Percentages of the element's own box, so nothing here measures anything.
+function soloShift(cols, rows, col, row) {
+  return { x: -(2 * col + 1) / (2 * cols),
+           y: -(2 * row + 1) / (2 * rows) };
+}
+
+function clearSolo() {
+  solo = -1;
+  document.body.classList.remove("solo");
+}
+
+function paintSolo() {
+  if (solo < 0) { clearSolo(); return; }
+  var col = solo % gridCols;
+  var row = Math.floor(solo / gridCols);
+  var shift = soloShift(gridCols, gridRows, col, row);
+  var style = el("video").style;
+  style.setProperty("--solo-cols", String(gridCols));
+  style.setProperty("--solo-rows", String(gridRows));
+  style.setProperty("--solo-x", String(shift.x));
+  style.setProperty("--solo-y", String(shift.y));
+  document.body.classList.add("solo");
+}
+
+// A tap on the picture: into the tile under the finger, or back out of one.
+function tapped(event) {
+  var was = solo >= 0;
+  if (!wantsSolo(was, cameras, picture === CFG.gridPicture)) {
+    clearSolo();
+    return;
+  }
+  var video = el("video");
+  var box = el("stage").getBoundingClientRect();
+  var index = cellAt(event.clientX - box.left, event.clientY - box.top,
+                     box.width, box.height, video.videoWidth,
+                     video.videoHeight, gridCols, gridRows, cameras);
+  if (index < 0) { return; }
+  solo = index;
+  paintSolo();
+}
+
 // ------------------------------------------------------------------ the choice
 
 // **Changing picture does not touch the connection when it does not have to.**
@@ -302,6 +438,10 @@ function answered(pc, response) {
 function choose(next) {
   if (picture === next) { return; }
   picture = next;
+  // The other two pictures are one camera, so a tile that was filling the stage
+  // has nothing to be a tile OF. Left standing it would crop the new picture to
+  // a quarter of itself, which looks like a broken stream rather than a state.
+  clearSolo();
   try { localStorage.setItem(PICTURE_KEY, picture); } catch (e) {}
   paintPictures();
   if (!pin || blocked || !viewerID) { return; }
@@ -393,6 +533,24 @@ function render(next) {
   el("tc").textContent = next.tc || "--:--:--:--";
   document.body.classList.toggle("rec", !!next.recording);
   el("rec").textContent = S.rec;
+  cameras = (next.cameras || []).length;
+  // The layout the app is composing with, never one worked out here — see
+  // RemoteStatus.gridColumns. A status from an older app carries neither, and
+  // 1x1 is the shape that makes the solo a plain centred picture.
+  gridCols = next.gridCols || 1;
+  gridRows = next.gridRows || 1;
+  // A board leaving the set can take the count below the tile being watched, or
+  // below two altogether. Correct it here rather than leaving the viewer to find
+  // the tap — the same thing the /cameras page's ensureTiles does when it
+  // shrinks under a fullscreen tile.
+  //
+  // Otherwise the solo is restated wholesale rather than diffed, like the
+  // identity push on the app's side and for the same reason: a board ARRIVING
+  // reshapes the grid under a tile that is still valid, and working out whether
+  // it did is a second answer to "has it changed". Four property writes four
+  // times a second, and the browser drops the ones that say nothing new.
+  if (solo >= 0 && (cameras < 2 || solo >= cameras)) { clearSolo(); }
+  else if (solo >= 0) { paintSolo(); }
 }
 
 // ------------------------------------------------------------------- the chrome
@@ -448,10 +606,13 @@ el("retry").addEventListener("click", function () {
 });
 // Tapping the picture recovers an autoplay a browser refused. Muted video
 // autoplays everywhere this page runs, but a phone with a strict media policy
-// would otherwise show a still first frame and nothing after it.
-el("stage").addEventListener("click", function () {
+// would otherwise show a still first frame and nothing after it. The same tap
+// fills the stage with the tile under it, and the next one comes back — the
+// gesture the /cameras page already teaches, on the same grid.
+el("stage").addEventListener("click", function (event) {
   var played = el("video").play();
   if (played && played.catch) { played.catch(function () {}); }
+  tapped(event);
 });
 
 document.addEventListener("visibilitychange", function () {
