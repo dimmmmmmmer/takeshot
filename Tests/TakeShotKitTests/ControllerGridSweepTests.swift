@@ -245,6 +245,49 @@ enum GridFixture {
         }
     }
 
+    /// The same grab from the OTHER arm — and this is the arm an operator
+    /// actually reaches on set, because the camera is usually rolling while a
+    /// comparison goes up. `canGrabFrame` read
+    /// `isCapturing || (playbackURL != nil && syncPlay == nil)`, so the grid
+    /// excluded only the PLAYBACK arm: with the camera rolling the button
+    /// stayed lit and the hotkey stayed live over a grid, while `grabFrame()`
+    /// opened with `guard syncPlay == nil` and returned. A lit button, a live
+    /// hotkey, no still and no toast to say why — the control and the method
+    /// answering different questions, which is the shape every defect in this
+    /// suite has. The rolling-with-no-grid case is asserted FIRST so a fix that
+    /// simply darkens the button forever cannot pass.
+    @Test func aGrabOverAGridIsDarkWhileTheCameraRolls() async throws {
+        try await ControllerHarness.run { controller, root in
+            MediaFixtures.silence(controller)
+            defer { MediaFixtures.stopPlayback(controller) }
+            let takes = try GridFixture.seedTakes(controller, in: root, count: 2)
+
+            controller.isCapturing = true
+            #expect(controller.canGrabFrame,
+                    "a rolling camera with no grid must still grab")
+
+            controller.selectedItems = Set(takes.map(\.url))
+            controller.startSyncPlay()
+            defer { controller.endSyncPlay() }
+            try #require(controller.syncPlay != nil)
+            try #require(controller.isCapturing,
+                         "the grid stopped the camera; this test is moot")
+
+            #expect(!controller.canGrabFrame,
+                    "the camera button is lit over a grid while rolling")
+
+            controller.grabFrame()
+            let hotkeys = HotkeyManager(defaults: InMemoryDefaults())
+            hotkeys.perform(.grabFrame, controller: controller)
+
+            let wrote = await ControllerWait.until(
+                { controller.recentlyAddedURL != nil }, timeout: .seconds(3))
+            #expect(!wrote, "a still was written over a comparison")
+            #expect(controller.lastError == nil,
+                    "the grid press said something; it matches a greyed control")
+        }
+    }
+
     // MARK: - the readouts
 
     /// The scopes measure the picture on screen or nothing, never the parked one.

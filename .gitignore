@@ -9,6 +9,11 @@ build/
 # (.coverage-floor); the measurement is not — it is a fact about one run.
 coverage.lcov
 coverage-report.txt
+# A battery's own log. It belongs inside the worktree that produced it (two
+# runs in two worktrees have been seen interleaving their output into one
+# shared file, which corrupts the RECORD without corrupting the run) — and a
+# log that lives in the checkout is a log that can be committed by accident.
+.battery*.log
 *.xcodeproj
 .swiftpm/
 # Local tooling state: throwaway worktrees and machine-specific settings.

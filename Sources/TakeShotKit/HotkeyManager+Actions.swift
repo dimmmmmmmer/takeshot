@@ -66,6 +66,13 @@ extension HotkeyManager {
                                    controller: CaptureController) {
         switch action {
         case .toggleMonitorMute:
+            // Deliberately UNGATED, and the only one here that is — the footer's
+            // speaker greys with no capture and no clip, this does not. The
+            // argument is written out at the menu bar's item, which makes the
+            // same choice for the same reason: "kill the sound NOW" is what a
+            // key and a status item are for when the window is closed. Stated
+            // here too because a bare call between two guarded neighbours reads
+            // as an oversight, and has now been reported as one.
             controller.toggleMonitorMute()
         case .toggleMonitorDim:
             // the condition the footer's DIM button is disabled by — a dim that

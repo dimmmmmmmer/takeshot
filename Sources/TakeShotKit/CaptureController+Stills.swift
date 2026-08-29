@@ -34,7 +34,13 @@ extension CaptureController {
     /// is no frame here to write; `grabFrame` is silent for the same reason the
     /// marker press is.
     var canGrabFrame: Bool {
-        isCapturing || (playbackURL != nil && syncPlay == nil)
+        // The grid excludes BOTH arms, not just the playback one. It used to
+        // read `isCapturing || (playbackURL != nil && syncPlay == nil)`, so
+        // with the camera rolling and a comparison open the button was lit and
+        // the hotkey live while `grabFrame()` opened with `guard syncPlay ==
+        // nil` and returned — a control that answers a different question from
+        // the method behind it, which is the shape the marker defects had.
+        syncPlay == nil && (isCapturing || playbackURL != nil)
     }
 
     /// Decode a still into Rec.709 display code values and hand it to the tap.
