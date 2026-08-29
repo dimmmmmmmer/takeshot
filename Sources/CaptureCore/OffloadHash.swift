@@ -71,11 +71,37 @@ public struct OffloadHasher {
                                 bypassCache: Bool = false,
                                 chunkBytes: Int = OffloadIO.defaultChunkBytes) throws
         -> String {
+        var refused = false
+        return try hashFile(at: url, algorithm: algorithm,
+                            bypassCache: bypassCache, chunkBytes: chunkBytes,
+                            cacheBypassRefused: &refused)
+    }
+
+    /// The same digest, and whether the cache bypass was actually GRANTED.
+    ///
+    /// `F_NOCACHE` can be refused — a network volume is the ordinary case — and
+    /// the request's result used to be discarded. That turned the sentence
+    /// above from a guarantee into a hope: a refused bypass means the verify
+    /// pass re-read the copy out of the page cache and compared RAM against
+    /// RAM, which is exactly the check the pass exists to avoid, and nothing
+    /// anywhere said so.
+    ///
+    /// Reported rather than thrown, because failing an otherwise sound offload
+    /// over a volume that cannot honour an advisory flag would be the worse
+    /// answer — the copy is still hashed, still compared, and the summary now
+    /// carries what the verify was actually able to prove.
+    public static func hashFile(at url: URL,
+                                algorithm: OffloadHashAlgorithm,
+                                bypassCache: Bool,
+                                chunkBytes: Int = OffloadIO.defaultChunkBytes,
+                                cacheBypassRefused: inout Bool) throws -> String {
         var hasher = OffloadHasher(algorithm)
-        try OffloadIO.readChunks(of: url, bypassCache: bypassCache,
-                                 chunkBytes: chunkBytes) { chunk in
-            hasher.update(chunk)
-        }
+        var refused = false
+        try OffloadIO.readChunks(
+            of: url, bypassCache: bypassCache, chunkBytes: chunkBytes,
+            onCacheBypass: { granted in refused = !granted },
+            body: { chunk in hasher.update(chunk) })
+        cacheBypassRefused = refused
         return hasher.finalize()
     }
 }
@@ -111,14 +137,19 @@ public enum OffloadIO {
     /// raises an Objective-C exception on an I/O error, which Swift cannot
     /// catch — a card with a bad sector took the whole app down instead of
     /// naming the file it could not read.
+    /// `onCacheBypass` is told whether the kernel GRANTED the bypass, and is
+    /// called only when one was asked for. The result used to be discarded,
+    /// which is how "this reads the disk rather than the page cache" became a
+    /// claim nothing checked.
     public static func readChunks(
         of url: URL, bypassCache: Bool = false,
         chunkBytes: Int = defaultChunkBytes,
+        onCacheBypass: ((Bool) -> Void)? = nil,
         body: (UnsafeRawBufferPointer) throws -> Void) throws {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         if bypassCache {
-            _ = fcntl(handle.fileDescriptor, F_NOCACHE, 1)
+            onCacheBypass?(fcntl(handle.fileDescriptor, F_NOCACHE, 1) != -1)
         }
         while try autoreleasepool(invoking: {
             // The chunk is a fresh Data per iteration and the pool keeps a

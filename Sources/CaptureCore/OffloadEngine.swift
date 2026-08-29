@@ -298,6 +298,7 @@ private final class OffloadRun {
                 bytesWritten: target.bytesWritten, elapsed: target.elapsed),
             mismatches: target.mismatches, failure: target.failure,
             wasCancelled: stoppedShort, resume: target.resumeFacts)
+        result.unbypassedVerifies = target.unbypassedVerifies
         do {
             let manifest = try OffloadMHL.write(
                 entries: target.entries, into: target.root,

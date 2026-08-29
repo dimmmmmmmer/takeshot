@@ -57,6 +57,9 @@ final class OffloadTarget {
     var verifiedCount: Int { entries.count }
 
     /// What resuming did here, or nil if it was never asked for.
+    /// Files verified while the kernel refused `F_NOCACHE` on this volume.
+    var unbypassedVerifies: Int = 0
+
     var resumeFacts: OffloadResumeFacts? {
         guard var facts = resume else { return nil }
         facts.reused = reused
@@ -236,9 +239,15 @@ final class OffloadTarget {
             try handle.close()
             self.handle = nil
             didWriteCopy?(written)
+            var bypassRefused = false
             let onDisk = try OffloadHasher.hashFile(
                 at: written, algorithm: algorithm, bypassCache: true,
-                chunkBytes: chunkBytes)
+                chunkBytes: chunkBytes, cacheBypassRefused: &bypassRefused)
+            // Counted, not fatal — see `OffloadDestinationResult
+            // .unbypassedVerifies`. A destination that refuses the bypass
+            // refuses it for every file, so this is a per-VOLUME fact arriving
+            // one file at a time.
+            if bypassRefused { unbypassedVerifies += 1 }
             release()
             guard onDisk == hash else {
                 recordMismatch(file.relativePath, copy: written)

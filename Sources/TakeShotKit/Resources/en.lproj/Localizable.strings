@@ -476,6 +476,7 @@
 "offload_cancelling" = "Finishing the current file...";
 "offload_progress_file" = "Copying: %@";
 "offload_files_done" = "%d of %d files";
+"offload_verified_uncached" = "All %d files verified — %d of them read from cache, so the disk itself is unconfirmed";
 "offload_verified_all" = "All %d files verified";
 "offload_result_mismatch" = "%d file(s) did not match — do not wipe the card";
 "offload_result_incomplete" = "Only %d of %d files verified — do not wipe the card";

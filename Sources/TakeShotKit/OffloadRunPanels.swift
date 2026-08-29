@@ -157,6 +157,16 @@ struct OffloadResultPanel: View {
     private func verdict(_ result: OffloadDestinationResult) -> String {
         switch result.outcome {
         case .verified:
+            // A verify that could not bypass the page cache still compared the
+            // hashes — it just cannot promise it read the DISK, which is the
+            // whole point of the pass before a card is wiped. Said on the same
+            // line rather than as a separate warning: it qualifies this verdict
+            // and belongs where the verdict is read.
+            guard result.unbypassedVerifies == 0 else {
+                return L("offload_verified_uncached",
+                         result.totals.filesVerified,
+                         result.unbypassedVerifies)
+            }
             return L("offload_verified_all", result.totals.filesVerified)
         case .mismatched:
             return result.mismatches.isEmpty

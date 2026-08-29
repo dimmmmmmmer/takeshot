@@ -481,6 +481,7 @@
 "offload_cancelling" = "Завершаю текущий файл...";
 "offload_progress_file" = "Копируется: %@";
 "offload_files_done" = "%d из %d файлов";
+"offload_verified_uncached" = "Проверено файлов: %d — из них %d прочитаны из кеша, сам диск не подтверждён";
 "offload_verified_all" = "Сверены все файлы: %d";
 "offload_result_mismatch" = "Не сошлось файлов: %d — карту не стирать";
 "offload_result_incomplete" = "Сверено только %d из %d файлов — карту не стирать";

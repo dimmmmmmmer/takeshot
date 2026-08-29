@@ -328,6 +328,19 @@ public struct OffloadDestinationResult: Sendable, Identifiable, Equatable {
     /// What resuming did here, and nil when the run was not asked to resume —
     /// which is what keeps an ordinary run's summary exactly as it was.
     public var resume: OffloadResumeFacts?
+    /// How many files were verified while the kernel REFUSED the cache bypass.
+    ///
+    /// The verify pass re-reads each copy through `F_NOCACHE` because comparing
+    /// against something still in the page cache verifies RAM rather than the
+    /// disk the card is about to be wiped against. `F_NOCACHE` is advisory and
+    /// can be refused — a network volume is the ordinary case — and the result
+    /// of asking used to be discarded, which turned that guarantee into a hope.
+    ///
+    /// Counted rather than fatal: the copy is still hashed and still compared,
+    /// and failing an otherwise sound offload over an advisory flag would be
+    /// the worse answer. What this buys is that the summary states what the
+    /// verify was actually able to prove.
+    public var unbypassedVerifies: Int = 0
 
     // The three report files, filled in afterwards rather than passed in. They
     // cannot be initializer parameters: the engine writes the manifest, folds
