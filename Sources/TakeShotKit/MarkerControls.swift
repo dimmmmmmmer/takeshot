@@ -160,7 +160,7 @@ struct MarkerListEditor: View {
                         controller.seekPlayback(to: marker.seconds)
                     } label: {
                         Text(marker.timecodeText.isEmpty
-                             ? TransportBar.timeText(marker.seconds)
+                             ? ClipTimeText.minutesSeconds.text(marker.seconds)
                              : marker.timecodeText)
                             .font(.caption.monospacedDigit())
                     }

@@ -8,10 +8,17 @@ import Foundation
 /// Resolve reads.
 extension TakeLogExporter {
     /// End TC of a take: start TC advanced by the recorded frames.
+    ///
+    /// The arithmetic is `TakeSpan`, shared with the ALE and the takes panel;
+    /// what is decided HERE is that a take with no start timecode has no end
+    /// to print. A shift report is read by a human, and `00:00:12;01` against
+    /// a take the camera gave no timecode for is a number that looks like a
+    /// position and is not one — the table prints an em dash instead. The ALE
+    /// makes the opposite choice for a machine-read reason of its own; see
+    /// `ALEExporter.span`.
     public static func endTimecode(of take: Take) -> Timecode? {
-        guard let start = take.startTimecode else { return nil }
-        return Timecode(frameNumber: start.frameNumber + durationFrames(of: take, at: start),
-                        fps: start.fps, isDropFrame: start.isDropFrame)
+        guard take.startTimecode != nil else { return nil }
+        return TakeSpan.of(take).end
     }
 
     /// Take length as timecode at the take's own rate ("00:00:12:07").

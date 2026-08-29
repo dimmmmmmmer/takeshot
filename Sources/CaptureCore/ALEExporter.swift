@@ -109,11 +109,8 @@ public enum ALEExporter {
     /// at all, and the length the operator can see in the app disappears with
     /// them; zero-based ones at least carry the duration across intact.
     private static func span(of take: Take) -> (start: Timecode, end: Timecode) {
-        let start = take.startTimecode ?? TakeLogExporter.fallbackRate
-        let frames = TakeLogExporter.frameOffset(seconds: take.durationSeconds,
-                                                 at: start)
-        return (start, Timecode(frameNumber: start.frameNumber + frames,
-                                fps: start.fps, isDropFrame: start.isDropFrame))
+        let span = TakeSpan.of(take)
+        return (span.start, span.end)
     }
 
     /// `VIDEO_FORMAT` is an Avid enumeration — `1080`, `720`, `PAL`, `NTSC` or

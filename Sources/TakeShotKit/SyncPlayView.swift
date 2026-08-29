@@ -211,7 +211,7 @@ struct SyncPlayTransportBar: View {
 
             SyncPlayPositionControls(model: model, position: model.position)
 
-            TransportTimeText(TransportBar.timeText(model.schedule.length))
+            TransportTimeText(ClipTimeText.minutesSeconds.text(model.schedule.length))
 
             TransportVolume(live: controller.live)
                 .help(L("playback_volume"))
@@ -237,7 +237,7 @@ private struct SyncPlayPositionControls: View {
     @ObservedObject var position: TransportPosition
 
     var body: some View {
-        TransportTimeText(TransportBar.timeText(position.currentTime))
+        TransportTimeText(ClipTimeText.minutesSeconds.text(position.currentTime))
 
         Slider(value: Binding(
             get: { position.currentTime },

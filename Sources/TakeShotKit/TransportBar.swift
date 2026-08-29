@@ -66,12 +66,6 @@ struct TransportBar: View {
             controller.replayLoopRequested = false
         }
     }
-
-    static func timeText(_ seconds: Double) -> String {
-        guard seconds.isFinite else { return "0:00" }
-        let total = Int(seconds.rounded(.down))
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
 }
 
 /// The filter control beside the transport: what the look is doing to the clip

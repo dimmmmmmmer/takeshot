@@ -155,27 +155,18 @@ private final class SheetPage {
     }
 
     /// The shift report's header, word for word except the title — the two
-    /// documents leave set together and have to read as one family.
+    /// documents leave set together and have to read as one family. That is
+    /// `ReportSummary` now rather than a comment over a second copy of it;
+    /// what is left here is the placement and the font.
     func drawHeader(takes: [Take], project: String, camera: String) {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .long
-        formatter.timeStyle = .none
-        formatter.locale = L10n.current.documentLocale
-        draw("\(project.isEmpty ? "TakeShot" : project) — \(L("contact_title"))",
-             x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
-             font: titleFont, offset: 4)
+        let header = ReportSummary.make(titleKey: "contact_title", takes: takes,
+                                        project: project, camera: camera)
+        let width = Self.pageSize.width - 2 * Self.margin
+        draw(header.title, x: Self.margin, width: width, font: titleFont,
+             offset: 4)
         y += 24
-        let good = takes.filter { $0.rating == .good }.count
-        let bad = takes.filter { $0.rating == .bad }.count
-        let total = takes.reduce(0.0) { $0 + $1.durationSeconds }
-        let totalText = String(format: "%d:%02d:%02d", Int(total) / 3600,
-                               (Int(total) / 60) % 60, Int(total) % 60)
-        let cameraPart = camera.isEmpty ? "" : "   \(L("report_camera", camera))"
-        draw("\(formatter.string(from: Date()))\(cameraPart)   "
-             + "\(L("report_takes_summary", takes.count, good, bad))   "
-             + "\(L("report_footage", totalText))",
-             x: Self.margin, width: Self.pageSize.width - 2 * Self.margin,
-             font: summaryFont, color: .darkGray)
+        draw(header.summary, x: Self.margin, width: width, font: summaryFont,
+             color: .darkGray)
         y += 24
     }
 
