@@ -101,7 +101,7 @@ same:
 | Seam | Real | Fake | What it unlocks |
 | --- | --- | --- | --- |
 | `DuplicateLookPrompt.handler` | `NSAlert.runModal()` | a closure answering one of the three | re-importing a look that is already in the library |
-| `CaptureBackend` | `DeckLinkBackendAdapter` | `MockCaptureBackend`, `SyntheticSignalBackend`, `StubCaptureBackend` | the whole capture session |
+| `CaptureBackend` | `DeckLinkBackendAdapter` | `MockCaptureBackend`, `SyntheticSignalBackend`, `StubBackend` | the whole capture session |
 | `AudioInputDeviceProviding` | `SystemAudioInputProvider` | `FakeAudioInputProvider` | the USB input path |
 | `VolumeWatching` | `WorkspaceVolumeWatch` | `FakeVolumeWatch` | the card watch |
 | `FinderOpen.handler` | `NSWorkspace` | a recorder | which folder each button reaches for |
