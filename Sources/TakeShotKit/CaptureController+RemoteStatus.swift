@@ -16,6 +16,13 @@ extension CaptureController {
         var status = RemoteStatus()
         status.timecode = live.currentTimecode?.description ?? ""
         status.timecodeFPS = live.currentTimecode?.fps ?? 0
+        // Advancing, not merely present. Sampled against the value the last
+        // status carried: the pump runs 4/s and a running timecode changes
+        // every frame, so two consecutive pushes of the same value is a clock
+        // that is standing still.
+        status.timecodeRunning = !status.timecode.isEmpty
+            && lastPushedTimecode.map { $0 != status.timecode } == true
+        lastPushedTimecode = status.timecode
         status.recording = isRecording
         status.capturing = isCapturing
         status.format = signalFormat?.name ?? ""

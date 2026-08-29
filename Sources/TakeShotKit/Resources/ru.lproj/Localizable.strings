@@ -731,6 +731,7 @@
 "slate_sync_tag" = "СИНХРО";
 "slate_sync_hint" = "Клик или пробел — синхровспышка";
 "slate_page_title" = "TakeShot: хлопушка";
+"slate_page_standby" = "СТОП";
 "slate_page_hold" = "СТОП";
 "slate_page_offline" = "НЕТ СВЯЗИ";
 "slate_page_hint" = "Тап — синхровспышка. Автоблокировку экрана поставьте на «Никогда».";

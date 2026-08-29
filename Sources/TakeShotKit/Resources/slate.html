@@ -101,6 +101,9 @@ body.rec #rec::before {
 /* Held: the clock has stopped and the number is the last one the app confirmed.
    Amber, which is the colour the desktop slate's sync hold already uses. */
 body.hold #tc, body.sync #tc { color: var(--hold); }
+/* Standby is not a fault: the clock is right, it is simply not moving,
+   so the readout keeps its ordinary colour and only the tag speaks. */
+body.standby #tc { color: inherit; }
 /* Offline: struck through as well as recoloured. A number that is merely a
    different colour can be read as a live one on footage; a number with a line
    through it cannot be read as anything but "do not use this". */
@@ -114,7 +117,7 @@ body.off #tc { color: var(--rec); text-decoration: line-through; }
   background: var(--hold); color: var(--face);
   visibility: hidden;
 }
-body.hold #tag, body.sync #tag { visibility: visible; }
+body.hold #tag, body.sync #tag, body.standby #tag { visibility: visible; }
 body.off #tag { visibility: visible; background: var(--rec); }
 
 /* SCENE / SHOT / TAKE — the three fields a camera is pointed at a slate FOR.
@@ -346,6 +349,11 @@ var watchdog = null;
 // is the same decision made twice: show what was confirmed, never what was
 // guessed.
 var seed = null;
+// Whether the app says the source's timecode is ADVANCING. A camera in
+// standby on Rec Run holds it still, and this page free-runs its own clock
+// from the last confirmed value — so without this a held timecode is
+// indistinguishable from a page that has stopped working.
+var tcRunning = false;
 var seedAt = 0;
 var seedFps = 0;
 var seedDrop = false;
@@ -415,6 +423,7 @@ function render(next) {
   el("roll").textContent = next.roll ? S.roll + " " + next.roll : "";
   document.body.classList.toggle("rec", !!next.recording);
 
+  tcRunning = !!next.tcRunning;
   var parsed = (next.tc && next.tcFps)
     ? TAKESHOT_TC.parse(next.tc, next.tcFps) : null;
   if (!parsed) {
@@ -444,11 +453,18 @@ function paint() {
   var offline = !connected;
   var syncing = !offline && moment < syncUntil;
   var held = seed !== null && (moment - seedAt) > CFG.holdMs;
+  // STANDBY is about the SOURCE, the other three are about this page's link to
+  // the app, so it is reported only when the link is fine: a socket that is
+  // gone has nothing to say about whether a camera is rolling.
+  var standby = !offline && !syncing && !held && seed !== null && !tcRunning;
   body.classList.toggle("off", offline);
   body.classList.toggle("sync", syncing);
   body.classList.toggle("hold", !offline && !syncing && held);
+  body.classList.toggle("standby", standby);
   body.classList.toggle("flash", moment < flashUntil);
-  write("tag", offline ? S.offline : (syncing ? S.sync : S.hold), "tag");
+  write("tag", offline ? S.offline
+    : (syncing ? S.sync : (held ? S.hold : (standby ? S.standby : S.hold))),
+    "tag");
   write("tc", readout(moment, syncing), "tc");
 }
 

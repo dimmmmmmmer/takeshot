@@ -312,6 +312,7 @@ enum RemotePage {
         ("roll", "roll_label"),
         ("sync", "slate_sync_tag"),
         ("hold", "slate_page_hold"),
+        ("standby", "slate_page_standby"),
         ("offline", "slate_page_offline"),
         ("hint", "slate_page_hint"),
     ]

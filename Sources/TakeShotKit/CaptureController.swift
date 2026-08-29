@@ -496,6 +496,14 @@ final class CaptureController: ObservableObject {
     /// times a minute rather than per push: the status goes out four times a
     /// second and a volume query is a syscall on the MainActor.
     var remoteDiskFreeGB: Double = -1
+    /// The timecode the last status carried, so the next one can say whether it
+    /// is ADVANCING. Optional because the FIRST sample has nothing to compare
+    /// against and must not guess: a page that opens while the camera is in
+    /// standby would otherwise be told the clock is moving.
+    ///
+    /// Not `@Published`: nothing draws it, and a per-push write to an observed
+    /// property would re-render the window four times a second.
+    var lastPushedTimecode: String?
     /// Take posters already encoded, by take. The script page asks for one per
     /// row, so the bytes are kept rather than re-encoded per request; the
     /// image behind them never changes once decoded (see +RemoteStatus).

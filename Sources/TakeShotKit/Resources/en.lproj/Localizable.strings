@@ -729,6 +729,7 @@
 "slate_sync_tag" = "SYNC";
 "slate_sync_hint" = "Click or press Space — sync flash";
 "slate_page_title" = "TakeShot Slate";
+"slate_page_standby" = "STANDBY";
 "slate_page_hold" = "HOLD";
 "slate_page_offline" = "OFFLINE";
 "slate_page_hint" = "Tap for the sync flash. Set the phone's Auto-Lock to Never.";

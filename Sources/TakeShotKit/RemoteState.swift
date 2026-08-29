@@ -20,6 +20,16 @@ struct RemoteStatus: Equatable, Sendable {
     /// the string was built with — drop-frame the page reads off the string's own
     /// `;` separator, exactly as `Timecode.init(text:fps:)` does.
     var timecodeFPS: Int = 0
+    var timecodeRunning = false
+    /// Whether the timecode is ADVANCING, as opposed to merely present.
+    ///
+    /// A Rec Run source — which is what a camera in standby is, and what the
+    /// demo source is by construction — holds its timecode still until it
+    /// rolls. The slate page free-runs its own clock from the last confirmed
+    /// value, so a held timecode there looks exactly like a page that has
+    /// stopped working (owner: "по хлопушке вообще не понял почему то бегает
+    /// тк то останавливается"). The app is the one that can tell the
+    /// difference, so it says.
     var recording = false
     var capturing = false
     /// Signal format name ("1080p25"); empty when nothing is detected.
@@ -121,6 +131,7 @@ struct RemoteStatus: Equatable, Sendable {
             "\"type\":\"status\"",
             "\"tc\":\(RemoteJSON.quoted(timecode))",
             "\"tcFps\":\(timecodeFPS)",
+            "\"tcRunning\":\(timecodeRunning ? "true" : "false")",
             "\"scene\":\(RemoteJSON.quoted(scene))",
             "\"shot\":\(RemoteJSON.quoted(shot))",
             "\"slateTake\":\(RemoteJSON.quoted(slateTake))",
