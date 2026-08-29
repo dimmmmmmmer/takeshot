@@ -44,7 +44,7 @@ the week it lands teaches everyone to ignore it.
 | | |
 | --- | --- |
 | Floor | **88.0 %** lines |
-| Measured | **90.63 %** lines (4 165 of 44 471 lines uncovered) |
+| Measured | **90.65 %** lines (4 181 of 44 720 lines uncovered) |
 
 Measured in the ORDINARY configuration, which is what `scripts/coverage.sh`
 runs and what CI runs. `-DTAKESHOT_FORCE_STUBS=1` is a different build with
