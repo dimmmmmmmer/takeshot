@@ -7,6 +7,20 @@ import Foundation
 /// A demo signal source for debugging the GUI and auto-takes without a board:
 /// synthetic 1080p25 frames (SMPTE-like bars, a moving strip, TC burn-in)
 /// and Rec Run timecode — running only while the "camera" records.
+///
+/// **There is no `--demo` gate.** This is in `shippingBackends()`
+/// unconditionally and `isAvailable` is `true`, so it appears in EVERY build's
+/// device list. Two documents claimed a flag for months and no such code has
+/// ever existed.
+///
+/// That is load-bearing for a published release, which is built with no vendor
+/// SDKs: `CDeckLink` is then a stub that can see no board, and this is the only
+/// entry in the list. The cost is worth knowing before anyone goes looking for
+/// it — `backendAvailable` is therefore always true, so `sdk_not_connected` is
+/// unreachable in a shipping build, and an operator who plugs a real
+/// UltraStudio into a downloaded build is told "no devices found" rather than
+/// that this binary was never compiled to see one. `DeckLinkDiagnosis` knows
+/// the difference and the diagnostics bundle reports it.
 final class MockCaptureBackend: CaptureBackend {
     static let deviceID = "mock-source"
 
@@ -179,7 +193,8 @@ final class MockCaptureBackend: CaptureBackend {
     /// Core Text's font machinery first from a background thread returned a nil
     /// font, and `CTLineCreateWithAttributedString` then raised
     /// "attempt to insert nil object from objects[0]". It is rare enough to
-    /// look like bad luck and it is the shipping `--demo` path, with multicam
+    /// look like bad luck, and this source is in every shipped build's device
+    /// list (there is no `--demo` gate — see the type's note), with multicam
     /// running two of these sources at once.
     ///
     /// `nonisolated(unsafe)`: a `CTFont` is an immutable Core Foundation object

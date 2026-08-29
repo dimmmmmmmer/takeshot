@@ -775,11 +775,26 @@ carry the detail.
 
 ## Demo source
 
-`MockCaptureBackend` is hidden from the production UI. It appears in the device
-list only when the app is launched as `TakeShot --demo` (or with
-`TAKESHOT_DEMO=1`), and generates a 1080p25 signal with Rec Run timecode; a
-"REC demo camera" button shows up when it is selected. This is how the GUI and
-the take logic are exercised end to end without a board.
+`MockCaptureBackend` is in `shippingBackends()` unconditionally and its
+`isAvailable` is `true`, so the demo source appears in EVERY build's device
+list. It generates a 1080p25 signal with Rec Run timecode; a "REC demo camera"
+button shows up when it is selected. This is how the GUI and the take logic are
+exercised end to end without a board.
+
+**There is no `--demo` flag.** This section claimed one for months, along with a
+`TAKESHOT_DEMO=1` variable, and no such code has ever existed — so a reader
+reproducing a bug would launch with the flag, get the same list either way, and
+learn nothing from the difference.
+
+That the source is always present is load-bearing for a published release,
+which is built with no vendor SDKs: `CDeckLink` is then a stub that can see no
+board at all, and the demo source is the only entry in the list. It has a cost
+worth knowing before you go looking for it — `backendAvailable` is therefore
+always true, so the `sdk_not_connected` message is unreachable in a shipping
+build. An operator who plugs a real UltraStudio into a downloaded build is told
+"no devices found" rather than that this binary was never compiled to see one,
+which `DeckLinkDiagnosis` already knows and the diagnostics bundle already
+reports.
 
 ## UI layout
 

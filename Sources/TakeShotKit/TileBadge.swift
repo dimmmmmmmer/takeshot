@@ -120,8 +120,8 @@ import Foundation
 /// queues. `MockCaptureBackend` records what that costs — reaching CoreText's
 /// font machinery first, concurrently, from background threads returned a nil
 /// font and `CTLineCreateWithAttributedString` raised
-/// "attempt to insert nil object from objects[0]", killing the process on the
-/// shipping `--demo` path. Every font here is created inside `rasterized`,
+/// "attempt to insert nil object from objects[0]", killing the process on a
+/// source every shipped build carries. Every font here is created inside `rasterized`,
 /// which only ever runs with `cacheLock` held, so the first touch is
 /// serialized by construction rather than by luck.
 enum TileBadge {
