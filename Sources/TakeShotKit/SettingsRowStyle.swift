@@ -21,7 +21,24 @@ struct SettingsRowStyle: LabeledContentStyle {
         HStack(alignment: .center, spacing: 8) {
             configuration.label
             Spacer(minLength: 8)
+            // **Trailing, and the TEXT inside it trailing too.** A grouped
+            // `Form` builds its labelled controls through `LabeledContent`, so
+            // this style reaches a bare `TextField` row as well — and the first
+            // version dropped what the default was doing for those, which put
+            // the project name's caret on the left (owner: "в настройках
+            // название проекта почему-то теперь вбивается с левой стороны а не
+            // с правой как раньше"). Fixing the vertical alignment must not
+            // cost the horizontal one.
+            //
+            // NO frame around it. `frame(alignment:)` with no width proposes
+            // nil to the child, and a bordered `TextField`'s ideal width grows
+            // with its content — so the SRT address field stretched as it was
+            // typed into and shoved the row about (owner: "интерфейс улетает
+            // при вбивании адреса, растягивает поле ввода"). The `Spacer`
+            // above is what puts the content on the right; each control keeps
+            // whatever width it declares for itself.
             configuration.content
+                .multilineTextAlignment(.trailing)
         }
     }
 }

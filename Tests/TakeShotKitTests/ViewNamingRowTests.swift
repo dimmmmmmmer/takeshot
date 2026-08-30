@@ -18,25 +18,35 @@ struct ViewNamingRowTests {
     /// taller". The caption is beside its box now, so the row costs exactly what
     /// the box costs. Measured against a bare `NameTextField`, which is what the
     /// box is: a row taller than that has the caption back on its own line.
-    @Test func theSlateRowIsOneControlTall() async throws {
+    @Test func theSlateRowMatchesTheFileRowsShape() async throws {
         try await ViewProbe.run { probe in
             let box: CGSize = probe.fittingSize(
                 NameTextField(field: .scene, text: .constant("12"))
                     .frame(width: 70))
             let row = probe.fittingSizes {
-                SlateFieldsEditor(scene: .constant("12A"), shot: .constant("2"),
+                SlateFieldsEditor(scene: .constant("12"), shot: .constant("2"),
                                   takeText: .constant("3"))
             }
             #expect(box.height > 0, "the measurement of the box itself is broken")
-            #expect(row.en.height <= box.height + 2,
-                    "the slate row is \(row.en.height)pt for a \(box.height)pt box")
+            // **A caption LINE above the box, like the file row.** It used to
+            // sit beside the box to save the footer a line, back when the two
+            // naming rows were stacked and height was the scarce thing. One row
+            // shows at a time now, and beside the box the row ran wide enough
+            // to reach under the REC button. So the row is deliberately taller
+            // than its box — and exactly as tall as the file row, which is what
+            // makes switching between them not move anything.
+            #expect(row.en.height > box.height,
+                    "the caption is back beside the box: \(row.en.height)pt")
+            let fileRow = probe.fittingSizes { NamingFileNameRow() }
+            #expect(abs(row.en.height - fileRow.en.height) <= 1,
+                    "the two rows are \(row.en.height)pt and \(fileRow.en.height)pt")
             #expect(row.ru.height == row.en.height,
                     "the row took a different height in Russian: \(row)")
 
-            // …and the block above it still stacks: two rows, not one
+            // …and the block is one row plus nothing, because only one shows
             let block = probe.fittingSizes { NamingFieldsView() }
-            #expect(block.en.height > row.en.height + 10,
-                    "the naming block is \(block.en.height)pt — the rows did not stack")
+            #expect(abs(block.en.height - row.en.height) <= 2,
+                    "the block is \(block.en.height)pt around a \(row.en.height)pt row")
         }
     }
 
@@ -86,7 +96,7 @@ struct ViewNamingRowTests {
             #expect(slateRow.ru.width <= half,
                     "the slate row alone wants \(slateRow.ru.width)pt of \(half)")
             // the block really is two rows: taller than the slate row on its own
-            #expect(slate.en.height > slateRow.en.height + 10,
+            #expect(abs(slate.en.height - slateRow.en.height) <= 2,
                     "the naming block is \(slate.en.height)pt — the rows did not stack")
         }
     }

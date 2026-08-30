@@ -21,7 +21,13 @@ extension CaptureController {
         // mode must take it down, and choosing this one arms it if the box has
         // been taught. Stated here rather than in the picker, because a settings
         // blob and the mode menu on the timecode badge are both callers.
-        let wantsVisual = settings.capture.detectionMode == .visual
+        // AUTO means "everything this signal offers", so the indicator counts
+        // there too (owner: "авто режим река должен учитывать и рек индикатор")
+        // — it is the only evidence an HDMI camera with no running timecode
+        // gives at all. Still refused while untaught: the setter below sees to
+        // that, so auto on an untaught box is simply auto without it.
+        let wantsVisual = RecDetectionMode.visualModes
+            .contains(settings.capture.detectionMode)
         if visualRecTeaching.isOn != (wantsVisual && visualRecTeaching.isTaught) {
             visualRecOn = wantsVisual
         }

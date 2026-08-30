@@ -140,7 +140,7 @@ struct CompareWipeOverlay: View {
             // letterboxes the composite into
             Color.clear
                 .aspectRatio(controller.compareAspect, contentMode: .fit)
-                .overlay { WipeHandle() }
+                .overlay { WipeHandle(live: controller.compareLive) }
         }
     }
 }
@@ -152,6 +152,9 @@ struct CompareWipeOverlay: View {
 /// why that had to leave this closure.
 private struct WipeHandle: View {
     @EnvironmentObject private var controller: CaptureController
+    /// Observed directly, so a drag re-runs THIS body and not the window's —
+    /// passed in by the overlay, which has the controller to take it from.
+    @ObservedObject var live: CompareLive
 
     private var axis: CompareCompositor.Axis {
         CaptureController.compareAxis(controller.wipeOrientation)
@@ -160,7 +163,7 @@ private struct WipeHandle: View {
     var body: some View {
         GeometryReader { geo in
             let (p1, p2) = CompareWipeGeometry.endpoints(
-                position: controller.wipePosition, in: geo.size, axis: axis)
+                position: live.wipePosition, in: geo.size, axis: axis)
             ZStack {
                 Path { path in
                     path.move(to: p1)
@@ -175,6 +178,10 @@ private struct WipeHandle: View {
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                // Through the CONTROLLER, which pushes the new cut to the
+                // compositor. The controller no longer publishes it — only
+                // `CompareLive` does — so this wakes the handle and the tap
+                // and nothing else.
                 controller.wipePosition = CompareWipeGeometry.position(
                     at: value.location, in: geo.size, axis: axis)
             })

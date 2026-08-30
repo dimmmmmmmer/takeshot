@@ -71,7 +71,12 @@ struct FooterCenterControls: View {
     @EnvironmentObject private var hotkeys: HotkeyManager
 
     var body: some View {
-        HStack(spacing: 12) {
+        // Tight around the record button: these two ACT on it — the last take
+        // and a frame of what it is recording — and at 12pt they read as three
+        // separate controls with the naming block crowded against them (owner:
+        // "кнопку стилл шота и реплея последнего тейка поближе прицепить к
+        // кнопке река, иначе ощущение что справа где поля ввода воздуха мало").
+        HStack(spacing: 6) {
             Button {
                 controller.instantReplay()
             } label: {

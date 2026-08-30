@@ -130,6 +130,44 @@ extension CaptureController {
     /// geometry change the viewer can make — that is the whole reason the region
     /// is not in viewport units. A click on the letterbox is ignored: there is no
     /// signal pixel there to name.
+    /// Whether a point on the picture is INSIDE the watched box.
+    ///
+    /// What the gesture and the cursor both ask, so they cannot disagree about
+    /// which one the operator is about to get.
+    func visualRecBoxContains(_ point: CGPoint, viewport: CGSize) -> Bool {
+        guard let fraction = liveAssist.imageFraction(
+            of: point, sourceSize: displaySourceSize(), in: viewport) else {
+            return false
+        }
+        let box = visualRecTeaching.region.normalizedBox
+        return Double(fraction.x) >= box.x && Double(fraction.x) <= box.x + box.width
+            && Double(fraction.y) >= box.y && Double(fraction.y) <= box.y + box.height
+    }
+
+    /// Drag the box to a new place, keeping its size.
+    ///
+    /// Moving and drawing are told apart by WHERE THE DRAG STARTED, not by how
+    /// far it went. Deciding on the distance meant a short drag moved the box
+    /// and a long one redrew it, which from the operator's side is the same
+    /// gesture doing two different things at random (owner: "курсор при марке
+    /// река визуального странно работает – то тащит, то рисует квадрат").
+    /// Inside the box drags it; outside draws a new one; the cursor says which.
+    func moveVisualRecRegion(by translation: CGSize, from start: CGPoint,
+                             viewport: CGSize) {
+        let source = displaySourceSize()
+        guard let from = liveAssist.imageFraction(of: start, sourceSize: source,
+                                                  in: viewport),
+              let to = liveAssist.imageFraction(
+                of: CGPoint(x: start.x + translation.width,
+                            y: start.y + translation.height),
+                sourceSize: source, in: viewport) else { return }
+        var teaching = visualRecTeaching
+        teaching.region.centerX += Double(to.x - from.x)
+        teaching.region.centerY += Double(to.y - from.y)
+        teaching.clamp()
+        visualRecTeaching = teaching
+    }
+
     /// Draw the box between two points on the picture.
     ///
     /// The crosshair over this overlay promised exactly this and delivered a
@@ -139,10 +177,8 @@ extension CaptureController {
     /// the letterbox is refused rather than clamped to a shape the operator did
     /// not draw — the same rule a click outside the picture already follows.
     ///
-    /// A band smaller than the floor is a CLICK, not a box, and is answered by
-    /// moving the centre instead: that is what a tap has always done, and
-    /// making a stray 2-pixel drag redefine the region would lose the taught
-    /// shape to a twitch.
+    /// A band smaller than the floor is a CLICK, and a click outside the box
+    /// puts the box where it was clicked: that is what a tap has always done.
     func drawVisualRecRegion(from start: CGPoint, to end: CGPoint,
                              viewport: CGSize) {
         let source = displaySourceSize()

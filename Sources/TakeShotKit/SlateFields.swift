@@ -70,63 +70,29 @@ struct SlateFieldsEditor: View {
         }
     }
 
-    /// One slate field: its caption, the box, and the ‹ › that page it.
+    /// One slate field, built by the SAME function the file-name row's fields
+    /// are built by.
     ///
-    /// `seed` is what an empty field becomes on the first press of ∧, and all
-    /// three are "1" now: scene, shot and take are counted the same way, which
-    /// is the change that took the setup LETTER off the shot. Everything else
-    /// about the stepping is `SlateStep`, including the part that matters most
-    /// here: ∨ off the first value empties the field again, so "not logged"
-    /// stays reachable without going for the keyboard.
+    /// It used to draw its own chevrons, which is why they did not look like
+    /// the ones one row away (owner: "почему стрелки вверх/вниз в мете не
+    /// похожи на вверх/вниз там где название файла") — a hand-drawn pair
+    /// beside a native `Stepper`. Now that both rows put the caption above the
+    /// box there is nothing left that differed, so there is no second builder:
+    /// the two rows are the same control with different labels.
+    ///
+    /// `seed` is what an empty field becomes on the first press up, and all
+    /// three are "1": scene, shot and take are counted the same way. Stepping
+    /// is `SlateStep`, including the part that matters most here — down off the
+    /// first value empties the field again, so "not logged" stays reachable
+    /// without going for the keyboard.
     private func pagedField(_ caption: String, field: NameField, width: CGFloat,
                             seed: String,
                             text: Binding<String>) -> some View {
-        HStack(spacing: 2) {
-            Text(caption)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: Self.captionWidth, alignment: .leading)
-            NameTextField(field: field, text: text)
-                .frame(width: width)
-            // **Up and down, stacked, on one side.** They were ‹ and › either
-            // side of the box, which reads as paging through a LIST — and these
-            // three fields hold numbers now, where the gesture everyone already
-            // knows is a stepper (owner: "стрелки у scene/shot/take не нужны,
-            // скорее стрелки вверх/вниз для выбора цифр").
-            //
-            // It also gives the row back an arrow's width per field: one 11pt
-            // column instead of two, which is 33pt of the footer half that the
-            // captions and boxes can spend instead.
-            VStack(spacing: 0) {
-                arrow("chevron.up", delta: 1, seed: seed, text: text)
-                arrow("chevron.down", delta: -1, seed: seed, text: text)
-            }
-        }
-    }
-
-    private func arrow(_ symbol: String, delta: Int, seed: String,
-                       text: Binding<String>) -> some View {
-        Button {
-            text.wrappedValue = SlateStep.stepped(text.wrappedValue,
-                                                  by: delta, seed: seed)
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
-                .frame(width: Self.arrowWidth, height: Self.arrowHeight)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        // free text has no next value, and an arrow that does nothing under the
-        // pointer is worse than one that says so
-        //
-        // disabled(exception): a predicate over this ARROW's own two arguments —
-        // the field it was built for and the direction it points — rather than
-        // over app state. The rule is still named exactly once, in
-        // `SlateStep.canStep`, which is what the enforcement is for; a
-        // parameterless `controller.something` has nothing to be here, because
-        // there are six of these arrows and each asks about a different field.
-        .disabled(!SlateStep.canStep(text.wrappedValue, by: delta))
+        NamingFieldsView.steppedField(
+            caption, field: field, width: width, text: text,
+            onStep: { delta in
+                text.wrappedValue = SlateStep.stepped(text.wrappedValue,
+                                                      by: delta, seed: seed)
+            })
     }
 }

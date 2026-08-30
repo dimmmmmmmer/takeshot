@@ -275,6 +275,12 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
     /// mode is added.
     public static let vancTriggerModes: Set<RecDetectionMode> = [.vanc, .auto]
 
+    /// The modes that watch the camera's own REC indicator. `auto` is here
+    /// because auto means "every kind of evidence this signal offers", and on
+    /// an HDMI camera with no running timecode the indicator is the only kind
+    /// there is. An untaught box simply contributes nothing.
+    public static let visualModes: Set<RecDetectionMode> = [.visual, .auto]
+
     public var actsOnVancTrigger: Bool { Self.vancTriggerModes.contains(self) }
 }
 

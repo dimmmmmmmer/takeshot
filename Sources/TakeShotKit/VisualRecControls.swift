@@ -40,7 +40,8 @@ struct VisualRecRows: View {
     /// indicator before it. Choosing the mode is now what opens the rows, so an
     /// untaught install has somewhere to start.
     private var isExpanded: Bool {
-        controller.settings.capture.detectionMode == .visual
+        RecDetectionMode.visualModes
+            .contains(controller.settings.capture.detectionMode)
             || controller.visualRecTeachArmed
             || controller.visualRecTeaching.rolling != nil
             || controller.visualRecTeaching.idle != nil
@@ -210,15 +211,13 @@ struct VisualRecTeachOverlay: View {
                         // `minimumDistance: 0` so a press that turns into a
                         // drag does not need a threshold first, and the tap
                         // above still answers a click that never moves.
-                        // **Drag DRAWS the box; a click still moves it.**
+                        // **Inside the box drags it, outside draws a new one.**
                         //
-                        // The crosshair says a region can be drawn here, and
-                        // until now it could not — the drag moved the centre,
-                        // which is a different gesture wearing the same cursor.
-                        // Both live in one controller method, which decides
-                        // between them on the size of the band: under the
-                        // floor it is a click and moves the centre, so a
-                        // twitch cannot replace a taught shape.
+                        // Told apart by where the drag STARTED, not by how far
+                        // it went: deciding on the distance made a short drag
+                        // move the box and a long one redraw it, which from the
+                        // operator's side is one gesture doing two things at
+                        // random. Where it started is something they chose.
                         //
                         // Live during the drag rather than on release: an
                         // operator sizing a box against a camera's REC dot is
@@ -227,16 +226,31 @@ struct VisualRecTeachOverlay: View {
                         .gesture(DragGesture(minimumDistance: 0,
                                              coordinateSpace: .local)
                             .onChanged { value in
-                                controller.drawVisualRecRegion(
-                                    from: value.startLocation,
-                                    to: value.location, viewport: geo.size)
+                                if controller.visualRecBoxContains(
+                                    value.startLocation, viewport: geo.size) {
+                                    controller.moveVisualRecRegion(
+                                        by: value.translation,
+                                        from: value.startLocation,
+                                        viewport: geo.size)
+                                } else {
+                                    controller.drawVisualRecRegion(
+                                        from: value.startLocation,
+                                        to: value.location, viewport: geo.size)
+                                }
                             })
+                        // …and the pointer says which one is under it, so the
+                        // gesture is never a surprise.
+                        .onContinuousHover { phase in
+                            guard case .active(let point) = phase else { return }
+                            let inside = controller.visualRecBoxContains(
+                                point, viewport: geo.size)
+                            let wanted: NSCursor = inside ? .openHand : .crosshair
+                            if NSCursor.current !== wanted { wanted.set() }
+                        }
                         .onHover { inside in
-                            if inside {
-                                NSCursor.crosshair.push()
-                            } else {
-                                NSCursor.pop()
-                            }
+                            // Leaving puts the arrow back; which cursor was
+                            // shown while inside is the hover above's business.
+                            if !inside { NSCursor.arrow.set() }
                         }
                     box(in: geo.size)
                 }

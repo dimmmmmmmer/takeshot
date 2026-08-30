@@ -154,13 +154,27 @@ final class CaptureController: ObservableObject {
     @Published var wipeOrientation: WipeOrientation = .vertical {
         didSet { pushCompare() }
     }
+    /// The two values a GESTURE moves. Held on their own object so a drag does
+    /// not wake every view in the window — see `CompareLive`.
+    let compareLive = CompareLive()
+
     /// Wipe position (0…1; left/top is playback).
-    @Published var wipePosition: Double = 0.5 {
-        didSet { pushCompare() }
+    var wipePosition: Double {
+        get { compareLive.wipePosition }
+        set {
+            guard newValue != compareLive.wipePosition else { return }
+            compareLive.wipePosition = newValue
+            pushCompare()
+        }
     }
     /// Playback opacity in blend mode.
-    @Published var blendOpacity: Double = 0.5 {
-        didSet { pushCompare() }
+    var blendOpacity: Double {
+        get { compareLive.blendOpacity }
+        set {
+            guard newValue != compareLive.blendOpacity else { return }
+            compareLive.blendOpacity = newValue
+            pushCompare()
+        }
     }
     /// Difference-mode gain (×1/×4/×16 — small differences are invisible
     /// unamplified). Persisted with the mode, see `persistCompareSettings`.
