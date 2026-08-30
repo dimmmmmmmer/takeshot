@@ -19,50 +19,28 @@ import Foundation
 /// encoder pool knows whether the grid picture is being watched, and the tap
 /// goes back to nil when neither is true.
 extension CaptureController {
-    /// Somebody started (or the last somebody stopped) watching the `/cameras`
-    /// page. Hopped here from the server's queue; the taps and the encoder are
-    /// MainActor state like the rest of the controller.
-    func setRemoteMultiviewActive(_ active: Bool) {
-        guard active else {
-            remoteMultiviewEncoder = nil
-            refreshMonitorTaps()
-            return
-        }
-        if remoteMultiviewEncoder == nil {
-            // The sink runs on the encoder's queue and must not touch the
-            // MainActor — a busy main thread would pace the stream. The
-            // server is captured weakly instead: `broadcastFrame` hops to its
-            // own queue, and a server being replaced is not kept alive by the
-            // stream it used to feed (stopRemoteServer drops the encoder
-            // anyway; the weak reference is what makes a race with it inert).
-            let server = remoteServer
-            remoteMultiviewEncoder = MultiviewEncoder { [weak server] camera, jpeg in
-                server?.broadcastFrame(camera: camera, jpeg: jpeg)
-            }
-        }
-        refreshMonitorTaps()
-    }
-
     /// (Re)install the per-camera monitor taps: the main pipeline is camera 0,
     /// the extra channels follow in order — the same order the status'
     /// `cameras` array and the page's tiles use. Called again whenever multicam
     /// reshapes the channel list, and whenever either consumer appears or goes.
     ///
-    /// The count goes to both consumers, because it is what sizes what they
-    /// produce: the JPEG encoder picks a tile edge off it (a single camera is a
-    /// whole phone, four are a quarter each) and the composer picks a layout.
-    /// It is the SAME number the status' `cameras` array carries, from the same
-    /// source, so a tile the phone draws and a cell in the video grid cannot
-    /// disagree about how many there are.
+    /// The count is what sizes what the composer produces — it picks a layout
+    /// off it. It is the SAME number the status' `cameras` array carries, from
+    /// the same source, so a cell in the video grid and the count a page reads
+    /// cannot disagree.
+    ///
+    /// There was a second consumer here until the JPEG `/cameras` page was
+    /// removed: an encoder that emitted one JPEG per board for a page to lay
+    /// out. The live page carries the composed grid as video and chooses its
+    /// own picture, so the second transport had nothing left that the first did
+    /// not do better.
     func refreshMonitorTaps() {
-        let jpeg = remoteMultiviewEncoder
         let composer = mirrors.gridComposer
-        guard jpeg != nil || composer != nil else {
+        guard composer != nil else {
             clearMonitorTaps()
             return
         }
         let cameras = extraChannels.count + 1
-        jpeg?.setCameraCount(cameras)
         composer?.setCameraCount(cameras)
         // The names and lamps for the count just set, so a grid that opens
         // mid-shift is labelled on its first composed frame rather than on
@@ -74,15 +52,13 @@ extension CaptureController {
         // composer wants it so the grid's encoder is built for the rate the
         // master camera is actually running at.
         let rate = signalFormat?.frameRate ?? 0
-        pipeline.setOnMonitorFrame { [weak jpeg, weak composer] frame in
-            jpeg?.offer(frame[.clean], camera: 0)
+        pipeline.setOnMonitorFrame { [weak composer] frame in
             composer?.offer(frame[.grid], camera: 0, framesPerSecond: rate)
         }
         for (index, channel) in extraChannels.enumerated() {
             let camera = index + 1
             let channelRate = channel.signalFormat?.frameRate ?? 0
-            channel.pipeline.setOnMonitorFrame { [weak jpeg, weak composer] frame in
-                jpeg?.offer(frame[.clean], camera: camera)
+            channel.pipeline.setOnMonitorFrame { [weak composer] frame in
                 composer?.offer(frame[.grid], camera: camera,
                                 framesPerSecond: channelRate)
             }
@@ -92,8 +68,8 @@ extension CaptureController {
     /// **Every live tile says which board it is, whether it is writing, whether
     /// it is feeding at all, and what its own timecode reads.**
     ///
-    /// `.camera`, from the same two expressions the operator's own grid and the
-    /// `/cameras` page already read — `settings.naming.cameraLabel` for the
+    /// `.camera`, from the same expressions the operator's own grid already
+    /// reads — `settings.naming.cameraLabel` for the
     /// main board and `CameraChannel.camLabel` for each extra — so a name
     /// burned into the picture cannot disagree with either surface. The lamp is
     /// each pipeline's OWN `isRecording` and never the app's: in multicam the
@@ -120,10 +96,8 @@ extension CaptureController {
     /// stops the composer's clock (`MultiviewComposer.Pacing.clock`), so no
     /// pass runs and the far end holds the last grid it was sent. Its own
     /// legend is written into an identity nothing will draw until frames come
-    /// back. The `/cameras` page has exactly the same hole from the same cause
-    /// — no frames, no JPEGs, a tile frozen on its last one — so this is parity
-    /// with the page rather than a regression against it, and closing it is a
-    /// change to what runs a compose, not to what a badge says.
+    /// back. Closing that is a change to what RUNS a compose, not to what a
+    /// badge says.
     ///
     /// **Restated wholesale rather than diffed**, and that is the design. The
     /// label, the lamp and the clock change at three different rates and from

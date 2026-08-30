@@ -22,8 +22,7 @@ struct RemotePageSourceTests {
     static func pages() throws -> [(name: String, html: String)] {
         try [("remote", RemotePage.html()),
              ("script", RemotePage.scriptHTML()),
-             ("cameras", RemotePage.camerasHTML()),
-             ("live", RemotePage.liveHTML()),
+                 ("live", RemotePage.liveHTML()),
              ("slate", RemotePage.slateHTML())]
             .map { page in
                 (page.0, try #require(String(bytes: page.1, encoding: .utf8),

@@ -23,7 +23,6 @@ import Testing
 
     private func pages() -> [(name: String, data: Data)] {
         [("remote", RemotePage.html()), ("script", RemotePage.scriptHTML()),
-         ("cameras", RemotePage.camerasHTML()),
          ("live", RemotePage.liveHTML()),
          ("slate", RemotePage.slateHTML())]
     }

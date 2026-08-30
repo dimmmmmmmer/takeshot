@@ -567,7 +567,6 @@
 "remote_page" = "Страница";
 "remote_link_remote" = "Пульт";
 "remote_link_script" = "Скрипт";
-"remote_link_cameras" = "Камеры";
 "remote_link_slate" = "Хлопушка";
 "remote_link_live" = "Видео";
 "remote_no_network" = "Этот Mac не в сети";
@@ -740,9 +739,6 @@
 "slate_page_hint" = "Тап — синхровспышка. Автоблокировку экрана поставьте на «Никогда».";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.
    Not "playback" (owner item 13d): nothing recorded is shown here. === */
-"cameras_title" = "TakeShot: камеры";
-"cameras_rec" = "REC";
-"cameras_wait" = "Видео ещё нет";
 
 /* === the live page: the viewer itself as video over WebRTC, and the choice of
    which picture — where the cameras page above is one JPEG per board. === */
@@ -752,6 +748,8 @@
 /* The picture switch. One label per LivePicture case; see the English file for
    why the keys are built from the raw values. One word each — they sit in a
    segmented switch on a handset. */
+"live_rec" = "REC";
+"live_wait" = "Видео ещё нет";
 "live_picture" = "Картинка";
 "live_picture_decorated" = "Монитор";
 "live_picture_clean" = "Камера";
@@ -1004,7 +1002,7 @@
 "bridge_ndi_runtime_refused" = "Библиотека NDI не запустилась на этом процессоре.";
 /* …и то же самое для страницы /live, читатель которой держит телефон в сети
    площадки, а не сидит за этим Mac. */
-"bridge_webrtc_not_built" = "В этой сборке нет WebRTC: она собрана без libdatachannel, поэтому живое видео недоступно. Всё остальное на пульте работает как обычно, а страница камер по-прежнему показывает сигнал. Как собрать с ним — описано в vendor/libdatachannel/README.md.";
+"bridge_webrtc_not_built" = "В этой сборке нет WebRTC: она собрана без libdatachannel, поэтому страница живого видео недоступна. Всё остальное на пульте работает как обычно. Как собрать с ним — описано в vendor/libdatachannel/README.md.";
 "bridge_webrtc_runtime_missing" = "Живое видео недоступно: сборка сделана с libdatachannel, но найти его на этой машине не удалось. В релизе библиотека лежит внутри самого приложения — см. vendor/libdatachannel/README.md. Искали: %@";
 "bridge_webrtc_runtime_incomplete" = "В установленном на этой машине libdatachannel нет точек входа, которые нужны приложению. Соберите 0.20 или новее.";
 "bridge_webrtc_runtime_no_media" = "libdatachannel на этой машине собран без поддержки медиа (RTC_ENABLE_MEDIA). Пересоберите его с включённой поддержкой медиа.";

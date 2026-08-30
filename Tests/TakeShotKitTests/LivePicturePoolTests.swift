@@ -117,39 +117,36 @@ struct LivePicturePoolTests {
         }
     }
 
-    /// The `/cameras` page and a browser watching the grid share the monitor
-    /// tap, and neither takes it away from the other.
+    /// The video grid's tap lives exactly as long as the grid does.
     ///
-    /// They are two consumers of one picture, so the failure this guards
-    /// against is a teardown: the phone page closing while a director is
-    /// watching the video grid must not stop the frames, and it used to be one
-    /// `setOnMultiviewFrame(nil)` away from doing exactly that.
-    @Test func theTwoGridsShareOneTapAndNeitherClosesIt() async throws {
+    /// There were TWO consumers of the monitor tap until the JPEG `/cameras`
+    /// page was removed — that page's encoder and the composed grid — and the
+    /// thing this guarded against was one of them closing the tap while the
+    /// other was still watching. One is left, so what remains to hold is the
+    /// simpler half: the tap opens with the grid and goes with it, and a
+    /// browser that drops takes its own frames away and nothing else's.
+    @Test func theGridsTapOpensAndClosesWithIt() async throws {
         let peers = WebRTCPeerLog()
         try await ControllerHarness.run { controller, _ in
             controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
             let served = try await RemoteHarness.serve(controller)
-            controller.setRemoteMultiviewActive(true)
+            #expect(!controller.pipeline.publishesMonitorFrames,
+                    "the tap is open with nobody watching")
+
             _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin,
                                               picture: .grid)
-            #expect(controller.pipeline.publishesMonitorFrames)
-
-            // The JPEG page closes. The video grid is still watching.
-            controller.setRemoteMultiviewActive(false)
-            #expect(controller.remoteMultiviewEncoder == nil)
             #expect(controller.mirrors.gridComposer != nil)
             #expect(controller.pipeline.publishesMonitorFrames,
-                    "the phone page closing took the video grid's frames away")
+                    "the grid is up and nothing is feeding it")
 
-            // And the other way round: the browser goes, the page stays.
-            controller.setRemoteMultiviewActive(true)
             let peer: FakeWebRTCPeer = try #require(peers.latest)
             peer.report(.failed)
             #expect(await ControllerWait.until {
                 controller.mirrors.gridComposer == nil
-            })
-            #expect(controller.pipeline.publishesMonitorFrames,
-                    "the browser leaving took the phone page's frames away")
+            }, "the composer outlived the browser")
+            #expect(await ControllerWait.until {
+                !controller.pipeline.publishesMonitorFrames
+            }, "an idle set is still paying for a tap")
         }
     }
 

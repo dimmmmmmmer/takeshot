@@ -562,7 +562,6 @@
 "remote_page" = "Page";
 "remote_link_remote" = "Remote";
 "remote_link_script" = "Script";
-"remote_link_cameras" = "Cameras";
 "remote_link_slate" = "Slate";
 "remote_link_live" = "Live";
 "remote_no_network" = "This Mac is on no network";
@@ -738,9 +737,6 @@
 "slate_page_hint" = "Tap for the sync flash. Set the phone's Auto-Lock to Never.";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.
    Not "playback" (owner item 13d): nothing recorded is shown here. === */
-"cameras_title" = "TakeShot Cameras";
-"cameras_rec" = "REC";
-"cameras_wait" = "No video yet";
 
 /* === the live page: the viewer itself as video over WebRTC, and the choice of
    which picture — where the cameras page above is one JPEG per board. === */
@@ -754,6 +750,8 @@
    does: "Monitor" is the operator's own monitor, aids and key and all;
    "Camera" is what the lens sees; "Grid" is every camera at once. Kept to one
    word each — they sit in a segmented switch on a handset. */
+"live_rec" = "REC";
+"live_wait" = "No video yet";
 "live_picture" = "Picture";
 "live_picture_decorated" = "Monitor";
 "live_picture_clean" = "Camera";
@@ -1031,7 +1029,7 @@
 "bridge_ndi_runtime_refused" = "NDI runtime declined to initialise on this CPU.";
 /* …and the same again for the /live page, whose reader is holding a phone on
    the set network rather than the Mac. */
-"bridge_webrtc_not_built" = "This build has no WebRTC in it: it was compiled without libdatachannel, so live video is not available. Everything else on the remote works as usual, and the camera page still shows the signal. Building with it is described in vendor/libdatachannel/README.md.";
+"bridge_webrtc_not_built" = "This build has no WebRTC in it: it was compiled without libdatachannel, so the live video page is not available. Everything else on the remote works as usual. Building with it is described in vendor/libdatachannel/README.md.";
 "bridge_webrtc_runtime_missing" = "Live video is not available: this build was made with libdatachannel but cannot find it on this machine. A release that ships it carries its own copy inside the app — see vendor/libdatachannel/README.md. Looked for: %@";
 "bridge_webrtc_runtime_incomplete" = "libdatachannel on this machine is missing entry points this app needs. Build 0.20 or newer.";
 "bridge_webrtc_runtime_no_media" = "libdatachannel on this machine was built without media support (RTC_ENABLE_MEDIA). Rebuild it with media enabled.";

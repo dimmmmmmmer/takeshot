@@ -34,8 +34,8 @@ import Testing
                                      path: RemoteLink.script.path)
             == "http://10.0.0.2:8765/script")
         #expect(RemoteAddress.joined(host: "http://10.0.0.2:8765",
-                                     path: RemoteLink.cameras.path)
-            == "http://10.0.0.2:8765/cameras")
+                                     path: RemoteLink.live.path)
+            == "http://10.0.0.2:8765/live")
     }
 
     /// The join is defensive on both sides: a host that already ends in a
@@ -56,12 +56,11 @@ import Testing
     /// is a switch that does nothing.
     @Test func theLinkSwitcherExposesEveryTarget() {
         let paths: [String] = RemoteLink.allCases.map(\.path)
-        #expect(paths == ["/", "/script", "/cameras", "/live", "/slate"])
+        #expect(paths == ["/", "/script", "/live", "/slate"])
         #expect(Set(paths).count == RemoteLink.allCases.count)
         #expect(RemoteLink.allCases.map(\.labelKey).allSatisfy { !$0.isEmpty })
         // The routes the server answers are these and not copies of them.
         #expect(RemotePage.scriptPath == RemoteLink.script.path)
-        #expect(RemotePage.camerasPath == RemoteLink.cameras.path)
         #expect(RemotePage.livePath == RemoteLink.live.path)
         #expect(RemotePage.slatePath == RemoteLink.slate.path)
     }

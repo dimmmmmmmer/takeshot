@@ -170,8 +170,15 @@ struct BridgeLocalizationTests {
 
             let webrtc: String = L("bridge_webrtc_not_built")
             #expect(webrtc.contains("сборке"), "\(webrtc)")
-            #expect(webrtc.contains("страница камер"),
+            // It used to point at the camera page, which was the JPEG surface
+            // and is gone — the promise had to change in the same commit that
+            // removed the page, or the app would be telling an operator to go
+            // somewhere that answers 404. What it offers now is the rest of
+            // the remote, which is true without libdatachannel.
+            #expect(webrtc.contains("на пульте работает"),
                     "the Russian offers the reader nothing that works: \(webrtc)")
+            #expect(!webrtc.contains("камер"),
+                    "the Russian still promises a page that is gone: \(webrtc)")
             #expect(webrtc.contains("vendor/libdatachannel/README.md"),
                     "\(webrtc)")
         }

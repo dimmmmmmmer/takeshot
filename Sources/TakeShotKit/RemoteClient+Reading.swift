@@ -112,10 +112,6 @@ extension RemoteClient {
             // The markup is as public as the operator page's — everything it
             // shows arrives over the socket, behind the same PIN.
             writeAndClose(RemoteResponse.page(server?.currentScriptPage ?? Data()))
-        case RemotePage.camerasPath:
-            // Same rule: the markup is empty tiles, and every frame that
-            // could fill them rides the socket behind the PIN.
-            writeAndClose(RemoteResponse.page(server?.currentCamerasPage ?? Data()))
         case RemotePage.livePath:
             // Same rule again: the markup is an empty <video> element, and the
             // offer that fills it goes through the PIN like everything else.

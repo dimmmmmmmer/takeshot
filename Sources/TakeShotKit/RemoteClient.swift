@@ -372,16 +372,12 @@ final class RemoteClient: @unchecked Sendable {
         guard spendCommandAllowance(), server.spendCommandAllowance() else {
             return
         }
-        if case .multiview(let on) = message.command {
-            // A per-connection subscription, not an app command: the server
-            // settles it here and the controller never hears of it. Pending
-            // frames go with a subscription that ends — they were for a page
-            // that no longer wants them.
-            wantsMultiview = on
-            if !on { pendingFrames.removeAll() }
-            server.multiviewDemandChanged()
-            return
-        }
+        // `multiview` was a per-connection subscription for the JPEG
+        // `/cameras` page, which is gone: the live page carries the composed
+        // grid as video and asks for a PICTURE, not for a frame stream. The
+        // command is still parsed and still costs its allowance, so an old
+        // page held open on somebody's phone is refused rather than crashing
+        // a socket, and it reaches `dispatch` where every unknown verb does.
         server.dispatch(message.command)
     }
 

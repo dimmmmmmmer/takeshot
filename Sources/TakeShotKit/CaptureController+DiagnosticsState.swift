@@ -135,7 +135,9 @@ extension CaptureController {
         remote.boundPort = remoteBoundPort
         remote.configuredPort = settings.remote.portEffective
         remote.clientCount = remoteServer?.clientCount ?? 0
-        remote.multiviewActive = remoteMultiviewEncoder != nil
+        // The composed grid, which is what the live page carries now that
+        // the JPEG /cameras page is gone.
+        remote.multiviewActive = mirrors.gridComposer != nil
         remote.pinConfigured = settings.remote.pin?.isEmpty == false
         return remote
     }

@@ -570,8 +570,8 @@ static void RTC_API CDCPliReceived(int tr, void *ptr) {
 /// the file that says how to change it.
 static NSString *const kCDCNoSDKMessage =
     @"This build has no WebRTC in it: it was compiled without libdatachannel, "
-    @"so live video is not available. Everything else on the remote works as "
-    @"usual, and the camera page still shows the signal. Building with it is "
+    @"so the live video page is not available. Everything else on the remote "
+    @"works as usual. Building with it is "
     @"described in vendor/libdatachannel/README.md.";
 
 @implementation CDCPeerConnection

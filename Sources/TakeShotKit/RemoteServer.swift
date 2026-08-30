@@ -61,12 +61,6 @@ final class RemoteServer: @unchecked Sendable {
         var webrtcPicture: @Sendable (String, LivePicture,
                                       @escaping @Sendable (Bool) -> Void) -> Void
             = { _, _, reply in reply(false) }
-        /// Somebody started (true) or the last somebody stopped (false)
-        /// watching the multiview stream. The app answers by building or
-        /// tearing down the encoder, so an idle set encodes nothing. Called
-        /// on the server's queue, only on a change. The default ignores it,
-        /// which is what a server driven without a controller wants.
-        var multiviewDemand: @Sendable (Bool) -> Void = { _ in }
     }
 
     /// The values the app pushes in while the server runs: the PIN and the
@@ -76,7 +70,6 @@ final class RemoteServer: @unchecked Sendable {
         var pin: String
         var page: Data
         var scriptPage: Data
-        var camerasPage: Data
         var livePage: Data
         var slatePage: Data
     }
@@ -161,16 +154,12 @@ final class RemoteServer: @unchecked Sendable {
     /// connection's, because a reconnect is what defeats every per-connection
     /// count. See `RemotePINTarpit`.
     private var tarpit = RemotePINTarpit()
-    /// What `handlers.multiviewDemand` was last told, so the app hears about
-    /// edges only — every subscribe, unsubscribe and disconnect recounts, and
-    /// most recounts change nothing.
-    private var multiviewDemand = false
     /// The set's command allowance, and when it was last topped up.
     private var commandTokens = RemoteServer.commandBurst
     private var commandTokensAt = RemoteServer.monotonicNow()
 
     init(pin: String, page: Data, scriptPage: Data = Data(),
-         camerasPage: Data = Data(), livePage: Data = Data(),
+         livePage: Data = Data(),
          slatePage: Data = Data(), handlers: Handlers,
          handshakeDeadline: DispatchTimeInterval
             = RemoteClient.handshakeDeadline) {
@@ -178,7 +167,7 @@ final class RemoteServer: @unchecked Sendable {
         self.handshakeDeadline = handshakeDeadline
         self.shared = OSAllocatedUnfairLock(
             initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
-                                 camerasPage: camerasPage, livePage: livePage,
+                                 livePage: livePage,
                                  slatePage: slatePage))
     }
 
@@ -207,9 +196,6 @@ final class RemoteServer: @unchecked Sendable {
             clients.removeAll()
             lastStatus = nil
             lastTakeLog = nil
-            // The clients are gone, so the demand is too — the app tears the
-            // encoder down on this edge even when it forgot to on its own.
-            multiviewDemandChanged()
         }
     }
 
@@ -257,11 +243,6 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.scriptPage = page }
     }
 
-    /// Replace the camera grid's page, for the same language switch.
-    func setCamerasPage(_ page: Data) {
-        shared.withLock { $0.camerasPage = page }
-    }
-
     /// Replace the live page, for the same language switch.
     func setLivePage(_ page: Data) {
         shared.withLock { $0.livePage = page }
@@ -270,17 +251,6 @@ final class RemoteServer: @unchecked Sendable {
     /// Replace the slate's page, for the same language switch.
     func setSlatePage(_ page: Data) {
         shared.withLock { $0.slatePage = page }
-    }
-
-    /// Push one camera's fresh JPEG to every client that asked for frames.
-    /// Fire-and-forget from the encoder's queue; each client applies its own
-    /// one-in-flight rule, so a slow phone holds nothing up (see
-    /// `RemoteClient+Multiview`).
-    func broadcastFrame(camera: Int, jpeg: Data) {
-        let index = UInt8(clamping: camera)
-        queue.async { [self] in
-            for client in clients.values { client.send(frame: jpeg, camera: index) }
-        }
     }
 
     /// Replace the PIN. Sockets already authenticated stay open; their next
@@ -295,21 +265,10 @@ final class RemoteServer: @unchecked Sendable {
     var currentPIN: String { shared.withLock { $0.pin } }
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
-    var currentCamerasPage: Data { shared.withLock { $0.camerasPage } }
     var currentLivePage: Data { shared.withLock { $0.livePage } }
     var currentSlatePage: Data { shared.withLock { $0.slatePage } }
     var currentStatus: String? { lastStatus }
     var currentTakeLog: String? { lastTakeLog }
-
-    /// A client subscribed, unsubscribed or went away: recount, and tell the
-    /// app only when the answer changed. Queue-confined, like the registry it
-    /// reads.
-    func multiviewDemandChanged() {
-        let demand = clients.values.contains(where: \.wantsMultiview)
-        guard demand != multiviewDemand else { return }
-        multiviewDemand = demand
-        handlers.multiviewDemand(demand)
-    }
 
     /// **The one door a PIN is verified through.** Compares the code AND
     /// charges for having asked, in one step that cannot be half-used.
@@ -463,7 +422,6 @@ final class RemoteServer: @unchecked Sendable {
         clients.removeValue(forKey: ObjectIdentifier(client))
         // A watcher that walked away is a demand change like any other: the
         // last one out is what lets the app stop encoding.
-        multiviewDemandChanged()
     }
 }
 

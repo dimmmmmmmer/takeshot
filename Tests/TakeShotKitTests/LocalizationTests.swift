@@ -66,7 +66,7 @@ struct LocalizationTests {
                 as? [String: String])
         }
 
-        let uses: [LocalizationTests.KeyUse] = try literalKeys()
+        let uses: [LocalizationWalk.KeyUse] = try LocalizationWalk.literalKeys()
         // Not a pinned count — a floor under "the walk read the sources at
         // all", so a broken extractor cannot come back green having found
         // nothing to check.
@@ -122,6 +122,55 @@ struct LocalizationTests {
         }
     }
 
+    /// The served pages' label TABLES name keys the source walk cannot see.
+    ///
+    /// `RemotePage`'s label tables are `(field, key)` pairs handed to `L()` at
+    /// runtime, so `everyKeyWrittenAsALiteralIsInBothStringsFiles` — which
+    /// reads literals — is blind to them by construction. That blindness is
+    /// stated at that test, and this is the other half of it: the tables are a
+    /// closed set, so they can be walked directly.
+    ///
+    /// It is not hypothetical. Removing the JPEG `/cameras` page took its
+    /// `cameras_*` strings with it, and the LIVE page had been borrowing two of
+    /// them — so a phone would have read `live_wait` off its own tile with
+    /// nothing to say that had happened.
+    @Test func everyKeyAPageLabelsWithIsInBothStringsFiles() throws {
+        let bundle = Bundle.module
+        var tables: [String: [String: String]] = [:]
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                bundle.path(forResource: language, ofType: "lproj"))
+            tables[language] = try #require(NSDictionary(
+                contentsOfFile: folder + "/Localizable.strings")
+                as? [String: String])
+        }
+
+        let pages: [(name: String, labels: [(field: String, key: String)])] = [
+            ("remote", RemotePage.labels),
+            ("script", RemotePage.scriptLabels),
+            ("live", RemotePage.liveLabels),
+            ("slate", RemotePage.slateLabels),
+        ]
+        // A floor under "the tables were read at all".
+        let keys: [String] = pages.flatMap { $0.labels.map(\.key) }
+        try #require(keys.count > 20,
+                     "only \(keys.count) page labels found")
+
+        for language in ["en", "ru"] {
+            let table: [String: String] = try #require(tables[language])
+            let absent: [String] = pages.flatMap { page in
+                page.labels.filter { table[$0.key] == nil }
+                    .map { "\(page.name).\($0.field) → \($0.key)" }
+            }
+            #expect(absent.isEmpty,
+                    """
+                    \(language) has no words for keys a served page labels \
+                    with, so the raw key is what reaches the phone:
+                    \(absent.joined(separator: "\n"))
+                    """)
+        }
+    }
+
     /// A key that reaches `String(format:)` has to carry the SAME conversions
     /// in both languages, in the same order.
     ///
@@ -155,13 +204,14 @@ struct LocalizationTests {
         let english: [String: String] = try #require(tables["en"])
         let russian: [String: String] = try #require(tables["ru"])
 
-        let formatted: [KeyUse] = try literalKeys().filter(\.takesArguments)
+        let formatted: [LocalizationWalk.KeyUse] =
+            try LocalizationWalk.literalKeys().filter(\.takesArguments)
         let keys: Set<String> = Set(formatted.map(\.key))
         // A floor under "the walk found the formatted call sites at all".
         try #require(keys.count > 80,
                      "only \(keys.count) formatted keys found, so a green run here would mean nothing")
 
-        for use: KeyUse in formatted {
+        for use: LocalizationWalk.KeyUse in formatted {
             guard let base: String = english[use.key],
                   let other: String = russian[use.key] else { continue }
             let site = "\(use.key) (\(use.file):\(use.line))"
@@ -223,6 +273,46 @@ struct LocalizationTests {
         }
     }
 
+    /// **A lowercase `\u` escape is not decoded, and nothing else notices.**
+    ///
+    /// Foundation's .strings parser takes `\U2019` and does NOT take `’`:
+    /// it drops the backslash and leaves the four digits standing, so the
+    /// operator reads "RED​u2019s R3D SDK" and every test that only compares
+    /// two tables, or asserts a line is non-empty, passes. Two lines in this
+    /// project were shipping exactly that — one of them the live toast for a
+    /// clip whose camera LUT was withheld — and they were found by a mutation
+    /// aimed at something else entirely.
+    ///
+    /// The rule this pins is the simple one: write the character. Every other
+    /// line in both files already does, `—` and `’` included, and a literal
+    /// cannot be half-decoded.
+    @Test func noStringHidesAnUndecodedEscape() throws {
+        let bundle = Bundle.module
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                bundle.path(forResource: language, ofType: "lproj"))
+            let text: String = try String(
+                contentsOfFile: folder + "/Localizable.strings",
+                encoding: .utf8)
+            let offenders: [String] = text
+                .components(separatedBy: "\n")
+                .filter { $0.contains("\\u") }
+            #expect(offenders.isEmpty,
+                    """
+                    \(language) carries a lowercase \\u escape, which the \
+                    .strings parser leaves undecoded — write the character:
+                    \(offenders.joined(separator: "\n"))
+                    """)
+        }
+    }
+}
+
+/// The walk itself: how a key is found in the sources.
+///
+/// Its own type because it is machinery rather than a claim — the claims are
+/// in `LocalizationTests`, and the extractor they lean on is long enough to
+/// have pushed that suite past the file's length rule.
+enum LocalizationWalk {
     /// One `L("…")` in the tree.
     struct KeyUse {
         let key: String
@@ -241,7 +331,7 @@ struct LocalizationTests {
     /// argument specifically so that `L(forward ? "menu_step_forward" :
     /// "menu_step_back")` contributes BOTH of its keys — a regex anchored on
     /// `L("` sees neither, and that call site is a menu item's label.
-    private func literalKeys() throws -> [KeyUse] {
+    static func literalKeys() throws -> [KeyUse] {
         let root: URL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -270,7 +360,7 @@ struct LocalizationTests {
     /// The code half of a line — a `//` comment can mention `L("…")` in prose
     /// (this file's own doc comments do), and a key named in a comment is not a
     /// key the app asks for.
-    private func code(of line: String) -> String {
+    static func code(of line: String) -> String {
         guard let range = line.range(of: "//") else { return line }
         return String(line[line.startIndex..<range.lowerBound])
     }
@@ -350,36 +440,4 @@ struct LocalizationTests {
         return text
     }
 
-    /// **A lowercase `\u` escape is not decoded, and nothing else notices.**
-    ///
-    /// Foundation's .strings parser takes `\U2019` and does NOT take `’`:
-    /// it drops the backslash and leaves the four digits standing, so the
-    /// operator reads "RED​u2019s R3D SDK" and every test that only compares
-    /// two tables, or asserts a line is non-empty, passes. Two lines in this
-    /// project were shipping exactly that — one of them the live toast for a
-    /// clip whose camera LUT was withheld — and they were found by a mutation
-    /// aimed at something else entirely.
-    ///
-    /// The rule this pins is the simple one: write the character. Every other
-    /// line in both files already does, `—` and `’` included, and a literal
-    /// cannot be half-decoded.
-    @Test func noStringHidesAnUndecodedEscape() throws {
-        let bundle = Bundle.module
-        for language in ["en", "ru"] {
-            let folder: String = try #require(
-                bundle.path(forResource: language, ofType: "lproj"))
-            let text: String = try String(
-                contentsOfFile: folder + "/Localizable.strings",
-                encoding: .utf8)
-            let offenders: [String] = text
-                .components(separatedBy: "\n")
-                .filter { $0.contains("\\u") }
-            #expect(offenders.isEmpty,
-                    """
-                    \(language) carries a lowercase \\u escape, which the \
-                    .strings parser leaves undecoded — write the character:
-                    \(offenders.joined(separator: "\n"))
-                    """)
-        }
-    }
 }

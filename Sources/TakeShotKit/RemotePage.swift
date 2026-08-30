@@ -13,20 +13,13 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     case remote
     /// The script supervisor's take log.
     case script
-    /// The live camera grid.
-    ///
-    /// Called "cameras" and not "playback": the tiles are the boards' live
-    /// signal, and a page named playback would be read as the recorded takes —
-    /// which is the one thing it does not show. Not "multiview" either, on the
-    /// page or in Settings; that is the name of the frame STREAM behind it
-    /// (see `MultiviewEncoder`), and a phone is being offered a link, not a
-    /// piece of the architecture.
-    case cameras
     /// The viewer itself, as video.
     ///
-    /// Not the same thing as `cameras`, and the difference is the transport
-    /// rather than the subject now: that page is one JPEG per board at five a
-    /// second, and this is an H.264 track over WebRTC at the signal's own rate.
+    /// There used to be a second page beside this one — `/cameras`, one JPEG
+    /// per board at five a second, laid out by the page. It is gone: this
+    /// carries the boards as a composed grid in an H.264 track at the signal's
+    /// own rate, with the tiles named and lamped in the picture itself, so the
+    /// JPEG page had nothing left that this does not do better.
     /// WHAT it carries is the viewer's choice — the decorated frame the SRT
     /// output carries, the clean camera picture, or every camera tiled — and
     /// the three of them are named at `LivePicture`.
@@ -51,7 +44,6 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .remote: return "/"
         case .script: return "/script"
-        case .cameras: return "/cameras"
         case .live: return "/live"
         case .slate: return "/slate"
         }
@@ -62,7 +54,6 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .remote: return "remote_link_remote"
         case .script: return "remote_link_script"
-        case .cameras: return "remote_link_cameras"
         case .live: return "remote_link_live"
         case .slate: return "remote_link_slate"
         }
@@ -70,7 +61,7 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// The pages the remote serves: the operator remote at `/`, the script
-/// supervisor's take log at `/script`, the camera grid at `/cameras` and the
+/// supervisor's take log at `/script`, the live video at `/live` and the
 /// slate at `/slate`.
 ///
 /// The markup is a bundle resource, not a Swift string literal: it is HTML,
@@ -201,24 +192,6 @@ enum RemotePage {
         ("take", "slate_take"),
     ]
 
-    /// Where the camera grid lives.
-    static let camerasPath = RemoteLink.cameras.path
-
-    /// The camera page's label → key table. The gate and connection strings
-    /// are shared with the other pages — same socket, same PIN.
-    static let camerasLabels: [(field: String, key: String)] = [
-        ("title", "cameras_title"),
-        ("connected", "remote_online"),
-        ("connecting", "remote_connecting"),
-        ("disconnected", "remote_offline"),
-        ("connect", "remote_connect"),
-        ("pinPrompt", "remote_pin_prompt"),
-        ("pinBad", "remote_pin_bad"),
-        ("noSignal", "remote_no_signal"),
-        ("wait", "cameras_wait"),
-        ("rec", "cameras_rec"),
-    ]
-
     /// Where the live page lives.
     static let livePath = RemoteLink.live.path
 
@@ -255,8 +228,12 @@ enum RemotePage {
         ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
-        ("wait", "cameras_wait"),
-        ("rec", "cameras_rec"),
+        // Named for the page that shows them. They were
+        // `cameras_*` — borrowed from the JPEG page, which is gone,
+        // and a key named after a page that no longer exists is the
+        // kind of thing the next person deletes as unused.
+        ("wait", "live_wait"),
+        ("rec", "live_rec"),
         ("unavailable", "live_unavailable"),
         ("retry", "live_retry"),
         ("picture", "live_picture"),
@@ -328,11 +305,6 @@ enum RemotePage {
     /// The script supervisor's page, same discipline.
     static func scriptHTML() -> Data {
         render(resource: "script", labels: scriptLabels)
-    }
-
-    /// The camera grid, same discipline again.
-    static func camerasHTML() -> Data {
-        render(resource: "cameras", labels: camerasLabels)
     }
 
     /// The live page, same discipline again.

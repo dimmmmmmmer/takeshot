@@ -40,7 +40,6 @@ extension CaptureController {
         let server = RemoteServer(
             pin: pin, page: RemotePage.html(),
             scriptPage: RemotePage.scriptHTML(),
-            camerasPage: RemotePage.camerasHTML(),
             livePage: RemotePage.liveHTML(),
             slatePage: RemotePage.slateHTML(),
             handlers: RemoteServer.Handlers(
@@ -87,11 +86,6 @@ extension CaptureController {
                         reply(self?.changeWebRTCPicture(viewer: viewer,
                                                         to: picture) ?? false)
                     }
-                },
-                multiviewDemand: { [weak self] active in
-                    // The taps and the encoder are controller state; the
-                    // demand edge hops here like a command does.
-                    Task { @MainActor in self?.setRemoteMultiviewActive(active) }
                 }))
         remoteServer = server
         server.start(port: UInt16(clamping: overridePort
@@ -102,11 +96,7 @@ extension CaptureController {
     func stopRemoteServer() {
         remoteStatusTask?.cancel()
         remoteStatusTask = nil
-        // The multiview taps and encoder go with the server, deterministically
-        // — the server's own demand recount would say the same thing, but only
-        // after a hop the teardown should not have to wait for.
-        setRemoteMultiviewActive(false)
-        // And the WebRTC viewers, for a sharper reason than the taps: there is
+        // The WebRTC viewers go with the server: there is
         // no other way to reach this app, so a peer connection left up would be
         // a picture going to a page that can no longer offer, rate or stop
         // anything.
@@ -185,7 +175,6 @@ extension CaptureController {
             // restart.
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
-            remoteServer?.setCamerasPage(RemotePage.camerasHTML())
             remoteServer?.setLivePage(RemotePage.liveHTML())
             remoteServer?.setSlatePage(RemotePage.slateHTML())
         }
