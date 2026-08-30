@@ -176,6 +176,8 @@ extension CaptureController {
             return L("srt_needs_address")
         case .passphraseTooShort:
             return L("srt_passphrase_short", SRTSettings.passphraseMinimum)
+        case .passphraseTooLong:
+            return L("srt_passphrase_long", SRTSettings.passphraseMaximum)
         }
     }
 

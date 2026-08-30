@@ -178,6 +178,12 @@ footer {
   border: 1px solid var(--line); background: var(--panel); color: var(--text);
   font-family: ui-monospace, Menlo, monospace; font-size: 34px;
   text-align: center; letter-spacing: 0.4em;
+  /* `html, body` set `user-select: none` so a finger resting on the readout
+     does not start a selection. It INHERITS, and WebKit will not put a caret
+     in a field that computes to none — so the operator taps the box, no
+     keyboard comes up, and the four digits cannot be typed at all. Every
+     other served page re-enables it here; this one did not. */
+  -webkit-user-select: text; user-select: text;
 }
 #connect { padding: 16px 28px; font-size: 18px; font-weight: 700; }
 #gateError { color: var(--rec); min-height: 1.2em; font-size: 14px; }

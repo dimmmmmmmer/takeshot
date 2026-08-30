@@ -38,7 +38,6 @@ final class MenuBarModel: ObservableObject {
         case addMarker
         case toggleMute
         case openMain
-        case openSlate
         case quit
     }
 
@@ -168,7 +167,6 @@ final class MenuBarModel: ObservableObject {
                  enabled: true, checked: controller.live.muted),
             .separator,
             Item(command: .openMain, title: L("menubar_open_main"), enabled: true),
-            Item(command: .openSlate, title: L("menu_slate"), enabled: true),
             .separator,
             Item(command: .quit, title: L("menubar_quit"), enabled: true),
         ]
@@ -196,7 +194,6 @@ final class MenuBarModel: ObservableObject {
         case .addMarker: controller.addMarker()
         case .toggleMute: controller.toggleMonitorMute()
         case .openMain: AppWindows.present(.main)
-        case .openSlate: AppWindows.present(.slate)
         // Through the normal terminate path, never a bespoke shutdown: that is
         // what runs `flushOnTerminate`, and quitting from the menu bar with no
         // window open is exactly the case where a take is still being written.

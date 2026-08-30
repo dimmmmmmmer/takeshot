@@ -146,10 +146,21 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    /// The shortest passphrase SRT accepts. Not ours — libsrt refuses anything
-    /// under ten characters, so the app checks the same rule first in order to say
-    /// so in the operator's own language rather than passing on a socket error.
+    /// The passphrase length libsrt accepts, in BYTES. Not ours — it refuses
+    /// anything outside 10…79 as firmly either way, so the app checks the same
+    /// rule first in order to say so in the operator's own language rather
+    /// than passing on a socket error.
+    ///
+    /// **Bytes and not `Character`s**, which is what this counted before: the
+    /// bridge hands libsrt a C string, so a Cyrillic passphrase is twice the
+    /// length `String.count` reports — ten Cyrillic letters passed a check
+    /// libsrt would then measure as twenty bytes, and forty of them would have
+    /// been refused by the socket for a reason the app never named.
     public static let passphraseMinimum = 10
+    /// …and the longest. The half of libsrt's rule the app did not implement:
+    /// an operator who pasted an 80-character phrase got the socket's own
+    /// English back instead of a sentence in their language.
+    public static let passphraseMaximum = 79
 
     /// nil for an unencrypted link, which is what an empty field means. A
     /// passphrase that is too SHORT is not nil and not silently dropped either —
@@ -163,23 +174,29 @@ public struct SRTSettings: Codable, Equatable, Sendable {
     /// What is wrong with this configuration, as something the UI can put words
     /// to; nil when there is nothing wrong.
     ///
-    /// Two cases, and both are silent failures if they are not checked here. A
+    /// Three cases, and each is a silent failure if it is not checked here. A
     /// caller with no address would dial nowhere and report a resolver error
-    /// nobody can act on; a passphrase of five characters would be refused by SRT
-    /// deep inside an open, and an operator who typed one and got an unencrypted
-    /// stream would have no way of knowing.
+    /// nobody can act on; a passphrase outside libsrt's range would be refused
+    /// deep inside an open, and an operator who typed one and got an
+    /// unencrypted stream would have no way of knowing.
+    ///
+    /// An EMPTY passphrase is none of them: it means "no encryption", which is
+    /// what `passphraseEffective` answers nil for, and it reaches the socket
+    /// as an unencrypted link by design.
     public enum Problem: Equatable, Sendable {
         case addressMissing
         case passphraseTooShort
+        case passphraseTooLong
     }
 
     public var configurationProblem: Problem? {
         if roleEffective == .caller, addressEffective.isEmpty {
             return .addressMissing
         }
-        if let phrase = passphraseEffective,
-           phrase.count < Self.passphraseMinimum {
-            return .passphraseTooShort
+        if let phrase = passphraseEffective {
+            let bytes = phrase.utf8.count
+            if bytes < Self.passphraseMinimum { return .passphraseTooShort }
+            if bytes > Self.passphraseMaximum { return .passphraseTooLong }
         }
         return nil
     }

@@ -40,10 +40,25 @@ extension TransportModel {
                    self.duration != item.duration.seconds {
                     self.duration = item.duration.seconds
                 }
-                // loop range: jump back at the out point while playing
-                if playing, self.isLooping, let out = self.outPoint,
-                   time.seconds >= out {
-                    self.seek(to: self.inPoint ?? 0)
+                // The out point, in BOTH loop states: wrap to the in point
+                // when looping, stop there when not. It used to act only while
+                // looping, so with the loop off playback ran straight past the
+                // mark to the end of the clip — the RAW engine has always done
+                // both (`RawPlayback+PlayLoop`), and these are two statements
+                // of one rule that had come apart.
+                switch self.rangeAction(atTime: time.seconds, playing: playing) {
+                case .carryOn:
+                    break
+                case .wrap(let start):
+                    self.seek(to: start)
+                case .stop(let mark):
+                    player.pause()
+                    self.isPlaying = false
+                    // Land ON the mark rather than wherever the 10 Hz tick
+                    // caught it: the operator set that frame, and stopping two
+                    // frames past it is the same overshoot in a place they can
+                    // see.
+                    self.seek(to: mark)
                 }
             }
         }

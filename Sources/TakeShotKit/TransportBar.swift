@@ -93,16 +93,21 @@ struct PlaybackLookButton: View {
             // no press can reach it
             icon(tint: AnyShapeStyle(.secondary))
                 .help(L("lut_baked_indicator"))
-        case .applied, .suppressed:
+        case .applied, .suppressed, .bypassed:
             Button {
                 controller.playbackLUTSuppressed.toggle()
             } label: {
-                icon(tint: look == .suppressed
-                     ? AnyShapeStyle(.secondary)
-                     : AnyShapeStyle(controller.accentColor))
+                // The accent means ENGAGED, and `isEngaged` is the one place
+                // that decides it — a look that difference mode is bypassing
+                // is picked but is not on the picture, and lighting it would
+                // be the indicator saying something the frame does not.
+                icon(tint: look.isEngaged
+                     ? AnyShapeStyle(controller.accentColor)
+                     : AnyShapeStyle(.secondary))
             }
             .buttonStyle(.plain)
-            .help(L("lut_playback_toggle"))
+            .help(look == .bypassed
+                  ? L("lut_bypassed_help") : L("lut_playback_toggle"))
         }
     }
 

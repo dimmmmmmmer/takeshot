@@ -84,6 +84,27 @@ extension CaptureController {
         return viewerMode == .playback ? playbackURL != nil : referencePinned
     }
 
+    /// Whether the compare on screen is BYPASSING the viewing LUT.
+    ///
+    /// Difference is a measurement, not a picture: both engines read the two
+    /// halves at the pre-LUT stage and the |A−B| output never sees the cube,
+    /// because a difference of two graded pictures is not the difference the
+    /// operator is measuring. That is deliberate and pinned.
+    ///
+    /// What was NOT right is the indicator. The filter icon lit in the accent
+    /// colour over a frame with no look on it, which reads as "the LUT is not
+    /// working" — and is how the owner reported it ("в режиме дифф лут не
+    /// применяется"). The pixels were correct; the icon was lying.
+    ///
+    /// It asks for the B side the way the RENDER does, not the way the bar
+    /// does: with nothing to difference against, both engines fall through and
+    /// apply the LUT after all, and saying "bypassed" there would be the same
+    /// lie pointing the other way.
+    var compareBypassesLook: Bool {
+        guard compareMode == .difference else { return false }
+        return viewerMode == .playback ? playbackURL != nil : referencePinned
+    }
+
     /// Whether the compare row belongs over the player at all.
     ///
     /// One property rather than a condition written out in the chrome, for the

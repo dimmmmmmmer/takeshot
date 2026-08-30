@@ -145,6 +145,45 @@ struct RemotePageSourceTests {
         }
     }
 
+    /// Every served page lets the four digits be TYPED.
+    ///
+    /// The PIN never travels in a URL — the QR encodes the address alone, on
+    /// purpose, because the code on the cart is read out to the people meant to
+    /// have it. So the gate's field is the only way into a handset that has not
+    /// opened the page before, and it has to work on all of them.
+    ///
+    /// The CSS half of that is not decoration. Every page sets
+    /// `user-select: none` on `html, body` so a finger resting on the timecode
+    /// does not start a selection; `user-select` INHERITS, and WebKit will not
+    /// put a caret in a field that computes to `none`. The operator page — the
+    /// one with REC on it — was the only one whose `#pin` rule did not turn it
+    /// back on, so the tap did nothing and no keyboard came up. Nothing about
+    /// that is visible in the markup: the field, the button and the handler
+    /// were all present and correct.
+    @Test func everyServedPageLetsThePINBeTyped() throws {
+        for page in try Self.pages() {
+            let rule = try #require(Self.cssRule("#pin", in: page.html),
+                                    "\(page.name) has no #pin rule at all")
+            #expect(rule.contains("user-select: text"),
+                    """
+                    the \(page.name) page's PIN field inherits \
+                    user-select: none, so WebKit will not place a caret in it \
+                    and the code cannot be typed
+                    """)
+        }
+    }
+
+    /// The declaration block of one CSS rule, or nil when the page has no such
+    /// selector. Enough of a parser for the stylesheets this repository writes:
+    /// each page carries one `<style>`, and no rule nested inside an at-rule
+    /// names `#pin`.
+    static func cssRule(_ selector: String, in html: String) -> String? {
+        guard let start = html.range(of: selector + " {"),
+              let end = html[start.upperBound...].firstIndex(of: "}")
+        else { return nil }
+        return String(html[start.upperBound..<end])
+    }
+
     /// Nothing on a served page builds DOM out of a string.
     ///
     /// Every dynamic value on these pages — a take's comment, a camera's name,

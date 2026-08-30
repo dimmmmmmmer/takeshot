@@ -251,12 +251,21 @@ import Testing
         #expect(transport.rangeStart(forPlayheadAt: 0) == nil)
         #expect(transport.rangeStart(forPlayheadAt: 9) == 0)
 
-        // with looping off the out point is not enforced anywhere, so it does
-        // not reposition the start either; an in point still does
+        // **The loop button does not decide whether the marks EXIST.** It used
+        // to: with looping off the out point was not enforced anywhere, so the
+        // next play ran the whole clip from the head and both marks read as
+        // ignored (owner: "точки in out у нас не учитываются все еще при
+        // выключенном лупе"). An out point is where the operator said the take
+        // ends; whether playback wraps there or stops is the loop question,
+        // and where the NEXT press starts from is not.
         transport.isLooping = false
-        #expect(transport.rangeStart(forPlayheadAt: 9) == nil)
+        #expect(transport.rangeStart(forPlayheadAt: 9) == 0,
+                "with the loop off, a playhead past the out point stayed there")
         transport.inPoint = 4
+        #expect(transport.rangeStart(forPlayheadAt: 9) == 4)
         #expect(transport.rangeStart(forPlayheadAt: 0) == 4)
+        // …and inside the range it is still left alone, in both loop states
+        #expect(transport.rangeStart(forPlayheadAt: 6) == nil)
     }
 
     /// And through the controller, on real media: opening a clip that carries a
@@ -356,7 +365,15 @@ import Testing
             #expect(raw.startOfPlayback() == 7)
         }
     }
+}
 
+/// The range TABLE: which clip a marked range belongs to, and what happens to
+/// it when that clip goes.
+///
+/// A different question from where playback begins and from what the out point
+/// means, and its own suite for that reason.
+@MainActor
+struct TransportRangeTableTests {
     /// Deleting the clip in the player releases its range along with everything
     /// else the controller was holding for it.
     @Test func deletingATakeForgetsItsRange() async throws {
@@ -373,6 +390,65 @@ import Testing
 
             #expect(controller.transport.inPoint == nil)
             #expect(controller.transport.storedRange(for: take.url).isEmpty)
+        }
+    }
+}
+
+/// What reaching the OUT point means — the decision alone, with no player.
+///
+/// Its own suite because it is a different question from where playback
+/// BEGINS, and because the split is what the file's length rule asked for.
+@MainActor
+struct TransportOutPointTests {
+    /// What reaching the out point MEANS, in both loop states.
+    ///
+    /// The loop decides which of two things happens at the mark; it does not
+    /// decide whether the mark is honoured. That gate was the defect: with
+    /// looping off nothing in the AVPlayer engine read `outPoint` at all, so
+    /// playback ran past it to the end of the clip while the RAW engine — the
+    /// same rule, stated a second time — stopped there correctly.
+    @Test func theOutPointActsInBothLoopStates() async throws {
+        try await ViewProbe.run { probe in
+            let transport = probe.controller.transport
+            transport.inPoint = 4
+            transport.outPoint = 8
+
+            for looping in [true, false] {
+                transport.isLooping = looping
+                let expected: TransportModel.RangeAction =
+                    looping ? .wrap(to: 4) : .stop(at: 8)
+                #expect(transport.rangeAction(atTime: 8, playing: true)
+                        == expected, "at the mark, looping=\(looping)")
+                #expect(transport.rangeAction(atTime: 9.5, playing: true)
+                        == expected, "past the mark, looping=\(looping)")
+                // …and before it, nothing happens either way
+                #expect(transport.rangeAction(atTime: 7.9, playing: true)
+                        == .carryOn, "before the mark, looping=\(looping)")
+                // …nor while paused: a playhead parked past the mark is where
+                // the operator put it, and yanking it back would fight a scrub.
+                #expect(transport.rangeAction(atTime: 9.5, playing: false)
+                        == .carryOn, "paused, looping=\(looping)")
+            }
+
+            // No out point is no decision, whatever the loop says.
+            transport.outPoint = nil
+            for looping in [true, false] {
+                transport.isLooping = looping
+                #expect(transport.rangeAction(atTime: 99, playing: true)
+                        == .carryOn)
+            }
+        }
+    }
+
+    /// An out point with no in point wraps to the HEAD, not to nothing.
+    @Test func wrappingWithNoInPointGoesToTheHead() async throws {
+        try await ViewProbe.run { probe in
+            let transport = probe.controller.transport
+            transport.isLooping = true
+            transport.inPoint = nil
+            transport.outPoint = 5
+            #expect(transport.rangeAction(atTime: 5, playing: true)
+                    == .wrap(to: 0))
         }
     }
 }

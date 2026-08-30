@@ -38,13 +38,35 @@ enum PlaybackLook: Equatable {
     /// (the look came from the camera, say). The only difference from
     /// `applied` is which way the toggle is pointing.
     case suppressed
+    /// A look is picked and preview is on, and the compare on screen is a
+    /// MEASUREMENT rather than a picture — so nothing is looking through the
+    /// cube and the indicator must not say it is.
+    ///
+    /// Difference mode reads both halves at the pre-LUT stage and never puts
+    /// the |A−B| output through the cube, in BOTH engines, on purpose: a
+    /// difference of two graded pictures is not the difference the operator is
+    /// measuring. The pixels were always right (owner reported it as "в режиме
+    /// дифф лут не применяется" — they are correct, and it is deliberate); the
+    /// INDICATOR was not, lighting the filter icon in the accent colour over a
+    /// frame with no look on it. That is the exact state this type was
+    /// extracted to make unreachable.
+    case bypassed
 
     /// Whether the tap should be given the cube. The one place that answers it.
     var appliesCube: Bool { self == .applied }
 
     /// Whether the bar offers a control the operator can press. `baked` is the
-    /// case this exists for: it is visible and it is not pressable.
-    var isSwitchable: Bool { self == .applied || self == .suppressed }
+    /// case this exists for: it is visible and it is not pressable. `bypassed`
+    /// is pressable — the look is still picked, and pressing it is how the
+    /// operator says what they want when they leave difference mode.
+    var isSwitchable: Bool {
+        self == .applied || self == .suppressed || self == .bypassed
+    }
+
+    /// Whether the indicator should read as ENGAGED. The one question the icon
+    /// asks, so `bypassed` cannot come to look like `applied` by being drawn at
+    /// a fourth call site.
+    var isEngaged: Bool { self == .applied || self == .baked }
 
     /// The rule, over the four facts that decide it.
     ///
@@ -52,10 +74,16 @@ enum PlaybackLook: Equatable {
     /// off: the codes in the file carry the look whatever the app is set to, so
     /// saying "no look" over a baked take would be a false negative about the
     /// footage rather than about a setting.
+    /// `bypassed` is tested after `baked` and before the toggle, because a
+    /// baked file carries the look in its codes whatever the compare is doing
+    /// — and a suppressed look is already off, so saying "bypassed" of it
+    /// would be two answers to one question.
     static func current(previewEnabled: Bool, hasCube: Bool,
-                        fileHasBakedLook: Bool, suppressed: Bool) -> PlaybackLook {
+                        fileHasBakedLook: Bool, suppressed: Bool,
+                        compareBypassesLook: Bool = false) -> PlaybackLook {
         if fileHasBakedLook { return .baked }
         guard previewEnabled, hasCube else { return .none }
-        return suppressed ? .suppressed : .applied
+        if suppressed { return .suppressed }
+        return compareBypassesLook ? .bypassed : .applied
     }
 }

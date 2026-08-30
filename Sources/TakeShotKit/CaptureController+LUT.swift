@@ -38,7 +38,8 @@ extension CaptureController {
         PlaybackLook.current(previewEnabled: settings.lut.previewEnabled ?? false,
                              hasCube: currentCube != nil,
                              fileHasBakedLook: playbackFileHasBakedLUT,
-                             suppressed: playbackLUTSuppressed)
+                             suppressed: playbackLUTSuppressed,
+                             compareBypassesLook: compareBypassesLook)
     }
 
     var lutRecordOn: Bool {

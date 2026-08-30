@@ -60,11 +60,16 @@ final class TransportModel: ObservableObject {
         if player.rate != 0 {
             player.pause()
         } else {
+            // The range decides FIRST. This used to seek to zero at the end of
+            // the item and then ask, and with the loop off `rangeStart`
+            // declined — so the zero stood and the whole clip replayed from the
+            // head, ignoring the in point the operator had set. A clip with no
+            // marks still gets the rewind, which is what it was for.
+            if beginInsideRange() { return player.rate = Float(desiredRate) }
             if let item = player.currentItem, item.duration.isNumeric,
                item.currentTime() >= item.duration {
                 player.seek(to: .zero)
             }
-            beginInsideRange()
             player.rate = Float(desiredRate)
         }
     }
@@ -81,24 +86,62 @@ final class TransportModel: ObservableObject {
     /// range on it always played the whole lead-in and only then began looping,
     /// which is exactly what the operator saw.
     ///
+    /// What reaching `time` means for a clip with an out point on it.
+    ///
+    /// Pure, and separate from the observer that acts on it, for the reason
+    /// `rangeStart` is: the decision is the part worth pinning, and driving a
+    /// real `AVPlayer` to its out point headlessly does not work — a test that
+    /// tried it passed against the OLD behaviour too, because playback never
+    /// started and "it stopped" was true before it began.
+    ///
+    /// The loop decides WHICH of the two things happens at the mark, never
+    /// whether the mark is honoured: that gate is what made the marks read as
+    /// ignored with the loop off (owner: "точки in out у нас не учитываются
+    /// все еще при выключенном лупе").
+    enum RangeAction: Equatable {
+        /// Nothing to do — not playing, no out point, or not there yet.
+        case carryOn
+        /// Wrap to the in point and keep going.
+        case wrap(to: Double)
+        /// Stop, ON the mark rather than wherever the 10 Hz tick caught it.
+        case stop(at: Double)
+    }
+
+    func rangeAction(atTime time: Double, playing: Bool) -> RangeAction {
+        guard playing, let out = outPoint, time >= out else { return .carryOn }
+        return isLooping ? .wrap(to: inPoint ?? 0) : .stop(at: out)
+    }
+
     /// Pure and separate from the seek so the decision can be tested without a
     /// player attached.
     func rangeStart(forPlayheadAt position: Double) -> Double? {
         let start = inPoint ?? 0
-        // past the end of the range: the next play restarts it rather than
-        // running on into whatever follows
-        if let outPoint, position >= outPoint, isLooping { return start }
+        // Past the end of the range: the next play restarts it rather than
+        // running on into whatever follows.
+        //
+        // NOT gated on looping, which it used to be — and that gate is why the
+        // marks read as ignored with the loop off (owner: "точки in out у нас
+        // не учитываются все еще при выключенном лупе"). An out point is where
+        // the operator said this take ends; whether playback WRAPS there or
+        // STOPS is what the loop button decides, and where the next press
+        // starts from is not that question. The RAW engine's twin
+        // (`startOfPlayback`) has never had the gate.
+        if let outPoint, position >= outPoint { return start }
         // before it: the range is where the operator wants to be watching
         guard inPoint != nil, position < start - 0.001 else { return nil }
         return start
     }
 
     /// Put the playhead inside the range before playback starts.
-    func beginInsideRange() {
+    /// Returns whether it MOVED the playhead, so a caller can tell "the range
+    /// put me somewhere" from "there was nothing to do".
+    @discardableResult
+    func beginInsideRange() -> Bool {
         guard let start = rangeStart(forPlayheadAt: position.currentTime)
-        else { return }
+        else { return false }
         seek(to: start)
         position.currentTime = start
+        return true
     }
 
     /// Set/clear the in or out point at the playhead (click near an existing

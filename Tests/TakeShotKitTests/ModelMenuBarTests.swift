@@ -224,6 +224,25 @@ import Testing
 
     /// Every command the menu offers is reachable exactly once. Two rows onto
     /// one action is how a menu and a button drift apart.
+    /// The status item does not offer the digital slate.
+    ///
+    /// The slate that goes on set is the WEB one at `/slate`: a phone can be
+    /// put where the camera is looking and a window on the cart Mac cannot
+    /// (owner: "в статус баре зачем мне диджитал слейт? должна быть только веб
+    /// страница"). The desktop slate window is still under View, which is
+    /// where you are when the app is in front — the status item is for when it
+    /// is not.
+    ///
+    /// Asserted on the TITLE rather than on a `Command` case, so it says the
+    /// same thing before and after the case exists.
+    @Test func theStatusItemDoesNotOfferTheSlate() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let model = MenuBarModel(controller: controller)
+            #expect(!model.items.contains { $0.title == L("menu_slate") },
+                    "the status item is offering the slate window again")
+        }
+    }
+
     @Test func everyCommandAppearsExactlyOnce() async throws {
         try await ControllerHarness.run { controller, _ in
             let model = MenuBarModel(controller: controller)
@@ -300,7 +319,7 @@ import Testing
         "menubar_mute_monitor", "menubar_open_main", "menubar_quit",
         "menubar_status_idle", "menubar_status_ready", "menubar_status_recording",
         // reused, because the item and the button are the same action
-        "record", "stop", "hotkey_marker", "menu_slate",
+        "record", "stop", "hotkey_marker",
     ]
 
     @Test func everyMenuBarStringResolvesInBothLanguages() {
