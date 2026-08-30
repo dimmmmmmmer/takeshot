@@ -504,6 +504,9 @@ final class CaptureController: ObservableObject {
     /// Not `@Published`: nothing draws it, and a per-push write to an observed
     /// property would re-render the window four times a second.
     var lastPushedTimecode: String?
+    /// Debounce for the visual-REC box, so a drag across the picture does not
+    /// write settings — and re-render the window — on every tick.
+    var visualRecPersistTask: Task<Void, Never>?
     /// Take posters already encoded, by take. The script page asks for one per
     /// row, so the bytes are kept rather than re-encoded per request; the
     /// image behind them never changes once decoded (see +RemoteStatus).

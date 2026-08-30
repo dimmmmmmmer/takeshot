@@ -17,6 +17,15 @@ extension CaptureController {
     /// Every settings write lands here (from the `settings` didSet). Only the
     /// parts of the app the change actually touches are rebuilt — see below.
     func applySettingsChange(from oldValue: CaptureSettings) {
+        // The REC-indicator trigger follows the detection MODE: choosing another
+        // mode must take it down, and choosing this one arms it if the box has
+        // been taught. Stated here rather than in the picker, because a settings
+        // blob and the mode menu on the timecode badge are both callers.
+        let wantsVisual = settings.capture.detectionMode == .visual
+        if visualRecTeaching.isOn != (wantsVisual && visualRecTeaching.isTaught) {
+            visualRecOn = wantsVisual
+        }
+
         settings.save(to: defaults)
         // A settings write fans out only to the subsystems the change actually
         // touches: a volume slider tick lands here too, and rebuilding the

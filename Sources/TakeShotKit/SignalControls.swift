@@ -135,6 +135,7 @@ struct DetectionModePicker: View {
             Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
             Text(L("mode_auto")).tag(RecDetectionMode.auto)
             Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
+            Text(L("mode_visual")).tag(RecDetectionMode.visual)
             Text(L("mode_manual")).tag(RecDetectionMode.manual)
         }
     }

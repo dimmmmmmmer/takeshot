@@ -75,6 +75,8 @@ public struct VisualRecSettings: Codable, Equatable, Sendable {
         case centerX = "visualRecCenterX"
         case centerY = "visualRecCenterY"
         case size = "visualRecSize"
+        case width = "visualRecWidth"
+        case height = "visualRecHeight"
         case margin = "visualRecMargin"
         case rolling = "visualRecRolling"
         case idle = "visualRecIdle"
@@ -84,8 +86,19 @@ public struct VisualRecSettings: Codable, Equatable, Sendable {
     /// frame, which is where an untaught box sits.
     public var centerX: Double?
     public var centerY: Double?
-    /// Box extent as a fraction of each axis; nil — `VisualRecRegion.defaultSize`.
+    /// The old SQUARE extent, kept so settings written before the box had two
+    /// axes still decode — and still restore, as both of them. Nothing writes
+    /// it any more: `persistVisualRec` writes the pair below, so the first save
+    /// after an upgrade retires it. Read in `restoreVisualRec`, which is the
+    /// only place it may be read; `RetiredSettingTests` holds that line.
     public var size: Double?
+    /// Box extent as a fraction of each axis; nil — `VisualRecRegion.defaultSize`.
+    ///
+    /// Two, because a camera's REC indicator is a dot beside a word — wide and
+    /// short — and a square that holds it holds a strip of moving picture with
+    /// it (see `VisualRecRegion.width`).
+    public var width: Double?
+    public var height: Double?
     /// Required margin against the other reference, as a fraction of the taught
     /// separation; nil — `VisualRecTeaching.defaultMargin`.
     public var margin: Double?

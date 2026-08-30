@@ -90,22 +90,41 @@ struct ViewVisualRecTests {
             #expect(!probe.controller.visualRecTeachArmed)
             #expect(!probe.controller.visualRecOn)
 
+            // **The door moved to the MODE picker.** The switch of its own is
+            // gone: watching the camera's indicator is an alternative to VANC
+            // and to running timecode, not a modifier on whichever of them is
+            // chosen, so it is a `RecDetectionMode` now (owner: "это должна
+            // быть одна из опций для река среди ванк/таймкод и прочего").
+            //
+            // What that fixes is this test's own subject one level up. The
+            // rows used to expand on `visualRecOn`, which cannot be true until
+            // the box is taught — with the teaching row inside the expansion.
+            // Choosing the mode is what opens them now, and the mode can be
+            // chosen from a fresh install.
+            let idle: CGSize = probe.fittingSize(VisualRecRows())
+            #expect(idle.height == 0,
+                    "the rows are offered under a mode that does not watch the picture")
+
+            probe.controller.settings.capture.detectionMode = .visual
             let fresh: CGSize = probe.fittingSize(VisualRecRows())
             let door: CGSize = probe.fittingSize(VisualRecTeachRow())
-            let switchOnly: CGSize = probe.fittingSize(
-                Toggle(L("visual_rec"), isOn: .constant(false)))
-
             #expect(door.height > 0, "the teach row renders as nothing")
-            #expect(fresh.height >= switchOnly.height + door.height - 1,
-                    "the untaught panel is \(fresh.height)pt — only the switch, no way in")
+            #expect(fresh.height >= door.height - 1,
+                    "choosing the mode offered \(fresh.height)pt — no way in")
 
-            // …and the door opens the rest, from exactly that state
+            // The dials are already there — choosing the mode opened the whole
+            // section, which is the point of moving the door: an operator who
+            // has picked this mode can size the box BEFORE teaching it, which
+            // is the order the job happens in.
+            #expect(fresh.height > door.height,
+                    "the mode opened the teach row and nothing else")
+
+            // …and the door still does what it is for, from exactly that state
             probe.controller.toggleVisualRecTeach()
             #expect(probe.controller.visualRecTeachArmed,
                     "the teach button did not arm teaching mode")
-            let opened: CGSize = probe.fittingSize(VisualRecRows())
-            #expect(opened.height > fresh.height,
-                    "arming teaching opened nothing: \(fresh) → \(opened)")
+            #expect(probe.fittingSize(VisualRecRows()).height >= fresh.height,
+                    "arming teaching took rows away")
         }
     }
 

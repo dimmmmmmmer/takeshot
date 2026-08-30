@@ -65,7 +65,7 @@ enum VisualRecProbe {
     /// The region the operator would mark on that indicator.
     static func region(size: Double = VisualRecRegion.defaultSize)
         -> VisualRecRegion {
-        VisualRecRegion(centerX: indicatorX, centerY: indicatorY, size: size)
+        VisualRecRegion(centerX: indicatorX, centerY: indicatorY, width: size)
     }
 
     /// The flat picture the fixtures are painted on. Its own constant so a test

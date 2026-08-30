@@ -73,16 +73,20 @@ struct TakeLogButton: View {
                 .frame(width: SlateFieldsEditor.popoverContentWidth,
                        alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button(L("comment_save")) {
-                    save()
-                    showPopover = false
-                }
-                .keyboardShortcut(.return, modifiers: [.command])
-            }
         }
         .padding(12)
+        // **No Save button: the editor saves itself** (owner: "написание
+        // комментов к дублям должно работать без кнопки save"). A popover on a
+        // take row is a correction made between setups, and a note that is lost
+        // because the operator clicked the picture instead of a button is the
+        // note the report needed.
+        //
+        // On every change rather than on dismissal alone: a popover can be
+        // closed by clicking away, by Escape, or by the window going — and
+        // `onDisappear` is not promised for all three. `setComment` and
+        // `setSlate` are idempotent and rewrite the sidecars on a debounce of
+        // their own, so writing per keystroke costs a comparison.
+        .onChange(of: draft) { _, _ in save() }
     }
 
     /// Both writes go through the controller, which files them on the take list

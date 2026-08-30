@@ -157,9 +157,9 @@ extension CaptureController {
         let teaching = pipeline.visualRec
         guard let separation = teaching.separation else { return "not taught" }
         let region = teaching.region
-        let box = String(format: "centre %.0f%%,%.0f%% size %.0f%%",
+        let box = String(format: "centre %.0f%%,%.0f%% size %.0f%%x%.0f%%",
                          region.centerX * 100, region.centerY * 100,
-                         region.size * 100)
+                         region.width * 100, region.height * 100)
         let state = teaching.isArmed
             ? "armed" : (teaching.isTaught ? "taught, off" : "taught, too alike")
         let reading = pipeline.visualRecReading?.rawValue ?? "no evidence"

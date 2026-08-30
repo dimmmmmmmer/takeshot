@@ -170,7 +170,7 @@ struct VisualRecTriggerTests {
     /// a row.
     @Test func theBoxIsClampedInsideTheFrame() throws {
         for (x, y) in [(0.0, 0.0), (1.0, 1.0), (0.5, 0.0), (0.0, 0.5)] {
-            let region = VisualRecRegion(centerX: x, centerY: y, size: 0.25)
+            let region = VisualRecRegion(centerX: x, centerY: y, width: 0.25)
             let box = try #require(region.pixels(width: 1920, height: 1080))
             #expect(box.x >= 0 && box.y >= 0, "\(x),\(y) → \(box)")
             #expect(box.x + box.width <= 1920, "\(x),\(y) → \(box)")
@@ -184,12 +184,25 @@ struct VisualRecTriggerTests {
     /// half: a region larger than a quarter of the frame each way stops being
     /// the indicator and starts being the picture.
     @Test func theBoxSizeIsClampedSmall() {
-        var region = VisualRecRegion(centerX: 0.5, centerY: 0.5, size: 4)
+        // Both axes, independently — the box stopped being square when a REC
+        // indicator turned out to be a dot beside a word.
+        var region = VisualRecRegion(centerX: 0.5, centerY: 0.5,
+                                     width: 4, height: 4)
         region.clamp()
-        #expect(region.size == VisualRecRegion.maxSize)
-        region.size = -1
+        #expect(region.width == VisualRecRegion.maxSize)
+        #expect(region.height == VisualRecRegion.maxSize)
+        region.width = -1
+        region.height = -1
         region.clamp()
-        #expect(region.size == VisualRecRegion.minSize)
+        #expect(region.width == VisualRecRegion.minSize)
+        #expect(region.height == VisualRecRegion.minSize)
+        // …and one axis at the ceiling does not drag the other with it, which
+        // is the whole point of there being two.
+        var wide = VisualRecRegion(centerX: 0.5, centerY: 0.5,
+                                   width: 0.25, height: 0.04)
+        wide.clamp()
+        #expect(wide.width == 0.25)
+        #expect(wide.height == 0.04)
         #expect(VisualRecRegion.maxSize <= 0.25,
                 "the box may not be allowed to cover the frame")
     }

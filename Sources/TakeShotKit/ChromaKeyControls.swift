@@ -351,7 +351,7 @@ struct ChromaPickOverlay: View {
                     }
                     .onHover { inside in
                         if inside {
-                            NSCursor.crosshair.push()
+                            PickerCursor.eyedropper.push()
                         } else {
                             NSCursor.pop()
                         }

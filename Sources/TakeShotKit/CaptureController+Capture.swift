@@ -117,6 +117,12 @@ extension CaptureController {
     /// without its moov atom), and waits on a detached task: a MainActor task
     /// can never run while the main thread is parked in semaphore.wait.
     func flushOnTerminate() {
+        // The debounced settings writes, before anything blocks. Each of these
+        // is a value the operator SET and would expect back: a box dragged, a
+        // level moved, a hold engaged inside the last 400 ms would otherwise be
+        // the one thing a session forgets.
+        visualRecPersistTask?.cancel()
+        persistVisualRec()
         // Before anything blocks: the remote's listener and its clients have to
         // go, or a phone holds a socket open against a process that is parked in
         // a semaphore waiting for the writer.

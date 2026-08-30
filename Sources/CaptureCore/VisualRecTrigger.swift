@@ -32,8 +32,21 @@ public struct VisualRecRegion: Equatable, Sendable {
     /// Box centre, 0…1 across the frame; y grows DOWN, like `imageFraction`.
     public var centerX: Double
     public var centerY: Double
-    /// Box extent as a fraction of the frame, on both axes.
-    public var size: Double
+    /// Box extent as a fraction of the frame, PER AXIS.
+    ///
+    /// One `size` for both, once — which made the region a square by
+    /// construction and could not be told to match what a camera actually
+    /// draws. A REC indicator is a dot beside a word: wide and short. A square
+    /// big enough to hold it holds a strip of picture above and below it too,
+    /// and every costume that walks through that strip is a frame the trigger
+    /// has to tell apart from the dot lighting up. (Owner: "по высоте ширине
+    /// нельзя отредачить квадратик".)
+    ///
+    /// The ceiling is per axis for the same reason it existed at all: a quarter
+    /// of the frame on ONE axis is still a strip, and the area rule that
+    /// mattered — 6 % — is what two quarters multiply to.
+    public var width: Double
+    public var height: Double
 
     /// Bounds on the box. The ceiling is the load-bearing one: a quarter of the
     /// frame each way is already 6 % of its area, and a region larger than that
@@ -47,17 +60,19 @@ public struct VisualRecRegion: Equatable, Sendable {
     public static let defaultSize = 0.08
 
     public init(centerX: Double = 0.5, centerY: Double = 0.5,
-                size: Double = defaultSize) {
+                width: Double = defaultSize, height: Double = defaultSize) {
         self.centerX = centerX
         self.centerY = centerY
-        self.size = size
+        self.width = width
+        self.height = height
     }
 
     /// Clamp everything the UI (or a hand-edited settings blob) can drive.
     public mutating func clamp() {
         centerX = min(1, max(0, centerX))
         centerY = min(1, max(0, centerY))
-        size = min(Self.maxSize, max(Self.minSize, size))
+        width = min(Self.maxSize, max(Self.minSize, width))
+        height = min(Self.maxSize, max(Self.minSize, height))
     }
 
     /// The watched box as a rectangle. A named struct and not four loose
@@ -81,10 +96,11 @@ public struct VisualRecRegion: Equatable, Sendable {
     /// and the operator's on-screen guide draws it, so the box that is watched is
     /// by construction the box that is shown.
     public var normalizedBox: Box<Double> {
-        let side = min(Self.maxSize, max(Self.minSize, size))
-        return Box(x: min(1 - side, max(0, centerX - side / 2)),
-                   y: min(1 - side, max(0, centerY - side / 2)),
-                   width: side, height: side)
+        let w = min(Self.maxSize, max(Self.minSize, width))
+        let h = min(Self.maxSize, max(Self.minSize, height))
+        return Box(x: min(1 - w, max(0, centerX - w / 2)),
+                   y: min(1 - h, max(0, centerY - h / 2)),
+                   width: w, height: h)
     }
 
     /// Pixel rect inside a frame of `width` × `height`. nil for a degenerate

@@ -254,6 +254,20 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
     case auto           // VANC trigger if recognized + running timecode
     case timecodeRun    // running TC only (camera in Rec Run)
     case manual         // in-app button only
+    /// The camera's own REC indicator, watched in a box on the picture.
+    ///
+    /// A MODE and not a switch beside them. It was a `Toggle` of its own, which
+    /// made it look like a modifier on whatever mode was chosen when it is an
+    /// alternative to them — and worse, it could not be turned on until the box
+    /// was taught while the teaching rows lived under the same switch, so an
+    /// untaught install found a control that did nothing (owner: "рек индикатор
+    /// в настройках не переключается вообще... это должна быть одна из опций
+    /// для река среди ванк/таймкод и прочего").
+    ///
+    /// It is the answer for HDMI, where there is no ancillary data to carry a
+    /// trigger at all and a camera that does not run Rec Run timecode leaves
+    /// nothing else to watch.
+    case visual
 
     /// The modes a recognized VANC trigger reaches the detector in. Stated here
     /// as data, next to the cases it is about: the frame path used to spell the

@@ -44,12 +44,24 @@ struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            paneSwitch
-            switch controller.namingPane {
-            case .file: NamingFileNameRow()
-            case .meta: slateRow
+        HStack(alignment: .center, spacing: 8) {
+            // The two rows are different HEIGHTS — the file row stacks its
+            // captions over its boxes, the slate row puts them beside — so a
+            // switch above them made the whole footer jump on every press
+            // (owner: "высота подвала прыгает при переключении"). Beside them
+            // it cannot: the block is as tall as whichever row is showing, and
+            // the switch is shorter than both.
+            Group {
+                switch controller.namingPane {
+                case .file: NamingFileNameRow()
+                case .meta: slateRow
+                }
             }
+            // …and pinned to the tallest of the two, so the row that is showing
+            // sits where the other one would. Without this the block's height
+            // still changes, it just changes on the other axis.
+            .frame(height: Self.rowHeight, alignment: .bottom)
+            paneSwitch
         }
         .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
         .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
@@ -79,6 +91,16 @@ struct NamingFieldsView: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .controlSize(.mini)
+        // VERTICAL, on the right (owner: "я бы как вариант даже подумал о том
+        // чтоб переключатель этот был не центрованно сверху а сбоку справа от
+        // этих полей, вертикальным"). A segmented picker has no vertical style,
+        // so it is rotated — which keeps it the one control macOS draws for
+        // "one of two", the same control the viewer's record/playback switch
+        // is, rather than a pair of buttons that only look like one.
+        .rotationEffect(.degrees(90))
+        .fixedSize()
+        .frame(width: Self.paneSwitchThickness,
+               height: Self.paneSwitchWidth)
         // **A FIXED width, for the reason the slate captions are fixed.** This
         // is the only other localized string in the footer's right half, and
         // the REC button is centered by that half measuring the same in English
@@ -89,12 +111,19 @@ struct NamingFieldsView: View {
         //
         // The number holds the longer pair with room to spare and is measured
         // against both languages rather than eyeballed.
-        .frame(width: Self.paneSwitchWidth)
     }
 
-    /// The FILE/META switch. Must hold both languages; pinned in
-    /// `ViewNamingRowTests`, which measures the words rather than trusting it.
+    /// The FILE/META switch, along its own length. Must hold both languages;
+    /// pinned in `ViewNamingRowTests`, which measures the words rather than
+    /// trusting it. Rotated, so this is the block's HEIGHT budget.
     static let paneSwitchWidth: CGFloat = 92
+    /// Across. A segmented control at `.mini` is about 16pt tall; 22 leaves it
+    /// room without charging the footer half for air.
+    static let paneSwitchThickness: CGFloat = 22
+    /// What both naming rows are pinned to, so switching cannot change the
+    /// block's height. The file row (captions stacked over boxes) is the taller
+    /// of the two and sets it.
+    static let rowHeight: CGFloat = 38
 
     /// What was shot. NOT gated on the template like the row above: scene, shot
     /// and take describe the work, not the file name, so they are here whether

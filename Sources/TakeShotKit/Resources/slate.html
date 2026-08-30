@@ -472,6 +472,11 @@ function paint() {
 function readout(moment, syncing) {
   if (seed === null) { return "--:--:--:--"; }
   if (syncing) { return syncLabel; }
+  // The free-run exists to smooth the gap between 4/s pushes. A source that is
+  // HOLDING its timecode has nothing to smooth, and extrapolating it made the
+  // clock climb while the camera sat in standby — the tag said STANDBY and the
+  // numbers said otherwise, which is worse than either alone.
+  if (!tcRunning) { return TAKESHOT_TC.label(seed, seedFps, seedDrop); }
   return TAKESHOT_TC.label(seed + advanced(moment), seedFps, seedDrop);
 }
 

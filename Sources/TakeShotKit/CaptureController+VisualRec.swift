@@ -35,8 +35,21 @@ extension CaptureController {
     /// in the panel cannot forget either.
     func applyVisualRecChange(from oldValue: VisualRecTeaching) {
         guard oldValue != visualRecTeaching else { return }
+        // The pipeline gets it AT ONCE — that is what makes the box follow the
+        // pointer, and it is one struct copy onto a queue.
         pipeline.setVisualRec(visualRecTeaching)
-        persistVisualRec()
+        // The settings write is DEBOUNCED, on the same 400 ms the volume slider
+        // and the DIM hold already use and for exactly the same reason: a
+        // settings write fans out through `applySettingsChange` and re-renders
+        // the window, and this value moves with a drag. Persisting every tick
+        // of a drag across the picture is what made dragging the box sluggish
+        // (owner: "перетаскивание марка река по визуалу лагает").
+        visualRecPersistTask?.cancel()
+        visualRecPersistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            self.persistVisualRec()
+        }
     }
 
     // MARK: - the switch and the dials
@@ -49,6 +62,12 @@ extension CaptureController {
     /// caller, the hotkeys and the web remote could be the next, and "armed but
     /// untaught" is a state the readout would have to describe and the trigger
     /// could not honour.
+    /// Whether the trigger is live. DRIVEN BY THE MODE now, not by a switch of
+    /// its own — see `RecDetectionMode.visual`. Still refuses to be true while
+    /// untaught, in the setter and not only by disabling a control: the mode
+    /// can be chosen from a settings blob or before the box is taught, and
+    /// "armed but untaught" is a state the readout would have to describe and
+    /// the trigger could not honour.
     var visualRecOn: Bool {
         get { visualRecTeaching.isOn }
         set {
@@ -63,11 +82,21 @@ extension CaptureController {
         }
     }
 
-    var visualRecSize: Double {
-        get { visualRecTeaching.region.size }
+    var visualRecWidth: Double {
+        get { visualRecTeaching.region.width }
         set {
             var teaching = visualRecTeaching
-            teaching.region.size = newValue
+            teaching.region.width = newValue
+            teaching.clamp()
+            visualRecTeaching = teaching
+        }
+    }
+
+    var visualRecHeight: Double {
+        get { visualRecTeaching.region.height }
+        set {
+            var teaching = visualRecTeaching
+            teaching.region.height = newValue
             teaching.clamp()
             visualRecTeaching = teaching
         }
@@ -106,6 +135,42 @@ extension CaptureController {
     /// geometry change the viewer can make — that is the whole reason the region
     /// is not in viewport units. A click on the letterbox is ignored: there is no
     /// signal pixel there to name.
+    /// Draw the box between two points on the picture.
+    ///
+    /// The crosshair over this overlay promised exactly this and delivered a
+    /// move (owner: "курсор превращается в крестик, подразумевая что можно
+    /// нарисовать область нужную, но это невозможно"). Both corners go through
+    /// `imageFraction`, so a rubber band that starts on the picture and ends on
+    /// the letterbox is refused rather than clamped to a shape the operator did
+    /// not draw — the same rule a click outside the picture already follows.
+    ///
+    /// A band smaller than the floor is a CLICK, not a box, and is answered by
+    /// moving the centre instead: that is what a tap has always done, and
+    /// making a stray 2-pixel drag redefine the region would lose the taught
+    /// shape to a twitch.
+    func drawVisualRecRegion(from start: CGPoint, to end: CGPoint,
+                             viewport: CGSize) {
+        let source = displaySourceSize()
+        guard let a = liveAssist.imageFraction(of: start, sourceSize: source,
+                                               in: viewport),
+              let b = liveAssist.imageFraction(of: end, sourceSize: source,
+                                               in: viewport) else { return }
+        let width = abs(Double(b.x - a.x))
+        let height = abs(Double(b.y - a.y))
+        guard width >= VisualRecRegion.minSize,
+              height >= VisualRecRegion.minSize else {
+            placeVisualRecRegion(at: end, viewport: viewport)
+            return
+        }
+        var teaching = visualRecTeaching
+        teaching.region.centerX = Double(a.x + b.x) / 2
+        teaching.region.centerY = Double(a.y + b.y) / 2
+        teaching.region.width = width
+        teaching.region.height = height
+        teaching.clamp()
+        visualRecTeaching = teaching
+    }
+
     func placeVisualRecRegion(at point: CGPoint, viewport: CGSize) {
         guard let fraction = liveAssist.imageFraction(
             of: point, sourceSize: displaySourceSize(), in: viewport) else { return }
@@ -218,8 +283,14 @@ extension CaptureController {
             == base.region.centerX ? nil : teaching.region.centerX
         updated.visualRec.centerY = teaching.region.centerY
             == base.region.centerY ? nil : teaching.region.centerY
-        updated.visualRec.size = teaching.region.size == base.region.size
-            ? nil : teaching.region.size
+        // The retired square key is cleared rather than carried: a value left
+        // there would be read back by `restoreVisualRec` on the next launch and
+        // would overwrite the pair the operator just set.
+        updated.visualRec.size = nil
+        updated.visualRec.width = teaching.region.width == base.region.width
+            ? nil : teaching.region.width
+        updated.visualRec.height = teaching.region.height
+            == base.region.height ? nil : teaching.region.height
         updated.visualRec.margin = teaching.margin == base.margin
             ? nil : teaching.margin
         updated.visualRec.rolling = teaching.rolling?.encoded
@@ -233,7 +304,12 @@ extension CaptureController {
         var teaching = VisualRecTeaching()
         teaching.region.centerX = stored.centerX ?? teaching.region.centerX
         teaching.region.centerY = stored.centerY ?? teaching.region.centerY
-        teaching.region.size = stored.size ?? teaching.region.size
+        // The retired square key seeds BOTH axes, so a box taught before this
+        // split comes back the shape it was left.
+        teaching.region.width = stored.width ?? stored.size
+            ?? teaching.region.width
+        teaching.region.height = stored.height ?? stored.size
+            ?? teaching.region.height
         teaching.margin = stored.margin ?? teaching.margin
         // a blob that was truncated or hand-edited leaves the trigger untaught
         // rather than armed on garbage (see `VisualRecSignature.init(encoded:)`)

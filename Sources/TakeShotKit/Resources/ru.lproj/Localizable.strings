@@ -38,6 +38,7 @@
 "mode_vanc" = "Только VANC-триггер";
 "mode_auto" = "Авто (VANC + таймкод)";
 "mode_timecode" = "Только бегущий таймкод";
+"mode_visual" = "Индикатор REC";
 "mode_manual" = "Только вручную";
 "settings_interface" = "Интерфейс";
 "language" = "Язык";
@@ -904,6 +905,8 @@
 "visual_rec_teach" = "Отметить на картинке";
 "visual_rec_teach_help" = "Кликните по индикатору записи на живой картинке, чтобы поставить на него рамку; размер задаётся ниже.";
 "visual_rec_teach_armed" = "Кликните по картинке, чтобы поставить рамку";
+"visual_rec_width" = "Ширина";
+"visual_rec_height" = "Высота";
 "visual_rec_size" = "Размер рамки";
 "visual_rec_margin" = "Запас";
 "visual_rec_learn_rolling" = "Снять «пишет»";

@@ -123,10 +123,10 @@ struct ControllerVisualRecTests {
     /// whatever a slider or a hand-edited blob asks for.
     @Test func theBoxSizeIsClamped() async throws {
         try await ViewProbe.run { probe in
-            probe.controller.visualRecSize = 10
-            #expect(probe.controller.visualRecSize == VisualRecRegion.maxSize)
-            probe.controller.visualRecSize = -1
-            #expect(probe.controller.visualRecSize == VisualRecRegion.minSize)
+            probe.controller.visualRecWidth = 10
+            #expect(probe.controller.visualRecWidth == VisualRecRegion.maxSize)
+            probe.controller.visualRecWidth = -1
+            #expect(probe.controller.visualRecWidth == VisualRecRegion.minSize)
             probe.controller.visualRecMargin = 5
             #expect(probe.controller.visualRecMargin == VisualRecTeaching.maxMargin)
         }
@@ -233,7 +233,7 @@ struct ControllerVisualRecTests {
         try await ViewProbe.run { probe in
             let controller = probe.controller
             controller.visualRecTeaching.region =
-                VisualRecRegion(centerX: 0.8, centerY: 0.12, size: 0.1)
+                VisualRecRegion(centerX: 0.8, centerY: 0.12, width: 0.1)
             await VisualRecControllerProbe.push(controller, dot: true)
             controller.learnVisualRec(.rolling)
             await VisualRecControllerProbe.push(controller, dot: false)
@@ -244,7 +244,7 @@ struct ControllerVisualRecTests {
             #expect(controller.visualRecTeaching.idle == nil)
             #expect(!controller.visualRecOn)
             #expect(controller.visualRecTeaching.region
-                    == VisualRecRegion(centerX: 0.8, centerY: 0.12, size: 0.1))
+                    == VisualRecRegion(centerX: 0.8, centerY: 0.12, width: 0.1))
         }
     }
 }
@@ -267,7 +267,7 @@ struct ControllerVisualRecReportTests {
         try await ViewProbe.run { probe in
             let controller = probe.controller
             controller.visualRecTeaching.region =
-                VisualRecRegion(centerX: 0.8, centerY: 0.12, size: 0.1)
+                VisualRecRegion(centerX: 0.8, centerY: 0.12, width: 0.1)
             controller.visualRecMargin = 0.7
             await VisualRecControllerProbe.push(controller, dot: true)
             controller.learnVisualRec(.rolling)
@@ -276,11 +276,21 @@ struct ControllerVisualRecReportTests {
             controller.visualRecOn = true
             #expect(controller.visualRecOn)
 
-            // what the stored blob holds…
-            let stored = CaptureSettings.loaded(from: controller.defaults)
-            #expect(stored.visualRec.rolling != nil)
+            // what the stored blob holds, once the debounce has run.
+            //
+            // The write is deferred by 400 ms — a box moves with a DRAG, and
+            // persisting every tick of one re-rendered the window through
+            // `applySettingsChange`. So this polls for the outcome rather than
+            // reading immediately or sleeping a guessed interval.
+            var stored = CaptureSettings.loaded(from: controller.defaults)
+            #expect(await ControllerWait.until {
+                stored = CaptureSettings.loaded(from: controller.defaults)
+                return stored.visualRec.rolling != nil
+            }, "the teaching never reached the settings")
             #expect(stored.visualRec.idle != nil)
-            #expect(stored.visualRec.size == 0.1)
+            // The retired square key is cleared on write; the pair replaces it.
+            #expect(stored.visualRec.size == nil)
+            #expect(stored.visualRec.width == 0.1)
             #expect(stored.visualRec.margin == 0.7)
 
             // …and what comes back from it

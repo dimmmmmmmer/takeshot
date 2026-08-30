@@ -208,6 +208,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .settingsRowAlignment()
         .confirmationDialog(L("clear_luts_confirm"), isPresented: $confirmClearLUTs) {
             Button(L("clear_data"), role: .destructive) { controller.clearLUTs() }
             Button(L("cancel"), role: .cancel) {}

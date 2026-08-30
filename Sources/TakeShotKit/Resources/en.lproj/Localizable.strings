@@ -38,6 +38,7 @@
 "mode_vanc" = "VANC trigger only";
 "mode_auto" = "Auto (VANC + timecode)";
 "mode_timecode" = "Running timecode only";
+"mode_visual" = "REC indicator";
 "mode_manual" = "Manual only";
 "settings_interface" = "Interface";
 "language" = "Language";
@@ -912,6 +913,8 @@
 "visual_rec_teach" = "Mark on picture";
 "visual_rec_teach_help" = "Click the record indicator on the live image to put the box on it; adjust the size below.";
 "visual_rec_teach_armed" = "Click the picture to place the box";
+"visual_rec_width" = "Width";
+"visual_rec_height" = "Height";
 "visual_rec_size" = "Box size";
 "visual_rec_margin" = "Margin";
 "visual_rec_learn_rolling" = "Learn rolling";

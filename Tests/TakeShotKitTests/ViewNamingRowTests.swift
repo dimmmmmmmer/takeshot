@@ -21,7 +21,7 @@ struct ViewNamingRowTests {
     @Test func theSlateRowIsOneControlTall() async throws {
         try await ViewProbe.run { probe in
             let box: CGSize = probe.fittingSize(
-                NameTextField(field: .scene, text: .constant("12A"))
+                NameTextField(field: .scene, text: .constant("12"))
                     .frame(width: 70))
             let row = probe.fittingSizes {
                 SlateFieldsEditor(scene: .constant("12A"), shot: .constant("2"),
@@ -256,7 +256,7 @@ struct ViewNamingRowTests {
             Keystroke(field: .clip, typed: "12a", kept: "12"),
             Keystroke(field: .clip, typed: "12345", kept: "1234"),
             Keystroke(field: .take, typed: "3.5", kept: "35"),
-            Keystroke(field: .scene, typed: "12:A", kept: "12A"),
+            Keystroke(field: .scene, typed: "12A", kept: "12"),
             Keystroke(field: .shot, typed: "2B", kept: "2"),
             Keystroke(field: .prefix, typed: "MARS?", kept: "MARS"),
             Keystroke(field: .postfix, typed: "v2|", kept: "v2"),
@@ -288,7 +288,7 @@ struct ViewNamingRowTests {
     /// otherwise every keystroke would be a rejection and the caret would fight
     /// the operator.
     @Test func aValidEditIsAcceptedUntouched() {
-        for (field, typed) in [(NameField.roll, "A001"), (.scene, "12 A"),
+        for (field, typed) in [(NameField.roll, "A001"), (.scene, "120"),
                                (.clip, "0042"), (.camera, "AB")] {
             let formatter = NameFieldFormatter(field: field)
             var proposed = typed as NSString

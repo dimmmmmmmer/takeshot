@@ -31,26 +31,38 @@ import SwiftUI
 struct VisualRecRows: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// Shown when the operator has CHOSEN this mode, whether or not the box has
+    /// been taught yet.
+    ///
+    /// It used to expand on `visualRecOn`, which cannot be true until the box
+    /// is taught — and the teaching rows were inside the expansion. The key was
+    /// inside the lock, the same shape as the reference pin and the taught REC
+    /// indicator before it. Choosing the mode is now what opens the rows, so an
+    /// untaught install has somewhere to start.
     private var isExpanded: Bool {
-        controller.visualRecOn || controller.visualRecTeachArmed
+        controller.settings.capture.detectionMode == .visual
+            || controller.visualRecTeachArmed
             || controller.visualRecTeaching.rolling != nil
             || controller.visualRecTeaching.idle != nil
     }
 
     var body: some View {
-        Toggle(L("visual_rec"), isOn: Binding(
-            get: { controller.visualRecOn },
-            set: { controller.visualRecOn = $0 }))
-            .disabled(!controller.canUseVisualRec)
-            .help(L("visual_rec_hint"))
-        VisualRecTeachRow()
+        // No switch of its own: the mode picker above IS the switch
+        // (see `RecDetectionMode.visual`).
         if isExpanded {
+            VisualRecTeachRow()
             VisualRecSliderRow(
-                label: L("visual_rec_size"),
-                value: Binding(get: { controller.visualRecSize },
-                               set: { controller.visualRecSize = $0 }),
+                label: L("visual_rec_width"),
+                value: Binding(get: { controller.visualRecWidth },
+                               set: { controller.visualRecWidth = $0 }),
                 range: VisualRecRegion.minSize...VisualRecRegion.maxSize,
-                readout: percent(controller.visualRecSize))
+                readout: percent(controller.visualRecWidth))
+            VisualRecSliderRow(
+                label: L("visual_rec_height"),
+                value: Binding(get: { controller.visualRecHeight },
+                               set: { controller.visualRecHeight = $0 }),
+                range: VisualRecRegion.minSize...VisualRecRegion.maxSize,
+                readout: percent(controller.visualRecHeight))
             VisualRecSliderRow(
                 label: L("visual_rec_margin"),
                 value: Binding(get: { controller.visualRecMargin },
@@ -194,11 +206,26 @@ struct VisualRecTeachOverlay: View {
                         // `minimumDistance: 0` so a press that turns into a
                         // drag does not need a threshold first, and the tap
                         // above still answers a click that never moves.
+                        // **Drag DRAWS the box; a click still moves it.**
+                        //
+                        // The crosshair says a region can be drawn here, and
+                        // until now it could not — the drag moved the centre,
+                        // which is a different gesture wearing the same cursor.
+                        // Both live in one controller method, which decides
+                        // between them on the size of the band: under the
+                        // floor it is a click and moves the centre, so a
+                        // twitch cannot replace a taught shape.
+                        //
+                        // Live during the drag rather than on release: an
+                        // operator sizing a box against a camera's REC dot is
+                        // watching the box, and a rectangle that only appears
+                        // when the mouse comes up cannot be aimed.
                         .gesture(DragGesture(minimumDistance: 0,
                                              coordinateSpace: .local)
                             .onChanged { value in
-                                controller.placeVisualRecRegion(
-                                    at: value.location, viewport: geo.size)
+                                controller.drawVisualRecRegion(
+                                    from: value.startLocation,
+                                    to: value.location, viewport: geo.size)
                             })
                         .onHover { inside in
                             if inside {

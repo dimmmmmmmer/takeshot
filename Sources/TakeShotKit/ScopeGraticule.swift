@@ -309,52 +309,70 @@ struct ScopeLevelGraticule: View {
     @Environment(\.scopeScaleMode) private var mode
 
     var body: some View {
-        GeometryReader { geo in
+        // **One `Canvas` for the whole graticule.**
+        //
+        // It was a `ZStack` of `ForEach`es: a `Rectangle` per excursion band, a
+        // stroked `Path` per rule, and a `Text` per number — each with its own
+        // `.shadow`, which forces an offscreen pass apiece. About thirty views
+        // for one axis, five axes on screen, all of them rebuilt and re-laid
+        // out on every tick of a window resize.
+        //
+        // Measured before the change: 14.14 ms for one layout pass of the whole
+        // panel at 900x600, against a 16.7 ms frame. That is why resizing the
+        // scopes window and dragging a scope inside it were both sluggish
+        // (owner: "отдельное окно скопов страшно лагает при изменении размера").
+        //
+        // A `Canvas` has no child views to lay out and no per-label offscreen
+        // pass: the shadow is one `drawLayer` around the whole run of numbers.
+        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
             let axis = ScopeAxis(
                 nominal: nominal,
                 mode: ScopeScaleMode.resolved(mode, transfer: transfer),
                 transfer: transfer)
-            ZStack(alignment: .topLeading) {
-                bands(axis, in: geo.size)
-                lines(axis, in: geo.size)
-                numbers(axis, in: geo.size)
+            draw(axis, in: size, context: context)
+        }
+    }
+
+    private func draw(_ axis: ScopeAxis, in size: CGSize,
+                      context: GraphicsContext) {
+        var context = context
+        for band in axis.excursionBands {
+            let rect = CGRect(x: 0, y: size.height * band.from,
+                              width: size.width,
+                              height: size.height * (band.to - band.from))
+            context.fill(Path(rect),
+                         with: .color(.white.opacity(0.05 + 0.05 * brightness)))
+        }
+        for tick in axis.ticks where tick.drawsRule {
+            rule(at: tick.unit, in: size, opacity: tick.weight.opacity,
+                 context: &context)
+        }
+        for unit in axis.extraNominalUnits {
+            rule(at: unit, in: size, opacity: ScopeTick.Weight.nominal.opacity,
+                 context: &context)
+        }
+        // The shadow once, around every number, instead of once per number.
+        context.drawLayer { layer in
+            layer.addFilter(.shadow(color: .black.opacity(0.9), radius: 1))
+            for tick in legible(axis.ticks, in: size) {
+                let text = Text(tick.label)
+                    .font(.system(size: 8, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.35 + brightness * 0.5))
+                layer.draw(text, in: CGRect(x: 3, y: labelTop(tick, in: size),
+                                            width: size.width - 3,
+                                            height: scopeLabelHeight))
             }
         }
     }
 
-    /// Everything the trace can reach that is outside the nominal range, tinted
-    /// rather than labelled: a number there would collide with the 0 and 100 it
-    /// sits a few points away from, and the band says the same thing.
-    private func bands(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ForEach(axis.excursionBands.indices, id: \.self) { index in
-            let band = axis.excursionBands[index]
-            Rectangle()
-                .fill(.white.opacity(0.05 + 0.05 * brightness))
-                .frame(height: size.height * (band.to - band.from))
-                .offset(y: size.height * band.from)
-        }
-    }
-
-    private func lines(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ZStack {
-            ForEach(axis.ticks.filter(\.drawsRule)) { tick in
-                rule(at: tick.unit, in: size, opacity: tick.weight.opacity)
-            }
-            ForEach(axis.extraNominalUnits, id: \.self) { unit in
-                rule(at: unit, in: size,
-                     opacity: ScopeTick.Weight.nominal.opacity)
-            }
-        }
-    }
-
-    private func rule(at unit: Double, in size: CGSize,
-                      opacity: Double) -> some View {
-        Path { path in
-            let y = size.height * unit
-            path.move(to: CGPoint(x: 0, y: y))
-            path.addLine(to: CGPoint(x: size.width, y: y))
-        }
-        .stroke(.white.opacity(opacity * brightness), lineWidth: 0.5)
+    private func rule(at unit: Double, in size: CGSize, opacity: Double,
+                      context: inout GraphicsContext) {
+        let y = size.height * unit
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: y))
+        path.addLine(to: CGPoint(x: size.width, y: y))
+        context.stroke(path, with: .color(.white.opacity(opacity * brightness)),
+                       lineWidth: 0.5)
     }
 
     /// The numbers, each one sitting on its own line inside the canvas.
@@ -362,17 +380,6 @@ struct ScopeLevelGraticule: View {
     /// Clamped to the canvas at both ends: the 100 and the 0 are exactly on the
     /// top and bottom rules, and centring them there would put half of each
     /// outside the box — which is the complaint this whole change answers.
-    private func numbers(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ForEach(legible(axis.ticks, in: size)) { tick in
-            Text(tick.label)
-                .font(.system(size: 8, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.35 + brightness * 0.5))
-                .shadow(color: .black.opacity(0.9), radius: 1)
-                .frame(height: scopeLabelHeight)
-                .padding(.leading, 3)
-                .offset(y: labelTop(tick, in: size))
-        }
-    }
 
     private func labelTop(_ tick: ScopeTick, in size: CGSize) -> CGFloat {
         min(size.height - scopeLabelHeight,

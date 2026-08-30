@@ -77,8 +77,9 @@ enum SettingsFormatFixture {
         "srtLatencyMs", "srtPassphrase", "srtPort", "srtRole",
         "startDebounceFrames", "stopDebounceFrames",
         "tenBitCapture", "timecodeSource", "videoLevels", "visualRecCenterX",
-        "visualRecCenterY", "visualRecIdle", "visualRecMargin",
-        "visualRecRolling", "visualRecSize",
+        "visualRecCenterY", "visualRecHeight", "visualRecIdle",
+        "visualRecMargin", "visualRecRolling", "visualRecSize",
+        "visualRecWidth",
     ]
 
     /// The keys a DEFAULT `CaptureSettings()` writes — the non-Optional ones,
@@ -200,6 +201,8 @@ enum SettingsFormatFixture {
           "visualRecIdle": "aWRsZS1yZWZlcmVuY2U=",
           "visualRecMargin": 0.55,
           "visualRecRolling": "cm9sbGluZy1yZWZlcmVuY2U=",
+          "visualRecWidth": 0.09,
+          "visualRecHeight": 0.05,
           "visualRecSize": 0.09
         }
         """
