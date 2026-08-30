@@ -57,10 +57,13 @@ import Testing
             #expect(!controller.showsCompareBar,
                     "the compare row is offered over a player with no frame in it")
 
-            // a live signal and nothing else: the row is there for the mode
-            // picker, and the pin is NOT — there is no take to pin a frame of
+            // a live signal and nothing else: NO row at all. The pin left
+            // record mode with the door, so the row had nothing to hold there
+            // — and an empty plate hung under the mode switch all day
+            // (owner: "что за пипися торчит под рек/плейбэк?").
             controller.isCapturing = true
-            #expect(controller.showsCompareBar)
+            #expect(!controller.showsCompareBar,
+                    "an empty compare plate is offered over a live signal")
             #expect(!controller.compareHasBSide)
             #expect(probe.fittingSize(ComparePinControls()).width == 0,
                     "the pin is offered over a live signal with no clip in review")
@@ -124,6 +127,14 @@ import Testing
                         "\(viewer): the pin door is \(door.width)pt")
                 for pinned in [false, true] {
                     controller.referencePinned = pinned
+                    // Record mode holds the row only once something IS pinned:
+                    // the pin itself lives in playback now, so an unpinned
+                    // record bar would be a plate around nothing.
+                    guard viewer == .playback || pinned else {
+                        #expect(!controller.showsCompareBar,
+                                "\(viewer) offers an empty compare plate")
+                        continue
+                    }
                     for mode in [CaptureController.CompareMode.off, .wipe,
                                  .blend, .difference, .sideBySide] {
                         controller.compareMode = mode

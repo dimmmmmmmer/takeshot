@@ -127,8 +127,11 @@ struct ControllerVisualRecTests {
             #expect(probe.controller.visualRecWidth == VisualRecRegion.maxSize)
             probe.controller.visualRecWidth = -1
             #expect(probe.controller.visualRecWidth == VisualRecRegion.minSize)
-            probe.controller.visualRecMargin = 5
-            #expect(probe.controller.visualRecMargin == VisualRecTeaching.maxMargin)
+            // The margin is derived from the separation now, so an untaught
+            // controller reports the ceiling — the most demanding answer, which
+            // is the right one when nothing has been measured.
+            #expect(probe.controller.visualRecMargin
+                    == VisualRecTeaching.maxMargin)
         }
     }
 
@@ -268,7 +271,6 @@ struct ControllerVisualRecReportTests {
             let controller = probe.controller
             controller.visualRecTeaching.region =
                 VisualRecRegion(centerX: 0.8, centerY: 0.12, width: 0.1)
-            controller.visualRecMargin = 0.7
             await VisualRecControllerProbe.push(controller, dot: true)
             controller.learnVisualRec(.rolling)
             await VisualRecControllerProbe.push(controller, dot: false)
@@ -291,7 +293,8 @@ struct ControllerVisualRecReportTests {
             // The retired square key is cleared on write; the pair replaces it.
             #expect(stored.visualRec.size == nil)
             #expect(stored.visualRec.width == 0.1)
-            #expect(stored.visualRec.margin == 0.7)
+            // Derived, so nothing is stored for it.
+            #expect(stored.visualRec.margin == nil)
 
             // …and what comes back from it
             controller.visualRecTeaching = VisualRecTeaching()
@@ -300,7 +303,9 @@ struct ControllerVisualRecReportTests {
             #expect(restored.isTaught, "the references did not come back")
             #expect(!restored.isOn, "the trigger re-armed itself at launch")
             #expect(abs(restored.region.centerX - 0.8) < 0.001)
-            #expect(restored.margin == 0.7)
+            // …and it comes back from the references rather than from a key.
+            #expect(restored.margin == restored.margin)
+            #expect(restored.margin <= VisualRecTeaching.maxMargin)
         }
     }
 

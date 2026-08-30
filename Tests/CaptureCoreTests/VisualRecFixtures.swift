@@ -109,13 +109,14 @@ enum VisualRecProbe {
     }
 
     /// A teaching captured from two frames, with the box on the indicator.
+    /// The margin is no longer a parameter: it is derived from the separation
+    /// the two references actually have, so a fixture cannot set it to a value
+    /// the teaching it describes would not produce.
     static func taught(rolling: CVPixelBuffer, idle: CVPixelBuffer,
                        region: VisualRecRegion = region(),
-                       margin: Double = VisualRecTeaching.defaultMargin,
                        on: Bool = true) -> VisualRecTeaching {
         var teaching = VisualRecTeaching()
         teaching.region = region
-        teaching.margin = margin
         teaching.rolling = VisualRecSampler.signature(of: rolling, region: region)
         teaching.idle = VisualRecSampler.signature(of: idle, region: region)
         teaching.isOn = on

@@ -101,11 +101,22 @@ struct VisualRecTriggerTests {
         #expect(VisualRecProbe.reading(teaching, of: halfLit) == nil,
                 "a half-lit indicator produced a reading: \(position)")
 
-        // …and with the margin wound off it becomes a decision again, which is
-        // what the margin is for and what it costs
-        var loose = teaching
-        loose.margin = 0
-        #expect(VisualRecProbe.reading(loose, of: halfLit) != nil)
+        // …and the margin that refused it is DERIVED from how far apart the
+        // two references landed, not chosen. There is nothing to wind off any
+        // more, so what is asserted is the function: this teaching separates
+        // well, so it demands little — and still enough to refuse a frame
+        // sitting on the midpoint.
+        let margin = teaching.margin
+        #expect(margin >= VisualRecTeaching.minMargin)
+        #expect(margin <= VisualRecTeaching.maxMargin)
+        let separation = try #require(teaching.separation)
+        let expected = min(VisualRecTeaching.maxMargin,
+                           max(VisualRecTeaching.minMargin,
+                               VisualRecTeaching.noiseGuard
+                                   * VisualRecTeaching.captureNoise
+                                   / (separation / 2)))
+        #expect(abs(margin - expected) < 0.0001,
+                "the margin is not the one the separation implies")
     }
 
     /// Two references that do not separate — the operator captured the same

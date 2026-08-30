@@ -225,14 +225,41 @@ public struct VisualRecTeaching: Equatable, Sendable {
     public var rolling: VisualRecSignature?
     public var idle: VisualRecSignature?
     /// How far past the midpoint a frame must be to count as evidence, as a
-    /// fraction of the taught separation. 0 would classify every frame as one or
-    /// the other; 1 demands the reference itself.
-    public var margin = defaultMargin
+    /// fraction of the taught separation. 0 would classify every frame as one
+    /// or the other; 1 demands the reference itself.
+    ///
+    /// **Derived, not set** (owner: "что мы сами это не можем высчитывать?").
+    /// It was a slider, and it was the wrong shape for the question: an
+    /// operator cannot know what fraction of a separation they have not
+    /// measured is enough to clear noise they cannot see. Both numbers are
+    /// already here.
+    ///
+    /// The arithmetic, from the figure `minSeparation` is derived from: two
+    /// captures of an UNCHANGED picture separate by about a code — sensor and
+    /// compression noise, averaged over ~200 pixels a cell. So the threshold
+    /// has to sit `noiseGuard` of those away from the midpoint, and as a
+    /// fraction of the half-separation that is `noiseGuard · noise / (S/2)`.
+    ///
+    /// What falls out is the behaviour you would ask for: a bright REC dot
+    /// separating the pair by 60 codes needs a tenth of it, a marginal teach at
+    /// 5 codes needs nearly all of it, and an untaught pair gets the ceiling.
+    /// The better the teaching, the less it demands.
+    public var margin: Double {
+        guard let separation, separation > 0 else { return Self.maxMargin }
+        let needed = Self.noiseGuard * Self.captureNoise / (separation / 2)
+        return min(Self.maxMargin, max(Self.minMargin, needed))
+    }
 
-    /// Half the taught separation. A frame then has to be three times nearer to
-    /// one reference than to the other, which on a real indicator it is by an
-    /// order of magnitude, and on a marginal one it is not.
-    public static let defaultMargin = 0.5
+    /// RMS code difference between two captures of a picture that did not
+    /// change. Stated once here and used by `minSeparation`'s reasoning too.
+    public static let captureNoise = 1.0
+    /// How many of those the decision threshold sits clear of the midpoint.
+    /// Three is the ordinary engineering answer for "not noise".
+    public static let noiseGuard = 3.0
+    /// Even a perfect teach keeps a little: an indicator that fades in has
+    /// frames legitimately near the midpoint, and calling them either way is
+    /// how a trigger chatters at the top of a take.
+    public static let minMargin = 0.1
     public static let maxMargin = 0.9
 
     /// How much of a frame's change may be OFF the taught axis before the frame
@@ -275,8 +302,10 @@ public struct VisualRecTeaching: Equatable, Sendable {
     public var isArmed: Bool { isOn && isTaught }
 
     public mutating func clamp() {
+        // The margin clamps itself now — it is derived from the separation and
+        // cannot arrive out of range from a hand-edited blob, because it does
+        // not arrive at all.
         region.clamp()
-        margin = min(Self.maxMargin, max(0, margin))
     }
 
     /// Forget both references, keeping the box and the margin — what "re-teach"

@@ -81,7 +81,7 @@ extension CaptureController {
     /// sends `.off` to the pipeline while nothing is pinned, so a mode picker
     /// offered in that state is a control that changes nothing.
     var compareHasBSide: Bool {
-        viewerMode == .playback ? playbackURL != nil : referencePinned
+        return viewerMode == .playback ? playbackURL != nil : referencePinned
     }
 
     /// Whether the compare row belongs over the player at all.
@@ -104,7 +104,21 @@ extension CaptureController {
     /// not on screen under the grid.
     var showsCompareBar: Bool {
         guard syncPlay == nil else { return false }
-        return viewerMode == .playback ? playbackURL != nil : isCapturing
+        // Record mode asks `referencePinned` again, and this time it is right.
+        //
+        // It used to ask it, which made live compare unreachable — the pin was
+        // the row's only content and the row only appeared once something was
+        // pinned. The key was inside the lock, so the rule became `isCapturing`
+        // and the row stood open all day holding one button.
+        //
+        // The pin has since moved to PLAYBACK, where the frame worth pinning
+        // is (owner: "она должна быть видна тогда когда я включил какой либо
+        // записанный шот"). So in record the row has nothing to hold until
+        // something IS pinned — and asking `isCapturing` left an empty plate
+        // hanging under the mode switch all day, which is what it looked like
+        // (owner: "что за пипися торчит под рек/плейбэк?"). There is no lock
+        // to be inside now: the door is one mode away.
+        return viewerMode == .playback ? playbackURL != nil : referencePinned
     }
 
     /// Whether the draggable wipe seam belongs on screen.

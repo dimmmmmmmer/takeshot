@@ -102,15 +102,10 @@ extension CaptureController {
         }
     }
 
-    var visualRecMargin: Double {
-        get { visualRecTeaching.margin }
-        set {
-            var teaching = visualRecTeaching
-            teaching.margin = newValue
-            teaching.clamp()
-            visualRecTeaching = teaching
-        }
-    }
+    /// The margin, for the READOUT only — it is derived from the taught
+    /// separation now and there is nothing to set. See
+    /// `VisualRecTeaching.margin`.
+    var visualRecMargin: Double { visualRecTeaching.margin }
 
     // MARK: - marking the box
 
@@ -291,8 +286,10 @@ extension CaptureController {
             ? nil : teaching.region.width
         updated.visualRec.height = teaching.region.height
             == base.region.height ? nil : teaching.region.height
-        updated.visualRec.margin = teaching.margin == base.margin
-            ? nil : teaching.margin
+        // Derived from the separation, so there is nothing to store. The key
+        // is cleared rather than left: a value there would be read by an older
+        // build as a margin an operator chose, which nobody ever did.
+        updated.visualRec.margin = nil
         updated.visualRec.rolling = teaching.rolling?.encoded
         updated.visualRec.idle = teaching.idle?.encoded
         guard updated != settings else { return }
@@ -310,7 +307,6 @@ extension CaptureController {
             ?? teaching.region.width
         teaching.region.height = stored.height ?? stored.size
             ?? teaching.region.height
-        teaching.margin = stored.margin ?? teaching.margin
         // a blob that was truncated or hand-edited leaves the trigger untaught
         // rather than armed on garbage (see `VisualRecSignature.init(encoded:)`)
         teaching.rolling = stored.rolling

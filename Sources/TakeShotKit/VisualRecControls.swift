@@ -63,12 +63,16 @@ struct VisualRecRows: View {
                                set: { controller.visualRecHeight = $0 }),
                 range: VisualRecRegion.minSize...VisualRecRegion.maxSize,
                 readout: percent(controller.visualRecHeight))
-            VisualRecSliderRow(
-                label: L("visual_rec_margin"),
-                value: Binding(get: { controller.visualRecMargin },
-                               set: { controller.visualRecMargin = $0 }),
-                range: 0...VisualRecTeaching.maxMargin,
-                readout: percent(controller.visualRecMargin))
+            // The margin is DERIVED from the taught separation and is shown
+            // rather than set (see `VisualRecTeaching.margin`). Shown at all
+            // because it is the number that explains a trigger's behaviour: a
+            // marginal teach demands nearly the whole separation, and knowing
+            // that is what tells an operator to re-teach rather than to fiddle.
+            LabeledContent(L("visual_rec_margin")) {
+                Text(verbatim: percent(controller.visualRecMargin))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
             learnRow
             LabeledContent(L("visual_rec_reading")) {
                 Text(controller.visualRecReadingText)

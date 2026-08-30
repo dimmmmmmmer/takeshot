@@ -67,58 +67,55 @@ struct NamingFieldsView: View {
         .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
     }
 
-    /// FILE or META, in the same shape as the viewer's record/playback switch
-    /// and for the same reason: it says which of two things the controls under
-    /// it are about, so the operator reads one word rather than scanning two
-    /// rows of captions. Both halves are recorded either way — this chooses
-    /// what is in FRONT of them, never what is written.
+    /// FILE or META, on its side beside the fields.
     ///
-    /// **Above the row rather than beside it, and that is a measurement.**
-    /// Beside it, the switch charges its own width to a footer half that is
-    /// 363pt at the app's minimum window and was already spending 310 of it on
-    /// the file-name fields plus their collision badge — 410pt, over by nearly
-    /// fifty. Above, the block is as wide as its widest ROW and the switch is
-    /// free; what it spends instead is height, which is exactly what showing
-    /// one row instead of two just handed back.
+    /// **Two buttons rather than a rotated `Picker`, and that was a
+    /// measurement.** A segmented picker has no vertical style, so the first
+    /// version rotated one — and a rotated picker rotates its CONTENT, so the
+    /// glyphs came out lying on their sides. Counter-rotating them inside did
+    /// not survive the picker's own re-render. A control that has to be
+    /// un-rotated twice to look right is the wrong control.
+    ///
+    /// Icons and not words (owner: "переключатель вертикальный нужно значками
+    /// сделать, подвал по высоте оч растянулся"): two words on their side cost
+    /// the footer 92pt of height to say one bit. A document against a tag —
+    /// what the file is CALLED against what was SHOT, the same distinction the
+    /// two rows draw. The words stay as the tooltip and the accessibility
+    /// label, so the control is still readable to someone meeting it.
     private var paneSwitch: some View {
-        Picker("", selection: Binding(
-            get: { controller.namingPane },
-            set: { controller.namingPane = $0 })) {
+        VStack(spacing: 2) {
             ForEach(NamingPane.allCases) { pane in
-                Text(L(pane.titleKey)).tag(pane)
+                let selected = controller.namingPane == pane
+                Button { controller.namingPane = pane } label: {
+                    // A TINTED plate under the glyph rather than a filled one,
+                    // which is what the scopes panel's own toggles do. Filled
+                    // with the accent, a white-ish accent — the default on this
+                    // app — put a white glyph on a white cell and the selected
+                    // side vanished.
+                    Image(systemName: pane.symbol)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(selected ? Color.primary : .secondary)
+                        .frame(width: Self.paneSwitchThickness,
+                               height: Self.paneSwitchCellHeight)
+                        .background(selected
+                                    ? AnyShapeStyle(controller.accentColor
+                                        .opacity(0.35))
+                                    : AnyShapeStyle(Color.white.opacity(0.07)),
+                                    in: RoundedRectangle(cornerRadius: 4))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L(pane.titleKey))
+                .help(L(pane.titleKey))
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.mini)
-        // VERTICAL, on the right (owner: "я бы как вариант даже подумал о том
-        // чтоб переключатель этот был не центрованно сверху а сбоку справа от
-        // этих полей, вертикальным"). A segmented picker has no vertical style,
-        // so it is rotated — which keeps it the one control macOS draws for
-        // "one of two", the same control the viewer's record/playback switch
-        // is, rather than a pair of buttons that only look like one.
-        .rotationEffect(.degrees(90))
-        .fixedSize()
-        .frame(width: Self.paneSwitchThickness,
-               height: Self.paneSwitchWidth)
-        // **A FIXED width, for the reason the slate captions are fixed.** This
-        // is the only other localized string in the footer's right half, and
-        // the REC button is centered by that half measuring the same in English
-        // and in Russian (`ViewFooterTests`). Left to size itself, FILE/META
-        // and ФАЙЛ/МЕТА differ by a few points and the button drifts off centre
-        // — which is exactly the failure that suite exists to catch, and it
-        // caught this one.
-        //
-        // The number holds the longer pair with room to spare and is measured
-        // against both languages rather than eyeballed.
     }
 
-    /// The FILE/META switch, along its own length. Must hold both languages;
-    /// pinned in `ViewNamingRowTests`, which measures the words rather than
-    /// trusting it. Rotated, so this is the block's HEIGHT budget.
-    static let paneSwitchWidth: CGFloat = 92
-    /// Across. A segmented control at `.mini` is about 16pt tall; 22 leaves it
-    /// room without charging the footer half for air.
+    /// One cell. Two of them plus the gap is the switch, and it is shorter than
+    /// the naming row beside it — which is what keeps it from setting the
+    /// footer's height.
+    static let paneSwitchCellHeight: CGFloat = 17
+    /// Across.
     static let paneSwitchThickness: CGFloat = 22
     /// What both naming rows are pinned to, so switching cannot change the
     /// block's height. The file row (captions stacked over boxes) is the taller

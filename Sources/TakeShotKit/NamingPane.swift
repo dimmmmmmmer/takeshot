@@ -28,4 +28,20 @@ enum NamingPane: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 
     var titleKey: String { "naming_pane_" + rawValue }
+
+    /// The switch is ICONS, not words (owner: "переключатель вертикальный
+    /// нужно значками сделать, подвал по высоте оч растянулся"). Two words
+    /// rotated on their side cost the footer 92pt of height for a control that
+    /// says one bit; two glyphs say the same thing in a third of it.
+    ///
+    /// A document and a tag: what the file is CALLED against what was SHOT,
+    /// which is the same distinction the two rows draw. The words survive as
+    /// the accessibility label and the tooltip, so the control is still
+    /// readable to somebody who has not met it before.
+    var symbol: String {
+        switch self {
+        case .file: "doc"
+        case .meta: "tag"
+        }
+    }
 }

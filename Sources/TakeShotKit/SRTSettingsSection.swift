@@ -68,10 +68,35 @@ struct SRTSettingsSection: View {
     /// a field that had to be left blank would be a field to get wrong.
     private var addressRow: some View {
         LabeledContent(L("srt_address")) {
+            // **What is typed here fills the other rows in.**
+            //
+            // `host:port`, `srt://host:port`, and libsrt's query parameters
+            // after either — the form every other tool takes, and the reason
+            // the mode looked like a setting OBS does not have (it is in the
+            // URL there). The rows stay on screen and stay editable: this
+            // arrives AT them rather than hiding where the values went.
+            //
+            // A bare host leaves the port and the mode alone. A paste that
+            // names only the host must not reset a port set on purpose.
             TextField("", text: Binding(
                 get: { controller.settings.srt.address ?? "" },
-                set: { controller.settings.srt.address =
-                    $0.isEmpty ? nil : $0 }))
+                set: { typed in
+                    guard let parsed = SRTAddress.parse(typed) else {
+                        controller.settings.srt.address =
+                            typed.isEmpty ? nil : typed
+                        return
+                    }
+                    controller.settings.srt.address = parsed.host
+                    if let port = parsed.port { controller.settings.srt.port = port }
+                    if let mode = parsed.mode { controller.settings.srt.role = mode }
+                    if let latency = parsed.latencyMs {
+                        controller.settings.srt.latencyMs =
+                            min(8000, max(20, latency))
+                    }
+                    if let passphrase = parsed.passphrase {
+                        controller.settings.srt.passphrase = passphrase
+                    }
+                }))
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 180)
