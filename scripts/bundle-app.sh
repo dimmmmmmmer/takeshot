@@ -42,6 +42,30 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
+# **The app is checked AFTER it is assembled, not the tree it came from.**
+#
+# `Bundle.module` is compiler-generated and its miss is a `fatalError`: an app
+# whose resource bundle did not land dies on the first `L()` — inside
+# `L10n.apply` during `CaptureController` startup, before any window, with no
+# message anywhere but a crash report. The app cannot report this about itself,
+# so the build has to.
+#
+# The existence check above is not enough on its own: an interrupted or
+# half-written build leaves the .bundle DIRECTORY in place while its .lproj
+# folders are missing, which copies cleanly and ships an app that renders raw
+# keys. So this asserts what has to be true of the thing being handed over —
+# the bundle is in the app, and the strings both languages need are inside it.
+BUNDLED_RESOURCES="$APP/Contents/Resources/TakeShot_TakeShotKit.bundle"
+for required in en.lproj/Localizable.strings ru.lproj/Localizable.strings \
+                remote.html live.html; do
+    if [ ! -f "$BUNDLED_RESOURCES/$required" ]; then
+        echo "the assembled app is missing $required." >&2
+        echo "Bundle.module would fatalError on launch, or the UI would show" \
+             "raw keys. Rebuild: rm -rf .build && scripts/bundle-app.sh" >&2
+        exit 1
+    fi
+done
+
 # The version, from the one file that states it. Resources/Info.plist carries
 # placeholders precisely so that a bundle whose version came from anywhere else
 # is recognisable — the About panel, the diagnostics bundle and the ASC MHL
