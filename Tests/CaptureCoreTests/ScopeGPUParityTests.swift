@@ -61,7 +61,11 @@ struct ScopeGPUParityTests {
         try #require(ScopeAnalyzerMetal.isAvailable,
                      "no GPU on this machine: \(ScopeAnalyzerMetal.unavailableReason ?? "")")
         ScopeAnalyzerMetal.isEnabled = true
-        defer { ScopeAnalyzerMetal.isEnabled = false }
+        // Back to the SHIPPING answer, not to false. `swift test --no-parallel`
+        // runs one process, so leaving it off here handed every scope suite
+        // scheduled after this one the CPU path — the parity suite would have
+        // been the only thing testing the default.
+        defer { ScopeAnalyzerMetal.isEnabled = ScopeAnalyzerMetal.isAvailable }
         let gpu = try #require(ScopeAnalyzer.analyze(buffer))
         ScopeAnalyzerMetal.isEnabled = false
         let cpu = try #require(ScopeAnalyzer.analyze(buffer))
@@ -149,9 +153,11 @@ struct ScopeGPUParityTests {
     /// column moving rather than as a scattered sample.
     @Test func aFlatFrameIsIdenticalEverywhere() throws {
         let (cpu, gpu) = try both(try wire { _, _ in WirePixel(r: 500, g: 400, b: 300) })
-        #expect(gpu.waveformY == cpu.waveformY, "a flat frame's luma differs")
-        #expect(gpu.waveformR == cpu.waveformR)
-        #expect(gpu.histY == cpu.histY)
+        #expect(maxDelta(gpu.waveformY, cpu.waveformY) == 0,
+                "a flat frame's luma: \(summary(gpu.waveformY, cpu.waveformY))")
+        #expect(maxDelta(gpu.waveformR, cpu.waveformR) == 0,
+                "a flat frame's red: \(summary(gpu.waveformR, cpu.waveformR))")
+        #expect(gpu.histY.elementsEqual(cpu.histY), "a flat frame's luma histogram")
         #expect(maxDelta(gpu.vector, cpu.vector) <= 2)
         #expect(maxDelta(gpu.cie, cpu.cie) <= 2)
     }

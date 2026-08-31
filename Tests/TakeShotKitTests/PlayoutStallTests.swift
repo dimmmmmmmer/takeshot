@@ -107,6 +107,38 @@ struct PlayoutFallbackNoticeTests {
         }
     }
 
+    /// A board that comes back clears its own complaint, and nothing else.
+    @Test func arecoveredOutputClearsItsOwnMessageOnly() async throws {
+        let previous = PlayoutFeeder.factory
+        PlayoutFeeder.factory = { _, width, height, _ in
+            PlayoutFeeder(output: FakePlayoutOutput(width: width, height: height))
+        }
+        defer { PlayoutFeeder.factory = previous }
+
+        try await ControllerHarness.run { controller, _ in
+            controller.settings.capture.monitorDeviceID = "decklink:board"
+            controller.rebuildPlayout()
+            let feeder = try #require(controller.mirrors.playout)
+
+            controller.lastError = L("playout_stalled_render")
+            feeder.onStall?(nil)
+            // Bounded well under the five seconds the toast register takes to
+            // clear a message on its own — an unbounded wait here passes
+            // against a recovery that does nothing, which is how the first
+            // version of this test survived its own mutation.
+            try await Task.sleep(for: .milliseconds(250))
+            #expect(controller.lastError == nil,
+                    "the board came back and the complaint stayed on screen")
+
+            // …and a message that is somebody else's outranks a resolved stall.
+            controller.lastError = "the card is full"
+            feeder.onStall?(nil)
+            try await Task.sleep(for: .milliseconds(150))
+            #expect(controller.lastError == "the card is full",
+                    "a recovered monitor wiped an unrelated error")
+        }
+    }
+
     /// A board that takes the signal's own mode says nothing.
     @Test func aBoardThatTakesTheModeIsSilent() async throws {
         let previous = PlayoutFeeder.factory

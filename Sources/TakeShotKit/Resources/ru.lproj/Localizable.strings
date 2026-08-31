@@ -885,6 +885,7 @@
 "stream_link_waiting" = "в сети, никто не забирает";
 "stream_link_off" = "выключено";
 "stream_stop_help" = "Нажмите, чтобы остановить отдачу";
+"stream_start_help" = "Нажмите, чтобы снова начать отдачу";
 "srt_status" = "Состояние";
 "srt_starting" = "Подключение";
 "srt_sending" = "Отдаёт";

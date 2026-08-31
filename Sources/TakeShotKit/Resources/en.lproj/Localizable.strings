@@ -893,6 +893,7 @@
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";
 "stream_stop_help" = "Click to stop sending";
+"stream_start_help" = "Click to start sending again";
 "srt_status" = "Status";
 "srt_starting" = "Connecting";
 "srt_sending" = "Sending";

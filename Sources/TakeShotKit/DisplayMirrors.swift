@@ -81,6 +81,15 @@ final class DisplayMirrors: ObservableObject {
     /// honest answer to "is it sending?": the switch is a wish, and a build with
     /// no libsrt, a machine with none installed, or a receiver nobody has opened
     /// yet cannot honour it.
+    /// Which outputs the FOOTER's own button switched off.
+    ///
+    /// Without this the button was a one-way door: pressing it turned both
+    /// switches off, `isEngaged` went false, the control erased itself, and the
+    /// only way to stream again was the Settings window — the window this
+    /// control exists so nobody has to open (owner: "должна быть кнопка
+    /// запустить/остановить поток", and that is two words).
+    @Published var pausedStreams = PausedStreams()
+
     @Published var srtState: SRTOutputState = .off
     /// The delivery buffer the open link is running with, and the round trip it
     /// reported. Both nil while nothing is streaming: the settings row states a
@@ -177,4 +186,13 @@ final class DisplayMirrors: ObservableObject {
     /// `ControllerHarness` fills it in for every controller it builds.
     var webrtcPeerFactory:
         (@Sendable (WebRTCOffer.VideoPlan, UInt32) -> WebRTCPeering)?
+}
+
+/// The outputs a footer press turned off, so the same press can turn them back
+/// on. Not "what is configured": a stream switched off in Settings stays off,
+/// because that was a decision and not a pause.
+struct PausedStreams: Equatable, Sendable {
+    var srt = false
+    var ndi = false
+    var any: Bool { srt || ndi }
 }

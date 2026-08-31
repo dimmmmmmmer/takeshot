@@ -101,6 +101,9 @@ extension CaptureController {
             let sender = try factory(
                 settings.ndi.sourceNameEffective(settings.naming))
             mirrors.ndi = NDIVideoMirror(sender: sender)
+            // Whoever turned it on — the footer or the Settings row — it is no
+            // longer paused, so the footer's button goes back to meaning "stop".
+            mirrors.pausedStreams.ndi = false
             startNDIAudio(on: sender)
             // ANNOUNCED, not sending. The source has just been created; nobody
             // can have opened it yet, and saying "sending" here is what made
@@ -203,8 +206,32 @@ extension CaptureController {
     /// switches move with it: a stream stopped from the footer must not come
     /// back the next time something re-applies the settings.
     func stopAllStreams() {
-        if settings.ndi.enabled == true { settings.ndi.enabled = false }
-        if settings.srt.enabled == true { settings.srt.enabled = false }
+        var paused = PausedStreams()
+        if settings.ndi.enabled == true {
+            paused.ndi = true
+            settings.ndi.enabled = false
+        }
+        if settings.srt.enabled == true {
+            paused.srt = true
+            settings.srt.enabled = false
+        }
+        // Only when something was actually stopped: a second press on an
+        // already-stopped footer must not erase what the first one remembered.
+        if paused.any { mirrors.pausedStreams = paused }
+    }
+
+    /// Switch back on exactly what `stopAllStreams` switched off.
+    ///
+    /// Exactly what, and not "everything that is configured": an operator who
+    /// turned NDI off in Settings before the shoot has not asked for it back,
+    /// and a footer button that decided otherwise would put a picture on the
+    /// set network they had deliberately taken off it.
+    func resumeStreams() {
+        let paused = mirrors.pausedStreams
+        guard paused.any else { return }
+        mirrors.pausedStreams = PausedStreams()
+        if paused.ndi { settings.ndi.enabled = true }
+        if paused.srt { settings.srt.enabled = true }
     }
 
     func stopNDIOutput() {

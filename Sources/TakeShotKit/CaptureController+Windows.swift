@@ -67,7 +67,19 @@ extension CaptureController {
         // own queue and holds no reference — so the hop is here.
         mirrors.playout?.onStall = { [weak self] reason in
             Task { @MainActor in
-                guard let self, let reason else { return }
+                guard let self else { return }
+                guard let reason else {
+                    // nil is the RECOVERY, which the first version of this
+                    // threw away — so the comment above it was not kept and a
+                    // board that came back left its own complaint on screen.
+                    // Only this message is cleared: anything else on the line
+                    // is somebody else's and outranks a resolved stall.
+                    if self.lastError == L("playout_stalled_pool")
+                        || self.lastError == L("playout_stalled_render") {
+                        self.lastError = nil
+                    }
+                    return
+                }
                 self.lastError = reason
             }
         }

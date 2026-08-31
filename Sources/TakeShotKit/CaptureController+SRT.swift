@@ -120,6 +120,9 @@ extension CaptureController {
             })
         mirrors.srt = mirror
         mirrors.srtEndpoint = endpoint
+        // Whoever turned it on — the footer or the Settings row — it is no
+        // longer paused, so the footer's button goes back to meaning "stop".
+        mirrors.pausedStreams.srt = false
         // `starting` and not `sending`: the connect has not happened yet, and it
         // cannot happen here — it blocks, and this is the MainActor.
         mirrors.srtState = .starting

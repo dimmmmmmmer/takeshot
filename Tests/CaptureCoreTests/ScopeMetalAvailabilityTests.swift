@@ -24,4 +24,20 @@ struct ScopeMetalAvailabilityTests {
             print("no GPU path here: \(reason ?? "")")
         }
     }
+
+    /// **The shipping default is the GPU path**, wherever there is a GPU.
+    ///
+    /// Pinned because nothing else does: the parity suite is the only thing
+    /// that touches the switch, and the first version of it restored `false`
+    /// rather than the default. `swift test --no-parallel` is one process, so
+    /// that handed every scope suite scheduled afterwards the CPU path — the
+    /// suites that are supposed to be exercising what ships.
+    @Test func theShippingDefaultIsWhateverTheMachineCanDo() {
+        #expect(ScopeAnalyzerMetal.isEnabled == ScopeAnalyzerMetal.isAvailable,
+                """
+                the GPU path is \(ScopeAnalyzerMetal.isEnabled ? "on" : "off") \
+                on a machine that \(ScopeAnalyzerMetal.isAvailable ? "can" : "cannot") \
+                run it — a suite left the switch where it found it convenient
+                """)
+    }
 }

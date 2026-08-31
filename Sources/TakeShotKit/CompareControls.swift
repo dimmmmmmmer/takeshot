@@ -106,20 +106,9 @@ struct CompareControls: View {
     }
 
     @ViewBuilder private var blendControls: some View {
-        Slider(value: $controller.blendOpacity, in: 0...1)
-            .frame(width: 90)
-            .controlSize(.mini)
-        TextField("", value: Binding(
-            get: { Int((controller.blendOpacity * 100).rounded()) },
-            set: { controller.blendOpacity = Double(min(100, max(0, $0))) / 100 }),
-            format: .number)
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 30)
-            .controlSize(.mini)
-        Text("%")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        BlendControls(live: controller.compareLive) {
+            controller.blendOpacity = $0
+        }
     }
 
     /// What the other half of the compare is. The takes and the Other content
@@ -209,5 +198,43 @@ struct ComparePinControls: View {
             .buttonStyle(.plain)
             .help(L("unpin_reference_help"))
         }
+    }
+}
+
+/// The blend slider and its percentage, observing `CompareLive` directly.
+///
+/// **A view of its own because the value it shows is not on the controller any
+/// more.** `blendOpacity` was moved off `CaptureController` so a drag would
+/// stop waking 114 `@EnvironmentObject` sites per tick — that is what fixed the
+/// lag the owner reported on the wipe and the blend. What it left behind was
+/// this row: the controller's property is a plain forwarder now, so binding to
+/// it publishes nothing and the "%" beside the slider showed whatever number
+/// happened to be there at the last unrelated publish. An operator dialling an
+/// exact opacity was reading a figure that disagreed with the picture.
+///
+/// The same shape `WipeHandle` already uses one file over, and for the same
+/// reason: the object that actually changes is the one to observe.
+private struct BlendControls: View {
+    @ObservedObject var live: CompareLive
+    /// Written through the controller, which is what pushes the value into the
+    /// pipeline and persists it on the debounce.
+    let onChange: (Double) -> Void
+
+    var body: some View {
+        Slider(value: Binding(get: { live.blendOpacity }, set: onChange),
+               in: 0...1)
+            .frame(width: 90)
+            .controlSize(.mini)
+        TextField("", value: Binding(
+            get: { Int((live.blendOpacity * 100).rounded()) },
+            set: { onChange(Double(min(100, max(0, $0))) / 100) }),
+            format: .number)
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .frame(width: 30)
+            .controlSize(.mini)
+        Text("%")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
