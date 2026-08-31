@@ -604,16 +604,12 @@ caught:
 
 ### What this wave deliberately did NOT touch
 
-- **`canGrabFrame` and `grabFrame()` disagree, and the lit button is the wrong
-  one.** `canGrabFrame` is `isCapturing || (playbackURL != nil && syncPlay ==
-  nil)`, so with the camera ROLLING and a sync-play grid on screen it answers
-  true — while `grabFrame()` opens with `guard syncPlay == nil else { return }`
-  and does nothing at all: no still, no toast, no error. The footer button is
-  enabled, the hotkey goes straight through, and the operator gets silence.
-  Not fixed here because it belongs to the sync-play-blindness class a parallel
-  sweep was closing, and doing it twice in two branches is worse than once.
-  **Whoever merges should check it was covered**; if it was not, it is the same
-  shape as the marker defects and the same size.
+- **`canGrabFrame` and `grabFrame()` disagreed, and the lit button was the
+  wrong one.** Left for the sync-play-blindness sweep running in parallel, on
+  the grounds that doing it twice in two branches is worse than once.
+  **CLOSED there**: `canGrabFrame` is now `syncPlay == nil && (isCapturing ||
+  playbackURL != nil)` — the same question the method asks — pinned by
+  `ControllerGridSweepTests`. Nothing is owed here.
 - **`toggleMonitorMute` does not ask `canMonitorAudio`.** The ⌃A hotkey mutes,
   un-mutes, forces `monitorOn` back to true and persists all of it while the
   footer's speaker is disabled. Acting on a preference while idle is not

@@ -43,11 +43,10 @@ import Foundation
 /// measured against a decoder. It is a constant, not a drift, and a receiver is
 /// what would show its size.
 ///
-/// **The NDI leg is still open, and the shared half is now built.** Both feeds
-/// wanted one independent stereo tap and only the leg after it differs — AAC
-/// and a second PID here, planar float and `NDIlib_send_send_audio_v3` there.
-/// The tap is the half that is done; see `CaptureController+NDI` for why that
-/// leg is not, and `CaptureController+LiveAudio` for the one line that widens
+/// **Both legs are built now, off one shared tap.** They wanted the same
+/// independent stereo tap and only what follows it differs — AAC and a second
+/// PID here, planar float and `NDIlib_send_send_audio_v3` in `NDIAudioMirror`.
+/// See `CaptureController+LiveAudio` for the seam that stayed narrow
 /// when it is.
 extension CaptureController {
     /// How long a settings edit settles before the link is rebuilt.

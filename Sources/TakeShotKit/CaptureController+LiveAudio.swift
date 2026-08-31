@@ -68,10 +68,14 @@ extension CaptureController {
     /// decrement is a converter and a per-packet tap running for the rest of
     /// the day with nothing on the other end of them.
     ///
-    /// **The one line to widen at the seam.** An NDI source or a WebRTC viewer
-    /// taking sound is one more term in `wanted` and one more `addSink` where
-    /// it is built; nothing else in this file changes, and nothing in
-    /// `CapturePipeline+Audio` changes at all.
+    /// **What `wanted` is about is the AAC ENCODER, not sound in general.**
+    /// NDI already carries sound and is deliberately absent from this
+    /// expression: its leg takes planar float straight off the pipeline's audio
+    /// tap and never needs an AAC session at all — `theNDILegBuildsNoAACEncoder`
+    /// pins that. An earlier version of this comment invited the next person to
+    /// add NDI as "one more term in `wanted`", which would build an encoder for
+    /// nobody and turn that test red. A WebRTC viewer taking sound WOULD belong
+    /// here, because Opus is a second encode of the same shape.
     func releaseIdleLiveAudio() {
         let wanted = mirrors.srt != nil
         guard !wanted, let encoder = mirrors.liveAudioEncoder else { return }

@@ -182,8 +182,9 @@ never bends it.
   and monitor spec sheet states its gamut in — which is not perceptually
   uniform: read it for whether a colour is inside a gamut, not for how far
   outside it is.
-- On a 10-bit RGB source the scopes measure the signal ON THE WIRE, before the
-  levels stage touches it — a WIRE badge in the toolbar says so. That is why the
+- On a 10- or 12-bit wire — RGB, and 10-bit YCbCr, which is what ordinary SDI
+  4:2:2 carries — the scopes measure the signal ON THE WIRE, before the levels
+  stage touches it; a WIRE badge in the toolbar says so. That is why the
   trace can sit below 0 % and above 100 %: those shaded bands are the camera's
   excursions, and seeing them is the point. Everything else is measured on the
   frame you are looking at, preview LUT included.
@@ -223,7 +224,7 @@ the look is not applied twice.
 
 ## Exports
 
-Two sidecars are kept up to date in the record folder as you work:
+Three sidecars are kept up to date in the record folder as you work:
 
 - `takeshot-log.csv` — the Resolve metadata table (File Name, Reel Name, Take,
   Good Take, Comments). Import it in Resolve with Media Pool → Import Metadata;
@@ -235,6 +236,11 @@ Two sidecars are kept up to date in the record folder as you work:
 - `takeshot-markers.csv` — one row per marker: file name, timecode, color, note.
   The timecode is the position; there is no separate seconds column. Markers on
   Other content live here too, positioned from the start of the clip.
+- `takeshot-slate.csv` — scene, shot and take per file. **Copy this one too.**
+  The scene/shot/take a take was recorded with are written into the file itself,
+  but a correction made afterwards — the ones you make between setups — lives
+  only here, because the .mov has already been written. Leaving it behind loses
+  every fix.
 
 On demand, from the export menu in the takes panel or the File menu:
 

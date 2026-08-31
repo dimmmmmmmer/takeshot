@@ -130,7 +130,7 @@ build is any use to you:
 
 ### The phone on set
 
-The web remote is off until you switch it on, serves five pages behind one
+The web remote is off until you switch it on, serves four pages behind one
 four-digit PIN, and loads nothing from the internet — the pages work on a set
 network with no route out. Settings shows a QR code for each.
 
@@ -148,8 +148,9 @@ network with no route out. Settings shows a QR code for each.
   thing — a second person on your picture costs nothing, a second PICTURE costs
   a second encode and a second stream's worth of bitrate, and it stops the
   moment the last person on it leaves. Nothing is encoded at all while nobody
-  is watching. Needs libdatachannel (`vendor/libdatachannel/README.md`); a
-  build made without it says so on the page and the tiles above keep working.
+  is watching. Needs libdatachannel (`vendor/libdatachannel/README.md`) — a
+  build made without it says so on the page, and there is no moving picture to
+  fall back to: the JPEG tile page it used to fall back on was retired.
 - `/slate` — the digital slate on a phone held in front of the lens: running
   timecode, the scene and take card, and a sync flash.
 

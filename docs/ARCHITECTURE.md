@@ -217,9 +217,10 @@ nothing else is shared, because they are different kinds of thing.
 stream.** A receiver discovers an NDI source in a list, so the whole
 configuration is a name. An SRT link is an address, a port and a role, and it
 carries an MPEG-TS — so that feature needs an encoder, and the operator has to be
-told about things NDI never asks: where to send, which end dials, how much of a
-bad link to ride out, and how many bits it can carry. Two controls against six is
-the difference, and the difference is which room each answers: NDI when the
+told about things NDI never asks: where to send, which end dials, and how many
+bits it can carry. (How much of a bad link to ride out is NOT among them: the
+delivery buffer is measured off the link and shown — see `SRTLatency`.) Two
+controls against five is the difference, and the difference is which room each answers: NDI when the
 receiver is on the same LAN and nobody should have to be told an address, SRT
 when it is across a network somebody else runs.
 
@@ -516,13 +517,14 @@ against one `LiveClock` and the arithmetic cannot drift, but the OFFSET between
 the two paths' latencies is a property of a decoder and has never been measured
 against one. It is a constant, not a drift.
 
-**Open in a way SRT's opening is not**: the machine this was restored on has the
-NDI runtime (`/usr/local/lib/libndi.4.dylib`) and no SDK headers anywhere, so
-`CNDI` compiles as a stub there and the real half of it has never executed.
-Everything above about queues, coalescing and the display-side cost is measured;
-everything about what `NDIlib_send_create` and `NDIlib_send_send_video_v2`
-actually do is inherited from the previous implementation of the same file.
-`vendor/NDISDK/README.md` says which claims those are.
+**Open in the way SRT's far end is open, and no longer in the way this
+paragraph used to say.** The SDK headers ARE in `vendor/NDISDK/` and the
+runtime is installed, so `CNDI` compiles as the real bridge here and
+`NDIRealBridgeTests` exercises it — announcing a source, sending a frame,
+reading the connection count back. What has still never happened is a RECEIVER:
+no second machine on a set network has opened the source, so the far end's
+reading of the frame rate, the colour and the sound is unverified, exactly as
+SRT's is. `vendor/NDISDK/README.md` says which claims those are.
 
 ### What the network can reach, and what it cannot
 
@@ -543,10 +545,12 @@ because a phone in a pocket or a page in a retry loop would otherwise cycle
 begin/finish at message rate, one file per cycle.
 
 **Two narrower reaches, both behind the PIN.** The multiview subscription calls
-`CapturePipeline.setOnMultiviewFrame`, which takes `displayFrameLock` — the same
+`CapturePipeline.setOnMonitorFrame`, which takes `displayFrameLock` — the same
 lock `publishDisplayFrame` takes once per frame — for two pointer assignments.
 And `rate`/`comment`/`slate`/`good`/`bad` drive `exportTakeLog()`, which rewrites
-four sidecar files on the volume the take is being written to; that is the same
+three sidecar files on the volume the take is being written to (the log, the
+markers and the slate; the in/out ranges are a fourth, written by
+`exportRanges` on its own); that is the same
 disk, and it is why `setRating` carries the "nothing changed" guard its two
 siblings already had.
 
@@ -573,8 +577,9 @@ of which are read from the MainActor or from tests.
 
 ### The pages themselves
 
-Five pages ship inside the binary — `remote`, `script`, `cameras`, `live`,
-`slate` — carrying about 71 kB of JavaScript between them. No compiler and no
+Four pages ship inside the binary — `remote`, `script`, `live`, `slate` —
+carrying about 71 kB of JavaScript between them. (`cameras`, the JPEG tile page,
+was retired: `/live` does everything it did.) No compiler and no
 linter reads any of it, so two rules stand in for one, and both are asserted by
 `RemotePageSourceTests`.
 
@@ -699,8 +704,9 @@ itself.
 
 ### What the scopes measure
 
-For a 10- or 12-bit RGB wire the analyzer reads the **wire frame**, not the
-display buffer (`CapturePipeline.LevelledFrame.scopeSource`; the only cost on
+For a 10- or 12-bit wire the analyzer reads the **wire frame**, not the display
+buffer — RGB (`r210`, `R12B`) and 10-bit YCbCr (`v210`), which since v210
+became the default 4:2:2 path is every ordinary SDI signal (`CapturePipeline.LevelledFrame.scopeSource`; the only cost on
 the capture queue is retaining the buffer). Two reasons, and the operator
 reported both as symptoms:
 
@@ -915,11 +921,14 @@ would drop a marker while a roll name is being typed.
 `CaptureSettings` does two jobs and they pull in opposite directions.
 
 It is the **record**. One JSON blob in `UserDefaults` under
-`TakeShot.CaptureSettings`, 90 keys, and there is no error path for getting the
-shape wrong: a key that moves stops decoding, `loaded(from:)` answers the throw
-with a fresh default object, and the operator's destination folder, naming
-template, calibrated assist thresholds and taught REC references are silently
-replaced by defaults on the first launch of the update — on a shooting day.
+`TakeShot.CaptureSettings`, 95 keys, and getting the shape wrong costs the
+operator their destination folder, naming template, calibrated assist thresholds
+and taught REC references on the first launch of an update — on a shooting day.
+A key that moves stops decoding and `loaded(from:)` answers the throw with a
+fresh default object; what it no longer does is throw the old blob away. The
+bytes that would not decode are kept under `captureSettingsUnreadable`
+(`CaptureSettings.unreadableKey`), once, and the launch that found the damage
+says so — so a setup that looks wiped is recoverable rather than gone.
 
 It is also the app's **configuration surface**, read at several hundred call
 sites, and as that it had grown into a god object: 84 flat stored properties,
@@ -934,7 +943,7 @@ own **synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)`
 delegate to all fifteen against a SINGLE keyed container, so every key still
 lands at the top level exactly where it always did. Nothing hand-writes a
 per-field encode or decode — the field-to-key mapping is still the compiler's,
-which is what makes the 90 keys unforgeable.
+which is what makes the 95 keys unforgeable.
 
 Flatness is load-bearing for a second consumer as well as for the stored blob:
 `DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by

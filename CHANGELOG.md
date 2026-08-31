@@ -201,9 +201,12 @@ Gatekeeper's refusal instead of the app.
   included — encoded as H.264 in an MPEG-TS and sent to an address on the set
   network. VLC on a director's laptop, OBS, a Resolve station, a cloud gateway:
   anything that takes an `srt://` URL. Either end can dial, which is what makes
-  it work behind a venue's router in both directions, and there are four things
-  to set: where, how much of a bad link to ride out (the latency), how many bits
-  the link can carry, and an optional AES passphrase. **If the link dies it comes
+  it work behind a venue's router in both directions, and there are three things
+  to set: where, how many bits the link can carry, and an optional AES
+  passphrase. How much of a bad link to ride out — the delivery buffer — is not
+  one of them: it is sized from the round trip the link itself reports, shown
+  rather than asked for, and re-applied when the network turns out to be worse
+  than it looked. **If the link dies it comes
   back by itself**, which on a venue network is the normal case rather than the
   exception — the status row says so and keeps trying, and none of it can touch a
   take. Needs a build made against libsrt (see the limits below).
@@ -252,10 +255,12 @@ Gatekeeper's refusal instead of the app.
   or a viewing LUT, and the picture the hardware output and the streams now
   carry is exactly those tiles. So the director sees precisely what you see,
   which is the point — but neither of you can meter a take inside a comparison.
-  The scopes say they are waiting rather than measuring, and the tile labels and
-  running timecodes are on your screen and not in the composed picture, so a
-  monitor at the far end shows four takes and no names. Use the single player
+  The scopes say they are waiting rather than measuring. Use the single player
   for anything you have to judge exposure by.
+
+  (The tile names and their running timecodes DO reach the far end — they are
+  drawn into the composed picture, see the bullet above. An earlier draft of
+  this section said the opposite.)
 
 - **The SRT output has never been watched by a real receiver.** The transport
   stream is checked byte for byte, the encode is measured through a real decode,
@@ -271,10 +276,11 @@ Gatekeeper's refusal instead of the app.
   runtime installed to send — NDI Tools is enough. Without it the feature
   reports itself unavailable in Settings and says so in a sentence rather than
   asking you to rebuild anything. **Nothing about the NDI output has been
-  watched by a real receiver in this build either**, for the same reason as
-  SRT and one more: the machine it was written on has the runtime and not the
-  headers, so the bridge compiles as a stub there and the half that talks to
-  NDI has never executed. Try it before a job depends on it.
+  watched by a real receiver in this build**, for the same reason as SRT: no
+  set network and no second machine. The bridge itself does execute here — the
+  SDK headers are in `vendor/NDISDK/` and `NDIRealBridgeTests` runs against
+  them — so what is untested is the far end, not the code. Try it before a job
+  depends on it.
 - **No browser has ever decoded the live video.** The offer and the answer are
   checked against a real Chrome offer captured off this machine, the RTP
   packetising is checked byte for byte, and the page is checked — but nothing

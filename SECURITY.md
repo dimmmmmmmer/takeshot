@@ -14,9 +14,20 @@ what an attacker gains. Expect a first response within a week.
 
 ## Scope notes
 
-TakeShot is a local desktop application: it captures video, writes files to a
-folder you choose, and talks to Blackmagic hardware. It has no network
-services, no telemetry and no accounts.
+TakeShot is a desktop application: it captures video, writes files to a folder
+you choose, and talks to Blackmagic hardware. It has no telemetry and no
+accounts.
+
+**It does listen on the network, and that surface is in scope.** All three
+services are off by default and switched on per shoot:
+
+- the **remote** — an HTTP listener (port 8765 by default) serving four pages
+  and a WebSocket, gated by a four-digit PIN behind a tarpit. This is the one
+  genuinely remote-reachable surface, and reports about it are welcome.
+- **SRT** — a UDP socket, sending only, optionally AES-encrypted by a
+  passphrase you set.
+- **NDI** — announces a source on the local network and sends to whoever opens
+  it. There is no authentication in the protocol; it is meant for a set LAN.
 
 What is in scope:
 

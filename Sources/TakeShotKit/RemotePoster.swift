@@ -9,21 +9,17 @@ import Foundation
 /// known picture and read the bytes back out of. The image itself is the takes
 /// panel's own thumbnail — see `CaptureController.remoteTakePoster`.
 ///
-/// ## The poster beside the camera grid
+/// ## The poster beside the live picture
 ///
-/// A live camera grid exists now (`/cameras`, owner-approved), and it was
-/// built the way the objections recorded here said it would have to be: the
-/// frames come off a second display-tap slot (`setOnMultiviewFrame`) rather
-/// than the playout mirror's, they ride the WebSocket as binary messages
-/// rather than a `multipart/x-mixed-replace` connection the HTTP side has no
-/// model for, and the encoder exists only while a phone is subscribed — see
-/// `MultiviewComposer` and the live picture pool.
+/// A live view exists (`/live`, real video over WebRTC), and the JPEG grid
+/// that stood between it and this file — `/cameras` — has been retired: it
+/// answered the same question at a worse price.
 ///
-/// The poster stays regardless, because it answers a different question. The
+/// The poster stays regardless, because it answers a DIFFERENT question. The
 /// stream is "what is the camera seeing NOW"; the poster is "what did that
 /// take look like" — a frame of footage that landed, shown next to the rating
 /// buttons that act on it, at a cost of one cached thumbnail re-encoded when
-/// a take finalizes.
+/// a take finalizes. That is why retiring the grid did not retire this.
 enum RemotePoster {
     /// Longest edge of the served image.
     ///
