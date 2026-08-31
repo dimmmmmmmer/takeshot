@@ -177,13 +177,13 @@ private struct LegendCanvas {
     /// strip runs the way a light meter does, and the same way the horizontal
     /// one runs darkest-at-the-left.
     func drawColumn(_ entries: [AssistLegend.Entry]) {
-        let labelX = metrics.padding + metrics.bandWidth + metrics.labelGap
+        let labelX = metrics.padding + metrics.swatchThickness + metrics.labelGap
         for (index, entry) in entries.enumerated() {
             let y = metrics.verticalPadding
                 + CGFloat(index) * (metrics.bandHeight + metrics.gap)
             context.setFillColor(Self.color(of: entry))
             context.fill(CGRect(x: metrics.padding, y: y,
-                                width: metrics.bandWidth,
+                                width: metrics.swatchThickness,
                                 height: metrics.bandHeight))
             draw(entry.label,
                  in: CGRect(x: labelX, y: y, width: metrics.labelWidth,
@@ -227,7 +227,7 @@ extension AssistLegendMetrics {
             swatchThickness: swatchThickness * scale,
             falseColorBand: falseColorBand * scale,
             elZoneBand: elZoneBand * scale,
-            bandHeight: bandHeight * scale, bandWidth: bandWidth * scale,
+            bandHeight: bandHeight * scale,
             fontSize: fontSize * scale, padding: padding * scale,
             verticalPadding: verticalPadding * scale, corner: corner * scale,
             gap: gap * scale, labelGap: labelGap * scale)

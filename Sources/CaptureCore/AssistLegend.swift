@@ -16,27 +16,35 @@ public enum AssistLegendSize: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// One 4:3 step per size off `AssistLegendMetrics.reference`.
+    ///
+    /// It was three hand-tuned structs, and they sat one step LOW: even the
+    /// large step's text was 1.85 % of frame height, against the 2.9 % the
+    /// dailies burn-in already uses and which is proven readable off a monitor
+    /// on set. So "large" read as a medium and "small" was barely there (owner:
+    /// "размеры лардж тянут максимум на медиум, смолл совсем уж маленький").
+    ///
+    /// Stated as one set and one factor rather than three sets, because three
+    /// sets is three places for a ratio to drift — and it had already drifted:
+    /// the corner radius stepped 8/10/12 while the font stepped 11/15/20, so
+    /// the small legend's corners were proportionally rounder than the large
+    /// one's for no reason anybody wrote down.
+    ///
+    /// The new small is today's large-but-one; the new large lands at 26.7pt of
+    /// text, bigger than anything the operator has now and still under the
+    /// burn-in's 31.3.
+    var step: CGFloat {
+        switch self {
+        case .small: return 0.75
+        case .medium: return 1
+        case .large: return 4.0 / 3.0
+        }
+    }
+
     /// Every dimension the legend is built from, in reference points — see
     /// `AssistLegendMetrics`.
     var metrics: AssistLegendMetrics {
-        switch self {
-        case .small:
-            return AssistLegendMetrics(
-                swatchThickness: 14, falseColorBand: 52, elZoneBand: 38,
-                bandHeight: 18, bandWidth: 30, fontSize: 11,
-                padding: 12, verticalPadding: 6, corner: 8, gap: 2, labelGap: 3)
-        case .medium:
-            return AssistLegendMetrics(
-                swatchThickness: 19, falseColorBand: 70, elZoneBand: 50,
-                bandHeight: 24, bandWidth: 40, fontSize: 15,
-                padding: 16, verticalPadding: 8, corner: 10, gap: 2, labelGap: 4)
-        case .large:
-            return AssistLegendMetrics(
-                swatchThickness: 26, falseColorBand: 92, elZoneBand: 66,
-                bandHeight: 32, bandWidth: 54, fontSize: 20,
-                padding: 20, verticalPadding: 10, corner: 12, gap: 3,
-                labelGap: 5)
-        }
+        AssistLegendMetrics.reference.scaled(by: step)
     }
 }
 
@@ -67,19 +75,27 @@ public enum AssistLegendPlacement: String, CaseIterable, Identifiable, Sendable 
 /// one scale factor, so a UHD output gets a legend of the same apparent size
 /// rather than a postage stamp, and a 720p one is not covered by it.
 struct AssistLegendMetrics {
-    /// Thickness of the swatch row in a horizontal strip.
+    /// Thickness of the swatch bar, whichever way the strip runs: across a
+    /// top/bottom strip, and across a left/right one.
     var swatchThickness: CGFloat
     /// Width of one band in a horizontal strip. False colour has 9 bands and
     /// EL Zone 13, so the wider strip gets the narrower band — neither may run
     /// off the side of the picture.
     var falseColorBand: CGFloat
     var elZoneBand: CGFloat
-    /// Vertical strip: one band's height, and the width of its swatch. The band
-    /// is sized off the label rather than off the horizontal swatch — thirteen
-    /// EL Zone bands as tall as they are wide would be a strip longer than the
-    /// frame is high.
+    /// Vertical strip: one band's height. Sized off the LABEL rather than off
+    /// the swatch — thirteen EL Zone bands as tall as they are wide would be a
+    /// strip longer than the frame is high.
+    ///
+    /// There is no `bandWidth` beside it any more. The swatch bar's thickness
+    /// across the strip was stated twice, with two different numbers: 14/19/26
+    /// running across a horizontal strip and 30/40/54 running across a vertical
+    /// one — 2.1x wider, derived from nothing, explained nowhere. That factor
+    /// IS why the side legends read as too fat while top and bottom looked
+    /// right (owner: "легенды фалс колора и эл зона выглядят несуразно по
+    /// бокам. слишком широкие цветовые патчи"). `swatchThickness` is the bar's
+    /// thickness whichever way the strip runs.
     var bandHeight: CGFloat
-    var bandWidth: CGFloat
     var fontSize: CGFloat
     var padding: CGFloat
     var verticalPadding: CGFloat
@@ -87,6 +103,13 @@ struct AssistLegendMetrics {
     /// Between two bands, and between a swatch and its label.
     var gap: CGFloat
     var labelGap: CGFloat
+
+    /// The set at MEDIUM, in reference points on a 1080-tall frame. Every size
+    /// is this one scaled — see `AssistLegendSize.step`.
+    static let reference = AssistLegendMetrics(
+        swatchThickness: 26, falseColorBand: 92, elZoneBand: 66,
+        bandHeight: 32, fontSize: 20, padding: 20, verticalPadding: 10,
+        corner: 12, gap: 3, labelGap: 5)
 
     /// The line of text under (or beside) a swatch.
     var labelHeight: CGFloat { (fontSize * 1.25).rounded() }
@@ -302,7 +325,8 @@ public struct AssistLegend: Equatable, Sendable {
         let gaps = (count - 1) * metrics.gap
         if placement.isVertical {
             return CGSize(
-                width: metrics.bandWidth + metrics.labelGap + metrics.labelWidth
+                width: metrics.swatchThickness + metrics.labelGap
+                    + metrics.labelWidth
                     + 2 * metrics.padding,
                 height: count * metrics.bandHeight + gaps
                     + 2 * metrics.verticalPadding)
