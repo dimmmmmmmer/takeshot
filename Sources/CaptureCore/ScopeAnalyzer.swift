@@ -296,6 +296,19 @@ public enum ScopeAnalyzer {
     /// closure so the walk below specializes per format: it runs
     /// `gridCols * gridRows` times per frame and every sample goes through here.
     protocol FrameReader {
+        /// Whether this FORMAT hands over the source's own luma and chroma
+        /// rather than leaving them to be derived from RGB.
+        ///
+        /// A property of the format and not of the samples, which is the whole
+        /// point of asking it here: the GPU path needs the answer before it
+        /// walks a single pixel, and reading it off the samples afterwards
+        /// would be one frame too late — a YCbCr source would have had its
+        /// chroma recomputed from RGB, folding every illegal excursion back
+        /// into the gamut, which is precisely what `nativeChroma` exists to
+        /// prevent.
+        static var carriesNativeLuma: Bool { get }
+        static var carriesNativeChroma: Bool { get }
+
         var width: Int { get }
         var height: Int { get }
         func sample(x: Int, y: Int) -> Sample
@@ -308,6 +321,20 @@ public enum ScopeAnalyzer {
     /// over changes with `region`, so a punched-in scope has exactly the same
     /// trace density as a full-frame one.
     private static func analyzed<Reader: FrameReader>(
+        _ reader: Reader, region: ScopeRegion, levels: ScopeWireLevels,
+        colorimetry: WireColorimetry = .sdr) -> ScopeData? {
+        if ScopeAnalyzerMetal.isEnabled,
+           let data = analyzedOnGPU(reader, region: region, levels: levels,
+                                    colorimetry: colorimetry) {
+            return data
+        }
+        return analyzedOnCPU(reader, region: region, levels: levels,
+                             colorimetry: colorimetry)
+    }
+
+    /// The walk, accumulating as it goes. The path this has always had, and
+    /// the one every machine without a GPU still takes.
+    private static func analyzedOnCPU<Reader: FrameReader>(
         _ reader: Reader, region: ScopeRegion, levels: ScopeWireLevels,
         colorimetry: WireColorimetry = .sdr) -> ScopeData? {
         guard reader.width > 1, reader.height > 0 else { return nil }
@@ -437,6 +464,11 @@ public enum ScopeAnalyzer {
     /// exists to show what arrived. This is also exactly what the 8-bit '2vuy'
     /// reader below has always done.
     private struct V210Reader: PackedPlaneReader {
+        // A YCbCr source: the camera coded these, so they are plotted as sent —
+        // illegal excursions included — rather than derived back out of RGB.
+        static var carriesNativeLuma: Bool { true }
+        static var carriesNativeChroma: Bool { true }
+
         let plane: PackedPlane
         /// The matrix onto R'G'B' — carried rather than shared with the converter
         /// instance because the analyzer is handed a frame and a levels reading,
@@ -466,6 +498,11 @@ public enum ScopeAnalyzer {
 
     /// '2vuy' — one Cb Y0 Cr Y1 macropixel covers two columns.
     private struct TwoVUYReader: PackedPlaneReader {
+        // A YCbCr source: the camera coded these, so they are plotted as sent —
+        // illegal excursions included — rather than derived back out of RGB.
+        static var carriesNativeLuma: Bool { true }
+        static var carriesNativeChroma: Bool { true }
+
         let plane: PackedPlane
 
         func sample(x: Int, y: Int) -> Sample {
@@ -478,6 +515,11 @@ public enum ScopeAnalyzer {
 
     /// Biplanar 4:2:0 video-range: luma plane + interleaved CbCr plane.
     private struct BiPlanar420Reader: FrameReader {
+        // A YCbCr source: the camera coded these, so they are plotted as sent —
+        // illegal excursions included — rather than derived back out of RGB.
+        static var carriesNativeLuma: Bool { true }
+        static var carriesNativeChroma: Bool { true }
+
         let luma: UnsafePointer<UInt8>
         let chroma: UnsafePointer<UInt8>
         let lumaRowBytes: Int
@@ -533,4 +575,12 @@ public enum ScopeAnalyzer {
 extension ScopeAnalyzer.PackedPlaneReader {
     var width: Int { plane.width }
     var height: Int { plane.height }
+}
+
+/// RGB formats derive luma and chroma rather than carrying them. Stated once
+/// here rather than on each of the readers that does; the YCbCr ones say so for
+/// themselves.
+extension ScopeAnalyzer.FrameReader {
+    static var carriesNativeLuma: Bool { false }
+    static var carriesNativeChroma: Bool { false }
 }

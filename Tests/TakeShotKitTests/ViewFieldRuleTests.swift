@@ -52,17 +52,36 @@ struct ViewFieldRuleTests {
                 // `NameTextField(` contains `TextField(`. It is the filtered
                 // one — the thing this hunts the ABSENCE of — so a substring
                 // match that counted it would report every correct site.
-                let bare = code.replacingOccurrences(of: "NameTextField(",
-                                                     with: "«filtered»(")
-                guard bare.contains("TextField("), bare.contains("text:") else {
-                    continue
-                }
+                guard Self.isBareTextField(code) else { continue }
                 found.append(Site(file: url.lastPathComponent, line: index + 1,
                                   text: code.trimmingCharacters(in: .whitespaces)))
             }
         }
         try #require(files > 100, "the walk did not find the source tree")
+        // **A floor on the EXTRACTOR, not only on the walk.** The rule below
+        // asserts an absence, so a detector that stopped recognising the shape
+        // it hunts would report a clean tree rather than a broken test. The app
+        // has free text in it on purpose — a comment, a search box, an SRT
+        // address, an NDI source name — so finding none of them means this
+        // stopped looking.
+        try #require(!found.isEmpty, """
+            the walk found no bare TextField anywhere, which cannot be true \
+            while the comment box and the SRT address exist — the detector is \
+            no longer recognising the shape
+            """)
         return found
+    }
+
+    /// One line's worth of the decision, so it can be checked against lines
+    /// whose answer is known (`theDetectorKnowsTheShapeItHunts`).
+    ///
+    /// `NameTextField(` contains `TextField(`. It is the FILTERED one — the
+    /// thing this hunts the absence of — so a substring match that counted it
+    /// would report every correct site as an offender.
+    static func isBareTextField(_ code: String) -> Bool {
+        let bare = code.replacingOccurrences(of: "NameTextField(",
+                                             with: "«filtered»(")
+        return bare.contains("TextField(") && bare.contains("text:")
     }
 
     /// **Nothing that becomes part of a FILE NAME is bound as raw text.**
@@ -92,6 +111,26 @@ struct ViewFieldRuleTests {
                 \(offenders.map { "\($0.file):\($0.line) \($0.text)" }
                     .joined(separator: "\n"))
                 """)
+    }
+
+    /// The detector still tells the three shapes apart. Checked against lines
+    /// rather than against the tree, because the tree is what it is USED on:
+    /// a detector that quietly stopped matching would make the rule above
+    /// pass by finding nothing.
+    @Test func theDetectorKnowsTheShapeItHunts() {
+        // bare: no rule at all — the shape the rule is about
+        #expect(ViewFieldRuleTests.isBareTextField(
+            #"TextField("", text: $controller.settings.naming.projectName)"#))
+        #expect(ViewFieldRuleTests.isBareTextField(
+            #"    TextField(L("srt_address"), text: address)"#))
+        // filtered: `NameTextField` carries the rule
+        #expect(!ViewFieldRuleTests.isBareTextField(
+            #"NameTextField(field: .prefix, text: $text)"#))
+        // typed: a format IS a rule, and the value it parses into is the type
+        #expect(!ViewFieldRuleTests.isBareTextField(
+            #"TextField("", value: $port, format: .number.grouping(.never))"#))
+        // and nothing at all
+        #expect(!ViewFieldRuleTests.isBareTextField("Text(L(\"rec\"))"))
     }
 
     /// …and the project name in particular, because that is the one this found.

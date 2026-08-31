@@ -717,10 +717,24 @@ white stay exactly 64 and 940 and the graticule does not move. Those two dropped
 bits are a stated limit rather than an oversight: the trace maps are 512 rows and
 the histograms 256 bins, so the analyzer cannot display more than about nine bits
 however many it is handed. The full 12 reach the file, which is where they are
-worth something. Measured cost: 23.4 ms per 1080p pass, the same as `r210`
-(23.5 ms) and BGRA (23.6 ms) — the pass is dominated by the accumulator, not the
-pixel fetch — and the delivered rate is unchanged at 12.5 Hz live, 20 of 20
-offered passes landing.
+worth something. Every format costs about the same — 23.4 ms per 1080p pass for
+`R12B`, 23.5 for `r210`, 23.6 for BGRA — because the pass was dominated by the
+accumulator rather than by the pixel fetch.
+
+**Was.** The accumulation runs on the GPU now (`ScopeAnalyzerMetal`,
+`ScopeKernel`), which takes the same 1080p `r210` pass from 23.65 ms to
+11.77 ms in release: the scatter itself, thirty writes per sample into four
+megabytes of maps, falls from about 13.3 ms to 1.36. What is left is the unpack
+walk (~5 ms) and `finish()` (5.38), both still on the CPU and both deliberately
+so — the walk is bit-twiddling against packed layouts whose stride rules are
+hardware facts, and `finish()` is where the numbers become the picture. The
+scopes are an instrument, so the GPU path was off until it was SHOWN to agree
+with the CPU one: `ScopeGPUParityTests` holds the histograms and the RGB
+waveforms to byte-for-byte equality and the three maps that go through `float`
+to one code of 255. A machine with no GPU walks the path it always had.
+
+The delivered rate is unchanged at 12.5 Hz live, 20 of 20 offered passes
+landing.
 
 `ScopeData.nominal` says where 0% and 100% sit on the trace map, and every
 graticule, value number and histogram mark is placed through it — so on a wire

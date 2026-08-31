@@ -111,6 +111,29 @@ struct ScopePerformanceTests {
         return samples[0]
     }
 
+    /// **The number this whole GPU path exists for** (owner: "по поводу
+    /// скопов – крути их на видеокарте", and: "почему-то в резолве не лагают
+    /// скопы"). Both paths on the same frame, back to back, so the ratio is
+    /// measured on this machine rather than argued from two runs.
+    @Test(.enabled(if: ScopePerformanceTests.enabled))
+    func theGPUPassAgainstTheCPUOne() throws {
+        let wire = try r210Noise(width: 1920, height: 1080)
+        ScopeAnalyzerMetal.isEnabled = false
+        let cpu = time("1080p r210 CPU") {
+            _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited)
+        }
+        guard ScopeAnalyzerMetal.isAvailable else {
+            print("SCOPEBENCH no GPU: \(ScopeAnalyzerMetal.unavailableReason ?? "")")
+            return
+        }
+        ScopeAnalyzerMetal.isEnabled = true
+        defer { ScopeAnalyzerMetal.isEnabled = ScopeAnalyzerMetal.isAvailable }
+        let gpu = time("1080p r210 GPU") {
+            _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited)
+        }
+        print(String(format: "SCOPEBENCH GPU is %.2fx the CPU pass", cpu / gpu))
+    }
+
     @Test(.enabled(if: ScopePerformanceTests.enabled))
     func onePassOverAFullHDFrame() throws {
         let bgra = try bgraNoise(width: 1920, height: 1080)

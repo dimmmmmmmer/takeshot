@@ -44,10 +44,16 @@ extension ScopeAnalyzer {
         /// divides back out before the brightness curve.
         static let splitWeight = splitUnit * splitUnit
 
+        // **The members below are internal, not private, and the reason is one
+        // seam.** `ScopeAnalyzer+GPU.swift` is the other end of this type — it
+        // builds the shader's constants out of these and copies the maps the
+        // shader fills back into them — and `private` does not reach across a
+        // file even for the same type. Nothing outside this pair touches them.
+
         /// What the wire codes mean, for the nominal range `finish()` publishes
         /// and for the vectorscope's chroma gain.
         private let levels: ScopeWireLevels
-        private let chromaGain: Double
+        let chromaGain: Double
         /// What those codes mean as luminance and as colour. Carried through
         /// untouched for every TRACE — the waveform, the parade, the histogram
         /// and the vectorscope do no transfer arithmetic at all, because a
@@ -64,9 +70,9 @@ extension ScopeAnalyzer {
         /// saturated blue too bright — an exposure judgement made against the
         /// wrong number, which is the one thing this instrument exists to get
         /// right.
-        private let lumaWeights: LinearRGB
+        let lumaWeights: LinearRGB
         /// This frame's own RGB→XYZ matrix, from its own primaries.
-        private let toXYZ: RGBToXYZ
+        let toXYZ: RGBToXYZ
         /// Wire code → linear light, all 1024 of them, built once per frame.
         ///
         /// The reason there is a table at all: linearizing costs a `pow` and
@@ -74,26 +80,26 @@ extension ScopeAnalyzer {
         /// per sample is 829 k transcendental calls a frame. It is the same
         /// answer `WireDisplayTable` gives for the display half — a transfer
         /// function is a function of the CODE, and there are only 1024 codes.
-        private let linear: UnsafeMutablePointer<Double>
+        let linear: UnsafeMutablePointer<Double>
 
         // Trace densities as difference maps (row-major, `height + 1` rows).
-        private let diffY: UnsafeMutablePointer<Int32>
-        private let diffR: UnsafeMutablePointer<Int32>
-        private let diffG: UnsafeMutablePointer<Int32>
-        private let diffB: UnsafeMutablePointer<Int32>
+        let diffY: UnsafeMutablePointer<Int32>
+        let diffR: UnsafeMutablePointer<Int32>
+        let diffG: UnsafeMutablePointer<Int32>
+        let diffB: UnsafeMutablePointer<Int32>
         // Mean color of the pixels landing in each luma-waveform cell, same
         // difference-map layout: a sample adds its color over the rows its
         // luma segment covers.
-        private let sumR: UnsafeMutablePointer<Int32>
-        private let sumG: UnsafeMutablePointer<Int32>
-        private let sumB: UnsafeMutablePointer<Int32>
+        let sumR: UnsafeMutablePointer<Int32>
+        let sumG: UnsafeMutablePointer<Int32>
+        let sumB: UnsafeMutablePointer<Int32>
         /// Vectorscope density — one cell per sample, no segments to fill.
-        private let vector: UnsafeMutablePointer<Int32>
+        let vector: UnsafeMutablePointer<Int32>
         /// CIE chromaticity density — the same shape of map as the vectorscope's
         /// and filled the same way.
-        private let cie: UnsafeMutablePointer<Int32>
+        let cie: UnsafeMutablePointer<Int32>
         /// The four 256-bin histograms, back to back (R, G, B, Y).
-        private let hist: UnsafeMutablePointer<Int32>
+        let hist: UnsafeMutablePointer<Int32>
 
         // previous sample of the current scanline — traces are drawn as
         // connected vertical segments between neighbours (like a real waveform
@@ -184,7 +190,7 @@ extension ScopeAnalyzer {
         /// measured 340 ms/pass at UHD back when a segment was filled row by
         /// row. An eighth of the scale looks identical on real traces, and the
         /// cap still bounds how far one noisy sample can smear a column.
-        private static let maxSpan = ScopeAnalyzer.sampleLevels / 8
+        static let maxSpan = ScopeAnalyzer.sampleLevels / 8
 
         /// Top and one-past-bottom row of the segment ending at `value`.
         @inline(__always)
