@@ -203,17 +203,31 @@ extension CaptureController {
 
     /// One sidecar, with "not there" told apart from "would not open".
     ///
-    /// The distinction is the whole point: `NSFileReadNoSuchFileError` is the
-    /// first take of the day, and every other error is a folder whose contents
-    /// must not be overwritten from memory.
+    /// The distinction is the whole point: nothing there is the first take of
+    /// the day, and a file that IS there and will not open is a folder whose
+    /// contents must not be overwritten from memory.
+    ///
+    /// **Asked as "does this file exist", not by matching an error code.** The
+    /// first version matched `NSFileReadNoSuchFileError` and treated every
+    /// other error as unreadable — and a path whose PARENT is gone does not
+    /// give that error: a record folder blocked by a regular file answers
+    /// `NSFileReadUnknownError` (256), so a vanished record volume looked like
+    /// three unreadable sidecars. That put "the day's ratings are not being
+    /// saved" on the banner over `alarm_volume_unreachable`, which is the more
+    /// serious fault and the one the operator has to act on. CI caught it; the
+    /// development Mac did not.
+    ///
+    /// Existence is also the more honest question. A file that is not there for
+    /// ANY reason — no folder, no volume, no permission to look — is not a
+    /// sidecar this app is about to overwrite, because the write will fail too
+    /// and `exportTakeLog`'s catch already reports that.
     static func readSidecar(_ url: URL) -> SidecarRead {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return .absent
+        }
         do {
             return .read(try Data(contentsOf: url))
-        } catch let error as NSError {
-            let absent = error.domain == NSCocoaErrorDomain
-                && (error.code == NSFileReadNoSuchFileError
-                    || error.code == NSFileNoSuchFileError)
-            if absent { return .absent }
+        } catch {
             return .unreadable(L("sidecar_unreadable",
                                  url.lastPathComponent,
                                  error.localizedDescription))

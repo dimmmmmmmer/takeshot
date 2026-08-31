@@ -118,4 +118,38 @@ import Testing
             #expect(wrote, "the held edits were never written after recovery")
         }
     }
+
+    /// **A record folder that is GONE is the volume alarm's business, not this
+    /// one's.**
+    ///
+    /// The first version of the read matched `NSFileReadNoSuchFileError` and
+    /// called every other error unreadable — and a path whose parent is blocked
+    /// answers `NSFileReadUnknownError` instead. So a vanished record volume
+    /// looked like three unreadable sidecars, and "the day's ratings are not
+    /// being saved" went on the banner over `alarm_volume_unreachable`: the
+    /// wrong message, hiding the more serious one, on the fault an operator
+    /// actually has to act on. CI caught it and the development Mac did not.
+    @Test func avanishedRecordFolderIsNotReportedAsUnreadableSidecars()
+        async throws {
+        try await ControllerHarness.run { controller, root in
+            // exactly what `ControllerDestinationFailureTests` builds: a
+            // regular file standing where a folder should be
+            let blocker = root.appendingPathComponent("not-a-folder")
+            try Data([0x00]).write(to: blocker)
+            controller.settings.capture.destinationPath =
+                blocker.appendingPathComponent("takes").path
+
+            let stored = controller.loadStoredMetadata()
+            #expect(stored.unreadable.isEmpty, """
+                a record folder that is not there was read as sidecars that \
+                will not open: \(stored.unreadable)
+                """)
+
+            controller.noteUnreadableSidecars(stored.unreadable)
+            #expect(controller.persistentAlert == nil, """
+                the sidecar banner took the alarm line while the record volume \
+                itself is gone — that is the message the operator needs there
+                """)
+        }
+    }
 }
