@@ -112,7 +112,20 @@ struct SettingsView: View {
                         Text(codec.rawValue).tag(codec)
                     }
                 }
-                TextField(L("project"), text: $controller.settings.naming.projectName)
+                // **The one field with a rule and no enforcement.**
+                //
+                // `NameField.prefix` states what a project name may hold —
+                // everything a path can, minus what it cannot — and this row
+                // was a bare `TextField` that took anything. `NamingEngine`
+                // then rewrote it on the way into the file name, so what the
+                // operator typed and what landed on disk were different
+                // strings and nothing said which. The filtered field refuses
+                // the character instead, at the keystroke.
+                LabeledContent(L("project")) {
+                    NameTextField(field: .prefix,
+                                  text: $controller.settings.naming.projectName)
+                        .frame(width: 180)
+                }
                 HStack(spacing: 8) {
                     Text(L("destination_folder"))
                         .fixedSize()
