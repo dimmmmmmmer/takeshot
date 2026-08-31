@@ -743,6 +743,10 @@
    which picture — where the cameras page above is one JPEG per board. === */
 "live_title" = "TakeShot: видео";
 "live_unavailable" = "Видео недоступно";
+"live_video_failed" = "Живое видео на этой машине не кодируется: %@";
+"settings_unreadable" = "Сохранённые настройки не читаются, работаем на значениях по умолчанию. Старая копия сохранена, а не затёрта.";
+"playout_stalled_pool" = "Выход на монитор замер: не хватает памяти под кадр";
+"playout_stalled_render" = "Выход на монитор замер: кадр не удалось отмасштабировать";
 "live_retry" = "Повторить";
 /* The picture switch. One label per LivePicture case; see the English file for
    why the keys are built from the raw values. One word each — they sit in a
@@ -971,6 +975,7 @@
 "toast_report_failed" = "Отчёт: %@";
 "toast_pdf_render_failed" = "Не удалось построить PDF";
 "toast_output_failed" = "Вывод: %@";
+"toast_output_fallback" = "Плата не приняла %1$d×%2$d на %3$d к/с — выход на монитор идёт 1080p25, кадры масштабируются";
 "toast_grab_failed" = "Не удалось снять кадр";
 "toast_grab_failed_reason" = "Не удалось снять кадр: %@";
 "toast_record_folder_recreated" = "Папку записи переместили или удалили — создана заново";

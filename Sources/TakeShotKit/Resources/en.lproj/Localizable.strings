@@ -741,6 +741,10 @@
    which picture — where the cameras page above is one JPEG per board. === */
 "live_title" = "TakeShot Live";
 "live_unavailable" = "Live video is not available";
+"live_video_failed" = "Live video cannot be encoded on this machine: %@";
+"settings_unreadable" = "The saved settings could not be read and defaults are in use. The old copy has been kept, not overwritten.";
+"playout_stalled_pool" = "The monitor output is frozen: no memory for a frame";
+"playout_stalled_render" = "The monitor output is frozen: the frame could not be scaled";
 "live_retry" = "Try again";
 /* The picture switch. One label per LivePicture case, and the key is built
    from the case's raw value — a case with no string here is a build that fails
@@ -986,6 +990,7 @@
 "toast_report_failed" = "Report: %@";
 "toast_pdf_render_failed" = "PDF render failed";
 "toast_output_failed" = "Output: %@";
+"toast_output_fallback" = "The board would not take %1$d×%2$d at %3$d fps — the monitor output is 1080p25 and frames are scaled to it";
 "toast_grab_failed" = "Frame grab failed";
 "toast_grab_failed_reason" = "Frame grab failed: %@";
 "toast_record_folder_recreated" = "Record folder was moved/deleted — recreated";

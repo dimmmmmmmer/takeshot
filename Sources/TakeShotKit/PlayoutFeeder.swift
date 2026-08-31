@@ -21,6 +21,21 @@ final class PlayoutFeeder: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: CVPixelBuffer?
     private var scheduled = false
+    /// The last frame this feeder could not put on the board, if it is still
+    /// failing. Queue-confined: only `display` touches it.
+    ///
+    /// **A monitor that freezes silently is the failure mode this exists for.**
+    /// Both ways the scale can fail — no buffer out of the pool, CoreImage
+    /// refusing the render — used to `return`, leaving the LAST frame on the
+    /// board with nothing said. An operator judging framing on a picture that
+    /// stopped being live is worse off than one looking at black, and the two
+    /// look identical when the camera is on sticks.
+    private var stallReason: String?
+
+    /// Told once when the output stops taking frames, and once more when it
+    /// starts again — never per frame, because this runs at the signal's rate.
+    /// nil is the recovery.
+    var onStall: (@Sendable (String?) -> Void)?
 
     /// How a feeder is built. Replaced by the suite so the controller's own
     /// routing (`rebuildPlayout`) can be driven with a fake board; never by the
@@ -89,7 +104,7 @@ final class PlayoutFeeder: @unchecked Sendable {
         }
         // geometry differs (e.g. UHD viewer on an HD output): aspect-fit
         guard let scaled = pool.buffer(width: width, height: height)
-        else { return }
+        else { return stall(L("playout_stalled_pool")) }
         let image = CIImage(cvPixelBuffer: buffer,
                             options: [.colorSpace: NSNull()])
         let fitted = CompareCompositor.fitted(
@@ -98,7 +113,24 @@ final class PlayoutFeeder: @unchecked Sendable {
         destination.colorSpace = nil
         guard let task = try? context.startTask(toRender: fitted,
                                                 to: destination),
-              (try? task.waitUntilCompleted()) != nil else { return }
+              (try? task.waitUntilCompleted()) != nil else {
+            return stall(L("playout_stalled_render"))
+        }
         output.display(scaled)
+        clearStall()
+    }
+
+    /// Say it once, on the way into a stall.
+    private func stall(_ reason: String) {
+        guard stallReason != reason else { return }
+        stallReason = reason
+        onStall?(reason)
+    }
+
+    /// …and once on the way out, so a row that went red goes back.
+    private func clearStall() {
+        guard stallReason != nil else { return }
+        stallReason = nil
+        onStall?(nil)
     }
 }

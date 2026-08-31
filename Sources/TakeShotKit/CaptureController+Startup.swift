@@ -22,8 +22,14 @@ extension CaptureController {
     /// persisted state and wire the long-lived callbacks. Called exactly once,
     /// from `init` — it lives here only because the class file is the stored
     /// state's inventory and was outgrowing the file-length limit.
-    func completeStartup(stored: CaptureSettings) {
+    /// `unreadable` is a stored configuration that would not decode. It has
+    /// been set aside rather than overwritten (see
+    /// `CaptureSettings.unreadableKey`), and it is said once, on the launch
+    /// that found it: an operator whose whole setup is back at defaults needs
+    /// to know that happened, not discover it mid-take.
+    func completeStartup(stored: CaptureSettings, unreadable: Bool = false) {
         L10n.apply(stored.theme.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
+        if unreadable { lastError = L("settings_unreadable") }
         player.audioOutputDeviceUniqueID = stored.audio.playbackAudioDeviceUID
         audioMonitor.outputDeviceUID = stored.audio.playbackAudioDeviceUID
         // 0 in old saves came from the mute button, not a chosen level

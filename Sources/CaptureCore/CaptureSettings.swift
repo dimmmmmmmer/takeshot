@@ -138,12 +138,40 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     static let defaultsKey = "TakeShot.CaptureSettings"
 
     public static func loaded(from defaults: UserDefaults = .standard) -> CaptureSettings {
-        guard let data = defaults.data(forKey: defaultsKey),
-              var settings = try? JSONDecoder().decode(CaptureSettings.self, from: data)
-        else { return CaptureSettings() }
+        load(from: defaults).settings
+    }
+
+    /// Where a blob that would not decode is kept.
+    ///
+    /// **Because the alternative is destroying it.** A stored configuration
+    /// that cannot be read used to fall through to defaults, and the very next
+    /// save — which is the next thing that happens, since the app writes
+    /// settings on any change — wrote defaults over it. A shoot's whole setup,
+    /// gone, with nothing to put back and nothing said.
+    public static let unreadableKey = "captureSettingsUnreadable"
+
+    /// The settings, and the blob that had to be set aside to produce them.
+    ///
+    /// `unreadable` is non-nil only on the launch that found the damage, so
+    /// whoever reports it says it once rather than at every start. The blob
+    /// itself stays in `UserDefaults` afterwards — it is the only copy of what
+    /// the operator had, and a person with `defaults read` can get at it.
+    public static func load(from defaults: UserDefaults = .standard)
+        -> (settings: CaptureSettings, unreadable: Data?) {
+        guard let data = defaults.data(forKey: defaultsKey) else {
+            return (CaptureSettings(), nil)
+        }
+        guard var settings = try? JSONDecoder().decode(CaptureSettings.self,
+                                                       from: data) else {
+            // Kept only if nothing is there yet: a second bad launch must not
+            // overwrite the good copy this saved the first time.
+            let first = defaults.data(forKey: unreadableKey) == nil
+            if first { defaults.set(data, forKey: unreadableKey) }
+            return (CaptureSettings(), first ? data : nil)
+        }
         settings = migrate(settings, retired: RetiredSettings(from: data))
         settings.schemaVersion = currentSchemaVersion
-        return settings
+        return (settings, nil)
     }
 
     public func save(to defaults: UserDefaults = .standard) {

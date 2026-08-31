@@ -50,9 +50,25 @@ extension CaptureController {
             // fall back to the universal 1080p25 raster (frames are scaled)
             do {
                 mirrors.playout = try PlayoutFeeder.factory(board, 1920, 1080, 25)
+                // **Said, not assumed.** The fallback works, so it is a notice
+                // and not an error — but the director's monitor is now showing
+                // a SCALED 1080p25 raster of a signal that is neither, and an
+                // operator who does not know that reads the softness as the
+                // camera's and the cadence as a sync problem.
+                lastNotice = L("toast_output_fallback", width, height,
+                               Int(rate.rounded()))
             } catch {
                 lastError = L("toast_output_failed",
                               BridgeUnavailable(error: error).localizedText)
+            }
+        }
+        // A frozen output says so once, and says so again when it recovers.
+        // The feeder cannot reach the controller on its own — it runs on its
+        // own queue and holds no reference — so the hop is here.
+        mirrors.playout?.onStall = { [weak self] reason in
+            Task { @MainActor in
+                guard let self, let reason else { return }
+                self.lastError = reason
             }
         }
         wireDisplayMirrors()

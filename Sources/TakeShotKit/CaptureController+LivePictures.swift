@@ -53,16 +53,33 @@ extension CaptureController {
             // from a clock that started later. See `LiveClock`.
             clock: mirrors.liveClock,
             onFailure: { [weak self] reason in
-                // VideoToolbox would not build a session at all. The SRT row is
-                // the one surface an operator already watches for this feed, so
-                // that is where it goes; with the switch off the event is inert
-                // and the log is the record.
                 os_log("live encoder unavailable: %{public}s", reason)
-                Task { @MainActor in self?.applySRTEvent(.refused(reason)) }
+                Task { @MainActor in self?.reportLiveEncoderFailure(reason) }
             })
         mirrors.liveEncoders[picture] = encoder
         wireLivePictures()
         return encoder
+    }
+
+    /// VideoToolbox would not build a session at all — said somewhere the
+    /// operator is looking.
+    ///
+    /// **The session is SHARED, and that is why this is not simply an SRT
+    /// event.** It used to be: the SRT row is the one surface an operator
+    /// already watches for this feed, and with the switch off the event was
+    /// inert — "the log is the record". But a browser on `/live`, the NDI
+    /// source and the hardware playout all ride the same encoder, and with SRT
+    /// off none of them had anywhere to say this. The phone sat on a black page
+    /// and the only explanation was in a log nobody opens on a set.
+    ///
+    /// So: SRT's row when SRT is on, in SRT's own words, and the app's error
+    /// line otherwise. Never both — one failure said twice reads as two.
+    func reportLiveEncoderFailure(_ reason: String) {
+        if mirrors.srt != nil {
+            applySRTEvent(.refused(reason))
+        } else {
+            lastError = L("live_video_failed", reason)
+        }
     }
 
     /// Drop every session nothing is watching any more.

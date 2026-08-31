@@ -247,3 +247,81 @@ struct LivePicturePoolTests {
         }
     }
 }
+
+/// **A shared session that cannot be built has to be said somewhere the
+/// operator is looking.**
+///
+/// VideoToolbox refusing to build a `VTCompressionSession` is not an SRT
+/// problem, though it used to be reported as one: a browser on `/live`, the
+/// NDI source and the hardware playout all ride the same encoder. With the SRT
+/// switch off, the event was inert — the phone sat on a black page and the
+/// only explanation was in a log nobody opens on a set.
+@MainActor
+struct LiveEncoderFailureReportTests {
+    @Test func withSRTOffTheFailureReachesTheAppsErrorLine() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(controller.mirrors.srt == nil, "this case is the switch OFF")
+            controller.lastError = nil
+            controller.reportLiveEncoderFailure("no encoder on this machine")
+
+            let shown = try #require(controller.lastError,
+                                     "a shared session failed and nothing said so")
+            #expect(shown.contains("no encoder on this machine"),
+                    "the reason did not travel: \(shown)")
+        }
+    }
+
+    /// With SRT on, the row an operator already watches for this feed says it,
+    /// in SRT's own words — and it is not said twice.
+    @Test func withSRTOnTheRowSaysItInSRTsOwnWords() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.settings.srt.enabled = true
+            controller.settings.srt.address = "127.0.0.1"
+            let started = await ControllerWait.until { controller.mirrors.srt != nil }
+            #expect(started, "the SRT mirror never came up")
+
+            controller.lastError = nil
+            controller.reportLiveEncoderFailure("no encoder on this machine")
+            #expect(controller.mirrors.srtState
+                == .failed("no encoder on this machine"))
+            let shown = try #require(controller.lastError)
+            #expect(shown == L("srt_failed", "no encoder on this machine"),
+                    "the failure was said twice, in two voices: \(shown)")
+        }
+    }
+}
+
+/// The controller's half of the settings-recovery rule: an operator whose whole
+/// setup is back at defaults is TOLD, at the launch that found the damage.
+@MainActor
+struct ControllerSettingsRecoveryTests {
+    @Test func alaunchThatFoundDamagedSettingsSaysSo() throws {
+        let suite = "takeshot.recovery.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // Written the way the app writes it — the key is CaptureCore's own and
+        // is not exported, so the damage is planted by corrupting a real save.
+        CaptureSettings().save(to: defaults)
+        let key = try #require(defaults.dictionaryRepresentation().keys
+            .first { $0.contains("CaptureSettings") })
+        defaults.set(Data("{ not settings".utf8), forKey: key)
+
+        let controller = CaptureController(backends: [], defaults: defaults)
+        #expect(controller.lastError == L("settings_unreadable"),
+                "the reset went unmentioned: \(controller.lastError ?? "-")")
+        #expect(defaults.data(forKey: CaptureSettings.unreadableKey) != nil,
+                "the operator's copy was not kept")
+    }
+
+    /// A good configuration starts silently.
+    @Test func anordinaryLaunchSaysNothing() throws {
+        let suite = "takeshot.recovery.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        CaptureSettings().save(to: defaults)
+
+        let controller = CaptureController(backends: [], defaults: defaults)
+        #expect(controller.lastError == nil,
+                "a clean launch complained: \(controller.lastError ?? "-")")
+    }
+}

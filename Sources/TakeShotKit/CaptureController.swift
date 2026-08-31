@@ -587,14 +587,15 @@ final class CaptureController: ObservableObject {
         self.audioInputs = audioInputs ?? SystemAudioInputProvider()
         self.volumeWatch = volumeWatch ?? WorkspaceVolumeWatch()
         self.backend = AggregateBackend(children: backends ?? Self.shippingBackends())
-        let stored = CaptureSettings.loaded(from: defaults)
+        let load = CaptureSettings.load(from: defaults)
+        let stored = load.settings
         self.settings = stored
         self.panelSide = defaults.string(forKey: "panelSide") ?? "right"
         self.pipeline = CapturePipeline(config: .init(
             settings: stored, roll: "001", takeNumber: 1))
 
         self.backend.delegate = self
-        completeStartup(stored: stored)
+        completeStartup(stored: stored, unreadable: load.unreadable != nil)
     }
 
     // MARK: - multicam
