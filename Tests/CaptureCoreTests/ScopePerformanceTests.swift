@@ -134,6 +134,93 @@ struct ScopePerformanceTests {
         print(String(format: "SCOPEBENCH GPU is %.2fx the CPU pass", cpu / gpu))
     }
 
+    /// **Where the GPU pass's milliseconds actually go.**
+    ///
+    /// The three phases, timed separately on the same frame, because the
+    /// budget has been argued from an estimate: the unpack walk was put at
+    /// ~5 ms and `finish()` at 5.38 ms, and the next optimisation is chosen by
+    /// which of them is real. Printed rather than asserted, like everything
+    /// else here.
+    @Test(.enabled(if: ScopePerformanceTests.enabled))
+    func whereTheGPUPassSpendsItself() throws {
+        guard ScopeAnalyzerMetal.isAvailable else {
+            print("SCOPEBENCH no GPU for the phase breakdown")
+            return
+        }
+        ScopeAnalyzerMetal.isEnabled = true
+        defer { ScopeAnalyzerMetal.isEnabled = ScopeAnalyzerMetal.isAvailable }
+        let wire = try r210Noise(width: 1920, height: 1080)
+        for _ in 0..<3 { _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited) }
+
+        var fill = 0.0, gpu = 0.0, done = 0.0
+        let runs = 15
+        for _ in 0..<runs {
+            ScopeAnalyzer.benchPhases = ScopeAnalyzer.Phases()
+            _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited)
+            fill += ScopeAnalyzer.benchPhases.fillMs
+            gpu += ScopeAnalyzer.benchPhases.gpuMs
+            done += ScopeAnalyzer.benchPhases.finishMs
+        }
+        print(String(
+            format: "SCOPEBENCH phases — unpack %.2f ms, GPU+install %.2f ms, "
+                + "finish %.2f ms (mean of %d)",
+            fill / Double(runs), gpu / Double(runs), done / Double(runs), runs))
+    }
+
+    /// **Two producers at once, which is the case the backend lock decides.**
+    ///
+    /// Three of them really can arrive together — the capture queue's live
+    /// scopes, a take under review, a RAW clip — and the GPU backend is one
+    /// device with one set of buffers, so they queue. What matters is how much
+    /// of a pass is EXCLUSIVE: the fill, the GPU wait and `install` have to be,
+    /// because the maps are views into the shader's own buffers; `finish` does
+    /// not, because it reads the pass's own accumulator.
+    ///
+    /// This prints the wall time for two threads doing the same work. With
+    /// `finish` inside the lock it is roughly serial; with it outside, the two
+    /// finishes overlap.
+    @Test(.enabled(if: ScopePerformanceTests.enabled))
+    func twoProducersAtOnce() throws {
+        guard ScopeAnalyzerMetal.isAvailable else {
+            print("SCOPEBENCH no GPU for the concurrency case")
+            return
+        }
+        ScopeAnalyzerMetal.isEnabled = true
+        defer { ScopeAnalyzerMetal.isEnabled = ScopeAnalyzerMetal.isAvailable }
+        let wire = try r210Noise(width: 1920, height: 1080)
+        let passes = 10
+        // Warm first: the first pass compiles the shader and faults in the
+        // buffers, and charging that to the single-threaded baseline made the
+        // concurrent case look FASTER than the serial one.
+        for _ in 0..<3 { _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited) }
+
+        // one thread, for the baseline this is measured against
+        let alone = ContinuousClock.now
+        for _ in 0..<passes { _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited) }
+        let solo = ContinuousClock.now - alone
+
+        let started = ContinuousClock.now
+        let group = DispatchGroup()
+        for _ in 0..<2 {
+            DispatchQueue.global().async(group: group) {
+                for _ in 0..<passes {
+                    _ = ScopeAnalyzer.analyze(wire, wireLevels: .limited)
+                }
+            }
+        }
+        group.wait()
+        let together = ContinuousClock.now - started
+
+        let soloMs = Double(solo.components.attoseconds) / 1e15
+            + Double(solo.components.seconds) * 1000
+        let bothMs = Double(together.components.attoseconds) / 1e15
+            + Double(together.components.seconds) * 1000
+        print(String(
+            format: "SCOPEBENCH %d passes alone %.1f ms, two threads %.1f ms "
+                + "(%.2fx, 2.00 would be fully serial)",
+            passes, soloMs, bothMs, bothMs / soloMs))
+    }
+
     @Test(.enabled(if: ScopePerformanceTests.enabled))
     func onePassOverAFullHDFrame() throws {
         let bgra = try bgraNoise(width: 1920, height: 1080)

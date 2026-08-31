@@ -118,6 +118,12 @@ extension ScopeAnalyzer {
             toXYZ = colorimetry.primaries.rgbToXYZ
             lumaWeights = toXYZ.lumaWeights
             chromaGain = levels.chromaGain
+            // Zeroed even on the GPU path, where `install` overwrites every
+            // cell: skipping it was tried and measured at nothing (11.99 →
+            // 11.92 ms median over fifteen 1080p passes, inside the noise).
+            // Fresh pages come from the kernel already zero, so the memset
+            // touches memory the allocator has not faulted in yet. Not worth
+            // an invariant that says "no cell may be read before install".
             func zeroed(_ count: Int) -> UnsafeMutablePointer<Int32> {
                 let buffer = UnsafeMutablePointer<Int32>.allocate(capacity: count)
                 buffer.initialize(repeating: 0, count: count)
@@ -349,37 +355,27 @@ extension ScopeAnalyzer {
             map[cy * size + cx] += weight
         }
 
+        /// **The six surfaces are built in parallel, because they are six
+        /// independent reads of six disjoint maps.**
+        ///
+        /// This is where a pass spends itself: measured at 9.87 ms of an
+        /// 11.9 ms GPU pass (`whereTheGPUPassSpendsItself` — the unpack walk it
+        /// used to be blamed on is 0.15 ms), now 4.96 ms of 7.1 ms. Four
+        /// waveform channels, the vectorscope and the chromaticity chart each
+        /// soften or blur their own megabyte and turn it into bytes, and no two
+        /// of them touch the same memory: `diffY/R/G/B`, `vector` and `cie` are
+        /// separate allocations and each output is its own array.
         func finish() -> ScopeData {
-            let softY = DensityMap.softened(diffY)
-            // colored luma trace: brightness from the softened density (log),
-            // chroma from the blurred means so color follows the soft edge
-            let colored = coloredTrace(density: softY)
+            let surfaces = builtSurfaces()
             let codes = levels.nominalCodes
             return ScopeData(
-                waveformY: DensityMap.toBytesLog(softY),
-                waveformR: DensityMap.toBytesLog(DensityMap.softened(diffR)),
-                waveformG: DensityMap.toBytesLog(DensityMap.softened(diffG)),
-                waveformB: DensityMap.toBytesLog(DensityMap.softened(diffB)),
-                waveformYColor: colored,
+                waveformY: surfaces.y, waveformR: surfaces.r,
+                waveformG: surfaces.g, waveformB: surfaces.b,
+                waveformYColor: surfaces.coloured,
                 histR: histogram(0), histG: histogram(1),
                 histB: histogram(2), histY: histogram(3),
-                // the vectorscope is softened in both directions: one sample per
-                // cell and no segments to fill left it a field of hard dots
-                // that read as a low-resolution scope rather than as a density
-                vector: DensityMap.toBytesLog(DensityMap.blurred(
-                    Array(UnsafeBufferPointer(start: vector,
-                                              count: Self.vectorCells)),
-                    size: Self.vectorSize),
-                    unit: Self.splitWeight),
-                // the chromaticity map is softened and scaled exactly like the
-                // vectorscope's, for exactly the same reasons — one sample per
-                // position, real gaps in both directions, and counts that are
-                // `splitWeight` per sample rather than 1
-                cie: DensityMap.toBytesLog(DensityMap.blurred(
-                    Array(UnsafeBufferPointer(start: cie,
-                                              count: Self.cieCells)),
-                    size: Self.cieSize),
-                    unit: Self.splitWeight),
+                vector: surfaces.vector,
+                cie: surfaces.cie,
                 nominal: ScopeNominalRange(white: Self.unit(of: codes.white),
                                            black: Self.unit(of: codes.black)),
                 transfer: colorimetry.transfer,
@@ -420,5 +416,73 @@ extension ScopeAnalyzer {
             }
             return colored
         }
+    }
+}
+
+extension ScopeAnalyzer.Accumulator {
+    /// The six drawn surfaces, one per core.
+    ///
+    /// Separate from `finish()` so the parallel section is a function of the
+    /// maps and nothing else — and because the surfaces are what a future pass
+    /// would move to the GPU, whole.
+    struct Surfaces {
+        var y: [UInt8] = []
+        var r: [UInt8] = []
+        var g: [UInt8] = []
+        var b: [UInt8] = []
+        var coloured: [UInt8] = []
+        var vector: [UInt8] = []
+        var cie: [UInt8] = []
+    }
+
+    /// Each iteration writes its own fields and reads only its own map, which
+    /// is what `nonisolated(unsafe)` states here — the same argument the wire
+    /// converters make for their bands, one type along.
+    func builtSurfaces() -> Surfaces {
+        var built = Surfaces()
+        nonisolated(unsafe) let me = self
+        withUnsafeMutablePointer(to: &built) { slot in
+            nonisolated(unsafe) let out = slot
+            DispatchQueue.concurrentPerform(iterations: 6) { unit in
+                switch unit {
+                case 0:
+                    let soft = ScopeAnalyzer.DensityMap.softened(me.diffY)
+                    out.pointee.y = ScopeAnalyzer.DensityMap.toBytesLog(soft)
+                    // colour from the blurred means, so it follows the soft
+                    // edge rather than the hard sample
+                    out.pointee.coloured = me.coloredTrace(density: soft)
+                case 1:
+                    out.pointee.r = ScopeAnalyzer.DensityMap.toBytesLog(
+                        ScopeAnalyzer.DensityMap.softened(me.diffR))
+                case 2:
+                    out.pointee.g = ScopeAnalyzer.DensityMap.toBytesLog(
+                        ScopeAnalyzer.DensityMap.softened(me.diffG))
+                case 3:
+                    out.pointee.b = ScopeAnalyzer.DensityMap.toBytesLog(
+                        ScopeAnalyzer.DensityMap.softened(me.diffB))
+                case 4:
+                    // the vectorscope is softened in both directions: one
+                    // sample per cell and no segments to fill left it a field
+                    // of hard dots that read as a low-resolution scope rather
+                    // than as a density
+                    out.pointee.vector = ScopeAnalyzer.DensityMap.toBytesLog(
+                        ScopeAnalyzer.DensityMap.blurred(
+                            Array(UnsafeBufferPointer(start: me.vector,
+                                                      count: Self.vectorCells)),
+                            size: Self.vectorSize),
+                        unit: Self.splitWeight)
+                default:
+                    // the chromaticity map is softened and scaled exactly like
+                    // the vectorscope's, for exactly the same reasons
+                    out.pointee.cie = ScopeAnalyzer.DensityMap.toBytesLog(
+                        ScopeAnalyzer.DensityMap.blurred(
+                            Array(UnsafeBufferPointer(start: me.cie,
+                                                      count: Self.cieCells)),
+                            size: Self.cieSize),
+                        unit: Self.splitWeight)
+                }
+            }
+        }
+        return built
     }
 }

@@ -35,11 +35,18 @@ extension ScopeAnalyzer {
             columns: gridCols, rows: gridRows,
             hasNativeLuma: Reader.carriesNativeLuma,
             hasNativeChroma: Reader.carriesNativeChroma)
-        var data: ScopeData?
+        let startedPass = DispatchTime.now()
+        var filledAt = startedPass
         let ran = ScopeAnalyzerMetal.accumulate(
             ScopeAnalyzerMetal.Request(
                 sampleCount: gridRows * gridCols, params: params,
                 linear: acc.linearFloats, waveCells: Accumulator.waveCells),
+            // Sequential, and measured: the whole walk is 0.15 ms of an
+            // 11.9 ms pass (`whereTheGPUPassSpendsItself`). Banding it across
+            // cores the way the wire converters are was tried and changed the
+            // median by nothing at all — this is 276,480 random reads out of a
+            // locked pixel buffer, and it is memory-bound, not compute-bound.
+            // The ~5 ms this used to be estimated at was an estimate.
             fill: { storage in
                 for gy in 0..<gridRows {
                     let y = window.y + gy * window.height / gridRows
@@ -60,12 +67,35 @@ extension ScopeAnalyzer {
                         storage[gy * gridCols + gx] = packed
                     }
                 }
+                filledAt = DispatchTime.now()
             },
-            consume: { maps in
-                acc.install(maps)
-                data = acc.finish()
-            })
-        return ran ? data : nil
+            // **`install` only, under the backend lock.**
+            //
+            // The lock is held across the fill, the GPU wait and this copy, and
+            // `install` genuinely has to be inside it: the maps are views into
+            // the shader's own buffers and are valid nowhere else. `finish` is
+            // NOT — it reads this pass's own accumulator, which nothing else
+            // can reach — and it is 5.38 ms of an 11.9 ms pass.
+            //
+            // Three producers really can arrive at once (the capture queue's
+            // live scopes, a take under review, a RAW clip), and with `finish`
+            // inside they were fully serialized: measured over ten 1080p
+            // passes, two threads cost 235.1 ms against 119.0 ms for one —
+            // 1.98x, where 2.00 is perfectly serial. Outside, the same pair
+            // costs 122.3 ms against 117.9 ms: 1.04x. The finishes overlap.
+            // (`twoProducersAtOnce` prints both.)
+            consume: { maps in acc.install(maps) })
+        guard ran else { return nil }
+        let installedAt = DispatchTime.now()
+        let data = acc.finish()
+        let endedAt = DispatchTime.now()
+        func ms(_ from: DispatchTime, _ to: DispatchTime) -> Double {
+            Double(to.uptimeNanoseconds - from.uptimeNanoseconds) / 1_000_000
+        }
+        benchPhases = Phases(fillMs: ms(startedPass, filledAt),
+                             gpuMs: ms(filledAt, installedAt),
+                             finishMs: ms(installedAt, endedAt))
+        return data
     }
 }
 
@@ -148,4 +178,21 @@ extension ScopeAnalyzer.Accumulator {
         copy(maps.vector, into: vector, count: Self.vectorCells)
         copy(maps.cie, into: cie, count: Self.cieCells)
     }
+}
+
+extension ScopeAnalyzer {
+    /// Wall time of one GPU pass, split by phase.
+    ///
+    /// **For the benchmark only, and it is why the numbers in CLAUDE.md are
+    /// measurements rather than estimates.** Written from whichever queue is
+    /// running a pass and read by a suite that runs one at a time; nothing in
+    /// the app reads it, and the writes are three doubles on a path that
+    /// already costs milliseconds.
+    struct Phases: Sendable {
+        var fillMs = 0.0
+        var gpuMs = 0.0
+        var finishMs = 0.0
+    }
+
+    nonisolated(unsafe) static var benchPhases = Phases()
 }
