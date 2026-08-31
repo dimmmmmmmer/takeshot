@@ -51,6 +51,17 @@ struct VisualRecRows: View {
         // No switch of its own: the mode picker above IS the switch
         // (see `RecDetectionMode.visual`).
         if isExpanded {
+            // **What the mode DOES, said once, where it is chosen.** The
+            // sentence was written and then stranded: it belonged to a
+            // standalone switch that became an option in the mode picker, and
+            // a picker with five options cannot carry a tooltip per option. It
+            // matters more than most hints because this mode has to be TAUGHT
+            // before it can do anything, and an operator who does not know
+            // that reads the disabled state as the feature being broken.
+            Text(L("visual_rec_hint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             VisualRecTeachRow()
             VisualRecSliderRow(
                 label: L("visual_rec_width"),

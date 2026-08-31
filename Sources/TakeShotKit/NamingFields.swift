@@ -158,9 +158,22 @@ struct NamingFieldsView: View {
         .fixedSize()
     }
 
+    /// `canStep` is what greys the arrows out on a value they cannot move —
+    /// "112A pickup" has no number and no pageable letter, so both directions
+    /// are no-ops, and a control that looks live and does nothing reads on set
+    /// as the app having hung: a press, a pause, and then a second press.
+    ///
+    /// **Both arrows or neither.** AppKit's `Stepper` cannot grey one of its
+    /// two halves: the documented "pass nil to disable that button" holds on
+    /// other platforms, and here it leaves an enabled `NSStepper` (measured —
+    /// `isEnabled` stays true either way). So the control is disabled when
+    /// NEITHER direction can do anything, which is the case that actually reads
+    /// as a hang; a half-usable stepper keeps both arrows, and the one that
+    /// cannot move returns the value unchanged.
     static func steppedField(_ label: String, field: NameField, width: CGFloat,
                              text: Binding<String>,
                              onStep: @escaping (Int) -> Void,
+                             canStep: @escaping (Int) -> Bool = { _ in true },
                              onCommit: @escaping () -> Void = {},
                              onEditingChanged: @escaping (Bool) -> Void = { _ in })
         -> some View {
@@ -171,9 +184,17 @@ struct NamingFieldsView: View {
                               onCommit: onCommit,
                               onEditingChanged: onEditingChanged)
                     .frame(width: width)
-                Stepper("", onIncrement: { onStep(1) }, onDecrement: { onStep(-1) })
+                Stepper("", onIncrement: { onStep(1) },
+                        onDecrement: { onStep(-1) })
                     .labelsHidden()
                     .controlSize(.small)
+                    // disabled(exception): per-FIELD, and about the field's
+                    // own text rather than about app state — whether the value
+                    // in THIS box has anything the arrows can page. The rule is
+                    // named once, on `SlateStep.canStep`, and both rows reach it
+                    // through this one builder; the controller has no opinion
+                    // about a string a binding is holding.
+                    .disabled(!canStep(1) && !canStep(-1))
             }
         }
         .fixedSize()

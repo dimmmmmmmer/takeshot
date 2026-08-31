@@ -93,6 +93,7 @@ struct SlateFieldsEditor: View {
             onStep: { delta in
                 text.wrappedValue = SlateStep.stepped(text.wrappedValue,
                                                       by: delta, seed: seed)
-            })
+            },
+            canStep: { SlateStep.canStep(text.wrappedValue, by: $0) })
     }
 }

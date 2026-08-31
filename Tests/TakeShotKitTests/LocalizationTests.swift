@@ -22,6 +22,43 @@ struct LocalizationTests {
         L10n.apply(.english) // leave the suite on a known language
     }
 
+    /// **Every key in the table is reachable from the app.**
+    ///
+    /// The other three walks ask whether a key the CODE names exists. This one
+    /// asks the opposite, and it is the half that catches a control that was
+    /// removed or replaced: `comment_save` outlived the Save button the comment
+    /// popover no longer has, `visual_rec_size` outlived the single size slider
+    /// that became width and height, and `visual_rec_hint` — the paragraph that
+    /// explains what the taught REC indicator DOES — was left with nothing
+    /// showing it when the standalone switch became a mode in the picker. A
+    /// string nobody can reach is not merely clutter: it is a translated
+    /// sentence that was supposed to be on screen.
+    ///
+    /// Keys built by concatenation are reachable too, and are counted so: a
+    /// `"legend_size_" + rawValue` in `Sources` covers every key that starts
+    /// that way. The prefix has to appear in the CODE, so retiring the enum
+    /// retires its keys' cover with it.
+    @Test func everyKeyInTheTableIsReachedFromTheCode() throws {
+        let bundle = Bundle.module
+        let enPath = try #require(bundle.path(forResource: "en", ofType: "lproj"))
+        let table = try #require(NSDictionary(contentsOfFile:
+            enPath + "/Localizable.strings") as? [String: String])
+
+        // ANY literal, not only the ones inside an `L(` call: a page's label
+        // table (`RemotePage`) and the hotkey and preset tables name their keys
+        // as plain strings and hand them to `L` somewhere else entirely, so a
+        // walk over call sites alone would call two thirds of the table dead.
+        let (named, prefixes) = try LocalizationWalk.literalsAndPrefixes()
+        let unreachable = table.keys
+            .filter { !named.contains($0) }
+            .filter { key in !prefixes.contains { key.hasPrefix($0) } }
+            .sorted()
+        #expect(unreachable.isEmpty, """
+            translated and unreachable — a removed control's leftovers, or a \
+            string that was meant to be showing: \(unreachable.joined(separator: ", "))
+            """)
+    }
+
     /// Adding a string to one file and forgetting the other is the standard way
     /// this project's UI ends up half-translated.
     @Test func theTwoStringsFilesCoverTheSameKeys() throws {
@@ -355,6 +392,92 @@ enum LocalizationWalk {
             }
         }
         return found
+    }
+
+    /// Every string literal in `Sources`, and every key PREFIX built on.
+    ///
+    /// One walk for both because they are one pass over the same lines, and the
+    /// reachability question needs them together: a key is reached if the code
+    /// names it, or if the code builds keys that start the way it starts.
+    static func literalsAndPrefixes() throws
+        -> (literals: Set<String>, prefixes: Set<String>) {
+        let root: URL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let walker = try #require(FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: nil),
+                                  "the source tree could not be walked")
+        var literals: Set<String> = []
+        var prefixes: Set<String> = []
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            guard let raw: String = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            for line in raw.components(separatedBy: "\n") {
+                let code = Self.code(of: line)
+                let span = Self.spans(on: code)
+                literals.formUnion(span.literals)
+                prefixes.formUnion(span.prefixes)
+            }
+        }
+        return (literals, prefixes)
+    }
+
+    /// Every string literal on one line, and every key prefix a literal on it
+    /// is built into.
+    ///
+    /// Its own scanner rather than `literal(_:from:)`: that one bails on a
+    /// backslash, which is exactly the `"bridge_\(code)"` shape this has to
+    /// see, and it stops ON the closing quote, which is one character short of
+    /// where the `+` of a concatenation would be.
+    static func spans(on line: String) -> (literals: [String], prefixes: [String]) {
+        var literals: [String] = []
+        var prefixes: [String] = []
+        let characters: [Character] = Array(line)
+        var scan: Int = 0
+        while scan < characters.count {
+            guard characters[scan] == "\"" else {
+                scan += 1
+                continue
+            }
+            var text: String = ""
+            var hole: Bool = false
+            scan += 1
+            while scan < characters.count, characters[scan] != "\"" {
+                // An interpolation ENDS the literal and the scan resumes just
+                // inside it. `"\\(L(\"marker_add_help\")) — …"` is one line's
+                // worth of this file's real shape: the key is a literal NESTED
+                // in another, and a flat scan that swallowed the outer one
+                // would call the key unreachable.
+                if characters[scan] == "\\", scan + 1 < characters.count,
+                   characters[scan + 1] == "(" {
+                    hole = true
+                    scan += 2
+                    break
+                }
+                text.append(characters[scan])
+                scan += 1
+            }
+            if hole {
+                // `"bridge_\\(code)"` — what precedes the hole is the prefix
+                // every key it builds starts with, and the literal itself is
+                // not a key.
+                if text.hasSuffix("_") { prefixes.append(text) }
+                continue
+            }
+            scan += 1  // past the closing quote
+            guard !text.isEmpty else { continue }
+            literals.append(text)
+            // `"trigger_" + rawValue` — the next thing on the line is a `+`.
+            guard text.hasSuffix("_") else { continue }
+            var after: Int = scan
+            while after < characters.count, characters[after] == " " { after += 1 }
+            if after < characters.count, characters[after] == "+" {
+                prefixes.append(text)
+            }
+        }
+        return (literals, prefixes)
     }
 
     /// The code half of a line — a `//` comment can mention `L("…")` in prose

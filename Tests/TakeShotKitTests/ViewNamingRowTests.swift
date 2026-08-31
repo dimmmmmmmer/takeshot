@@ -340,3 +340,82 @@ struct ViewNamingRowTests {
         return nil
     }
 }
+
+/// **A stepper that cannot move is greyed out rather than dead under the
+/// pointer.**
+///
+/// `SlateStep.canStep` was written for exactly this and then never called: the
+/// arrows stayed lit on "112A pickup", which has no number and no pageable
+/// letter. A control that looks live and does nothing reads on set as the app
+/// having hung — a press, a pause, and then a second press.
+///
+/// Asserted through the AppKit control rather than through a render: an
+/// offscreen host draws an enabled and a disabled `NSStepper` to the same
+/// pixels (measured — the two bitmaps agree to every digit), so a brightness
+/// comparison here would pass whatever the code did.
+@MainActor
+struct ViewSteppedFieldTests {
+    /// Every `NSControl` in a hosted tree, so the assertion is about the
+    /// control the operator actually clicks.
+    private static func controls(_ view: NSView) -> [NSControl] {
+        var found: [NSControl] = []
+        if let control = view as? NSControl { found.append(control) }
+        for child in view.subviews { found += controls(child) }
+        return found
+    }
+
+    private static func steppersAreEnabled(_ view: some View) -> [Bool] {
+        let host = NSHostingView(rootView: AnyView(view))
+        host.frame = CGRect(origin: .zero, size: CGSize(width: 420, height: 70))
+        host.layoutSubtreeIfNeeded()
+        return controls(host)
+            .filter { String(describing: type(of: $0)).contains("Stepper") }
+            .map(\.isEnabled)
+    }
+
+    /// The builder itself: the same field, with and without a usable arrow.
+    @Test func aFieldWithNothingToPageDisablesItsStepper() {
+        let live = Self.steppersAreEnabled(
+            NamingFieldsView.steppedField("SCENE", field: .scene, width: 70,
+                                          text: .constant("12"),
+                                          onStep: { _ in }))
+        #expect(live == [true], "the field has no stepper to look at: \(live)")
+        let dead = Self.steppersAreEnabled(
+            NamingFieldsView.steppedField("SCENE", field: .scene, width: 70,
+                                          text: .constant("12"),
+                                          onStep: { _ in },
+                                          canStep: { _ in false }))
+        #expect(dead == [false], """
+            a field whose arrows can do nothing is still live — `canStep` \
+            reaches no control
+            """)
+    }
+
+    /// And the slate row asks it. "pickup 1" ends in a number the arrows page;
+    /// "1 pickup" ends in the last letter of a word, which they must not — the
+    /// same glyphs, so nothing but the arrows can differ.
+    @Test func theSlateRowGreysAStepperItCannotUse() {
+        let pageable = Self.steppersAreEnabled(
+            SlateFieldsEditor(scene: .constant("pickup 1"), shot: .constant("2"),
+                              takeText: .constant("3")))
+        #expect(pageable == [true, true, true],
+                "the slate row's three steppers are not all live: \(pageable)")
+        let stuck = Self.steppersAreEnabled(
+            SlateFieldsEditor(scene: .constant("1 pickup"), shot: .constant("2"),
+                              takeText: .constant("3")))
+        #expect(stuck == [false, true, true], """
+            a scene with nothing to page keeps a live stepper — the row is not \
+            asking `SlateStep.canStep`: \(stuck)
+            """)
+    }
+
+    /// An empty field keeps its stepper: up seeds it with "1", which is how a
+    /// scene is entered without going for the keyboard.
+    @Test func anEmptyFieldKeepsTheArrowThatSeedsIt() {
+        let empty = Self.steppersAreEnabled(
+            SlateFieldsEditor(scene: .constant(""), shot: .constant(""),
+                              takeText: .constant("")))
+        #expect(empty == [true, true, true],
+                "an empty slate row cannot be filled with the arrows: \(empty)")
+    }
+}
