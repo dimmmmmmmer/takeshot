@@ -103,8 +103,19 @@ jobs:
         timeout-minutes: 45
         run: swift build -j 2 --target CaptureCore
 
+      # 70, on evidence rather than on hope. The split above did its job: on
+      # 31 August this step reached file 254 of 257 — `RawTransportBar.swift` —
+      # and was killed nine seconds later by its 45-minute budget. That is a
+      # step that is SLOW, not one that is stuck, which is exactly the
+      # distinction the split was added to make, and it is the first time this
+      # workflow's failure has said what it needs instead of going blank. The
+      # core step's 45 stays: it has never come close.
+      #
+      # The job's 120 still bounds the pair (45 + 70 = 115 worst case), so a
+      # genuinely hung extractor is still killed by the outer budget rather
+      # than holding a macOS runner all afternoon.
       - name: Build the app layer
-        timeout-minutes: 45
+        timeout-minutes: 70
         run: swift build -j 2
 
       - name: Perform CodeQL Analysis
