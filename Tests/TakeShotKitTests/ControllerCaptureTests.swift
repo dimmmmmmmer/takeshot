@@ -315,12 +315,14 @@ import Testing
     @Test func multicamAddsAndRemovesTheSecondDemoCamera() async throws {
         try await ControllerHarness.run { controller, _ in
             #expect(controller.extraChannels.isEmpty)
-            #expect(controller.allCameraLabels == ["A"])
+            #expect(controller.settings.naming.cameraLabel == "A")
+            #expect(controller.extraChannels.map(\.camLabel) == [])
 
             controller.toggleMulticam()
             #expect(controller.multicamOn)
             #expect(controller.extraChannels.count == 1)
-            #expect(controller.allCameraLabels == ["A", "B"])
+            #expect(controller.settings.naming.cameraLabel == "A")
+            #expect(controller.extraChannels.map(\.camLabel) == ["B"])
 
             // …and what that channel reports reaches the operator wearing the
             // channel's letter. The channel forwards the alarm untouched; the
@@ -335,7 +337,8 @@ import Testing
             controller.toggleMulticam()
             #expect(!controller.multicamOn)
             #expect(controller.extraChannels.isEmpty)
-            #expect(controller.allCameraLabels == ["A"])
+            #expect(controller.settings.naming.cameraLabel == "A")
+            #expect(controller.extraChannels.map(\.camLabel) == [])
         }
     }
 }

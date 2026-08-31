@@ -25,11 +25,12 @@ struct ModelPlaybackLookTests {
         #expect(look == .bypassed)
         #expect(!look.isEngaged, "the icon would light over a picture with no look")
         #expect(!look.appliesCube, "the tap would be handed a cube to ignore")
-        #expect(look.isSwitchable,
-                """
-                the look is still picked — pressing it is how the operator \
-                says what they want on leaving difference mode
-                """)
+        // …and it is still a PRESSABLE state, which `PlaybackLookButton`
+        // decides in an exhaustive switch: the look is still picked, and
+        // pressing it is how the operator says what they want on leaving
+        // difference mode.
+        #expect(look != .baked,
+                "a bypassed look reads as baked — the bar would stop offering it")
     }
 
     /// The order matters at both ends. A baked file carries the look in its own

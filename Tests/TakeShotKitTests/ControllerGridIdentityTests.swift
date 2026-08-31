@@ -35,6 +35,12 @@ import Testing
                 try #require(controller.mirrors.syncGridComposer)
             let first: String = model.tiles[0].source.name
             #expect(first == "TS_A001C01", "the fixture take is named \(first)")
+            // A floor on what is being walked: `tiles.indices` over an empty
+            // model iterates nothing and asserts nothing, which is a green
+            // test for a grid that never composed. The sibling twenty lines up
+            // takes the same precaution.
+            #expect(model.tiles.count == 2,
+                    "the grid has \(model.tiles.count) tiles, so nothing below ran")
             for index in model.tiles.indices {
                 let held = composer.heldIdentity(camera: index)
                 #expect(held == .take(label: model.tiles[index].source.name),

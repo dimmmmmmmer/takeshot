@@ -51,15 +51,24 @@ extension CapturePipeline {
     /// The converter for a wire format, or nil when the frame is one the 8-bit
     /// path handles. The three high-bit-depth formats differ in their pixel
     /// packing, their colour space and their record format, not in what the
-    /// levels stage does with them, so this is the only place the pipeline names
-    /// them.
+    /// levels stage does with them, so this is the only place the pipeline
+    /// names them.
+    ///
+    /// **Each converter answers for itself.** This used to `switch` on the
+    /// three concrete constants, which made `WireConverter.wireFormat` — a
+    /// protocol requirement all three implement — a second statement of the
+    /// same fact that nothing read. A converter could answer a format this
+    /// function did not route to it and nothing would notice; only two of the
+    /// three had even that much asserted in a test, so the r210 path had no
+    /// guard at all.
     func wireConverter(for pixelFormat: OSType) -> WireConverter? {
-        switch pixelFormat {
-        case TenBitConverter.r210: return tenBitConverter
-        case TwelveBitConverter.r12b: return twelveBitConverter
-        case TenBitYUVConverter.v210: return tenBitYUVConverter
-        default: return nil
-        }
+        wireConverters.first { $0.wireFormat == pixelFormat }
+    }
+
+    /// The three, in the order they are tried. A stored array rather than a
+    /// computed one: it is asked per frame.
+    var wireConverters: [WireConverter] {
+        [tenBitConverter, twelveBitConverter, tenBitYUVConverter]
     }
 
     /// Levels and, for a high-bit-depth RGB wire, the split into display +

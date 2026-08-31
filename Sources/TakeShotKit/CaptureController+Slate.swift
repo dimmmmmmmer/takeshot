@@ -66,13 +66,6 @@ extension CaptureController {
     /// never opened the slate.
     var isSlating: Bool { !scene.isEmpty || !shot.isEmpty }
 
-    /// The slate as the footer chip shows it; a dash when nothing is set, so an
-    /// empty control reads as "not logged" rather than as a render failure.
-    var slateDisplay: String {
-        let text = pendingSlate.compact
-        return text.isEmpty ? "—" : text
-    }
-
     /// What the footer's TAKE field shows. An unlogged take number is an EMPTY
     /// field, not a 0: blank is how the operator sees that numbering is still
     /// following the clip counter.

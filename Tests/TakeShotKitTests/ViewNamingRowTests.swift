@@ -51,13 +51,23 @@ struct ViewNamingRowTests {
     }
 
     /// The three captions are the only localized strings in the footer's right
-    /// half, and beside their boxes they are charged to the row's width — so
-    /// they live in a FIXED box, and a translation that does not fit it is
-    /// truncated in silence. Both languages are measured against that box.
-    @Test func theSlateCaptionsFitTheirFixedBoxInBothLanguages() async throws {
+    /// half, they sit ABOVE their boxes, and a caption is `.fixedSize()` — so
+    /// one wider than the box under it widens the column and pushes the REC
+    /// button off centre in one language only.
+    ///
+    /// Measured against each field's OWN width. It used to be measured against
+    /// a fixed 36pt caption box, which was deleted with the beside-the-box
+    /// layout — leaving this comparing a measured width to a number nothing
+    /// applied, which is a test that cannot fail.
+    @Test func theSlateCaptionsFitTheirFieldsInBothLanguages() async throws {
         try await ViewProbe.run { probe in
-            let box = SlateFieldsEditor.captionWidth
+            let boxes: [String: CGFloat] = [
+                "scene": SlateFieldsEditor.sceneWidth,
+                "slate_shot": SlateFieldsEditor.shotWidth,
+                "slate_take": SlateFieldsEditor.takeWidth,
+            ]
             for key in ["scene", "slate_shot", "slate_take"] {
+                let box = try #require(boxes[key])
                 let caption = probe.fittingSizes { () -> Text in
                     Text(L(key)).font(.system(size: 9, weight: .semibold))
                 }

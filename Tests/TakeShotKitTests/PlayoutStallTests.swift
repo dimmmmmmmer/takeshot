@@ -154,6 +154,12 @@ struct PlayoutFallbackNoticeTests {
             controller.lastNotice = nil
             controller.settings.capture.monitorDeviceID = "decklink:board"
             controller.rebuildPlayout()
+            // The silence below is only evidence if a playout was actually
+            // built: `rebuildPlayout` returning early is silent too, and the
+            // notice was cleared on the line above. The sibling test already
+            // takes this precaution.
+            #expect(controller.mirrors.playout != nil,
+                    "no playout was built, so its silence says nothing")
             #expect(controller.lastNotice == nil,
                     "a working board was reported as a fallback")
         }

@@ -177,39 +177,24 @@ struct NamingEngineTests {
                 == "Film_A001C01_night")
     }
 
-    @Test func relativeDirectory() {
-        let engine = NamingEngine(template: "{scene}")
-        let dir = engine.relativeDirectory(for: NamingContext(
-            project: "My Film", date: date, scene: "12A"))
-        #expect(dir == "My_Film/2026-07-14/12A")
-    }
-
-    /// Two keystrokes nothing in the field refuses, and the day's takes were
-    /// written into the PARENT of the folder the operator chose: `sanitize` has
-    /// no opinion about dots, and only the file-NAME path ran the pass that
-    /// trims them.
-    @Test func aProjectOfTwoDotsCannotLeaveTheRecordFolder() {
+    /// The dots that used to escape the record folder now have nowhere to
+    /// escape FROM — the app writes flat — but they still must not survive
+    /// into a name. `..` as a project is two keystrokes nothing in the field
+    /// refuses.
+    @Test func aProjectOfDotsCannotReachTheName() {
         let engine = NamingEngine(template: "{scene}")
         for escape in ["..", "...", ".", " .. "] {
-            let dir: String = engine.relativeDirectory(for: NamingContext(
-                project: escape, date: date, scene: escape))
-            #expect(dir == "2026-07-14", "a dots-only name is not a level")
+            let name: String = engine.fileName(for: NamingContext(
+                project: escape, date: date, scene: escape,
+                take: 1, reel: "001", camera: "A"))
+            #expect(!name.contains(".."), "a name that can climb: \(name)")
+            #expect(!name.hasPrefix("."), "a hidden file: \(name)")
             let root: URL = URL(fileURLWithPath: "/Volumes/CARD/rec")
-            let resolved: String = root.appendingPathComponent(dir)
+            let resolved: String = root.appendingPathComponent(name)
                 .standardizedFileURL.path
             #expect(resolved.hasPrefix("/Volumes/CARD/rec/"),
-                    "the take folder stays inside the record folder")
+                    "the take left the record folder: \(resolved)")
         }
-    }
-
-    /// A leading dot is the milder half of the same gap: footage in a directory
-    /// the operator cannot see in Finder.
-    @Test func aProjectBeginningWithADotIsNotAHiddenFolder() {
-        let engine = NamingEngine(template: "{scene}")
-        let dir: String = engine.relativeDirectory(for: NamingContext(
-            project: ".hidden", date: date, scene: "12A"))
-        #expect(dir == "hidden/2026-07-14/12A",
-                "no level of the take folder starts with a dot")
     }
 
     /// The template is free text in Settings — a plain `TextField`, no input

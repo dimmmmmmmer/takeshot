@@ -19,15 +19,20 @@ import SwiftUI
 /// are still the row above's: same 9pt semibold, same caps (SCENE/SHOT/TAKE
 /// beside CAM/ROLL/CLIP), only turned through ninety degrees.
 ///
-/// **The caption box is a FIXED width, and that is load-bearing.** These three
-/// captions are the only localized strings in the footer's right half, and the
+/// **The captions must fit their own boxes, and that is load-bearing.** These
+/// three are the only localized strings in the footer's right half, and the
 /// footer's REC button is centered by that half measuring the same in English
-/// and in Russian (`ViewFooterTests`). Stacked, the caption was narrower than
-/// the box under it and cost nothing; beside it, it would charge the row
-/// whatever "СЦЕНА" happens to measure. A fixed box makes the row's width a
-/// constant again — and `ViewNamingRowTests` measures both languages' captions
-/// against it, because the failure mode of a box too small is a silently
-/// truncated word.
+/// and in Russian (`ViewFooterTests`). They sit ABOVE their boxes now (owner:
+/// "подписи scene shot take в мете должны быть над полями ввода"), and a
+/// caption is `.fixedSize()` — so one wider than the box under it widens the
+/// whole column and pushes the REC button off centre in one language only.
+///
+/// There used to be a fixed 36pt caption box for this, from when the caption
+/// sat BESIDE its field; the frame was deleted with that layout and the
+/// constant, its doc and the test that measured against it all outlived it —
+/// so the test compared a measured width to a number nothing applied and could
+/// not fail. What is measured now is the real constraint: each caption against
+/// the width of its own field, in both languages.
 struct SlateFieldsEditor: View {
     @Binding var scene: String
     @Binding var shot: String
@@ -39,19 +44,13 @@ struct SlateFieldsEditor: View {
     /// caption + ‹ + box + ›, and the three of them plus the gaps have to fit
     /// `footerHalfWidth` (363pt at the app's minimum window). Scene keeps the
     /// most of it: it is the one that holds more than a number or a letter.
-    private static let sceneWidth: CGFloat = 70
-    private static let shotWidth: CGFloat = 32
+    /// Internal, not private: `ViewNamingRowTests` measures each caption
+    /// against the field it sits over, which is the constraint that keeps the
+    /// footer's halves equal in both languages.
+    static let sceneWidth: CGFloat = 70
+    static let shotWidth: CGFloat = 32
     /// Four digits of monospaced text plus the box's own insets.
-    private static let takeWidth: CGFloat = 36
-    /// The caption box. Must hold the longest of SCENE/SHOT/TAKE and
-    /// СЦЕНА/КАДР/ДУБЛЬ — pinned in the render tests, not eyeballed.
-    static let captionWidth: CGFloat = 36
-    /// One arrow. Both dimensions fixed: a chevron that resized with its state
-    /// would shuffle the row under the operator's pointer.
-    private static let arrowWidth: CGFloat = 13
-    /// Half the row's height each, so the pair is the height one arrow used to
-    /// be and the row does not grow.
-    private static let arrowHeight: CGFloat = 9
+    static let takeWidth: CGFloat = 36
 
     /// What the takes panel's popover sizes its other rows to, so the whole
     /// editor reads as one block rather than a wide slate row over narrow

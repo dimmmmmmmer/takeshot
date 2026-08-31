@@ -60,14 +60,6 @@ final class SyncPlayGridPicture: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Whether anything is taking the grid picture. Read by the suite and by
-    /// the wiring's own guard; the app's answer is `mirrors.syncGrid != nil`.
-    var isWired: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return displayFrameHandler != nil
-    }
-
     /// One composed grid, from `MultiviewComposer`'s queue.
     func publish(_ buffer: CVPixelBuffer) {
         lock.lock()

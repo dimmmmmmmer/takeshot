@@ -142,9 +142,13 @@ import Testing
     /// reason that is two questions and not one: it is visible and it is not
     /// pressable, because no press can reach a look that is already in the
     /// codes.
-    @Test func exactlyOneStateGradesAndExactlyTwoArePressable() {
-        let states: [PlaybackLook] = [.none, .baked, .applied, .suppressed]
-        #expect(states.filter(\.appliesCube) == [.applied])
-        #expect(states.filter(\.isSwitchable) == [.applied, .suppressed])
+    /// Over `allCases`, not a hand-written list: the list said
+    /// `[.none, .baked, .applied, .suppressed]` and `bypassed` — the newest
+    /// case, and the one the whole difference-mode rule is about — was simply
+    /// not in it, so nothing here was ever asked about it.
+    @Test func exactlyOneStateGradesTheFrame() {
+        #expect(PlaybackLook.allCases.filter(\.appliesCube) == [.applied])
+        #expect(PlaybackLook.allCases.count == 5,
+                "a state was added; check `PlaybackLookButton` decides for it")
     }
 }

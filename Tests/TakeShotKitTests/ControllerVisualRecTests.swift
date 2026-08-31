@@ -303,9 +303,25 @@ struct ControllerVisualRecReportTests {
             #expect(restored.isTaught, "the references did not come back")
             #expect(!restored.isOn, "the trigger re-armed itself at launch")
             #expect(abs(restored.region.centerX - 0.8) < 0.001)
-            // …and it comes back from the references rather than from a key.
-            #expect(restored.margin == restored.margin)
-            #expect(restored.margin <= VisualRecTeaching.maxMargin)
+            // …and the margin comes back DERIVED from the references rather
+            // than read from a stored key. This used to be
+            // `restored.margin == restored.margin`, which held whatever the
+            // restore did — including returning a fresh, untaught object.
+            let expected = VisualRecTeaching.noiseGuard
+                * VisualRecTeaching.captureNoise
+                / ((restored.separation ?? 0) / 2)
+            #expect(abs(restored.margin
+                - min(VisualRecTeaching.maxMargin,
+                      max(VisualRecTeaching.minMargin, expected))) < 0.0001,
+                    """
+                    the margin is \(restored.margin) against \(expected) for a \
+                    separation of \(restored.separation as Any) — it is not \
+                    being derived from the references it came back with
+                    """)
+            #expect(restored.margin < VisualRecTeaching.maxMargin, """
+                the margin is at its ceiling, which is what an UNTAUGHT \
+                teaching answers — the restore gave back a blank
+                """)
         }
     }
 

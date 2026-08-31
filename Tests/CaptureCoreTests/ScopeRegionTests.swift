@@ -119,7 +119,7 @@ struct ScopeRegionTests {
     @Test func noPunchInIsTheWholeFrame() {
         let region = ScopeRegion(assist: ViewAssist())
         #expect(region == .full)
-        #expect(region.isFull)
+        #expect(region.width == 1 && region.height == 1)
         // punchIn below 1 is off, not a magnification of the letterbox
         var assist = ViewAssist()
         assist.punchIn = 0.5

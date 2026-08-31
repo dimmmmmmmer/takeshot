@@ -7,11 +7,6 @@ import Foundation
 /// Split out of `+Capture`: one camera and several are different jobs, and this
 /// one is only ever entered from the multicam switch.
 extension CaptureController {
-    /// All cameras for the preview grid: main (nil channel) + extras.
-    var allCameraLabels: [String] {
-        [settings.naming.cameraLabel] + extraChannels.map(\.camLabel)
-    }
-
     /// The boards in the device list, in the order it has them.
     ///
     /// One list, because three things read it and two of them must agree: the

@@ -115,31 +115,21 @@ public struct NamingEngine: Sendable {
         return Self.collapseSeparators(Self.templateSafe(result))
     }
 
-    /// Take folder relative to the record root: <project>/<date>/<scene>.
-    public func relativeDirectory(for context: NamingContext) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        let components = [context.project, dateFormatter.string(from: context.date), context.scene]
-            .map(Self.pathComponent)
-            .filter { !$0.isEmpty }
-        return components.joined(separator: "/")
-    }
-
-    /// One directory level. `sanitize` plus the rule that only a PATH needs:
-    /// a component may not begin or end with a dot.
-    ///
-    /// `sanitize` has no opinion about dots and the file-name path did not need
-    /// one, because `collapseSeparators` trims them off either end of a name.
-    /// A directory got no such pass, so a project named `..` — two keystrokes,
-    /// and nothing in the field refuses them — produced `../<date>/..`, and the
-    /// day's takes were written into the PARENT of the folder the operator
-    /// chose. A leading dot is the milder half of the same gap: a hidden
-    /// directory the operator cannot see in Finder.
-    static func pathComponent(_ value: String) -> String {
-        sanitize(value).replacingOccurrences(
-            of: #"^\.+|\.+$"#, with: "", options: .regularExpression)
-    }
+    // **There is no directory builder here, and that is a decision.** A
+    // `relativeDirectory(for:)` used to compose `<project>/<date>/<scene>` and
+    // a `pathComponent` hardened each level against a project named `..` — two
+    // keystrokes that, before it, wrote the day's takes into the PARENT of the
+    // folder the operator chose. Both were dead: the pipeline writes STRAIGHT
+    // into the chosen folder (`CapturePipeline+TakeFiles`, "the DIT picks the
+    // card/roll folder themselves; app nesting surprises them"), so nothing
+    // ever built a path out of them.
+    //
+    // Kept as a note rather than as code because the hardening only matters
+    // for a feature that does not exist: with no nesting there is no level to
+    // escape from, and the live path appends a NAME, which `sanitize` and
+    // `collapseSeparators` already strip of separators and of leading and
+    // trailing dots. Anyone adding subfolders has to bring the dot rule back
+    // with them — that is what this paragraph is for.
 
     /// The forbidden characters of a finished name, applied to the finished
     /// name.

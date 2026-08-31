@@ -56,14 +56,6 @@ public final class AssistStage: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Whether there is anything to draw at all — what a producer asks before
-    /// re-delivering a paused frame.
-    public var hasWork: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return assist.anyToolActive || !assist.guides.isEmpty
-    }
-
     /// How many frames reached this stage past their own frame interval and
     /// were shown without the aids rather than held up. A diagnostic, not a
     /// control (see `CapturePipeline.chromaKeyLateDrops` for the same idea).

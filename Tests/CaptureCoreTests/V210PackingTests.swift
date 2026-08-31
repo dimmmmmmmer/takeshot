@@ -219,8 +219,21 @@ struct V210PackingTests {
                             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
                             &out)
         let vuy = try #require(out)
-        guard VTPixelTransferSessionTransferImage(session, from: frame,
-                                                 to: vuy) == noErr else { return }
+        // **Recorded, not returned.** This is the one test that can catch a
+        // swapped Cb/Cr in v210 — which is now the DEFAULT wire for every SDI
+        // 4:2:2 signal — and a bare `return` here made it green whenever the
+        // transfer declined. That guard is a function of the fixture, not of
+        // the machine: a `makeV210` with the wrong FourCC or bytes-per-row
+        // makes the transfer fail and the suite pass.
+        let transferred = VTPixelTransferSessionTransferImage(session,
+                                                              from: frame, to: vuy)
+        guard transferred == noErr else {
+            Issue.record("""
+                VideoToolbox would not convert the fixture (\(transferred)) — \
+                the component-order check did not run
+                """)
+            return
+        }
         CVPixelBufferLockBaseAddress(vuy, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(vuy, .readOnly) }
         let base = try #require(CVPixelBufferGetBaseAddress(vuy))

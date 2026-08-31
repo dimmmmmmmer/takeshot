@@ -49,6 +49,17 @@ func rgbaImage(from bytes: [UInt8],
 /// middle of a drag, and a slider that redraws the panel has no business
 /// re-colouring a density map to do it.
 ///
+/// **And building them stays here, on the main actor, deliberately.** An audit
+/// read this as the last per-frame scope work on the main thread and proposed
+/// moving it to the producer. Measured on 1080p analyzer output, every one of
+/// the six: lumaColor 0.047 ms, red 0.012, green 0.013, blue 0.020, vector
+/// 0.096, cie 0.108 — **0.30 ms for all six together**, once per ANALYZED
+/// frame, which is about 12.5 a second. That is 0.4 % of the main thread with
+/// every scope open at once, and moving it to the producer would cost the
+/// laziness: the cache builds only the maps a visible surface asks for, and a
+/// producer cannot know which those are. Not worth it, and the numbers are
+/// here so it does not get proposed a third time.
+///
 /// One cache for the whole app on purpose: every surface showing scopes at a
 /// given moment is showing the SAME `ScopeData`, so the main window, a
 /// fullscreen mirror and the separate window share the work instead of

@@ -19,8 +19,9 @@ import SwiftUI
 /// Draws nothing when the build can see boards: `noticeTitle` is nil for
 /// `.loaded`, and an operator with a working build has nothing to read here.
 struct DeckLinkNoticeRow: View {
-    @EnvironmentObject private var controller: CaptureController
-
+    // No `@EnvironmentObject` here on purpose: there was one, unread, and an
+    // observed object a view never reads still re-renders it on every publish
+    // — the controller's, which is the busiest in the app.
     var body: some View {
         if let title = DeckLinkProbe.current.noticeTitle,
            let detail = DeckLinkProbe.current.noticeDetail {

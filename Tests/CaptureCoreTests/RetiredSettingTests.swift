@@ -66,6 +66,28 @@ import Testing
             }
         }
         try #require(files > 100, "the walk did not find the source tree")
+        // **And the detector can still see a reader.** The assertion below is
+        // an ABSENCE, so it holds just as well when the detector has stopped
+        // detecting — a `withoutComments` that stripped a line too many, or a
+        // `retired` list that lost its entries, would report a clean tree
+        // forever. Two planted positives, one of them behind a trailing
+        // comment, prove the shape of the walk before it is trusted with an
+        // empty answer (the same precaution `ViewFieldRuleTests` takes).
+        let planted = Self.withoutComments("""
+            let a = settings.capture.tenBitCapture // and a comment after it
+            // let b = settings.capture.colorTagPreset — this one must NOT count
+            let c = settings.capture.colorTagPreset
+            """)
+        for field in Self.retired {
+            try #require(planted.contains(field), """
+                the walk cannot see `\(field)` even when it is there — the \
+                clean result below proves nothing
+                """)
+        }
+        try #require(
+            planted.components(separatedBy: "capture.colorTagPreset").count == 2,
+            "a commented-out reader was counted, so real ones are overcounted")
+
         #expect(readers.isEmpty,
                 "a retired setting is being read for real behaviour again: \(readers.joined(separator: " | "))")
     }
@@ -124,5 +146,57 @@ import Testing
             }
         }
         return kept.joined(separator: "\n")
+    }
+}
+
+/// **Each wire converter answers for its own format, and the pipeline routes on
+/// that answer.**
+///
+/// `wireConverter(for:)` used to `switch` on the three concrete constants,
+/// which made `WireConverter.wireFormat` a second statement of the same fact
+/// that nothing read — a converter could answer a format the switch did not
+/// route to it and nothing would notice. Only two of the three had even that
+/// much asserted, so the `r210` path, which is the one an UltraStudio delivers,
+/// had no guard at all.
+@Suite struct WireConverterRoutingTests {
+    private func pipeline() -> CapturePipeline {
+        CapturePipeline(config: .init(settings: CaptureSettings(), takeNumber: 1))
+    }
+
+    @Test func everyConverterIsReachedByTheFormatItClaims() {
+        let pipeline = self.pipeline()
+        for converter in pipeline.wireConverters {
+            let routed = pipeline.wireConverter(for: converter.wireFormat)
+            #expect(routed === converter, """
+                a converter claims \(converter.wireFormat) and the pipeline \
+                hands that format to somebody else
+                """)
+        }
+    }
+
+    /// And the three claim three DIFFERENT formats — two answering the same one
+    /// would make the routing depend on the order of a list.
+    @Test func theThreeClaimDistinctFormats() {
+        let formats = pipeline().wireConverters.map(\.wireFormat)
+        #expect(Set(formats).count == formats.count,
+                "two converters claim the same wire format: \(formats)")
+        #expect(formats.count == 3)
+    }
+
+    /// An 8-bit frame is nobody's: it goes down the path that does not split.
+    @Test func anEightBitFormatIsRoutedNowhere() {
+        #expect(pipeline().wireConverter(for: kCVPixelFormatType_32BGRA) == nil)
+        #expect(pipeline().wireConverter(for: kCVPixelFormatType_422YpCbCr8) == nil)
+    }
+
+    /// The record format each one names is the one its record buffer really is
+    /// — the second requirement that had no production caller.
+    @Test func theRecordFormatMatchesTheBufferHandedToTheWriter() throws {
+        let pipeline = self.pipeline()
+        for converter in pipeline.wireConverters {
+            #expect(converter.recordPixelFormat != 0,
+                    "a converter names no record format")
+            #expect(converter.recordBytesPerPixel > 0)
+        }
     }
 }

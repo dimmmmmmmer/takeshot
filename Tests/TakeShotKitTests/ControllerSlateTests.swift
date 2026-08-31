@@ -71,7 +71,7 @@ import Testing
             #expect(!controller.isSlating)
             #expect(controller.slateTakeNumber == 0)
             #expect(controller.pendingSlate.isEmpty)
-            #expect(controller.slateDisplay == "—")
+            #expect(controller.pendingSlate.compact.isEmpty)
         }
     }
 
@@ -82,13 +82,13 @@ import Testing
             controller.nextTakeNumber = 42
             controller.scene = "12"
             #expect(controller.slateTakeNumber == 1)
-            #expect(controller.slateDisplay == "12 T1")
+            #expect(controller.pendingSlate.compact == "12 T1")
 
             controller.shot = "2"
             controller.slateTakeOverride = 3
             #expect(controller.pendingSlate
                 == SlateMetadata(scene: "12", shot: 2, take: 3))
-            #expect(controller.slateDisplay == "12/2 T3")
+            #expect(controller.pendingSlate.compact == "12/2 T3")
 
             // the next scene starts over, and the clip counter is untouched
             controller.scene = "12A"

@@ -57,6 +57,15 @@ enum TakeTileBadges {
 
     /// The rect the controls cluster occupies inside a thumbnail — top-trailing,
     /// inset. Origin top-left, like the overlay alignment it describes.
+    ///
+    /// **This and `durationFrame` are the TEST's model of what SwiftUI lays
+    /// out**, not something the view calls: the tile positions both badges with
+    /// `.overlay(alignment:)` and an inset. They are here rather than in the
+    /// suite because the inset and the sizes they read are this type's, and a
+    /// copy of the arithmetic next to a copy of the constants is how the two
+    /// would drift. What `ViewTakesTileTests` gets out of them is a real
+    /// question the render cannot answer cheaply: whether the two badges fit
+    /// and stay clear of each other at every tile width, in both languages.
     static func controlsFrame(size: CGSize, in bounds: CGSize) -> CGRect {
         CGRect(x: bounds.width - inset - size.width, y: inset,
                width: size.width, height: size.height)

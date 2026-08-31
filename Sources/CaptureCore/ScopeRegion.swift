@@ -42,10 +42,12 @@ public struct ScopeRegion: Equatable, Sendable {
                   width: side, height: side)
     }
 
-    /// Whole frame — the analyzer skips the offset math entirely.
-    public var isFull: Bool {
-        width >= 1 && height >= 1
-    }
+    // There was an `isFull` here, documented as the whole-frame fast path
+    // "the analyzer skips the offset math entirely" — and neither analyzer
+    // ever asked it. It is not worth adding: the offset math is two integer
+    // operations per sample, and the ENTIRE walk that contains them is 0.15 ms
+    // of an 11.9 ms pass (`whereTheGPUPassSpendsItself`). A branch to skip it
+    // would be a second code path through the sampler for nothing measurable.
 
     /// A region resolved against a frame size: the exact pixels to sample.
     struct PixelWindow: Equatable {

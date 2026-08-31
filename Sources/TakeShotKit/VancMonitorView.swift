@@ -58,9 +58,14 @@ struct VancMonitorView: View {
     }
 
     static func describe(did: UInt8, sdid: UInt8) -> String {
+        // The two Blackmagic identifiers are named where the PARSER names
+        // them: spelling 0x51/0x52 by hand here made a second place for them
+        // to be right, next to a `tallySDID` constant that nothing read.
         switch (did, sdid) {
-        case (0x51, 0x52): return "Blackmagic tally"
-        case (0x51, 0x53): return "Blackmagic camera control"
+        case (VancParser.blackmagicDID, VancParser.tallySDID):
+            return "Blackmagic tally"
+        case (VancParser.blackmagicDID, VancParser.cameraControlSDID):
+            return "Blackmagic camera control"
         case (0x60, 0x60): return "Timecode (RP188/ATC)"
         case (0x61, 0x01): return "Captions (CEA-708)"
         case (0x61, 0x02): return "Captions (CEA-608)"

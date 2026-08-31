@@ -23,7 +23,7 @@ import Foundation
 /// So the rule is stated once, over the four facts, and both the bar and the
 /// tap read it. The bar cannot show a state the picture is not in, because it
 /// is the same answer.
-enum PlaybackLook: Equatable {
+enum PlaybackLook: Equatable, CaseIterable {
     /// Nothing to apply and nothing to offer: no look picked, its cube did not
     /// load, or preview is off. The bar shows no filter control at all.
     case none
@@ -55,13 +55,14 @@ enum PlaybackLook: Equatable {
     /// Whether the tap should be given the cube. The one place that answers it.
     var appliesCube: Bool { self == .applied }
 
-    /// Whether the bar offers a control the operator can press. `baked` is the
-    /// case this exists for: it is visible and it is not pressable. `bypassed`
-    /// is pressable — the look is still picked, and pressing it is how the
-    /// operator says what they want when they leave difference mode.
-    var isSwitchable: Bool {
-        self == .applied || self == .suppressed || self == .bypassed
-    }
+    // **Which states are PRESSABLE is stated by the bar's `switch` and
+    // nowhere else** (`PlaybackLookButton`). There was an `isSwitchable`
+    // property here saying the same thing, and nothing read it: the view spells
+    // the cases out, which is the version the compiler checks — a new case
+    // cannot slip into the pressable branch by accident, and with a Bool it
+    // could. What the property did instead was give a test something to assert
+    // against, and that test then listed four of the five cases by hand and
+    // missed `bypassed`.
 
     /// Whether the indicator should read as ENGAGED. The one question the icon
     /// asks, so `bypassed` cannot come to look like `applied` by being drawn at
