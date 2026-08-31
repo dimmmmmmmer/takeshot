@@ -118,19 +118,38 @@ struct SRTSettingsSection: View {
         }
     }
 
-    /// SRT's delivery buffer: how long it has to notice a lost packet and ask for
-    /// it again, paid for in delay. Clamped to what libsrt accepts.
+    /// SRT's delivery buffer: how long it has to notice a lost packet and ask
+    /// for it again, paid for in delay.
+    ///
+    /// **Shown, not asked** (owner: "пусть это не на пользователе будет а
+    /// автоматом считается"). It was a number field, which put a question to
+    /// the operator that the link itself answers: the buffer wants to be about
+    /// four round trips, and the round trip is something SRT measures and
+    /// reports. `SRTMirror` reads it and re-opens on it; this row is where the
+    /// operator can see what it decided, which is the difference between an
+    /// automatic value and a hidden one.
     private var latencyRow: some View {
         LabeledContent(L("srt_latency")) {
-            TextField("", value: Binding(
-                get: { controller.settings.srt.latencyEffective },
-                set: { controller.settings.srt.latencyMs =
-                    min(8000, max(20, $0)) }),
-                format: .number.grouping(.never))
-                .textFieldStyle(.roundedBorder)
+            Text(latencyText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
-                .frame(width: Self.numberWidth)
         }
+        .help(L("srt_latency_help"))
+    }
+
+    /// Three things it can say: a measured link, a link still being measured,
+    /// and a figure that came from the address the operator pasted.
+    private var latencyText: String {
+        let buffer = controller.mirrors.srtLatencyMs
+            ?? controller.settings.srt.latencyEffective
+        if controller.settings.srt.latencyMs != nil {
+            return L("srt_latency_stated", buffer)
+        }
+        guard let rtt = controller.mirrors.srtRoundTripMs else {
+            return L("srt_latency_measuring", buffer)
+        }
+        return L("srt_latency_auto", buffer, Int(rtt.rounded()))
     }
 
     private var bitrateRow: some View {

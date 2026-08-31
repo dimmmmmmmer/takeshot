@@ -35,15 +35,25 @@ public struct SRTEndpoint: Equatable, Sendable {
     public var port: Int
     /// SRT's delivery buffer, in milliseconds.
     public var latencyMs: Int
+    /// Whether `latencyMs` was STATED rather than derived.
+    ///
+    /// The two are told apart because only one of them may be overwritten by a
+    /// measurement. A derived figure is the app's own starting guess and
+    /// `SRTMirror` replaces it with what the link reports; a stated one comes
+    /// from a pasted `srt://…?latency=` URL, which is the receiving end saying
+    /// what it wants — and both ends of an SRT link have to agree on the
+    /// buffer, so that is not a number to improve on.
+    public var latencyIsExplicit: Bool
     /// nil means unencrypted, which is what an empty field means.
     public var passphrase: String?
 
     public init(role: SRTRole, address: String, port: Int, latencyMs: Int,
-                passphrase: String?) {
+                latencyIsExplicit: Bool = false, passphrase: String?) {
         self.role = role
         self.address = address
         self.port = port
         self.latencyMs = latencyMs
+        self.latencyIsExplicit = latencyIsExplicit
         self.passphrase = passphrase
     }
 
@@ -115,18 +125,27 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         return port
     }
 
-    /// **The number this feature is actually about.** SRT's delivery buffer is the
-    /// window it has to notice a lost packet and ask for it again, so it is how
-    /// much of a bad link the picture rides out — and it is paid for in delay,
-    /// which is why it cannot simply be set high and forgotten.
+    /// **The buffer to OPEN with, which is a starting point and not a
+    /// setting.** SRT's delivery buffer is the window it has to notice a lost
+    /// packet and ask for it again, so it is how much of a bad link the picture
+    /// rides out — and it is paid for in delay, which is why it cannot simply
+    /// be set high and forgotten.
     ///
-    /// 120 ms is libsrt's own live default and the figure the protocol's own
-    /// guidance starts from: about four times a typical round trip on a venue
-    /// LAN, which is enough for a retransmission to arrive in time. The floor is
-    /// 20 (below one round trip, SRT cannot recover anything and the operator has
-    /// bought delay for nothing) and the ceiling 8000 (libsrt's own limit).
+    /// Nothing puts this number in front of the operator (owner: "пусть это не
+    /// на пользователе будет а автоматом считается"): the right value is four
+    /// round trips, the round trip is something the LINK measures and reports,
+    /// and asking somebody on set to know it in milliseconds about a network
+    /// they did not build is asking them to guess at a number the app is
+    /// holding. `SRTMirror` reads the measurement and re-opens on it;
+    /// `SRTLatency` is the arithmetic between the two.
+    ///
+    /// `SRTLatency.floorMs` is what a link starts on, before it has been
+    /// measured — libsrt's own live default, and enough for a venue LAN. A
+    /// value from a pasted URL is kept as stated, within libsrt's own limits.
     public var latencyEffective: Int {
-        guard let latencyMs, (20...8000).contains(latencyMs) else { return 120 }
+        guard let latencyMs, (20...8000).contains(latencyMs) else {
+            return SRTLatency.floorMs
+        }
         return latencyMs
     }
 
@@ -206,6 +225,7 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         guard configurationProblem == nil else { return nil }
         return SRTEndpoint(role: roleEffective, address: addressEffective,
                            port: portEffective, latencyMs: latencyEffective,
+                           latencyIsExplicit: latencyMs != nil,
                            passphrase: passphraseEffective)
     }
 }

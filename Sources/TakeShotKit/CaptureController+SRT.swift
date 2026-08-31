@@ -110,6 +110,13 @@ extension CaptureController {
                 // The mirror's queue must never touch the controller: every event
                 // hops here first, and lands where the button handlers run.
                 Task { @MainActor in self?.applySRTEvent(event) }
+            },
+            onMeasurement: { [weak self] buffer, roundTrip in
+                Task { @MainActor in
+                    guard let self, self.mirrors.srt != nil else { return }
+                    self.mirrors.srtLatencyMs = buffer
+                    self.mirrors.srtRoundTripMs = roundTrip
+                }
             })
         mirrors.srt = mirror
         mirrors.srtEndpoint = endpoint
@@ -127,6 +134,8 @@ extension CaptureController {
         mirrors.srt = nil
         mirrors.srtEndpoint = nil
         mirrors.srtState = .off
+        mirrors.srtLatencyMs = nil
+        mirrors.srtRoundTripMs = nil
         // Drop the display slot with it — but only if nothing else is watching.
         // The session outlives this switch when a browser is on the same
         // picture, and `releaseIdleLivePictures` is the one place that decides;

@@ -75,6 +75,18 @@ protocol SRTStreamSending: AnyObject, Sendable {
     var lastSendError: String? { get }
     /// Take the link down. Idempotent.
     func close()
+    /// The link's measured round trip in milliseconds, or nil when there is
+    /// nothing to measure — an older libsrt, no socket, or a handshake that has
+    /// not completed. Called only on `SRTMirror`'s queue.
+    var roundTripMs: Double? { get }
+}
+
+extension SRTStreamSending {
+    /// A link that cannot say. The default keeps the fakes in the suites — and
+    /// any future transport — from having to answer a question only libsrt's
+    /// statistics call can, and `SRTLatency` already treats "no measurement" as
+    /// its floor rather than as an error.
+    var roundTripMs: Double? { nil }
 }
 
 /// The real link: a thin Swift face on `CSRTSender`, which is a stub in any build
@@ -113,6 +125,11 @@ final class SRTStream: SRTStreamSending, @unchecked Sendable {
             port: UInt16(clamping: endpoint.port),
             latencyMs: Int32(clamping: endpoint.latencyMs),
             passphrase: endpoint.passphrase)
+    }
+
+    var roundTripMs: Double? {
+        let measured = sender.roundTripMs()
+        return measured > 0 ? measured : nil
     }
 
     func open() throws {

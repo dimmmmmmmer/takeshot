@@ -96,7 +96,13 @@ struct CSRTRuntime {
     decltype(&srt_close) close_socket;
     decltype(&srt_getlasterror) lasterror;
     decltype(&srt_getlasterror_str) lasterror_str;
-    /// nil once every pointer above resolved and the runtime started.
+    /// OPTIONAL, unlike every pointer above: a libsrt too old to export it
+    /// still sends a picture, and refusing to stream at all because the round
+    /// trip cannot be READ would be trading the feature for the measurement.
+    /// Null here means `roundTripMs` answers "unknown" and the buffer stays at
+    /// the floor.
+    decltype(&srt_bstats) bstats;
+    /// nil once every REQUIRED pointer above resolved and the runtime started.
     ///
     /// Set with `code` and never without it — they are one answer stated twice,
     /// for two readers (a diagnostics bundle and a translator), and a code that
@@ -151,6 +157,7 @@ static CSRTRuntime *CSRTSharedRuntime(void) {
       runtime.lasterror_str =
           (decltype(&srt_getlasterror_str))dlsym(handle,
                                                  "srt_getlasterror_str");
+      runtime.bstats = (decltype(&srt_bstats))dlsym(handle, "srt_bstats");
       if (runtime.startup == NULL || runtime.create_socket == NULL ||
           runtime.setsockflag == NULL || runtime.bind_socket == NULL ||
           runtime.listen_socket == NULL || runtime.accept_socket == NULL ||
@@ -528,6 +535,35 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
     return CSRTSendOutcomeBroken;
 }
 
++ (BOOL)isRoundTripAvailable {
+    return CSRTSharedRuntime()->bstats != NULL;
+}
+
+- (double)roundTripMs {
+    CSRTRuntime *runtime = CSRTSharedRuntime();
+    if (runtime->bstats == NULL) {
+        return -1;
+    }
+    SRTSOCKET target = _role == CSRTRoleListener ? _peer : _socket;
+    if (target == SRT_INVALID_SOCK) {
+        return -1;
+    }
+    // The struct is libsrt's own, taken from the SDK header — this file never
+    // declares an SRT layout of its own (see the runtime table's comment).
+    // Zeroed first so a shorter struct from an older library leaves the
+    // trailing fields readable rather than whatever was on the stack.
+    SRT_TRACEBSTATS stats;
+    memset(&stats, 0, sizeof(stats));
+    // `clear` 0: this reads the instantaneous figures and must not reset the
+    // library's counters, which somebody else may be reading too.
+    if (runtime->bstats(target, &stats, 0) != 0) {
+        return -1;
+    }
+    // A link that has not completed its handshake reports zero rather than a
+    // measurement, and zero is not a round trip.
+    return stats.msRTT > 0 ? stats.msRTT : -1;
+}
+
 - (void)close {
     CSRTRuntime *runtime = CSRTSharedRuntime();
     if (runtime->close_socket == NULL) {
@@ -617,6 +653,14 @@ static NSString *const kCSRTNoSDKMessage =
     (void)length;
     _lastSendError = kCSRTNoSDKMessage;
     return CSRTSendOutcomeBroken;
+}
+
++ (BOOL)isRoundTripAvailable {
+    return NO;
+}
+
+- (double)roundTripMs {
+    return -1;
 }
 
 - (void)close {

@@ -82,6 +82,12 @@ final class DisplayMirrors: ObservableObject {
     /// no libsrt, a machine with none installed, or a receiver nobody has opened
     /// yet cannot honour it.
     @Published var srtState: SRTOutputState = .off
+    /// The delivery buffer the open link is running with, and the round trip it
+    /// reported. Both nil while nothing is streaming: the settings row states a
+    /// measurement or says it has none, and a stale number left over from the
+    /// last link would be neither.
+    @Published var srtLatencyMs: Int?
+    @Published var srtRoundTripMs: Double?
 
     /// The endpoint the live mirror was built for, so the status row can show the
     /// `srt://` URL to read out rather than making the operator reassemble it

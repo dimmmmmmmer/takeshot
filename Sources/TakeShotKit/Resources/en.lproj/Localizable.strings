@@ -878,8 +878,13 @@
 "srt_role_listener" = "Wait for the receiver";
 "srt_address" = "Address";
 "srt_port" = "Port";
-"srt_latency" = "Latency, ms";
+"srt_latency" = "Delivery buffer";
+"srt_latency_help" = "How long SRT has to notice a lost packet and ask for it again. Sized from the round trip the link reports — four times over, so a re-request has room to be lost as well — and re-applied when the network changes. A latency in a pasted srt:// address is kept as given.";
 "srt_bitrate" = "Bitrate, Mbit/s";
+"srt_retuned" = "Re-opening on a longer buffer for this link";
+"srt_latency_auto" = "Buffer %1$d ms, round trip %2$d ms";
+"srt_latency_measuring" = "Buffer %1$d ms — measuring the link";
+"srt_latency_stated" = "Buffer %1$d ms, from the address";
 "srt_passphrase" = "Passphrase";
 "stream_link_up" = "a receiver is taking it";
 "stream_link_waiting" = "on the network, nobody taking it";

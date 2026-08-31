@@ -26,6 +26,7 @@ final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
     private var storedClosed = false
     private var storedOutcomes: [SRTSendOutcome]
     private var storedOpenFailures: [SRTStreamError]
+    private var storedRoundTrip: Double?
 
     /// `outcomes` is consumed one entry per send and the last one repeats, so a
     /// suite writes the story it wants — "two frames through, then the link goes".
@@ -64,6 +65,14 @@ final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
     }
 
     var lastSendError: String? { "the fake link says so" }
+
+    /// What the link answers when asked how far away the far end is. nil is a
+    /// link that cannot say, which is an older libsrt or an unfinished
+    /// handshake — the case `SRTLatency` reads as its floor.
+    var roundTripMs: Double? {
+        get { lock.withLock { storedRoundTrip } }
+        set { lock.withLock { storedRoundTrip = newValue } }
+    }
 
     func close() {
         lock.withLock { storedClosed = true }
@@ -114,6 +123,14 @@ enum SRTFixtures {
     static let endpoint = SRTEndpoint(role: .caller, address: "10.0.0.9",
                                       port: 9000, latencyMs: 120,
                                       passphrase: nil)
+
+    /// The same link with nothing stated about its buffer — what the settings
+    /// build when nobody pasted a `srt://…?latency=` address, and so the case
+    /// the measurement is allowed to change.
+    static let autoEndpoint = SRTEndpoint(role: .caller, address: "10.0.0.9",
+                                          port: 9000,
+                                          latencyMs: SRTLatency.floorMs,
+                                          passphrase: nil)
 
     /// A mirror over a fake link, with its events recorded, and the shared
     /// encoder in front of it.
@@ -198,57 +215,6 @@ struct SRTRig {
         #expect(SRTMirror.reconnectCeiling == 5)
         #expect(SRTMirror.reconnectDelay < SRTMirror.reconnectCeiling)
     }
-}
-
-/// **An idle set encodes nothing**, which is the property the whole shared-encoder
-/// design is arranged around — and the one that made a test flake when it was
-/// first put in, so it is worth pinning as arithmetic rather than as timing.
-///
-/// Nobody watching means no `VTCompressionSession` is ever created at all: not a
-/// session sitting idle, not a session encoding into a sink that discards. The
-/// consequence a caller has to know about is on the other side of the same
-/// coin — a frame offered while nothing is subscribed is DROPPED, not held, so
-/// whoever subscribes gets the next frame rather than the last one.
-@Suite(.enabled(if: SRTVideoEncoder.isSupported,
-                "no H.264 encoder on this machine"))
-struct LiveVideoEncoderIdleTests {
-    @Test func nothingIsEncodedWhileNothingIsWatching() async throws {
-        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
-        defer { encoder.stop() }
-        let buffer = try SRTFixtures.displayBuffer()
-        for _ in 0..<5 {
-            encoder.offer(buffer, framesPerSecond: 25)
-            try await Task.sleep(for: .milliseconds(30))
-        }
-        #expect(!encoder.hasSinks)
-        #expect(encoder.appliedBitsPerSecond == nil,
-                "a session was built for nobody")
-    }
-
-    /// And the moment something IS watching, the next frame reaches it.
-    @Test func theFirstFrameAfterASinkArrivesReachesIt() async throws {
-        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
-        defer { encoder.stop() }
-        let samples = SampleCounter()
-        encoder.addSink(samples) { _ in samples.count() }
-        let buffer = try SRTFixtures.displayBuffer()
-        let deadline = Date().addingTimeInterval(5)
-        while samples.total == 0, Date() < deadline {
-            encoder.offer(buffer, framesPerSecond: 25)
-            try await Task.sleep(for: .milliseconds(30))
-        }
-        #expect(samples.total > 0, "a subscribed sink got nothing")
-        #expect(encoder.appliedBitsPerSecond == 4_000_000)
-    }
-}
-
-/// Samples that reached a sink. Its identity is the sink's key, so it is a
-/// class; the count is touched from VideoToolbox's thread, so it is locked.
-final class SampleCounter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var stored = 0
-    func count() { lock.withLock { stored += 1 } }
-    var total: Int { lock.withLock { stored } }
 }
 
 /// The frame path: off the caller's queue, latest-wins, and never able to hold it

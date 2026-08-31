@@ -312,13 +312,17 @@ Resolve station or a cloud gateway. Off by default.
   *Wait for the receiver* when it is the other way round: TakeShot holds the port
   open and whoever wants the picture connects to it. The status row shows the
   `srt://` address to hand over either way.
-- **Latency** is SRT's whole point. It is the buffer the far end holds, and it is
+- **Delivery buffer** is SRT's whole point, and it is not something to set. It is
   the time SRT has to notice a lost packet and ask for it again — so it is how
-  much of a bad network the picture rides out, paid for in delay. 120 ms is the
-  standard starting figure and is right for a wired venue LAN; raise it on
-  congested Wi-Fi or over the internet, where 4× the round-trip time is the rule
-  of thumb. Below about 20 ms it can recover nothing and you have bought the
-  delay for nothing.
+  much of a bad network the picture rides out, paid for in delay. The right
+  figure is about four round trips, and the round trip is something the link
+  itself measures; asking you for it in milliseconds, about a network you did
+  not build, would be asking you to guess at a number the app is holding. So the
+  row shows what it settled on and what it measured, and when the network turns
+  out to be worse than it looked the link re-opens once on a longer buffer — a
+  second of black on the feed, and then a picture that holds. A `latency=` in an
+  `srt://` address you paste is kept as given: that one comes from the receiving
+  end, and both ends have to agree.
 - **Bitrate** is what the link can carry, which the app cannot know. 8 Mbit/s
   holds up on a face at 1080p. The stream costs about 5 % more than the number
   you set, which is the transport itself.

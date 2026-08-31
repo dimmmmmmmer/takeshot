@@ -101,8 +101,9 @@ build is any use to you:
   on the set network — VLC on a director's laptop, OBS, a Resolve station, a
   cloud gateway. **With sound**: a stereo fold of the channels being recorded,
   AAC on a second stream, and it does not depend on whether the cart's speakers
-  are up. Caller or listener, with the latency, the bitrate and an optional AES
-  passphrase as the only knobs. Off by default; needs libsrt at build time
+  are up. Caller or listener, with the bitrate and an optional AES passphrase
+  as the only knobs — the delivery buffer sizes itself from the round trip the
+  link reports, and is shown rather than asked for. Off by default; needs libsrt at build time
   (`vendor/SRTSDK/README.md`) and installed to send.
 - NDI output: the same mirrored viewer announced as a source on the set network,
   for a director's iPad or a client feed, with no second cable and no second

@@ -82,6 +82,24 @@ final class SRTMirror: @unchecked Sendable {
     /// bundle is where a number nobody watches live belongs.
     static let dropLogInterval = 100
 
+    /// How often the link is asked for its round trip, in frames sent.
+    ///
+    /// Counted in frames rather than on a timer because a timer would keep
+    /// asking a link that has nothing going out, and the measurement is only
+    /// meaningful while datagrams are flowing. 150 is about six seconds at 25
+    /// fps — slow enough that the statistics call costs nothing, often enough
+    /// that a network which got worse when the crew moved outside is noticed
+    /// within a setup rather than within a take.
+    static let roundTripProbeFrames = 150
+
+    /// The shortest gap between two retunes.
+    ///
+    /// Re-opening costs the far end a gap of about a second, so it is worth
+    /// paying only for a link that is genuinely too tight — never on a wobble.
+    /// Thirty seconds on top of `SRTLatency`'s 20 % band means a link whose RTT
+    /// is drifting settles instead of oscillating.
+    static let retuneInterval: TimeInterval = 30
+
     private let queue = DispatchQueue(label: SRTMirror.queueLabel,
                                       qos: .userInitiated)
     private let endpoint: SRTEndpoint
@@ -93,6 +111,11 @@ final class SRTMirror: @unchecked Sendable {
     private let audioEncoder: LiveAudioEncoder?
     private let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending
     private let onEvent: @Sendable (Event) -> Void
+    /// The buffer the link is running with and the round trip it reported, for
+    /// the settings row. Separate from `Event` on purpose: the events are a
+    /// state machine that dedupes itself, and a measurement that changes by a
+    /// millisecond is not a state change.
+    private let onMeasurement: @Sendable (Int, Double?) -> Void
 
     // MARK: - queue-confined state
 
@@ -102,6 +125,15 @@ final class SRTMirror: @unchecked Sendable {
     private var backoff = SRTMirror.reconnectDelay
     private var reopening = false
     private var dropped = 0
+    /// Frames since the link was last asked for its round trip.
+    private var sinceProbe = 0
+    /// The last round trip the link reported; nil until one arrives.
+    private var roundTrip: Double?
+    /// The delivery buffer the OPEN link was given, which is not necessarily
+    /// the endpoint's: a retuned link is running on a measured figure.
+    private var openLatencyMs: Int
+    /// When the link was last re-opened to change its buffer.
+    private var lastRetune: DispatchTime?
     /// The last event handed upwards. A repeat is swallowed: each one is a
     /// MainActor hop and a `@Published` write, and "still reconnecting" arriving
     /// once a second would re-render the settings window for no news.
@@ -110,12 +142,16 @@ final class SRTMirror: @unchecked Sendable {
     init(endpoint: SRTEndpoint, encoder: LiveVideoEncoder,
          audioEncoder: LiveAudioEncoder? = nil,
          factory: @escaping @Sendable (SRTEndpoint) throws -> SRTStreamSending,
-         onEvent: @escaping @Sendable (Event) -> Void) {
+         onEvent: @escaping @Sendable (Event) -> Void,
+         onMeasurement: @escaping @Sendable (Int, Double?) -> Void
+             = { _, _ in }) {
         self.endpoint = endpoint
+        self.openLatencyMs = endpoint.latencyMs
         self.encoder = encoder
         self.audioEncoder = audioEncoder
         self.factory = factory
         self.onEvent = onEvent
+        self.onMeasurement = onMeasurement
     }
 
     /// Open the link. Asynchronous on purpose: a caller's connect blocks, and the
@@ -153,6 +189,11 @@ final class SRTMirror: @unchecked Sendable {
         guard !stopped, stream != nil,
               let unit = MPEGTSMuxer.accessUnit(from: sample) else { return }
         send(muxer.datagrams(for: unit))
+        sinceProbe += 1
+        if sinceProbe >= Self.roundTripProbeFrames {
+            sinceProbe = 0
+            probeRoundTrip()
+        }
     }
 
     /// One encoded access unit of SOUND as datagrams on the same socket.
@@ -204,7 +245,11 @@ final class SRTMirror: @unchecked Sendable {
     private func openLink() {
         guard !stopped, stream == nil else { return }
         do {
-            let link = try factory(endpoint)
+            var opening = endpoint
+            opening.latencyMs = wantedLatencyMs
+            openLatencyMs = opening.latencyMs
+            onMeasurement(openLatencyMs, roundTrip)
+            let link = try factory(opening)
             try link.open()
             stream = link
             backoff = Self.reconnectDelay
@@ -221,6 +266,62 @@ final class SRTMirror: @unchecked Sendable {
             case .unavailable(let reason): report(.unavailable(reason))
             }
         }
+    }
+
+    /// **The delivery buffer this link should open with, which is a
+    /// measurement and not a preference** (owner: "пусть это не на
+    /// пользователе будет а автоматом считается").
+    ///
+    /// SRT recovers a lost packet by asking for it again, so the buffer has to
+    /// hold the picture for several round trips — a number an operator on set
+    /// cannot be expected to know about a network they did not build, and which
+    /// the link itself reports. `SRTLatency` turns one into the other; until a
+    /// measurement arrives it is the floor, which is what the field defaulted
+    /// to anyway.
+    ///
+    /// An endpoint carrying an EXPLICIT figure keeps it. That is not an
+    /// operator's guess: it comes from a pasted `srt://…?latency=` URL, which
+    /// is the receiving end stating what it wants, and both ends of an SRT link
+    /// have to agree.
+    private var wantedLatencyMs: Int {
+        endpoint.latencyIsExplicit
+            ? endpoint.latencyMs
+            : SRTLatency.recommended(forRTT: roundTrip)
+    }
+
+    /// Ask the link how far away the far end is, and re-open it if the buffer
+    /// it is running with is too small for the answer.
+    ///
+    /// **A link whose buffer is too tight does not fail — it breaks up.** It
+    /// keeps its socket, keeps sending, and loses the packets it did not have
+    /// room to ask for again, indefinitely. So there is no reconnect to ride
+    /// along on: the only way a measured figure ever reaches the wire is to
+    /// take the link down on purpose. That costs the far end about a second,
+    /// which is why it is bounded on all three sides — only upwards, only
+    /// outside `SRTLatency`'s 20 % band, and never twice inside
+    /// `retuneInterval`.
+    ///
+    /// The recorder is not in this path and is not consulted: the SRT feed is a
+    /// monitoring picture, not the deliverable, and a second of black on it is
+    /// cheaper than a take's worth of a picture that is breaking up.
+    private func probeRoundTrip() {
+        guard let measured = stream?.roundTripMs else { return }
+        roundTrip = measured
+        onMeasurement(openLatencyMs, measured)
+        guard !endpoint.latencyIsExplicit,
+              SRTLatency.wantsReconnect(current: openLatencyMs, forRTT: measured)
+        else { return }
+        let now = DispatchTime.now()
+        if let lastRetune,
+           now.uptimeNanoseconds - lastRetune.uptimeNanoseconds
+               < UInt64(Self.retuneInterval * 1_000_000_000) { return }
+        lastRetune = now
+        os_log("SRT retuning the delivery buffer: %d ms → %d ms at %.1f ms RTT",
+               openLatencyMs, SRTLatency.recommended(forRTT: measured), measured)
+        // Through the loss path so the sinks come off and the reconnect keeps
+        // its backoff — the difference is that this one is deliberate, and the
+        // buffer it comes back with is the measured one.
+        linkLost(L("srt_retuned"))
     }
 
     /// Start taking samples, and ask for a keyframe with the first one.

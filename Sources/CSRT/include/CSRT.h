@@ -146,6 +146,20 @@ typedef NS_ENUM(NSInteger, CSRTOpenFailure) {
 @property(nonatomic, readonly, copy, nullable) NSString *lastSendError;
 
 /// Take the link down. Idempotent; also runs from `dealloc`.
+/// Whether this libsrt exports the statistics call the round trip is read
+/// from. An older one still streams; it just cannot be measured, and then the
+/// delivery buffer stays at its floor.
++ (BOOL)isRoundTripAvailable;
+
+/// The link's round trip in milliseconds, or a NEGATIVE number when there is
+/// nothing to measure: no library call, no socket, or a handshake that has not
+/// completed. Negative rather than zero, because zero is a number an operator
+/// would read as a measurement.
+///
+/// This is what sizes SRT's delivery buffer (`SRTLatency`), which is the one
+/// number in this feature an operator on set cannot be expected to know.
+- (double)roundTripMs;
+
 - (void)close;
 
 @end
