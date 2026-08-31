@@ -19,7 +19,7 @@ import Foundation
 /// other. A slow NDI receiver cannot stall a browser's picture, and an SRT
 /// reconnect cannot stall NDI.
 ///
-/// The discipline is `MultiviewEncoder`'s, `PlayoutFeeder`'s and
+/// The discipline is `MultiviewComposer`'s, `PlayoutFeeder`'s and
 /// `LiveVideoEncoder`'s: the display queue drops a frame here and returns at
 /// once, only the newest frame is kept, and the send runs on this queue — never
 /// on capture, never on main. NDI's send is synchronous and compresses the frame

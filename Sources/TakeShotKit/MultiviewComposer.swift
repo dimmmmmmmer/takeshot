@@ -6,10 +6,10 @@ import Foundation
 /// **`LivePicture.grid` as an actual frame**: every camera's clean picture
 /// tiled into one buffer, on a queue of its own.
 ///
-/// The phone camera grid does not need this — it sends one JPEG per camera and
-/// the page lays the tiles out itself (`MultiviewEncoder`). A video track has no
-/// page: an H.264 session carries one raster, so a browser that asked to watch
-/// the grid has to be sent a grid, composed here. What that buys is the reason
+/// The retired JPEG page did not need this — it sent one frame per camera and
+/// laid the tiles out itself. A video track has no page: an H.264 session
+/// carries one raster, so a browser that asked to watch the grid has to be
+/// sent a grid, composed here. What that buys is the reason
 /// the grid is a PICTURE rather than a layout — one encode serves every phone
 /// watching it, exactly as the decorated picture does.
 ///

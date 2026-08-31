@@ -1,16 +1,17 @@
 import CaptureCore
 import Foundation
 
-/// The crew monitoring streams, from the controller's side: the JPEG tiles the
-/// `/cameras` page shows, the composed grid picture a browser can watch as
-/// video, and the taps that feed both.
+/// The crew monitoring stream, from the controller's side: the composed grid
+/// picture a browser watches as video, and the per-camera taps that feed it.
 ///
-/// **Two consumers of one tap, and that is the point.** Both want
-/// `LivePicture.clean` from every live board — that is what makes them
-/// monitoring surfaces rather than assist ones — so they ride the SAME slot
-/// (`CapturePipeline.setOnMonitorFrame`) and each names the picture it wants
-/// out of the frame that arrives. Two slots would be two readings of what clean
-/// means, which is exactly the drift `LivePicture` exists to prevent.
+/// **One slot, and it was shared.** There were two consumers here until the
+/// JPEG `/cameras` page was retired, and both wanted `LivePicture.clean` from
+/// every live board — that is what makes a monitoring surface rather than an
+/// assist one — so they rode the SAME slot
+/// (`CapturePipeline.setOnMonitorFrame`) and each named the picture it wanted
+/// out of the frame that arrived. Two slots would have been two readings of
+/// what clean means, which is the drift `LivePicture` exists to prevent, and
+/// the rule outlives the second consumer.
 ///
 /// The frames come off each pipeline's display path — the same latest-wins hop
 /// the preview layers and the playout mirror ride, never the capture queue —

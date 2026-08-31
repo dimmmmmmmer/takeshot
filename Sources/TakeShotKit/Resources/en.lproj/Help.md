@@ -13,10 +13,16 @@ review layer on top.
 - **Input levels** state what the SOURCE sends. Limited is expanded once; Full
   passes through untouched. Auto assumes limited for RGB 4:4:4 HDMI, which is
   what cameras send.
-- Limited expands the camera's WHOLE legal swing (4–1019 in 10-bit), so the
-  sub-blacks and super-whites it rides outside 64–940 are still there for the
-  grade. There was a second Limited that clipped them away; it is gone, and a
-  saved setting that named it now reads as Limited.
+- Limited expands the NOMINAL pair: code 64 becomes black, 940 becomes white.
+  The sub-blacks and super-whites a camera legally rides outside that pair are
+  clipped **in the picture**, and that is deliberate — expanding the whole legal
+  swing 4–1019 instead put nominal black six per cent up the scale, so every
+  black on the monitor was a grey and you were judging exposure against it.
+  Nothing is lost: the excursions are in the recorded file, which carries the
+  wire codes rather than this expansion, and on the scopes, which read the wire
+  and draw them outside the nominal lines. There was a second Limited that
+  expanded the whole swing; it is gone, and a saved setting that named it now
+  reads as Limited.
 - **Bit depth follows the signal.** The board's format detection reports what
   the source is sending, so there is nothing to set: a 12-bit RGB 4:4:4 camera
   is captured as 12-bit R12B, everything else at 10-bit (r210 for RGB 4:4:4,

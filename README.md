@@ -112,10 +112,12 @@ build is any use to you:
   so there is a switch and a name and nothing else to get wrong, which is what
   makes it the one for a receiver on the same LAN. Off by default; needs the NDI
   SDK at build time (`vendor/NDISDK/README.md`) and an NDI runtime installed.
-- Chroma key for the monitor: pull the green screen with an eyedropper,
-  tolerance, softness and spill, and put a checkerboard, a colour or a still
-  behind the actor. Preview and monitor output only — the take, the grabs and
-  the exports keep the original picture, deliberately.
+- Chroma key: pull the green screen with an eyedropper, tolerance, softness and
+  spill, and put a checkerboard, a colour or a still behind the actor. A preview
+  tool by default — the take, the grabs and the exports keep the original
+  picture — with one switch, **Bake into recording**, that makes the next take a
+  composite instead. It says what that costs before you throw it: the screen is
+  replaced in the file, so it cannot be re-keyed and it is not camera original.
 - Digital slate: a fullscreen card with a running timecode and the rolling
   take's name to point a camera at, with a white sync flash on click.
 - Markers with timecode while recording and while reviewing.
@@ -136,8 +138,6 @@ network with no route out. Settings shows a QR code for each.
   disk and a poster frame of the last take.
 - `/script` — the script supervisor's take log, live, with the rating and a
   comment typed straight into the take.
-- `/cameras` — every board's live signal as tiles, each labelled and with its
-  own REC light. No frames are encoded at all unless somebody has it open.
 - `/live` — the viewer as actual video: H.264 over WebRTC, at the signal's own
   rate. **The phone chooses what it is watching** — Monitor (the operator's own
   picture, aids and chroma key included, which is what the SRT output carries),

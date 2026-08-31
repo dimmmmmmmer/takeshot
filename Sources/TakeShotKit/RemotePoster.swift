@@ -17,7 +17,7 @@ import Foundation
 /// than the playout mirror's, they ride the WebSocket as binary messages
 /// rather than a `multipart/x-mixed-replace` connection the HTTP side has no
 /// model for, and the encoder exists only while a phone is subscribed — see
-/// `MultiviewEncoder` and `RemoteClient+Multiview`.
+/// `MultiviewComposer` and the live picture pool.
 ///
 /// The poster stays regardless, because it answers a different question. The
 /// stream is "what is the camera seeing NOW"; the poster is "what did that

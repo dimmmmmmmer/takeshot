@@ -23,7 +23,7 @@ import os.log
 /// taken off `CapturePipeline.addAudioTap` — the mix the cart's speakers get,
 /// without the switch the cart's speakers are behind.
 ///
-/// The discipline is `MultiviewEncoder`'s and `PlayoutFeeder`'s: the mux and the
+/// The discipline is `MultiviewComposer`'s and `PlayoutFeeder`'s: the mux and the
 /// send run on THIS queue — never on capture, never on main — and the sample
 /// arrives on VideoToolbox's thread and hops here before anything touches it.
 ///

@@ -398,26 +398,6 @@ final class RemoteServer: @unchecked Sendable {
         queue.sync { clients.values.map(\.commandsHonoured).reduce(0, +) }
     }
 
-    /// Frames handed to the transport, across all clients. For the tests —
-    /// the one-in-flight rule is otherwise invisible from outside: a frame
-    /// held back is indistinguishable on the wire from one not yet encoded.
-    var multiviewFrameSends: Int {
-        queue.sync { clients.values.map(\.frameSends).reduce(0, +) }
-    }
-
-    /// Clients with a frame handed over whose completion has not landed.
-    /// For the tests, like the ledger above.
-    var multiviewFramesInFlight: Int {
-        queue.sync { clients.values.filter(\.frameInFlight).count }
-    }
-
-    /// The largest held-frame count any client is carrying — the latest-wins
-    /// bound the tests assert: one per camera, however many frames were
-    /// pushed while the socket stalled.
-    var multiviewPendingFrames: Int {
-        queue.sync { clients.values.map(\.pendingFrames.count).max() ?? 0 }
-    }
-
     /// Seconds off a clock that only ever moves forward. The tarpit's window is
     /// measured against it rather than against `Date`, which an NTP correction
     /// or an operator setting the clock can move backwards — and a window whose

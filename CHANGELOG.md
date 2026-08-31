@@ -51,9 +51,11 @@ If the board refuses the depth you asked for, the app says so on screen and the
 diagnostics report carries the depth actually enabled — it will not silently
 give you something else.
 
-**The phone camera grid moved from `/multiview` to `/cameras`.** A phone with
-the old address bookmarked gets a 404. Re-scan the QR code in Settings; the
-operator remote at `/` and the script page at `/script` are where they were.
+**The phone camera grid is at `/live` now, as video.** It was `/multiview`,
+then `/cameras`, and both of those were a stream of JPEGs a page laid out; a
+phone with either address bookmarked gets a 404. Re-scan the QR code in
+Settings. The operator remote at `/` and the script page at `/script` are where
+they were.
 
 **Downloads cannot see a capture board.** The published build is made on a
 machine with none of the vendor SDKs on it, because none of them may be
@@ -72,10 +74,13 @@ Gatekeeper's refusal instead of the app.
 - **Digital slate** — a fullscreen card with a giant running timecode and the
   rolling take's name, to point a camera at. Click or hit Space for a white
   sync flash.
-- **Chroma key** for the monitor: pull the green screen with an eyedropper,
-  tolerance, softness and spill control, and put a checkerboard, a colour or a
-  still behind the actor. Preview and hardware monitor only — the take, the
-  grabs and the exports keep the original picture, deliberately.
+- **Chroma key**: pull the green screen with an eyedropper, tolerance, softness
+  and spill control, and put a checkerboard, a colour or a still behind the
+  actor. A preview tool by default — the take, the grabs and the exports keep
+  the original picture — and **Bake into recording** for when you do want the
+  composite in the file. It warns before you throw it: a baked take cannot be
+  re-keyed and is not camera original. The scopes keep measuring the camera
+  either way.
 - **Difference compare** joins wipe, blend and A/B: the per-pixel difference of
   the two sources with a ×1/×4/×16 gain, for the mismatch that is too small to
   see any other way.
@@ -128,9 +133,6 @@ Gatekeeper's refusal instead of the app.
 
 - **Script supervisor's page** at `/script` — the day's take log, live, with
   good/bad and a comment typed straight into the take.
-- **Camera grid** at `/cameras` — every board's live signal as tiles, each
-  labelled and with its own REC light. It is the live signal, not the takes,
-  and no encoding happens at all unless somebody has the page open.
 - **Live video at `/live`**, over WebRTC rather than a stream of JPEGs — and
   the phone chooses what it watches: the monitor picture with your aids and
   framelines on it, the clean camera, or the multi-camera grid. Each picture
@@ -281,9 +283,13 @@ Gatekeeper's refusal instead of the app.
   candidate names rather than addresses. Try it before a job depends on it.
 - **Live video needs libdatachannel at build time.** A published build carries
   it inside the app; a build made from source does not unless you build the
-  library too, and the page then says so and stops asking. The camera grid at
-  `/cameras` keeps working either way, which is why it is still there.
-- **The SRT output carries sound; the NDI one still does not.** The SRT stream
+  library too, and the page then says so and stops asking. There is no fallback
+  picture behind it any more — the JPEG camera grid it used to fall back to is
+  gone, because the live page carries every camera as a composed grid at the
+  signal's own rate and the JPEG page had nothing left it did better. On a
+  build without the library the remote, the script page and the slate work as
+  normal; only moving pictures are missing.
+- **Both network outputs carry sound now.** The SRT stream
   now has a stereo audio track on it: the same two channels the cart's speakers
   play, which are the first two of whatever is being RECORDED — your channel
   mask, or the channels the app measured as carrying during standby. There is no
@@ -293,8 +299,9 @@ Gatekeeper's refusal instead of the app.
   **Nobody has watched it on a real receiver.** The two streams are timestamped
   off one clock and the arithmetic is checked, but how far the sound sits from
   the picture on a decoder has not been measured — check it before a job depends
-  on lip sync. NDI is still picture only: the shared half is built and the NDI
-  half of it cannot even be compiled on a machine without the SDK headers.
+  on lip sync. The NDI source carries the same two channels, off the same mix,
+  as uncompressed float beside its picture; the same warning applies to it, and
+  neither has been watched on a real receiver.
 - **`v210` has never run against a board.** The 10-bit YCbCr path — now the
   default for every 4:2:2 signal — was built and measured against synthetic
   frames and through a real ProRes encode, but the rig it was written on feeds
@@ -312,8 +319,11 @@ Gatekeeper's refusal instead of the app.
   signature, so macOS treats each one as a new application and asks for its
   permissions again. Nothing is lost by it; it is a nuisance until the project
   has a Developer ID.
-- **The chroma key never reaches a deliverable.** It is a monitoring tool. If
-  you need the key in the file, it is not this.
+- **The chroma key reaches a deliverable only if you throw a switch.** It is a
+  monitoring tool by default; **Bake into recording** makes the next take a
+  composite, and the take latches whichever answer it opened with — arming
+  mid-take bakes the NEXT one, disarming mid-take finishes the one in progress.
+  A baked take cannot be re-keyed and is not camera original.
 - **A demo camera is always in the device list.** It is how the app is
   exercised without a board, and on a build with no DeckLink SDK it is the only
   device there.

@@ -128,8 +128,7 @@ final class RemoteClient: @unchecked Sendable {
     /// every other route.
     var pendingRequest: RemoteRequest?
     var pendingBodyLength = 0
-    /// Read by `RemoteClient+Multiview` as well — the frame path must never
-    /// serve a socket that has not shown the PIN. Written only here.
+    /// Whether this socket has shown the PIN. Written only here.
     private(set) var authenticated = false
     private var badPINs = 0
     /// No more protocol traffic goes out on this connection.
@@ -154,23 +153,6 @@ final class RemoteClient: @unchecked Sendable {
     var inFlightBytes: Int { inFlight }
     /// Tarpit answers scheduled on this connection and not yet delivered.
     private var heldAnswers = 0
-
-    // MARK: - multiview state (see RemoteClient+Multiview for the behaviour)
-
-    /// The socket asked for the camera-frame stream. Flipped in `settle` —
-    /// behind the PIN, like everything else a message can ask for.
-    private(set) var wantsMultiview = false
-    /// A frame has been handed to the transport and its completion has not
-    /// landed. THE one-in-flight rule: while this is true the next frame
-    /// waits in `pendingFrames` instead of joining a queue. Module-internal
-    /// like `buffer` — `RemoteClient+Multiview` is the only writer.
-    var frameInFlight = false
-    /// Newest undelivered frame per camera — latest wins, so a slow phone
-    /// gets fewer frames, never older ones and never a growing backlog.
-    var pendingFrames: [UInt8: Data] = [:]
-    /// Frames actually handed to the transport. For the tests (via
-    /// `RemoteServer.multiviewFrameSends`), like `inFlightBytes`.
-    var frameSends = 0
 
     /// Command allowance left, and when it was last topped up.
     private var commandTokens = RemoteClient.commandBurst

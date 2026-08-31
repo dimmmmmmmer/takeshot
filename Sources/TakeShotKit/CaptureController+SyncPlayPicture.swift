@@ -25,7 +25,7 @@ import Foundation
 /// **Nothing here exists while nobody is comparing, and nothing exists while a
 /// comparison is on screen but nowhere else.** The composer is built when a
 /// mirror appears under a grid and dropped when the last one goes — the same
-/// discipline `MultiviewEncoder` and the live-picture pool already follow, and
+/// discipline `MultiviewComposer` and the live-picture pool already follow, and
 /// recomputed from the mirrors rather than counted, so nothing can drift.
 extension CaptureController {
     /// Build or drop the composer that turns the comparison's tiles into the

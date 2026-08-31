@@ -24,9 +24,10 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     /// output carries, the clean camera picture, or every camera tiled — and
     /// the three of them are named at `LivePicture`.
     ///
-    /// The two stand side by side deliberately and not forever. The grid page
-    /// is what still works on a build with no libdatachannel in it, which is
-    /// every build until the library is dropped in.
+    /// It is now the ONLY moving picture the remote has, which is the cost of
+    /// retiring the JPEG page: a build with no libdatachannel in it says so and
+    /// shows nothing. The published DMG carries the library; a build from
+    /// source does not unless the library is dropped in.
     case live
     /// The digital slate, on a phone held up in front of a lens.
     ///

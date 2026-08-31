@@ -177,26 +177,31 @@ values included: the record buffer's pixel format follows that answer, and
 `AVAssetWriter` does not survive a format change under an open session. Arming
 mid-take bakes the next take; disarming mid-take finishes the one in progress.
 
-The phone camera grid (`/cameras`) is deliberately outside all of it. It is a
-monitoring surface, not an assist one, so it is handed the `clean` buffer —
-the same frame before the key and the aids — and the operator's compare wipe,
-chroma-key preview and exposure tools never reach it. `MultiviewEncoder` then
-encodes it with Rec.709 declared on both ends, so the tile is the app's own
-picture rather than a gamma conversion of it (owner item 13).
+The phone camera grid (the live page's Grid picture) is deliberately outside
+all of it. It is a monitoring surface, not an assist one, so it is handed the
+`clean` buffer — the same frame before the key and the aids — and the
+operator's compare wipe, chroma-key preview and exposure tools never reach it.
+`MultiviewComposer` tiles those buffers into one raster with Rec.709 declared
+on both ends, so the tile is the app's own picture rather than a gamma
+conversion of it (owner item 13).
 
-How big that tile is depends on how many of them the page is laying out, and
-that is not a refinement — a cap sized for a four-up grid is what made a single
-camera look like a thumbnail, and a cap sized for the single view sends four
-times the bytes for tiles a quarter of the screen. One camera gets 1280 on the
-long edge, two get 960, three or more get 640, which is roughly the physical
-pixels each tile occupies on a phone. Measured at 1080p in, JPEG at 0.75: 42.9,
-28.4 and 16.5 KB a frame at 2.6, 1.5 and 1.5 ms, so the whole page stays inside
-1.7-2.6 Mbit/s at the five-frame pace whatever the camera count. The reduction
-is Lanczos and not an affine transform, which is a correctness point rather
-than a taste one: `transformed(by:)` does not band-limit, and on a zone plate
-reduced 1920 → 640 the band past the target's Nyquist came back with 18.9 codes
-of standard deviation against Lanczos' 1.5 — fine detail folding into moire.
-`MultiviewPerformanceTests` prints the timings and asserts the bytes.
+The grid is one RASTER rather than a page of tiles, and that follows from the
+transport: an H.264 track carries one picture, so a browser that asked for the
+grid has to be SENT a grid. `MultiviewComposer` tiles the clean buffers into
+one, and the main camera is its clock — a compose runs when camera 0 delivers
+and never when another does, because composing per camera would run the pass
+four times a frame interval for a grid nobody can see change faster than the
+main signal. Each tile carries its own name, REC lamp and timecode composited
+in, so every far end gets them: the hardware monitor, the SDI output, NDI, SRT
+and every browser, once rather than four times or not at all.
+
+What it costs, measured in release (`MultiviewComposerTests`, minimum of twenty
+runs on the development Mac): one camera 0.010 ms — a pass-through, not a
+render — two cameras 0.72 ms at 1080p and 1.44 at UHD, four cameras 0.87 and
+1.96. The H.264 encode that follows is six milliseconds at 1080p, so the
+compose is a fraction of what the picture was going to cost anyway. And one
+encode serves every phone watching the grid, which is the other half of why
+this is a picture and not a layout.
 
 ### The SRT output, and why NDI is beside it rather than replaced by it
 
