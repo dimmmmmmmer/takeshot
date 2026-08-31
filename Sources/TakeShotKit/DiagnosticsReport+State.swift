@@ -57,7 +57,9 @@ enum DiagnosticsStateReport {
     /// The drop counters, per take and since launch. Both, because either one
     /// alone lies: a take-local count hides a rig that drops two frames on
     /// every single take, and a session total hides which take was the bad one.
-    private static func counters(_ health: PipelineHealth) -> [String] {
+    /// Internal rather than private so the suite can read one line back
+    /// without assembling a whole bundle.
+    static func counters(_ health: PipelineHealth) -> [String] {
         [
             pair("Take rolling", health.isRecording),
             // What rolled it. The single line that turns "it started on its own"
@@ -77,6 +79,11 @@ enum DiagnosticsStateReport {
                  + "in this take, \(health.paddedAudioPacketsTotal) since launch"),
             pair("Ingress drops", health.ingressDrops),
             pair("Chroma late drops", health.chromaLateDrops),
+            // The recording half, which is the one that costs footage: a take
+            // the operator believes was keyed with the green screen still in
+            // it. It had been counted since the bake shipped and printed
+            // nowhere.
+            pair("Chroma bake fallbacks", health.chromaBakeFallbacks),
             pair("Takes closed", health.takesClosed),
             pair("Failed to finalize", health.takesFailedToFinalize),
         ]

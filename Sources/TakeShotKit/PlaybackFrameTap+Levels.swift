@@ -120,7 +120,18 @@ extension PlaybackFrameTap {
                 width: CVPixelBufferGetWidth(buffer),
                 height: CVPixelBufferGetHeight(buffer)),
               StudioSwing.map(buffer, into: expanded, table: table)
-        else { return buffer }
+        else {
+            // The frame still goes to the screen — better than none — but the
+            // operator is told, because what they are looking at can be a stop
+            // and a half from what the take is. Once per clip: the cause is a
+            // pool that will not give a buffer, so it repeats every frame.
+            if !reportedLevelsFallback {
+                reportedLevelsFallback = true
+                let report = onLevelsFallback
+                DispatchQueue.main.async { report?() }
+            }
+            return buffer
+        }
         CVBufferPropagateAttachments(buffer, expanded)
         return expanded
     }

@@ -921,6 +921,7 @@
 "ndi_not_sending" = "Not sending";
 "ndi_picture_only" = "Picture only — this NDI runtime carries no sound";
 "still_unreadable" = "%@ will not open — the viewer is still showing the previous picture";
+"playback_levels_fallback" = "Playback levels could not be applied — what you are seeing may be up to a stop and a half from the take";
 "ndi_refusing" = "The runtime refused %d frames in a row — receivers are looking at a still";
 "ndi_unavailable" = "Unavailable";
 "ndi_failed_short" = "Could not start";

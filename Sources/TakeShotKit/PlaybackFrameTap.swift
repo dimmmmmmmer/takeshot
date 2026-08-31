@@ -122,6 +122,18 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// Scope data from playback frames (~15 Hz while enabled), on the main queue.
     var onScopeData: ((ScopeData) -> Void)?
 
+    /// Said ONCE per clip when the playback levels/tone-map could not be
+    /// applied and the untouched frame went to the screen instead.
+    ///
+    /// The fallback itself is right — a frame is better than no frame — but it
+    /// was silent, and `displayReady`'s own doc prices the error at a stop and
+    /// a half on a PQ take. An operator judging exposure on review had no way
+    /// to know the tone map did not run. Once per clip and not per frame: the
+    /// cause is a pool that will not give a buffer, so it repeats.
+    var onLevelsFallback: (() -> Void)?
+    /// Whether this clip has already said it.
+    var reportedLevelsFallback = false
+
     var lastBuffer: CVPixelBuffer?
     /// Static source (a still in the player): composited/analyzed like video.
     var stillBuffer: CVPixelBuffer?
@@ -269,6 +281,8 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// levels question is answered on the tap queue, so the file is opened for
     /// its metadata the same way the compare clip's is (see `+Levels`).
     func attach(to item: AVPlayerItem, url: URL) {
+        // a new clip gets to say it again
+        reportedLevelsFallback = false
         queue.async {
             self.detachLocked()
             let output = AVPlayerItemVideoOutput(

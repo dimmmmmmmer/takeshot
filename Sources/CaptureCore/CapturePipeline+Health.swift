@@ -61,6 +61,15 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// their frame interval. Not a recording fault: the display stage drops
     /// the effect rather than the frame.
     public var chromaLateDrops = 0
+    /// Frames a BAKING take wrote without the key because the render failed.
+    ///
+    /// The recording half of the pair above, and the one that costs footage: a
+    /// take the operator believes was keyed comes back with the green screen in
+    /// it. The pipeline has counted these since the bake shipped, behind a
+    /// property whose doc said it was "read from the main actor for the
+    /// diagnostics bundle" — and the bundle only ever printed the display-only
+    /// number beside it.
+    public var chromaBakeFallbacks = 0
     /// Takes whose writer was closed since launch, and how many of those could
     /// not be finalized (the `_FAILED.mov` ones).
     public var takesClosed = 0
@@ -80,6 +89,7 @@ extension CapturePipeline {
         inFlightLock.unlock()
         chromaLock.lock()
         snapshot.chromaLateDrops = chromaLateDropCount
+        snapshot.chromaBakeFallbacks = chromaBakeFallbackCount
         chromaLock.unlock()
         return snapshot
     }

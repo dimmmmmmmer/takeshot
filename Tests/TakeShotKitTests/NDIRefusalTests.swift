@@ -135,3 +135,27 @@ final class RefusalBox: @unchecked Sendable {
             == .integrity)
     }
 }
+
+/// **A take written without the key it was promised is in the bundle.**
+///
+/// The pipeline has counted these since the bake shipped, behind a property
+/// whose own doc said it was "read from the main actor for the diagnostics
+/// bundle" — and the bundle printed only the display-only number beside it. A
+/// take the operator believes was keyed comes back with the green screen in it
+/// and there was no record of it anywhere.
+@Suite struct DiagnosticsChromaTests {
+    @Test func theBakeFallbackCountReachesTheReport() {
+        var health = PipelineHealth()
+        health.chromaLateDrops = 3
+        health.chromaBakeFallbacks = 7
+        let text = DiagnosticsStateReport.counters(health).joined(separator: "\n")
+        #expect(text.contains("Chroma bake fallbacks"), """
+            frames written to the file without the key are still counted \
+            nowhere a diagnostics bundle can show them: \(text)
+            """)
+        #expect(text.contains("7"))
+        // …and it is a DIFFERENT number from the display-only one beside it
+        #expect(text.contains("Chroma late drops"))
+        #expect(text.contains("3"))
+    }
+}

@@ -12,6 +12,19 @@ import Foundation
 /// Split out of `+Capture`, which had grown to hold the session, the bindings
 /// and the watchdog at once.
 extension CaptureController {
+    /// The playback tap's own callbacks. Split out of `bindPipeline` because
+    /// they are a different producer: the tap runs over a clip under review,
+    /// not over the board.
+    func bindPlaybackTap() {
+        playbackTap.onLevelsFallback = { [weak self] in
+            self?.lastError = L("playback_levels_fallback")
+        }
+        playbackTap.onScopeData = { [weak self] data in
+            guard let self, self.syncPlay == nil else { return }
+            self.scopes.data = data
+        }
+    }
+
     func bindPipeline() {
         pipeline.onFormatChanged = { [weak self] format in
             guard let self else { return }
@@ -66,10 +79,7 @@ extension CaptureController {
         // producing. Refusing it here rather than relying on the clear winning
         // the race is what makes "a grid is measured by nothing" a property of
         // the app instead of a property of the ordering.
-        playbackTap.onScopeData = { [weak self] data in
-            guard let self, self.syncPlay == nil else { return }
-            self.scopes.data = data
-        }
+        bindPlaybackTap()
         bindAudioReporting()
         pipeline.onError = { [weak self] alarm in
             self?.reportPipelineError(alarm)
