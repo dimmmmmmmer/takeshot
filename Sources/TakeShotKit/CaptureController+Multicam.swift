@@ -111,14 +111,28 @@ extension CaptureController {
                     let name = devices.first {
                         $0.id == Self.deckLinkPrefix + rawID
                     }?.name ?? rawID
-                    lastError = Self.tagged(
-                        BridgeUnavailable(error: error).localizedText,
-                        source: name)
+                    noteChannelStartFailed(error, device: name)
                 }
             }
             extraChannels = channels
         }
     }
+    /// A camera channel whose board would not start.
+    ///
+    /// **The sticky register, not the five-second one.** A channel that never
+    /// starts is absent from `extraChannels`, so it is absent from pushConfig,
+    /// from the grid, from every take and from the log that goes to post. That
+    /// is the same loss the pipeline reports as `recordingStartFailed` and
+    /// classifies `.integrity` — and it was landing in the toast register,
+    /// which clears itself after five seconds. An operator setting up B-cam
+    /// while looking at the slate had no way to learn a board never came up.
+    func noteChannelStartFailed(_ error: Error, device: String) {
+        reportPipelineError(
+            .recordingStartFailed(
+                reason: BridgeUnavailable(error: error).localizedText),
+            camera: device)
+    }
+
     private func appendChannelTake(_ take: Take) {
         takes.append(take)
         takes.sort { $0.recordedAt < $1.recordedAt }

@@ -919,6 +919,9 @@
 "ndi_sending" = "Sending";
 "ndi_announced" = "On the network, no receivers";
 "ndi_not_sending" = "Not sending";
+"ndi_picture_only" = "Picture only — this NDI runtime carries no sound";
+"still_unreadable" = "%@ will not open — the viewer is still showing the previous picture";
+"ndi_refusing" = "The runtime refused %d frames in a row — receivers are looking at a still";
 "ndi_unavailable" = "Unavailable";
 "ndi_failed_short" = "Could not start";
 "ndi_failed" = "NDI: %@";

@@ -59,6 +59,16 @@ final class DisplayMirrors: ObservableObject {
     /// only honest answer to "is it sending?": the switch is a wish, and a build
     /// with no SDK or a machine with no runtime cannot honour it.
     @Published var ndiState: NDIOutputState = .off
+    /// Whether the loaded NDI runtime can carry SOUND, once a source has been
+    /// announced; nil before that.
+    ///
+    /// **A runtime without the audio entry point still sends a picture.** That
+    /// is deliberate — refusing to announce a source because it cannot carry
+    /// sound would trade the feature for half of it — but it was invisible:
+    /// every audio packet was refused, the bridge's `isAudioAvailable`
+    /// predicate had no caller outside a test, and the director's iPad got a
+    /// picture and permanent silence while the footer lamp stayed green.
+    @Published var ndiCarriesAudio: Bool?
 
     /// Overridden in tests so a suite never announces a real source on the set
     /// network; nil — the real sender. `ControllerHarness` fills it in for every

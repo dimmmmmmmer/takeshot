@@ -84,13 +84,34 @@ final class NDIVideoMirror: @unchecked Sendable {
     private var lastSendAt: TimeInterval = 0
     /// `stop()` has run; late offers are inert.
     private var stopped = false
+    /// Consecutive frames the bridge refused.
+    ///
+    /// **A refused frame freezes the source on its last one.** The return was
+    /// discarded, so a receiver went on being handed the same picture while the
+    /// footer lamp stayed green — and NDI has no other way to notice, because
+    /// the source is still announced and still has its connection count.
+    /// Consecutive rather than total: one refusal is a busy send, a run of them
+    /// is a feed that has stopped moving.
+    private var refusals = 0
+
+    /// How many in a row before the operator is told. Half a second at the
+    /// mirror's own rate, which is long enough to ride out a busy send and
+    /// short enough that nobody is describing a frozen picture over talkback
+    /// before the app has noticed it.
+    static let refusalAlarmThreshold = 15
 
     init(sender: NDISending,
-         framesPerSecond: Double = NDIVideoMirror.framesPerSecond) {
+         framesPerSecond: Double = NDIVideoMirror.framesPerSecond,
+         onRefused: @escaping @Sendable (Int) -> Void = { _ in }) {
         self.sender = sender
+        self.onRefused = onRefused
         interval = framesPerSecond > 0 ? 1 / framesPerSecond
             : NDIVideoMirror.minimumInterval
     }
+
+    /// Told when the feed has stopped moving, with how many frames in a row
+    /// were refused. Called on this mirror's queue.
+    private let onRefused: @Sendable (Int) -> Void
 
     /// Offer one displayed frame. Called on the display queue (live) or the tap
     /// queue (playback); returns at once — the hop is an async dispatch, never
@@ -120,7 +141,14 @@ final class NDIVideoMirror: @unchecked Sendable {
         // Stamped before the send, so the pace is measured start to start and a
         // slow send does not quietly raise the delivered rate afterwards.
         lastSendAt = RemoteServer.monotonicNow()
-        sender.send(frame.buffer, rate: frame.rate)
+        if sender.send(frame.buffer, rate: frame.rate) {
+            refusals = 0
+            return
+        }
+        refusals += 1
+        // Once per run, at the threshold: a receiver that reconnects clears it,
+        // and repeating every frame would be fifty messages a second.
+        if refusals == Self.refusalAlarmThreshold { onRefused(refusals) }
     }
 
     /// Take the source off the network. Asynchronous on purpose: a send may be

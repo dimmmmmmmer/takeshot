@@ -54,7 +54,9 @@ extension CaptureController {
             clock: mirrors.liveClock,
             onFailure: { [weak self] reason in
                 os_log("live encoder unavailable: %{public}s", reason)
-                Task { @MainActor in self?.reportLiveEncoderFailure(reason) }
+                Task { @MainActor in
+                    self?.reportLiveEncoderFailure(reason, for: picture)
+                }
             })
         mirrors.liveEncoders[picture] = encoder
         wireLivePictures()
@@ -74,8 +76,16 @@ extension CaptureController {
     ///
     /// So: SRT's row when SRT is on, in SRT's own words, and the app's error
     /// line otherwise. Never both — one failure said twice reads as two.
-    func reportLiveEncoderFailure(_ reason: String) {
-        if mirrors.srt != nil {
+    ///
+    /// **Which PICTURE failed decides that, not which switches are on.** The
+    /// sessions are keyed per `LivePicture`, and this used to report ANY of
+    /// them into the SRT row: a phone asking for the grid and failing to get an
+    /// encoder painted a healthy SRT link `.failed`, toasted "SRT: …", lit the
+    /// trouble triangle — and `SRTMirror` dedupes against its last reported
+    /// event, so nothing cleared it until the link really dropped. The browser
+    /// that actually lost its picture was told nothing at all.
+    func reportLiveEncoderFailure(_ reason: String, for picture: LivePicture) {
+        if picture == Self.srtPicture, mirrors.srt != nil {
             applySRTEvent(.refused(reason))
         } else {
             lastError = L("live_video_failed", reason)

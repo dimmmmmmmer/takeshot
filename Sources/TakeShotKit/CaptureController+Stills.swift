@@ -43,13 +43,34 @@ extension CaptureController {
         syncPlay == nil && (isCapturing || playbackURL != nil)
     }
 
+    /// A still that would not decode or would not render.
+    ///
+    /// **Said, rather than left on the previous picture.** Both guards returned
+    /// bare while `playbackURL` was already set, so the transport bar and the
+    /// badges named the new still and the viewer went on showing the last one.
+    /// An operator comparing a framing reference was looking at the wrong image
+    /// and being told it was the right one — and the grab side one screen away
+    /// has always toasted its own failures.
+    @MainActor
+    func stillFailed(_ url: URL) {
+        // Only if it is still the one being opened: a second still chosen while
+        // the first was decoding owns the viewer now, and a stale complaint
+        // about the abandoned one is noise.
+        guard playbackURL == url else { return }
+        lastError = L("still_unreadable", url.lastPathComponent)
+    }
+
     /// Decode a still into Rec.709 display code values and hand it to the tap.
     func loadStill(url: URL) {
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
                   let cg = CGImageSourceCreateImageAtIndex(source, 0, [
                       kCGImageSourceShouldCacheImmediately: true,
-                  ] as CFDictionary) else { return }
+                  ] as CFDictionary)
+            else {
+                await self?.stillFailed(url)
+                return
+            }
             // managed input (embedded profile) rendered INTO the HDTV space:
             // identity for our own grabs, correct conversion for foreign files
             let attachments = [
@@ -62,7 +83,10 @@ extension CaptureController {
             let image = CIImage(cgImage: cg)
             guard let buffer = CIBufferRender.render(
                 image, width: cg.width, height: cg.height, into: space)
-            else { return }
+            else {
+                await self?.stillFailed(url)
+                return
+            }
             let boxed = UncheckedSendable(buffer)
             await MainActor.run { [weak self] in
                 guard let self, self.playbackURL == url else { return }

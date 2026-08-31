@@ -109,6 +109,14 @@ struct NDIStatusRow: View {
                     Text(L("ndi_failed_short")).foregroundStyle(.secondary)
                     reasonText(reason)
                 }
+                // A runtime that carries no sound still sends the picture, and
+                // said here rather than left to be discovered on the receiver:
+                // "the feed has no audio" is a question somebody asks from
+                // another room, halfway through a take.
+                if mirrors.ndiCarriesAudio == false {
+                    Text(L("ndi_picture_only"))
+                        .foregroundStyle(.orange)
+                }
             }
         }
     }

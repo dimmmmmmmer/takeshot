@@ -103,7 +103,12 @@ struct StreamIndicator: View {
         var lines: [String] = []
         guard !isPaused else { return L("stream_start_help") }
         if srt.isEngaged { lines.append("SRT — " + Self.words(srt)) }
-        if ndi.isEngaged { lines.append("NDI — " + Self.words(ndi)) }
+        if ndi.isEngaged {
+            lines.append("NDI — " + Self.words(ndi))
+            if mirrors.ndiCarriesAudio == false {
+                lines.append(L("ndi_picture_only"))
+            }
+        }
         lines.append(L("stream_stop_help"))
         return lines.joined(separator: "\n")
     }

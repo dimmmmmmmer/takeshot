@@ -100,7 +100,12 @@ extension CaptureController {
             let factory = mirrors.ndiSenderFactory ?? NDISender.make
             let sender = try factory(
                 settings.ndi.sourceNameEffective(settings.naming))
-            mirrors.ndi = NDIVideoMirror(sender: sender)
+            mirrors.ndi = NDIVideoMirror(
+                sender: sender,
+                onRefused: { [weak self] count in
+                    // The mirror's queue must never touch the controller.
+                    Task { @MainActor in self?.noteNDIRefusing(count) }
+                })
             // Whoever turned it on — the footer or the Settings row — it is no
             // longer paused, so the footer's button goes back to meaning "stop".
             mirrors.pausedStreams.ndi = false
@@ -176,6 +181,13 @@ extension CaptureController {
     /// this is the belt on the braces, and it is the half that survives a path
     /// that forgets to.
     private func startNDIAudio(on sender: NDISending) {
+        // Asked ONCE, here, rather than per packet: it is a property of the
+        // loaded runtime and cannot change while one is loaded. A runtime that
+        // cannot carry sound still gets its mirror and its tap — the packets
+        // are refused at the bridge and the picture is unaffected — but the
+        // operator is told, because a silent feed the app knew about in advance
+        // is worse than one it could not predict.
+        mirrors.ndiCarriesAudio = NDISender.isAudioAvailable
         let mirror = NDIAudioMirror(sender: sender)
         mirrors.ndiAudio = mirror
         pipeline.addAudioTap(mirror) { [weak mirror] packet in
@@ -193,6 +205,21 @@ extension CaptureController {
         pipeline.removeAudioTap(mirror)
         mirror.stop()
         mirrors.ndiAudio = nil
+        mirrors.ndiCarriesAudio = nil
+    }
+
+    /// The source is announced, the receiver is still connected, and the
+    /// bridge has been refusing frames for long enough that what the receiver
+    /// is looking at is a still.
+    ///
+    /// Reported into the NDI row rather than the alarm banner: no footage is at
+    /// risk — the recorder is not in this path at all — and the picture the
+    /// director is watching having stopped is exactly what the stream lamp is
+    /// for. `StreamLink` reads `.failed` as trouble, so the lamp goes amber
+    /// with a triangle instead of staying green.
+    func noteNDIRefusing(_ count: Int) {
+        guard mirrors.ndi != nil else { return }
+        mirrors.ndiState = .failed(L("ndi_refusing", count))
     }
 
     /// Take every live output down at once.

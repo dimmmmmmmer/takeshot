@@ -21,6 +21,10 @@ final class FakeNDISender: NDISending, @unchecked Sendable {
     /// default — a source that has just been announced has none, which is the
     /// state most of these tests are in.
     nonisolated(unsafe) var receivers: Int32 = 0
+    /// What `send` answers. False is a runtime refusing the frame — the source
+    /// stays announced and the receiver goes on looking at the last picture,
+    /// which is the failure this flag exists to reproduce.
+    nonisolated(unsafe) var acceptsFrames = true
     var connectedReceivers: Int32 { receivers }
     let sourceName: String
 
@@ -82,6 +86,7 @@ final class FakeNDISender: NDISending, @unchecked Sendable {
 
     @discardableResult
     func send(_ buffer: CVPixelBuffer, rate: NDIFrameRate) -> Bool {
+        guard acceptsFrames else { return false }
         let label = String(cString: __dispatch_queue_get_label(nil))
         lock.withLock {
             storedFrames.append(buffer)

@@ -262,7 +262,8 @@ struct LiveEncoderFailureReportTests {
         try await ControllerHarness.run { controller, _ in
             #expect(controller.mirrors.srt == nil, "this case is the switch OFF")
             controller.lastError = nil
-            controller.reportLiveEncoderFailure("no encoder on this machine")
+            controller.reportLiveEncoderFailure("no encoder on this machine",
+                                               for: CaptureController.srtPicture)
 
             let shown = try #require(controller.lastError,
                                      "a shared session failed and nothing said so")
@@ -281,12 +282,44 @@ struct LiveEncoderFailureReportTests {
             #expect(started, "the SRT mirror never came up")
 
             controller.lastError = nil
-            controller.reportLiveEncoderFailure("no encoder on this machine")
+            controller.reportLiveEncoderFailure("no encoder on this machine",
+                                               for: CaptureController.srtPicture)
             #expect(controller.mirrors.srtState
                 == .failed("no encoder on this machine"))
             let shown = try #require(controller.lastError)
             #expect(shown == L("srt_failed", "no encoder on this machine"),
                     "the failure was said twice, in two voices: \(shown)")
+        }
+    }
+
+    /// **Another picture's failure must not paint the SRT row.**
+    ///
+    /// The sessions are keyed per `LivePicture`. A phone asking for the grid
+    /// and failing to get an encoder used to mark a healthy SRT link `.failed`,
+    /// toast "SRT: …" and light the trouble triangle — and `SRTMirror` dedupes
+    /// against its last reported event, so nothing cleared it until the link
+    /// really dropped. The browser that lost its picture was told nothing.
+    @Test func adifferentPicturesFailureLeavesTheSRTRowAlone() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.settings.srt.enabled = true
+            controller.settings.srt.address = "127.0.0.1"
+            let started = await ControllerWait.until { controller.mirrors.srt != nil }
+            #expect(started, "the SRT mirror never came up")
+            let healthy = controller.mirrors.srtState
+
+            controller.lastError = nil
+            let other = LivePicture.allCases
+                .first { $0 != CaptureController.srtPicture }
+            controller.reportLiveEncoderFailure("no encoder for the grid",
+                                               for: try #require(other))
+
+            #expect(controller.mirrors.srtState == healthy, """
+                a picture SRT is not sending marked the SRT link failed — and \
+                the mirror dedupes, so it stays red while the link is fine
+                """)
+            let shown = try #require(controller.lastError,
+                                     "the browser that lost its picture was told nothing")
+            #expect(shown.contains("no encoder for the grid"))
         }
     }
 }
