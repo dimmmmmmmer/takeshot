@@ -406,13 +406,25 @@ static CNDRuntime *CNDSharedRuntime(void) {
 
 - (int32_t)connectedReceivers {
     CNDRuntime *runtime = CNDSharedRuntime();
-    if (runtime->send_connections == NULL || _sender == NULL) {
+    if (runtime->send_connections == NULL) {
+        return -1;
+    }
+    // Through the same claim the two send legs take, and for the same reason.
+    // This is polled from the status pump — a THIRD thread — while a mirror can
+    // call `stop` from its own queue, and reading `_sender` outside the lock
+    // put a destroyed instance into the SDK: the null check and the call were
+    // two separate reads with a teardown allowed between them. Deferred
+    // destruction does not help a reader that never took the claim.
+    NDIlib_send_instance_t instance = [self beginSend];
+    if (instance == NULL) {
         return -1;
     }
     // 0 ms: ask what is true NOW rather than waiting for somebody to arrive.
-    // The SDK's timeout parameter blocks the calling thread, and this is polled
-    // from the status pump.
-    return runtime->send_connections(_sender, 0);
+    // The SDK's timeout parameter blocks the calling thread, and the pump this
+    // runs on must not park.
+    int32_t connections = runtime->send_connections(instance, 0);
+    [self endSend];
+    return connections;
 }
 
 - (BOOL)sendAudio:(const float *)planar

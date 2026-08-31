@@ -73,13 +73,25 @@ extension CapturePipeline {
     public func setScopesEnabled(_ on: Bool) {
         queue.async {
             self.scopesEnabled = on
-            // analyze the current frame right away — the scopes window should
-            // open with data, not "waiting for signal"
-            if on, let buffer = self.currentPreviewBuffer(),
-               let scopeData = ScopeAnalyzer.analyze(buffer,
-                                                    region: self.scopeRegion) {
-                DispatchQueue.main.async { self.onScopeData?(scopeData) }
-            }
+            // The NEXT frame is analyzed, by the frame path, instead of one
+            // being analyzed here — the same answer `setScopeRegion` gives
+            // below, and for the same reason: this runs on the capture queue,
+            // which owns per-frame work and may not be handed a
+            // content-dependent 22 ms pass. Opening the scopes did exactly
+            // that, in the one call that is guaranteed to happen while a
+            // signal is running.
+            //
+            // It also analyzed the wrong frame with the wrong numbers. The
+            // frame path reads the WIRE frame at its own levels and
+            // colorimetry (see `analyzeScopes`); this read the display buffer,
+            // which is 8-bit with the excursions already clipped out of it, at
+            // `.full` and `.sdr` whatever the signal was — so the first trace
+            // an operator saw could disagree with every trace after it.
+            //
+            // The cost is one frame, 40 ms at 25 fps. With no signal arriving
+            // there is nothing to draw and the window says so, which is the
+            // truth about a board with no cable in it.
+            self.lastScopeFrame = 0
         }
     }
 

@@ -61,6 +61,12 @@ final class RawPlayerModel: ObservableObject {
     /// shows, `.full` otherwise.
     var scopeRegion = ScopeRegion.full
 
+    /// A re-present of the paused frame is in flight (see `repaintPausedFrame`).
+    var repainting = false
+    /// Another was asked for while that one ran — the assist the operator
+    /// settled on, which nothing else would come along to draw.
+    var repaintPending = false
+
     /// A `refreshScopes` pass is in flight (see `RawPlayback+Scopes`).
     var scopeRefreshing = false
     /// Another refresh was asked for while that pass ran — a paused clip has no
@@ -166,7 +172,51 @@ final class RawPlayerModel: ObservableObject {
     func setViewAssist(_ assist: ViewAssist) {
         assistStage.setAssist(assist)
         sinks.setAssist(assist)
-        if let buffer = lastBuffer { present(buffer) }
+        repaintPausedFrame()
+    }
+
+    /// Draw the paused frame again with whatever the aids now say — off the
+    /// main thread, and latest-wins.
+    ///
+    /// It used to be `present(lastBuffer)` inline, which is a whole CoreImage
+    /// pass on the MainActor. That is affordable once, when a checkbox is
+    /// ticked; it is not affordable at a slider's rate, and the draft path
+    /// (`CaptureController.previewAssist`) calls this about sixty times a
+    /// second for as long as a zebra threshold or a punch-in is being dragged.
+    /// A paused RAW clip made the whole window stutter under that drag, which
+    /// is the same complaint the compare wipe had.
+    ///
+    /// Latest-wins for the same reason `refreshScopes` is: the request that
+    /// arrives mid-pass is the one the operator settled on, and on a paused
+    /// clip nothing else will ever come along to correct it. Only while
+    /// PAUSED — a playing clip is drawing its own frames on the decode task,
+    /// which is the thread `assistStage` is confined to then.
+    func repaintPausedFrame() {
+        guard playTask == nil, let buffer = lastBuffer else { return }
+        guard !repainting else {
+            repaintPending = true
+            return
+        }
+        repainting = true
+        let boxed = UncheckedSendable(buffer)
+        let generation = playGeneration
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let model = self else { return }
+            model.present(boxed.value)
+            await MainActor.run {
+                model.repainting = false
+                // A play that started under the pass owns the picture now, and
+                // its own frames carry the aids.
+                guard model.playGeneration == generation else {
+                    model.repaintPending = false
+                    return
+                }
+                if model.repaintPending {
+                    model.repaintPending = false
+                    model.repaintPausedFrame()
+                }
+            }
+        }
     }
 
     func setLetterbox(_ color: CIColor) {

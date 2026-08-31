@@ -206,5 +206,10 @@ struct NDILiveSenderTests {
             #expect(!sender.sendAudio(buffer.baseAddress!, framesPerChannel: 32,
                                       channels: 2, sampleRate: 48_000))
         }
+        // The count is a third caller of the instance and takes the same claim:
+        // it is polled from the status pump while a mirror can stop from its
+        // own queue.
+        #expect(sender.connectedReceivers() == -1,
+                "a stopped sender asked a destroyed instance for its count")
     }
 }

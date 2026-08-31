@@ -119,6 +119,53 @@ struct PipelineScopeTests {
                 "the left half of the frame is still being sampled")
     }
 
+    /// **Opening the scopes costs the capture queue nothing.**
+    ///
+    /// It used to analyze the current frame inline, on the capture queue, so
+    /// the window would open with data rather than "waiting for signal" — a
+    /// content-dependent 22 ms pass on the one queue that owns per-frame work,
+    /// in the one call guaranteed to happen while a signal is running.
+    /// `setScopeRegion` next to it already states the rule and follows it.
+    ///
+    /// So: no data until a FRAME arrives, and then data on the first one —
+    /// which is 40 ms at 25 fps and reads the wire frame with the signal's own
+    /// levels, like every trace after it.
+    @Test func openingTheScopesWaitsForAFrameRatherThanAnalyzingOnTheCaptureQueue()
+        async throws {
+        let root = TestMedia.scratchDirectory("PipelineScopeOpen")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pipeline = idlePipeline(root: root)
+        let collected = EventCollector<ScopeData>()
+        pipeline.onScopeData = { collected.append($0) }
+        pipeline.handleFormat(CaptureFormat(width: 320, height: 180, frameRate: 25,
+                                            timecodeFPS: 25, name: "test"))
+        let driver = SignalDriver(pipeline: pipeline)
+        var timecode = Timecode(hours: 10, minutes: 0, seconds: 0, frames: 0, fps: 25)
+        let buffer = try gradient()
+        // a frame the pipeline is holding, so "the current frame" exists to be
+        // analyzed — which is what the old code reached for
+        timecode = timecode.advanced(by: 1)
+        try await driver.push(timecode, pixelBuffer: buffer)
+
+        pipeline.setScopesEnabled(true)
+        // Polled rather than slept: the callback lands on the MAIN queue, and
+        // in this harness main is only serviced at an await — a flat sleep
+        // proved this either way, which is how the first version of this test
+        // passed against the behaviour it was written to reject.
+        await TestWait.until({ !collected.isEmpty }, timeout: .seconds(2))
+        #expect(collected.isEmpty, """
+            the scopes analyzed a frame on the capture queue when the window \
+            opened
+            """)
+
+        // and the very next frame IS analyzed — no waiting out the stride
+        timecode = timecode.advanced(by: 1)
+        try await driver.push(timecode, pixelBuffer: buffer)
+        await TestWait.until({ !collected.isEmpty }, timeout: .seconds(20))
+        #expect(!collected.isEmpty,
+                "the first frame after opening was not analyzed")
+    }
+
     /// No scope surface open, no analysis: the pipeline must not spend a frame's
     /// worth of CPU on data nobody is looking at.
     @Test func closedScopesAnalyzeNothing() async throws {
