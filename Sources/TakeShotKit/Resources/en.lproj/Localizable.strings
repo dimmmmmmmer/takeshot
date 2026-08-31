@@ -881,6 +881,10 @@
 "srt_latency" = "Latency, ms";
 "srt_bitrate" = "Bitrate, Mbit/s";
 "srt_passphrase" = "Passphrase";
+"stream_link_up" = "a receiver is taking it";
+"stream_link_waiting" = "on the network, nobody taking it";
+"stream_link_off" = "off";
+"stream_stop_help" = "Click to stop sending";
 "srt_status" = "Status";
 "srt_starting" = "Connecting";
 "srt_sending" = "Sending";
@@ -902,6 +906,7 @@
 "ndi_source_name" = "Source name";
 "ndi_status" = "Status";
 "ndi_sending" = "Sending";
+"ndi_announced" = "On the network, no receivers";
 "ndi_not_sending" = "Not sending";
 "ndi_unavailable" = "Unavailable";
 "ndi_failed_short" = "Could not start";

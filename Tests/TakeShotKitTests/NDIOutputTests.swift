@@ -17,6 +17,11 @@ import Testing
 /// `FakeAudioCaptureDevice` carries a lock: it is called on `NDIVideoMirror`'s
 /// queue and read from the test, and TSan aborts a suite on a plain `var`.
 final class FakeNDISender: NDISending, @unchecked Sendable {
+    /// How many receivers the tests want this source to have. Zero by
+    /// default — a source that has just been announced has none, which is the
+    /// state most of these tests are in.
+    nonisolated(unsafe) var receivers: Int32 = 0
+    var connectedReceivers: Int32 { receivers }
     let sourceName: String
 
     /// One packet of sound as it reached the sender: already de-interleaved,
@@ -115,6 +120,9 @@ final class FakeNDISender: NDISending, @unchecked Sendable {
 /// queue (`aParkedNDISendDoesNotStallTheSRTLink`), and that inside this one
 /// output the picture and the sound cannot hold each other up.
 final class BlockingNDISender: NDISending, @unchecked Sendable {
+    /// A fake sender nobody is watching: the tests
+    /// that use it are about frames, not about the link.
+    var connectedReceivers: Int32 { 0 }
     let sourceName = "blocking"
     private let hold: TimeInterval
     private let audioHold: TimeInterval

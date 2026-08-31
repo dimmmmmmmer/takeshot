@@ -68,7 +68,11 @@ struct NDILifecycleTests {
             controller.settings.ndi.enabled = true
 
             #expect(controller.mirrors.ndi != nil)
-            #expect(controller.mirrors.ndiState == NDIOutputState.sending)
+            // ANNOUNCED, not sending: the source is on the network and
+            // nobody has opened it. "Sending" one line after
+            // `send_create` was the switch wearing the link's
+            // clothes — see `NDIOutputState.announced`.
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
             #expect(log.names == ["Dune B"])
 
             controller.settings.ndi.enabled = nil
@@ -146,7 +150,11 @@ struct NDILifecycleTests {
             controller.startNDIIfEnabled()
             #expect(log.names == ["Dune C", "Dune C"],
                     "the stored switch did not announce at startup: \(log.names)")
-            #expect(controller.mirrors.ndiState == NDIOutputState.sending)
+            // ANNOUNCED, not sending: the source is on the network and
+            // nobody has opened it. "Sending" one line after
+            // `send_create` was the switch wearing the link's
+            // clothes — see `NDIOutputState.announced`.
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
         }
     }
 
@@ -177,7 +185,11 @@ struct NDILifecycleTests {
             #expect(log.names.last == "Client feed")
             #expect(log.all.first?.isStopped == true,
                     "the old source was left on the network")
-            #expect(controller.mirrors.ndiState == NDIOutputState.sending)
+            // ANNOUNCED, not sending: the source is on the network and
+            // nobody has opened it. "Sending" one line after
+            // `send_create` was the switch wearing the link's
+            // clothes — see `NDIOutputState.announced`.
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
         }
     }
 
@@ -257,7 +269,60 @@ struct NDILifecycleTests {
             #expect(await ControllerWait.until { controller.mirrors.ndi != nil },
                     "a new name did not retry")
             #expect(log.names == ["Client feed"])
-            #expect(controller.mirrors.ndiState == NDIOutputState.sending)
+            // ANNOUNCED, not sending: the source is on the network and
+            // nobody has opened it. "Sending" one line after
+            // `send_create` was the switch wearing the link's
+            // clothes — see `NDIOutputState.announced`.
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
+        }
+    }
+
+    /// A receiver opening the source is what turns the indicator on.
+    ///
+    /// The state used to be written once, one line after `send_create`, and
+    /// never revisited — so it said "sending" for a source nobody had opened
+    /// and could not have said anything else.
+    ///
+    /// `refreshNDILink` is called DIRECTLY rather than waited for. The poll
+    /// that drives it in the app is a background task on a one-second tick, and
+    /// a test that raced it passed against the old behaviour too: the
+    /// assertions all ran before the first tick, so nothing was being measured.
+    /// This asserts the decision, which is the part that can be wrong.
+    @Test func aReceiverOpeningTheSourceIsSeen() async throws {
+        let log = NDISenderLog()
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.ndiSenderFactory = { name in log.build(name) }
+            controller.settings.ndi.enabled = true
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced,
+                    "a source nobody opened claimed to be sending")
+
+            let sender = try #require(log.latest)
+            sender.receivers = 1
+            controller.refreshNDILink()
+            #expect(controller.mirrors.ndiState == NDIOutputState.sending,
+                    "a receiver opened the source and the state did not move")
+
+            sender.receivers = 0
+            controller.refreshNDILink()
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced,
+                    "the source still claims a receiver that has gone")
+        }
+    }
+
+    /// A runtime that cannot answer keeps exactly the behaviour it had.
+    ///
+    /// `connectedReceivers` is -1 there — not zero — and reading that as "nobody
+    /// is watching" would turn every older runtime's indicator off for good.
+    @Test func aRuntimeThatCannotCountSaysSending() async throws {
+        let log = NDISenderLog()
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.ndiSenderFactory = { name in log.build(name) }
+            controller.settings.ndi.enabled = true
+            let sender = try #require(log.latest)
+            sender.receivers = -1
+            controller.refreshNDILink()
+            #expect(controller.mirrors.ndiState == NDIOutputState.sending,
+                    "a runtime that cannot count was read as nobody watching")
         }
     }
 }
@@ -322,7 +387,11 @@ struct NDIBesideSRTTests {
             #expect(controller.mirrors.liveEncoders.isEmpty,
                     "the shared encoder outlived the last thing watching it")
             #expect(controller.mirrors.ndi != nil)
-            #expect(controller.mirrors.ndiState == NDIOutputState.sending)
+            // ANNOUNCED, not sending: the source is on the network and
+            // nobody has opened it. "Sending" one line after
+            // `send_create` was the switch wearing the link's
+            // clothes — see `NDIOutputState.announced`.
+            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
 
             let before = sender.frames.count
             #expect(await ControllerWait.until {

@@ -93,6 +93,13 @@ struct NDIStatusRow: View {
                     if let version = NDISender.runtimeVersion {
                         reasonText(version)
                     }
+                case .announced:
+                    // On the network, nobody watching. Said plainly rather
+                    // than as "sending", which is what it used to claim.
+                    Text(L("ndi_announced")).foregroundStyle(.secondary)
+                    if let version = NDISender.runtimeVersion {
+                        reasonText(version)
+                    }
                 case .off:
                     Text(L("ndi_not_sending")).foregroundStyle(.secondary)
                 case .unavailable(let reason):

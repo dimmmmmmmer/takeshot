@@ -102,10 +102,64 @@ extension CaptureController {
                 settings.ndi.sourceNameEffective(settings.naming))
             mirrors.ndi = NDIVideoMirror(sender: sender)
             startNDIAudio(on: sender)
-            mirrors.ndiState = .sending
+            // ANNOUNCED, not sending. The source has just been created; nobody
+            // can have opened it yet, and saying "sending" here is what made
+            // the state mean "the switch is on" — see `NDIOutputState`.
+            mirrors.ndiState = .announced
+            startNDILinkPoll()
             wireDisplayMirrors()
         } catch {
             ndiFailed(error.localizedDescription)
+        }
+    }
+
+    /// Poll the link for as long as there is a sender.
+    ///
+    /// Its own task rather than a line in the remote's status pump: that pump
+    /// only runs when the web remote is switched ON, and whether a director's
+    /// laptop is taking the NDI picture has nothing to do with whether anybody
+    /// opened the phone page. Tied to the sender's life instead, which is
+    /// exactly the span over which the question means anything.
+    ///
+    /// A second apart. NDI has no connection event, so this is the cadence at
+    /// which a receiver appearing becomes visible — fast enough for an operator
+    /// to see somebody join, slow enough to be free.
+    private func startNDILinkPoll() {
+        mirrors.ndiLinkTask?.cancel()
+        mirrors.ndiLinkTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                self.refreshNDILink()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// Ask the sender how many receivers have the source open, and move the
+    /// state between `announced` and `sending` on the answer.
+    ///
+    /// A POLL because NDI offers no event: there is no "somebody connected"
+    /// callback in the SDK, so the app asks on the tick it already pushes its
+    /// remote status on. A runtime that cannot say answers -1, and the state
+    /// then stays where an older build would have left it.
+    ///
+    /// Only while a sender exists. Nothing else moves this state, so a failure
+    /// or the switch going off is not overwritten by a poll that ran after it.
+    func refreshNDILink() {
+        guard let sender = mirrors.ndi?.sender else { return }
+        switch mirrors.ndiState {
+        case .announced, .sending:
+            let count = sender.connectedReceivers
+            guard count >= 0 else {
+                // The runtime cannot answer. Say what an older build said —
+                // the source is up — rather than claiming nobody is watching.
+                mirrors.ndiState = .sending
+                return
+            }
+            let wanted: NDIOutputState = count > 0 ? .sending : .announced
+            if mirrors.ndiState != wanted { mirrors.ndiState = wanted }
+        case .off, .failed, .unavailable:
+            break
         }
     }
 
@@ -138,7 +192,24 @@ extension CaptureController {
         mirrors.ndiAudio = nil
     }
 
+    /// Take every live output down at once.
+    ///
+    /// What the footer's indicator presses. One verb rather than two switches,
+    /// because the question an operator asks mid-shoot is "stop sending", not
+    /// "which of the two transports did I want to stop" — and the settings
+    /// switches are still there for the other case.
+    ///
+    /// It writes the SETTINGS rather than calling the two stop methods, so the
+    /// switches move with it: a stream stopped from the footer must not come
+    /// back the next time something re-applies the settings.
+    func stopAllStreams() {
+        if settings.ndi.enabled == true { settings.ndi.enabled = false }
+        if settings.srt.enabled == true { settings.srt.enabled = false }
+    }
+
     func stopNDIOutput() {
+        mirrors.ndiLinkTask?.cancel()
+        mirrors.ndiLinkTask = nil
         mirrors.ndiRenameTask?.cancel()
         mirrors.ndiRenameTask = nil
         stopNDIAudio()

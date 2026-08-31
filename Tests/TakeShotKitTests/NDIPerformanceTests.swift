@@ -40,6 +40,8 @@ struct NDIPerformanceTests {
     /// locks it, reads the base address and the stride, unlocks. That is the
     /// whole of this path's pixel work.
     private final class LockingSender: NDISending, @unchecked Sendable {
+        /// Nobody watching: these tests are about frames.
+        var connectedReceivers: Int32 { 0 }
         let sourceName = "bench"
         private let done = DispatchSemaphore(value: 0)
         private let lock = NSLock()

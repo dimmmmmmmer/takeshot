@@ -65,6 +65,9 @@ final class DisplayMirrors: ObservableObject {
     /// controller it builds, so reaching the real one by omission is not
     /// possible from a test.
     var ndiSenderFactory: ((String) throws -> NDISending)?
+    /// Polls how many receivers have the NDI source open. Lives exactly as long
+    /// as the sender does — see `CaptureController.startNDILinkPoll`.
+    var ndiLinkTask: Task<Void, Never>?
 
     /// Debounces the re-announce a name change causes (see `applyNDIChange`).
     var ndiRenameTask: Task<Void, Never>?

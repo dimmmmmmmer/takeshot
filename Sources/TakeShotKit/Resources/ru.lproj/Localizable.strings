@@ -873,6 +873,10 @@
 "srt_latency" = "Задержка, мс";
 "srt_bitrate" = "Битрейт, Мбит/с";
 "srt_passphrase" = "Пароль";
+"stream_link_up" = "приёмник забирает поток";
+"stream_link_waiting" = "в сети, никто не забирает";
+"stream_link_off" = "выключено";
+"stream_stop_help" = "Нажмите, чтобы остановить отдачу";
 "srt_status" = "Состояние";
 "srt_starting" = "Подключение";
 "srt_sending" = "Отдаёт";
@@ -894,6 +898,7 @@
 "ndi_source_name" = "Имя источника";
 "ndi_status" = "Состояние";
 "ndi_sending" = "Отдаёт";
+"ndi_announced" = "В сети, приёмников нет";
 "ndi_not_sending" = "Не отдаёт";
 "ndi_unavailable" = "Недоступно";
 "ndi_failed_short" = "Не запустилось";

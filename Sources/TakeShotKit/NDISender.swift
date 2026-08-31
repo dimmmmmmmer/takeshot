@@ -77,6 +77,14 @@ struct NDIFrameRate: Equatable, Sendable {
 protocol NDISending: AnyObject, Sendable {
     /// The name the source is announced under.
     var sourceName: String { get }
+    /// How many receivers have this source open, or -1 when the runtime cannot
+    /// say. A POLL: NDI has no "somebody connected" event, so the app asks on
+    /// the tick it already pushes its status on.
+    ///
+    /// This is what tells "the source is announced" from "somebody is
+    /// watching" — the difference between a lamp that reports a checkbox and
+    /// one that reports the link.
+    var connectedReceivers: Int32 { get }
     /// Push one frame. Blocking; called only on `NDIVideoMirror`'s own queue.
     /// Returns false for a frame that was refused (see `CNDSender`).
     @discardableResult
@@ -129,6 +137,11 @@ final class NDISender: NDISending, @unchecked Sendable {
     /// The loaded runtime's version, for diagnostics; nil in a stub build.
     static var runtimeVersion: String? { CNDSender.runtimeVersion() }
 
+    /// Straight through to the bridge, which answers -1 on a runtime that does
+    /// not export the call — so an older runtime keeps saying only that the
+    /// source was announced, which is exactly what it knows.
+    var connectedReceivers: Int32 { sender.connectedReceivers() }
+
     /// The factory shape `DisplayMirrors.ndiSenderFactory` overrides.
     static func make(name: String) throws -> NDISending {
         try NDISender(name: name)
@@ -176,7 +189,20 @@ final class NDISender: NDISending, @unchecked Sendable {
 enum NDIOutputState: Equatable {
     /// The switch is off, which is the default.
     case off
-    /// A source is announced and frames are going to it.
+    /// The source is on the network and NOBODY has opened it.
+    ///
+    /// This state did not exist, and its absence was the whole problem: the
+    /// app wrote `.sending` one line after `send_create` returned, which is
+    /// "the switch is on" wearing the clothes of "somebody is watching". An
+    /// indicator on the main window has to be able to tell those apart, or it
+    /// is a lamp that lights because a checkbox is ticked.
+    ///
+    /// Only reachable on a runtime that exports the connection count (see
+    /// `CNDSender.isConnectionCountAvailable`). Without it the app knows only
+    /// that the source was announced, and says `.sending` as it always did —
+    /// an older runtime keeps exactly the behaviour it had.
+    case announced
+    /// A receiver has the source open and frames are going to it.
     case sending
     /// This build (or this machine) cannot send at all: no SDK headers when it
     /// was compiled, or no runtime installed. Carries what that means.

@@ -102,6 +102,15 @@ struct CNDRuntime {
     /// than a case that has been seen — and the cost of being wrong the other
     /// way is a director's monitor going dark over their sound.
     decltype(&NDIlib_send_send_audio_v3) send_audio;
+    /// How many receivers are watching. OPTIONAL on the same terms as
+    /// `send_audio`: a runtime that does not export it keeps its picture, and
+    /// the app then knows only that the source was announced.
+    ///
+    /// This is the one call that can tell "the switch is on" from "somebody is
+    /// watching", which is the difference an indicator on the main window has
+    /// to show — a lamp that lights because a checkbox is ticked is a lamp
+    /// that says nothing.
+    decltype(&NDIlib_send_get_no_connections) send_connections;
     /// nil once every REQUIRED pointer above resolved and the runtime
     /// initialised.
     ///
@@ -147,6 +156,9 @@ static CNDRuntime *CNDSharedRuntime(void) {
           handle, "NDIlib_send_send_video_v2");
       runtime.send_audio = (decltype(&NDIlib_send_send_audio_v3))dlsym(
           handle, "NDIlib_send_send_audio_v3");
+      runtime.send_connections =
+          (decltype(&NDIlib_send_get_no_connections))dlsym(
+              handle, "NDIlib_send_get_no_connections");
       if (runtime.initialize == NULL || runtime.send_create == NULL ||
           runtime.send_destroy == NULL || runtime.send_video == NULL) {
           runtime.send_create = NULL;
@@ -198,6 +210,11 @@ static CNDRuntime *CNDSharedRuntime(void) {
 + (BOOL)isAudioAvailable {
     CNDRuntime *runtime = CNDSharedRuntime();
     return runtime->send_create != NULL && runtime->send_audio != NULL;
+}
+
++ (BOOL)isConnectionCountAvailable {
+    CNDRuntime *runtime = CNDSharedRuntime();
+    return runtime->send_create != NULL && runtime->send_connections != NULL;
 }
 
 + (nullable NSString *)unavailableReason {
@@ -387,6 +404,17 @@ static CNDRuntime *CNDSharedRuntime(void) {
     return sent;
 }
 
+- (int32_t)connectedReceivers {
+    CNDRuntime *runtime = CNDSharedRuntime();
+    if (runtime->send_connections == NULL || _sender == NULL) {
+        return -1;
+    }
+    // 0 ms: ask what is true NOW rather than waiting for somebody to arrive.
+    // The SDK's timeout parameter blocks the calling thread, and this is polled
+    // from the status pump.
+    return runtime->send_connections(_sender, 0);
+}
+
 - (BOOL)sendAudio:(const float *)planar
     framesPerChannel:(int32_t)framesPerChannel
             channels:(int32_t)channels
@@ -507,6 +535,10 @@ static NSString *const kCNDNoSDKMessage =
     (void)frameRateN;
     (void)frameRateD;
     return NO;
+}
+
+- (int32_t)connectedReceivers {
+    return -1;
 }
 
 - (BOOL)sendAudio:(const float *)planar

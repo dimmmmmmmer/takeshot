@@ -67,7 +67,10 @@ final class NDIVideoMirror: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: NDIVideoMirror.queueLabel,
                                       qos: .userInitiated)
-    private let sender: NDISending
+    /// Readable so the controller can ask it how many receivers are
+    /// watching — the one question that separates "announced" from
+    /// "somebody is taking the picture".
+    let sender: NDISending
     /// Shortest gap between two sends (1 / the pace this mirror was built with).
     private let interval: TimeInterval
 
