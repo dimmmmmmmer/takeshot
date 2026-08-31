@@ -150,6 +150,11 @@ import Testing
             controller.viewerMode = .playback
 
             controller.pinReference(imageURL: still)
+            // The decode and the render are off the actor now — a 4K PNG off
+            // the record volume used to freeze the whole UI, REC button
+            // included, while the camera was live.
+            #expect(await ControllerWait.until { controller.referencePinned },
+                    "the reference never arrived")
 
             #expect(controller.referencePinned)
             #expect(controller.compareMode == .wipe)
@@ -167,7 +172,9 @@ import Testing
             controller.pinReference(
                 imageURL: root.appendingPathComponent("not-an-image.png"))
 
-            #expect(controller.lastError == L("reference_pin_failed"))
+            #expect(await ControllerWait.until {
+                controller.lastError == L("reference_pin_failed")
+            }, "a reference that could not be read said nothing")
             #expect(!controller.referencePinned)
             #expect(controller.compareMode == .off)
         }

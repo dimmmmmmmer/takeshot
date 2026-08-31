@@ -544,7 +544,12 @@ public final class CapturePipeline: @unchecked Sendable {
         var lastData: Data
     }
 
-    var rawVancStats: [String: RawVancStat] = [:]
+    /// Keyed by `did << 8 | sdid` rather than by "DD/SS".
+    ///
+    /// The string was formatted for EVERY packet of EVERY frame — on the
+    /// capture queue, in service of a publish that happens about once a
+    /// second. A `UInt16` is the same identity with no allocation.
+    var rawVancStats: [UInt16: RawVancStat] = [:]
 
     /// Free URL: if the file exists, adds _2, _3… before the extension.
     /// (Used by beginTake; `recStartIndex` there is the camera's actual record

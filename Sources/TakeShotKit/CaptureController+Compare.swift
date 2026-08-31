@@ -229,25 +229,49 @@ extension CaptureController {
         lastNotice = L("reference_pinned")
     }
     /// Pin a still/photo from the record folder.
+    ///
+    /// **The decode and the render are OFF the main actor**, which is what
+    /// `CIBufferRender`'s own doc has always claimed of its callers and this
+    /// one was not doing. A 4K PNG off the record volume is a file read, a
+    /// decode, a `CIContext` and a `waitUntilCompleted` — and on the MainActor
+    /// that is the whole UI frozen, REC button included, while the camera is
+    /// live. The two callers this was measured against
+    /// (`CaptureController+Stills`) already hop.
     func pinReference(imageURL: URL) {
-        guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-              let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            lastError = L("reference_pin_failed")
-            return
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+                  let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                await self?.reportPinFailed()
+                return
+            }
+            // raw code values, like every other surface in the app
+            let image = CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
+            guard let buffer = CIBufferRender.render(
+                image, width: cg.width, height: cg.height, into: nil) else {
+                await self?.reportPinFailed()
+                return
+            }
+            let held = UncheckedSendable(buffer)
+            await MainActor.run { [weak self] in
+                self?.adoptPinnedReference(held.value)
+            }
         }
-        // raw code values, like every other surface in the app
-        let image = CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
-        guard let buffer = CIBufferRender.render(
-            image, width: cg.width, height: cg.height, into: nil) else {
-            lastError = L("reference_pin_failed")
-            return
-        }
+    }
+
+    /// The half of `pinReference` that touches app state, back on the actor.
+    @MainActor
+    func adoptPinnedReference(_ buffer: CVPixelBuffer) {
         pipeline.setPreviewReference(buffer: buffer)
         referencePinned = true
         if compareMode == .off { compareMode = .wipe }
         viewerMode = .record
         pushCompare()
         lastNotice = L("reference_pinned")
+    }
+
+    @MainActor
+    func reportPinFailed() {
+        lastError = L("reference_pin_failed")
     }
     func unpinReference() {
         pipeline.setPreviewReference(buffer: nil)

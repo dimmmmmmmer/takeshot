@@ -171,6 +171,14 @@ extension CaptureController {
         generator.appliesPreferredTrackTransform = true
         return try? await generator.image(at: time).image
     }
+    /// **The name is chosen on the actor, the WRITE is not.**
+    ///
+    /// The encode above was carefully moved off the main actor and then handed
+    /// back here to do the blocking part: `createDirectory` and `write` against
+    /// `destinationRoot`, which on set is an external SSD or a share. A stall
+    /// there is the whole UI stopped — including REC — for as long as the
+    /// volume takes to answer. Only the naming needs app state, so only the
+    /// naming stays.
     private func saveGrab(_ png: Data?) {
         guard let png else { lastError = L("toast_grab_failed"); return }
         // project_cam_still_timecode
@@ -178,18 +186,30 @@ extension CaptureController {
         let name = NamingEngine.sanitize(
             [settings.naming.projectName, settings.naming.cameraLabel, "still", stamp]
                 .filter { !$0.isEmpty }.joined(separator: "_"))
-        let url = CapturePipeline.uniqueURL(for: destinationRoot
+        let root = destinationRoot
+        let url = CapturePipeline.uniqueURL(for: root
             .appendingPathComponent(name).appendingPathExtension("png"))
-        do {
-            try FileManager.default.createDirectory(
-                at: destinationRoot, withIntermediateDirectories: true)
-            try png.write(to: url)
-            scanDestinationFolder() // show it in Other content right away
-            flashNewItem(url)
-            lastNotice = L("grab_saved", url.lastPathComponent)
-        } catch {
-            lastError = L("toast_grab_failed_reason", error.localizedDescription)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try FileManager.default.createDirectory(
+                    at: root, withIntermediateDirectories: true)
+                try png.write(to: url)
+                await self?.grabSaved(at: url)
+            } catch {
+                let why = error.localizedDescription
+                await MainActor.run { [weak self] in
+                    self?.lastError = L("toast_grab_failed_reason", why)
+                }
+            }
         }
+    }
+
+    /// The still is on the disk; say so and show it.
+    @MainActor
+    private func grabSaved(at url: URL) {
+        scanDestinationFolder() // show it in Other content right away
+        flashNewItem(url)
+        lastNotice = L("grab_saved", url.lastPathComponent)
     }
     private static func grabTimeStamp() -> String {
         let formatter = DateFormatter()

@@ -114,11 +114,31 @@ extension CapturePipeline {
         // the take's own picture — including the chroma composite while a take
         // is rolling, and the camera's picture when none is (there is then no
         // deliverable for the still to match, and no pass has been spent).
-        let png = Self.pngData(from: recordBakesDisplayBuffer
-                                   ? recordBuffer : leveled,
-                               ciContext: ciContext)
-        DispatchQueue.main.async { grab(png) }
+        let source = recordBakesDisplayBuffer ? recordBuffer : leveled
+        // **Off the capture queue.** A full CoreImage render plus a PNG
+        // deflate of a 1080p frame is milliseconds, and this queue holds the
+        // writer, the pre-roll ring and the REC detector — one keypress
+        // mid-take was one or more dropped frames on the queue that must not
+        // be blocked. The playback arm of the same feature already does it
+        // this way (`CaptureController+Stills`).
+        //
+        // The buffer is retained by the closure, which is what makes the hop
+        // safe: the pools recycle, and a frame the encoder is done with can be
+        // handed back out while this is still reading it.
+        let context = ciContext
+        let held = UncheckedSendable(source)
+        Self.grabQueue.async {
+            let png = Self.pngData(from: held.value, ciContext: context)
+            DispatchQueue.main.async { grab(png) }
+        }
     }
+
+    /// Where a still is rendered and compressed. Its own queue rather than a
+    /// global one so two grabs in quick succession cannot both be resident at
+    /// once — a 1080p render holds a frame's worth of intermediate, and the
+    /// machine's real job is writing ProRes.
+    static let grabQueue = DispatchQueue(label: "com.takeshot.grab",
+                                         qos: .userInitiated)
 
     public static func pngData(from pixelBuffer: CVPixelBuffer,
                                ciContext: CIContext) -> Data? {

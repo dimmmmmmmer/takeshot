@@ -183,20 +183,37 @@ extension CapturePipeline {
         }
     }
 
+    /// **Counted per packet, formatted once per publish.**
+    ///
+    /// This runs on the capture queue for every packet of every frame — a
+    /// 1080p signal with timecode and camera-control ancillary is a handful
+    /// per frame, so ~150 a second — and it used to build a `String` for the
+    /// dictionary key and copy a `Data` out of the packet each time, in
+    /// service of a publish that happens about ONCE a second. The gate two
+    /// functions down makes exactly this argument about the scopes: "with no
+    /// scope surface open this function still costs nothing at all."
+    ///
+    /// The key is now the two identifying bytes packed into a `UInt16`, and
+    /// the payload is copied only on a frame that is actually going to
+    /// publish. What a viewer sees is unchanged: it is the LAST packet's data
+    /// either way, and the last packet before a publish is the one that
+    /// reaches it.
     private func updateVancStats(_ packets: [AncillaryPacket]) {
+        // publish at most ~once a second so we don't poke the UI every frame
+        let interval = Int(format?.frameRate.rounded() ?? 25)
+        let publishing = frameIndex - vancStatsLastPublish >= interval
         for packet in packets {
-            let key = String(format: "%02X/%02X", packet.did, packet.sdid)
+            let key = UInt16(packet.did) << 8 | UInt16(packet.sdid)
             let previous = rawVancStats[key]
             rawVancStats[key] = RawVancStat(
                 did: packet.did, sdid: packet.sdid,
                 count: (previous?.count ?? 0) + 1,
                 lastLine: packet.lineNumber,
-                lastData: Data(packet.data.prefix(24)))
+                lastData: publishing ? Data(packet.data.prefix(24))
+                                     : (previous?.lastData ?? Data()))
             vancStatsDirty = true
         }
-        // publish at most ~once a second so we don't poke the UI every frame
-        let interval = Int(format?.frameRate.rounded() ?? 25)
-        if vancStatsDirty, frameIndex - vancStatsLastPublish >= interval {
+        if vancStatsDirty, publishing {
             vancStatsDirty = false
             vancStatsLastPublish = frameIndex
             let stats = rawVancStats.values.map { raw in
