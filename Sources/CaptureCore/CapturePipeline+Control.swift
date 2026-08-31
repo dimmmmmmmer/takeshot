@@ -133,8 +133,27 @@ extension CapturePipeline {
         queue.async {
             if self.writer != nil {
                 self.finishTake()
-            } else {
-                self.beginTake(timecode: self.lastTimecode)
+                return
+            }
+            self.beginTake(timecode: self.lastTimecode)
+            // **A press that opened nothing has to say so.**
+            //
+            // `beginTake` declines silently when no format has been detected
+            // yet — a board that has not locked. Nothing was reported, and a
+            // caller holding its own "I asked for this" latch never cleared it:
+            // `CameraChannel.recordingRequested` then said the channel was
+            // rolling when it was not, so the NEXT press — A-cam stopping —
+            // started a take on the B-cam instead of ending one, and the two
+            // boards ran inverted for the rest of the day. That is the exact
+            // failure the latch was added to prevent, arriving through the
+            // other door.
+            //
+            // Reported only for a PRESS. The detector calls `beginTake` at
+            // frame rate and a decline there is the ordinary state of a board
+            // between takes, not an event.
+            if self.writer == nil {
+                let report = self.onRecStateChanged
+                DispatchQueue.main.async { report?(false) }
             }
         }
     }

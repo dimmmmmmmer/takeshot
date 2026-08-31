@@ -93,9 +93,14 @@ struct ViewChromaKeyTests {
     @Test func thePickOverlayIsArmedOnlyOnDemandAndNeverStretchesThePlayer() async throws {
         try await ViewProbe.run { probe in
             let player = CGSize(width: 1280, height: 720)
+            // Offered the whole player, an unarmed overlay asks for NOTHING —
+            // which is the strongest form of "does not stretch it". It used to
+            // be asserted as `== player`, against a helper that returned its
+            // own argument and could not have said otherwise.
             let idle = ViewRender.laidOutSize(probe.hosted(ChromaPickOverlay()),
                                               in: player)
-            #expect(idle == player)
+            #expect(idle.width <= player.width && idle.height <= player.height,
+                    "the idle pick overlay asks for \(idle) over a \(player) player")
             #expect(probe.fittingSize(ChromaPickOverlay()) == .zero,
                     "the pick surface is on the picture with nothing armed")
 

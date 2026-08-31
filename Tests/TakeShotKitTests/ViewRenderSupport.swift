@@ -88,14 +88,44 @@ enum ViewRender {
         size(view, proposedWidth: 1, proposedHeight: height).width
     }
 
-    /// Lay a view out at an exact size and report the frame the host ended up
-    /// with. Used for "an overlay must not stretch its host": the answer has to
-    /// stay the size that was asked for.
-    static func laidOutSize(_ view: some View, in size: CGSize) -> CGSize {
+    /// Build the view's tree at an exact size, for a test that needs the tree
+    /// to EXIST rather than to be measured — an `NSViewRepresentable` registers
+    /// itself in `makeNSView`, and nothing about that is a size.
+    ///
+    /// Separate from `laidOutSize` on purpose. That function used to do this by
+    /// accident — it hosted the view and handed its own argument back — so
+    /// tests counting mounts and tests asserting a size were leaning on the
+    /// same call for two different reasons, and only one of them was working.
+    static func mountTree(_ view: some View, in size: CGSize) {
         let host = NSHostingView(rootView: AnyView(view))
         host.frame = CGRect(origin: .zero, size: size)
         host.layoutSubtreeIfNeeded()
-        return host.frame.size
+        withExtendedLifetime(host) {}
+    }
+
+    /// What the view ASKS FOR when it is offered exactly `size`. Used for "an
+    /// overlay must not stretch its host": the answer has to stay the size that
+    /// was offered, and content that cannot compress answers with more.
+    ///
+    /// **This used to return its own argument.** It set `host.frame` and then
+    /// read `host.frame.size` back — an `NSHostingView` handed an explicit
+    /// frame keeps it, and `layoutSubtreeIfNeeded()` lays out the SUBVIEWS
+    /// rather than resizing the host. So every "must not stretch" assertion in
+    /// this suite was `size == size` and could not fail: a badge overlay, an
+    /// assist overlay, a teach box, a sync-play grid or a slate face that
+    /// genuinely blew its host out would have passed.
+    ///
+    /// `sizeThatFits` is the question that has an answer. It is the same call
+    /// `size(_:proposedWidth:proposedHeight:)` makes, and the note there — that
+    /// content which cannot compress answers with MORE than the proposal — is
+    /// exactly the signal these callers wanted.
+    static func laidOutSize(_ view: some View, in size: CGSize) -> CGSize {
+        let controller = NSHostingController(rootView: AnyView(view))
+        // The tree has to exist first: `sizeThatFits` on a controller whose
+        // view was never loaded hands the proposal straight back — which is the
+        // failure this function is being rescued from.
+        _ = controller.view
+        return controller.sizeThatFits(in: size)
     }
 
     /// Mount a view at an exact size and keep the host alive for `body`.

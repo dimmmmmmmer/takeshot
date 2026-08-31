@@ -275,8 +275,10 @@ struct ViewAssistZoomTests {
             for player in [AnyView(LiveFullscreenView()),
                            AnyView(PlaybackFullscreenView())] {
                 let before = PunchEventView.mountCount
-                _ = ViewRender.laidOutSize(probe.hosted(player),
-                                           in: CGSize(width: 1280, height: 720))
+                // The tree has to be BUILT, not measured: the input registers
+                // itself in `makeNSView`.
+                ViewRender.mountTree(probe.hosted(player),
+                                     in: CGSize(width: 1280, height: 720))
                 #expect(PunchEventView.mountCount > before,
                         "this fullscreen player has no pan/zoom input")
             }

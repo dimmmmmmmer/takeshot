@@ -110,7 +110,11 @@ final class CameraChannel: ObservableObject, Identifiable {
     /// window used to leave the request unmatched — the channel kept writing,
     /// the next start was swallowed as "already recording", and B-cam ran one
     /// continuous clip out of phase with A-cam for the rest of the day.
-    private var recordingRequested = false
+    /// Readable so a test can wait for it: it is cleared by the pipeline's
+    /// rec-state callback, one main-queue hop after a press the pipeline
+    /// declined, and a test that pressed again before that hop would be racing
+    /// the app rather than testing it.
+    private(set) var recordingRequested = false
 
     func setRecording(_ recording: Bool) {
         guard recording != recordingRequested else { return }

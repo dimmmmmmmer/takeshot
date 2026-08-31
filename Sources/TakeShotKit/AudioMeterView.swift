@@ -88,9 +88,12 @@ struct AudioMeterView: View {
         context.opacity = 1
     }
 
-    /// The three bands of one bar, drawn from the bottom up.
-    private static func fill(level: Float, in column: CGRect,
-                             context: GraphicsContext) {
+    /// The three bands of one bar, drawn from the bottom up. Shared with
+    /// `SegmentedMeterBar` so the footer's bank and the channel panel's bars
+    /// cannot come to disagree about where yellow starts — which is a
+    /// judgement an operator makes at a glance.
+    static func fill(level: Float, in column: CGRect,
+                     context: GraphicsContext) {
         let f = SegmentedMeterBar.fraction(level)
         guard f > 0 else { return }
         let band: (CGFloat, CGFloat, Color) -> Void = { from, to, colour in
@@ -125,25 +128,21 @@ struct SegmentedMeterBar: View {
     static let yellowMark: CGFloat = 50.0 / 60.0
     static let redMark: CGFloat = 55.0 / 60.0
 
+    /// One `Canvas`, for the same reason as the bank above it.
+    ///
+    /// It was a `GeometryReader` around a `VStack` of three `Rectangle`s whose
+    /// HEIGHTS were the level — so every audio tick re-laid-out three views per
+    /// channel, and the channel panel shows up to sixteen of them at once. The
+    /// call site animated that layout for another 0.07 s on top. A `Canvas` has
+    /// no children to lay out; the bands are the same three, from the same
+    /// `AudioMeterView.fill`, against whatever rect the bar is handed.
     var body: some View {
-        GeometryReader { geo in
-            let h = geo.size.height
-            let f = Self.fraction(level)
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                if f > Self.redMark {
-                    Rectangle().fill(Color.red)
-                        .frame(height: h * (f - Self.redMark))
-                }
-                if f > Self.yellowMark {
-                    Rectangle().fill(Color.yellow)
-                        .frame(height: h * (min(f, Self.redMark) - Self.yellowMark))
-                }
-                Rectangle().fill(Color.green)
-                    .frame(height: h * min(f, Self.yellowMark))
-            }
+        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
+            var context = context
+            let rect = CGRect(origin: .zero, size: size)
+            context.clip(to: Path(roundedRect: rect, cornerRadius: 2))
+            AudioMeterView.fill(level: level, in: rect, context: context)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 2))
     }
 
     static func fraction(_ level: Float) -> CGFloat {

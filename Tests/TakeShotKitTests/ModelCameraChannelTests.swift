@@ -248,4 +248,56 @@ struct ModelCameraChannelTests {
         #expect(alarm.severity == .integrity,
                 "a take that never started came up as a toast")
     }
+
+    /// **A REC press a channel could not honour must not leave it thinking it
+    /// is rolling.**
+    ///
+    /// `beginTake` declines silently when no format has been detected — a board
+    /// that has not locked yet, which is the ordinary state a few hundred
+    /// milliseconds after `start()`. The channel latched "requested" anyway, so
+    /// the NEXT press — A-cam stopping — opened a take on B-cam instead of
+    /// closing one, and the two boards ran inverted for the rest of the day:
+    /// B-cam recording the gaps BETWEEN takes.
+    ///
+    /// That is the failure `recordingRequested` was added to prevent, arriving
+    /// through the other door — the latch closed the case where the pipeline
+    /// reports back false, and left open the case where it never reports.
+    @Test func aPressTheChannelCouldNotHonourDoesNotLeaveItLatched() async throws {
+        let root = scratch()
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let backend = StubBackend(devices: [CaptureDeviceInfo(id: "x", name: "X")])
+        let channel = CameraChannel(camLabel: "B", backend: backend, deviceID: "x",
+                                    settings: settings(destination: root.path),
+                                    roll: "001")
+        try channel.start()
+
+        // REC pressed before the board has locked: no format, so no take.
+        channel.setRecording(true)
+        #expect(await ControllerWait.until { !channel.recordingRequested },
+                "the channel still thinks it was asked to roll, with no take")
+        #expect(!channel.isRecording, "a take opened with no format")
+
+        // The signal arrives. A-cam then STOPS, which asks this channel to stop
+        // too — and must not be read as "start", which is what a stuck latch
+        // turns it into.
+        channel.pipeline.handleFormat(CameraChannelProbe.format)
+        channel.setRecording(false)
+        let opened = await ControllerWait.until({ channel.isRecording },
+                                                timeout: .seconds(2))
+        #expect(!opened,
+                """
+                the stop press started a take — B-cam is now inverted against \
+                A-cam and will record the gaps between takes
+                """)
+        channel.stopStreams()
+    }
+}
+
+/// The one fact this file's newest test needs from the capture side.
+enum CameraChannelProbe {
+    static let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
+                                      timecodeFPS: 25, name: "320x180p25")
 }

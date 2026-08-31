@@ -142,8 +142,11 @@ struct AudioChannelPanel: View {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(.black.opacity(0.5))
+                // No implicit animation: it was interpolating a LAYOUT, which
+                // is the expensive kind, and the levels already arrive ~25
+                // times a second. A meter that lags the sound it describes is
+                // worse than one that does not.
                 SegmentedMeterBar(level: level)
-                    .animation(.linear(duration: 0.07), value: level)
             }
             .frame(width: 20, height: 170)
             .opacity(enabled ? 1 : 0.25)

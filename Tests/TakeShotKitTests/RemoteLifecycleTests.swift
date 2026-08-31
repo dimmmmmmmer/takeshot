@@ -204,4 +204,59 @@ import Testing
         #expect(html.contains("CFG.watchdogMs"),
                 "the page was handed a watchdog it does not read")
     }
+
+    /// **A rotated PIN cuts the sockets that were holding the old one.**
+    ///
+    /// Rotation is what an operator reaches for when a unit walked off set with
+    /// the code in it. The old shape only refused that unit's next COMMAND —
+    /// and the pages that matter most here send none: the slate and the live
+    /// view open a socket, show their code once and then only ever receive.
+    /// A phone parked on the slate kept the timecode, the take name and the
+    /// frames arriving indefinitely after the code it used had been retired,
+    /// which is the one thing rotating a code is meant to stop.
+    @Test func rotatingThePINDropsTheSocketsHoldingTheOldOne() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let session = RemoteHarness.session()
+            let client = try await RemoteHarness.connect(port: port, pin: pin,
+                                                         session: session)
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+            let seated = await ControllerWait.until {
+                controller.remoteServer?.clientCount == 1
+            }
+            #expect(seated, "the socket never seated")
+
+            controller.regenerateRemotePIN()
+
+            let dropped = await ControllerWait.until {
+                controller.remoteServer?.clientCount == 0
+            }
+            #expect(dropped, """
+                a socket holding the retired PIN is still connected — a phone \
+                parked on the slate keeps receiving
+                """)
+        }
+    }
+
+    /// And the rotation does not take the listener with it: the operator reads
+    /// the new code out and the same unit comes straight back in on it.
+    @Test func theNewPINWorksOnTheSameListener() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let session = RemoteHarness.session()
+            let first = try await RemoteHarness.connect(port: port, pin: pin,
+                                                        session: session)
+            _ = try await first.next(type: "auth")
+            controller.regenerateRemotePIN()
+            first.close()
+
+            let fresh = try #require(controller.settings.remote.pin)
+            #expect(fresh != pin)
+            let again = try await RemoteHarness.measureAuth(port: port, pin: fresh)
+            #expect(again.ok, "the new code was refused on the same listener")
+            let stale = try await RemoteHarness.measureAuth(port: port, pin: pin)
+            #expect(!stale.ok, "the retired code still opens the door")
+        }
+    }
 }

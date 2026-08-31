@@ -198,10 +198,7 @@ struct PreviewLayerRenderTests {
         let (adopted, renders) = state(of: layer)
         #expect(adopted === source)
         #expect(renders > baseline, "the aids never reached the screen")
-        layer.renderLock.lock()
-        let applied = layer.assist
-        layer.renderLock.unlock()
-        #expect(applied == assist)
+        #expect(layer.currentAssist == assist)
 
         // an unchanged assist must not cost a GPU pass per settings write
         let settled = state(of: layer).1
@@ -224,5 +221,43 @@ struct PreviewLayerRenderTests {
         layer.clearToBlack()
         drain(layer)
         #expect(state(of: layer).0 == nil)
+    }
+
+    /// **A settings change must never wait on a parked `nextDrawable()`.**
+    ///
+    /// That is this file's own rule — `stateLock` exists beside `renderLock`
+    /// precisely for it, and `setLetterbox` follows it. `setAssist` did not: it
+    /// took `renderLock`, which `render()` holds across the GPU pass, so every
+    /// zebra slider tick, punch-in pinch and false-colour toggle — all on the
+    /// MainActor — could block the main thread for as long as a drawable takes
+    /// to come back. On an occluded window that is up to a second.
+    ///
+    /// The lock is held by another thread here, which is exactly what a pass in
+    /// flight looks like from the caller's side.
+    @Test func settingTheAssistDoesNotWaitOnTheRenderLock() throws {
+        let layer = MetalPreviewLayer()
+        let held = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            layer.renderLock.lock()
+            held.signal()
+            release.wait()
+            layer.renderLock.unlock()
+        }
+        held.wait()
+        defer { release.signal() }
+
+        var assist = ViewAssist()
+        assist.desqueeze = 2
+        let returned = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            layer.setAssist(assist)
+            returned.signal()
+        }
+        // Generous: the point is "it did not park behind a GPU pass", not a
+        // latency figure. Under the old code this waits for the full hold.
+        #expect(returned.wait(timeout: .now() + 2) == .success,
+                "setAssist blocked on the render lock")
+        #expect(layer.currentAssist == assist)
     }
 }

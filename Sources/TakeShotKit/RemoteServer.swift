@@ -253,11 +253,23 @@ final class RemoteServer: @unchecked Sendable {
         shared.withLock { $0.slatePage = page }
     }
 
-    /// Replace the PIN. Sockets already authenticated stay open; their next
-    /// command carries the old code and is refused, which is what a rotated
-    /// code has to mean.
+    /// Replace the PIN, and drop every socket that was holding the old one.
+    ///
+    /// Refusing their next COMMAND is not enough, because the pages that make
+    /// rotation urgent send none: the slate and the live view show their code
+    /// once at the handshake and from then on only receive. A phone parked on
+    /// the slate went on getting the timecode, the take name and the frames
+    /// after the code it used had been retired — which is the one thing an
+    /// operator rotating a code is trying to stop.
+    ///
+    /// 1008 (policy violation) rather than 1001: the page is being turned away,
+    /// not told the server is going down, and its reconnect asks for a code.
     func setPIN(_ pin: String) {
         shared.withLock { $0.pin = pin }
+        queue.async { [self] in
+            for client in clients.values { client.close(code: 1008) }
+            clients.removeAll()
+        }
     }
 
     // MARK: - called by RemoteClient, on the same queue

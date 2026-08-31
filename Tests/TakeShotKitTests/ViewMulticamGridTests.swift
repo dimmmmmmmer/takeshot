@@ -132,8 +132,22 @@ import Testing
             }
             let exact = CGSize(width: 960, height: 540)
             await probe.mounted(MulticamGrid(), in: exact) {
-                #expect(ViewRender.laidOutSize(
-                    probe.hosted(MulticamGrid()), in: exact) == exact)
+                // **The WIDTH is the ceiling that matters here.** The grid
+                // is a `LazyVGrid` of `.aspectRatio(16:9, .fit)` tiles, so its
+                // IDEAL height is whatever the tiles want at the offered width
+                // — 546 in a 540 host, six points over — and `.fit` resolves
+                // that by scaling the tiles down when it is actually drawn.
+                // Asserting the ideal height would be asserting a number that
+                // never reaches the screen.
+                //
+                // Width is different: a grid wider than its host has nowhere to
+                // go, and that is the direction a column-count mistake shows up
+                // in. This used to be `== exact` against a helper that returned
+                // its own argument, so neither axis was being checked at all.
+                let asked = ViewRender.laidOutSize(
+                    probe.hosted(MulticamGrid()), in: exact)
+                #expect(asked.width <= exact.width,
+                        "the grid asks for \(asked.width)pt inside a \(exact.width)pt host")
             }
         }
     }

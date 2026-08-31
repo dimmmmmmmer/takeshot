@@ -178,12 +178,14 @@ extension MetalPreviewLayer {
     /// `AssistStage`). What is left is the geometry, which cannot move: only a
     /// surface knows its own viewport.
     ///
-    /// Call under renderLock — `assist` is read here.
+    /// The assist is copied out under `stateLock` (see `currentAssist`),
+    /// not read under `renderLock`: a settings change must never wait on a
+    /// parked `nextDrawable()`.
     private func placedImage(from pixelBuffer: CVPixelBuffer,
                              in size: CGSize) -> CIImage? {
         var image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
-        let currentAssist = assist
+        let currentAssist = self.currentAssist
         if currentAssist.desqueeze != 1 {
             image = image.transformed(by: CGAffineTransform(
                 scaleX: currentAssist.desqueeze, y: 1))

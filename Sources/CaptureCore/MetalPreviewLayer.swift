@@ -72,7 +72,16 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     /// The aids, for the GEOMETRY half only — the desqueeze and the punch-in
     /// this surface places its picture with. Everything that paints on the
     /// picture is already on the frame when it arrives (see `AssistStage`).
-    /// Read under renderLock; use setAssist from any thread.
+    /// The assist stage's geometry, under `stateLock` — NOT `renderLock`.
+    ///
+    /// It was under `renderLock`, which is the one lock this file says a
+    /// settings change must never wait on: `render()` holds it across
+    /// `nextDrawable()`, which parks for up to a second on an occluded window.
+    /// So every zebra slider tick, every punch-in pinch and every false-colour
+    /// toggle — all of them on the MainActor — could block the main thread on
+    /// GPU work. `setLetterbox` beside it already had this right.
+    ///
+    /// Read with `currentAssist`; write with `setAssist`, from any thread.
     var assist = ViewAssist()
     /// The primaries the layer's colorspace is currently built for. Compared
     /// against every presented frame's own tag so a Rec.2020 source can be
@@ -82,11 +91,22 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
         kCVImageBufferColorPrimaries_ITU_R_709_2
 
     public func setAssist(_ newValue: ViewAssist) {
-        renderLock.lock()
+        stateLock.lock()
         let changed = assist != newValue
         assist = newValue
-        renderLock.unlock()
+        stateLock.unlock()
         if changed { redraw() }
+    }
+
+    /// The assist as one copy, taken at the top of a pass.
+    ///
+    /// Copied out rather than read field by field: a gesture writing halfway
+    /// through a pass would otherwise draw a frame with the old desqueeze and
+    /// the new pan, which is a picture that never existed.
+    var currentAssist: ViewAssist {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return assist
     }
 
     public override init() {
