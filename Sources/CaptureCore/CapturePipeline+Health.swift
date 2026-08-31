@@ -48,6 +48,15 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// Frames refused at ingress because the in-flight window was full — the
     /// pipeline being outrun rather than the encoder being behind.
     public var ingressDrops = 0
+    /// Frames the wire converter could not produce at all — pool exhaustion,
+    /// or a pixel format it stopped reading. Counted since launch, because the
+    /// drop happens before a take exists and is invisible to every other
+    /// counter here.
+    public var conversionFailures = 0
+    /// 8-bit frames whose limited→full expansion failed and were passed on
+    /// UNEXPANDED. The levels log has already said they were expanded by the
+    /// time this can happen, so the count is the only honest record.
+    public var expansionFallbacks = 0
     /// Frames shown WITHOUT the chroma key because they were already past
     /// their frame interval. Not a recording fault: the display stage drops
     /// the effect rather than the frame.
@@ -141,5 +150,41 @@ extension CapturePipeline {
             $0.droppedAudioPacketsInTake = dropped
             $0.droppedAudioPacketsTotal += delta
         }
+    }
+}
+
+extension CapturePipeline {
+    /// A frame the wire converter could not produce.
+    ///
+    /// **The one drop nothing could see.** It happens before the take path, so
+    /// no recording counter moves; arrival is stamped at ingress
+    /// (`CapturePipeline+Input`, "stamped before the window test on purpose"),
+    /// so the frame watchdog goes on believing frames are coming. REC stayed
+    /// red, the take stayed open, and nothing at all reached the file.
+    ///
+    /// Alarms on the same shape as the dropped-frame alarm beside it — a
+    /// threshold and then every hundredth — because one lost frame is a pool
+    /// that has not recycled yet and a stream of them is the take.
+    func noteConversionFailure() {
+        conversionFailures += 1
+        let count = conversionFailures
+        noteHealth { $0.conversionFailures = count }
+        guard count == Self.droppedFrameAlarmThreshold || count % 100 == 0
+        else { return }
+        DispatchQueue.main.async {
+            self.onError?(.frameLostConversionFailed(count: count))
+        }
+    }
+
+    /// An 8-bit frame whose limited→full expansion could not be made.
+    ///
+    /// Counted and not alarmed: the frame still reaches the file, and what is
+    /// wrong with it is its levels rather than its existence. The count is the
+    /// honest record, because the levels log now says `passthrough` for these
+    /// and a bundle would otherwise show only that the mode changed.
+    func noteExpansionFallback() {
+        expansionFallbacks += 1
+        let count = expansionFallbacks
+        noteHealth { $0.expansionFallbacks = count }
     }
 }

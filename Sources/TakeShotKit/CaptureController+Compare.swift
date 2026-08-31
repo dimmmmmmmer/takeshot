@@ -13,6 +13,25 @@ import os.log
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    /// Wipe position (0…1; left/top is playback).
+    var wipePosition: Double {
+        get { compareLive.wipePosition }
+        set {
+            guard newValue != compareLive.wipePosition else { return }
+            compareLive.wipePosition = newValue
+            pushCompare()
+        }
+    }
+    /// Playback opacity in blend mode.
+    var blendOpacity: Double {
+        get { compareLive.blendOpacity }
+        set {
+            guard newValue != compareLive.blendOpacity else { return }
+            compareLive.blendOpacity = newValue
+            pushCompare()
+        }
+    }
+
     /// Live vs. playback compare mode.
     enum CompareMode: String, CaseIterable, Identifiable {
         case off        // playback only

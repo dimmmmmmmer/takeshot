@@ -144,3 +144,51 @@ struct OffloadResumeGateTests {
         #expect(checked.extra.isEmpty, "strays: \(checked.extra)")
     }
 }
+
+/// **A stale copy the run could not delete must not be reported as replaced.**
+///
+/// The replacement was counted first and deleted with a `try?`, so a
+/// destination folder that had gone read-only — or a file another process was
+/// holding open — left the truncated copy in place under the REAL name, put the
+/// good one beside it as `_2`, and printed the real name under RE-COPIED. The
+/// operator reads a clean report and wipes the card. That is the outcome this
+/// file's own doc calls worse than a missing file: a truncated .mov that looks
+/// like footage, arrived at through the report rather than through the disk.
+@Suite struct OffloadStaleCopyTests {
+    private static let victim = "CLIPS/index.xml"
+
+    @Test func aStaleCopyThatCannotBeDeletedFailsRatherThanReportsSuccess() throws {
+        let source = try OffloadFixtures.scratch("stale-src")
+        let dest = try OffloadFixtures.scratch("stale-dst")
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: dest.appendingPathComponent("CLIPS").path)
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: dest)
+        }
+        try OffloadFixtures.cardAlreadyOffloaded(from: source, to: dest)
+        let copy = dest.appendingPathComponent(Self.victim)
+        let whole = try Data(contentsOf: copy)
+        try Data(whole.prefix(100)).write(to: copy)
+        // The delete is what fails: a directory with no write bit refuses the
+        // unlink while the file itself still reads.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555],
+            ofItemAtPath: dest.appendingPathComponent("CLIPS").path)
+
+        let report = OffloadEngine.run(OffloadFixtures.plan(source, dest, resume: true))
+
+        let result = try #require(report.destinations.first)
+        #expect(result.resume?.replaced.contains(Self.victim) != true, """
+            a stale copy that is still on the disk was listed as replaced — \
+            the report says the footage is good and it is truncated
+            """)
+        #expect(!report.isFullyVerified,
+                "a destination that could not clear its own debris passed")
+        #expect(result.failure != nil, "nothing said why the destination failed")
+        // and the truncated file is still exactly where it was: the run did not
+        // half-succeed by writing a `_2` beside it
+        #expect(try Data(contentsOf: copy).count == 100)
+    }
+}

@@ -114,6 +114,16 @@ extension CaptureController {
     /// enabled by, and the first half of `canDimMonitoring` above: DIM asks the
     /// same question and then one more, which is why they are two names and not
     /// one.
+    ///
+    /// **The HOTKEYS deliberately do not ask it.** ⌃A and ⌃D are holds an
+    /// operator sets in advance — you arrive at a location, you silence the cart
+    /// before the first take rather than after the room comes through the
+    /// speakers — and both states persist, so a mute set with nothing running is
+    /// still in force when the signal arrives. `muteRestoresTheLevelItSilenced`
+    /// pins exactly that, on a controller with no signal at all. What the button
+    /// being disabled says is narrower: pressing it right now would change
+    /// nothing you can hear. The two are not in conflict, and this note is here
+    /// because an audit read them as one.
     var canMonitorAudio: Bool { isCapturing || viewerMode == .playback }
 
     /// The live feed is only monitored while the viewer is showing it. Without

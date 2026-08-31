@@ -79,6 +79,20 @@ extension CaptureController {
     /// Resolve-compatible CSV: rewritten on every take and every circle-take mark
     /// — in Resolve it's imported via Media Pool → Import Metadata.
     func exportTakeLog() {
+        // **A sidecar that would not be read is not overwritten.**
+        //
+        // The whole table is rewritten from memory on every rating, comment and
+        // take, and memory only holds what the last scan managed to load — so a
+        // record folder on a share that had not finished mounting, or a card
+        // with an I/O error on one file, used to lose the day's ratings,
+        // comments, markers and slates on the next keypress, silently. The
+        // catch below has called that "a day-loss bug" since it was written;
+        // what was missing was the read side telling absent from unreadable
+        // (`StoredSidecars.unreadable`).
+        //
+        // Refusing costs an edit that has to be made again after the folder
+        // comes back. Writing costs the day.
+        guard unreadableSidecars.isEmpty else { return }
         let takes = (takes + retiredTakes).sorted { $0.recordedAt < $1.recordedAt }
         let root = destinationRoot
         // Markers on clips that are not ours go into the same sidecar under

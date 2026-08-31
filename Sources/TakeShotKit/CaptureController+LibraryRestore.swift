@@ -18,6 +18,17 @@ extension CaptureController {
         var meta: [String: TakeLogExporter.TakeMeta] = [:]
         var markers: [String: [TakeLogExporter.MarkerRow]] = [:]
         var slates: [String: TakeLogExporter.SlateRow] = [:]
+        /// A sidecar that IS there and could not be read, with what the file
+        /// system said. Empty when every file was either read or absent.
+        ///
+        /// **Absent and unreadable are different answers and were not being
+        /// told apart.** Both came back as an empty table, and the next rating
+        /// or take rewrites the whole table from memory — so a record folder on
+        /// a share that had not finished mounting, or a card with an I/O error
+        /// on one file, lost the day's ratings, comments, markers and slates
+        /// without a word. The write side has called this "a day-loss bug" in
+        /// its own catch since it was written; the read side had no equivalent.
+        var unreadable: [String] = []
     }
 
     /// What the file itself carries, reduced to values that can leave the
@@ -146,26 +157,67 @@ extension CaptureController {
     /// timecode in the sidecar, and turning it into an offset needs the take's
     /// own start TC, which is only read further down in `classify`.
     func loadStoredMetadata() -> StoredSidecars {
-        // Lossy decode on purpose: one bad byte must not wipe the day's
-        // ratings. The failable String(bytes:encoding:) the linter prefers
-        // would return nil for the whole file, which is exactly the outcome
-        // this guards against.
-        // swiftlint:disable optional_data_string_conversion
-        let meta = (try? Data(contentsOf: takeLogURL))
-            .map { TakeLogExporter.parseMetadata(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+        var sidecars = StoredSidecars()
         let markersURL = destinationRoot
             .appendingPathComponent(TakeLogExporter.markersFileName)
-        let markers = (try? Data(contentsOf: markersURL))
-            .map { TakeLogExporter.parseMarkerRows(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         let slatesURL = destinationRoot
             .appendingPathComponent(TakeLogExporter.slateFileName)
-        let slates = (try? Data(contentsOf: slatesURL))
-            .map { TakeLogExporter.parseSlates(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+
+        // Lossy DECODE on purpose: one bad byte must not wipe the day's
+        // ratings, so the bytes that arrive are always turned into a string.
+        // What is not lossy any more is the READ — see `StoredSidecars`.
+        // swiftlint:disable optional_data_string_conversion
+        switch Self.readSidecar(takeLogURL) {
+        case .absent: break
+        case .read(let data):
+            sidecars.meta = TakeLogExporter.parseMetadata(
+                csv: String(decoding: data, as: UTF8.self))
+        case .unreadable(let why): sidecars.unreadable.append(why)
+        }
+        switch Self.readSidecar(markersURL) {
+        case .absent: break
+        case .read(let data):
+            sidecars.markers = TakeLogExporter.parseMarkerRows(
+                csv: String(decoding: data, as: UTF8.self))
+        case .unreadable(let why): sidecars.unreadable.append(why)
+        }
+        switch Self.readSidecar(slatesURL) {
+        case .absent: break
+        case .read(let data):
+            sidecars.slates = TakeLogExporter.parseSlates(
+                csv: String(decoding: data, as: UTF8.self))
+        case .unreadable(let why): sidecars.unreadable.append(why)
+        }
         // swiftlint:enable optional_data_string_conversion
-        return StoredSidecars(meta: meta, markers: markers, slates: slates)
+        return sidecars
+    }
+
+    /// What came back from one sidecar: nothing there, the bytes, or a reason.
+    enum SidecarRead {
+        /// No such file — the ordinary state of a fresh record folder.
+        case absent
+        case read(Data)
+        /// It is there and would not open. Carries the sentence to show.
+        case unreadable(String)
+    }
+
+    /// One sidecar, with "not there" told apart from "would not open".
+    ///
+    /// The distinction is the whole point: `NSFileReadNoSuchFileError` is the
+    /// first take of the day, and every other error is a folder whose contents
+    /// must not be overwritten from memory.
+    static func readSidecar(_ url: URL) -> SidecarRead {
+        do {
+            return .read(try Data(contentsOf: url))
+        } catch let error as NSError {
+            let absent = error.domain == NSCocoaErrorDomain
+                && (error.code == NSFileReadNoSuchFileError
+                    || error.code == NSFileNoSuchFileError)
+            if absent { return .absent }
+            return .unreadable(L("sidecar_unreadable",
+                                 url.lastPathComponent,
+                                 error.localizedDescription))
+        }
     }
     /// Markers on clips that are not ours, back from the same sidecar.
     ///
@@ -206,5 +258,36 @@ extension CaptureController {
                 csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
         // swiftlint:enable optional_data_string_conversion
         return ranges
+    }
+}
+
+extension CaptureController {
+    /// What the scan found out about the sidecars, turned into the latch that
+    /// guards `exportTakeLog` and the banner that says why.
+    ///
+    /// The banner is the STICKY register and not a toast: the operator's
+    /// ratings and comments are not being saved, and a five-second message
+    /// about that is one they can be looking away from. It clears itself when a
+    /// later scan reads the files — a share that finished mounting fixes this
+    /// without anybody being told twice.
+    func noteUnreadableSidecars(_ reasons: [String]) {
+        let previous = unreadableSidecars
+        unreadableSidecars = reasons
+        guard previous != reasons else { return }
+        if reasons.isEmpty {
+            // Only our own banner: anything else on it outranks a fault that
+            // has just resolved itself.
+            if persistentAlert == Self.sidecarAlert(previous) { persistentAlert = nil }
+            // The edits made while the folder was unreadable were kept in
+            // memory and never written; now that it opens, write them.
+            exportTakeLog()
+        } else {
+            persistentAlert = Self.sidecarAlert(reasons)
+        }
+    }
+
+    static func sidecarAlert(_ reasons: [String]) -> String? {
+        guard !reasons.isEmpty else { return nil }
+        return ([L("sidecars_not_rewritten")] + reasons).joined(separator: "\n")
     }
 }

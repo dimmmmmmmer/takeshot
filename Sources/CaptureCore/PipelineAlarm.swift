@@ -46,6 +46,15 @@ public enum PipelineAlarm: Sendable, Equatable {
     case takeClosedFramesStopped
     /// Frames turned away at the door because the in-flight window is full.
     case ingressOverload(drops: Int)
+    /// The wire converter could not produce a frame — its buffer pools are
+    /// exhausted, or the pixel format stopped being one it reads.
+    ///
+    /// **The one drop nothing could see.** It happens BEFORE the take path, so
+    /// the frame never reaches the writer and none of the recording counters
+    /// move; arrival is stamped at ingress, so the watchdog goes on believing
+    /// frames are coming. REC stays red, the take stays open, and nothing at
+    /// all is written to the file.
+    case frameLostConversionFailed(count: Int)
     /// The USB audio interface stopped feeding while a take rolls. The take
     /// continues on padded silence — honest silence beats splicing sources
     /// into a writer whose channel count is already latched.
@@ -110,7 +119,8 @@ public enum PipelineAlarm: Sendable, Equatable {
              .externalAudioPadded, .takeAudioStarved,
              .takeAudioChannelsConformed,
              .recordingStartFailed,
-             .takeLostNoAudioTrack, .takeLostFinalizeFailed:
+             .takeLostNoAudioTrack, .takeLostFinalizeFailed,
+             .frameLostConversionFailed:
             .integrity
         case .takeDroppedAudioPackets, .takeGapFilledAudio,
              .takeDroppedVideoFrames:
@@ -136,6 +146,8 @@ public enum PipelineAlarm: Sendable, Equatable {
             "Take closed: input signal lost mid-take"
         case .takeClosedFramesStopped:
             "Take closed: input stopped delivering frames mid-take"
+        case .frameLostConversionFailed(let count):
+            "TAKE AT RISK — \(count) frame(s) never converted; nothing is reaching the file"
         case .ingressOverload(let drops):
             "Pipeline overloaded — \(drops) frame(s) dropped at ingress"
         case .externalAudioPadded:

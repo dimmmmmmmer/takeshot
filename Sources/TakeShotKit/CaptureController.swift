@@ -123,6 +123,15 @@ final class CaptureController: ObservableObject {
     /// by the operator or by the next successful take start.
     @Published var persistentAlert: String?
 
+    /// Sidecars that ARE in the record folder and would not open.
+    ///
+    /// A latch rather than a message, because it has to stop a write and not
+    /// only describe one: every rating and every take rewrites the whole table
+    /// from memory, so a folder whose sidecars could not be READ is one keypress
+    /// away from losing the day. Set by the folder scan, cleared by a later scan
+    /// that reads them.
+    @Published var unreadableSidecars: [String] = []
+
     /// Error toast: pops up over the footer and dismisses itself after a few
     /// seconds (see `+Toasts` for the timers).
     @Published var lastError: String? {
@@ -158,24 +167,6 @@ final class CaptureController: ObservableObject {
     /// not wake every view in the window — see `CompareLive`.
     let compareLive = CompareLive()
 
-    /// Wipe position (0…1; left/top is playback).
-    var wipePosition: Double {
-        get { compareLive.wipePosition }
-        set {
-            guard newValue != compareLive.wipePosition else { return }
-            compareLive.wipePosition = newValue
-            pushCompare()
-        }
-    }
-    /// Playback opacity in blend mode.
-    var blendOpacity: Double {
-        get { compareLive.blendOpacity }
-        set {
-            guard newValue != compareLive.blendOpacity else { return }
-            compareLive.blendOpacity = newValue
-            pushCompare()
-        }
-    }
     /// Difference-mode gain (×1/×4/×16 — small differences are invisible
     /// unamplified). Persisted with the mode, see `persistCompareSettings`.
     @Published var differenceGain: DifferenceGain = .x1 {

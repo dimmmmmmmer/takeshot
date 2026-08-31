@@ -345,6 +345,11 @@ public final class CapturePipeline: @unchecked Sendable {
     var format: CaptureFormat?
     var frameIndex = 0
     var droppedFrames = 0
+    /// Frames the wire converter could not produce, since launch. Capture-queue
+    /// confined, like `droppedFrames`.
+    var conversionFailures = 0
+    /// 8-bit frames handed on without their limited→full expansion.
+    var expansionFallbacks = 0
     var lastTimecode: Timecode?
     var takeStartTC: Timecode?
     var takeStartedAt = Date()

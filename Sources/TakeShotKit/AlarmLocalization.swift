@@ -36,6 +36,8 @@ extension PipelineAlarm {
             L("alarm_take_closed_no_frames")
         case .ingressOverload(let drops):
             L("alarm_ingress_overload", drops)
+        case .frameLostConversionFailed(let count):
+            L("alarm_conversion_failed", count)
         case .externalAudioPadded:
             L("alarm_usb_audio_lost")
         case .takeAudioStarved:

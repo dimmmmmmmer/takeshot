@@ -205,12 +205,28 @@ final class OffloadTarget {
     ///
     /// Never silent: every path taken this way is listed in this destination's
     /// summary and counted in its resume facts.
+    ///
+    /// **Counted only once the delete has actually happened.** It used to be
+    /// counted first and deleted with a `try?`, so a destination that was
+    /// read-only, or a file some other process had open, left the truncated
+    /// copy in place under the REAL name, put the good one beside it as `_2`,
+    /// and printed the real name under RE-COPIED. The operator reads a clean
+    /// report and wipes the card — which is the exact outcome the paragraph
+    /// above calls worse than a missing file, arrived at through the report
+    /// rather than through the disk.
     private func replaceStaleCopy(at candidate: URL, of relativePath: String) {
         guard isResuming, Self.regularFileSize(at: candidate) != nil else {
             return
         }
-        replaced.append(relativePath)
-        try? FileManager.default.removeItem(at: candidate)
+        do {
+            try FileManager.default.removeItem(at: candidate)
+            replaced.append(relativePath)
+        } catch {
+            // The stale copy is still there, so this destination cannot be
+            // trusted for this file at all: failing it is what keeps the
+            // summary and the disk saying the same thing.
+            fail(error.localizedDescription, at: relativePath)
+        }
     }
 
     func write(_ chunk: UnsafeRawBufferPointer) {

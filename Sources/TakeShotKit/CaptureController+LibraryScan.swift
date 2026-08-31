@@ -66,6 +66,7 @@ extension CaptureController {
         }
         retireMissingTakes()
         let stored = loadStoredMetadata()
+        noteUnreadableSidecars(stored.unreadable)
         var restored: [Take] = []
         var foreign: [URL] = []
         for url in candidates {

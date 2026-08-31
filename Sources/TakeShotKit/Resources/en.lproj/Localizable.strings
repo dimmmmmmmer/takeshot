@@ -893,6 +893,8 @@
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";
 "stream_stop_help" = "Click to stop sending";
+"sidecar_unreadable" = "%1$@ — %2$@";
+"sidecars_not_rewritten" = "The day's ratings, comments and slates are NOT being saved: a sidecar in the record folder will not open, and rewriting it would overwrite what is in it. They are kept in this session and written as soon as the folder reads again.";
 "stream_start_help" = "Click to start sending again";
 "srt_status" = "Status";
 "srt_starting" = "Connecting";
@@ -961,6 +963,7 @@
 "alarm_take_closed_signal" = "Take closed: input signal lost mid-take";
 "alarm_take_closed_no_frames" = "Take closed: input stopped delivering frames mid-take";
 "alarm_ingress_overload" = "Pipeline overloaded — %d frame(s) dropped at ingress";
+"alarm_conversion_failed" = "RECORDING AT RISK — %d frames could not be converted and never reached the file. The picture on screen is not what is being written.";
 "alarm_usb_audio_lost" = "USB AUDIO LOST — take continues, audio padded with silence";
 "alarm_take_audio_starved" = "AUDIO LOST — the take's audio track starved, padded with silence";
 "alarm_audio_channels_conformed" = "AUDIO CHANNELS CHANGED — source sent %1$d, take conformed to %2$d";

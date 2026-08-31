@@ -86,7 +86,10 @@ extension CapturePipeline {
             // no-ops when nothing changed, so an SDR session does one
             // comparison per frame and rebuilds nothing.
             converter.setColorimetry(signalColorimetry)
-            guard let split = converter.convert(pixelBuffer) else { return nil }
+            guard let split = converter.convert(pixelBuffer) else {
+                noteConversionFailure()
+                return nil
+            }
             tagColorIfUntagged(split.display)
             // What the NEXT take will carry, so the file can say so (see
             // `TakeWriter.levelsKey`). Only this branch can record wire codes:
@@ -123,11 +126,25 @@ extension CapturePipeline {
             return LevelledFrame(display: pixelBuffer, wireRecord: nil,
                                  scopeSource: nil)
         }
-        logLevels(effective: inputLevels, rgb444: format.isRGB444)
         let mode = InputLevels.resolved(inputLevels)
-        let leveled = mode.expandsEightBit
-            ? (expandLimitedRGB(pixelBuffer) ?? pixelBuffer)
-            : pixelBuffer
+        // **The OUTCOME is logged, not the intent.** The expansion can fail —
+        // no pool buffer — and the fallback hands the frame on with its studio
+        // codes intact. On this path the display buffer is also what the writer
+        // gets, so those codes are RECORDED as if they were full range: the
+        // historical crushed-blacks bug. Logging before the attempt meant the
+        // one artifact a diagnostics bundle carries asserted the opposite of
+        // what happened.
+        var leveled = pixelBuffer
+        var effective = inputLevels
+        if mode.expandsEightBit {
+            if let expanded = expandLimitedRGB(pixelBuffer) {
+                leveled = expanded
+            } else {
+                effective = "passthrough"
+                noteExpansionFallback()
+            }
+        }
+        logLevels(effective: effective, rgb444: format.isRGB444)
         return LevelledFrame(display: leveled, wireRecord: nil,
                              scopeSource: nil)
     }
