@@ -106,7 +106,9 @@ struct StreamIndicator: View {
         if ndi.isEngaged {
             lines.append("NDI — " + Self.words(ndi))
             if mirrors.ndiCarriesAudio == false {
-                lines.append(L("ndi_picture_only"))
+                // The sentence, not the two-word label: a tooltip has room and
+                // this is where an operator finds out WHY the feed is silent.
+                lines.append(L("ndi_picture_only_help"))
             }
         }
         lines.append(L("stream_stop_help"))

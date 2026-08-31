@@ -114,8 +114,14 @@ struct NDIStatusRow: View {
                 // "the feed has no audio" is a question somebody asks from
                 // another room, halfway through a take.
                 if mirrors.ndiCarriesAudio == false {
+                    // Short enough to stay on ONE line in both languages — a
+                    // grouped Form wraps rather than truncates, and a row that
+                    // wraps in Russian only makes the section a different
+                    // height in the two languages (`ViewNDISettingsTests`).
+                    // The sentence is in the tooltip.
                     Text(L("ndi_picture_only"))
                         .foregroundStyle(.orange)
+                        .help(L("ndi_picture_only_help"))
                 }
             }
         }

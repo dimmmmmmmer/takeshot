@@ -919,7 +919,8 @@
 "ndi_sending" = "Sending";
 "ndi_announced" = "On the network, no receivers";
 "ndi_not_sending" = "Not sending";
-"ndi_picture_only" = "Picture only — this NDI runtime carries no sound";
+"ndi_picture_only" = "Picture only";
+"ndi_picture_only_help" = "This NDI runtime has no audio entry point, so the source carries picture and no sound. Receivers will show the feed and hear nothing. Installing a newer NDI runtime fixes it.";
 "still_unreadable" = "%@ will not open — the viewer is still showing the previous picture";
 "playback_levels_fallback" = "Playback levels could not be applied — what you are seeing may be up to a stop and a half from the take";
 "ndi_refusing" = "The runtime refused %d frames in a row — receivers are looking at a still";
