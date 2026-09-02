@@ -48,15 +48,18 @@ import Testing
             == SettingsFormatFixture.allKeys)
     }
 
-    /// A default install writes the eight non-Optional fields and nothing else:
-    /// every other field is Optional, and a nil Optional is omitted rather than
-    /// written as null.
+    /// A default install writes the eight non-Optional fields plus its schema
+    /// version, and nothing else: every other field is Optional, and a nil
+    /// Optional is omitted rather than written as null.
     ///
-    /// This is the test that fails if somebody adds a NON-Optional field. That
-    /// is the change the whole "new settings fields must be Optional" rule
-    /// exists to prevent — a synthesized decoder requires every non-Optional
-    /// key, so one more of them makes every blob written before today throw,
-    /// and `loaded(from:)` answers a throw with a fresh default settings object.
+    /// This is the test that fails if somebody adds a NON-Optional field. The
+    /// reason that used to matter was decoding: a synthesized decoder requires
+    /// every non-Optional key, so one more of them made every blob written
+    /// before today throw, and `load(from:)` answered with a fresh object. That
+    /// half is closed — the two groups with non-Optional fields decode a
+    /// missing key as its default now (`SettingsPartialRecordTests`). What
+    /// this still pins is the FORMAT: which keys a fresh install puts on disk,
+    /// so a field cannot start being written without somebody saying so here.
     @Test func aDefaultInstanceWritesOnlyTheRequiredKeys() throws {
         let object = SettingsFormatFixture.object(
             from: try JSONEncoder().encode(CaptureSettings()))

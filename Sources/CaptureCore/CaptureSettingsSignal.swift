@@ -101,6 +101,37 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     public var monitorDeviceID: String?
 
     public init() {}
+
+    /// **A missing key is the default, not a failure.** Synthesized `Codable`
+    /// treats every non-optional field as required, defaults or no, so a blob
+    /// without one of these reset the whole record to a fresh object. Encoding
+    /// and the keys stay synthesized: nothing about the wire format changes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fresh = Self()
+        codec = try c.decodeIfPresent(type(of: fresh.codec),
+                                      forKey: .codec) ?? fresh.codec
+        destinationPath = try c.decodeIfPresent(type(of: fresh.destinationPath),
+                                      forKey: .destinationPath) ?? fresh.destinationPath
+        detectionMode = try c.decodeIfPresent(type(of: fresh.detectionMode),
+                                      forKey: .detectionMode) ?? fresh.detectionMode
+        startDebounceFrames = try c.decodeIfPresent(type(of: fresh.startDebounceFrames),
+                                      forKey: .startDebounceFrames) ?? fresh.startDebounceFrames
+        stopDebounceFrames = try c.decodeIfPresent(type(of: fresh.stopDebounceFrames),
+                                      forKey: .stopDebounceFrames) ?? fresh.stopDebounceFrames
+        timecodeSource = try c.decodeIfPresent(String.self, forKey: .timecodeSource)
+        ltcChannel = try c.decodeIfPresent(Int.self, forKey: .ltcChannel)
+        tenBitCapture = try c.decodeIfPresent(Bool.self, forKey: .tenBitCapture)
+        preRollSeconds = try c.decodeIfPresent(Double.self, forKey: .preRollSeconds)
+        preRollFrames = try c.decodeIfPresent(Int.self, forKey: .preRollFrames)
+        preRollUnit = try c.decodeIfPresent(String.self, forKey: .preRollUnit)
+        forcedInputMode = try c.decodeIfPresent(String.self, forKey: .forcedInputMode)
+        forcedInputRGB = try c.decodeIfPresent(Bool.self, forKey: .forcedInputRGB)
+        videoLevels = try c.decodeIfPresent(String.self, forKey: .videoLevels)
+        colorTagPreset = try c.decodeIfPresent(String.self, forKey: .colorTagPreset)
+        hdrMode = try c.decodeIfPresent(String.self, forKey: .hdrMode)
+        monitorDeviceID = try c.decodeIfPresent(String.self, forKey: .monitorDeviceID)
+    }
     // The pre-roll's arithmetic — the range both entry units clamp against,
     // the seconds↔frames conversion and `preRollFramesEffective(atFrameRate:)`
     // — is in `PreRollSetting.swift`, beside the unit that selects the field.
@@ -124,6 +155,24 @@ public struct NamingSettings: Codable, Equatable, Sendable {
     public var clipPadWidth: Int?
 
     public init() {}
+
+    /// **A missing key is the default, not a failure.** Synthesized `Codable`
+    /// treats every non-optional field as required, defaults or no, so a blob
+    /// without one of these reset the whole record to a fresh object. Encoding
+    /// and the keys stay synthesized: nothing about the wire format changes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fresh = Self()
+        namingTemplate = try c.decodeIfPresent(type(of: fresh.namingTemplate),
+                                      forKey: .namingTemplate) ?? fresh.namingTemplate
+        projectName = try c.decodeIfPresent(type(of: fresh.projectName),
+                                      forKey: .projectName) ?? fresh.projectName
+        cameraLabel = try c.decodeIfPresent(type(of: fresh.cameraLabel),
+                                      forKey: .cameraLabel) ?? fresh.cameraLabel
+        namingPane = try c.decodeIfPresent(String.self, forKey: .namingPane)
+        postfix = try c.decodeIfPresent(String.self, forKey: .postfix)
+        clipPadWidth = try c.decodeIfPresent(Int.self, forKey: .clipPadWidth)
+    }
 
     public var clipPadWidthEffective: Int { min(4, max(2, clipPadWidth ?? 2)) }
 }

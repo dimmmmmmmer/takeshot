@@ -382,3 +382,32 @@ enum PreviewProbe {
         #expect(pipeline.displaySinks.all().isEmpty)
     }
 }
+
+/// **Stopping capture blanks the screen.**
+///
+/// Switching devices restarts capture through `captureStopped()`, and that
+/// path dropped every other trace of the old source — its format, its
+/// timecode, its pre-roll, its compare buffer — and left the display sinks
+/// presenting the old source's last frame. The signal-loss path one file over
+/// blanks them; this one did not, so the viewer kept camera A's picture until
+/// camera B delivered, and if B had no signal yet, indefinitely (owner: "при
+/// переключении источника последний кадр с прошлого источника не исчезает").
+@Suite struct PreviewStopClearsTests {
+    @Test func stoppingCaptureClearsTheDisplaySinks() async {
+        let pipeline = PreviewProbe.makePipeline()
+        let layer = MetalPreviewLayer()
+        pipeline.addDisplaySink(layer)
+
+        PreviewProbe.push(pipeline, PreviewProbe.frame(0xC0), frame: 1)
+        await TestWait.until({ layer.lastBuffer != nil }, timeout: .seconds(2))
+        #expect(layer.lastBuffer != nil, "the frame never reached the surface")
+
+        pipeline.captureStopped()
+        await TestWait.until({ layer.lastBuffer == nil }, timeout: .seconds(2))
+        #expect(layer.lastBuffer == nil, """
+            capture stopped and the surface still holds the old source's last \
+            frame — a device switch shows the previous camera until the next \
+            one delivers
+            """)
+    }
+}

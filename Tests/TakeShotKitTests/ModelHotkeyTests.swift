@@ -263,6 +263,15 @@ struct ModelHotkeyStorageTests {
         defer {
             defaults.removePersistentDomain(forName: name)
             UserDefaults.standard.removeSuite(named: name)
+            // **And the file.** Removing the domain empties it; cfprefsd
+            // leaves the 42-byte plist behind. Measured on the development
+            // Mac: 6,469 of them in ~/Library/Preferences, one per test case
+            // per run since this suite was written — every one an empty
+            // dictionary that Preferences has to scan on every launch of
+            // every app.
+            let plist = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Preferences/\(name).plist")
+            try? FileManager.default.removeItem(at: plist)
         }
         try body(defaults)
     }

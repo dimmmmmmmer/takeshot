@@ -78,7 +78,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// domain in it.
     public var schemaVersion: Int?
 
-    public init() {}
+    /// A fresh object is at the CURRENT schema. It used to leave
+    /// `schemaVersion` nil, so a first launch saved a blob with no version and
+    /// every launch after it re-ran all three migrations over a record that
+    /// had never been anywhere but here. Idempotent today; a wrong premise.
+    public init() { schemaVersion = Self.currentSchemaVersion }
 
     // MARK: - the flat wire format
 

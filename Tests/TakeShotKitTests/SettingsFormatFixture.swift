@@ -93,7 +93,7 @@ enum SettingsFormatFixture {
     /// so a default install stores eight keys, not ninety.
     static let alwaysWrittenKeys: [String] = [
         "cameraLabel", "codec", "destinationPath", "detectionMode",
-        "namingTemplate", "projectName", "startDebounceFrames",
+        "namingTemplate", "projectName", "schemaVersion", "startDebounceFrames",
         "stopDebounceFrames",
     ]
 

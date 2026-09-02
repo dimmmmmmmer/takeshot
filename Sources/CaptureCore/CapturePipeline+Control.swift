@@ -216,6 +216,17 @@ extension CapturePipeline {
             self.latestPreview = nil // don't compare against a frozen frame
             self.latestPreLUT = nil
             self.latestPreviewLock.unlock()
+            // **And the screen.** The signal-loss path (`+Input`) blanks the
+            // display sinks right after dropping these same buffers; this path
+            // did everything else it does and left the layer presenting the
+            // old source's last frame. Switching devices restarts capture
+            // through here, so the viewer kept showing camera A until camera
+            // B delivered — and if B had no signal yet, indefinitely (owner:
+            // "при переключении источника последний кадр с прошлого источника
+            // не исчезает").
+            self.displayQueue.async {
+                self.displaySinks.clearToBlack()
+            }
             self.rawVancStats.removeAll()
             self.vancStatsLastPublish = 0
             // the taught indicator's latch describes a frame from the session
