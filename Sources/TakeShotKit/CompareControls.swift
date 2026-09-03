@@ -218,16 +218,30 @@ private struct BlendControls: View {
     @ObservedObject var live: CompareLive
     /// Written through the controller, which is what pushes the value into the
     /// pipeline and persists it on the debounce.
-    let onChange: (Double) -> Void
+    ///
+    /// `@MainActor`, because that is where the controller lives and where the
+    /// call site mutates it. A `Binding`'s setter is `@Sendable`, so the two
+    /// meet through `assumeIsolated` below: SwiftUI drives a setter on the main
+    /// thread, and assuming it (rather than hopping with a Task) keeps the
+    /// write synchronous with the drag — a hop would put the pipeline one
+    /// event behind the slider.
+    let onChange: @MainActor (Double) -> Void
 
     var body: some View {
-        Slider(value: Binding(get: { live.blendOpacity }, set: onChange),
+        Slider(value: Binding(get: { live.blendOpacity },
+                              set: { value in
+                                  MainActor.assumeIsolated { onChange(value) }
+                              }),
                in: 0...1)
             .frame(width: 90)
             .controlSize(.mini)
         TextField("", value: Binding(
             get: { Int((live.blendOpacity * 100).rounded()) },
-            set: { onChange(Double(min(100, max(0, $0))) / 100) }),
+            set: { value in
+                MainActor.assumeIsolated {
+                    onChange(Double(min(100, max(0, value))) / 100)
+                }
+            }),
             format: .number)
             .textFieldStyle(.roundedBorder)
             .multilineTextAlignment(.trailing)

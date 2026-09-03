@@ -398,13 +398,21 @@ enum PreviewProbe {
         let layer = MetalPreviewLayer()
         pipeline.addDisplaySink(layer)
 
+        // `lastBuffer` is written on the redraw queue under `renderLock`, so
+        // it is read the same way — a bare read here is the data race
+        // ThreadSanitizer reported on CI, in the test and not the product.
+        func held() -> CVPixelBuffer? {
+            layer.renderLock.lock()
+            defer { layer.renderLock.unlock() }
+            return layer.lastBuffer
+        }
         PreviewProbe.push(pipeline, PreviewProbe.frame(0xC0), frame: 1)
-        await TestWait.until({ layer.lastBuffer != nil }, timeout: .seconds(2))
-        #expect(layer.lastBuffer != nil, "the frame never reached the surface")
+        await TestWait.until({ held() != nil }, timeout: .seconds(2))
+        #expect(held() != nil, "the frame never reached the surface")
 
         pipeline.captureStopped()
-        await TestWait.until({ layer.lastBuffer == nil }, timeout: .seconds(2))
-        #expect(layer.lastBuffer == nil, """
+        await TestWait.until({ held() == nil }, timeout: .seconds(2))
+        #expect(held() == nil, """
             capture stopped and the surface still holds the old source's last \
             frame — a device switch shows the previous camera until the next \
             one delivers

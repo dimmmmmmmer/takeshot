@@ -537,6 +537,14 @@ static NSString *const kCNDNoSDKMessage =
     return nil;
 }
 
+/// A stub has no runtime to ask, so it cannot count receivers — the app then
+/// says `.sending` on announce, as an older runtime does (see
+/// `NDIOutputState.announced`). Declared in the header for both halves; the
+/// real one resolves `NDIlib_send_get_no_connections`, this one answers NO.
++ (BOOL)isConnectionCountAvailable {
+    return NO;
+}
+
 - (void)stop {
 }
 
