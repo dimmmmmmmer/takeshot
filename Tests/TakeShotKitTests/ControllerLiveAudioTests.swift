@@ -100,7 +100,15 @@ struct ControllerLiveAudioTests {
 
             // …and the picture is still going, on its own PID. A feed that
             // gained sound by losing the picture is not the feature.
-            #expect(Self.carries(stream.datagrams, pid: MPEGTSMuxer.videoPID))
+            //
+            // WAITED for, like the sound above, not asserted the instant sound
+            // arrives: the two ride different encoders, and on a loaded CI
+            // runner the AAC packet can land before the first H.264 access
+            // unit is out of VideoToolbox. Asserted synchronously this was
+            // green on the development Mac and red on the runner once.
+            #expect(await ControllerWait.untilWritten {
+                Self.carries(stream.datagrams, pid: MPEGTSMuxer.videoPID)
+            }, "the picture stopped when the sound joined")
             // Every datagram is still exactly what the socket was configured
             // for: the carry buffer emits whole ones or none.
             #expect(stream.datagrams.allSatisfy {

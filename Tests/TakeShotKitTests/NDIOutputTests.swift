@@ -24,7 +24,15 @@ final class FakeNDISender: NDISending, @unchecked Sendable {
     /// What `send` answers. False is a runtime refusing the frame — the source
     /// stays announced and the receiver goes on looking at the last picture,
     /// which is the failure this flag exists to reproduce.
-    nonisolated(unsafe) var acceptsFrames = true
+    ///
+    /// Behind the lock like every other field here: it is flipped by the test
+    /// while the mirror's queue is reading it inside `send`, and a plain var
+    /// there is the data race ThreadSanitizer reported on CI.
+    var acceptsFrames: Bool {
+        get { lock.withLock { storedAcceptsFrames } }
+        set { lock.withLock { storedAcceptsFrames = newValue } }
+    }
+    private var storedAcceptsFrames = true
     var connectedReceivers: Int32 { receivers }
     let sourceName: String
 
