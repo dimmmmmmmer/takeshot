@@ -334,9 +334,45 @@ extension CaptureController {
         Task { [weak self] in
             while let self, !Task.isCancelled {
                 self.checkDiskSpace()
-                try? await Task.sleep(for: .seconds(10))
+                // Ten seconds idle, two while a take rolls: at UHD ProRes the
+                // 0.5 GB floor lasts under six seconds, so a ten-second tick
+                // let the writer hit ENOSPC between two looks.
+                let interval = self.isRecording ? Self.diskWatchRecordingInterval
+                                                : Self.diskWatchIdleInterval
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
+    }
+
+    static let diskWatchIdleInterval: Double = 10
+    static let diskWatchRecordingInterval: Double = 2
+
+    /// The open take's size at the last tick, and when — what the write rate
+    /// is measured from. Measured rather than tabulated: a table of codec
+    /// rates would be wrong for a second channel on the same volume, and the
+    /// file's own growth is not.
+    private struct TakeGrowth {
+        var bytes: Int64
+        var at: Date
+    }
+    private static var lastGrowth: TakeGrowth?
+
+    /// Bytes per second the open take is growing at, from two looks at its
+    /// size; nil until there have been two, or when nothing is open.
+    func measuredWriteRate() -> Double? {
+        guard isRecording, let name = pipeline.health.takeFileName else {
+            Self.lastGrowth = nil
+            return nil
+        }
+        let url = destinationRoot.appendingPathComponent(name)
+        guard let size = (try? FileManager.default.attributesOfItem(
+            atPath: url.path))?[.size] as? Int64 else { return nil }
+        let now = Date()
+        defer { Self.lastGrowth = TakeGrowth(bytes: size, at: now) }
+        guard let last = Self.lastGrowth else { return nil }
+        let seconds = now.timeIntervalSince(last.at)
+        guard seconds > 0.5, size >= last.bytes else { return nil }
+        return Double(size - last.bytes) / seconds
     }
     /// One tick of the watch above. Internal rather than private so the suite can
     /// drive exactly one, instead of waiting out a ten-second timer — which is a
@@ -372,7 +408,8 @@ extension CaptureController {
         // here had to change but the words themselves. The watchdog is the app's
         // own: it watches a volume, which is not something CaptureCore knows
         // about, so there is no boundary to carry a severity across.
-        switch Self.diskVerdict(freeBytes: free, isRecording: isRecording) {
+        switch Self.diskVerdict(freeBytes: free, isRecording: isRecording,
+                                bytesPerSecond: measuredWriteRate()) {
         case .fine:
             break
         case .full(let freeGB):
@@ -407,9 +444,22 @@ extension CaptureController {
         case full(gigabytes: Double)
     }
 
-    static func diskVerdict(freeBytes: Int64, isRecording: Bool) -> DiskVerdict {
+    ///
+    /// **The close threshold follows the write rate.** 0.5 GB was a fixed
+    /// floor, and at UHD ProRes HQ (~88 MB/s) it lasts under six seconds — less
+    /// than one ten-second tick, so the writer hit ENOSPC first and the take
+    /// died as a writer failure, renamed `_FAILED`, instead of being closed
+    /// while it could still finalize. With a measured rate the take is closed
+    /// when what is left would not carry it through two more looks plus the
+    /// floor; without one (the first tick of a take) the floor stands alone.
+    static func diskVerdict(freeBytes: Int64, isRecording: Bool,
+                            bytesPerSecond: Double? = nil) -> DiskVerdict {
         let freeGB = Double(freeBytes) / 1_000_000_000
-        if freeGB < 0.5, isRecording { return .full(gigabytes: freeGB) }
+        if isRecording {
+            let floor = 0.5 * 1_000_000_000
+            let runway = (bytesPerSecond ?? 0) * diskWatchRecordingInterval * 2
+            if Double(freeBytes) < floor + runway { return .full(gigabytes: freeGB) }
+        }
         return freeGB < 5 ? .low(gigabytes: freeGB) : .fine
     }
 }

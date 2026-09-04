@@ -70,7 +70,7 @@ extension CapturePipeline {
         reservationLock.unlock()
     }
 
-    static func markFailed(_ url: URL) -> URL {
+    public static func markFailed(_ url: URL) -> URL {
         let name = url.deletingPathExtension().lastPathComponent
         guard !name.hasSuffix(failedTakeSuffix) else { return url }
         let renamed = url.deletingLastPathComponent()
@@ -87,8 +87,14 @@ extension CapturePipeline {
         defer { releaseReservation(for: target) }
         do {
             try FileManager.default.moveItem(at: url, to: target)
+            FailedTakeLedger.forget(url)
             return target
         } catch {
+            // The rename fails exactly when it matters — the volume that
+            // dropped mid-take is the one that will not take the move. Written
+            // down off the volume, so the scan refuses the file after the
+            // remount instead of adopting it as footage (`FailedTakeLedger`).
+            FailedTakeLedger.record(url)
             return url
         }
     }

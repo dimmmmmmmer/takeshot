@@ -84,6 +84,7 @@ extension CaptureController {
             scannedPaths.insert(url.path)
             return .foreign
         }
+        if let refused = refuseLedgeredFailure(url) { return refused }
         let embedded = await Self.embeddedMetadata(of: url)
         scannedPaths.insert(url.path)
         guard let embedded else {
@@ -315,5 +316,22 @@ extension CaptureController {
     static func sidecarAlert(_ reasons: [String]) -> String? {
         guard !reasons.isEmpty else { return nil }
         return ([L("sidecars_not_rewritten")] + reasons).joined(separator: "\n")
+    }
+}
+
+extension CaptureController {
+    /// A failed take whose rename could not be made when the volume dropped
+    /// still carries the healthy name and the origin tag. The ledger is what
+    /// survived the drop; it is asked before the tag is trusted, and the rename
+    /// is tried again now that the file is reachable — success makes the NAME
+    /// say it, and the entry goes. nil for a file the ledger has never heard of.
+    func refuseLedgeredFailure(_ url: URL) -> ScanOutcome? {
+        guard FailedTakeLedger.contains(url) else { return nil }
+        let marked = CapturePipeline.markFailed(url)
+        scannedPaths.insert(url.path)
+        // Still cannot be renamed: visible as Other content under its healthy
+        // name, never a take. Renamed: the old path is gone, and the `_FAILED`
+        // file is picked up by the name guard on the next scan.
+        return marked == url ? .foreign : .known
     }
 }

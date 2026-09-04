@@ -155,4 +155,46 @@ import Testing
                     "a stop on an idle pipeline closed something")
         }
     }
+
+    /// **…and a failed take whose RENAME could not be made is refused too.**
+    /// The name guard above is only half of it: the rename fails exactly when
+    /// the volume dropped, and the file keeps its healthy name and its tag.
+    /// What survived the drop is the ledger in Application Support.
+    @Test func aLedgeredTakeIsNotAdoptedAsFootage() async throws {
+        let previous = FailedTakeLedger.fileURL
+        FailedTakeLedger.fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("failed-takes-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: FailedTakeLedger.fileURL)
+            FailedTakeLedger.fileURL = previous
+        }
+        try await ControllerHarness.run { controller, root in
+            // a real tagged clip under its HEALTHY name — what a finalize that
+            // failed on a dropped volume leaves behind when the rename fails
+            let url: URL = root.appendingPathComponent("A001C007.mov")
+            _ = try await MediaFixtures.writeClip(at: url, frames: 8)
+            try ControllerFixtures.settle(url)
+            FailedTakeLedger.record(url)
+
+            controller.scanDestinationFolder()
+            // the rename is retried now that the file is reachable
+            let renamed = root.appendingPathComponent("A001C007_FAILED.mov")
+            #expect(await ControllerWait.untilWritten {
+                FileManager.default.fileExists(atPath: renamed.path)
+            }, "the retry did not rename the file")
+            #expect(controller.takes.isEmpty, """
+                a take the ledger says failed came back into the list as \
+                footage — and from there into the log post reads
+                """)
+            #expect(!FailedTakeLedger.contains(url),
+                    "the name says it now; the ledger still did too")
+
+            // …and the next scan shows it as Other content by name
+            controller.scanDestinationFolder()
+            #expect(await ControllerWait.untilWritten {
+                controller.otherFiles.contains(renamed)
+            }, "the renamed take vanished instead of staying visible")
+            #expect(controller.takes.isEmpty)
+        }
+    }
 }
