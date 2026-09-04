@@ -199,6 +199,12 @@ public struct Take: Identifiable, Equatable, Sendable {
     public var startTimecode: Timecode?
     public var durationSeconds: Double
     public var recordedAt: Date
+    /// The REAL frames per second — 23.976 where the timecode says 24 — from
+    /// the capture format at open, or the file's own video track when the take
+    /// came back from a folder scan. nil for a take neither could say anything
+    /// about, and then the timecode's own reading stands
+    /// (`TakeLogExporter.realRate(for:)`).
+    public var frameRate: Double?
 
     /// Flat accessor for the scene, which every caller had before the rest of
     /// the slate existed. One storage location, so a take cannot carry two
@@ -236,7 +242,9 @@ public struct Take: Identifiable, Equatable, Sendable {
 
     public init(url: URL, scene: String, roll: String = "", takeNumber: Int,
                 startTimecode: Timecode?, durationSeconds: Double,
-                recordedAt: Date) {
+                recordedAt: Date,
+                frameRate: Double? = nil) {
+        self.frameRate = frameRate
         self.url = url
         self.roll = roll
         self.takeNumber = takeNumber

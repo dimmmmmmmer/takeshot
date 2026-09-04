@@ -69,8 +69,10 @@ public struct TakeSpan: Equatable, Sendable {
     /// The span of `take`, on the take's own timebase.
     public static func of(_ take: Take) -> TakeSpan {
         let start = take.startTimecode ?? TakeLogExporter.fallbackRate
+        // On the take's OWN rate: a 23.976 source numbered at 24 was counted
+        // at 24 here, so every OUT point ran ahead by a frame every 41 s.
         let frames = TakeLogExporter.frameOffset(seconds: take.durationSeconds,
-                                                 at: start)
+                                                 for: take)
         return TakeSpan(
             start: start,
             end: Timecode(frameNumber: start.frameNumber + frames,

@@ -37,7 +37,7 @@ public final class TakeWriter {
     /// `+Audio`, the way the timecode track's live in `+Timecode` — never
     /// wider than the module.
     var audioInput: AVAssetWriterInput?
-    private let format: CaptureFormat
+    let format: CaptureFormat
     private var appendedFrames = 0
 
     /// The channel count the take's audio track was opened with — 0 when the
@@ -145,6 +145,16 @@ public final class TakeWriter {
     public static let markerKey = "com.takeshot.origin"
     public static let rollKey = "com.takeshot.roll"
     public static let clipKey = "com.takeshot.clip"
+    /// The take's REAL frame rate — 23.976, 29.97 — as a decimal string.
+    ///
+    /// A timecode numbers frames at 24 or 30 and says nothing about whether the
+    /// clock behind it runs at 1000/1001 of that; drop-frame flags the 29.97
+    /// case and nothing flags 23.976 or 29.97 NON-drop. Every OUT point,
+    /// duration-in-frames, ALE FPS and marker position computed from the
+    /// timecode alone was therefore counted at 24/30 real frames a second on
+    /// those sources: off by one frame every 41 s. The rate is stamped here at
+    /// open, like the roll and the clip, so a restored take carries it too.
+    public static let frameRateKey = "com.takeshot.framerate"
     /// Name of the LUT baked into the file (absent — the file is clean).
     public static let lutKey = "com.takeshot.lut"
 

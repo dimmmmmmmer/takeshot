@@ -49,6 +49,10 @@ extension CaptureController {
         var take: String?
         var durationSeconds: Double
         var startTimecode: Timecode?
+        /// From `com.takeshot.framerate` when this build wrote the file, else
+        /// the video track's own nominal rate — a take from an older build
+        /// still gets its 23.976 back rather than the timecode's 24.
+        var frameRate: Double?
     }
 
     /// Identify one candidate, restoring its take metadata when it is ours.
@@ -95,7 +99,8 @@ extension CaptureController {
             takeNumber: embedded.takeNumber,
             startTimecode: embedded.startTimecode,
             durationSeconds: embedded.durationSeconds,
-            recordedAt: created)
+            recordedAt: created,
+            frameRate: embedded.frameRate)
         // the operator's own work, restored from the sidecars rather than read
         // off the file
         take.rating = stored.meta[name]?.rating ?? .none
@@ -133,6 +138,12 @@ extension CaptureController {
         guard await value(TakeWriter.markerKey) != nil else { return nil }
         let duration = (try? await asset.load(.duration))?.seconds ?? 0
         let startTC = await TimecodeReader.startTimecode(of: asset)
+        var frameRate = Double(await value(TakeWriter.frameRateKey) ?? "")
+        if frameRate == nil,
+           let track = try? await asset.loadTracks(withMediaType: .video).first {
+            let nominal = try? await track.load(.nominalFrameRate)
+            if let nominal, nominal > 0 { frameRate = Double(nominal) }
+        }
         return EmbeddedMetadata(
             roll: await value(TakeWriter.rollKey) ?? "",
             takeNumber: Int(await value(TakeWriter.clipKey) ?? "") ?? 0,
@@ -140,7 +151,8 @@ extension CaptureController {
             shot: await value(TakeWriter.shotKey),
             take: await value(TakeWriter.takeKey),
             durationSeconds: duration,
-            startTimecode: startTC)
+            startTimecode: startTC,
+            frameRate: frameRate)
     }
 
     /// The slate as the file itself carries it. A take key of 0 or nonsense is

@@ -148,7 +148,16 @@ final class RefusalBox: @unchecked Sendable {
         var health = PipelineHealth()
         health.chromaLateDrops = 3
         health.chromaBakeFallbacks = 7
+        health.lutBakeFallbacks = 11
         let text = DiagnosticsStateReport.counters(health).joined(separator: "\n")
+        // The look's version of the same claim: a file whose metadata says the
+        // LUT is baked and whose frames are clean. It was `?? display` on both
+        // record paths and recorded nowhere.
+        #expect(text.contains("LUT bake fallbacks"), """
+            frames written without the look they were promised are counted \
+            nowhere a bundle can show them: \(text)
+            """)
+        #expect(text.contains("11"))
         #expect(text.contains("Chroma bake fallbacks"), """
             frames written to the file without the key are still counted \
             nowhere a diagnostics bundle can show them: \(text)

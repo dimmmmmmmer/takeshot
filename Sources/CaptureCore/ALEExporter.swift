@@ -67,9 +67,7 @@ public enum ALEExporter {
                                      format: CaptureFormat?) -> [String] {
         // the project rate: the measured one when a signal is known (23.976 is
         // not expressible as a nominal timecode rate), else the first take's
-        let rate = format?.frameRate
-            ?? TakeLogExporter.realRate(of: takes[0].startTimecode
-                ?? TakeLogExporter.fallbackRate)
+        let rate = format?.frameRate ?? TakeLogExporter.realRate(for: takes[0])
         return ["Heading",
                 "FIELD_DELIM\tTABS",
                 "VIDEO_FORMAT\t\(videoFormat(of: format))",
@@ -88,7 +86,7 @@ public enum ALEExporter {
             start.description,
             end.description,
             TakeLogExporter.durationTimecode(of: take),
-            rateText(TakeLogExporter.realRate(of: start)),
+            rateText(TakeLogExporter.realRate(for: take)),
             // the creative take when the scripty logged one, else the clip
             // counter — the Avid's Take column is about the performance
             String(take.editorialTakeNumber),

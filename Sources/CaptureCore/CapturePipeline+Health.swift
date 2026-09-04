@@ -70,6 +70,10 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// diagnostics bundle" — and the bundle only ever printed the display-only
     /// number beside it.
     public var chromaBakeFallbacks = 0
+    /// Frames a LUT-baking take wrote without the look because the render
+    /// failed — the same claim as the chroma one, for a look instead of a key:
+    /// the file's metadata says baked and the frame is clean.
+    public var lutBakeFallbacks = 0
     /// Takes whose writer was closed since launch, and how many of those could
     /// not be finalized (the `_FAILED.mov` ones).
     public var takesClosed = 0
@@ -90,6 +94,7 @@ extension CapturePipeline {
         chromaLock.lock()
         snapshot.chromaLateDrops = chromaLateDropCount
         snapshot.chromaBakeFallbacks = chromaBakeFallbackCount
+        snapshot.lutBakeFallbacks = lutBakeFallbackCount
         chromaLock.unlock()
         return snapshot
     }

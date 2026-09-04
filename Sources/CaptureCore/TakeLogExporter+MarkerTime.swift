@@ -26,7 +26,14 @@ extension TakeLogExporter {
     /// player shows for it (`playbackTimecodeText`).
     public static func markerTimecode(of marker: TakeMarker,
                                       in take: Take) -> String {
-        markerTimecode(of: marker, startingAt: take.startTimecode)
+        guard let start = take.startTimecode else {
+            return offsetTimecode(seconds: marker.seconds, from: fallbackRate,
+                                  rate: realRate(of: fallbackRate))
+        }
+        if !marker.timecodeText.isEmpty { return marker.timecodeText }
+        // On the take's own rate: 23.976 numbered at 24 was counted at 24.
+        return offsetTimecode(seconds: marker.seconds, from: start,
+                              rate: realRate(for: take))
     }
 
     /// The same column for a clip that is not a take — a file that landed in the
@@ -42,12 +49,14 @@ extension TakeLogExporter {
         return offsetTimecode(seconds: marker.seconds, from: start)
     }
 
-    /// `rate` advanced by `seconds`, on its own timebase.
-    private static func offsetTimecode(seconds: Double,
-                                       from rate: Timecode) -> String {
-        Timecode(frameNumber: rate.frameNumber
-                     + frameOffset(seconds: seconds, at: rate),
-                 fps: rate.fps, isDropFrame: rate.isDropFrame).description
+    /// `start` advanced by `seconds`, counted on `rate` real frames a second
+    /// and numbered on `start`'s own fps.
+    private static func offsetTimecode(seconds: Double, from start: Timecode,
+                                       rate: Double? = nil) -> String {
+        let frames = rate.map { max(0, Int((seconds * $0).rounded())) }
+            ?? frameOffset(seconds: seconds, at: start)
+        return Timecode(frameNumber: start.frameNumber + frames,
+                        fps: start.fps, isDropFrame: start.isDropFrame).description
     }
 
     /// Offset in seconds of a marker timecode inside a take — the inverse of
@@ -57,7 +66,8 @@ extension TakeLogExporter {
     /// one frame of the take, and both ends of the round trip land on the same
     /// frame from then on.
     public static func markerSeconds(timecodeText: String,
-                                     start: Timecode?) -> Double? {
+                                     start: Timecode?,
+                                     realRate real: Double? = nil) -> Double? {
         let rate = start ?? fallbackRate
         guard let marker = Timecode(text: timecodeText, fps: rate.fps)
         else { return nil }
@@ -68,7 +78,7 @@ extension TakeLogExporter {
             frames += Timecode.dayFrames(fps: rate.fps,
                                          isDropFrame: rate.isDropFrame)
         }
-        return Double(frames) / realRate(of: rate)
+        return Double(frames) / (real ?? realRate(of: rate))
     }
 
     /// The rows belonging to one take, resolved onto its own timebase and
@@ -76,7 +86,7 @@ extension TakeLogExporter {
     /// landing on frame zero, under the head of every take.
     public static func markers(_ rows: [MarkerRow], of take: Take) -> [TakeMarker] {
         markers(rows, startingAt: take.startTimecode,
-                duration: take.durationSeconds)
+                duration: take.durationSeconds, realRate: realRate(for: take))
     }
 
     /// The same resolution for a clip that is not a take: the rows of one file
@@ -84,10 +94,11 @@ extension TakeLogExporter {
     /// has none, so it arrives with `start` nil and its column read as an offset
     /// from zero.
     public static func markers(_ rows: [MarkerRow], startingAt start: Timecode?,
-                               duration: Double) -> [TakeMarker] {
+                               duration: Double,
+                               realRate: Double? = nil) -> [TakeMarker] {
         rows.compactMap { row -> TakeMarker? in
             if let seconds = markerSeconds(timecodeText: row.timecodeText,
-                                           start: start),
+                                           start: start, realRate: realRate),
                isInside(seconds: seconds, start: start, duration: duration) {
                 return TakeMarker(seconds: seconds,
                                   timecodeText: row.timecodeText,
@@ -124,6 +135,20 @@ extension TakeLogExporter {
     /// Seconds → frames on a timecode's own timebase.
     static func frameOffset(seconds: Double, at rate: Timecode) -> Int {
         max(0, Int((seconds * realRate(of: rate)).rounded()))
+    }
+
+    /// The same offset on the TAKE's own rate, which is what a 23.976 or a
+    /// 29.97 non-drop source needs: the timecode numbers frames at 24/30 and
+    /// cannot say the clock runs at 1000/1001 of that.
+    static func frameOffset(seconds: Double, for take: Take) -> Int {
+        max(0, Int((seconds * realRate(for: take)).rounded()))
+    }
+
+    /// The take's real frames per second: what it was captured at when known,
+    /// the timecode's own reading (drop-frame or nominal) when not.
+    public static func realRate(for take: Take) -> Double {
+        if let rate = take.frameRate, rate > 0 { return rate }
+        return realRate(of: take.startTimecode ?? fallbackRate)
     }
 
     /// Real frames per second behind a timecode's numbering: drop-frame runs at

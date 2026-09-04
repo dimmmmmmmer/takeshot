@@ -80,7 +80,27 @@ extension CapturePipeline {
                             previewed: CVPixelBuffer) -> CVPixelBuffer {
         let latched = writer == nil ? lutFilter : takeLUTFilter
         if lutPreview, latched === lutFilter { return previewed }
-        return applyLUT(to: display, using: latched) ?? display
+        return lutBakedOrCounted(display, using: latched)
+    }
+
+    /// The record-side bake, with its failure COUNTED.
+    ///
+    /// `applyLUT` answers nil for two different reasons: no filter latched —
+    /// nothing to bake, the clean frame is right — and a render that failed
+    /// (no pool buffer, no output image, a CoreImage task that did not
+    /// complete). The second used to be `?? display` on both the live path and
+    /// the pre-roll drain: the clean frame went into a file whose metadata says
+    /// the look is baked, and nothing anywhere recorded that it happened. The
+    /// chroma bake one file over counts exactly this — "content the file was
+    /// supposed to carry and does not" — and a look is the same claim.
+    func lutBakedOrCounted(_ buffer: CVPixelBuffer,
+                           using chosen: CIFilter?) -> CVPixelBuffer {
+        guard chosen != nil else { return buffer }
+        if let baked = applyLUT(to: buffer, using: chosen) { return baked }
+        chromaLock.lock()
+        lutBakeFallbackCount += 1
+        chromaLock.unlock()
+        return buffer
     }
 
     /// The key is being composited into a file that is actually open. Split from

@@ -313,6 +313,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// `chromaLateDropCount` beside it and for the same reason — the writer is
     /// the capture queue and the reader is the main actor.
     var chromaBakeFallbackCount = 0
+    /// Frames a LUT-baking take wrote WITHOUT the look because the render
+    /// failed. Same lock and same reason as the chroma counter above it.
+    var lutBakeFallbackCount = 0
 
     var monitorEnabled = false
     /// The format description for the STEREO packet — the one the cart's

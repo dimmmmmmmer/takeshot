@@ -34,7 +34,9 @@ extension TakeLogExporter {
     /// The recorded length in frames, counted on `rate`'s own timebase (see
     /// `realRate(of:)` — a drop-frame rate is not its nominal value).
     private static func durationFrames(of take: Take, at rate: Timecode) -> Int {
-        frameOffset(seconds: take.durationSeconds, at: rate)
+        // The take's OWN rate — `rate` only numbers the frames. A 23.976 take
+        // counted at 24 came out a frame long every 41 s.
+        frameOffset(seconds: take.durationSeconds, for: take)
     }
 
     /// The report table, labelled in `labels`' language.

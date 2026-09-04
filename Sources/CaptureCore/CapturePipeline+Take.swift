@@ -107,6 +107,7 @@ extension CapturePipeline {
                 var meta = [
                     TakeWriter.rollKey: config.roll,
                     TakeWriter.clipKey: String(config.takeNumber),
+                    TakeWriter.frameRateKey: String(format.frameRate),
                 ]
                 // tag a file with a baked-in LUT: playback won't apply the LUT again
                 if takeLUTRecord, let takeLUTName {
@@ -288,7 +289,8 @@ extension CapturePipeline {
             takeNumber: takeNumber,
             startTimecode: takeStartTC,
             durationSeconds: writer.durationSeconds,
-            recordedAt: takeStartedAt)
+            recordedAt: takeStartedAt,
+            frameRate: writer.format.frameRate)
         take.slate = takeSlate
         take.comment = audioNotes(from: writer).joined(separator: "; ")
         return take

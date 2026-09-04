@@ -84,6 +84,7 @@ enum DiagnosticsStateReport {
             // it. It had been counted since the bake shipped and printed
             // nowhere.
             pair("Chroma bake fallbacks", health.chromaBakeFallbacks),
+            pair("LUT bake fallbacks", health.lutBakeFallbacks),
             pair("Takes closed", health.takesClosed),
             pair("Failed to finalize", health.takesFailedToFinalize),
         ]
