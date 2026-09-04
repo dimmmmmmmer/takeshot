@@ -140,6 +140,32 @@ extension CapturePipeline {
         }
     }
 
+    /// **Make a take open, or make it closed — never flip it.**
+    ///
+    /// This is what a RELAY calls. The main camera's REC is mirrored to every
+    /// extra channel, and the mirror used to go through `toggleManualRecord`,
+    /// which flips: a B-cam whose own detector had already opened a take on the
+    /// camera's VANC flag got A-cam's "start" up to 1.5 s later (A relays only
+    /// after its pre-roll drain) and the flip CLOSED it. Every B-cam take of
+    /// the day came out about a second long, finalized cleanly, joined the list
+    /// and the CSV, and looked like footage until the edit. A set is
+    /// idempotent: two authorities agreeing on "open" open once.
+    public func setManualRecord(_ on: Bool) {
+        queue.async {
+            if on {
+                guard self.writer == nil else { return }
+                self.beginTake(timecode: self.lastTimecode)
+                if self.writer == nil {
+                    let report = self.onRecStateChanged
+                    DispatchQueue.main.async { report?(false) }
+                }
+            } else {
+                guard self.writer != nil else { return }
+                self.finishTake()
+            }
+        }
+    }
+
     /// Manual record start/stop (button).
     public func toggleManualRecord() {
         queue.async {

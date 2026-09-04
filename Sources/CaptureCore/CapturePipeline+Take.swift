@@ -176,6 +176,15 @@ extension CapturePipeline {
     func finishTake() {
         guard let writer else { return }
         self.writer = nil
+        // **The detector is told, whatever closed the take.** It sets itself
+        // false on its own `.stopped` event and nowhere else — so a take closed
+        // by a writer failure, a failed start, a disk-full stop or a relay left
+        // it believing it was still recording, and `vancEvent` ignores a start
+        // while recording. The camera never stopped rolling; the operator
+        // swapped the full drive; nothing recorded until the camera stopped and
+        // started again, and no alarm said auto-detection was suspended.
+        // Idempotent on the detector's own path: it is already false there.
+        detector.setRecording(false)
         // Nothing left for the watchdog to protect, and it must not fire between
         // takes — including when it is the watchdog itself that got us here.
         stopFrameWatchdog()

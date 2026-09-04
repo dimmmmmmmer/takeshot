@@ -119,10 +119,23 @@ extension CaptureController {
                 _ = try TakeLogExporter.writeSlates(takes: takes,
                                                     toDirectory: root)
             } catch {
-                // ratings/comments silently not persisting is a day-loss bug
+                // ratings/comments silently not persisting is a day-loss bug —
+                // and a five-second toast IS silence to an operator looking at
+                // the slate. The READ side of the same failure has been sticky
+                // since the unreadable-sidecar guard; the write side stayed in
+                // the toast register. Same loss, same register now.
+                //
+                // **A banner already up outranks this one.** A record volume
+                // that vanishes fails these writes too, and the disk watch
+                // raises `alarm_volume_unreachable` for it — the more serious
+                // message, and the one the operator has to act on. Letting a
+                // sidecar write land on top of it hid the volume alarm behind
+                // its own consequence (`anUnreachableRecordVolumeStopsARollingTake`
+                // caught it on the first battery).
                 DispatchQueue.main.async {
-                    self?.lastError = L("toast_metadata_log_not_saved",
-                                        error.localizedDescription)
+                    guard let self, self.persistentAlert == nil else { return }
+                    self.persistentAlert = L("toast_metadata_log_not_saved",
+                                             error.localizedDescription)
                 }
             }
         }

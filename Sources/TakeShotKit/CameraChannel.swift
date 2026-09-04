@@ -119,7 +119,11 @@ final class CameraChannel: ObservableObject, Identifiable {
     func setRecording(_ recording: Bool) {
         guard recording != recordingRequested else { return }
         recordingRequested = recording
-        pipeline.toggleManualRecord()
+        // A SET, not a toggle: this channel's own detector may already have
+        // opened the take on the camera's VANC flag, and the main camera's
+        // relay arriving a second later must agree with it, not undo it. See
+        // `CapturePipeline.setManualRecord`.
+        pipeline.setManualRecord(recording)
     }
 }
 

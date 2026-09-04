@@ -301,3 +301,108 @@ enum CameraChannelProbe {
     static let format = CaptureFormat(width: 320, height: 180, frameRate: 25,
                                       timecodeFPS: 25, name: "320x180p25")
 }
+
+/// **The main camera's REC relay AGREES with a channel's own detector; it does
+/// not undo it.**
+///
+/// Every channel runs the detector in the shared mode, so a B-cam carrying the
+/// camera's SDI REC flag opens its own take the instant the flag arrives. The
+/// main camera relays its REC only after its pre-roll drain — up to 1.5 s
+/// later — and the relay went through `toggleManualRecord`, which FLIPS: it
+/// found B's take open and closed it. B's detector then still believed it was
+/// recording (`finishTake` never told it), so B's next flag was ignored. Every
+/// B-cam take of the day came out about a second long, finalized cleanly,
+/// joined the list and the CSV, and looked like footage until the edit.
+@Suite @MainActor struct ModelCameraChannelRelayTests {
+    private func pixelBuffer() -> CVPixelBuffer {
+        var out: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, 320, 180, kCVPixelFormatType_32BGRA,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+                            &out)
+        guard let out else { fatalError("could not allocate a test frame") }
+        return out
+    }
+
+    private func settings(destination: String) -> CaptureSettings {
+        var settings = CaptureSettings()
+        settings.capture.codec = .proResProxy
+        settings.capture.destinationPath = destination
+        settings.naming.namingTemplate = "{cam}{roll}C{clip}"
+        settings.capture.detectionMode = .vanc
+        settings.capture.preRollFrames = 0
+        settings.naming.cameraLabel = "A"
+        return settings
+    }
+
+    /// Frames at the live pace, the FIRST one carrying the camera's own flag.
+    private func feed(_ backend: StubBackend, buffer: CVPixelBuffer, count: Int,
+                      startingAt index: Int, trigger: VancTrigger? = nil)
+        async throws -> Int {
+        var frame = index
+        let standing = Timecode(hours: 9, minutes: 0, seconds: 0, frames: 0, fps: 25)
+        for step in 0..<count {
+            frame += 1
+            backend.delegate?.backend(backend, didReceive: CapturedFrame(
+                pixelBuffer: buffer,
+                pts: CMTime(value: CMTimeValue(frame * 40), timescale: 1000),
+                timecode: standing,
+                vancTrigger: step == 0 ? trigger : nil,
+                ancillaryPackets: []))
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        return frame
+    }
+
+    @Test func aRelayedStartDoesNotCloseTheTakeTheChannelOpenedItself() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ModelCameraChannelRelay-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let backend = StubBackend(devices: [CaptureDeviceInfo(id: "x", name: "X")])
+        let channel = CameraChannel(camLabel: "B", backend: backend, deviceID: "x",
+                                    settings: settings(destination: root.path),
+                                    roll: "007")
+        var takes: [Take] = []
+        channel.onTakeFinished = { takes.append($0) }
+        try channel.start()
+        let buffer = pixelBuffer()
+        channel.pipeline.handleFormat(CaptureFormat(
+            width: 320, height: 180, frameRate: 25, timecodeFPS: 25, name: "test"))
+
+        // B's OWN flag opens the take…
+        var index = try await feed(backend, buffer: buffer, count: 6, startingAt: 0,
+                                   trigger: .recordStart)
+        #expect(await ControllerWait.until { channel.pipeline.health.isRecording },
+                "the channel's own VANC start opened nothing")
+
+        // …and the main camera's relay, a second later, must agree with it.
+        channel.setRecording(true)
+        index = try await feed(backend, buffer: buffer, count: 12, startingAt: index)
+        #expect(channel.pipeline.health.isRecording, """
+            the main camera's relayed START closed the take the channel had \
+            already opened on its own flag
+            """)
+
+        // The relayed stop closes it, and the channel's NEXT flag opens a
+        // second take: the detector was told about the close.
+        channel.setRecording(false)
+        index = try await feed(backend, buffer: buffer, count: 3, startingAt: index)
+        await ControllerWait.untilWritten { !takes.isEmpty }
+        #expect(!channel.pipeline.health.isRecording)
+
+        _ = try await feed(backend, buffer: buffer, count: 6, startingAt: index,
+                           trigger: .recordStart)
+        #expect(await ControllerWait.until { channel.pipeline.health.isRecording }, """
+            after a close the channel did not make, its detector still thought \
+            it was recording and ignored the camera's next REC flag
+            """)
+
+        channel.setRecording(false)
+        _ = try await feed(backend, buffer: buffer, count: 2, startingAt: index + 6)
+        await ControllerWait.untilWritten { takes.count >= 2 }
+        channel.stopStreams()
+        await channel.pipeline.finishPendingWrites()
+        #expect(takes.count == 2, "expected two distinct takes, got \(takes.count)")
+    }
+}
