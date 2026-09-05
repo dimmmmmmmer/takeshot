@@ -279,12 +279,22 @@ extension CaptureController {
         // the DIT may have opened in Excel must not cost every range in it. The
         // failable initializer the linter prefers returns nil for the whole file,
         // which is the outcome this guards against.
+        //
+        // …and told apart from a file that IS there and will not open, the way
+        // the other three sidecars are: this one was still `try?`, so a range
+        // file on a share that had not mounted read as an empty day and the
+        // next in/out mark rewrote it wholesale.
         // swiftlint:disable optional_data_string_conversion
-        let ranges = (try? Data(contentsOf: url))
-            .map { TakeLogExporter.parseRanges(
-                csv: String(decoding: $0, as: UTF8.self)) } ?? [:]
+        switch Self.readSidecar(url) {
+        case .absent:
+            return [:]
+        case .read(let data):
+            return TakeLogExporter.parseRanges(csv: String(decoding: data, as: UTF8.self))
+        case .unreadable(let why):
+            noteUnreadableSidecars(Array(Set(unreadableSidecars + [why])))
+            return [:]
+        }
         // swiftlint:enable optional_data_string_conversion
-        return ranges
     }
 }
 

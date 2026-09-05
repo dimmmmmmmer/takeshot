@@ -150,6 +150,9 @@ extension CaptureController {
     /// really moved, so there is nothing here to debounce — scrubbing does not
     /// reach it.
     func exportClipRanges() {
+        // The same refusal `exportTakeLog` makes: a range sidecar that would
+        // not be READ is not rewritten from memory.
+        guard unreadableSidecars.isEmpty else { return }
         let ranges = transport.storedRanges
         let root = destinationRoot
         Self.takeLogQueue.async { [weak self] in

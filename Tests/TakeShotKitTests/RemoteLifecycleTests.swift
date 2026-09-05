@@ -259,4 +259,36 @@ import Testing
             #expect(!stale.ok, "the retired code still opens the door")
         }
     }
+
+    /// **A failure from a server that was already replaced is not news about
+    /// the running one.** A port change stops one server and starts another;
+    /// the old one's listener reports its failure on its own queue a hop later,
+    /// and that hop used to tear down the REPLACEMENT and flip the switch off.
+    @Test func aStaleFailureDoesNotTearDownTheReplacement() async throws {
+        try await ControllerHarness.run { controller, _ in
+            _ = try await RemoteHarness.serve(controller)
+            controller.settings.remote.enabled = true
+            let stale = controller.remoteGeneration
+
+            // the port changes: one server goes, another comes
+            controller.stopRemoteServer()
+            controller.startRemoteServer(overridePort: 0)
+            #expect(await ControllerWait.until { controller.remoteBoundPort > 0 })
+            #expect(controller.remoteGeneration != stale)
+
+            // …and the OLD one's failure arrives late
+            controller.remoteFailed("address in use", generation: stale)
+            #expect(controller.remoteServer != nil, """
+                a failure from a server that had already been replaced tore \
+                down the one that replaced it
+                """)
+            #expect(controller.settings.remote.enabled == true,
+                    "the stale failure flipped the remote switch off")
+
+            // …while the CURRENT server's failure still does what it should
+            controller.remoteFailed("address in use", generation: controller.remoteGeneration)
+            #expect(controller.remoteServer == nil)
+            #expect(controller.settings.remote.enabled == false)
+        }
+    }
 }

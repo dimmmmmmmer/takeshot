@@ -490,6 +490,10 @@ final class CaptureController: ObservableObject {
     /// because it is the only honest answer to "is the remote up?" in
     /// Settings: the configured port is a wish, this is what happened.
     @Published var remoteBoundPort: Int = 0
+    /// Which start of the remote server is the current one. The failure
+    /// handler captures it; a failure from a replaced server is not news
+    /// about the running one (`remoteFailed(_:generation:)`).
+    var remoteGeneration = 0
     /// Feeds the remote its status; cancelled with the server.
     var remoteStatusTask: Task<Void, Never>?
     /// Free space on the record volume, GB; -1 — unreadable. Sampled a few

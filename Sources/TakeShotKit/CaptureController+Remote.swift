@@ -36,6 +36,14 @@ extension CaptureController {
     /// ephemeral port the listener bound.
     func startRemoteServer(overridePort: Int? = nil) {
         guard remoteServer == nil else { return }
+        // **Which server is speaking.** The handlers are closures with no
+        // identity, and `remoteFailed` tore down whatever server was current
+        // and flipped the switch off. A port change stops one server and starts
+        // another; the old one's listener reports its failure on its own queue
+        // a hop later — and that hop landed on the REPLACEMENT. The generation
+        // is captured by the closures below and checked on arrival.
+        remoteGeneration += 1
+        let generation = remoteGeneration
         let pin = ensureRemotePIN()
         let server = RemoteServer(
             pin: pin, page: RemotePage.html(),
@@ -53,7 +61,9 @@ extension CaptureController {
                     Task { @MainActor in self?.remoteBoundPort = Int(port) }
                 },
                 failed: { [weak self] message in
-                    Task { @MainActor in self?.remoteFailed(message) }
+                    Task { @MainActor in
+                        self?.remoteFailed(message, generation: generation)
+                    }
                 },
                 poster: { [weak self] takeID, reply in
                     // The thumbnails belong to the takes panel and live on the
@@ -110,7 +120,10 @@ extension CaptureController {
     /// second copy of TakeShot) already on the port. The toggle goes back off,
     /// because a switch left on over a server that is not listening is the
     /// version of this failure nobody can diagnose from the set.
-    func remoteFailed(_ message: String) {
+    func remoteFailed(_ message: String, generation: Int? = nil) {
+        // A failure from a server that has already been replaced is not news
+        // about the one that is running.
+        if let generation, generation != remoteGeneration { return }
         stopRemoteServer()
         if settings.remote.enabled == true { settings.remote.enabled = false }
         lastError = L("remote_failed", message)

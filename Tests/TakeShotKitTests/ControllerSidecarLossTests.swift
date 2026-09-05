@@ -153,3 +153,36 @@ import Testing
         }
     }
 }
+
+/// **The range sidecar joins the rule the other three follow.** It was still
+/// read with `try?`, so a `takeshot-ranges.csv` on a share that had not
+/// mounted read as an empty day and the next in/out mark rewrote it wholesale.
+@Suite @MainActor struct ControllerRangesSidecarTests {
+    @Test func anUnreadableRangesFileIsNotRewrittenOver() async throws {
+        try await ControllerHarness.run { controller, root in
+            let file = root.appendingPathComponent(TakeLogExporter.rangesFileName)
+            let before = "yesterday's in and out points"
+            try Data(before.utf8).write(to: file)
+            try FileManager.default.setAttributes([.posixPermissions: 0],
+                                                  ofItemAtPath: file.path)
+            defer {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o644], ofItemAtPath: file.path)
+            }
+
+            let ranges = controller.loadStoredRanges()
+            #expect(ranges.isEmpty)
+            #expect(!controller.unreadableSidecars.isEmpty, """
+                a range file that would not open was read as an empty day — \
+                the next in/out mark rewrites it
+                """)
+
+            controller.exportClipRanges()
+            try await Task.sleep(for: .milliseconds(400))
+            try FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                                  ofItemAtPath: file.path)
+            #expect(try String(contentsOf: file, encoding: .utf8) == before,
+                    "the range sidecar was rewritten over a file the app could not read")
+        }
+    }
+}
