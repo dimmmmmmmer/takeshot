@@ -87,6 +87,29 @@ struct RemotePINTarpit {
 
     private var ledgers: [String: Ledger] = [:]
 
+    /// **A flood spread across addresses is still a flood — counted by how
+    /// many addresses are failing, never by how many failures there are.**
+    ///
+    /// Keyed by source address alone, the tarpit answered a FRESH address
+    /// instantly until its own eighth failure, and addresses are free: an
+    /// `ifconfig` alias or an IPv6 /64 gives one host thousands, so a
+    /// four-digit code fell in minutes to anything that could reach the port.
+    /// The obvious repair — one ledger for the whole server — was here before
+    /// and was taken out for a reason the test suite still states: anything
+    /// reaching the port could hold every answer on the set two seconds late
+    /// all day, and a REC button two seconds late loses the head of a take.
+    ///
+    /// So the server-wide reading is the number of DISTINCT addresses that
+    /// have failed inside the window. A set has a handful of phones; sixteen
+    /// addresses failing at once is nothing a crew does by accident and
+    /// everything an address-rotating guesser does by design. And an address
+    /// that has shown the right code inside the window is never held by it —
+    /// a phone that dropped off the Wi-Fi and comes back is answered at once
+    /// whatever else is happening to the port.
+    static let serverAddressThreshold = 16
+    private var failingAddresses: [String: TimeInterval] = [:]
+    private var trustedAddresses: [String: TimeInterval] = [:]
+
     /// Register one PIN verification by `peer` and say how long its answer must
     /// wait — or nil for "do not answer this one at all", which is what a peer
     /// gets while it already has an answer on the way.
@@ -99,12 +122,19 @@ struct RemotePINTarpit {
                           now: TimeInterval) -> TimeInterval? {
         var ledger = ledgers[peer] ?? Ledger()
         ledger.failures.removeAll { now - $0 >= Self.window }
-        let hot = ledger.failures.count > Self.threshold
+        failingAddresses = failingAddresses.filter { now - $0.value < Self.window }
+        trustedAddresses = trustedAddresses.filter { now - $0.value < Self.window }
+        let serverHot = failingAddresses.count > Self.serverAddressThreshold
+            && trustedAddresses[peer] == nil
+        let hot = ledger.failures.count > Self.threshold || serverHot
         if failed {
             ledger.failures.append(now)
             if ledger.failures.count > Self.threshold + 1 {
                 ledger.failures.removeFirst()
             }
+            failingAddresses[peer] = now
+        } else {
+            trustedAddresses[peer] = now
         }
         defer {
             ledgers[peer] = ledger
@@ -122,6 +152,10 @@ struct RemotePINTarpit {
     /// ledger is. Read by the tests to know a burst landed; nothing branches
     /// on it.
     var pressure: Int { ledgers.values.map(\.failures.count).max() ?? 0 }
+
+    /// How many distinct addresses have failed inside the window. For the
+    /// suite: this is the reading the server-wide delay switches on.
+    var failingAddressCount: Int { failingAddresses.count }
 
     /// Whether any peer has an answer on the way at `now`. For the tests: the
     /// one-at-a-time rule is otherwise invisible from outside, and a test that

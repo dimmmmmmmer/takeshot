@@ -52,6 +52,16 @@ public enum OffloadVerifyError: LocalizedError, Equatable {
 
 /// Finding and parsing the manifests `OffloadMHL` writes.
 public enum OffloadManifestReader {
+    /// Relative, and never climbing: no leading slash, no `..` component, no
+    /// empty component (which is what `a//b` and a trailing slash smuggle in).
+    public static func staysInside(_ relativePath: String) -> Bool {
+        guard !relativePath.hasPrefix("/"), !relativePath.hasPrefix("\\") else {
+            return false
+        }
+        let parts = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+        return !parts.contains { $0 == ".." || $0.isEmpty || $0 == "." }
+    }
+
     /// The manifest that describes this tree as it stands now.
     ///
     /// ASC MHL numbers manifests oldest first and keeps every generation, so a
@@ -99,6 +109,13 @@ public enum OffloadManifestReader {
             throw OffloadVerifyError.unreadableManifest(
                 name: name,
                 reason: parser.parserError?.localizedDescription ?? "malformed XML")
+        }
+        // Before the hash question: a manifest naming a path outside the
+        // destination is not this app's manifest, whatever it hashes with.
+        if let escaping = reader.escaping.first {
+            throw OffloadVerifyError.unreadableManifest(
+                name: name,
+                reason: "an entry names a path outside the destination: \(escaping)")
         }
         if !reader.unusable.isEmpty {
             throw OffloadVerifyError.unsupportedHash(
@@ -183,8 +200,23 @@ private final class HashListReader: NSObject, XMLParserDelegate {
         }
     }
 
+    /// Entries whose path is absolute or climbs above the destination. Any
+    /// one of them means the manifest is not what this app wrote.
+    private(set) var escaping: [String] = []
+
     private func finishEntry() {
         guard let path, !path.isEmpty, !digests.isEmpty else { return }
+        // **A path that leaves the destination is not a file to verify.** The
+        // manifest is read off a returned SSD, and its `<path>` text was taken
+        // as-is: `../../../../Users/op/Library/Keychains/x` walked up cleanly
+        // from the destination and the verify pass then opened whatever it
+        // named — its size into the report, its bytes through the hash. Refused
+        // here and remembered, so the run says the manifest is tampered rather
+        // than skipping the entry in silence.
+        guard OffloadManifestReader.staysInside(path) else {
+            escaping.append(path)
+            return
+        }
         guard let (used, digest) = pick() else {
             unusable.formUnion(digests.keys)
             return

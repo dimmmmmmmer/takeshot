@@ -62,11 +62,17 @@ import Testing
             }
             try #require(full, "the anonymous sockets never filled the registry")
 
-            // The set is now locked out, and this is the half that makes the
-            // rest of the test mean something.
+            // **The set is NOT locked out.** It used to be: the ninth socket,
+            // whoever it was from, was dropped before a byte was read, so a
+            // `nc` loop renewing eight anonymous sockets every fourteen seconds
+            // held every phone out for as long as it ran — and this test then
+            // asserted the lockout as the premise. A newcomer now displaces the
+            // OLDEST socket that has never shown a PIN.
             let url: URL = try HTTPURLProbe.url(port: served.port)
             let gotIn: Bool = await HTTPURLProbe.reachable(url)
-            #expect(!gotIn, "eight anonymous sockets did not actually fill the server")
+            #expect(gotIn, "eight anonymous sockets still hold the set out of its own remote")
+            #expect(server.clientCount <= RemoteServer.maximumClients,
+                    "the newcomer was added on top of a full house")
 
             server.sweepUnauthenticated()
             let freed: Bool = await ControllerWait.until {

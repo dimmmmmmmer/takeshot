@@ -462,4 +462,47 @@ import Testing
                 """)
         }
     }
+
+    /// **Fresh addresses buy nothing.** Keyed by source address alone, the
+    /// tarpit answered a new address instantly until its own eighth failure —
+    /// and addresses are free. The server-wide reading is the number of
+    /// DISTINCT addresses failing in the window, so a rotating guesser is
+    /// answered no faster than one that stays put, while one guesser on one
+    /// address still slows nobody else (the test above).
+    @Test func rotatingAddressesDoesNotBuyInstantAnswers() {
+        var tarpit = RemotePINTarpit()
+        let now: TimeInterval = 100
+        for n in 0...RemotePINTarpit.serverAddressThreshold {
+            _ = tarpit.attempt(peer: "10.0.0.\(n)", failed: true, now: now)
+        }
+        #expect(tarpit.failingAddressCount > RemotePINTarpit.serverAddressThreshold)
+        let fresh = tarpit.attempt(peer: "10.0.0.250", failed: true, now: now)
+        #expect(fresh != 0, """
+            a brand-new address was answered instantly with this many \
+            addresses failing — rotating addresses walks straight past the tarpit
+            """)
+    }
+
+    /// A phone that showed the right code inside the window is never held by
+    /// the server-wide delay: it dropped off the Wi-Fi during a flood and comes
+    /// back, and a REC button two seconds late loses the head of a take.
+    @Test func aPhoneThatKnowsTheCodeIsNotHeldByAFloodOfStrangers() {
+        var tarpit = RemotePINTarpit()
+        #expect(tarpit.attempt(peer: "10.0.0.200", failed: false, now: 100) == 0)
+        for n in 0...RemotePINTarpit.serverAddressThreshold {
+            _ = tarpit.attempt(peer: "10.0.0.\(n)", failed: true, now: 101)
+        }
+        #expect(tarpit.attempt(peer: "10.0.0.200", failed: false, now: 102) == 0,
+                "a phone that had already shown the code paid for strangers")
+    }
+
+    /// A handful of phones each mistyping once is not a flood, and is answered.
+    @Test func aFewPhonesMistypingOnceAreStillAnsweredAtOnce() {
+        var tarpit = RemotePINTarpit()
+        for n in 0..<4 {
+            _ = tarpit.attempt(peer: "10.0.0.\(n)", failed: true, now: 100)
+        }
+        #expect(tarpit.attempt(peer: "10.0.0.99", failed: false, now: 100) == 0,
+                "four phones each wrong once tarpitted a fifth that was right")
+    }
 }

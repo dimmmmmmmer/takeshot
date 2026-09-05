@@ -223,6 +223,21 @@ private final class OffloadVerifyRun {
 
     private func check(_ entry: OffloadEntry) {
         let url = root.appendingPathComponent(entry.relativePath)
+        // The reader refuses a climbing path; this is the belt to its braces —
+        // the RESOLVED file has to sit under the resolved destination, whatever
+        // the text looked like.
+        // LEXICAL, not through the filesystem: `standardizedFileURL` resolves
+        // symlinks for a path that exists and leaves one that does not, so a
+        // deleted file under a `/var` → `/private/var` root came out "outside
+        // the destination" instead of missing. `standardized` folds `..` and
+        // touches nothing on disk, which is the only question being asked.
+        let inside = root.standardized.path
+        guard url.standardized.path.hasPrefix(inside + "/") else {
+            mismatched.append(OffloadVerifyFault(
+                relativePath: entry.relativePath,
+                reason: "the manifest names a path outside the destination"))
+            return
+        }
         guard let size = regularFileSize(at: url) else {
             missing.append(entry.relativePath)
             return

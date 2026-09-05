@@ -91,6 +91,7 @@ extension RemoteClient {
         // RFC 6455 §4.1: the handshake is a GET. Upgrading anything else would
         // let a method nothing sends reach the socket path.
         if request.method == "GET", request.path == "/ws", request.isWebSocketUpgrade,
+           !request.isFromForeignOrigin,
            let key = request.headers["sec-websocket-key"] {
             write(RemoteResponse.upgrade(key: key))
             upgraded = true

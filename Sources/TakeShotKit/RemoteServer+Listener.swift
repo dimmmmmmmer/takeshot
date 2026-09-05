@@ -87,9 +87,23 @@ extension RemoteServer {
     }
 
     private func accept(_ connection: NWConnection) {
-        guard clients.count < Self.maximumClients else {
-            connection.cancel()
-            return
+        // **A full house is made of authenticated sockets, or it is not full.**
+        // The cap used to drop the ninth connection whoever it was from, so
+        // eight anonymous sockets renewed every fourteen seconds — a `nc` loop
+        // from any host on the LAN — held every phone out of the remote for as
+        // long as the loop ran; the fifteen-second sweep only ever returned the
+        // slots to the same loop. Now a newcomer displaces the OLDEST socket
+        // that has never shown a PIN, and only a house full of sockets that
+        // have is closed.
+        if clients.count >= Self.maximumClients {
+            let anonymous = clients.values.filter { !$0.authenticated }
+                .sorted { $0.acceptedAt < $1.acceptedAt }
+            guard let oldest = anonymous.first else {
+                connection.cancel()
+                return
+            }
+            oldest.close(code: 1013) // "try again later" — the slot is taken
+            clients.removeValue(forKey: ObjectIdentifier(oldest))
         }
         let client = RemoteClient(connection: connection, server: self)
         clients[ObjectIdentifier(client)] = client

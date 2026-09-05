@@ -113,6 +113,9 @@ final class RemoteClient: @unchecked Sendable {
     /// every such peer in one bucket — the old server-wide behaviour, as the
     /// fallback rather than as the rule.
     let peer: String
+    /// When the socket was accepted. The listener reaps the OLDEST anonymous
+    /// socket when the house is full, and this is what "oldest" reads.
+    let acceptedAt = DispatchTime.now()
     /// The server's queue, kept for the close-frame deadline and for the
     /// tarpit's held answers. Everything in this class already runs on it.
     var queue: DispatchQueue?

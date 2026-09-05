@@ -88,6 +88,27 @@ struct RemoteRequest: Equatable {
             && headers["connection"]?.lowercased().contains("upgrade") == true
             && headers["sec-websocket-key"] != nil
     }
+
+    /// The request was made by a page served from somewhere ELSE.
+    ///
+    /// A browser sends `Origin` on every WebSocket upgrade and on every
+    /// cross-site POST, and nothing here read it — so any web page open on a
+    /// crew phone could run `new WebSocket("ws://<mac>:8765/ws")` and drive the
+    /// remote through that phone's session. The PIN is still asked per
+    /// message, but the guesses are charged to the PHONE's ledger and the
+    /// phone's own answers are what get delayed. A page this server served
+    /// names this server as its origin; anything else is refused. No `Origin`
+    /// at all is a non-browser client (the suite, a script the operator wrote)
+    /// and is left alone — the header is a browser's promise, not a wall.
+    var isFromForeignOrigin: Bool {
+        guard let origin = headers["origin"]?.lowercased(),
+              let host = headers["host"]?.lowercased() else { return false }
+        if origin == "null" { return true }
+        let originHost = origin.replacingOccurrences(of: "http://", with: "")
+            .replacingOccurrences(of: "https://", with: "")
+            .split(separator: "/", maxSplits: 1).first.map(String.init) ?? origin
+        return originHost != host
+    }
 }
 
 /// Responses the remote sends. Every one of them closes the connection after
@@ -196,7 +217,10 @@ enum RemoteResponse {
         // disagreement would show as a video element that stays black on one
         // browser and plays on another. `mediastream:` and `blob:` and nothing
         // else: the page still fetches nothing from off the set network.
-        head += "media-src 'self' blob: mediastream:\r\n"
+        // …and the page cannot be framed by another site: a crew member's
+        // browser on any origin could otherwise wrap it and read taps through.
+        head += "media-src 'self' blob: mediastream:; frame-ancestors 'none'\r\n"
+        head += "X-Frame-Options: DENY\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"
         for line in extra { head += line + "\r\n" }
         head += "Connection: close\r\n\r\n"
