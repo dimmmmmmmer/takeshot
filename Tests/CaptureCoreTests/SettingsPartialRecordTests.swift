@@ -26,6 +26,21 @@ import Testing
             == CaptureSettings().capture.destinationPath)
     }
 
+    /// `codec` and `detectionMode` are the only typed enums on the wire. A
+    /// raw value this build does not know — a rollback after a newer build
+    /// added a case, a hand edit — is that ONE field at its default; the
+    /// synthesized decoding threw and the whole record went unreadable.
+    @Test func anUnknownEnumValueIsThatOneFieldAtItsDefault() throws {
+        let blob = #"{"detectionMode": "hologram", "codec": "ProRes 9000", "#
+            + #""destinationPath": "/Volumes/SHOOT"}"#
+        let decoded = try JSONDecoder().decode(CaptureSettings.self,
+                                               from: Data(blob.utf8))
+        #expect(decoded.capture.destinationPath == "/Volumes/SHOOT",
+                "one unknown value cost the record")
+        #expect(decoded.capture.detectionMode == CaptureSettings().capture.detectionMode)
+        #expect(decoded.capture.codec == CaptureSettings().capture.codec)
+    }
+
     @Test func aOneKeyBlobKeepsThatKeyAndDefaultsTheRest() throws {
         let decoded = try JSONDecoder().decode(
             CaptureSettings.self, from: Data(#"{"remoteEnabled": true}"#.utf8))

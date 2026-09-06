@@ -139,7 +139,9 @@ extension MPEGTSMuxer {
         let sectionLength = 9 + streams.count + 4
         var body: [UInt8] = [0x02, 0xB0, UInt8(sectionLength)]
         body += [UInt8(Self.programNumber >> 8),
-                 UInt8(Self.programNumber & 0xFF), 0xC1, 0x00, 0x00]
+                 UInt8(Self.programNumber & 0xFF),
+                 // reserved '11', version_number, current_next_indicator 1
+                 0xC1 | (pmtVersion << 1), 0x00, 0x00]
         body += [0xE0 | UInt8((Self.videoPID >> 8) & 0x1F),
                  UInt8(Self.videoPID & 0xFF), 0xF0, 0x00]
         body += streams

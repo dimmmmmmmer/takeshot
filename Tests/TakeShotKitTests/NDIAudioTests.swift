@@ -489,11 +489,17 @@ struct NDIAudioWiringTests {
             #expect(controller.mirrors.ndiAudio != nil)
             #expect(controller.pipeline.hasAudioTaps)
             #expect(log.all.count == 1)
+            let poll = controller.mirrors.ndiLinkTask
+            #expect(poll != nil, "no link poll to take down — the premise is gone")
 
             controller.ndiFailed("source name already in use")
 
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiAudio == nil)
+            #expect(controller.mirrors.ndiLinkTask == nil,
+                    "the 1 Hz link poll outlived the sender it polled")
+            #expect(poll?.isCancelled == true,
+                    "the poll's handle was dropped; the poll itself kept running")
             #expect(!controller.pipeline.hasAudioTaps,
                     "a failed source left its sound leg on the tap")
             #expect(controller.mirrors.ndiState

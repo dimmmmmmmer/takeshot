@@ -1,4 +1,6 @@
+import CaptureCore
 import Foundation
+import os.log
 
 /// One card the app has stopped asking about, and why.
 struct OffloadedCardRecord: Codable, Equatable, Identifiable {
@@ -50,15 +52,30 @@ final class OffloadedCardLedger: ObservableObject {
     /// history's own load: the cost is one prompt too many, and refusing to run
     /// the watch over a stale JSON blob would be the tail wagging the dog.
     func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let stored = try? JSONDecoder().decode([OffloadedCardRecord].self,
-                                                     from: data)
-        else {
+        guard let data = try? Data(contentsOf: fileURL) else {
             cards = []
             return
         }
-        cards = stored
+        guard let stored = try? JSONDecoder().decode(
+            [LenientRecord<OffloadedCardRecord>].self, from: data) else {
+            // os_log takes a STATIC format string, so the file's name is an
+            // argument rather than part of the sentence.
+            os_log("%{public}s is not a list; it is left alone and this run's changes go at quit",
+                   log: CapturePipeline.levelsLog, type: .error, "offloaded-cards.json")
+            // Not even a list: an empty ledger for this launch, and the file
+            // is left alone — a save would erase every "Never" the operator
+            // had answered (see `OffloadHistoryStore.load`).
+            cards = []
+            saveBlocked = true
+            return
+        }
+        saveBlocked = false
+        cards = stored.compactMap(\.value)
     }
+
+    /// The file on disk could not be read as a list at all; nothing is
+    /// written over it until a launch reads it.
+    private(set) var saveBlocked = false
 
     func record(for key: String) -> OffloadedCardRecord? {
         cards.first { $0.key == key }
@@ -116,6 +133,7 @@ final class OffloadedCardLedger: ObservableObject {
     /// repeated prompt, not a fact about footage, and an alarm raised over a
     /// read-only Application Support folder would be a false one.
     private func save() {
+        guard !saveBlocked else { return }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
         guard let data = try? encoder.encode(cards) else { return }

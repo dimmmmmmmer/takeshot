@@ -128,6 +128,7 @@ typedef NS_ENUM(NSInteger, CSRTOpenFailure) {
                         port:(uint16_t)port
                    latencyMs:(int32_t)latencyMs
                   passphrase:(nullable NSString *)passphrase
+                    streamID:(nullable NSString *)streamID
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

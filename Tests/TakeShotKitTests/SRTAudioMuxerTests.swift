@@ -266,6 +266,22 @@ enum AudioMuxFixtures {
 /// **The program map with and without sound**, which is the one table a
 /// receiver reads before it will decode anything at all.
 @Suite struct SRTProgramMapTests {
+    /// The PMT that adds the audio stream carries a NEW version number, or a
+    /// receiver that parsed the picture-only map keeps it and never hears the
+    /// sound. TS header 4, pointer 1, table_id + length 3, program_number 2:
+    /// the version byte is the eleventh.
+    @Test func theMapThatAddsAudioIsANewVersion() {
+        var muxer = MPEGTSMuxer()
+        let before = muxer.programMap()
+        muxer.carriesAudio = true
+        let after = muxer.programMap()
+        let index = 4 + 1 + 3 + 2
+        #expect((before[index] >> 1) & 0x1F == 0, "the first map is not version 0")
+        #expect((after[index] >> 1) & 0x1F == 1,
+                "the map that added audio kept version \((after[index] >> 1) & 0x1F)")
+        #expect(after[index] & 0x01 == 1, "current_next_indicator cleared")
+    }
+
     private static func map(carryingAudio: Bool) -> [UInt8] {
         var muxer = MPEGTSMuxer()
         muxer.carriesAudio = carryingAudio

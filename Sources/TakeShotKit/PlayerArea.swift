@@ -47,7 +47,7 @@ struct PlayerArea: View {
                             .font(.caption.bold())
                             .lineLimit(2)
                         Button {
-                            controller.persistentAlert = nil
+                            controller.dismissPersistentAlert()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.white.opacity(0.7))

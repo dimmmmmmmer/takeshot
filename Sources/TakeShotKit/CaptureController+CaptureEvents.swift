@@ -144,6 +144,7 @@ extension CaptureController {
             // …but a take rolling on embedded fallback instead of the chosen
             // USB source is not a clean start, and must say so (+AudioInput)
             warnIfAudioFellBackAtRecStart()
+            raiseSettingsNoticeIfPending()
         } else {
             // a take that outlived its USB device resolves the source now
             reconcileAudioInputAfterTake()
@@ -393,7 +394,12 @@ extension CaptureController {
             try? FileManager.default.createDirectory(
                 at: destinationRoot, withIntermediateDirectories: true)
             guard !FileManager.default.fileExists(atPath: destinationRoot.path)
-            else { return }
+            else {
+                // recreated, or there all along: a watcher that never armed
+                // (the folder was not there to open) gets its chance now
+                if folderWatcher == nil { startFolderWatcher() }
+                return
+            }
             if isRecording {
                 pipeline.stopRecordingIfRolling()
                 persistentAlert = L("alarm_volume_unreachable")

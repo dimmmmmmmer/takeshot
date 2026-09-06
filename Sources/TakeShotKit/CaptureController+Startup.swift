@@ -27,9 +27,38 @@ extension CaptureController {
     /// `CaptureSettings.unreadableKey`), and it is said once, on the launch
     /// that found it: an operator whose whole setup is back at defaults needs
     /// to know that happened, not discover it mid-take.
+    /// Put the settings notice up when nothing else holds the slot — at
+    /// launch, and again after the REC-start clear, the way the USB fallback
+    /// re-raises its own (`warnIfAudioFellBackAtRecStart`).
+    func raiseSettingsNoticeIfPending() {
+        guard settingsNotice != nil, persistentAlert == nil else { return }
+        let text = settingsNotice ?? L("settings_unreadable")
+        settingsNotice = text
+        persistentAlert = text
+    }
+
+    /// The operator's own dismissal of the sticky alarm. The settings notice
+    /// is the one alarm with no condition behind it to re-check, so this is
+    /// where it is put to rest — and only when it is the one being dismissed,
+    /// compared against the text that was RAISED: an operator whose whole
+    /// setup came up at defaults has the app in the wrong language too, and
+    /// putting that right between the banner going up and their pressing ×
+    /// used to make the two strings differ and the notice come back.
+    func dismissPersistentAlert() {
+        if persistentAlert == settingsNotice { settingsNotice = nil }
+        persistentAlert = nil
+    }
+
     func completeStartup(stored: CaptureSettings, unreadable: Bool = false) {
         L10n.apply(stored.theme.appLanguage.flatMap(AppLanguage.init(rawValue:)) ?? .english)
-        if unreadable { lastError = L("settings_unreadable") }
+        // Sticky, not the five-second toast: a whole setup back at defaults
+        // is something to find out about now, not from the wrong destination
+        // folder on the first take. Never over an alarm already showing.
+        if unreadable {
+            settingsUnreadableAtLaunch = true
+            settingsNotice = L("settings_unreadable")
+            raiseSettingsNoticeIfPending()
+        }
         player.audioOutputDeviceUniqueID = stored.audio.playbackAudioDeviceUID
         audioMonitor.outputDeviceUID = stored.audio.playbackAudioDeviceUID
         // 0 in old saves came from the mute button, not a chosen level

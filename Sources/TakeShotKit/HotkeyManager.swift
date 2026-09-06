@@ -17,6 +17,14 @@ final class HotkeyManager: ObservableObject {
                                               conflict: HotkeyConflict)?
 
     private var monitor: Any?
+    /// Monitors an `install` found already up and took down first. The main
+    /// window's `onAppear` runs again when the window is reopened, and a
+    /// monitor never goes away by itself: the second install used to stack
+    /// on the first, and every press then reached the app twice.
+    private(set) var staleMonitorsRemoved = 0
+    /// Whether a monitor is up at all — the premise a headless test has to
+    /// state before it can say anything about two installs.
+    var hasMonitor: Bool { monitor != nil }
     /// Injectable so tests get their own suite instead of the operator's
     /// bindings; production always uses the standard defaults.
     private let defaults: UserDefaults
@@ -24,24 +32,62 @@ final class HotkeyManager: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: Self.defaultsKey),
-           let stored = try? JSONDecoder().decode([String: KeyCombo].self, from: data) {
-            var result: [HotkeyAction: KeyCombo] = [:]
-            for action in HotkeyAction.allCases {
-                result[action] = stored[action.rawValue] ?? action.defaultCombo
-            }
-            // grab-still default moved ⌘⇧S → ⌘S: migrate an untouched binding
-            let oldGrabDefault = KeyCombo(
-                key: "s", modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
-                keyCode: 1)
-            if result[.grabFrame] == oldGrabDefault {
-                result[.grabFrame] = HotkeyAction.grabFrame.defaultCombo
-            }
-            bindings = result
-        } else {
-            bindings = Dictionary(uniqueKeysWithValues:
-                HotkeyAction.allCases.map { ($0, $0.defaultCombo) })
+        let stored = Self.storedBindings(in: defaults)
+        var result: [HotkeyAction: KeyCombo] = [:]
+        for action in HotkeyAction.allCases {
+            result[action] = stored[action.rawValue] ?? action.defaultCombo
         }
+        // grab-still default moved ⌘⇧S → ⌘S: migrate an untouched binding
+        let oldGrabDefault = KeyCombo(
+            key: "s", modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+            keyCode: 1)
+        // …unless the operator had already put something of THEIR OWN on ⌘S:
+        // a migration that moved a stored entry onto a stored chord made the
+        // very collision the yield below exists to prevent
+        if result[.grabFrame] == oldGrabDefault,
+           !stored.contains(where: { $0.key != HotkeyAction.grabFrame.rawValue
+               && $0.value.sharesKey(with: HotkeyAction.grabFrame.defaultCombo) }) {
+            result[.grabFrame] = HotkeyAction.grabFrame.defaultCombo
+        }
+        bindings = Self.yieldingNewDefaults(result, storedFor: stored.keys)
+    }
+
+    /// One entry of the stored record, or nothing when that entry will not
+    /// decode. The record used to be read as a whole, so one malformed chord
+    /// — a hand edit, a field a later build added — put EVERY action back on
+    /// its default, and the next re-bind saved the reset. Now only that
+    /// entry's own action comes up on its default.
+    private struct StoredCombo: Decodable {
+        let combo: KeyCombo?
+        init(from decoder: Decoder) throws { combo = try? KeyCombo(from: decoder) }
+    }
+
+    private static func storedBindings(in defaults: UserDefaults) -> [String: KeyCombo] {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let stored = try? JSONDecoder().decode([String: StoredCombo].self,
+                                                     from: data) else { return [:] }
+        return stored.compactMapValues(\.combo)
+    }
+
+    /// An action the record predates arrives on today's default; when the
+    /// operator had already put one of THEIR bindings on that chord, the
+    /// newcomer yields and comes up unbound. The alternative was two actions
+    /// on one key, fired in dictionary order — REC one day, dim the monitors
+    /// the next — which is the bug `HotkeyConflict` exists to make impossible
+    /// by hand and which an update could still create on its own.
+    private static func yieldingNewDefaults(_ bindings: [HotkeyAction: KeyCombo],
+                                            storedFor stored: Dictionary<String, KeyCombo>.Keys)
+        -> [HotkeyAction: KeyCombo] {
+        var result = bindings
+        for action in HotkeyAction.allCases where !stored.contains(action.rawValue) {
+            guard let combo = result[action] else { continue }
+            let taken = HotkeyAction.allCases.contains { other in
+                other != action && stored.contains(other.rawValue)
+                    && (result[other]?.sharesKey(with: combo) ?? false)
+            }
+            if taken { result[action] = .unbound }
+        }
+        return result
     }
 
     func combo(for action: HotkeyAction) -> KeyCombo {
@@ -69,9 +115,19 @@ final class HotkeyManager: ObservableObject {
     /// Not guarded by the conflict check: a default cannot collide with a fixed
     /// shortcut (`ModelHotkeyTests` proves that), and if it collides with a
     /// chord the operator moved onto it, refusing would leave them with no way
-    /// back at all.
+    /// back at all. So the reset WINS and whoever was sitting on the chord
+    /// comes off it — the alternative is two actions on one key, fired in
+    /// dictionary order, which is the state `HotkeyConflict` exists to make
+    /// unreachable. This is the way back from a yielded binding as well: the
+    /// row shows "—", the arrow puts the default back, and the action that
+    /// took the chord during the update is the one that gives it up.
     func resetToDefault(_ action: HotkeyAction) {
-        set(action.defaultCombo, for: action)
+        let restored = action.defaultCombo
+        for other in HotkeyAction.allCases
+        where other != action && combo(for: other).sharesKey(with: restored) {
+            set(.unbound, for: other)
+        }
+        set(restored, for: action)
         if lastRefusal?.action == action { lastRefusal = nil }
     }
 
@@ -91,8 +147,7 @@ final class HotkeyManager: ObservableObject {
         // physical key differing only by a stored keyCode still collide when
         // the operator presses it.
         let owner = HotkeyAction.allCases.first { other in
-            other != action && self.combo(for: other).key == combo.key
-                && self.combo(for: other).modifiers == combo.modifiers
+            other != action && self.combo(for: other).sharesKey(with: combo)
         }
         return owner.map { .action($0) }
     }
@@ -172,6 +227,10 @@ final class HotkeyManager: ObservableObject {
     /// `outcome`, which is a function of those facts alone.
     func install(controller: CaptureController) {
         controller.hotkeysRef = self
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            staleMonitorsRemoved += 1
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak controller] event in
             guard let self, let controller else { return event }
             let press = HotkeyPress(

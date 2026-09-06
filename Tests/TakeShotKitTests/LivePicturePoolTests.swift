@@ -331,7 +331,14 @@ struct ControllerSettingsRecoveryTests {
     @Test func alaunchThatFoundDamagedSettingsSaysSo() throws {
         let suite = "takeshot.recovery.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            UserDefaults.standard.removeSuite(named: suite)
+            // and the plist cfprefsd leaves behind (see `ModelHotkeyTests`)
+            try? FileManager.default.removeItem(
+                at: FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent("Library/Preferences/\(suite).plist"))
+        }
         // Written the way the app writes it — the key is CaptureCore's own and
         // is not exported, so the damage is planted by corrupting a real save.
         CaptureSettings().save(to: defaults)
@@ -340,8 +347,22 @@ struct ControllerSettingsRecoveryTests {
         defaults.set(Data("{ not settings".utf8), forKey: key)
 
         let controller = CaptureController(backends: [], defaults: defaults)
-        #expect(controller.lastError == L("settings_unreadable"),
-                "the reset went unmentioned: \(controller.lastError ?? "-")")
+        #expect(controller.persistentAlert == L("settings_unreadable"),
+                "the reset went unmentioned: \(controller.persistentAlert ?? "-")")
+        // The first REC press clears the sticky slot ("a clean start clears
+        // the alarm") — and that press onto the default destination folder is
+        // exactly when the notice has to still be up.
+        controller.pipeline.onRecStateChanged?(true)
+        #expect(controller.persistentAlert == L("settings_unreadable"),
+                "the first REC press wiped the notice")
+        controller.dismissPersistentAlert()
+        controller.pipeline.onRecStateChanged?(true)
+        #expect(controller.persistentAlert == nil,
+                "a notice the operator dismissed came back")
+        // …and the FACT survives the dismissal, because the bundle collected
+        // at wrap is the one that has to say the day ran on defaults.
+        #expect(controller.settingsUnreadableAtLaunch,
+                "the bundle lost the reason the setup was at defaults")
         #expect(defaults.data(forKey: CaptureSettings.unreadableKey) != nil,
                 "the operator's copy was not kept")
     }
@@ -350,7 +371,14 @@ struct ControllerSettingsRecoveryTests {
     @Test func anordinaryLaunchSaysNothing() throws {
         let suite = "takeshot.recovery.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            UserDefaults.standard.removeSuite(named: suite)
+            // and the plist cfprefsd leaves behind (see `ModelHotkeyTests`)
+            try? FileManager.default.removeItem(
+                at: FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent("Library/Preferences/\(suite).plist"))
+        }
         CaptureSettings().save(to: defaults)
 
         let controller = CaptureController(backends: [], defaults: defaults)

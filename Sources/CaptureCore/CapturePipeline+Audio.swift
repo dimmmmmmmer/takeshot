@@ -110,6 +110,14 @@ extension CapturePipeline {
         }
     }
 
+    /// How many channels a packet declares, 0 for one with no audio format.
+    static func channelCount(of sampleBuffer: CMSampleBuffer) -> Int {
+        guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(description)
+        else { return 0 }
+        return Int(asbd.pointee.mChannelsPerFrame)
+    }
+
     /// Route the packet to the take (or the pre-roll ring while standing by).
     /// Meters show ALL channels; only the ones in the mask are written.
     /// Internal rather than private: the silence padding in `+ExternalAudio`
@@ -119,17 +127,38 @@ extension CapturePipeline {
         // fixed at start, a live change would kill the whole file
         let activeMask = activeAudioChannelMask
         var toWrite: CMSampleBuffer? = sampleBuffer
+        var maskKeptNothing = false
         if let mask = activeMask {
-            toWrite = PCMAudio.selectChannels(sampleBuffer,
-                                              indices: Self.channels(in: mask),
-                                              formatCache: &trimFormatCache)
+            // Decided HERE and not from a nil answer: `selectChannels` also
+            // answers nil when it cannot build the re-packed buffer, and that
+            // is a dropped packet, not a moved channel map.
+            let arrived = Self.channelCount(of: sampleBuffer)
+            let wanted = Self.channels(in: mask)
+            // A mask that names NO channel is the operator switching the last
+            // one off, not the source moving: the take opens with no audio
+            // track and says so on its own, and an alarm here would fire on
+            // every packet of every take of that day.
+            maskKeptNothing = arrived > 0 && !wanted.isEmpty
+                && !wanted.contains { $0 < arrived }
+            toWrite = maskKeptNothing ? nil
+                : PCMAudio.selectChannels(sampleBuffer,
+                                          indices: Self.channels(in: mask),
+                                          formatCache: &trimFormatCache)
         }
         if let writer {
             // The writer conforms what it is given to the count it latched — a
             // source can change its own, and the mask trim above filters to what
             // ARRIVED (see `TakeWriter.conformed`). Reported from here, because
             // only the pipeline can raise an alarm.
-            if let toWrite { writer.append(audioSampleBuffer: toWrite) }
+            if let toWrite {
+                writer.append(audioSampleBuffer: toWrite)
+            } else if maskKeptNothing {
+                // the source no longer sends the channels the take latched,
+                // and a packet that never reaches the writer is counted
+                // nowhere else — the writer's own padding then says
+                // "starved", which is the symptom
+                noteAudioMaskMiss(arrived: Self.channelCount(of: sampleBuffer))
+            }
             // Both only take the health lock when a tally actually moved, so an
             // accepted packet costs two comparisons.
             noteAudioDrops(from: writer)

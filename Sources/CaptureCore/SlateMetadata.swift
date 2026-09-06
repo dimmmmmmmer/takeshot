@@ -49,6 +49,57 @@ public struct SlateMetadata: Equatable, Sendable {
 
     public static let empty = SlateMetadata()
 
+    /// The highest number a slate field holds, and deliberately the number
+    /// the panel's arrows stop at: a reader that ACCEPTED more would put a
+    /// take number on the log that the panel cannot show.
+    public static let maxNumber = 9999
+
+    /// The number somebody TYPED, or 0 when they typed none: the panel's
+    /// field, the phone's, the arrows.
+    ///
+    /// Every ASCII digit in the string, wherever it sits — a scene number
+    /// fat-fingered into the take box ("12A") is take 12 and "T7" is take 7,
+    /// because what the operator meant is the digits. Deliberately not
+    /// `Character.isNumber`, which is true of "١٢" and every other Unicode
+    /// digit and then makes `Int(_:)` refuse the whole string, so a non-Latin
+    /// numeral would read as whatever the call site's `?? fallback` happened
+    /// to be.
+    public static func number(from text: String) -> Int {
+        clamped(text.filter { $0.isASCII && $0.isNumber })
+    }
+
+    /// The number a RECORD holds — the sidecar's Shot or Take cell, the
+    /// file's own metadata key — or 0 when it holds none.
+    ///
+    /// Stricter than the typed field, because these are files a person edits
+    /// in Excel and a cell that is not a number must read as "not logged"
+    /// rather than as a take the slate never had: digits at the FRONT and
+    /// after them letters or nothing. "12" and "12A" are shot 12; "-3", "3.5"
+    /// and "v2" are not logged.
+    ///
+    /// The letters are the one concession, and they are what the file and the
+    /// sidecar used to disagree about: the build before 8dcfd69 logged the
+    /// shot as free text — "12A", the American setup letter — so a sidecar
+    /// written then holds text in a column this build reads as a number. A
+    /// strict `Int(_:)` made that 0 while the file's own metadata read 12,
+    /// and the next rating rewrote the sidecar with the Shot column blank.
+    public static func loggedNumber(from text: String) -> Int {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let digits = trimmed.prefix { $0.isASCII && $0.isNumber }
+        guard !digits.isEmpty,
+              trimmed.dropFirst(digits.count).allSatisfy(\.isLetter) else { return 0 }
+        return clamped(String(digits))
+    }
+
+    /// A run of digits too long to be an `Int` is over the ceiling by a very
+    /// long way. `Int(_:)` answers nil for it, and reading that as "no
+    /// number" would log a leant-on keyboard as an unslated take.
+    private static func clamped(_ digits: String) -> Int {
+        guard !digits.isEmpty else { return 0 }
+        guard let value = Int(digits) else { return maxNumber }
+        return min(maxNumber, value)
+    }
+
     public init(scene: String = "", shot: Int = 0, take: Int = 0) {
         self.scene = scene
         self.shot = shot

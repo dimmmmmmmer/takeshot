@@ -26,7 +26,7 @@ enum SettingsFormatFixture {
     /// The defaults key the blob is stored under.
     static let defaultsKey = "TakeShot.CaptureSettings"
 
-    /// Every key the current format has, sorted. 92 of them.
+    /// Every key the current format has, sorted. 96 of them.
     ///
     /// Adding a key here is how a new setting is declared to exist; a key that
     /// disappears from this list is a setting that every existing operator
@@ -74,7 +74,7 @@ enum SettingsFormatFixture {
         "r3dApplyCameraLUT", "r3dDecodeScale", "remoteEnabled", "remotePIN",
         "remotePort", "safeActionPercent", "safeAreasOn", "safeTitlePercent",
         "schemaVersion", "srtAddress", "srtBitrateMbps", "srtEnabled",
-        "srtLatencyMs", "srtPassphrase", "srtPort", "srtRole",
+        "srtLatencyMs", "srtPassphrase", "srtPort", "srtRole", "srtStreamID",
         "startDebounceFrames", "stopDebounceFrames",
         "tenBitCapture", "timecodeSource", "videoLevels", "visualRecCenterX",
         "visualRecCenterY", "visualRecHeight", "visualRecIdle",
@@ -191,6 +191,7 @@ enum SettingsFormatFixture {
           "srtPassphrase": "video-village-2026",
           "srtPort": 9312,
           "srtRole": "listener",
+          "srtStreamID": "publish/cam1",
           "startDebounceFrames": 4,
           "stopDebounceFrames": 6,
           "tenBitCapture": false,

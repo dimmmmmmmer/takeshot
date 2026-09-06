@@ -252,6 +252,14 @@ extension CaptureController {
     /// enforces the same thing (see `visualRecOn`).
     var canUseVisualRec: Bool { visualRecTeaching.isTaught }
 
+    /// Visual detection is the chosen mode and the indicator has not been
+    /// taught: the trigger stays off, nothing starts a take, and until this
+    /// was said on screen an operator stood watching for takes that could not
+    /// come (see `DetectionModePicker`).
+    var visualRecNeedsTeaching: Bool {
+        settings.capture.detectionMode == .visual && !canUseVisualRec
+    }
+
     /// There is something to forget — one reference is enough, since half a
     /// teaching is exactly the state the operator wants to clear and start
     /// again from.

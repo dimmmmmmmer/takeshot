@@ -31,6 +31,7 @@ extension CaptureController {
         recording.codec = settings.capture.codec.rawValue
         recording.health = pipeline.health
         recording.persistentAlert = persistentAlert
+        recording.settingsUnreadableAtLaunch = settingsUnreadableAtLaunch
         recording.lastError = lastError
         recording.audioSource = externalAudioActive
             ? "external (USB input device)" : "embedded (capture board)"

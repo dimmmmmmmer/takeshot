@@ -124,7 +124,8 @@ final class SRTStream: SRTStreamSending, @unchecked Sendable {
             address: endpoint.address,
             port: UInt16(clamping: endpoint.port),
             latencyMs: Int32(clamping: endpoint.latencyMs),
-            passphrase: endpoint.passphrase)
+            passphrase: endpoint.passphrase,
+            streamID: endpoint.streamID)
     }
 
     var roundTripMs: Double? {

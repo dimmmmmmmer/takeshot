@@ -87,8 +87,10 @@ None of these SDKs may be redistributed, so a build published from CI has none
 of them. `CONTRIBUTING.md` says where each one goes; the app's **Collect
 diagnostics** report states which are live in the copy you are running.
 
-Signed ad hoc, not with a Developer ID — the first launch needs a right-click →
-**Open** rather than a double-click. macOS 14 (Sonoma) or newer.
+Signed ad hoc, not with a Developer ID — Gatekeeper blocks the first launch:
+open System Settings → Privacy & Security and press **Open Anyway**, or clear
+the quarantine flag with `xattr -d com.apple.quarantine TakeShot.app`. macOS 15
+(Sequoia) or newer.
 FOOTER
 
 # Which Macs this particular download runs on — MEASURED, not assumed. A plain

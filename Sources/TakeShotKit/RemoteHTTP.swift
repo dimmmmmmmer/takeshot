@@ -120,6 +120,14 @@ enum RemoteResponse {
              body: body)
     }
 
+    /// A bookmark to a page that no longer exists, sent on to the one that
+    /// replaced it: `/cameras` was the JPEG grid, and a phone that kept the
+    /// address got a bare text 404 after the grid was retired.
+    static func redirect(to path: String) -> Data {
+        make(status: "302 Found", contentType: "text/plain; charset=utf-8",
+             body: Data("See \(path)\n".utf8), extra: ["Location: \(path)"])
+    }
+
     static func notFound() -> Data {
         make(status: "404 Not Found", contentType: "text/plain; charset=utf-8",
              body: Data("Not found\n".utf8))

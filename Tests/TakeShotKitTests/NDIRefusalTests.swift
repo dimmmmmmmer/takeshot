@@ -144,6 +144,40 @@ final class RefusalBox: @unchecked Sendable {
 /// take the operator believes was keyed comes back with the green screen in it
 /// and there was no record of it anywhere.
 @Suite struct DiagnosticsChromaTests {
+    /// Five more counters kept behind properties and printed nowhere a
+    /// bundle could show them: the converter's refusals, the expansion
+    /// fallbacks, the aids' late drops, the head of the take the drain
+    /// dropped, and the packets the audio mask kept nothing of.
+    @Test func theQuietCountersReachTheReport() {
+        var health = PipelineHealth()
+        health.conversionFailures = 5001
+        health.expansionFallbacks = 6002
+        health.assistLateDrops = 8003
+        health.preRollFramesLostInTake = 9004
+        health.preRollFramesLostTotal = 13005
+        health.maskedOutAudioPacketsInTake = 21006
+        let text = DiagnosticsStateReport.counters(health).joined(separator: "\n")
+        for (line, value) in [("Conversion failures", "5001"), ("Expansion fallbacks", "6002"),
+                              ("Assist late drops", "8003"), ("Pre-roll frames lost", "9004"),
+                              ("Audio outside the mask", "21006")] {
+            #expect(text.contains(line) && text.contains(value),
+                    "\(line) is counted and printed nowhere: \(text)")
+        }
+    }
+
+    /// The fact that the launch found the settings unreadable is in the
+    /// bundle whatever the banner shows by the time one is collected — the
+    /// operator may have dismissed it at nine in the morning.
+    @Test func theSettingsNoticeIsInTheBundleAfterItIsDismissed() {
+        var snapshot = DiagnosticsSnapshot()
+        snapshot.recording.settingsUnreadableAtLaunch = true
+        snapshot.recording.persistentAlert = nil
+        let line = DiagnosticsStateReport.recording(snapshot)
+            .first { $0.contains("Settings unreadable at launch") }
+        #expect(line?.contains("yes") == true,
+                "the day ran on defaults and the bundle does not say so: \(line ?? "-")")
+    }
+
     @Test func theBakeFallbackCountReachesTheReport() {
         var health = PipelineHealth()
         health.chromaLateDrops = 3

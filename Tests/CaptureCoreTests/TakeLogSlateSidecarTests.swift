@@ -127,8 +127,14 @@ struct TakeLogSlateSidecarTests {
             ,12,A,3,no name
             zero.mov,14,,0,
             junk.mov,15,,not a number,
+            neg.mov,16,,-3,
+            dec.mov,17,,3.5,
             """)
-        #expect(parsed.count == 3)
+        #expect(parsed.count == 5)
+        #expect(parsed["neg.mov"]?.slate == SlateMetadata(scene: "16"),
+                "a negative read as a take number")
+        #expect(parsed["dec.mov"]?.slate == SlateMetadata(scene: "17"),
+                "a decimal read as a take number")
         #expect(parsed["good.mov"]?.slate.take == 3)
         #expect(parsed["short.mov"] == nil)
         #expect(parsed["zero.mov"]?.slate == SlateMetadata(scene: "14"))

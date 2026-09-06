@@ -148,6 +148,7 @@ struct DailiesSheetFooter: View {
             Spacer()
             Button(model.isRunning ? L("offload_hide") : L("close"),
                    action: dismiss)
+                .keyboardShortcut(.cancelAction)
             Button(L("dailies_start")) { model.start() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!controller.canStartDailies)

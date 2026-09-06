@@ -107,6 +107,11 @@ final class DisplayMirrors: ObservableObject {
     /// last link would be neither.
     @Published var srtLatencyMs: Int?
     @Published var srtRoundTripMs: Double?
+    /// Which SRT link is current. Every event and measurement closure carries
+    /// the number of the link it was made for, and one from a link since
+    /// replaced is dropped — a stopped mirror's `refused` used to put the
+    /// live one into `failed` (see `remoteGeneration` for the same rule).
+    var srtGeneration = 0
 
     /// The endpoint the live mirror was built for, so the status row can show the
     /// `srt://` URL to read out rather than making the operator reassemble it

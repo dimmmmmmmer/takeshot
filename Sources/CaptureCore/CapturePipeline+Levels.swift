@@ -65,12 +65,6 @@ extension CapturePipeline {
         wireConverters.first { $0.wireFormat == pixelFormat }
     }
 
-    /// The three, in the order they are tried. A stored array rather than a
-    /// computed one: it is asked per frame.
-    var wireConverters: [WireConverter] {
-        [tenBitConverter, twelveBitConverter, tenBitYUVConverter]
-    }
-
     /// Levels and, for a high-bit-depth RGB wire, the split into display +
     /// record buffers. nil means the converter could not produce a frame and
     /// this one is dropped — the same `guard` the inline code had.

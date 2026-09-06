@@ -178,6 +178,9 @@ struct DiagnosticsSnapshot: Codable, Sendable {
         /// The sticky alarm, verbatim, if one is up. The single most useful
         /// line in the whole bundle when something has gone wrong.
         var persistentAlert: String?
+        /// The launch found the stored settings unreadable: the whole setup
+        /// is at defaults whatever the banner shows by now.
+        var settingsUnreadableAtLaunch = false
         var lastError: String?
         var audioSource = "embedded"
         var audioChannelMask: String?

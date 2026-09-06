@@ -192,6 +192,45 @@ import Testing
     /// trimmed, missing ones silent. The take survives, and the change is
     /// reported in the sticky register because the channel MAP after it is a
     /// guess — post has to know before the edit, not after.
+    /// The operator's mask names channels the source STOPS sending — 9 on a
+    /// sixteen-channel embed that renegotiates to eight mid-take. Every
+    /// packet is set aside whole; that used to be counted nowhere and
+    /// reported a second later as "starved", the symptom and not the moved
+    /// map.
+    @Test func aMaskTheSourceStopsCoveringMidTakeIsCountedAndNamed() async throws {
+        let root = TestMedia.scratchDirectory("AudioMaskMoved")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var settings = Self.settings(root: root, preRoll: 0)
+        settings.audio.audioChannelMask = 1 << 8 // channel 9 alone
+        let pipeline = CapturePipeline(config: .init(settings: settings, takeNumber: 1))
+        let takes = TakeCollector()
+        let errors = EventCollector<PipelineAlarm>()
+        let recStates = EventCollector<Bool>()
+        pipeline.onTakeFinished = { takes.append($0) }
+        pipeline.onError = { errors.append($0) }
+        pipeline.onRecStateChanged = { recStates.append($0) }
+        pipeline.handleFormat(Self.format)
+
+        let feed = ChannelChangingFeed(pipeline: pipeline)
+        try await feed.push(frames: 4, audioChannels: 16)
+        pipeline.toggleManualRecord()
+        #expect(await TestWait.becomesTrue { pipeline.health.isRecording },
+                "the take never opened")
+        try await feed.push(frames: 6, audioChannels: 16)
+        try await feed.push(frames: 10, audioChannels: 8) // …and channel 9 is gone
+        pipeline.toggleManualRecord()
+
+        await TestWait.untilWritten { recStates.last == false }
+        await pipeline.finishPendingWrites()
+        await TestWait.untilWritten { !takes.isEmpty }
+
+        #expect(pipeline.health.maskedOutAudioPacketsTotal > 0,
+                "the packets the mask kept nothing of were not counted")
+        #expect(errors.contains(.takeAudioChannelsMissing(arrived: 8)),
+                "the moved channel map was never named: \(errors.all)")
+    }
+
     @Test func aSourceThatChangesChannelCountMidTakeDoesNotCostTheTake() async throws {
         let root = TestMedia.scratchDirectory("AudioChannelsMoved")
         defer { try? FileManager.default.removeItem(at: root) }

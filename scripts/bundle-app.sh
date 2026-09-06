@@ -57,7 +57,7 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 # the bundle is in the app, and the strings both languages need are inside it.
 BUNDLED_RESOURCES="$APP/Contents/Resources/TakeShot_TakeShotKit.bundle"
 for required in en.lproj/Localizable.strings ru.lproj/Localizable.strings \
-                remote.html live.html; do
+                remote.html live.html slate.html script.html; do
     if [ ! -f "$BUNDLED_RESOURCES/$required" ]; then
         echo "the assembled app is missing $required." >&2
         echo "Bundle.module would fatalError on launch, or the UI would show" \

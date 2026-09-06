@@ -456,21 +456,29 @@ static void RTC_API CDCPliReceived(int tr, void *ptr);
 
 - (BOOL)sendRTP:(const void *)bytes length:(NSInteger)length {
     CDCRuntime *runtime = CDCSharedRuntime();
-    if (runtime->createPeer == NULL || _track < 0 || bytes == NULL ||
+    // Read ONCE, under the lock `close` clears it with: a send racing a close
+    // used to read the track three times and could hand the library a handle
+    // the line before had just closed.
+    int track;
+    @synchronized(self) {
+        track = _track;
+    }
+    if (runtime->createPeer == NULL || track < 0 || bytes == NULL ||
         length <= 0) {
         return NO;
     }
     // Asked rather than assumed: the track opens when DTLS-SRTP comes up, and
     // a send before that is refused by the library anyway — this only keeps a
     // log line per packet out of it while a phone is still connecting.
-    if (!runtime->isOpen(_track)) {
+    if (!runtime->isOpen(track)) {
         return NO;
     }
-    return runtime->sendMessage(_track, (const char *)bytes, (int)length) >= 0;
+    return runtime->sendMessage(track, (const char *)bytes, (int)length) >= 0;
 }
 
 - (void)close {
     CDCRuntime *runtime = CDCSharedRuntime();
+    int peer;
     @synchronized(self) {
         if (_torn) {
             return;
@@ -478,13 +486,14 @@ static void RTC_API CDCPliReceived(int tr, void *ptr);
         _torn = YES;
         _onStateChange = nil;
         _onKeyframeRequest = nil;
+        // the handles go under the same lock `sendRTP` reads them with
+        peer = _peer;
+        _peer = -1;
+        _track = -1;
     }
-    if (runtime->deletePeer == NULL || _peer < 0) {
+    if (runtime->deletePeer == NULL || peer < 0) {
         return;
     }
-    int peer = _peer;
-    _peer = -1;
-    _track = -1;
     // The user pointer goes before the connection does: a callback already
     // running finds it nil and returns, and `rtcDeletePeerConnection` does not
     // come back until none is.

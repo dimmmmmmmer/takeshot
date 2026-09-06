@@ -44,8 +44,12 @@ extension PipelineAlarm {
             L("alarm_take_audio_starved")
         case .takeAudioChannelsConformed(let from, let to):
             L("alarm_audio_channels_conformed", from, to)
+        case .takeAudioChannelsMissing(let arrived):
+            L("alarm_audio_channels_missing", arrived)
         case .recordingStartFailed(let reason):
             L("alarm_recording_start_failed", reason)
+        case .recordingRefusedNoSignal:
+            L("alarm_rec_refused_no_signal")
         case .takeLostNoAudioTrack(let file):
             L("alarm_take_lost_no_audio", file)
         case .takeLostFinalizeFailed(let file, let reason):

@@ -24,7 +24,7 @@ import Foundation
 /// SINGLE keyed container, so every key still lands at the top level exactly
 /// where it always did. Nothing here hand-writes a per-field encode or decode —
 /// the field-to-key mapping is still the compiler's, which is what makes the
-/// 90 keys unforgeable.
+/// 96 keys unforgeable.
 ///
 /// Flatness is load-bearing for a second consumer as well as for the stored
 /// blob: `DiagnosticsRedaction` walks this encoding as a flat map and drops
@@ -81,7 +81,11 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// A fresh object is at the CURRENT schema. It used to leave
     /// `schemaVersion` nil, so a first launch saved a blob with no version and
     /// every launch after it re-ran all three migrations over a record that
-    /// had never been anywhere but here. Idempotent today; a wrong premise.
+    /// had never been anywhere but here. NOT idempotent: v3 re-reads the
+    /// chroma softness as a fraction of the tolerance, so a fresh install made
+    /// between 3 August and 2 September 2026 had a softness it set on its first
+    /// launch multiplied on its second (see the CHANGELOG). A version stamp is
+    /// what makes a re-reading migration safe to have at all.
     public init() { schemaVersion = Self.currentSchemaVersion }
 
     // MARK: - the flat wire format
@@ -153,13 +157,27 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
     /// settings on any change — wrote defaults over it. A shoot's whole setup,
     /// gone, with nothing to put back and nothing said.
     public static let unreadableKey = "captureSettingsUnreadable"
+    /// Where the previous stash goes when a NEWER damage arrives, so the
+    /// second incident neither throws the first copy away nor is itself
+    /// thrown away. Two copies, bounded: the one before that is gone, and it
+    /// had been sitting unrecovered through two incidents.
+    public static let previousUnreadableKey = "captureSettingsUnreadable.previous"
 
     /// The settings, and the blob that had to be set aside to produce them.
     ///
-    /// `unreadable` is non-nil only on the launch that found the damage, so
-    /// whoever reports it says it once rather than at every start. The blob
-    /// itself stays in `UserDefaults` afterwards — it is the only copy of what
-    /// the operator had, and a person with `defaults read` can get at it.
+    /// `unreadable` is non-nil on the launch that found a damage it has not
+    /// seen before, so whoever reports it says each incident once rather than
+    /// at every start. The blob itself stays in `UserDefaults` afterwards — it
+    /// is the only copy of what the operator had, and a person with
+    /// `defaults read` can get at it.
+    ///
+    /// The stash used to be write-once for the life of the install: after the
+    /// first incident — even one recovered from a year before — every later
+    /// corruption was neither kept nor said, and the next save wrote defaults
+    /// over it, which is the loss the stash was written to prevent. Now the
+    /// SAME bytes relaunched are the same incident, already kept and already
+    /// said; different bytes are a new one, kept and said, and the copy they
+    /// displace moves to `previousUnreadableKey`.
     public static func load(from defaults: UserDefaults = .standard)
         -> (settings: CaptureSettings, unreadable: Data?) {
         guard let data = defaults.data(forKey: defaultsKey) else {
@@ -167,14 +185,19 @@ public struct CaptureSettings: Codable, Equatable, Sendable {
         }
         guard var settings = try? JSONDecoder().decode(CaptureSettings.self,
                                                        from: data) else {
-            // Kept only if nothing is there yet: a second bad launch must not
-            // overwrite the good copy this saved the first time.
-            let first = defaults.data(forKey: unreadableKey) == nil
-            if first { defaults.set(data, forKey: unreadableKey) }
-            return (CaptureSettings(), first ? data : nil)
+            let kept = defaults.data(forKey: unreadableKey)
+            if kept == data { return (CaptureSettings(), nil) }
+            if let kept { defaults.set(kept, forKey: previousUnreadableKey) }
+            defaults.set(data, forKey: unreadableKey)
+            return (CaptureSettings(), data)
         }
         settings = migrate(settings, retired: RetiredSettings(from: data))
-        settings.schemaVersion = currentSchemaVersion
+        // Never stamped DOWN: a blob a newer build wrote keeps its version, so
+        // that build does not run its value re-readings a second time over a
+        // record this one had merely opened and saved (the dev Mac runs ahead
+        // of the CI-built releases against the same defaults).
+        settings.schemaVersion = max(settings.schemaVersion ?? 0,
+                                     currentSchemaVersion)
         return (settings, nil)
     }
 

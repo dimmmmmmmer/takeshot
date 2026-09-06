@@ -101,12 +101,13 @@ extension TakeLogExporter {
         return result
     }
 
-    /// The Take cell. Empty means "not logged"; so does anything that is not a
-    /// positive whole number — a 0 or a negative would read back as a take
-    /// number the slate never had.
+    /// The Shot or Take cell. Empty means "not logged"; so does anything with
+    /// no digits in it — a 0 would read back as a take number the slate
+    /// never had. Read by the model's own parser, the same one the file's
+    /// metadata and the panel go through, so "12A" from the build that logged
+    /// shots as text is shot 12 everywhere rather than 12 in the file and 0
+    /// in the sidecar that then overwrote it.
     private static func takeNumberField(_ field: String) -> Int {
-        let trimmed = field.trimmingCharacters(in: .whitespaces)
-        guard let value = Int(trimmed), value > 0 else { return 0 }
-        return value
+        SlateMetadata.loggedNumber(from: field)
     }
 }

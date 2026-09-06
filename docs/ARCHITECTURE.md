@@ -544,13 +544,13 @@ socket (`RemoteClient.commandBurst`) and per set (`RemoteServer.commandBurst`),
 because a phone in a pocket or a page in a retry loop would otherwise cycle
 begin/finish at message rate, one file per cycle.
 
-**Two narrower reaches, both behind the PIN.** The multiview subscription calls
-`CapturePipeline.setOnMonitorFrame`, which takes `displayFrameLock` — the same
+**Two narrower reaches, both behind the PIN.** The live page's picture
+subscription calls `CapturePipeline.setOnMonitorFrame`, which takes `displayFrameLock` — the same
 lock `publishDisplayFrame` takes once per frame — for two pointer assignments.
 And `rate`/`comment`/`slate`/`good`/`bad` drive `exportTakeLog()`, which rewrites
 three sidecar files on the volume the take is being written to (the log, the
 markers and the slate; the in/out ranges are a fourth, written by
-`exportRanges` on its own); that is the same
+`exportClipRanges` on its own); that is the same
 disk, and it is why `setRating` carries the "nothing changed" guard its two
 siblings already had.
 
@@ -794,7 +794,9 @@ with the reasoning stated.
   raises the sticky alarm and marks the take's log row.
 - Pre-roll carries audio as well as picture.
 - Dropped video, audio and pre-roll frames are counted and shown.
-- Free space is watched: a warning under 5 GB, the take is closed under 0.5 GB.
+- Free space is watched: a warning under 5 GB; the take is closed while it can
+  still finalize, when what is left is under 0.5 GB plus four seconds of the
+  measured write rate (`diskVerdict`).
 
 ## Hard-won facts
 
@@ -900,6 +902,26 @@ would drop a marker while a roll name is being typed.
   out would place the marker hours past the end of the take. The conversion
   itself lives in `+MarkerTime`, shared with the shift report's duration
   counting and with the controller's anchoring of a recording's markers.
+- `takeshot-slate.csv` — File Name, Scene, Shot, Take, Description: the
+  script supervisor's fields, kept OUT of the Resolve table so its frozen
+  schema cannot move (`TakeLogExporter+Slate`). Shot and Take are numbers,
+  read by `SlateMetadata.loggedNumber`: digits at the front and after them
+  letters or nothing, so "12A" from the build that logged shots as text is
+  shot 12 here and in the file's own metadata alike, while "-3" and "3.5"
+  are not a number and read as not logged. (The panel's own field is looser
+  — `SlateMetadata.number` takes the digits out of whatever was typed —
+  because a person typing is not a record.) A row that says nothing is not
+  written.
+- `takeshot-ranges.csv` — File Name, In, Out: the review in/out points
+  (`TakeLogExporter+Ranges`), written by `exportClipRanges` on its own rather
+  than with the three above.
+- Every one of the four is read through `readSidecar`, which tells an ABSENT
+  file from an UNREADABLE one, and the writers stand behind the
+  `unreadableSidecars` latch: a file that could not be read is never
+  rewritten from memory, because that rewrite is how a read failure became
+  the day's loss. They are opened in Excel and saved back: the readers take
+  the spreadsheet's spelling of a boolean (`TRUE`, `ИСТИНА`) and a leading
+  byte-order mark, both of which used to cost every rating or every marker.
 - Offload writes three files into each destination:
   `ascmhl/NNNN_<name>_<stamp>.mhl` (an ASC MHL v2.0 hashlist outside tools can
   verify), `offload-summary_<stamp>.txt` (the human-readable verdict) and
@@ -921,14 +943,16 @@ would drop a marker while a roll name is being typed.
 `CaptureSettings` does two jobs and they pull in opposite directions.
 
 It is the **record**. One JSON blob in `UserDefaults` under
-`TakeShot.CaptureSettings`, 95 keys, and getting the shape wrong costs the
+`TakeShot.CaptureSettings`, 96 keys, and getting the shape wrong costs the
 operator their destination folder, naming template, calibrated assist thresholds
 and taught REC references on the first launch of an update — on a shooting day.
 A key that moves stops decoding and `loaded(from:)` answers the throw with a
 fresh default object; what it no longer does is throw the old blob away. The
 bytes that would not decode are kept under `captureSettingsUnreadable`
-(`CaptureSettings.unreadableKey`), once, and the launch that found the damage
-says so — so a setup that looks wiped is recoverable rather than gone.
+(`CaptureSettings.unreadableKey`); a later, different damage takes that slot
+and moves the copy it displaces to `captureSettingsUnreadable.previous`, and
+each incident is said once, as a sticky alarm that a REC start cannot wipe —
+so a setup that looks wiped is recoverable rather than gone.
 
 It is also the app's **configuration surface**, read at several hundred call
 sites, and as that it had grown into a god object: 84 flat stored properties,
@@ -943,7 +967,7 @@ own **synthesized** `Codable`; `CaptureSettings.encode(to:)`/`init(from:)`
 delegate to all fifteen against a SINGLE keyed container, so every key still
 lands at the top level exactly where it always did. Nothing hand-writes a
 per-field encode or decode — the field-to-key mapping is still the compiler's,
-which is what makes the 95 keys unforgeable.
+which is what makes the 96 keys unforgeable.
 
 Flatness is load-bearing for a second consumer as well as for the stored blob:
 `DiagnosticsRedaction` walks this encoding as a flat map and drops secrets by
@@ -954,7 +978,7 @@ Three suites hold all of that still, and between them the format is a fact
 rather than a claim:
 
 - `ModelSettingsFormatTests` pins the exact key set, that a default install
-  writes only the eight non-Optional keys, that a blob with a distinct value in
+  writes only the nine non-Optional keys, that a blob with a distinct value in
   every field round-trips value for value, that the encoding is flat, and that
   a save/load through `UserDefaults` — migration chain included — is the
   identity. Every assertion is phrased in JSON and none names a Swift property

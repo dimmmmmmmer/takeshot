@@ -70,17 +70,10 @@ extension CapturePipeline {
             gapFilledAudioPackets = 0
             reportedAudioConform = false
             reportedAudioStarved = false
+            reportedAudioMaskMiss = false
             mirroredAudioDrops = 0
             mirroredAudioPadding = 0
-            noteHealth {
-                $0.isRecording = true
-                $0.startTrigger = trigger
-                $0.takeFileName = url.lastPathComponent
-                $0.droppedVideoFramesInTake = 0
-                $0.droppedAudioPacketsInTake = 0
-                $0.gapFilledAudioPacketsInTake = 0
-                $0.paddedAudioPacketsInTake = 0
-            }
+            noteTakeOpened(fileName: url.lastPathComponent, trigger: trigger)
             lastExternalAudioEnd = nil
             preRolledAudioEnd = nil
             // from here on the take is answerable for its input: a board that
@@ -326,7 +319,38 @@ extension CapturePipeline {
             notes.append("audio channel count changed mid-take — "
                 + "\(writer.conformedAudioPackets) packet(s) conformed")
         }
+        notes += Self.timecodeNotes(resyncs: writer.tcResyncs.count,
+                                   dropped: writer.droppedTimecodeResyncs)
         return notes
+    }
+
+    /// The health mirror at the top of a take: what is rolling, what rolled
+    /// it, and every per-take tally back to zero. Its own function because
+    /// the list grows with each thing a take can go wrong in, and `beginTake`
+    /// is already the longest thing in this file.
+    private func noteTakeOpened(fileName: String, trigger: RecTrigger) {
+        noteHealth {
+            $0.isRecording = true
+            $0.startTrigger = trigger
+            $0.takeFileName = fileName
+            $0.droppedVideoFramesInTake = 0
+            $0.droppedAudioPacketsInTake = 0
+            $0.gapFilledAudioPacketsInTake = 0
+            $0.paddedAudioPacketsInTake = 0
+            $0.maskedOutAudioPacketsInTake = 0
+            $0.preRollFramesLostInTake = 0
+        }
+    }
+
+    /// The file's timecode track was re-anchored mid-take: a NLE that reads
+    /// only the first sample syncs the clip against the camera original by
+    /// the frozen span, and until now the only record was os_log. Post needs
+    /// the fact in the row it reads.
+    static func timecodeNotes(resyncs: Int, dropped: Int) -> [String] {
+        guard resyncs > 0 || dropped > 0 else { return [] }
+        var note = "timecode re-anchored \(resyncs) time(s) mid-take"
+        if dropped > 0 { note += " (\(dropped) more past the track's budget, not written)" }
+        return [note]
     }
 
     /// Drop a finished task's handle, back on the pipeline queue that owns the

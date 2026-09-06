@@ -74,8 +74,17 @@ public enum PipelineAlarm: Sendable, Equatable {
     /// count and the take survives; the map its later channels carry is a
     /// guess, which is why this is not a quiet notice.
     case takeAudioChannelsConformed(from: Int, to: Int)
+    /// The take's latched channels are not among the ones the source now
+    /// sends — a mask on 9–16 of a sixteen-channel embed that renegotiated to
+    /// eight. Every packet is set aside whole (there is nothing in it to
+    /// keep) and the track pads with silence; without this the only report
+    /// was "starved", which names the symptom and not the moved map.
+    case takeAudioChannelsMissing(arrived: Int)
     /// The writer never opened, so there is no take at all.
     case recordingStartFailed(reason: String)
+    /// A REC press with no signal locked: nothing opened, and the operator —
+    /// or the phone across the set — was watching a button stay grey.
+    case recordingRefusedNoSignal
     /// A take that began before the first audio packet has no audio input and
     /// discards every packet of the take. Silent scratch audio is only ever
     /// discovered in the edit.
@@ -106,24 +115,26 @@ public enum PipelineAlarm: Sendable, Equatable {
     /// One `switch`, two answers — so a new case cannot be added without
     /// stating which side of the line it falls on.
     ///
-    /// The three tallies are the only notices, and they are notices because
-    /// they arrive AFTER a take that finalized successfully: whatever live
-    /// alarm they had (dropped frames, padded audio) already fired in the
-    /// integrity register while the take was rolling, and this is the total
-    /// stated quietly afterwards. Everything else costs footage.
+    /// Four notices. The three tallies, because they arrive AFTER a take
+    /// that finalized successfully: whatever live alarm they had (dropped
+    /// frames, padded audio) already fired in the integrity register while
+    /// the take was rolling, and this is the total stated quietly afterwards.
+    /// The refused press, because no footage was lost: the picture is still
+    /// black and the button still grey, and a toast is the size of that.
+    /// Everything else costs footage.
     public var severity: Severity {
         switch self {
         case .takeLostWriterFailed, .recordingFramesDropped, .preRollIncomplete,
              .takeClosedFormatChanged, .takeClosedSignalLost,
              .takeClosedFramesStopped, .ingressOverload,
              .externalAudioPadded, .takeAudioStarved,
-             .takeAudioChannelsConformed,
+             .takeAudioChannelsConformed, .takeAudioChannelsMissing,
              .recordingStartFailed,
              .takeLostNoAudioTrack, .takeLostFinalizeFailed,
              .frameLostConversionFailed:
             .integrity
         case .takeDroppedAudioPackets, .takeGapFilledAudio,
-             .takeDroppedVideoFrames:
+             .takeDroppedVideoFrames, .recordingRefusedNoSignal:
             .notice
         }
     }
@@ -157,8 +168,13 @@ public enum PipelineAlarm: Sendable, Equatable {
         case .takeAudioChannelsConformed(let from, let to):
             "AUDIO CHANNELS CHANGED — source sent \(from), "
                 + "take conformed to \(to)"
+        case .takeAudioChannelsMissing(let arrived):
+            "AUDIO LOST — the take's channels are not among the \(arrived) "
+                + "the source now sends"
         case .recordingStartFailed(let reason):
             "Failed to start recording: \(reason)"
+        case .recordingRefusedNoSignal:
+            "REC refused — no signal locked, nothing was opened"
         case .takeLostNoAudioTrack(let file):
             "TAKE LOST audio — \(file) started before the audio format "
                 + "was known and has no audio track"

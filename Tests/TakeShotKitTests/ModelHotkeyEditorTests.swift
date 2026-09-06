@@ -144,6 +144,46 @@ struct ModelHotkeyEditorTests {
         }
     }
 
+    /// ⌘V is paste in every text field and ⌘Q is quit: neither is a chord
+    /// an action can be put on. (⌘↩ used to be reserved for a "Rename take"
+    /// shortcut that does not exist.)
+    @Test func theEditMenusChordsAreRefused() throws {
+        try withEditor { _, hotkeys in
+            let command = NSEvent.ModifierFlags.command.rawValue
+            #expect(hotkeys.assign(KeyCombo(key: "v", modifiers: command, keyCode: 9),
+                                   to: .punchIn) == .reserved("reserved_edit_menu"))
+            #expect(hotkeys.assign(KeyCombo(key: "q", modifiers: command, keyCode: 12),
+                                   to: .punchIn) == .reserved("reserved_app_menu"))
+            #expect(hotkeys.assign(KeyCombo(key: "return", modifiers: command, keyCode: 36),
+                                   to: .punchIn) == nil,
+                    "a chord nothing in the app uses was refused")
+        }
+    }
+
+    /// …and a reserved chord is reserved by its KEY too: ⌘м on a Russian
+    /// layout is the ⌘V key, and paste is not a chord an action can take.
+    @Test func aReservedChordIsRefusedUnderAnotherLayoutsSymbol() throws {
+        try withEditor { _, hotkeys in
+            let command = NSEvent.ModifierFlags.command.rawValue
+            #expect(hotkeys.assign(KeyCombo(key: "м", modifiers: command, keyCode: 9),
+                                   to: .punchIn) == .reserved("reserved_edit_menu"),
+                    "⌘м on the physical V key was bound over paste")
+        }
+    }
+
+    /// The same PHYSICAL key under another layout's symbol still collides:
+    /// ⌘к and ⌘r are one key, and `matches` fires on the key.
+    @Test func theSamePhysicalKeyUnderAnotherLayoutCollides() throws {
+        try withEditor { _, hotkeys in
+            let record = HotkeyAction.toggleRecord.defaultCombo
+            let cyrillic = KeyCombo(key: "к", modifiers: record.modifiers,
+                                    keyCode: record.keyCode)
+            #expect(hotkeys.conflict(for: cyrillic, assigning: .punchIn)
+                == .action(.toggleRecord),
+                "⌘к on keyCode \(record.keyCode ?? 0) slipped past ⌘r")
+        }
+    }
+
     /// Two bindings on the same physical key differing only by a stored keyCode
     /// still collide when the operator presses it, so the check is on key +
     /// modifiers — not on the whole struct.

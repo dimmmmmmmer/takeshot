@@ -125,6 +125,9 @@ extension RemoteClient {
             writeAndClose(RemoteResponse.page(server?.currentSlatePage ?? Data()))
         case RemotePage.posterPath:
             servePoster(request)
+        case "/cameras":
+            // the JPEG grid's address, kept as a bookmark on crew phones
+            writeAndClose(RemoteResponse.redirect(to: RemotePage.livePath))
         default:
             writeAndClose(RemoteResponse.notFound())
         }

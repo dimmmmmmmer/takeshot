@@ -122,6 +122,16 @@ final class CaptureController: ObservableObject {
     /// lost takes) must NOT vanish after five seconds like a toast. Cleared
     /// by the operator or by the next successful take start.
     @Published var persistentAlert: String?
+    /// The launch found the stored settings unreadable and the whole setup is
+    /// at defaults. NEVER cleared: it is the fact the diagnostics bundle has
+    /// to carry whatever the banner shows by the time somebody collects one.
+    var settingsUnreadableAtLaunch = false
+    /// The notice the operator has not put to rest yet, exactly as it was
+    /// raised. A clean REC start clears the banner and this is what puts it
+    /// back (see `raiseSettingsNoticeIfPending`); dismissing THIS text — not
+    /// whatever `L()` answers by then, which a language change moves — is
+    /// what ends it.
+    var settingsNotice: String?
 
     /// Sidecars that ARE in the record folder and would not open.
     ///

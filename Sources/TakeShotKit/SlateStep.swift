@@ -1,4 +1,5 @@
 import Foundation
+import CaptureCore
 
 /// One press of the ‹ › arrows beside a slate field.
 ///
@@ -23,11 +24,12 @@ import Foundation
 /// from empty gives the field's first value, which is why `seed` is a parameter:
 /// scenes and takes start at 1, shots at A.
 enum SlateStep {
-    /// Nothing pages past this, and nothing TYPED past it either:
-    /// `SlateTakeField.maximum` is defined as this number rather than as a
-    /// second `9999`, which is what makes the arrows and the keyboard one
-    /// control. The field itself takes four digits at most.
-    static let maxNumber = 9999
+    /// Nothing pages past this, and nothing TYPED past it either: this,
+    /// `SlateTakeField.maximum` and the sidecar reader all name
+    /// `SlateMetadata.maxNumber`, one number, which is what makes the arrows,
+    /// the keyboard and the file one control. The field itself takes four
+    /// digits at most.
+    static let maxNumber = SlateMetadata.maxNumber
 
     /// The value after one press, or `value` unchanged when there is nothing to
     /// page (see `canStep`, which is what greys the arrow out first).

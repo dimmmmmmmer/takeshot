@@ -23,6 +23,7 @@ public enum SRTAddress {
         public var mode: String?
         public var latencyMs: Int?
         public var passphrase: String?
+        public var streamID: String?
     }
 
     /// Ports below 1024 need root and above 65535 do not exist.
@@ -51,12 +52,12 @@ public enum SRTAddress {
         guard !host.isEmpty else { return nil }
 
         var parsed = Parsed(host: host, port: port, mode: nil,
-                            latencyMs: nil, passphrase: nil)
+                            latencyMs: nil, passphrase: nil, streamID: nil)
         apply(query: query, to: &parsed)
         return parsed
     }
 
-    /// libsrt's query parameters, of which three matter here.
+    /// libsrt's query parameters, of which four matter here.
     private static func apply(query: Substring, to parsed: inout Parsed) {
         for pair in query.split(separator: "&") {
             let halves = pair.split(separator: "=", maxSplits: 1)
@@ -69,6 +70,10 @@ public enum SRTAddress {
             case "latency", "rcvlatency", "peerlatency":
                 parsed.latencyMs = Int(value)
             case "passphrase": parsed.passphrase = value
+            // What a gateway routes by. It used to fall into `default` and
+            // vanish, so a pasted `srt://gw:9000?streamid=publish/cam1` shook
+            // hands with the gateway and published to nowhere.
+            case "streamid": parsed.streamID = value.removingPercentEncoding ?? value
             default: break
             }
         }

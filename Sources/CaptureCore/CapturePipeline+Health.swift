@@ -45,6 +45,11 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// Summing them would say one thing where two happened.
     public var paddedAudioPacketsInTake = 0
     public var paddedAudioPacketsTotal = 0
+    /// Packets the take's latched channel mask kept nothing of: the source
+    /// stopped sending the channels the take is on. Set aside whole, so they
+    /// are in no other tally.
+    public var maskedOutAudioPacketsInTake = 0
+    public var maskedOutAudioPacketsTotal = 0
     /// Frames refused at ingress because the in-flight window was full — the
     /// pipeline being outrun rather than the encoder being behind.
     public var ingressDrops = 0
@@ -57,6 +62,15 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// UNEXPANDED. The levels log has already said they were expanded by the
     /// time this can happen, so the count is the only honest record.
     public var expansionFallbacks = 0
+    /// Frames the assist stage showed without the aids because they arrived
+    /// past their own interval (`AssistStage.lateDrops`); filled in when the
+    /// snapshot is taken, because the stage keeps its own count.
+    public var assistLateDrops = 0
+    /// Frames the head of a take went without: the drain budget ran out, or
+    /// the ring held fewer than the window asked for. The alarm was a toast
+    /// and this is the record of it.
+    public var preRollFramesLostInTake = 0
+    public var preRollFramesLostTotal = 0
     /// Frames shown WITHOUT the chroma key because they were already past
     /// their frame interval. Not a recording fault: the display stage drops
     /// the effect rather than the frame.
@@ -91,6 +105,7 @@ extension CapturePipeline {
         inFlightLock.lock()
         snapshot.ingressDrops = ingressDrops
         inFlightLock.unlock()
+        snapshot.assistLateDrops = assistStage.lateDrops
         chromaLock.lock()
         snapshot.chromaLateDrops = chromaLateDropCount
         snapshot.chromaBakeFallbacks = chromaBakeFallbackCount
@@ -149,7 +164,31 @@ extension CapturePipeline {
         }
         guard !reportedAudioStarved else { return }
         reportedAudioStarved = true
+        // A track starved BECAUSE the mask kept nothing of what arrived has
+        // already been named, and named better: "starved" is the symptom the
+        // moved channel map produces a second later, and on the single sticky
+        // slot it would replace the cause with it.
+        guard !reportedAudioMaskMiss else { return }
         DispatchQueue.main.async { self.onError?(.takeAudioStarved) }
+    }
+
+    /// A packet the latched mask left nothing of: count it, and say once per
+    /// take that the source's channel map moved out from under the take.
+    ///
+    /// The packet never reaches the writer, so unlike the drops and the
+    /// padding there is no writer tally to mirror — this is the count. Once
+    /// per take for the same reason as the conform: the operator needs to be
+    /// told the map moved, not how often.
+    func noteAudioMaskMiss(arrived: Int) {
+        noteHealth {
+            $0.maskedOutAudioPacketsInTake += 1
+            $0.maskedOutAudioPacketsTotal += 1
+        }
+        guard !reportedAudioMaskMiss else { return }
+        reportedAudioMaskMiss = true
+        DispatchQueue.main.async {
+            self.onError?(.takeAudioChannelsMissing(arrived: arrived))
+        }
     }
 
     /// Mirror the writer's audio-drop tally, which lives on the writer and is

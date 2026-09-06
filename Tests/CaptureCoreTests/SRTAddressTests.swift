@@ -38,6 +38,12 @@ struct SRTAddressTests {
     @Test func theQueryCarriesTheModeAndTheBuffer() throws {
         let parsed = try #require(SRTAddress.parse(
             "srt://1.2.3.4:9000?mode=listener&latency=320&passphrase=hunter2"))
+        #expect(parsed.streamID == nil)
+        let routed = try #require(SRTAddress.parse(
+            "srt://gw.example:9000?streamid=publish%2Fcam1&latency=200"))
+        // what a gateway routes by used to fall into `default` and vanish
+        #expect(routed.streamID == "publish/cam1", "the stream id was dropped: \(routed)")
+        #expect(routed.latencyMs == 200)
         #expect(parsed.mode == "listener")
         #expect(parsed.latencyMs == 320)
         #expect(parsed.passphrase == "hunter2")

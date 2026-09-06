@@ -281,10 +281,11 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// levels question is answered on the tap queue, so the file is opened for
     /// its metadata the same way the compare clip's is (see `+Levels`).
     func attach(to item: AVPlayerItem, url: URL) {
-        // a new clip gets to say it again
-        reportedLevelsFallback = false
         queue.async {
             self.detachLocked()
+            // a new clip gets to say it again — set on the queue that reads
+            // it, after the previous clip's tick has stopped
+            self.reportedLevelsFallback = false
             let output = AVPlayerItemVideoOutput(
                 pixelBufferAttributes: Self.displayBufferAttributes)
             item.attachOutput(output)
@@ -352,6 +353,12 @@ final class PlaybackFrameTap: @unchecked Sendable {
         output = nil
         item = nil
         stillBuffer = nil
+        // and the frame it had delivered: a UHD take's last picture used to
+        // stay resident until the NEXT attach, for as long as the operator
+        // was back on live. `lastCompareBuffer` is the compare clip's, let go
+        // by its own detach — clearing it here blanked B's parked frame under
+        // a still loaded over an active compare.
+        lastBuffer = nil
     }
 }
 

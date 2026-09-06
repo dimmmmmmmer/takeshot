@@ -155,14 +155,28 @@ extension CapturePipeline {
             if on {
                 guard self.writer == nil else { return }
                 self.beginTake(timecode: self.lastTimecode)
-                if self.writer == nil {
-                    let report = self.onRecStateChanged
-                    DispatchQueue.main.async { report?(false) }
-                }
+                // State only: the relay fires on every A-cam take, and a
+                // B-cam without a signal would toast on each of them while
+                // its own tile already says so.
+                if self.writer == nil { self.reportDeclinedPress(sayingWhy: false) }
             } else {
                 guard self.writer != nil else { return }
                 self.finishTake()
             }
+        }
+    }
+
+    /// A press that opened nothing says so twice: the state, for a caller
+    /// holding its own "I asked for this" latch (see `toggleManualRecord`),
+    /// and — when the reason is that no signal has locked — a word to the
+    /// operator, who otherwise watched a button stay grey while a phone
+    /// across the set asked why.
+    private func reportDeclinedPress(sayingWhy: Bool) {
+        let report = onRecStateChanged
+        let alarm = sayingWhy && format == nil ? onError : nil
+        DispatchQueue.main.async {
+            report?(false)
+            alarm?(.recordingRefusedNoSignal)
         }
     }
 
@@ -189,10 +203,7 @@ extension CapturePipeline {
             // Reported only for a PRESS. The detector calls `beginTake` at
             // frame rate and a decline there is the ordinary state of a board
             // between takes, not an event.
-            if self.writer == nil {
-                let report = self.onRecStateChanged
-                DispatchQueue.main.async { report?(false) }
-            }
+            if self.writer == nil { self.reportDeclinedPress(sayingWhy: true) }
         }
     }
 

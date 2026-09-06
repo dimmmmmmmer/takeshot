@@ -71,7 +71,9 @@
 "reserved_settings" = "Settings";
 "reserved_open_folder" = "Open the record folder";
 "reserved_help" = "Help";
-"reserved_rename_take" = "Rename take";
+"reserved_edit_menu" = "the Edit menu";
+"mode_visual_untaught" = "Teach the REC indicator first — until then nothing starts a take.";
+"reserved_app_menu" = "macOS";
 "reserved_play_pause" = "Play / pause";
 "reserved_close_overlay" = "Close overlay";
 "hotkey_record" = "Record / stop";
@@ -810,6 +812,8 @@
 "dailies_result_cancelled" = "The queue was stopped; unfinished files were removed.";
 /* === a card mounted: the offer, which never starts a copy by itself === */
 "card_detected" = "Card detected: %@";
+"offload_ledger_unreadable" = "The list of cards already copied could not be read. Answers given today will not be remembered.";
+"card_unreadable" = "Card %1$@ could not be read (%2$@). Nothing was offered.";
 "card_contents" = "%d files, %@";
 "card_size_gb" = "%.1f GB";
 "card_size_mb" = "%.0f MB";
@@ -889,6 +893,7 @@
 "srt_latency_measuring" = "Buffer %1$d ms — measuring the link";
 "srt_latency_stated" = "Buffer %1$d ms, from the address";
 "srt_passphrase" = "Passphrase";
+"srt_stream_id" = "Stream ID";
 "stream_link_up" = "a receiver is taking it";
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";
@@ -907,6 +912,7 @@
 "srt_needs_address" = "Enter the receiver's address, or wait for the receiver instead.";
 "srt_passphrase_short" = "A passphrase has to be %d bytes or more. Clear the field to send unencrypted.";
 "srt_passphrase_long" = "A passphrase has to be %d bytes or fewer. Note a Cyrillic letter is two of them.";
+"srt_stream_id_long" = "A stream ID has to be %d bytes or fewer.";
 
 /* === NDI output: the viewer announced as a source on the set network. Two
    controls against SRT's six, and that is the difference between the two: NDI
@@ -956,7 +962,7 @@
 "trigger_visual" = "INDICATOR";
 "trigger_manual" = "MANUAL";
 
-/* Recording-integrity alarms. Ten of these are the sticky banner: the paths
+/* Recording-integrity alarms. 15 of these are the sticky banner: the paths
    where footage is lost or the rolling take is at risk. WHICH register a line
    lands in is decided by PipelineAlarm.severity in CaptureCore, never by these
    words — see AlarmLocalization — so they can be reworded and translated
@@ -973,10 +979,13 @@
 "alarm_take_audio_starved" = "AUDIO LOST — the take's audio track starved, padded with silence";
 "alarm_audio_channels_conformed" = "AUDIO CHANNELS CHANGED — source sent %1$d, take conformed to %2$d";
 "alarm_recording_start_failed" = "Failed to start recording: %@";
+"alarm_audio_channels_missing" = "AUDIO LOST — the take's channels are not among the %d the source now sends";
 "alarm_take_lost_no_audio" = "TAKE LOST audio — %1$@ started before the audio format was known and has no audio track";
 "alarm_take_lost_finalize" = "TAKE LOST — failed to finalize %1$@: %2$@";
-/* …and the three that toast: a finalized take's closing tallies, stated after
-   the live alarm for them has already been and gone. */
+/* …and the four that toast: a finalized take's closing tallies, stated after
+   the live alarm for them has already been and gone, and a REC press that
+   opened nothing. */
+"alarm_rec_refused_no_signal" = "REC refused — no signal locked, nothing was opened";
 "alarm_take_audio_dropped" = "Take %1$@: %2$d audio packet(s) dropped";
 "alarm_take_audio_gap_filled" = "Take %1$@: %2$d audio packet(s) gap-filled with silence";
 "alarm_take_video_dropped" = "Take %1$@: %2$d video frame(s) dropped";

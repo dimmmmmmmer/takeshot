@@ -196,6 +196,11 @@ public final class CapturePipeline: @unchecked Sendable {
     /// and it is the cheapest of the three to keep: it owns no record pool,
     /// because the frame the board delivered already is what the encoder wants.
     let tenBitYUVConverter = TenBitYUVConverter()
+    /// The three, in the order they are tried. Stored: it is asked per frame,
+    /// and as a computed property it allocated a three-existential array on
+    /// every one of them while its comment said it did not.
+    lazy var wireConverters: [WireConverter] = [tenBitConverter, twelveBitConverter,
+                                                tenBitYUVConverter]
     /// Bytes per pixel of the buffers currently going to the writer, so the
     /// pre-roll ring's memory cap is sized on what it is really holding —
     /// 12-bit record frames are twice a 10-bit one and would otherwise
@@ -427,6 +432,9 @@ public final class CapturePipeline: @unchecked Sendable {
     /// The same latch for the writer's audio backstop, and the running mirror of
     /// its tally (see `noteAudioPadding`).
     var reportedAudioStarved = false
+    /// …and for a packet the latched mask kept nothing of (see
+    /// `noteAudioMaskMiss`).
+    var reportedAudioMaskMiss = false
     var mirroredAudioPadding = 0
     var lastPublishedLevels: [Float] = []
     /// Input audio channel count (cached even during preview — so the writer

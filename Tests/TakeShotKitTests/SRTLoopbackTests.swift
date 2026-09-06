@@ -47,7 +47,7 @@ struct SRTLoopbackTests {
     private static func listener() throws -> (CSRTSender, UInt16) {
         for port in ports {
             let sender = CSRTSender(role: .listener, address: "", port: port,
-                                    latencyMs: 120, passphrase: nil)
+                                    latencyMs: 120, passphrase: nil, streamID: nil)
             if (try? sender.open()) != nil { return (sender, port) }
         }
         throw SRTStreamError.configuration("no free port in the test range")
@@ -80,7 +80,7 @@ struct SRTLoopbackTests {
         let (server, port) = try Self.listener()
         defer { server.close() }
         let client = CSRTSender(role: .caller, address: "127.0.0.1", port: port,
-                               latencyMs: 120, passphrase: nil)
+                               latencyMs: 120, passphrase: nil, streamID: nil)
         defer { client.close() }
         // Nobody has been accepted yet, so the listener has nowhere to send. This
         // is the poll answering rather than blocking, which is the property the
@@ -119,7 +119,7 @@ struct SRTLoopbackTests {
         let (probe, port) = try Self.listener()
         probe.close()
         let client = CSRTSender(role: .caller, address: "127.0.0.1", port: port,
-                                latencyMs: 120, passphrase: nil)
+                                latencyMs: 120, passphrase: nil, streamID: nil)
         defer { client.close() }
         do {
             try client.open()
@@ -138,7 +138,7 @@ struct SRTLoopbackTests {
     @Test func anUnresolvableAddressIsAConfigurationFailure() throws {
         let client = CSRTSender(role: .caller,
                                 address: "no-such-host.takeshot.invalid",
-                                port: 9000, latencyMs: 120, passphrase: nil)
+                                port: 9000, latencyMs: 120, passphrase: nil, streamID: nil)
         defer { client.close() }
         do {
             try client.open()
@@ -155,7 +155,7 @@ struct SRTLoopbackTests {
     /// to be a configuration failure or the reconnect loop would spin on it.
     @Test func aPassphraseSRTRefusesIsAConfigurationFailure() throws {
         let sender = CSRTSender(role: .listener, address: "", port: 41_099,
-                                latencyMs: 120, passphrase: "short")
+                                latencyMs: 120, passphrase: "short", streamID: nil)
         defer { sender.close() }
         do {
             try sender.open()
@@ -172,7 +172,7 @@ struct SRTLoopbackTests {
         for port in Self.ports {
             let sender = CSRTSender(role: .listener, address: "", port: port,
                                     latencyMs: 200,
-                                    passphrase: "video-village-2026")
+                                    passphrase: "video-village-2026", streamID: nil)
             defer { sender.close() }
             if (try? sender.open()) != nil { return }
         }
@@ -186,7 +186,7 @@ struct SRTLoopbackTests {
         let (first, port) = try Self.listener()
         first.close()
         let second = CSRTSender(role: .listener, address: "", port: port,
-                                latencyMs: 120, passphrase: nil)
+                                latencyMs: 120, passphrase: nil, streamID: nil)
         defer { second.close() }
         try second.open()
     }

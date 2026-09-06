@@ -144,7 +144,10 @@ struct HotkeyEditorView: View {
             .foregroundStyle(.red)
             Spacer()
             Button(L("close")) { dismiss() }
-                .keyboardShortcut(.defaultAction)
+                // Escape rather than Return: Return is a chord the operator
+                // may be recording, and the monitor consumes Escape first
+                // while a row is armed (see `HotkeyOutcome.cancelRecording`).
+                .keyboardShortcut(.cancelAction)
         }
     }
 }

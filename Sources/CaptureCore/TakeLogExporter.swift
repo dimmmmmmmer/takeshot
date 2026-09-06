@@ -59,6 +59,18 @@ public enum TakeLogExporter {
         }
     }
 
+    /// Whether a Good Take cell says yes. The writer puts `true`; a
+    /// spreadsheet that has had the file open puts the boolean back its own
+    /// way — `TRUE` from Excel and Numbers, `ИСТИНА` from a Russian Excel —
+    /// and a reader that knew only its own spelling un-rated every good take
+    /// on the next launch, then wrote that loss back with the next rating.
+    /// Bad takes were never at risk: they also carry the Comments marker.
+    static func isGoodTakeCell(_ cell: String) -> Bool {
+        let value = cell.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["true", "истина", "vrai", "wahr", "verdadero", "vero", "verdadeiro"]
+            .contains(value)
+    }
+
     /// The marker written into Comments for a rejected take. It was "NG" for
     /// the app's whole life; the operator-facing word is "Bad" everywhere now,
     /// and the column is read by people, so the file says what the UI says.
@@ -97,7 +109,7 @@ public enum TakeLogExporter {
         for fields in parseCSVRecords(csv).dropFirst() {
             guard fields.count >= 5, !fields[0].isEmpty else { continue }
             let (rating, comment) = parseComments(unguarded(fields[4]),
-                                                  good: fields[3] == "true")
+                                                  good: isGoodTakeCell(fields[3]))
             result[unguarded(fields[0])] = TakeMeta(rating: rating,
                                                     comment: comment)
         }

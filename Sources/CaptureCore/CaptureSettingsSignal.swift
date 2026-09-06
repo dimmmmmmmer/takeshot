@@ -109,12 +109,16 @@ public struct CaptureSignalSettings: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let fresh = Self()
-        codec = try c.decodeIfPresent(type(of: fresh.codec),
-                                      forKey: .codec) ?? fresh.codec
+        // The two typed enums decode by raw string with a fallback: a value
+        // this build does not know — a rollback after a newer build added a
+        // case, a hand edit — is that ONE field at its default, where the
+        // synthesized decoding threw and made the whole record unreadable.
+        codec = try c.decodeIfPresent(String.self, forKey: .codec)
+            .flatMap(CaptureCodec.init(rawValue:)) ?? fresh.codec
         destinationPath = try c.decodeIfPresent(type(of: fresh.destinationPath),
                                       forKey: .destinationPath) ?? fresh.destinationPath
-        detectionMode = try c.decodeIfPresent(type(of: fresh.detectionMode),
-                                      forKey: .detectionMode) ?? fresh.detectionMode
+        detectionMode = try c.decodeIfPresent(String.self, forKey: .detectionMode)
+            .flatMap(RecDetectionMode.init(rawValue:)) ?? fresh.detectionMode
         startDebounceFrames = try c.decodeIfPresent(type(of: fresh.startDebounceFrames),
                                       forKey: .startDebounceFrames) ?? fresh.startDebounceFrames
         stopDebounceFrames = try c.decodeIfPresent(type(of: fresh.stopDebounceFrames),

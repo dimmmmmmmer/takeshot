@@ -9,6 +9,8 @@ struct KeyCombo: Codable, Equatable {
     var keyCode: UInt16?
 
     var display: String {
+        // an action that yielded its chord shows a dash, not a blank button
+        if isUnbound { return "—" }
         var parts = ""
         let flags = NSEvent.ModifierFlags(rawValue: modifiers)
         if flags.contains(.control) { parts += "⌃" }
@@ -42,7 +44,24 @@ struct KeyCombo: Codable, Equatable {
     /// can ask it without one (see `HotkeyManager.outcome`) — and so the
     /// modifier mask is spelled once instead of once here and once in
     /// `from(event:)`.
+    /// Whether two bindings answer to the same press: the physical key when
+    /// both know it, the symbol when one is a legacy record without one. The
+    /// conflict check used to compare symbols only while `matches` fires on
+    /// the physical key — so ⌘ы and ⌘s (both keyCode 1 under a Russian
+    /// layout) passed the check and then collided on the key.
+    func sharesKey(with other: KeyCombo) -> Bool {
+        guard !isUnbound, !other.isUnbound, modifiers == other.modifiers else { return false }
+        if let keyCode, let otherCode = other.keyCode { return keyCode == otherCode }
+        return key == other.key
+    }
+
+    /// No chord at all — what an action is left on when the chord it ships
+    /// with was already the operator's binding for something else.
+    static let unbound = KeyCombo(key: "", modifiers: 0, keyCode: nil)
+    var isUnbound: Bool { key.isEmpty && keyCode == nil }
+
     func matches(_ press: HotkeyPress) -> Bool {
+        guard !isUnbound else { return false }
         let flags = press.modifiers
             .intersection(.deviceIndependentFlagsMask)
             .intersection([.command, .option, .control, .shift])
@@ -73,9 +92,15 @@ struct ReservedShortcut {
     let modifiers: UInt
     /// Localization key naming what owns the chord, for the conflict message.
     let titleKey: String
+    /// The physical key, which is what the monitor fires on and what the
+    /// chord is compared by. `key` is the symbol of whatever layout the
+    /// operator was in when they recorded their chord: ⌘в on a Russian
+    /// layout is the ⌘V key, and a symbol comparison let paste be bound over.
+    let keyCode: UInt16?
 
     func matches(_ combo: KeyCombo) -> Bool {
-        combo.key == key && combo.modifiers == modifiers
+        KeyCombo(key: key, modifiers: modifiers, keyCode: keyCode)
+            .sharesKey(with: combo)
     }
 
     /// Every fixed shortcut in the app. Keep in step with the `keyboardShortcut`
@@ -86,17 +111,37 @@ struct ReservedShortcut {
         let commandShift = NSEvent.ModifierFlags([.command, .shift]).rawValue
         return [
             ReservedShortcut(key: ",", modifiers: command,
-                             titleKey: "reserved_settings"),
+                             titleKey: "reserved_settings", keyCode: 43),
             ReservedShortcut(key: "o", modifiers: commandShift,
-                             titleKey: "reserved_open_folder"),
+                             titleKey: "reserved_open_folder", keyCode: 31),
             ReservedShortcut(key: "?", modifiers: command,
-                             titleKey: "reserved_help"),
-            ReservedShortcut(key: "return", modifiers: command,
-                             titleKey: "reserved_rename_take"),
+                             titleKey: "reserved_help", keyCode: 44),
+            // The Edit menu's and AppKit's own. ⌘ chords reach the hotkeys
+            // even while a field has the keyboard (`typingKeepsTheKey`), so
+            // a binding on ⌘V would take paste from every text field, and one
+            // on ⌘Q would quit — or be refused by the system, unpredictably.
+            ReservedShortcut(key: "c", modifiers: command,
+                             titleKey: "reserved_edit_menu", keyCode: 8),
+            ReservedShortcut(key: "v", modifiers: command,
+                             titleKey: "reserved_edit_menu", keyCode: 9),
+            ReservedShortcut(key: "x", modifiers: command,
+                             titleKey: "reserved_edit_menu", keyCode: 7),
+            ReservedShortcut(key: "a", modifiers: command,
+                             titleKey: "reserved_edit_menu", keyCode: 0),
+            ReservedShortcut(key: "z", modifiers: command,
+                             titleKey: "reserved_edit_menu", keyCode: 6),
+            ReservedShortcut(key: "q", modifiers: command,
+                             titleKey: "reserved_app_menu", keyCode: 12),
+            ReservedShortcut(key: "w", modifiers: command,
+                             titleKey: "reserved_app_menu", keyCode: 13),
+            ReservedShortcut(key: "h", modifiers: command,
+                             titleKey: "reserved_app_menu", keyCode: 4),
+            ReservedShortcut(key: "m", modifiers: command,
+                             titleKey: "reserved_app_menu", keyCode: 46),
             ReservedShortcut(key: "space", modifiers: 0,
-                             titleKey: "reserved_play_pause"),
+                             titleKey: "reserved_play_pause", keyCode: 49),
             ReservedShortcut(key: "escape", modifiers: 0,
-                             titleKey: "reserved_close_overlay"),
+                             titleKey: "reserved_close_overlay", keyCode: 53),
         ]
     }()
 

@@ -1,4 +1,5 @@
 import Foundation
+import CaptureCore
 
 /// What a TAKE field means, in both directions: the text an operator types
 /// becomes a take number, and a take number becomes the text the field shows.
@@ -52,7 +53,7 @@ enum SlateTakeField {
     /// past this", and a field that ACCEPTED more would make that sentence
     /// false from the keyboard. It was three separate `9999` literals before —
     /// here, in `commitSlateTakeText` and in `advanceSlateTake`.
-    static let maximum = SlateStep.maxNumber
+    static let maximum = SlateMetadata.maxNumber
 
     /// The take number `text` names, or 0 when it names none.
     ///
@@ -62,13 +63,9 @@ enum SlateTakeField {
     /// handed — so a plain `filter(\.isNumber)` turns a non-Latin numeral into
     /// whatever the call site's `?? fallback` happens to be.
     static func number(from text: String) -> Int {
-        let digits = text.filter { $0.isASCII && $0.isNumber }
-        guard !digits.isEmpty else { return 0 }
-        // A run of digits too long to be an Int is over the ceiling by a very
-        // long way. `Int(_:)` answers nil for it, and reading that as "no
-        // number" would log a leant-on keyboard as an unslated take.
-        guard let value = Int(digits) else { return maximum }
-        return min(maximum, value)
+        // the parser itself lives with the model, beside the stricter one the
+        // sidecar and the file's own keys are read by
+        SlateMetadata.number(from: text)
     }
 
     /// What the field shows for a take number. An unlogged take is an EMPTY

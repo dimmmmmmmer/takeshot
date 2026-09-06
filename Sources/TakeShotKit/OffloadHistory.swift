@@ -1,5 +1,6 @@
 import CaptureCore
 import Foundation
+import os.log
 
 /// One finished offload, as the sheet's history list shows it.
 ///
@@ -100,15 +101,30 @@ final class OffloadHistoryStore: ObservableObject {
     /// sheet because a JSON file from an older build has an extra field would
     /// be the tail wagging the dog.
     func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let stored = try? JSONDecoder().decode([OffloadRunRecord].self,
-                                                     from: data)
-        else {
+        guard let data = try? Data(contentsOf: fileURL) else {
             runs = []
             return
         }
-        runs = Array(stored.prefix(Self.limit))
+        guard let stored = try? JSONDecoder().decode(
+            [LenientRecord<OffloadRunRecord>].self, from: data) else {
+            // os_log takes a STATIC format string, so the file's name is an
+            // argument rather than part of the sentence.
+            os_log("%{public}s is not a list; it is left alone and this run's changes go at quit",
+                   log: CapturePipeline.levelsLog, type: .error, "offload-history.json")
+            // Not even a list. No history for THIS launch — and the file is
+            // left exactly as it is, because a save would replace the only
+            // copy of whatever it holds with an empty list.
+            runs = []
+            saveBlocked = true
+            return
+        }
+        saveBlocked = false
+        runs = Array(stored.compactMap(\.value).prefix(Self.limit))
     }
+
+    /// The file on disk could not be read as a list at all; nothing is
+    /// written over it until a launch reads it.
+    private(set) var saveBlocked = false
 
     /// Newest first, capped, written straight through — a run that finished and
     /// then vanished because the app was quit before some later flush is
@@ -130,6 +146,7 @@ final class OffloadHistoryStore: ObservableObject {
     /// Support folder costs the operator a convenience list, not a fact about
     /// footage — and an alarm raised over it would be a false one.
     private func save() {
+        guard !saveBlocked else { return }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
         guard let data = try? encoder.encode(runs) else { return }
@@ -138,4 +155,13 @@ final class OffloadHistoryStore: ObservableObject {
             withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
     }
+}
+
+/// One element of a stored list, or nothing when that element will not
+/// decode. The lists used to be read whole, so one record from a build that
+/// changed a field took every other record with it — and the next save wrote
+/// the emptied list over the only copy.
+struct LenientRecord<Value: Decodable>: Decodable {
+    let value: Value?
+    init(from decoder: Decoder) throws { value = try? Value(from: decoder) }
 }

@@ -45,8 +45,9 @@ compare live against playback, compare against a take made with **this** build
 signal the board does not flag as RGB 4:4:4 — the ordinary professional SDI
 case — is now taken at 10-bit YCbCr instead of 8-bit. Two bits the cable was
 already carrying used to be thrown away by the driver. Expect larger files.
-12-bit RGB is available as an opt-in for RGB 4:4:4 sources only; there is no
-12-bit YCbCr wire format, so a 4:2:2 signal set to 12 is still captured at 10.
+12-bit RGB (`R12B`) follows the signal for RGB 4:4:4 sources; there is no
+12-bit YCbCr wire format, so a 4:2:2 signal is captured at 10 whatever the
+camera's own depth.
 If the board refuses the depth you asked for, the app says so on screen and the
 diagnostics report carries the depth actually enabled — it will not silently
 give you something else.
@@ -201,9 +202,9 @@ Gatekeeper's refusal instead of the app.
   included — encoded as H.264 in an MPEG-TS and sent to an address on the set
   network. VLC on a director's laptop, OBS, a Resolve station, a cloud gateway:
   anything that takes an `srt://` URL. Either end can dial, which is what makes
-  it work behind a venue's router in both directions, and there are three things
-  to set: where, how many bits the link can carry, and an optional AES
-  passphrase. How much of a bad link to ride out — the delivery buffer — is not
+  it work behind a venue's router in both directions, and there are four things
+  to set: where, how many bits the link can carry, an optional AES passphrase,
+  and — for a gateway that routes by one — a stream ID. How much of a bad link to ride out — the delivery buffer — is not
   one of them: it is sized from the round trip the link itself reports, shown
   rather than asked for, and re-applied when the network turns out to be worse
   than it looked. **If the link dies it comes
@@ -314,7 +315,13 @@ Gatekeeper's refusal instead of the app.
   the board RGB 4:4:4 over HDMI, so no YCbCr signal has ever reached it. It is
   the single largest untested surface in this release. Shoot a test roll and
   check it before a job depends on it.
-- **12-bit RGB is opt-in and its range is unconfirmed.** The SDK and CoreVideo
+- **Chroma key softness may have been rescaled once.** A build installed fresh
+  between 3 August and 2 September 2026 saved its first settings without a
+  version stamp, and the next launch re-read the softness slider as if it were
+  an older record: the value was divided by twice the key's tolerance, so with
+  a narrow tolerance it went up (to the maximum) and with a wide one it went
+  down. Set the slider once more; it does not happen again.
+- **12-bit RGB's range is unconfirmed.** The SDK and CoreVideo
   both describe `R12B` as full-range 0–4095; whether a board actually puts
   studio-swing codes in it has not been measured on hardware.
 - **R3D needs RED's SDK at build time.** Without it an `.r3d` is recognised and

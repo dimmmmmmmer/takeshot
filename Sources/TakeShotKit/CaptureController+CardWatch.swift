@@ -30,6 +30,10 @@ extension CaptureController {
             self?.handleVolumeUnmount(url)
         }
         offloadedCards.load()
+        // A ledger that would not read is a day of "Never" answers that go
+        // nowhere; the operator is told once rather than finding out by being
+        // asked about the same card at every mount.
+        if offloadedCards.saveBlocked { lastError = L("offload_ledger_unreadable") }
         guard offersMountedCards else { return }
         volumeWatch.start()
     }
@@ -57,11 +61,37 @@ extension CaptureController {
     /// is a few hundred milliseconds of metadata I/O on a full card, and the
     /// window must not stall for it while a take is rolling.
     func handleVolumeMount(_ volume: MountedVolume) {
+        // The record folder's own volume arriving: a watcher that failed to arm
+        // at a launch without the SSD plugged in was dead for the whole day,
+        // and the only re-arm was changing the destination path. Before the
+        // card guard, because this is the record folder and not a card.
+        if folderWatcher == nil,
+           Self.folder(destinationRoot, isOn: Self.comparablePath(volume.url)) {
+            startFolderWatcher()
+            // …and the takes that were already on it: arming a watcher only
+            // catches the NEXT write, so a folder full of yesterday's takes
+            // would have stayed out of the library until one arrived.
+            scanDestinationFolder()
+        }
         guard offersMountedCards, !isExcludedVolume(volume) else { return }
         Task.detached(priority: .utility) { [weak self] in
+            if let reason = CardScan.unreadableReason(volume) {
+                await self?.noteUnreadableCard(volume, reason: reason)
+                return
+            }
             guard let candidate = CardScan.inspect(volume) else { return }
             await self?.considerCard(candidate)
         }
+    }
+
+    /// A card that mounted and could not be listed: said, because the only
+    /// other outcome is the operator finding out at wrap that nothing was
+    /// copied. A toast — the card is still in the reader and re-seating it
+    /// mounts it again, which asks again.
+    func noteUnreadableCard(_ volume: MountedVolume, reason: String) {
+        os_log("card %{public}s could not be read: %{public}s",
+               log: CapturePipeline.levelsLog, type: .error, volume.name, reason)
+        lastError = L("card_unreadable", volume.name, reason)
     }
 
     /// The scan came back with something card-shaped. Whether to ASK about it.

@@ -76,6 +76,65 @@ struct SRTLifecycleTests {
         }
     }
 
+    /// An edit into a state that cannot be started — the address cleared —
+    /// drops the link AND what it held: the encoder used to stay running for
+    /// nobody until the switch was cycled, because only `stopSRTOutput`
+    /// released the pool.
+    @Test func anEditIntoAnUnstartableStateReleasesWhatTheLinkHeld() async throws {
+        try await SRTProbe.run(live: true, configure: SRTProbe.caller) { controller, log in
+            controller.settings.srt.enabled = true
+            for _ in 0..<60 where log.latest == nil {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            #expect(log.latest != nil, "the link never opened — the premise is gone")
+            #expect(!controller.mirrors.liveEncoders.isEmpty,
+                    "no encoder to strand — the premise is gone")
+
+            controller.settings.srt.address = ""
+            for _ in 0..<60 where controller.mirrors.srt != nil {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            #expect(controller.mirrors.srt == nil)
+            #expect(controller.mirrors.liveEncoders.isEmpty,
+                    "the encoder outlived the link it fed")
+        }
+    }
+
+    /// A refusal reported by the link before this one — its queue was still
+    /// reporting when `stop` reached it — does not put THIS link into failed.
+    @Test func anEventFromTheLinkBeforeLastIsNotAppliedToThisOne() async throws {
+        try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
+            controller.settings.srt.enabled = true
+            for _ in 0..<60 where log.latest == nil {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            #expect(log.latest != nil, "the link never opened — the premise is gone")
+
+            let stale = controller.mirrors.srtGeneration - 1
+            controller.applySRTEvent(.refused("old link"), generation: stale)
+            #expect(controller.mirrors.srtState != SRTOutputState.failed("old link"),
+                    "a stopped mirror's refusal was applied to its replacement")
+            controller.applySRTEvent(.refused("this link"),
+                                     generation: controller.mirrors.srtGeneration)
+            #expect(controller.mirrors.srtState == SRTOutputState.failed("this link"))
+        }
+    }
+
+    /// The stream ID the operator typed is the one the link is asked for.
+    @Test func theLinkCarriesTheStreamID() async throws {
+        try await SRTProbe.run(configure: { settings in
+            SRTProbe.caller(&settings)
+            settings.srt.streamID = "publish/cam1"
+        }, { controller, log in
+            controller.settings.srt.enabled = true
+            for _ in 0..<60 where log.latest == nil {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            #expect(log.endpoints.first?.streamID == "publish/cam1",
+                    "the link was opened without the gateway's stream id: \(log.endpoints)")
+        })
+    }
+
     @Test func theLinkIsOpenedAndDroppedWithTheSetting() async throws {
         try await SRTProbe.run { controller, log in
             controller.settings.srt.address = "10.0.4.21"

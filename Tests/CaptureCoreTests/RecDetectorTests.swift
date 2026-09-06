@@ -90,6 +90,60 @@ struct RecDetectorTests {
         #expect(!detector.isRecording)
     }
 
+    /// One misread RP188 word is a hiccup, not a camera stop: a frame skipped
+    /// or a step back is absorbed and the take stays open. A real jump (the
+    /// test above) still closes on the spot.
+    @Test func aOneFrameTimecodeHiccupDoesNotSplitTheTake() {
+        let detector = RecDetector(config: RecDetectorConfig(startDebounceFrames: 2,
+                                                             stopDebounceFrames: 12))
+        for i in 1...4 {
+            _ = detector.process(FrameSample(index: i, timecode: tc(400 + i)))
+        }
+        #expect(detector.isRecording)
+
+        #expect(detector.process(FrameSample(index: 5, timecode: tc(406))) == nil,
+                "a skipped word closed the take")
+        #expect(detector.process(FrameSample(index: 6, timecode: tc(405))) == nil,
+                "a step back closed the take")
+        #expect(detector.process(FrameSample(index: 7, timecode: tc(407))) == nil)
+        #expect(detector.isRecording)
+    }
+
+    /// Idle, the tolerance is off: a source whose word steps by two every
+    /// frame is not running cleanly, and the start debounce does not open on
+    /// it.
+    @Test func aTwoFrameStepWhileIdleDoesNotOpenATake() {
+        let detector = RecDetector(config: RecDetectorConfig(startDebounceFrames: 2,
+                                                             stopDebounceFrames: 12))
+        for i in 1...6 {
+            #expect(detector.process(FrameSample(index: i, timecode: tc(100 + 2 * i))) == nil,
+                    "a word stepping by two opened a take at frame \(i)")
+        }
+        #expect(!detector.isRecording)
+    }
+
+    /// The step back has a midnight twin: 00:00:00:00 re-read as 23:59:59:24
+    /// is one word back across the wrap, not a jump of a day.
+    @Test func aReReadAcrossMidnightDoesNotSplitTheTake() {
+        let detector = RecDetector(config: RecDetectorConfig(startDebounceFrames: 2,
+                                                             stopDebounceFrames: 12))
+        let day = Timecode.dayFrames(fps: 25, isDropFrame: false)
+        var index = 0
+        for frame in [day - 4, day - 3, day - 2, day - 1] {
+            index += 1
+            _ = detector.process(FrameSample(index: index, timecode: tc(frame)))
+        }
+        #expect(detector.isRecording)
+        index += 1
+        #expect(detector.process(FrameSample(index: index, timecode: tc(0))) == nil, "the wrap itself")
+        index += 1
+        #expect(detector.process(FrameSample(index: index, timecode: tc(day - 1))) == nil,
+                "a re-read of the last word before midnight closed the take")
+        index += 1
+        #expect(detector.process(FrameSample(index: index, timecode: tc(1))) == nil)
+        #expect(detector.isRecording)
+    }
+
     @Test func lostTimecodeWhileRecordingStopsAfterDebounce() {
         let detector = RecDetector(config: RecDetectorConfig(startDebounceFrames: 2,
                                                              stopDebounceFrames: 3))

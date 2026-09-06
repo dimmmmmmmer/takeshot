@@ -84,6 +84,28 @@ enum CardFixture {
 @Suite @MainActor struct ControllerCardWatchTests {
     // MARK: - the rule: ask, never copy
 
+    /// A card the app cannot list is not an empty card. It used to be the same
+    /// nil — nothing offered, nothing logged — and a reader with a bad contact
+    /// looked like a formatted card all day.
+    @Test(.enabled(if: getuid() != 0, "mode bits mean nothing as root"))
+    func aCardTheAppCannotReadIsSaidRatherThanTakenForEmpty() async throws {
+        let root = try CardFixture.scratch("locked")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0],
+                                               ofItemAtPath: root.path)
+        try await CardFixture.withWatch { controller, watch in
+            watch.mount(root, name: "LOCKED")
+            #expect(await ControllerWait.until {
+                controller.lastError?.contains("LOCKED") == true
+            }, "an unreadable card was taken for an empty one: \(controller.lastError ?? "-")")
+            #expect(controller.cardOffer == nil)
+        }
+    }
+
     @Test func aMountedCardRaisesAPromptAndCopiesNothing() async throws {
         let card = try CardFixture.makeCard("ask")
         defer { try? FileManager.default.removeItem(at: card) }

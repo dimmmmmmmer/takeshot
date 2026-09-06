@@ -130,13 +130,23 @@ struct DetectionModePicker: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        Picker(L("detection_mode"),
-               selection: $controller.settings.capture.detectionMode) {
-            Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
-            Text(L("mode_auto")).tag(RecDetectionMode.auto)
-            Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
-            Text(L("mode_visual")).tag(RecDetectionMode.visual)
-            Text(L("mode_manual")).tag(RecDetectionMode.manual)
+        VStack(alignment: .leading, spacing: 4) {
+            Picker(L("detection_mode"),
+                   selection: $controller.settings.capture.detectionMode) {
+                Text(L("mode_vanc")).tag(RecDetectionMode.vanc)
+                Text(L("mode_auto")).tag(RecDetectionMode.auto)
+                Text(L("mode_timecode")).tag(RecDetectionMode.timecodeRun)
+                Text(L("mode_visual")).tag(RecDetectionMode.visual)
+                Text(L("mode_manual")).tag(RecDetectionMode.manual)
+            }
+            // Visual detection chosen before the indicator has been taught:
+            // the setter keeps the trigger off and nothing on screen said so,
+            // so an operator waited for takes that could not start.
+            if controller.visualRecNeedsTeaching {
+                Text(L("mode_visual_untaught"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

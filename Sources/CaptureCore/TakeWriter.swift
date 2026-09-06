@@ -54,6 +54,9 @@ public final class TakeWriter {
     let timecodeFormatDescription: CMTimeCodeFormatDescription?
     let startTimecode: Timecode?
     var tcResyncs: [(pts: CMTime, timecode: Timecode)] = []
+    /// Re-anchors past the track's budget of 32: not honoured, and said in
+    /// the take's log row rather than dropped without a word.
+    var droppedTimecodeResyncs = 0
     /// How far the timecode track has been WRITTEN, which is not how far the
     /// picture has: the samples are committed as the take runs and lag it by up
     /// to one `timecodeSampleInterval` (see `commitTimecodeSamples`). `.invalid`

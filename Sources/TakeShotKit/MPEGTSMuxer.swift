@@ -97,7 +97,17 @@ struct MPEGTSMuxer {
     /// `SRTMirror.setCarriesAudio`), and a change only reaches the wire on
     /// the next keyframe — which is when the tables are resent, and why that
     /// setter asks for one.
-    var carriesAudio = false
+    var carriesAudio = false {
+        didSet {
+            // A map that changed is a new VERSION of the map: a receiver that
+            // saw the picture-only table (VLC on libdvbpsi) ignores a PMT
+            // carrying the version it already has, and never learned that
+            // an audio PID had joined the program.
+            if carriesAudio != oldValue { pmtVersion = (pmtVersion &+ 1) & 0x1F }
+        }
+    }
+    /// The PMT's 5-bit `version_number`, bumped when the stream loop changes.
+    private(set) var pmtVersion: UInt8 = 0
 
     /// Packets muxed but not yet in a whole datagram.
     ///

@@ -132,6 +132,23 @@ enum CardScan {
     /// `nonisolated` and pure: it walks a directory tree, which is I/O measured
     /// in hundreds of milliseconds on a full card, and the caller runs it off the
     /// MainActor (see `CaptureController.handleVolumeMount`).
+    /// Why the volume's root cannot be listed, or nil when it can.
+    ///
+    /// An empty card and an unreadable one used to be one answer — nil from
+    /// `inspect`, nothing offered, nothing said — so a reader with a bad
+    /// contact, or a card the Finder itself refuses, looked exactly like a
+    /// freshly formatted card. The operator's day then went by without a copy
+    /// and without a word. Asked first, before the walk `inspect` does.
+    nonisolated static func unreadableReason(_ volume: MountedVolume) -> String? {
+        guard volume.isLocal, volume.isBrowsable else { return nil }
+        do {
+            _ = try FileManager.default.contentsOfDirectory(atPath: volume.url.path)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     nonisolated static func inspect(_ volume: MountedVolume) -> CardCandidate? {
         // A share on the set Wi-Fi is not a card, and walking it to find out is
         // the stall. Non-browsable volumes are the internal system mounts the

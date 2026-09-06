@@ -15,6 +15,41 @@ struct OffloadFailureTests {
     /// corrupted after it is written and before it is read back: the run has to
     /// report the file, keep it out of the manifest, and refuse to call the
     /// destination verified.
+    /// …and when the bad copy cannot even be set aside — the folder went
+    /// read-only under it — the destination is FAILED, not reported clean with
+    /// a wrong file under the take's real name.
+    @Test(.enabled(if: getuid() != 0, "mode bits mean nothing as root"))
+    func aCorruptedCopyThatCannotBeSetAsideFailsTheDestination() throws {
+        let source = try OffloadFixtures.scratch("stuck-src")
+        let dest = try OffloadFixtures.scratch("stuck-dst")
+        let folder = dest.appendingPathComponent("DCIM/100MEDIA")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                   ofItemAtPath: folder.path)
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: dest)
+        }
+        try OffloadFixtures.makeCard(at: source)
+        let victim = "DCIM/100MEDIA/A001C002.mov"
+
+        let report = OffloadEngine.run(OffloadPlan(
+            source: source, destinations: [dest], chunkBytes: OffloadFixtures.chunk,
+            didWriteCopy: { copy in
+                guard copy.path.hasSuffix("A001C002.mov") else { return }
+                OffloadFixtures.flipFirstByte(of: copy)
+                // the rename to `_MISMATCH` needs the folder writable
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o555],
+                    ofItemAtPath: copy.deletingLastPathComponent().path)
+            }))
+
+        let result = try #require(report.destinations.first)
+        #expect(result.failure != nil,
+                "a mismatched copy left under \(victim) was not a failure")
+        #expect(result.failure?.contains("could not be set aside") == true,
+                "\(result.failure ?? "-")")
+    }
+
     @Test func aCorruptedCopyIsReportedAndKeptOutOfTheManifest() throws {
         let source = try OffloadFixtures.scratch("bad-src")
         let dest = try OffloadFixtures.scratch("bad-dst")

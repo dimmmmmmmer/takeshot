@@ -46,32 +46,42 @@ public struct SRTEndpoint: Equatable, Sendable {
     public var latencyIsExplicit: Bool
     /// nil means unencrypted, which is what an empty field means.
     public var passphrase: String?
+    /// What a gateway routes by — MediaMTX, SRS, Haivision, Wowza all pick the
+    /// publishing point from it (`publish/cam1`, or libsrt's own
+    /// `#!::r=live/cam1` form). Set on the socket before the handshake; nil
+    /// sends none, which a plain receiver never asks for.
+    public var streamID: String?
 
     public init(role: SRTRole, address: String, port: Int, latencyMs: Int,
-                latencyIsExplicit: Bool = false, passphrase: String?) {
+                latencyIsExplicit: Bool = false, passphrase: String?,
+                streamID: String? = nil) {
         self.role = role
         self.address = address
         self.port = port
         self.latencyMs = latencyMs
         self.latencyIsExplicit = latencyIsExplicit
         self.passphrase = passphrase
+        self.streamID = streamID
     }
 
     /// How the status row names this link. `srt://` because that is the URL every
     /// receiver on a set is typed into, so it is the string an operator can read
     /// back to whoever is at the other end.
     public var url: String {
-        role == .listener ? "srt://:\(port)" : "srt://\(address):\(port)"
+        let base = role == .listener ? "srt://:\(port)" : "srt://\(address):\(port)"
+        guard let streamID else { return base }
+        return base + "?streamid=" + streamID
     }
 }
 
 /// The SRT output (see `CSRTSender`, `SRTMirror` and
 /// `CaptureController+SRT`).
 ///
-/// Seven fields, and the shortlist is the design. NDI needed a switch and a name;
+/// Eight fields, and the shortlist is the design. NDI needed a switch and a name;
 /// SRT needs to be told WHERE to send, in WHICH role, how much of a bad link to
-/// ride out, and how many bits the link can carry — none of which the app can
-/// know and all of which the operator does. Everything else about the stream is
+/// ride out, how many bits the link can carry, and — for a gateway that routes
+/// by it — which stream this is; none of which the app can know and all of
+/// which the operator does. Everything else about the stream is
 /// inferred and stays inferred: the codec (H.264, because every receiver decodes
 /// it), the keyframe interval (one second, because that is the join time), the
 /// raster and the frame rate (the signal's), and the packet size (188 × 7,
@@ -85,6 +95,7 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         case latencyMs = "srtLatencyMs"
         case bitrateMbps = "srtBitrateMbps"
         case passphrase = "srtPassphrase"
+        case streamID = "srtStreamID"
     }
 
     /// The viewer is sent out over SRT; nil/false — off, which is the default.
@@ -109,6 +120,9 @@ public struct SRTSettings: Codable, Equatable, Sendable {
     /// matching the key NAME, and this is what keeps it out of a diagnostics
     /// bundle that gets emailed to someone.
     public var passphrase: String?
+    /// The gateway's stream ID; nil or empty sends none (see
+    /// `SRTEndpoint.streamID`). A pasted `srt://…?streamid=` fills it.
+    public var streamID: String?
 
     public init() {}
 
@@ -202,10 +216,20 @@ public struct SRTSettings: Codable, Equatable, Sendable {
     /// An EMPTY passphrase is none of them: it means "no encryption", which is
     /// what `passphraseEffective` answers nil for, and it reaches the socket
     /// as an unencrypted link by design.
+    /// libsrt's own ceiling for `SRTO_STREAMID`.
+    public static let streamIDMaximum = 512
+
+    public var streamIDEffective: String? {
+        let trimmed = streamID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
     public enum Problem: Equatable, Sendable {
         case addressMissing
         case passphraseTooShort
         case passphraseTooLong
+        case streamIDTooLong
     }
 
     public var configurationProblem: Problem? {
@@ -217,6 +241,10 @@ public struct SRTSettings: Codable, Equatable, Sendable {
             if bytes < Self.passphraseMinimum { return .passphraseTooShort }
             if bytes > Self.passphraseMaximum { return .passphraseTooLong }
         }
+        if let streamID = streamIDEffective,
+           streamID.utf8.count > Self.streamIDMaximum {
+            return .streamIDTooLong
+        }
         return nil
     }
 
@@ -226,6 +254,7 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         return SRTEndpoint(role: roleEffective, address: addressEffective,
                            port: portEffective, latencyMs: latencyEffective,
                            latencyIsExplicit: latencyMs != nil,
-                           passphrase: passphraseEffective)
+                           passphrase: passphraseEffective,
+                           streamID: streamIDEffective)
     }
 }

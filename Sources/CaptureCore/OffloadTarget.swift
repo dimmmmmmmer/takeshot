@@ -345,9 +345,25 @@ final class OffloadTarget {
             renamed.appendPathExtension(copy.pathExtension)
         }
         let target = CapturePipeline.uniqueURL(for: renamed)
-        try? FileManager.default.moveItem(at: copy, to: target)
-        CapturePipeline.releaseReservation(for: target)
-        openTarget = nil
+        do {
+            try FileManager.default.moveItem(at: copy, to: target)
+            CapturePipeline.releaseReservation(for: target)
+            openTarget = nil
+        } catch {
+            // The bad copy is still there under the take's REAL name, so this
+            // destination cannot be trusted for the file at all: failing it is
+            // what keeps the summary and the disk saying the same thing — the
+            // `replaceStaleCopy` rule, reached from the other side.
+            //
+            // The open target is let go of FIRST and not deleted: `fail`
+            // removes whatever is still open, and this file is the evidence
+            // the paragraph above says is kept for whoever investigates.
+            CapturePipeline.releaseReservation(for: copy)
+            openTarget = nil
+            fail("a copy with a checksum mismatch could not be set aside "
+                 + "(\(error.localizedDescription)) and is still on the disk "
+                 + "under its real name", at: relativePath)
+        }
     }
 
     /// Put this destination out of the run, naming what went wrong.

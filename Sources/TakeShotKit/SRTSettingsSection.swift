@@ -46,6 +46,7 @@ struct SRTSettingsSection: View {
                 latencyRow
                 bitrateRow
                 passphraseRow
+            streamIDRow
                 // Its own view because the state lives on `mirrors`, a nested
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of the
@@ -95,6 +96,9 @@ struct SRTSettingsSection: View {
                     }
                     if let passphrase = parsed.passphrase {
                         controller.settings.srt.passphrase = passphrase
+                    }
+                    if let streamID = parsed.streamID {
+                        controller.settings.srt.streamID = streamID
                     }
                 }))
                 .textFieldStyle(.roundedBorder)
@@ -172,6 +176,20 @@ struct SRTSettingsSection: View {
             SecureField("", text: Binding(
                 get: { controller.settings.srt.passphrase ?? "" },
                 set: { controller.settings.srt.passphrase =
+                    $0.isEmpty ? nil : $0 }))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 180)
+        }
+    }
+
+    /// The gateway's stream ID. Plain text, unlike the passphrase: it is the
+    /// publishing point's name, not a secret, and the operator has to be able
+    /// to read it back to whoever runs the gateway.
+    private var streamIDRow: some View {
+        LabeledContent(L("srt_stream_id")) {
+            TextField("", text: Binding(
+                get: { controller.settings.srt.streamID ?? "" },
+                set: { controller.settings.srt.streamID =
                     $0.isEmpty ? nil : $0 }))
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 180)

@@ -50,6 +50,8 @@ enum DiagnosticsStateReport {
         out.append("")
         out.append(pair("Sticky alarm", recording.persistentAlert
                         ?? "none — no integrity alarm is up"))
+        out.append(pair("Settings unreadable at launch",
+                        recording.settingsUnreadableAtLaunch))
         out.append(pair("Last error toast", recording.lastError ?? "none"))
         return out
     }
@@ -77,6 +79,17 @@ enum DiagnosticsStateReport {
                  + "in this take, \(health.gapFilledAudioPacketsTotal) since launch"),
             pair("Padded audio track", "\(health.paddedAudioPacketsInTake) "
                  + "in this take, \(health.paddedAudioPacketsTotal) since launch"),
+            pair("Audio outside the mask", "\(health.maskedOutAudioPacketsInTake) "
+                 + "in this take, \(health.maskedOutAudioPacketsTotal) since launch"),
+            pair("Pre-roll frames lost", "\(health.preRollFramesLostInTake) "
+                 + "in this take, \(health.preRollFramesLostTotal) since launch"),
+            // Frames the converter never produced under a red REC, 8-bit frames
+            // recorded with their studio codes intact, and the aids flickering:
+            // three counts that were kept since they shipped and printed in
+            // no bundle anyone sent to support.
+            pair("Conversion failures", "\(health.conversionFailures)"),
+            pair("Expansion fallbacks", "\(health.expansionFallbacks)"),
+            pair("Assist late drops", "\(health.assistLateDrops)"),
             pair("Ingress drops", health.ingressDrops),
             pair("Chroma late drops", health.chromaLateDrops),
             // The recording half, which is the one that costs footage: a take

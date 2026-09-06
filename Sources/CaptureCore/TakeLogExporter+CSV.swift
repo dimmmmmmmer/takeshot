@@ -120,6 +120,11 @@ extension TakeLogExporter {
     /// Empty records are dropped, which is what splitting on newlines did: a
     /// blank line in a hand-edited sidecar is not a row.
     static func parseCSVRecords(_ csv: String) -> [[String]] {
+        // Excel's "CSV UTF-8" puts a byte-order mark in front of the header.
+        // It is not whitespace, so the column lookup that trims whitespace
+        // saw "\u{FEFF}File Name", matched nothing, and read every row as
+        // nameless — a markers file saved from Excel came back empty.
+        let csv = csv.hasPrefix("\u{FEFF}") ? String(csv.dropFirst()) : csv
         var records: [[String]] = []
         var fields: [String] = []
         var current = ""

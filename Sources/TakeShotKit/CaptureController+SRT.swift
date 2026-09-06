@@ -91,6 +91,8 @@ extension CaptureController {
     }
 
     private func openSRTLink(to endpoint: SRTEndpoint) {
+        mirrors.srtGeneration += 1
+        let generation = mirrors.srtGeneration
         let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending =
             mirrors.srtStreamFactory ?? { SRTStream.make($0) }
         let mirror = SRTMirror(
@@ -108,11 +110,14 @@ extension CaptureController {
             onEvent: { [weak self] event in
                 // The mirror's queue must never touch the controller: every event
                 // hops here first, and lands where the button handlers run.
-                Task { @MainActor in self?.applySRTEvent(event) }
+                Task { @MainActor in
+                    self?.applySRTEvent(event, generation: generation)
+                }
             },
             onMeasurement: { [weak self] buffer, roundTrip in
                 Task { @MainActor in
-                    guard let self, self.mirrors.srt != nil else { return }
+                    guard let self, self.mirrors.srt != nil,
+                          self.mirrors.srtGeneration == generation else { return }
                     self.mirrors.srtLatencyMs = buffer
                     self.mirrors.srtRoundTripMs = roundTrip
                 }
@@ -159,10 +164,13 @@ extension CaptureController {
     /// status row and a reconnect, and the only thing that toasts is `refused` —
     /// a configuration the operator has to go and change, which is exactly the
     /// case where nothing will improve until somebody is told.
-    func applySRTEvent(_ event: SRTMirror.Event) {
+    func applySRTEvent(_ event: SRTMirror.Event, generation: Int? = nil) {
         // A late event from a mirror that has already been stopped: the switch is
         // off and the row says so, and it must not be talked back out of that.
+        // And one from the link BEFORE this one — its queue reports what
+        // happened before `stop` reached it — must not speak for this link.
         guard mirrors.srt != nil else { return }
+        if let generation, generation != mirrors.srtGeneration { return }
         switch event {
         case .opened:
             mirrors.srtState = .sending
@@ -189,6 +197,8 @@ extension CaptureController {
             return L("srt_passphrase_short", SRTSettings.passphraseMinimum)
         case .passphraseTooLong:
             return L("srt_passphrase_long", SRTSettings.passphraseMaximum)
+        case .streamIDTooLong:
+            return L("srt_stream_id_long", SRTSettings.streamIDMaximum)
         }
     }
 
@@ -242,6 +252,18 @@ extension CaptureController {
             self.mirrors.srt?.stop()
             self.mirrors.srt = nil
             self.startSRTOutput()
+            // A restart into a state that cannot be started — the address
+            // just cleared — used to leave the previous link's encoder, AAC
+            // leg, audio tap and display slot running for nobody until the
+            // switch was cycled: only `stopSRTOutput` released them.
+            if self.mirrors.srt == nil {
+                self.releaseIdleLivePictures()
+                self.releaseIdleLiveAudio()
+                // and nothing of the dead link stays on the settings row
+                self.mirrors.srtEndpoint = nil
+                self.mirrors.srtLatencyMs = nil
+                self.mirrors.srtRoundTripMs = nil
+            }
         }
     }
 }

@@ -161,9 +161,12 @@ extension CaptureController {
     /// number the slate never had into the day's log.
     private func embeddedSlate(scene: String?, shot: String?,
                                take: String?) -> SlateMetadata {
+        // The file's own keys are a RECORD, read by the sidecar's rule: the
+        // two used to disagree about "12A" from the build that logged the
+        // shot as text, and the sidecar then overwrote what the file knew.
         SlateMetadata(scene: scene ?? "",
-                      shot: SlateTakeField.number(from: shot ?? ""),
-                      take: max(0, Int(take ?? "") ?? 0))
+                      shot: SlateMetadata.loggedNumber(from: shot ?? ""),
+                      take: SlateMetadata.loggedNumber(from: take ?? ""))
     }
     /// Ratings, comments, markers and slates of the day, as saved next to the
     /// takes. The markers stay unresolved rows here: their position is a

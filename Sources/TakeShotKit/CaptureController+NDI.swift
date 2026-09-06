@@ -295,6 +295,11 @@ extension CaptureController {
         // on the pipeline over a source that no longer exists is a per-packet
         // conversion for nobody, on the queue that owns the file.
         stopNDIAudio()
+        // The 1 Hz link poll goes with the sender it polls: a re-announce that
+        // failed to build the new one used to leave the old poll running with
+        // nothing to ask, for as long as the switch stayed on.
+        mirrors.ndiLinkTask?.cancel()
+        mirrors.ndiLinkTask = nil
         mirrors.ndi?.stop()
         mirrors.ndi = nil
         mirrors.ndiState = .failed(message)

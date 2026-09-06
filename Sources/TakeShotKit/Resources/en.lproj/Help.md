@@ -95,8 +95,9 @@ diagnostics bundle reports the same.
 While recording, the footage is protected: the file is written in fragments so a
 crash or a power loss cannot cost the whole take, a mid-take format change or a
 signal loss closes the take with an alarm that stays on screen until you clear
-it, free space is watched (a warning under 5 GB, the take is closed under
-0.5 GB), and a take that fails to finalize is left as `*_FAILED.mov` rather than
+it, free space is watched (a warning under 5 GB; the take is closed before the
+disk runs out, at 0.5 GB plus a few seconds of the current write rate), and a
+take that fails to finalize is left as `*_FAILED.mov` rather than
 adopted into the list.
 
 ## Naming and the record folder
@@ -341,6 +342,9 @@ Resolve station or a cloud gateway. Off by default.
 - **Passphrase** turns on AES. Ten characters or more, or leave it empty and the
   stream is unencrypted — worth thinking about on a venue's own network. The
   same passphrase goes into the receiver.
+- **Stream ID** is for a gateway that routes by it — MediaMTX, SRS, Haivision,
+  Wowza. Leave it empty for a plain receiver, which never asks. A pasted
+  `srt://…?streamid=publish/cam1` fills it in for you.
 - **Sound goes with it**, and it does not depend on the cart's speakers. The
   stream carries a stereo track: the first two channels of whatever is being
   recorded — your channel mask, or the channels TakeShot measured as carrying a

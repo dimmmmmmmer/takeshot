@@ -234,6 +234,10 @@ extension CapturePipeline {
         // asked for (`preRollShortfall`). Silence here reads as a clean head.
         if lostPreRoll > 0 {
             let count = lostPreRoll
+            noteHealth {
+                $0.preRollFramesLostInTake += count
+                $0.preRollFramesLostTotal += count
+            }
             DispatchQueue.main.async {
                 self.onError?(.preRollIncomplete(frames: count))
             }

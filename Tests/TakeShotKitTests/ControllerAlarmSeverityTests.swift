@@ -37,10 +37,12 @@ import Testing
 
     /// Every alarm CaptureCore can raise, in call-site order.
     ///
-    /// Thirteen of the sixteen are sticky. The three that toast are the take's
-    /// closing tallies, reported after a take that DID finalize: the live alarm
-    /// for them, where there is one, already fired while the take was rolling,
-    /// and these are the totals stated quietly afterwards.
+    /// 15 of the 19 are sticky. Three of the four that toast are
+    /// the take's closing tallies, reported after a take that DID finalize:
+    /// the live alarm for them, where there is one, already fired while the
+    /// take was rolling, and these are the totals stated quietly afterwards.
+    /// The fourth is a REC press that opened nothing — no footage lost, the
+    /// picture still black, and a toast is the size of that.
     static let samples: [Sample] = [
         // CapturePipeline+Frame — the writer died mid-take
         .init(site: "Frame.appendToTake/writerFailed",
@@ -100,6 +102,17 @@ import Testing
               message: "AUDIO CHANNELS CHANGED — source sent 2, "
                   + "take conformed to 8",
               sticky: true),
+        // CapturePipeline+Audio — the mask kept nothing of what arrived
+        .init(site: "Audio.maskMiss",
+              alarm: .takeAudioChannelsMissing(arrived: 4),
+              message: "AUDIO LOST — the take's channels are not among the 4 "
+                  + "the source now sends",
+              sticky: true),
+        // CapturePipeline+Control — a press with nothing to open
+        .init(site: "Control.declinedPress",
+              alarm: .recordingRefusedNoSignal,
+              message: "REC refused — no signal locked, nothing was opened",
+              sticky: false),
         // CapturePipeline+Take — the writer never opened
         .init(site: "Take.beginTake",
               alarm: .recordingStartFailed(
@@ -189,7 +202,7 @@ import Testing
     /// toasted away in five seconds. Their severity is pinned by the row like
     /// every other one; only the oracle comparison is skipped.
     private static let afterTheClassifier: Set<String> = [
-        "Audio.conformedToTake",
+        "Audio.conformedToTake", "Audio.maskMiss", "Control.declinedPress",
     ]
 
     @Test func theTypedSeverityAgreesWithTheSubstringListItReplaced() {
@@ -208,7 +221,7 @@ import Testing
 
     /// An English operator must read exactly what they read before: the
     /// localized wording is the core's own message, character for character.
-    /// Every one of the thirteen, so a translation cannot be smuggled into the
+    /// Every one of the 19, so a translation cannot be smuggled into the
     /// base language.
     @Test func theEnglishWordingIsUnchangedByLocalizing() {
         L10n.apply(.english)

@@ -84,6 +84,21 @@ import Testing
     /// **A short passphrase is a problem and not a silent downgrade.** SRT
     /// refuses anything under ten characters, so an operator who typed five would
     /// otherwise get an unencrypted stream and no way of knowing.
+    /// A gateway's stream ID rides the endpoint to the socket and the row's
+    /// read-out, and a string past libsrt's ceiling is refused up front.
+    @Test func aStreamIDReachesTheEndpointAndItsReadOut() throws {
+        var settings = CaptureSettings()
+        settings.srt.address = "gw.example"
+        settings.srt.streamID = "  publish/cam1 "
+        let endpoint = try #require(settings.srt.endpoint)
+        #expect(endpoint.streamID == "publish/cam1", "the stream id never reached the socket")
+        #expect(endpoint.url.hasSuffix("?streamid=publish/cam1"), "\(endpoint.url)")
+        settings.srt.streamID = String(repeating: "x", count: 513)
+        #expect(settings.srt.configurationProblem == SRTSettings.Problem.streamIDTooLong)
+        settings.srt.streamID = nil
+        #expect(try #require(settings.srt.endpoint).url == "srt://gw.example:9000")
+    }
+
     @Test func aPassphraseTooShortIsReportedRatherThanDropped() {
         var settings = CaptureSettings()
         settings.srt.address = "10.0.0.9"

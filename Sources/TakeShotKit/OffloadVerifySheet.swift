@@ -84,7 +84,10 @@ struct OffloadVerifySheet: View {
             Button(model.isRunning ? L("offload_hide") : L("close")) {
                 dismiss()
             }
-            .keyboardShortcut(.defaultAction)
+            // Escape, the way every other sheet leaves: a take that starts
+            // with this sheet up wants the operator back at the picture in
+            // one press, not hunting for a button.
+            .keyboardShortcut(.cancelAction)
         }
     }
 }

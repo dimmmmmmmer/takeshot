@@ -199,6 +199,7 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
     uint16_t _port;
     int32_t _latencyMs;
     NSString *_passphrase;
+    NSString *_streamID;
     /// The socket this object owns: the connected one for a caller, the
     /// LISTENING one for a listener.
     SRTSOCKET _socket;
@@ -238,7 +239,8 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
                      address:(NSString *)address
                         port:(uint16_t)port
                    latencyMs:(int32_t)latencyMs
-                  passphrase:(nullable NSString *)passphrase {
+                  passphrase:(nullable NSString *)passphrase
+                    streamID:(nullable NSString *)streamID {
     self = [super init];
     if (self) {
         _role = role;
@@ -246,6 +248,7 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
         _port = port;
         _latencyMs = latencyMs;
         _passphrase = [passphrase copy];
+        _streamID = [streamID copy];
         _socket = SRT_INVALID_SOCK;
         _peer = SRT_INVALID_SOCK;
     }
@@ -355,7 +358,31 @@ static NSString *CSRTLastError(CSRTRuntime *runtime, int *code) {
            message:CSRTLastError(runtime, NULL)];
         return NO;
     }
+    if (![self configureStreamID:sock error:error]) {
+        return NO;
+    }
     return [self configureEncryption:sock error:error];
+}
+
+/// The stream ID a gateway routes by: a string set on the socket before the
+/// handshake, which the listener's accepted socket then carries. Nothing at
+/// all when the operator left the field empty — a plain receiver never asks.
+/// It used to be neither parsed from a pasted URL nor set here, so the
+/// handshake with a gateway succeeded and the picture went to nowhere.
+- (BOOL)configureStreamID:(SRTSOCKET)sock error:(NSError **)error {
+    if (_streamID.length == 0) {
+        return YES;
+    }
+    CSRTRuntime *runtime = CSRTSharedRuntime();
+    const char *streamID = _streamID.UTF8String;
+    if (runtime->setsockflag(sock, SRTO_STREAMID, streamID,
+                             (int)strlen(streamID)) == SRT_ERROR) {
+        [self fill:error
+              code:CSRTOpenFailureConfiguration
+           message:CSRTLastError(runtime, NULL)];
+        return NO;
+    }
+    return YES;
 }
 
 /// AES if there is a passphrase, and nothing at all if there is not.
@@ -622,7 +649,8 @@ static NSString *const kCSRTNoSDKMessage =
                      address:(NSString *)address
                         port:(uint16_t)port
                    latencyMs:(int32_t)latencyMs
-                  passphrase:(nullable NSString *)passphrase {
+                  passphrase:(nullable NSString *)passphrase
+                    streamID:(nullable NSString *)streamID {
     self = [super init];
     if (self) {
         _role = role;
@@ -630,6 +658,7 @@ static NSString *const kCSRTNoSDKMessage =
         (void)port;
         (void)latencyMs;
         (void)passphrase;
+        (void)streamID;
     }
     return self;
 }

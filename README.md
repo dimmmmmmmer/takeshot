@@ -33,8 +33,9 @@ build is any use to you:
   it goes and it is a five-minute job. Every release page lists which bridges
   that particular build has, and so does the app's own **Collect diagnostics**
   report.
-- **Ad-hoc signed, not notarized.** The first launch needs a right-click →
-  **Open** instead of a double-click; macOS then remembers the choice. A
+- **Ad-hoc signed, not notarized.** Gatekeeper blocks the first launch:
+  System Settings → Privacy & Security → **Open Anyway** (or `xattr -d
+  com.apple.quarantine TakeShot.app`); macOS then remembers the choice. A
   Developer ID signature is on the list, not done.
 - **Apple Silicon.** The DMG is an `arm64` build — a plain SwiftPM build of
   the machine it was made on, and that machine is an Apple Silicon runner. An
@@ -56,8 +57,8 @@ build is any use to you:
 - Pre-roll buffer: every take opens with picture *and* sound from before the
   REC press, so nothing is lost to trigger latency.
 - 10-bit capture by default, at whatever the wire is carrying: `v210` for the
-  ordinary 4:2:2 SDI signal, `r210` for RGB 4:4:4, with 12-bit (`R12B`) as an
-  opt-in for RGB 4:4:4 only. A depth the board refuses falls back visibly
+  ordinary 4:2:2 SDI signal, `r210` for RGB 4:4:4, and 12-bit (`R12B`)
+  when an RGB 4:4:4 source carries it. A depth the board refuses falls back visibly
   rather than producing black frames. ProRes Proxy/LT/422/HQ/4444, H.264 and
   HEVC.
 - Sound from the board's embedded audio or from a USB audio interface — the
@@ -101,9 +102,9 @@ build is any use to you:
   on the set network — VLC on a director's laptop, OBS, a Resolve station, a
   cloud gateway. **With sound**: a stereo fold of the channels being recorded,
   AAC on a second stream, and it does not depend on whether the cart's speakers
-  are up. Caller or listener, with the bitrate and an optional AES passphrase
-  as the only knobs — the delivery buffer sizes itself from the round trip the
-  link reports, and is shown rather than asked for. Off by default; needs libsrt at build time
+  are up. Caller or listener, with the bitrate, an optional AES passphrase and
+  a stream ID for gateways that route by one — the delivery buffer sizes itself
+  from the round trip the link reports, and is shown rather than asked for. Off by default; needs libsrt at build time
   (`vendor/SRTSDK/README.md`) and installed to send.
 - NDI output: the same mirrored viewer announced as a source on the set network,
   for a director's iPad or a client feed, with no second cable and no second

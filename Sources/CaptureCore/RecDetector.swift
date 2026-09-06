@@ -260,6 +260,13 @@ public final class RecDetector {
         switch delta {
         case 0: return .stalled
         case 1, 1 - dayFrames: return .advancing
+        // One word back (its 24 h twin: 00:00:00:00 re-read as 23:59:59:MM),
+        // or one skipped — a re-read or a missed read of the RP188 word — is
+        // absorbed WHILE RECORDING, where a split costs two files with the
+        // glitch frame in neither. Idle, the start debounce keeps asking for
+        // a clean run: a source stepping by two is not one to open a take on.
+        case -1, dayFrames - 1: return isRecording ? .stalled : .discontinuity
+        case 2, 2 - dayFrames: return isRecording ? .advancing : .discontinuity
         default: return .discontinuity
         }
     }

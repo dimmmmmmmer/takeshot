@@ -63,8 +63,11 @@ extension TakeWriter {
     /// runs until the NEXT anchor and nobody knows that yet; `commitTimecodeSamples`
     /// turns them into samples as the picture passes them.
     public func addTimecodeResync(timecode: Timecode, at pts: CMTime) {
-        guard startTimecode != nil, sessionStarted, pts > firstPTS,
-              tcResyncs.count < 32 else { return }
+        guard startTimecode != nil, sessionStarted, pts > firstPTS else { return }
+        guard tcResyncs.count < 32 else {
+            droppedTimecodeResyncs += 1
+            return
+        }
         // An anchor can only be honoured while its span is still uncommitted.
         // It always is — the cursor lags the frame path by a sample interval and
         // this arrives on the frame that is being processed — but it is
