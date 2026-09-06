@@ -34,15 +34,33 @@ jobs:
       # with the suites describing a downloaded build never running at all.
       # A runner image that gains libsrt from Homebrew one week would do the
       # same to CI, silently. So the flag says what this job is for.
+      # **A warning is a finding.** The tree is at zero of them, and the
+      # compiler on this runner is not the one on the development Mac — a
+      # concurrency diagnostic that only the runner's toolchain emits used to
+      # sit in the log for weeks with nothing to notice it.
       - name: Build
-        run: swift build -Xcc -DTAKESHOT_FORCE_STUBS=1
+        run: |
+          set -o pipefail
+          swift build -Xcc -DTAKESHOT_FORCE_STUBS=1 2>&1 | tee build.log
+          if grep -E "^.*: warning: " build.log; then
+            echo "::error::the build is not warning-free on this toolchain"
+            exit 1
+          fi
 
       - name: Lint
         # Style regressions are cheap to prevent and expensive to clean up in
         # bulk — the tree is at zero findings and stays there.
         run: |
-          brew install swiftlint
-          ./scripts/lint.sh lint --strict
+          # Pinned. `brew install swiftlint` is whatever the tap serves that
+          # morning, and a linter that gains a rule overnight turns an
+          # unrelated push red — in --strict mode, where every finding is an
+          # error. The portable build is the project's own version, checked.
+          curl -sSL -o /tmp/swiftlint.zip \
+            https://github.com/realm/SwiftLint/releases/download/0.65.0/portable_swiftlint.zip
+          unzip -q -o /tmp/swiftlint.zip -d /tmp/swiftlint
+          echo "/tmp/swiftlint" >> "$GITHUB_PATH"
+          /tmp/swiftlint/swiftlint version
+          PATH="/tmp/swiftlint:$PATH" ./scripts/lint.sh lint --strict
 
       - name: Test
         run: ./scripts/test.sh -Xcc -DTAKESHOT_FORCE_STUBS=1

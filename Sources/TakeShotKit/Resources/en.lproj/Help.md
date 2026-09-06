@@ -40,9 +40,10 @@ review layer on top.
   channel you had chosen that the signal does not carry stays in the menu,
   marked, rather than being silently swapped for another one.
 - The demo source is always in the device list. It generates a 1080p25 signal
-  with running timecode, so the whole take path can be exercised without a
-  board — and in a build made without the DeckLink SDK it is the only source
-  there is.
+  so the whole take path can be exercised without a board — and in a build made
+  without the DeckLink SDK it is the only source there is. Its timecode stands
+  still at 10:00:00:00, because the demo camera is in standby: press REC
+  yourself to make a take from it.
 - If a board is connected and never appears, Settings says why under the device
   picker: this build has no DeckLink SDK in it, Desktop Video is not installed,
   or the framework was refused at load. Nothing is said when the build can see

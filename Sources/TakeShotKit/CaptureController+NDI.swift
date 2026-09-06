@@ -162,8 +162,11 @@ extension CaptureController {
                 // The runtime cannot answer. Say what an older build said —
                 // the source is up — rather than claiming nobody is watching.
                 mirrors.ndiState = .sending
+                // …and 0 would be a claim of its own. Nothing is known.
+                if mirrors.ndiReceivers != 0 { mirrors.ndiReceivers = 0 }
                 return
             }
+            if mirrors.ndiReceivers != Int(count) { mirrors.ndiReceivers = Int(count) }
             let wanted: NDIOutputState = count > 0 ? .sending : .announced
             if mirrors.ndiState != wanted { mirrors.ndiState = wanted }
         case .off, .failed, .unavailable:
@@ -188,7 +191,10 @@ extension CaptureController {
         // operator is told, because a silent feed the app knew about in advance
         // is worse than one it could not predict.
         mirrors.ndiCarriesAudio = NDISender.isAudioAvailable
-        let mirror = NDIAudioMirror(sender: sender)
+        let mirror = NDIAudioMirror(sender: sender, onRefused: { [weak self] count in
+            // The mirror's queue must never touch the controller.
+            Task { @MainActor in self?.noteNDIAudioRefusing(count) }
+        })
         mirrors.ndiAudio = mirror
         pipeline.addAudioTap(mirror) { [weak mirror] packet in
             mirror?.offer(packet)
@@ -217,6 +223,15 @@ extension CaptureController {
     /// director is watching having stopped is exactly what the stream lamp is
     /// for. `StreamLink` reads `.failed` as trouble, so the lamp goes amber
     /// with a triangle instead of staying green.
+    /// The sound leg is being refused. Said as a toast rather than in the
+    /// lamp: the picture is still going, so the link is not down — but the
+    /// sound that did not go is a permanent offset from here on, and that is
+    /// not something to find out from a log.
+    func noteNDIAudioRefusing(_ count: Int) {
+        guard mirrors.ndi != nil else { return }
+        lastError = L("ndi_audio_refusing", count)
+    }
+
     func noteNDIRefusing(_ count: Int) {
         guard mirrors.ndi != nil else { return }
         mirrors.ndiState = .failed(L("ndi_refusing", count))
@@ -300,6 +315,7 @@ extension CaptureController {
         // nothing to ask, for as long as the switch stayed on.
         mirrors.ndiLinkTask?.cancel()
         mirrors.ndiLinkTask = nil
+        mirrors.ndiReceivers = 0
         mirrors.ndi?.stop()
         mirrors.ndi = nil
         mirrors.ndiState = .failed(message)

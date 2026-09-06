@@ -41,6 +41,14 @@ if [ ! -d "$RESOURCE_BUNDLE" ]; then
 fi
 cp -R "$RESOURCE_BUNDLE" "$APP/Contents/Resources/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+# **The licences travel with the binary, because one of them requires it.**
+#
+# A published build BUNDLES libdatachannel (MPL-2.0) into Contents/Frameworks,
+# which is distribution: the MPL asks that the licence go with it, and NOTICE
+# is where this project says so and points at the source. Copying them here
+# rather than only into the DMG means an app dragged out of the image still
+# carries them.
+cp NOTICE LICENSE "$APP/Contents/Resources/"
 
 # **The app is checked AFTER it is assembled, not the tree it came from.**
 #

@@ -52,7 +52,7 @@ printf '%s\n' "$notes" | sed '/./,$!d'
 
 # Which bridges are real in this build. Each path is the exact file the
 # corresponding target tests for — keep these in step with Package.swift
-# (the R3D archive) and the four __has_include guards in Sources/C*/.
+# (the R3D archive) and the six __has_include guards in Sources/C*/.
 sdk_state() {
     if [ -f "$2" ]; then echo "- $1: **built in**"
     else echo "- $1: **stub** — $3"
@@ -80,6 +80,14 @@ sdk_state "SRT (libsrt)" "vendor/SRTSDK/include/srt/srt.h" \
   MPL-2.0 and needs no registration: \`brew install srt\` and rebuild."
 sdk_state "NDI" "vendor/NDISDK/include/Processing.NDI.Lib.h" \
     "the NDI output reports itself unavailable."
+# The sixth, and the only one a published build carries: it is in no macOS
+# package manager, so the release workflow builds it from a pinned tag and
+# `bundle-app.sh` signs it into Contents/Frameworks. MPL-2.0 — the licence
+# rides along in NOTICE, beside the app in the disk image.
+sdk_state "libdatachannel (WebRTC)" "vendor/libdatachannel/include/rtc/rtc.h" \
+    "the live video page on the web remote is unavailable; everything else on
+  the remote works. \`brew\` has no formula for it — see
+  vendor/libdatachannel/README.md to build it."
 
 cat <<'FOOTER'
 

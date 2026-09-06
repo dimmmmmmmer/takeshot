@@ -83,9 +83,6 @@ jobs:
       - name: Release notes exist
         run: ./scripts/release-notes.sh "$VERSION" > /dev/null
 
-      - name: Test
-        run: ./scripts/test.sh
-
       # Built, not fetched: libdatachannel is in no macOS package manager, which
       # is the same fact that makes the app carry its own copy. Pinned to a tag
       # so a release is reproducible and cannot change under us between two
@@ -124,6 +121,32 @@ jobs:
           otool -L vendor/libdatachannel/lib/libdatachannel.dylib
           lipo -archs vendor/libdatachannel/lib/libdatachannel.dylib
 
+      # **The suite runs against what SHIPS, which is why it is below the
+      # library and not above it.** It used to run first, so the one bridge a
+      # published DMG has for real — libdatachannel — was tested as a stub in
+      # every release this workflow has ever made, and the WebRTC suites were
+      # skipped in the run that decided whether to publish.
+      #
+      # The other five are FORCED to stubs for the reason `ci.yml` states:
+      # `__has_include` answers about the machine, and a runner image that
+      # gains libsrt from Homebrew one week would quietly test a configuration
+      # nobody downloads. `TAKESHOT_FORCE_STUBS` is not the flag for this job
+      # — it would stub libdatachannel too.
+      - name: Test what ships
+        env:
+          SHIPPED: >-
+            -Xcc -DTAKESHOT_FORCE_STUB_DECKLINK=1
+            -Xcc -DTAKESHOT_FORCE_STUB_BRAW=1
+            -Xcc -DTAKESHOT_FORCE_STUB_R=1
+            -Xcc -DTAKESHOT_FORCE_STUB_SRT=1
+            -Xcc -DTAKESHOT_FORCE_STUB_NDI=1
+        run: |
+          echo "TAKESHOT_BUILD_FLAGS=$SHIPPED" >> "$GITHUB_ENV"
+          # shellcheck disable=SC2086
+          ./scripts/test.sh $SHIPPED
+
+      # `TAKESHOT_BUILD_FLAGS` comes from the step above, so the artifact is
+      # the configuration the suite ran against and not a sixth one.
       - name: Build TakeShot.app
         run: ./scripts/bundle-app.sh
 
@@ -154,6 +177,10 @@ jobs:
           mkdir -p build/dmg-root
           cp -R build/TakeShot.app build/dmg-root/
           ln -s /Applications build/dmg-root/Applications
+          # …and beside the app, where somebody looking for them will look:
+          # the image carries MPL-2.0 code (libdatachannel and what it links)
+          # and the licence has to travel with it.
+          cp NOTICE LICENSE build/dmg-root/
           hdiutil create -volname "TakeShot" -srcfolder build/dmg-root \
             -ov -format UDZO "build/TakeShot-${{ github.ref_name }}.dmg"
 

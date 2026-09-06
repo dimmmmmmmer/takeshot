@@ -1,4 +1,11 @@
 .build/
+# EVERY scratch path, by pattern rather than one at a time — the same reason
+# .swiftlint.yml excludes them that way. A build into a scratch path of its own
+# is how this project checks a configuration it does not ship from (the older
+# SDK, the forced stubs, the shipped one the release workflow tests), and a new
+# one invented this week put a 136 MB dSYM into a commit and had the push
+# rejected by the remote.
+.build-*/
 # The scratch path docs/ARCHITECTURE.md tells you to build the older SDK
 # into, so the two-SDK check does not leave the checkout dirty.
 .build-sdk15

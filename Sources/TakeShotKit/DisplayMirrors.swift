@@ -112,6 +112,11 @@ final class DisplayMirrors: ObservableObject {
     /// replaced is dropped — a stopped mirror's `refused` used to put the
     /// live one into `failed` (see `remoteGeneration` for the same rule).
     var srtGeneration = 0
+    /// How many receivers have the NDI source open. The 1 Hz poll has always
+    /// asked (there is no callback in the SDK) and the answer was reduced to
+    /// "sending"/"announced" and thrown away — the number is what tells an
+    /// operator whether the director's laptop is the one watching.
+    @Published var ndiReceivers = 0
 
     /// The endpoint the live mirror was built for, so the status row can show the
     /// `srt://` URL to read out rather than making the operator reassemble it

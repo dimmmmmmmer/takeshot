@@ -301,6 +301,14 @@ struct NDILifecycleTests {
             controller.refreshNDILink()
             #expect(controller.mirrors.ndiState == NDIOutputState.sending,
                     "a receiver opened the source and the state did not move")
+            // …and the NUMBER, which the poll has always had and dropped on
+            // the floor: "one receiver" and "four" are different answers to
+            // "is the director seeing this?"
+            #expect(controller.mirrors.ndiReceivers == 1)
+            sender.receivers = 4
+            controller.refreshNDILink()
+            #expect(controller.mirrors.ndiReceivers == 4,
+                    "the count the poll asked for was thrown away")
 
             sender.receivers = 0
             controller.refreshNDILink()
@@ -323,6 +331,8 @@ struct NDILifecycleTests {
             controller.refreshNDILink()
             #expect(controller.mirrors.ndiState == NDIOutputState.sending,
                     "a runtime that cannot count was read as nobody watching")
+            #expect(controller.mirrors.ndiReceivers == 0,
+                    "an unknown count was shown as a number")
         }
     }
 }

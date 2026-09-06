@@ -95,8 +95,8 @@ jobs:
       # emitted one line. A single step cannot tell "slow" from "stuck"; two
       # can, because the second one's log starts empty.
       #
-      # `-j 2` bounds the contention rather than guessing at it: the runner is
-      # x86_64 with a handful of cores, and each Swift frontend the extractor
+      # `-j 2` bounds the contention rather than guessing at it: the runner
+      # has a handful of cores, and each Swift frontend the extractor
       # traces is shadowed by an `extractor.real` of its own — the orphan list
       # after the timeout had three of them alive beside two frontends.
       - name: Build the core

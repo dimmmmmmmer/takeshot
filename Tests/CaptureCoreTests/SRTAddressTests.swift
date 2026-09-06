@@ -44,6 +44,13 @@ struct SRTAddressTests {
         // what a gateway routes by used to fall into `default` and vanish
         #expect(routed.streamID == "publish/cam1", "the stream id was dropped: \(routed)")
         #expect(routed.latencyMs == 200)
+        // ffmpeg and OBS write the same option in MICROseconds. Read as
+        // milliseconds it became the app's 8000 ms ceiling — eight seconds of
+        // delay nobody asked for.
+        let ffmpeg = try #require(SRTAddress.parse("srt://gw:9000?latency=200000"))
+        #expect(ffmpeg.latencyMs == 200, "microseconds read as \(ffmpeg.latencyMs ?? -1)")
+        let stated = try #require(SRTAddress.parse("srt://gw:9000?latency=320"))
+        #expect(stated.latencyMs == 320, "a number in range was rescaled")
         #expect(parsed.mode == "listener")
         #expect(parsed.latencyMs == 320)
         #expect(parsed.passphrase == "hunter2")

@@ -68,7 +68,7 @@ public enum SRTAddress {
             // libsrt spells the same number three ways depending on which side
             // is being configured; all three mean this link's delivery buffer.
             case "latency", "rcvlatency", "peerlatency":
-                parsed.latencyMs = Int(value)
+                parsed.latencyMs = Int(value).map(Self.latencyMilliseconds)
             case "passphrase": parsed.passphrase = value
             // What a gateway routes by. It used to fall into `default` and
             // vanish, so a pasted `srt://gw:9000?streamid=publish/cam1` shook
@@ -77,6 +77,20 @@ public enum SRTAddress {
             default: break
             }
         }
+    }
+
+    /// A delivery buffer in MILLISECONDS, whatever unit the URL was written
+    /// in.
+    ///
+    /// libsrt's own `latency` is milliseconds, and so is every receiver that
+    /// spells the option out. ffmpeg and OBS write MICROseconds — their
+    /// `latency=200000` is 200 ms, and read as milliseconds it became 8000,
+    /// the app's ceiling: three minutes of the operator wondering why the
+    /// picture was eight seconds behind. Nothing sane asks for more than
+    /// eight seconds of buffer, so a number past the ceiling is a unit and
+    /// not a wish.
+    static func latencyMilliseconds(_ value: Int) -> Int {
+        value > SRTLatency.ceilingMs ? value / 1000 : value
     }
 
     /// Host and port, with IPv6 in brackets kept whole.

@@ -186,11 +186,24 @@ import Testing
             let take = try #require(controller.takes.first)
             await ControllerWait.fileExists(at: take.url)
 
-            // embedded audio was recorded — never a take with no sound at all
+            // Embedded audio was recorded — never a take with no sound at
+            // all. Measured against the take's OWN picture rather than
+            // against the second of wall clock above: the synthetic source
+            // runs slower than real time under instrumentation, and half a
+            // second of tape was the coverage job's flake for a while (it
+            // came out at 0.44). What the fallback promises is sound UNDER
+            // the picture, and that is a ratio, not a stopwatch.
             let ranges = try await TestAudioKit.trackRanges(of: take.url)
             let audio = try #require(ranges.audio,
                                      "the fallback take has no audio track")
-            #expect(audio.duration.seconds > 0.5)
+            let video = try #require(ranges.video, "the take has no picture")
+            #expect(audio.duration.seconds > 0,
+                    "the audio track is empty")
+            #expect(audio.duration.seconds > video.duration.seconds * 0.5,
+                    """
+                    \(audio.duration.seconds)s of sound under \
+                    \(video.duration.seconds)s of picture
+                    """)
         }
     }
 

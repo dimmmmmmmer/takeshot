@@ -94,8 +94,17 @@ final class NDIAudioMirror: @unchecked Sendable {
         var stopped = false
     }
 
-    init(sender: NDISending) {
+    /// Told when the ceiling has refused a run of packets, at the same
+    /// threshold the picture's mirror uses. A refused audio packet is not a
+    /// hole the way a dropped frame is — it is a permanent shift between the
+    /// sound and the picture for the rest of the session — and until now the
+    /// only record of one was a log line every fiftieth.
+    private let onRefused: @Sendable (Int) -> Void
+
+    init(sender: NDISending,
+         onRefused: @escaping @Sendable (Int) -> Void = { _ in }) {
         self.sender = sender
+        self.onRefused = onRefused
     }
 
     /// How many packets the ceiling has refused. For the tests and the log; a
@@ -135,6 +144,10 @@ final class NDIAudioMirror: @unchecked Sendable {
                 os_log("NDI audio: %d packets refused, backlog ceiling %d frames",
                        refused, Self.backlogCeilingFrames)
             }
+            // Once per run, at the threshold, like the picture's mirror: a
+            // receiver that comes back clears it, and reporting every packet
+            // would be fifty a second.
+            if refused == NDIVideoMirror.refusalAlarmThreshold { onRefused(refused) }
             return
         }
         queue.async { [self] in

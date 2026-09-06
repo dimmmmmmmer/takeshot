@@ -831,9 +831,14 @@ carry the detail.
 
 `MockCaptureBackend` is in `shippingBackends()` unconditionally and its
 `isAvailable` is `true`, so the demo source appears in EVERY build's device
-list. It generates a 1080p25 signal with Rec Run timecode; a "REC demo camera"
-button shows up when it is selected. This is how the GUI and the take logic are
-exercised end to end without a board.
+list. It generates a 1080p25 signal whose Rec Run timecode STANDS STILL at
+10:00:00:00 under a burn-in that reads STBY: the demo camera is in standby and
+has no REC flag, and a timecode that advanced would let the timecode-run
+detector open takes off the demo signal by itself
+(`theDemoTimecodeStandsStill` pins it). Manual REC is the one way in. This is
+how the GUI and the take logic are exercised end to end without a board.
+(There is no "REC demo camera" button; this section claimed one, as it once
+claimed a `--demo` flag.)
 
 **There is no `--demo` flag.** This section claimed one for months, along with a
 `TAKESHOT_DEMO=1` variable, and no such code has ever existed — so a reader

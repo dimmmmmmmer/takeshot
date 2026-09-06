@@ -5,8 +5,17 @@ import CoreVideo
 import Foundation
 
 /// A demo signal source for debugging the GUI and auto-takes without a board:
-/// synthetic 1080p25 frames (SMPTE-like bars, a moving strip, TC burn-in)
-/// and Rec Run timecode — running only while the "camera" records.
+/// synthetic 1080p25 frames (SMPTE-like bars, a moving strip, TC burn-in) and
+/// Rec Run timecode — which means it does NOT move, because the demo camera is
+/// in standby and has no REC flag to come out of it with.
+///
+/// **Frozen at 10:00:00:00 on purpose**, and pinned by
+/// `theDemoTimecodeStandsStill`. A timecode that advanced would be a camera
+/// running, and the timecode-run detector would then open takes off the demo
+/// signal by itself — the manual REC button would stop being the only way in,
+/// on the source that is the ONLY one a downloaded build has. Help.md called
+/// this "running timecode" for months, which is what a reader would go looking
+/// for; the word is Rec Run, and standby is where it stands.
 ///
 /// **There is no `--demo` gate.** This is in `shippingBackends()`
 /// unconditionally and `isAvailable` is `true`, so it appears in EVERY build's
@@ -33,6 +42,10 @@ final class MockCaptureBackend: CaptureBackend {
     /// Demo source — "camera in standby": TC frozen (Rec Run), signal live.
     /// Recording is manual via the REC button only; auto-detection fires on a real
     /// camera once TC starts running.
+    /// The demo camera has no REC flag of its own — nothing here presses a
+    /// record button on it — so the burn-in says STBY, the Rec Run timecode
+    /// above stands still, and the app's own manual REC is the one way a take
+    /// starts from this source.
     private let isCameraRecording = false
 
     private let queue = DispatchQueue(label: "takeshot.mock-source")

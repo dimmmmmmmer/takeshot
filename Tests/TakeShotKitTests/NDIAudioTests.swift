@@ -474,6 +474,28 @@ struct NDIAudioWiringTests {
         }
     }
 
+    /// A receiver that stops taking sound is a PERMANENT offset from the
+    /// picture, not a hole: the mirror says so once, where it used to write a
+    /// log line every fiftieth packet and nothing on screen.
+    @Test func aRefusedSoundLegIsSaidRatherThanLogged() async throws {
+        let sender = BlockingNDISender(holding: 0, holdingAudio: 2)
+        let told = HitCounter()
+        let mirror = NDIAudioMirror(sender: sender, onRefused: { _ in told.bump() })
+        var cache: CMAudioFormatDescription?
+        let samples = [Int16](repeating: 0, count: 4800 * 2)
+        let packet: CMSampleBuffer = try #require(
+            NDIAudioFixtures.packet(samples, channels: 2, cache: &cache))
+        mirror.offer(packet)
+        #expect(sender.waitUntilInsideAudioSend(), "the send never started")
+
+        for _ in 0..<40 { mirror.offer(packet) }
+        #expect(mirror.droppedPackets >= NDIVideoMirror.refusalAlarmThreshold,
+                "the ceiling refused too few to reach the threshold")
+        #expect(told.value == 1,
+                "the sound going away was said \(told.value) time(s)")
+        mirror.stop()
+    }
+
     /// …and `ndiFailed` itself takes a LIVE leg off, which is the half the test
     /// above cannot reach.
     ///

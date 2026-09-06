@@ -12,18 +12,18 @@
 # holds throwaway worktrees — linting them reports the same file several times
 # and mixes half-finished copies into the count.
 excluded:
+  # EVERY scratch path, by pattern rather than one at a time.
+  #
+  # Generated sources — `resource_bundle_accessor.swift`, the test runner —
+  # are no more lintable than the ones in `.build`, and a build into a scratch
+  # path of its own is how this project checks a configuration it does not
+  # ship from: the older SDK (`.build-sdk15`, docs/ARCHITECTURE.md), the
+  # forced stubs (`.build-stubs`, CLAUDE.md), the shipped one the release
+  # workflow tests (`.build-ships`). Each used to be listed by name, so the
+  # next check somebody invented turned `lint --strict` red on twenty
+  # findings in code nobody wrote — which is a reason not to run the check.
   - .build
-  # docs/ARCHITECTURE.md documents building the older SDK into its own scratch
-  # path, and generated sources in there are no more lintable than the ones in
-  # .build — without this, running the documented check turns `lint --strict`
-  # red on a resource_bundle_accessor.swift nobody wrote.
-  - .build-sdk15
-  # And the forced-stub scratch path, for exactly the same reason: CLAUDE.md
-  # documents building the published configuration into its own scratch path,
-  # and generated sources in there are no more lintable than the ones in
-  # `.build`. Without this, running the documented check turns `lint --strict`
-  # red on 20 findings in code nobody wrote.
-  - .build-stubs
+  - .build-*
   - .claude
 
 identifier_name:

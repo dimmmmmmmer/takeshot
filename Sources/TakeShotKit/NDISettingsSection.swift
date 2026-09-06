@@ -86,7 +86,12 @@ struct NDIStatusRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 switch mirrors.ndiState {
                 case .sending:
-                    Text(L("ndi_sending"))
+                    // With the count, which the poll has always known: "one
+                    // receiver" and "four" are different answers to "is the
+                    // director seeing this?"
+                    Text(mirrors.ndiReceivers > 0
+                         ? L("ndi_sending_to", mirrors.ndiReceivers)
+                         : L("ndi_sending"))
                     // Which runtime is actually loaded. Free to show, and the
                     // first thing worth knowing when a receiver on the set
                     // cannot see a source that says it is sending.
