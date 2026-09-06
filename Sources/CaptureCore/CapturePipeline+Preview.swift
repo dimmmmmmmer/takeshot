@@ -88,6 +88,9 @@ extension CapturePipeline {
     func redrawDisplayStage() {
         displayQueue.async { [weak self] in
             guard let self, let buffer = self.lastDisplaySource else { return }
+            self.presentLock.lock()
+            self.displayStagePasses += 1
+            self.presentLock.unlock()
             // An aid changed, not the picture: the grid's frame is the one it
             // already has, so re-publishing the same source as its own clean
             // copy leaves the phones exactly where they were.

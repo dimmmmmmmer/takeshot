@@ -187,12 +187,41 @@ extension CapturePipeline {
     /// pull frames from the buffer from (camera start - pre-roll) to current;
     /// in Rec Run their timecode is frozen at the start value, so the take's
     /// timecode track stays correct
+    /// How long the whole pre-roll burst may hold the capture queue.
+    ///
+    /// Stated here rather than written into the deadline, because it is one
+    /// half of a rule whose other half is `ingressWindowFrames`: while the
+    /// drain is parked, live frames keep arriving and are turned away at
+    /// ingress once the window is full. At 25 fps this budget is 37 frames
+    /// against a window of 12 — the arithmetic
+    /// `theDrainBudgetOutlastsTheIngressWindow` states in one place, so the
+    /// two numbers cannot be tuned apart by two people in two files.
+    ///
+    /// NOT measured in a test: what it costs depends on the encoder, the
+    /// raster and the disk, and a threshold here would fail for reasons that
+    /// have nothing to do with this code. `PreRollDrainCostTests` prints the
+    /// number the budget is argued from.
+    public static let drainBudgetSeconds: Double = 1.5
+
+    /// What the last drain spent, for the bench to print. Written on the
+    /// capture queue at the end of a drain and read after it — the same shape
+    /// `ScopeAnalyzer` uses for its phases, and for the same reason: a number
+    /// argued about needs to be a number somebody measured.
+    public struct DrainCost: Sendable {
+        public var totalMs = 0.0
+        public var framesAppended = 0
+        public var framesRefused = 0
+        public var budgetSpent: Double { totalMs / (drainBudgetSeconds * 1000) }
+    }
+
     func drainPreRoll(into writer: TakeWriter, startIndex: Int) {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        var appended = 0
         let cutoff = max(0, startIndex - preRollFrames)
         // the burst outruns the encoder queue — wait, but within a total
         // budget: unbounded waits stall the pipeline queue while capture
         // callbacks pile up retained 4K frames behind it
-        let drainDeadline = Date().addingTimeInterval(1.5)
+        let drainDeadline = Date().addingTimeInterval(Self.drainBudgetSeconds)
         var lostPreRoll = Self.preRollShortfall(
             startIndex: startIndex, cutoff: cutoff,
             heldInWindow: preRollBuffer.filter {
@@ -210,6 +239,7 @@ extension CapturePipeline {
             if writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
                                      deadline: drainDeadline) {
                 if firstPreRollPTS == nil { firstPreRollPTS = buffered.pts }
+                appended += 1
             } else {
                 lostPreRoll += 1
             }
@@ -242,6 +272,12 @@ extension CapturePipeline {
                 self.onError?(.preRollIncomplete(frames: count))
             }
         }
+        // What it spent, for the bench that argues about the budget. Last,
+        // because the audio half is part of the same parked stretch.
+        let elapsed = DispatchTime.now().uptimeNanoseconds &- startedAt
+        lastDrainCost = DrainCost(totalMs: Double(elapsed) / 1_000_000,
+                                  framesAppended: appended,
+                                  framesRefused: lostPreRoll)
     }
 
     /// Write the buffered pre-roll audio into a take that has just started,

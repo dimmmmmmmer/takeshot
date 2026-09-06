@@ -10,6 +10,15 @@ import Foundation
 ///
 /// Split out of CapturePipeline, which had grown past 1300 lines.
 extension CapturePipeline {
+    /// How many frames may be in flight before ingress turns one away.
+    ///
+    /// The other half of `drainBudgetSeconds`: while the pre-roll drain parks
+    /// the capture queue, live frames keep arriving and fill this window, and
+    /// the ones past it are dropped at the door — which is why the two
+    /// numbers are stated together and pinned together
+    /// (`theDrainBudgetOutlastsTheIngressWindow`).
+    public static let ingressWindowFrames = 12
+
     public func handleFormat(_ newFormat: CaptureFormat) {
         queue.async {
             // a re-announced identical format must not reset detection state:
@@ -126,7 +135,7 @@ extension CapturePipeline {
         // below is the pipeline being outrun, not the board going quiet (see
         // `+FrameWatchdog`).
         lastFrameArrival = DispatchTime.now().uptimeNanoseconds
-        if inFlightFrames >= 12 {
+        if inFlightFrames >= Self.ingressWindowFrames {
             ingressDrops += 1
             let drops = ingressDrops
             inFlightLock.unlock()

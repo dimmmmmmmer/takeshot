@@ -792,7 +792,11 @@ with the reasoning stated.
   misreads it, so 8-channel track fed 2-channel packets measured 0.34 s of sound
   under 0.68 s of picture. The channel map after the change is a guess, so it
   raises the sticky alarm and marks the take's log row.
-- Pre-roll carries audio as well as picture.
+- Pre-roll carries audio as well as picture. Handing the ring to the writer
+  holds the capture queue for 41 ms at 1080p25 and 87 ms at UHD — 3-6% of its
+  1.5 s budget, measured in `PreRollDrainCostTests`, and one to two frames
+  against a twelve-frame ingress window, so a REC start costs no live frames.
+  The budget is a ceiling, not a cost; re-measure before tuning it.
 - Dropped video, audio and pre-roll frames are counted and shown.
 - Free space is watched: a warning under 5 GB; the take is closed while it can
   still finalize, when what is left is under 0.5 GB plus four seconds of the

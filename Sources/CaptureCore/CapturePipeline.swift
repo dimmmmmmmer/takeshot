@@ -437,6 +437,18 @@ public final class CapturePipeline: @unchecked Sendable {
     var reportedAudioMaskMiss = false
     var mirroredAudioPadding = 0
     var lastPublishedLevels: [Float] = []
+    /// What the last pre-roll drain spent (see `CapturePipeline.DrainCost`).
+    /// Capture-queue confined, like the counters beside it; written by
+    /// `drainPreRoll`, which is a file along, so this is not `private(set)`.
+    public internal(set) var lastDrainCost = CapturePipeline.DrainCost()
+    /// Display-stage passes since launch, counted under `presentLock`.
+    ///
+    /// A seam and not a control: `enqueuePreview` coalesces (a newer frame
+    /// replaces the pending one), and `redrawDisplayStage` — the path every
+    /// assist slider tick takes — does not. Whether that matters is a
+    /// question about how many passes a drag actually costs, which is what
+    /// `DisplayStageCostTests` counts.
+    public internal(set) var displayStagePasses = 0
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).
     var sourceAudioChannels = 0
