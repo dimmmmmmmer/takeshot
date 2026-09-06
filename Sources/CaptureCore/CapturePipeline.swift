@@ -441,14 +441,31 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Capture-queue confined, like the counters beside it; written by
     /// `drainPreRoll`, which is a file along, so this is not `private(set)`.
     public internal(set) var lastDrainCost = CapturePipeline.DrainCost()
-    /// Display-stage passes since launch, counted under `presentLock`.
+    /// Display-stage passes and assist redraws since launch, both written
+    /// and READ under `presentLock` — a plain `var` here is a data race the
+    /// moment a test looks at it while the display queue runs, which is what
+    /// ThreadSanitizer said about the first version of this seam.
     ///
     /// A seam and not a control: `enqueuePreview` coalesces (a newer frame
     /// replaces the pending one), and `redrawDisplayStage` — the path every
     /// assist slider tick takes — does not. Whether that matters is a
     /// question about how many passes a drag actually costs, which is what
     /// `DisplayStageCostTests` counts.
-    public internal(set) var displayStagePasses = 0
+    var displayPassCounts = (passes: 0, assistRedraws: 0)
+
+    /// Every publish of the display stage, coalesced or not.
+    public var displayStagePasses: Int {
+        presentLock.lock()
+        defer { presentLock.unlock() }
+        return displayPassCounts.passes
+    }
+
+    /// Only the redraws an assist change asked for.
+    public var assistRedrawCount: Int {
+        presentLock.lock()
+        defer { presentLock.unlock() }
+        return displayPassCounts.assistRedraws
+    }
     /// Input audio channel count (cached even during preview — so the writer
     /// knows the audio input format up front, before the first record packet).
     var sourceAudioChannels = 0

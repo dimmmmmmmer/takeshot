@@ -89,7 +89,7 @@ extension CapturePipeline {
         displayQueue.async { [weak self] in
             guard let self, let buffer = self.lastDisplaySource else { return }
             self.presentLock.lock()
-            self.displayStagePasses += 1
+            self.displayPassCounts.assistRedraws += 1
             self.presentLock.unlock()
             // An aid changed, not the picture: the grid's frame is the one it
             // already has, so re-publishing the same source as its own clean
@@ -246,6 +246,9 @@ extension CapturePipeline {
     func publishDisplayFrame(_ buffer: CVPixelBuffer, clean: CVPixelBuffer,
                              deadline: UInt64) {
         lastDisplaySource = buffer
+        presentLock.lock()
+        displayPassCounts.passes += 1
+        presentLock.unlock()
         let keyed = self.chromaKeyed(buffer, deadline: deadline) ?? buffer
         let shown = assistStage.rendered(keyed, deadline: deadline) ?? keyed
         displaySinks.present(shown)

@@ -247,8 +247,14 @@ struct PreviewLayerRenderTests {
         held.wait()
         defer { release.signal() }
 
-        var assist = ViewAssist()
-        assist.desqueeze = 2
+        // `let`, not a `var` mutated above it: the closure below captures it
+        // and runs on another thread, which the runner's toolchain warns about
+        // and the development Mac's does not.
+        let assist: ViewAssist = {
+            var built = ViewAssist()
+            built.desqueeze = 2
+            return built
+        }()
         let returned = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
             layer.setAssist(assist)

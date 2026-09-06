@@ -29,43 +29,47 @@ struct DisplayStageCostTests {
         pipeline.handleFormat(CaptureFormat(width: 1920, height: 1080,
                                             frameRate: 25, timecodeFPS: 25,
                                             name: "1080p25"))
-        // a frame has to have been shown for a redraw to have anything to redo
+        // A frame has to have been shown for a redraw to have anything to
+        // redo. Waited on through the COUNTER and not through
+        // `lastDisplaySource`, which belongs to the display queue: reading it
+        // from here is a data race, and ThreadSanitizer said so about the
+        // first version of this test.
         pipeline.handleFrame(pixelBuffer: TestMedia.pixelBuffer(width: 1920,
                                                                 height: 1080),
                              pts: CMTime(value: 40, timescale: 1000),
                              timecode: nil)
-        #expect(await TestWait.becomesTrue { pipeline.lastDisplaySource != nil },
+        #expect(await TestWait.becomesTrue { pipeline.displayStagePasses > 0 },
                 "nothing was ever displayed, so nothing can be redrawn")
 
-        let before = pipeline.displayStagePasses
+        let before = pipeline.assistRedrawCount
         // a drag across a slider's range, as the UI delivers it
         for _ in 0..<40 { pipeline.redrawDisplayStage() }
         #expect(await TestWait.becomesTrue {
-            pipeline.displayStagePasses >= before + 40
+            pipeline.assistRedrawCount >= before + 40
         }, """
-            \(pipeline.displayStagePasses - before) passes for 40 ticks — \
-            if this is now fewer, the redraw has learnt to coalesce and this \
+            \(pipeline.assistRedrawCount - before) redraws for 40 ticks — \
+            if this is now fewer, the path has learnt to coalesce and this \
             test should say so instead
             """)
     }
 
     /// …and the frame path DOES coalesce, which is the comparison that makes
-    /// the number above mean something.
-    @Test func framesArrivingFasterThanTheScreenCostOnePassEach() async throws {
+    /// the number above mean something: forty frames offered faster than the
+    /// screen takes them cost fewer than forty passes.
+    @Test func framesArrivingFasterThanTheScreenAreCoalesced() async throws {
         let pipeline = pipeline()
         pipeline.handleFormat(CaptureFormat(width: 1920, height: 1080,
                                             frameRate: 25, timecodeFPS: 25,
                                             name: "1080p25"))
         let picture = TestMedia.pixelBuffer(width: 1920, height: 1080)
-        for index in 1...40 {
-            pipeline.enqueuePreview(pixelBuffer: picture)
-            _ = index
-        }
+        for _ in 0..<40 { pipeline.enqueuePreview(pixelBuffer: picture) }
         await pipeline.finishPendingWrites()
-        // Nothing is asserted about the count: what is pinned is that the
-        // coalescing path exists and is a different one, which the reader can
-        // see beside `redrawDisplayStage`.
-        #expect(pipeline.displayStagePasses == 0,
+        #expect(pipeline.assistRedrawCount == 0,
                 "the frame path went through the assist redraw")
+        #expect(pipeline.displayStagePasses < 40,
+                """
+                40 frames cost \(pipeline.displayStagePasses) passes — the \
+                latest-wins gate in enqueuePreview is not doing anything
+                """)
     }
 }

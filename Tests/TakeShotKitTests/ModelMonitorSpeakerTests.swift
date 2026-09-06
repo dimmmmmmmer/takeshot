@@ -218,20 +218,20 @@ struct MonitorSpeakerSlotTests {
     /// footer actually applies, so this fails if that frame is ever removed
     /// in favour of letting the symbol size the row.
     @Test func theSpeakerSlotIsTheSameSizeInEveryState() {
-        let sizes: Set<CGSize> = Set(Self.symbols.map { symbol in
+        let sizes: Set<String> = Set(Self.symbols.map { symbol in
             ViewRender.fittingSize(
                 Image(systemName: symbol)
                     .font(.system(size: 15))
-                    .frame(width: 24, height: 20))
+                    .frame(width: 24, height: 20)).measured
         })
         #expect(sizes.count == 1,
                 "the speaker slot takes \(sizes.count) different sizes: \(sizes)")
     }
 }
 
-extension CGSize: @retroactive Hashable {
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(width)
-        hasher.combine(height)
-    }
+// CGSize conforms to Hashable in CoreGraphics on the deployment target this
+// project builds against, and restating it warns on the runner's toolchain.
+// The suite compares sizes as strings instead, which is what it prints anyway.
+extension CGSize {
+    var measured: String { "\(width)x\(height)" }
 }

@@ -38,10 +38,14 @@ jobs:
       # compiler on this runner is not the one on the development Mac — a
       # concurrency diagnostic that only the runner's toolchain emits used to
       # sit in the log for weeks with nothing to notice it.
+      # …and the TESTS, not only the sources. The first version of this guard
+      # greped a plain `swift build` and passed while two warnings sat in the
+      # test targets — which is where a suite's own concurrency mistakes live.
       - name: Build
         run: |
           set -o pipefail
-          swift build -Xcc -DTAKESHOT_FORCE_STUBS=1 2>&1 | tee build.log
+          swift build --build-tests -Xcc -DTAKESHOT_FORCE_STUBS=1 2>&1 \
+            | tee build.log
           if grep -E "^.*: warning: " build.log; then
             echo "::error::the build is not warning-free on this toolchain"
             exit 1
