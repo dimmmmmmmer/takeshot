@@ -202,6 +202,7 @@
 "wipe_vertical" = "Vertical wipe";
 "wipe_horizontal" = "Horizontal wipe";
 "wipe_diagonal" = "Diagonal wipe";
+"wipe_diagonal_mirrored" = "Diagonal wipe, the other way";
 
 
 /* LUT */

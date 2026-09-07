@@ -85,6 +85,13 @@ struct CompareControls: View {
             Image(systemName: "line.diagonal")
                 .tag(CaptureController.WipeOrientation.diagonal)
                 .help(L("wipe_diagonal"))
+            // The same glyph flipped: there is no mirrored `line.diagonal` in
+            // the symbol set, and a DIFFERENT glyph for the same control in the
+            // other direction would read as a different kind of wipe.
+            Image(systemName: "line.diagonal")
+                .scaleEffect(x: -1, y: 1)
+                .tag(CaptureController.WipeOrientation.diagonalMirrored)
+                .help(L("wipe_diagonal_mirrored"))
         }
         .pickerStyle(.segmented)
         .fixedSize()

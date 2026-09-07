@@ -37,6 +37,18 @@ enum CompareWipeGeometry {
             let t = clamped * (size.width + size.height)
             return (CGPoint(x: max(0, t - size.height), y: min(t, size.height)),
                     CGPoint(x: min(t, size.width), y: max(0, t - size.width)))
+        case .diagonalMirrored:
+            // `x − y = t − height`: the same segment reflected in the vertical
+            // centre line, which is what makes the handle land on the seam the
+            // compositor cuts for this axis (owner: "шторку диагональную хочу
+            // не только вправо но и влево").
+            let t = clamped * (size.width + size.height)
+            let (near, far) = (CGPoint(x: max(0, t - size.height),
+                                       y: min(t, size.height)),
+                               CGPoint(x: min(t, size.width),
+                                       y: max(0, t - size.width)))
+            return (CGPoint(x: size.width - near.x, y: near.y),
+                    CGPoint(x: size.width - far.x, y: far.y))
         }
     }
 
@@ -55,6 +67,11 @@ enum CompareWipeGeometry {
             raw = point.y / size.height
         case .diagonal:
             raw = (point.x + point.y) / (size.width + size.height)
+        case .diagonalMirrored:
+            // Mirrored in x, exactly as `endpoints` mirrors it, so dropping the
+            // handle on the line leaves it where it was.
+            raw = ((size.width - point.x) + point.y)
+                / (size.width + size.height)
         }
         return clamp(raw)
     }

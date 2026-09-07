@@ -55,13 +55,15 @@ struct ViewCompareHandleTests {
     }
 
     /// Which way "past the seam" is, in SwiftUI's top-left space: the axis the
-    /// wipe grows along. The front image is on the LOW side of it in all three,
-    /// which is what "front occupies the left/top side" means.
+    /// wipe grows along. The front image is on the LOW side of it in all four,
+    /// which is what "front occupies the left/top side" means — the mirrored
+    /// diagonal grows the other way in x, so its front corner is the top-RIGHT.
     private func normal(_ axis: CompareCompositor.Axis) -> CGVector {
         switch axis {
         case .vertical: return CGVector(dx: 1, dy: 0)
         case .horizontal: return CGVector(dx: 0, dy: 1)
         case .diagonal: return CGVector(dx: 0.707, dy: 0.707)
+        case .diagonalMirrored: return CGVector(dx: -0.707, dy: 0.707)
         }
     }
 
@@ -71,7 +73,7 @@ struct ViewCompareHandleTests {
     /// the wipe. Through the real compositor, so this cannot be satisfied by
     /// restating the handle's own arithmetic.
     @Test func eitherSideOfTheHandleIsEitherSideOfTheSeam() {
-        for axis in [CompareCompositor.Axis.vertical, .horizontal, .diagonal] {
+        for axis in CompareCompositor.Axis.allCases {
             for position in [0.35, 0.5, 0.65] {
                 let composed = CompareCompositor.compose(
                     front: front, back: back,
@@ -97,7 +99,7 @@ struct ViewCompareHandleTests {
     /// The handle's line reaches the edges of the picture: a seam that stopped
     /// short would leave the operator guessing where the cut carries on.
     @Test func theLineSpansThePicture() {
-        for axis in [CompareCompositor.Axis.vertical, .horizontal, .diagonal] {
+        for axis in CompareCompositor.Axis.allCases {
             let (p1, p2) = CompareWipeGeometry.endpoints(position: 0.5,
                                                          in: viewport, axis: axis)
             for point in [p1, p2] {
@@ -116,7 +118,7 @@ struct ViewCompareHandleTests {
     /// line the operator is aiming at — a scale error here is a handle that
     /// creeps away from the pointer as it is dragged.
     @Test func droppingTheHandleWhereItIsLeavesItThere() {
-        for axis in [CompareCompositor.Axis.vertical, .horizontal, .diagonal] {
+        for axis in CompareCompositor.Axis.allCases {
             for position in [0.0, 0.2, 0.5, 0.8, 1.0] {
                 let back = CompareWipeGeometry.position(
                     at: handleMidpoint(position, axis), in: viewport, axis: axis)
@@ -130,11 +132,27 @@ struct ViewCompareHandleTests {
     /// minimum distance and reports wherever the pointer is, which on a fast
     /// drag is well outside the picture.
     @Test func aDragPastTheEdgeStopsAtIt() {
-        for axis in [CompareCompositor.Axis.vertical, .horizontal, .diagonal] {
+        // Which corner a wipe grows FROM is per axis: the mirrored diagonal
+        // starts at the top-RIGHT, so dragging past the top-left is dragging
+        // past its far end, not its start.
+        let far: [CompareCompositor.Axis: (start: CGPoint, end: CGPoint)] = [
+            .vertical: (CGPoint(x: -400, y: 0), CGPoint(x: 900, y: 0)),
+            .horizontal: (CGPoint(x: 0, y: -400), CGPoint(x: 0, y: 900)),
+            .diagonal: (CGPoint(x: -400, y: -400), CGPoint(x: 900, y: 900)),
+            .diagonalMirrored: (CGPoint(x: 900, y: -400),
+                                CGPoint(x: -400, y: 900)),
+        ]
+        for axis in CompareCompositor.Axis.allCases {
+            guard let corners = far[axis] else {
+                Issue.record("\(axis) has no far corners named")
+                continue
+            }
             #expect(CompareWipeGeometry.position(
-                at: CGPoint(x: -400, y: -400), in: viewport, axis: axis) == 0)
+                at: corners.start, in: viewport, axis: axis) == 0,
+                    "\(axis) did not stop at its start")
             #expect(CompareWipeGeometry.position(
-                at: CGPoint(x: 900, y: 900), in: viewport, axis: axis) == 1)
+                at: corners.end, in: viewport, axis: axis) == 1,
+                    "\(axis) did not stop at its end")
         }
     }
 
@@ -142,7 +160,7 @@ struct ViewCompareHandleTests {
     /// run, and every branch divides by one of its dimensions. The seam parks
     /// at 0 rather than becoming a NaN nothing downstream can recover from.
     @Test func aViewportWithNoSizeDoesNotProduceANaN() {
-        for axis in [CompareCompositor.Axis.vertical, .horizontal, .diagonal] {
+        for axis in CompareCompositor.Axis.allCases {
             let position = CompareWipeGeometry.position(
                 at: CGPoint(x: 10, y: 10), in: .zero, axis: axis)
             #expect(position == 0, "\(axis) answered \(position)")

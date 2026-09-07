@@ -77,7 +77,12 @@ extension CaptureController {
     enum WipeOrientation: String, CaseIterable {
         case vertical    // vertical line, drags horizontally
         case horizontal  // horizontal line, drags vertically
-        case diagonal    // 45°
+        case diagonal    // 45°, "/" — front on the top-left
+        /// The other 45°, "\\" — front on the top-right (owner: "шторку
+        /// диагональную хочу не только вправо но и влево"). Which one is
+        /// wanted depends on where the thing being matched sits in the frame,
+        /// and one of the two always cuts through it.
+        case diagonalMirrored
     }
 
     /// What the A pane of the A/B split shows.
@@ -307,6 +312,7 @@ extension CaptureController {
         case .vertical: return .vertical
         case .horizontal: return .horizontal
         case .diagonal: return .diagonal
+        case .diagonalMirrored: return .diagonalMirrored
         }
     }
 

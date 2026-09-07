@@ -4,10 +4,18 @@
 /// and the live pipeline (live vs pinned reference) must draw the exact same
 /// seam and fade, so the geometry lives in one place.
 public enum CompareCompositor {
-    public enum Axis: String, Sendable {
+    public enum Axis: String, CaseIterable, Sendable {
         case vertical    // vertical seam, drags horizontally
         case horizontal  // horizontal seam, drags vertically
-        case diagonal    // 45°
+        /// 45°, seam running from the top-right down to the bottom-left ("/").
+        /// The front picture takes the top-left corner.
+        case diagonal
+        /// The other 45° (owner: "шторку диагональную хочу не только вправо но
+        /// и влево"). Seam from the top-left down to the bottom-right ("\\"),
+        /// front on the top-right. Which one an operator wants depends on where
+        /// the thing being matched sits in the frame, and one of the two always
+        /// cuts through it.
+        case diagonalMirrored
     }
 
     public enum Mode: Sendable {
@@ -49,18 +57,42 @@ public enum CompareCompositor {
                                   width: extent.width,
                                   height: extent.height * position)
                 return front.cropped(to: rect).composited(over: back)
-            case .diagonal:
-                // SwiftUI wipe region (top-left origin): x + y ≤ t. In CI's
-                // bottom-left coordinates that is d(x,y) = x − y ≤ t − height.
-                // A 1-px gradient across that line makes an exact hard mask.
-                let t = position * Double(extent.width + extent.height)
-                let threshold = t - Double(extent.height)
+            case .diagonal, .diagonalMirrored:
+                // **Both diagonals, worked in CI's bottom-left space.**
+                //
+                // The front region is stated in SwiftUI's top-left space,
+                // because that is where the operator's handle lives
+                // (`CompareWipeGeometry`), and then carried across with
+                // `y = height − yS`:
+                //
+                // - `.diagonal` — front is `x + yS < t`, the TOP-LEFT corner.
+                //   In CI that is `x − y < t − height`, so the distance
+                //   function is `x − y` and white belongs on the LOW side.
+                // - `.diagonalMirrored` — front is `(width − x) + yS < t`, the
+                //   TOP-RIGHT corner (owner: "шторку диагональную хочу не
+                //   только вправо но и влево"). In CI that is
+                //   `x + y > width + height − t`: a different distance
+                //   function AND the other side of it, which is why the two
+                //   colours change ends as well as the geometry.
+                //
+                // A 1-px gradient across the line makes an exact hard mask
+                // either way.
+                let span = Double(extent.width + extent.height)
+                let t = position * span
+                let mirrored = axis == .diagonalMirrored
+                let threshold = mirrored ? span - t : t - Double(extent.height)
+                // The point where the distance function equals `d`: for
+                // `x − y` that is (d/2, −d/2); for `x + y` it is (d/2, d/2).
                 func pointAt(_ d: Double) -> CIVector {
-                    CIVector(x: d / 2, y: -d / 2) // the point where x − y = d
+                    CIVector(x: d / 2, y: mirrored ? d / 2 : -d / 2)
                 }
+                // White is the front. It sits on the low side of the threshold
+                // for one diagonal and the high side for the other.
+                let frontEnd = pointAt(threshold + (mirrored ? 0.5 : -0.5))
+                let backEnd = pointAt(threshold + (mirrored ? -0.5 : 0.5))
                 guard let mask = CIFilter(name: "CILinearGradient", parameters: [
-                    "inputPoint0": pointAt(threshold - 0.5),
-                    "inputPoint1": pointAt(threshold + 0.5),
+                    "inputPoint0": frontEnd,
+                    "inputPoint1": backEnd,
                     "inputColor0": CIColor.white,
                     "inputColor1": CIColor.black,
                 ])?.outputImage?.cropped(to: extent) else { return front }
