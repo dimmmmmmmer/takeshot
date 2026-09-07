@@ -24,6 +24,17 @@ struct NameTextField: NSViewRepresentable {
     @Binding var text: String
     /// Digits that do not jump around as they change — the counters use it.
     var monospacedDigit = false
+    /// Whether the field draws its own rounded box.
+    ///
+    /// The footer's fields want one — they sit on a toolbar and need an edge.
+    /// A row in a grouped Form does not: SwiftUI's own `TextField` there is a
+    /// right-aligned value with no box until you touch it, and a bezel makes it
+    /// look like a control somebody bolted on (owner: "в настройках у нейминга
+    /// проекта появилось окошко… можно было без него как раньше просто чтобы
+    /// текст названия центровался по правому борту").
+    var bezeled = true
+    /// Which edge the text sits against. `.right` is the Form's convention.
+    var alignment: NSTextAlignment = .natural
     /// Enter, or focus leaving the field. Where a field has a commit step
     /// (the clip number sets the filename padding from what was typed), this
     /// is it; the binding itself updates on every accepted keystroke.
@@ -39,8 +50,11 @@ struct NameTextField: NSViewRepresentable {
         view.delegate = context.coordinator
         view.target = context.coordinator
         view.action = #selector(Coordinator.submitted(_:))
-        view.isBezeled = true
+        view.isBezeled = bezeled
         view.bezelStyle = .roundedBezel
+        view.drawsBackground = bezeled
+        view.isBordered = bezeled
+        view.alignment = alignment
         view.isEditable = true
         view.isSelectable = true
         view.usesSingleLineMode = true
@@ -65,6 +79,9 @@ struct NameTextField: NSViewRepresentable {
         // operator is mid-word resets the insertion point to the end.
         let wanted = field.normalized(text)
         if nsView.stringValue != wanted { nsView.stringValue = wanted }
+        // Reapplied: a caller may switch these with state, and AppKit keeps
+        // whatever it was made with otherwise.
+        nsView.alignment = alignment
     }
 
     /// The height is the control's own; the width is whatever was proposed, so

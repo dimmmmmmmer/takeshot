@@ -83,6 +83,9 @@ public final class MetalPreviewLayer: CAMetalLayer, @unchecked Sendable {
     ///
     /// Read with `currentAssist`; write with `setAssist`, from any thread.
     var assist = ViewAssist()
+    /// A redraw is already on its way — see `redraw()`. Under `stateLock` with
+    /// the assist it exists for.
+    var redrawScheduled = false
     /// The primaries the layer's colorspace is currently built for. Compared
     /// against every presented frame's own tag so a Rec.2020 source can be
     /// converted to the display profile by ColorSync instead of being shown as

@@ -29,9 +29,29 @@ extension MetalPreviewLayer {
     /// the external monitor sleeps — long enough to freeze the REC button
     /// mid-take. Re-rendering always picks up the newest `lastBuffer`, so
     /// running late cannot show a stale frame.
+    /// **Latest-wins.** Every trigger is a UI event and the loudest of them is
+    /// a drag: a slider delivers about sixty changes a second, and each one used
+    /// to queue a full render. A render can park for a second inside
+    /// `nextDrawable()` when the window is occluded or an external monitor
+    /// sleeps, so the queue grew for as long as the finger moved and the
+    /// picture followed it a second late (owner: "лагает action safe, title
+    /// safe", "лагают и ползунки высоты и ширины").
+    ///
+    /// Dropping the ones in between cannot show a stale frame: a redraw takes
+    /// `lastBuffer` and `currentAssist` when it RUNS, so whichever pass runs
+    /// last draws the value the operator settled on. The flag is cleared at the
+    /// start of the pass, so a change arriving mid-render schedules one more.
     public func redraw() {
+        stateLock.lock()
+        let schedule = !redrawScheduled
+        redrawScheduled = true
+        stateLock.unlock()
+        guard schedule else { return }
         redrawQueue.async { [weak self] in
             guard let self else { return }
+            stateLock.lock()
+            redrawScheduled = false
+            stateLock.unlock()
             renderLock.lock()
             let buffer = lastBuffer // strong read under the lock: present() swaps
             renderLock.unlock()     // it concurrently on the producer queue

@@ -85,18 +85,50 @@ extension CapturePipeline {
 
     /// Re-run the display stage over the frame already on screen. Used when an
     /// aid changes while nothing new is arriving.
+    ///
+    /// **Latest-wins, like `enqueuePreview`** — and it was not, which is what
+    /// an operator felt as the app going treacly under a slider (owner: "лагает
+    /// action safe, title safe", "лагают и ползунки высоты и ширины"). A drag
+    /// delivers about sixty changes a second and each one queued a FULL display
+    /// pass: the chroma key, the assist stage and every sink, at the signal's
+    /// raster. Sixty of those cannot finish in a second at UHD, so the queue
+    /// grew for as long as the finger moved and the picture followed a second
+    /// behind it.
+    ///
+    /// Dropping the passes in between is safe here in a way it would not be for
+    /// a FRAME: a redraw carries no picture of its own — it re-publishes
+    /// whatever `lastDisplaySource` holds, with whatever `assistStage` holds —
+    /// so the pass that does run reads the value the operator settled on. The
+    /// flag is cleared at the START of the pass, so a change arriving mid-render
+    /// schedules one more and the final value always lands.
     func redrawDisplayStage() {
+        presentLock.lock()
+        let schedule = !redrawScheduled
+        redrawScheduled = true
+        presentLock.unlock()
+        guard schedule else { return } // one is already on its way
         displayQueue.async { [weak self] in
-            guard let self, let buffer = self.lastDisplaySource else { return }
+            guard let self else { return }
             self.presentLock.lock()
+            self.redrawScheduled = false
             self.displayPassCounts.assistRedraws += 1
             self.presentLock.unlock()
+            guard let buffer = self.lastDisplaySource else { return }
             // An aid changed, not the picture: the grid's frame is the one it
             // already has, so re-publishing the same source as its own clean
             // copy leaves the phones exactly where they were.
             self.publishDisplayFrame(buffer, clean: buffer, deadline: .max)
         }
     }
+    /// Wait until everything already scheduled on the display queue has run.
+    ///
+    /// For the suite: the queue is private and every publish is async onto it,
+    /// so this is how a test knows a pass has finished without a wall-clock
+    /// window — the same shape `PlayoutFeeder.settle` uses one target along.
+    public func settleDisplay() {
+        displayQueue.sync {}
+    }
+
     public func setPreviewLetterbox(_ color: CIColor) {
         displaySinks.setLetterbox(color)
     }

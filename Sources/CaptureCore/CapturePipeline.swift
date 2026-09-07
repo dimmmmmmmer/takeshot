@@ -460,6 +460,10 @@ public final class CapturePipeline: @unchecked Sendable {
     /// question about how many passes a drag actually costs, which is what
     /// `DisplayStageCostTests` counts.
     var displayPassCounts = (passes: 0, assistRedraws: 0)
+    /// An assist redraw is already on its way, so another request only has to
+    /// be sure one runs AFTER it — see `redrawDisplayStage`. Under
+    /// `presentLock` with the counters it belongs to.
+    var redrawScheduled = false
 
     /// Every publish of the display stage, coalesced or not.
     public var displayStagePasses: Int {

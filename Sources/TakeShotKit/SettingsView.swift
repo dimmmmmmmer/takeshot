@@ -121,10 +121,16 @@ struct SettingsView: View {
                 // operator typed and what landed on disk were different
                 // strings and nothing said which. The filtered field refuses
                 // the character instead, at the keystroke.
+                // Unbezeled and right-aligned, which is what a plain
+                // `TextField` looks like in a grouped Form — the filtering is
+                // the point of this control, not the box (owner: "можно было
+                // без него как раньше просто чтобы текст названия центровался
+                // по правому борту").
                 LabeledContent(L("project")) {
                     NameTextField(field: .prefix,
-                                  text: $controller.settings.naming.projectName)
-                        .frame(width: 180)
+                                  text: $controller.settings.naming.projectName,
+                                  bezeled: false, alignment: .right)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 HStack(spacing: 8) {
                     Text(L("destination_folder"))

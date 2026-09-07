@@ -207,6 +207,44 @@ struct PreviewLayerRenderTests {
         #expect(state(of: layer).1 == settled)
     }
 
+    /// **A drag coalesces.** Sixty changes must not be sixty GPU passes.
+    ///
+    /// Every trigger for a redraw is a UI event and the loudest of them is a
+    /// drag: a slider delivers about sixty a second, and each one used to queue
+    /// a full render. A render can park for a second inside `nextDrawable()`
+    /// when the window is occluded or an external monitor sleeps, so the queue
+    /// grew for as long as the finger moved and the picture followed it a
+    /// second late — the owner's "лагает action safe, title safe" and "лагают
+    /// и ползунки высоты и ширины".
+    ///
+    /// Dropping the passes in between cannot show a stale frame: a redraw takes
+    /// `lastBuffer` and `currentAssist` when it RUNS.
+    @Test func aDragCoalescesIntoFewerRendersThanItAsksFor() throws {
+        let layer = makeLayer()
+        layer.debugTag = "drag"
+        layer.present(frame(0x40))
+        drain(layer)
+        let baseline = state(of: layer).1
+
+        var assist = ViewAssist()
+        assist.zebraOn = true
+        for step in 0..<60 {
+            assist.zebraThreshold = Double(50 + step) / 100
+            layer.setAssist(assist)
+        }
+        drain(layer)
+        let drawn = state(of: layer).1 - baseline
+        #expect(drawn > 0, "the drag drew nothing at all")
+        // Two: the flag clears at the START of a pass, so a change arriving
+        // mid-render schedules exactly one more — which is what guarantees the
+        // value the operator settled on is the one that lands. `drain` may also
+        // let a pass through, so the bound is loose enough to say "coalesced"
+        // and tight enough that sixty would fail it.
+        #expect(drawn <= 4, "sixty ticks cost \(drawn) GPU passes")
+        // …and the LAST value is the one on screen.
+        #expect(layer.currentAssist.zebraThreshold == assist.zebraThreshold)
+    }
+
     /// A drawable smaller than two pixels is not something to draw into; the
     /// layer must decline instead of asking for one.
     @Test func aDegenerateDrawableSizeIsDeclined() throws {
