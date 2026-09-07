@@ -36,28 +36,43 @@ struct ScopeCodeAxisMarks: View {
     @Environment(\.scopeScaleMode) private var mode
 
     var body: some View {
-        GeometryReader { geo in
+        // **One `Canvas`**, like `ScopeLevelGraticule` and for the same reason:
+        // this was a `GeometryReader` around two `ForEach`es — a stroked `Path`
+        // per rule and a `Text` per number, each with its own `.shadow` and so
+        // its own offscreen pass — rebuilt on every scope publish under the
+        // histogram it explains.
+        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
             let axis = ScopeAxis(
                 nominal: nominal,
                 mode: ScopeScaleMode.resolved(mode, transfer: transfer),
                 transfer: transfer)
-            ZStack(alignment: .topLeading) {
-                lines(axis, in: geo.size)
-                numbers(axis, in: geo.size)
-            }
+            draw(axis, in: size, context: context)
         }
     }
 
-    /// The mode's own marks, plus — in code mode, where the numbers are codes
-    /// and neither of them is 0 % — the nominal pair drawn at full weight.
-    private func lines(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ZStack {
-            ForEach(axis.horizontalTicks) { tick in
-                rule(at: tick.unit, in: size, opacity: tick.weight.opacity)
-            }
-            ForEach(axis.extraNominalXs, id: \.self) { x in
-                rule(at: x, in: size,
-                     opacity: ScopeTick.Weight.nominal.opacity)
+    private func draw(_ axis: ScopeAxis, in size: CGSize,
+                      context: GraphicsContext) {
+        var context = context
+        for tick in axis.horizontalTicks {
+            rule(at: tick.unit, in: size, opacity: tick.weight.opacity,
+                 context: &context)
+        }
+        // in code mode, where the numbers are codes and neither of them is
+        // 0 %, the nominal pair is drawn at full weight
+        for x in axis.extraNominalXs {
+            rule(at: x, in: size, opacity: ScopeTick.Weight.nominal.opacity,
+                 context: &context)
+        }
+        // The shadow once, around every number, instead of once per number.
+        context.drawLayer { layer in
+            layer.addFilter(.shadow(color: .black.opacity(0.9), radius: 1))
+            for tick in axis.horizontalTicks {
+                let text = Text(tick.label)
+                    .font(.system(size: 8).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.3 + brightness * 0.45))
+                layer.draw(text, at: CGPoint(x: labelCentre(tick, in: size),
+                                             y: size.height
+                                                - scopeLabelHeight / 2 - 1))
             }
         }
     }
@@ -66,44 +81,27 @@ struct ScopeCodeAxisMarks: View {
     /// shouting here: these rules run ACROSS the shape being measured rather
     /// than along it, so the loudest of them lands at the flat 0.3 the
     /// histogram's marks were drawn at, and the rest sit under it.
-    private func rule(at x: Double, in size: CGSize,
-                      opacity: Double) -> some View {
-        Path { path in
-            let position = size.width * x
-            path.move(to: CGPoint(x: position, y: 0))
-            path.addLine(to: CGPoint(x: position, y: size.height))
-        }
-        .stroke(.white.opacity(opacity * 0.45 * brightness), lineWidth: 0.5)
+    private func rule(at x: Double, in size: CGSize, opacity: Double,
+                      context: inout GraphicsContext) {
+        let position = size.width * x
+        var path = Path()
+        path.move(to: CGPoint(x: position, y: 0))
+        path.addLine(to: CGPoint(x: position, y: size.height))
+        context.stroke(path,
+                       with: .color(.white.opacity(opacity * 0.45 * brightness)),
+                       lineWidth: 0.5)
     }
 
-    /// Anchored on the marks, and inset at the ends so the first and last
-    /// number stay inside the box instead of hanging off its corners.
-    private func numbers(_ axis: ScopeAxis, in size: CGSize) -> some View {
-        ForEach(axis.horizontalTicks) { tick in
-            let x = size.width * tick.unit
-            Text(tick.label)
-                .font(.system(size: 8).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.3 + brightness * 0.45))
-                .shadow(color: .black.opacity(0.9), radius: 1)
-                .fixedSize()
-                .frame(width: Self.labelWidth,
-                       alignment: alignment(at: x, in: size))
-                .offset(x: min(size.width - Self.labelWidth,
-                               max(0, x - Self.labelWidth / 2)),
-                        y: size.height - scopeLabelHeight - 1)
-        }
+    /// Centred on the mark, and clamped at both ends so the first and last
+    /// number stay inside the box instead of hanging off its corners — the
+    /// same inset the label frame used to give them.
+    private func labelCentre(_ tick: ScopeTick, in size: CGSize) -> CGFloat {
+        let x = size.width * tick.unit
+        return min(size.width - Self.labelWidth / 2,
+                   max(Self.labelWidth / 2, x))
     }
 
     /// Wide enough for "1023" at 8 pt, and the same box whatever the number is
     /// so the marks are not nudged by the width of their own label.
     private static let labelWidth: CGFloat = 34
-
-    /// Centred on the mark, unless the mark is close enough to an edge that the
-    /// label box had to be clamped — then the text goes to the clamped side, so
-    /// it still sits over the line it names.
-    private func alignment(at x: CGFloat, in size: CGSize) -> Alignment {
-        if x - Self.labelWidth / 2 < 0 { return .leading }
-        if x + Self.labelWidth / 2 > size.width { return .trailing }
-        return .center
-    }
 }

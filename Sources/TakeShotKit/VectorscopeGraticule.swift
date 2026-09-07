@@ -56,83 +56,102 @@ struct VectorscopeGraticule: View {
     static let skinToneAngle = 123.0 * Double.pi / 180
 
     var body: some View {
-        ZStack {
-            rings
-            axes
-            ForEach(VectorscopeView.targets100(primaries)) { target in
-                fullAmplitudeTick(target)
-            }
-            ForEach(VectorscopeView.targets75(primaries)) { target in
-                targetBox(target)
+        // **One `Canvas` for the whole graticule**, for the reason
+        // `ScopeLevelGraticule` is one and measured on the same instrument.
+        // It was a `ZStack` of four `Circle`s, a `Path`, and two `ForEach`es
+        // over six targets each — a stroked rectangle and a shadowed `Text`
+        // apiece, about twenty child views, every one of them laid out and
+        // drawn again on every scope publish. Twelve and a half of those a
+        // second, on the thread that also lays out the window.
+        //
+        // Measured before this change (release, one box at 440x300,
+        // `ViewScopePanelCostTests`): **7.19 ms** a redraw for the vectorscope
+        // against 2.34 for the waveform, which draws one image and this
+        // graticule's simpler cousin. The image is the same in both; the
+        // difference was here.
+        Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
+            draw(in: context)
+        }
+    }
+
+    private func draw(in context: GraphicsContext) {
+        var context = context
+        // the boundary and the three quiet saturation rings. `strokeBorder`
+        // strokes INSIDE the frame, so each radius loses half a line width —
+        // kept exactly, or every ring moves by a quarter point.
+        for ring in [0.25, 0.5, 0.75] {
+            stroke(circleOf: side * ring, lineWidth: 0.5,
+                   opacity: 0.16, in: &context)
+        }
+        stroke(circleOf: side, lineWidth: 0.7, opacity: 0.42, in: &context)
+
+        var axes = Path()
+        axes.move(to: CGPoint(x: center.x - side / 2, y: center.y))
+        axes.addLine(to: CGPoint(x: center.x + side / 2, y: center.y))
+        axes.move(to: CGPoint(x: center.x, y: center.y - side / 2))
+        axes.addLine(to: CGPoint(x: center.x, y: center.y + side / 2))
+        if skinToneLine {
+            axes.move(to: center)
+            // view coordinates put +y downward, so the Cr component of the
+            // angle is subtracted rather than added
+            axes.addLine(to: CGPoint(
+                x: center.x + cos(Self.skinToneAngle) * side / 2,
+                y: center.y - sin(Self.skinToneAngle) * side / 2))
+        }
+        context.stroke(axes, with: .color(.white.opacity(0.28 * brightness)),
+                       lineWidth: 0.5)
+
+        // A short tick along each hue's own radius, ending at the 100 % point.
+        var ticks = Path()
+        for target in VectorscopeView.targets100(primaries) {
+            let at = point(target)
+            let dx = at.x - center.x, dy = at.y - center.y
+            ticks.move(to: CGPoint(x: center.x + dx * 0.9,
+                                   y: center.y + dy * 0.9))
+            ticks.addLine(to: at)
+        }
+        context.stroke(ticks, with: .color(.white.opacity(0.4 * brightness)),
+                       lineWidth: 1)
+
+        // The six 75 % boxes, one path — a box states a tolerance, which is
+        // the question a colourist is asking of a bar.
+        var boxes = Path()
+        for target in VectorscopeView.targets75(primaries) {
+            let at = point(target)
+            boxes.addRect(CGRect(x: at.x - 4.5 + 0.35, y: at.y - 4.5 + 0.35,
+                                 width: 9 - 0.7, height: 9 - 0.7))
+        }
+        context.stroke(boxes, with: .color(.white.opacity(0.55 * brightness)),
+                       lineWidth: 0.7)
+
+        // The shadow once, around every label, instead of once per label —
+        // a per-`Text` shadow is an offscreen pass apiece.
+        context.drawLayer { layer in
+            layer.addFilter(.shadow(color: .black.opacity(0.9), radius: 1))
+            for target in VectorscopeView.targets75(primaries) {
+                let at = point(target)
+                let text = Text(target.id)
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.4 + 0.35 * brightness))
+                layer.draw(text, at: CGPoint(x: at.x + 11, y: at.y - 8))
             }
         }
     }
 
-    /// The outer boundary plus the three quiet saturation rings inside it.
-    private var rings: some View {
-        ZStack {
-            ForEach([0.25, 0.5, 0.75], id: \.self) { ring in
-                Circle()
-                    .strokeBorder(.white.opacity(0.16 * brightness),
-                                  lineWidth: 0.5)
-                    .frame(width: side * ring, height: side * ring)
-                    .position(center)
-            }
-            Circle()
-                .strokeBorder(.white.opacity(0.42 * brightness), lineWidth: 0.7)
-                .frame(width: side, height: side)
-                .position(center)
-        }
-    }
-
-    /// The neutral cross and, when it is wanted, the skin-tone line.
-    private var axes: some View {
-        Path { p in
-            p.move(to: CGPoint(x: center.x - side / 2, y: center.y))
-            p.addLine(to: CGPoint(x: center.x + side / 2, y: center.y))
-            p.move(to: CGPoint(x: center.x, y: center.y - side / 2))
-            p.addLine(to: CGPoint(x: center.x, y: center.y + side / 2))
-            if skinToneLine {
-                p.move(to: center)
-                // view coordinates put +y downward, so the Cr component of the
-                // angle is subtracted rather than added
-                p.addLine(to: CGPoint(
-                    x: center.x + cos(Self.skinToneAngle) * side / 2,
-                    y: center.y - sin(Self.skinToneAngle) * side / 2))
-            }
-        }
-        .stroke(.white.opacity(0.28 * brightness), lineWidth: 0.5)
+    /// A ring of `diameter` centred on the scope, stroked inside its own edge
+    /// exactly as `Circle().strokeBorder` did.
+    private func stroke(circleOf diameter: CGFloat, lineWidth: CGFloat,
+                        opacity: Double, in context: inout GraphicsContext) {
+        let inset = diameter - lineWidth
+        let rect = CGRect(x: center.x - inset / 2, y: center.y - inset / 2,
+                          width: inset, height: inset)
+        context.stroke(Path(ellipseIn: rect),
+                       with: .color(.white.opacity(opacity * brightness)),
+                       lineWidth: lineWidth)
     }
 
     private func point(_ target: VectorscopeView.VectorTarget) -> CGPoint {
         CGPoint(x: center.x - side / 2 + target.x * side,
                 y: center.y - side / 2 + target.y * side)
-    }
-
-    private func targetBox(_ target: VectorscopeView.VectorTarget) -> some View {
-        let at = point(target)
-        return ZStack {
-            Rectangle()
-                .strokeBorder(.white.opacity(0.55 * brightness), lineWidth: 0.7)
-                .frame(width: 9, height: 9)
-                .position(at)
-            Text(target.id)
-                .font(.system(size: 7, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.4 + 0.35 * brightness))
-                .shadow(color: .black.opacity(0.9), radius: 1)
-                .position(x: at.x + 11, y: at.y - 8)
-        }
-    }
-
-    /// A short tick along the hue's own radius, ending at the 100 % point.
-    private func fullAmplitudeTick(
-        _ target: VectorscopeView.VectorTarget) -> some View {
-        let at = point(target)
-        let dx = at.x - center.x, dy = at.y - center.y
-        return Path { p in
-            p.move(to: CGPoint(x: center.x + dx * 0.9, y: center.y + dy * 0.9))
-            p.addLine(to: at)
-        }
-        .stroke(.white.opacity(0.4 * brightness), lineWidth: 1)
     }
 }

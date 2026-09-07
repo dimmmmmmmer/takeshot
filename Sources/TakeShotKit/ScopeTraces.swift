@@ -120,13 +120,20 @@ struct HistogramView: View {
         // and gave the numbers to only one of them, which is how the marks on
         // the other two ended up as lines with nothing naming them.
         ZStack {
-            VStack(spacing: 1) {
-                // channels stacked in rows — each normalized to its own peak,
-                // all three readable at once (nothing blended away)
-                ForEach(Array(selectedSeries.enumerated()),
-                        id: \.offset) { _, item in
-                    channelRow(item.bins, color: item.color)
-                }
+            // **One `Canvas` for all three channels**, for the reason
+            // `ScopeLevelGraticule` is one. It was a `VStack` of
+            // `GeometryReader`s, each holding two 256-point shapes — one filled
+            // with a `LinearGradient`, one stroked — so a three-channel
+            // histogram was six gradient-shaded shape views and three nested
+            // layout passes, rebuilt on every scope publish.
+            //
+            // Measured before this change (release, one box at 440x300,
+            // `ViewScopePanelCostTests`): **8.49 ms** a redraw, the most
+            // expensive box on the panel by a factor of three and more than
+            // half of a 60 Hz frame on its own, twelve and a half times a
+            // second.
+            Canvas(opaque: false, rendersAsynchronously: false) { context, size in
+                draw(in: context, size: size)
             }
             // the graticule and its numbers come from the same ScopeAxis the
             // traces are drawn through, so the brightness slider reaches them
@@ -136,17 +143,29 @@ struct HistogramView: View {
         }
     }
 
-    private func channelRow(_ bins: [Int], color: Color) -> some View {
-        GeometryReader { geo in
-            let peak = max(1, bins.max() ?? 1)
-            ZStack {
-                channelPath(bins, peak: peak, in: geo.size)
-                    .fill(LinearGradient(
-                        colors: [color.opacity(0.85), color.opacity(0.35)],
-                        startPoint: .top, endPoint: .bottom))
-                channelPath(bins, peak: peak, in: geo.size)
-                    .stroke(color, lineWidth: 1)
-            }
+    /// The channels stacked in rows — each normalized to its own peak, all
+    /// three readable at once (nothing blended away). The row geometry is the
+    /// `VStack(spacing: 1)` this replaced, arithmetic rather than layout.
+    private func draw(in context: GraphicsContext, size: CGSize) {
+        let series = selectedSeries
+        guard !series.isEmpty else { return }
+        let spacing: CGFloat = 1
+        let rowHeight = (size.height - spacing * CGFloat(series.count - 1))
+            / CGFloat(series.count)
+        guard rowHeight > 0 else { return }
+        for (index, item) in series.enumerated() {
+            var row = context
+            let top = (rowHeight + spacing) * CGFloat(index)
+            row.translateBy(x: 0, y: top)
+            let rowSize = CGSize(width: size.width, height: rowHeight)
+            let peak = max(1, item.bins.max() ?? 1)
+            let path = channelPath(item.bins, peak: peak, in: rowSize)
+            row.fill(path, with: .linearGradient(
+                Gradient(colors: [item.color.opacity(0.85),
+                                  item.color.opacity(0.35)]),
+                startPoint: .zero,
+                endPoint: CGPoint(x: 0, y: rowHeight)))
+            row.stroke(path, with: .color(item.color), lineWidth: 1)
         }
     }
 
