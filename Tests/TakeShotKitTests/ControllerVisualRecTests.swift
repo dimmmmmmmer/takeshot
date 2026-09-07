@@ -71,8 +71,15 @@ enum VisualRecControllerProbe {
         // asked for whose box content is identical (a region placed off the
         // dot), and "wait until the signature CHANGES" would then wait for
         // something that is never going to happen.
+        // Both halves: a pass this push did not already have, AND a reading to
+        // take from it. The pass counter alone says a frame was published; it
+        // does not say `latestPreLUT` survived — `handleFormat` clears it, and
+        // on a runner slow enough for that clear to land after this frame's
+        // enqueue the very next line read nil out of a pipeline that had just
+        // displayed something.
         #expect(await ControllerWait.until {
             controller.pipeline.displayStagePasses > passesBefore
+                && controller.pipeline.captureVisualRecSignature() != nil
         }, "the pushed frame never reached the display stage")
     }
 

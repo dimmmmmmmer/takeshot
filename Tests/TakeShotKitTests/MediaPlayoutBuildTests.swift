@@ -174,9 +174,15 @@ import Testing
     }
 
     /// In review the tap takes over, and its frames really do reach the board —
-    /// the handler is wired to the feeder, not merely installed. The capture is
-    /// stopped first, so the only thing that can put a frame on the wire is the
-    /// tap.
+    /// the handler is wired to the feeder, not merely installed.
+    ///
+    /// The board is asked whether the TAP's frame arrived, not whether anything
+    /// did, and for the reason its neighbour below states in full: a live frame
+    /// reaching the mirror is legitimate — the display stage re-publishes its
+    /// last frame whenever a sink is added — so a board that is not empty says
+    /// nothing about this. Asserting an empty one to begin with was the same
+    /// stale assumption from the other side, and it went red on CI with a 1080p
+    /// raster sitting there. The still's size is the discriminator.
     @Test func inReviewTheTapsFramesReachTheBoard() async throws {
         try await withFakeBoard { requests in
             try await ControllerHarness.run { controller, _ in
@@ -184,14 +190,25 @@ import Testing
                 controller.viewerMode = .playback
                 let feeder = try #require(controller.mirrors.playout)
                 let board = try #require(requests.outputs.first)
-                #expect(board.displayed.isEmpty)
+                // The baseline is taken DRAINED. Adding a sink re-publishes the
+                // display stage's last frame, and that hop landing between the
+                // two reads is what made an "is it empty" precondition depend
+                // on how fast the machine was.
+                feeder.settle()
+                let before = board.displayed.count
 
                 controller.playbackTap.attachStill(
                     MediaFixtures.pixelBuffer(level: 0x40, width: 320, height: 180))
                 controller.playbackTap.queue.sync {}
                 feeder.settle()
 
-                #expect(!board.displayed.isEmpty,
+                // Counted, not sized: the feeder scales the still to the
+                // board's own raster, so what arrives is 1920x1080 whatever
+                // went in — which is why the size discriminator its neighbour
+                // below uses works only as a NEGATIVE. With capture stopped and
+                // the sink's own republish already drained, nothing but the tap
+                // can add a frame here.
+                #expect(board.displayed.count > before,
                         "the tap's frames never reached the output")
             }
         }
