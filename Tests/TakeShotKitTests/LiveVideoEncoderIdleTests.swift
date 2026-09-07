@@ -1,3 +1,5 @@
+import CaptureCore
+import CoreMedia
 import CoreVideo
 import Foundation
 import Testing
@@ -53,4 +55,70 @@ final class SampleCounter: @unchecked Sendable {
     private var stored = 0
     func count() { lock.withLock { stored += 1 } }
     var total: Int { lock.withLock { stored } }
+}
+
+/// **The shared encoder declares the colour it was HANDED, and follows it when
+/// it changes.**
+///
+/// One `VTCompressionSession` serves SRT, the web remote and everything else
+/// watching the same picture, and it is rebuilt when the raster or the rate
+/// moves. The COLOUR was not in that identity and was not read at all: the
+/// session declared Rec.709 as a constant, over a display buffer this app had
+/// itself tagged Rec.2020 whenever the camera was sending PQ or HLG. The
+/// director's laptop drew wide-gamut coordinates as narrow ones — a
+/// desaturated picture next to a correct one on the cart, which is the version
+/// of this that costs an hour of arguing about which screen is lying.
+@Suite(.enabled(if: SRTVideoEncoder.isSupported,
+                "no H.264 encoder on this machine"))
+struct LiveVideoEncoderColourTests {
+    /// The primaries the far end reads off a sample.
+    private static func primaries(_ sample: CMSampleBuffer) -> String? {
+        guard let format = CMSampleBufferGetFormatDescription(sample),
+              let extensions = CMFormatDescriptionGetExtensions(format)
+                as? [CFString: Any]
+        else { return nil }
+        return extensions[kCMFormatDescriptionExtension_ColorPrimaries]
+            as? String
+    }
+
+    /// Offer one buffer until a sample comes back, and hand back that sample.
+    private static func encodeOne(_ encoder: LiveVideoEncoder,
+                                  _ buffer: CVPixelBuffer,
+                                  into box: SampleBox) async throws
+        -> CMSampleBuffer {
+        let before = box.samples.count
+        let deadline = Date().addingTimeInterval(5)
+        while box.samples.count == before, Date() < deadline {
+            encoder.offer(buffer, framesPerSecond: 25)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return try #require(box.samples.last, "no sample came back in 5 s")
+    }
+
+    @Test func aCameraChangingToHDRChangesWhatTheStreamDeclares() async throws {
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        defer { encoder.stop() }
+        let box = SampleBox()
+        encoder.addSink(box) { box.store($0) }
+
+        // An SDR day: untagged, which IS Rec.709 and is almost every day.
+        let sdr = try SRTFixtures.displayBuffer()
+        let first = try await Self.encodeOne(encoder, sdr, into: box)
+        #expect(Self.primaries(first)
+                == kCVImageBufferColorPrimaries_ITU_R_709_2 as String,
+                "an SDR frame was declared \(Self.primaries(first) ?? "nothing")")
+
+        // The camera is swapped for one sending PQ. `CapturePipeline` tone maps
+        // the frame into a Rec.709 curve and tags it Rec.2020 primaries, which
+        // is what the display buffer really holds.
+        let hdr = try SRTFixtures.displayBuffer()
+        ColorTags.tag(hdr, preset: ColorTags.rec2020Preset)
+        let second = try await Self.encodeOne(encoder, hdr, into: box)
+        #expect(Self.primaries(second)
+                == kCVImageBufferColorPrimaries_ITU_R_2020 as String,
+                """
+                the session went on declaring \
+                \(Self.primaries(second) ?? "nothing") after the signal changed
+                """)
+    }
 }

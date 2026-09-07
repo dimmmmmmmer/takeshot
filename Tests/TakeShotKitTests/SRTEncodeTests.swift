@@ -1,3 +1,4 @@
+import CaptureCore
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -114,7 +115,10 @@ struct SRTEncodeTests {
             configuration: SRTVideoEncoder.Configuration(
                 width: CVPixelBufferGetWidth(buffer),
                 height: CVPixelBufferGetHeight(buffer),
-                framesPerSecond: framesPerSecond, bitsPerSecond: 8_000_000),
+                framesPerSecond: framesPerSecond, bitsPerSecond: 8_000_000,
+                // Off the buffer, exactly as `LiveVideoEncoder` does it, so
+                // this helper cannot declare a colour the app would not.
+                colorPreset: ColorTags.preset(of: buffer)),
             sink: { collected.store($0) })
         let step: Int64 = MPEGTSMuxer.clockHz / Int64(framesPerSecond)
         for frame in 0..<frames {
@@ -155,21 +159,67 @@ struct SRTEncodeTests {
                 "white came back at \(measured[2]) of 255")
     }
 
+    /// The three colour extensions the far end reads off the stream.
+    struct DeclaredColour: Equatable {
+        var primaries: String?
+        var transfer: String?
+        var matrix: String?
+    }
+
+    private static func declaredColour(_ sample: CMSampleBuffer) throws
+        -> DeclaredColour {
+        let format: CMFormatDescription =
+            try #require(CMSampleBufferGetFormatDescription(sample))
+        let extensions: [CFString: Any] = try #require(
+            CMFormatDescriptionGetExtensions(format) as? [CFString: Any])
+        return DeclaredColour(
+            primaries: extensions[kCMFormatDescriptionExtension_ColorPrimaries]
+                as? String,
+            transfer: extensions[kCMFormatDescriptionExtension_TransferFunction]
+                as? String,
+            matrix: extensions[kCMFormatDescriptionExtension_YCbCrMatrix]
+                as? String)
+    }
+
+    /// **An HDR day: the stream declares the primaries the buffer really has.**
+    ///
+    /// `CapturePipeline` tone maps a PQ or HLG frame into a Rec.709 CURVE and
+    /// tags it Rec.2020 PRIMARIES, because tone mapping is per channel and
+    /// cannot move primaries. This encoder declared Rec.709 as a constant for
+    /// its whole life, so wide-gamut coordinates arrived at the director's
+    /// laptop labelled as narrow ones and were drawn desaturated — beside the
+    /// cart's own monitor showing them correctly, which is the version of this
+    /// bug that costs an hour of everybody arguing about which screen is lying.
+    @Test func anHDRBufferIsDeclaredRec2020() throws {
+        let source: CVPixelBuffer = try Self.bands()
+        ColorTags.tag(source, preset: ColorTags.rec2020Preset)
+        let sample: CMSampleBuffer =
+            try #require(try Self.encode(source).first)
+        let declared = try Self.declaredColour(sample)
+        #expect(declared.primaries
+                == kCVImageBufferColorPrimaries_ITU_R_2020 as String,
+                "the stream declared \(declared.primaries ?? "nothing")")
+        #expect(declared.matrix == kCVImageBufferYCbCrMatrix_ITU_R_2020 as String,
+                "the matrix stayed \(declared.matrix ?? "nothing")")
+        // …and the CURVE is still 709, because the frame really has been tone
+        // mapped. Declaring PQ here would be the opposite mistake and a
+        // picture a hundred times too dark.
+        #expect(declared.transfer
+                == kCVImageBufferTransferFunction_ITU_R_709_2 as String)
+    }
+
     /// …and the stream says it is Rec.709, which is what makes the numbers above
     /// mean anything at the far end.
     @Test func theStreamDeclaresRec709() throws {
         let samples: [CMSampleBuffer] = try Self.encode(try Self.bands())
         let sample: CMSampleBuffer = try #require(samples.first)
-        let format: CMFormatDescription =
-            try #require(CMSampleBufferGetFormatDescription(sample))
-        let extensions: [CFString: Any] = try #require(
-            CMFormatDescriptionGetExtensions(format) as? [CFString: Any])
-        #expect(extensions[kCMFormatDescriptionExtension_ColorPrimaries]
-            as? String == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
-        #expect(extensions[kCMFormatDescriptionExtension_TransferFunction]
-            as? String == kCVImageBufferTransferFunction_ITU_R_709_2 as String)
-        #expect(extensions[kCMFormatDescriptionExtension_YCbCrMatrix]
-            as? String == kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
+        let declared = try Self.declaredColour(sample)
+        #expect(declared.primaries
+                == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
+        #expect(declared.transfer
+                == kCVImageBufferTransferFunction_ITU_R_709_2 as String)
+        #expect(declared.matrix
+                == kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
     }
 
     /// **Frame reordering is off, which is why the muxer carries one timestamp.**

@@ -114,7 +114,7 @@ import Testing
 
             controller.settings.capture.destinationPath =
                 try unreachablePath(under: root)
-            controller.checkDiskSpace()
+            await controller.checkDiskSpace()
 
             // Waited for in the failing direction, on the full budget: the
             // watchdog sets the banner synchronously, so a poll for the RIGHT

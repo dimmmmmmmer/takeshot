@@ -1,5 +1,6 @@
 import AppKit
 import CNDI
+import CaptureCore
 import SwiftUI
 import Testing
 
@@ -49,11 +50,58 @@ struct ViewNDISettingsTests {
             let form = ViewBudget.settingsFormWidth
             for key in ["settings_ndi", "ndi_enable", "ndi_source_name",
                         "ndi_status", "ndi_sending", "ndi_not_sending",
-                        "ndi_unavailable", "ndi_failed_short"] {
+                        "ndi_unavailable", "ndi_failed_short",
+                        "ndi_rec709_only"] {
                 let ideal = probe.fittingSizes { Text(L(key)).fixedSize() }
                 #expect(ideal.ru.width <= form,
                         "\(key) is \(ideal.ru.width)pt of \(form)")
             }
+        }
+    }
+
+    /// **A wire that cannot carry the signal's colour says so, and only then.**
+    ///
+    /// `NDIlib_video_frame_v2_t` has no colour field: BGRX on that wire is
+    /// Rec.709 by definition, so an HDR signal — whose display buffer keeps the
+    /// camera's Rec.2020 primaries through the tone map — reaches an NDI
+    /// receiver undersaturated, and nothing in the protocol can prevent it. The
+    /// SRT leg declares the real primaries; this leg can only be honest, where
+    /// the operator chooses between them.
+    @Test func aWideGamutSignalIsAdmittedOnTheNDIRow() async throws {
+        try await ViewProbe.run { probe in
+            let mirrors = probe.controller.mirrors
+            mirrors.ndiState = .sending
+            let quiet = probe.fittingSizes {
+                Form { NDIStatusRow(mirrors: mirrors, wideGamut: false) }
+                    .formStyle(.grouped)
+            }
+            let warned = probe.fittingSizes {
+                Form { NDIStatusRow(mirrors: mirrors, wideGamut: true) }
+                    .formStyle(.grouped)
+            }
+            #expect(warned.en.height > quiet.en.height,
+                    "an HDR signal went out as Rec.709 with nothing said")
+            // …and it stays one row in both languages, like the audio line
+            // beside it: a grouped Form wraps rather than truncates, and a row
+            // that wraps in Russian only makes the section a different height
+            // in the two languages.
+            #expect(abs(warned.ru.height - warned.en.height) <= 8,
+                    "the Russian warning wraps differently: \(warned)")
+        }
+    }
+
+    /// An SDR day is every other day, and the row is not there. Stated
+    /// separately because the assertion above is a COMPARISON: a version of it
+    /// that showed the line unconditionally would pass a height test that only
+    /// looked at one side.
+    @Test func anSDRSignalSaysNothingAboutColourOnTheNDIRow() async throws {
+        try await ViewProbe.run { _ in
+            let colorimetry = WireColorimetry(transfer: .sdr, primaries: .rec709)
+            #expect(!colorimetry.exceedsRec709,
+                    "an SDR Rec.709 signal claimed the wire could not carry it")
+            let hdr = WireColorimetry(transfer: .pq, primaries: .rec2020)
+            #expect(hdr.exceedsRec709,
+                    "a Rec.2020 signal claimed Rec.709 was enough")
         }
     }
 

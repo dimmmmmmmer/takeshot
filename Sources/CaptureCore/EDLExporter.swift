@@ -127,8 +127,37 @@ public enum EDLExporter {
                                                    : marker.timecodeText
             }
             return "* LOC: \(locator.description) "
-                + "\(marker.color.uppercased()) \(name)"
+                + "\(locatorColor(for: marker.color)) \(name)"
         }
+    }
+
+    /// **The app's swatches, mapped onto the palette a `* LOC:` line has.**
+    ///
+    /// Avid defined the locator convention and its colour set is the one every
+    /// conform tool reads: white, red, green, blue, cyan, magenta, yellow,
+    /// black. The app's own swatches are the OPERATOR's palette and two of
+    /// them — orange and purple — are in nobody's. Written through verbatim,
+    /// `ORANGE` is a word the importer does not know on a line it otherwise
+    /// understands, and the marker arrives with its colour dropped: the
+    /// assistant conforming the day sees a wall of identical locators where
+    /// the operator had been colour-coding takes since call time.
+    ///
+    /// Orange lands on YELLOW and not on RED. Red is what every set uses for
+    /// "do not use this one", and moving a note there would make the EDL say
+    /// something the operator did not.
+    ///
+    /// A colour with no mapping lands on WHITE rather than being written
+    /// through: an importer that knows white draws the marker, and a marker
+    /// drawn in the wrong colour is recoverable in a way one that never
+    /// appeared is not.
+    static let locatorColors = [
+        "orange": "YELLOW", "red": "RED", "yellow": "YELLOW",
+        "green": "GREEN", "cyan": "CYAN", "blue": "BLUE",
+        "purple": "MAGENTA",
+    ]
+
+    static func locatorColor(for swatch: String) -> String {
+        locatorColors[swatch.lowercased()] ?? "WHITE"
     }
 
     /// Reels are 8 chars in CMX: the roll when present, else a counter.

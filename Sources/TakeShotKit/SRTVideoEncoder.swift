@@ -1,3 +1,4 @@
+import CaptureCore
 import CoreMedia
 @preconcurrency import CoreVideo
 import Foundation
@@ -32,14 +33,23 @@ import VideoToolbox
 /// order is coding order, so there is no decode timestamp for the muxer to carry
 /// and no way for the two to disagree.
 ///
-/// **The colour is declared, not converted.** The display buffer holds full-range
-/// BGRA whose codes are Rec.709-encoded (the contract stated at
-/// `MetalPreviewLayer`), and VideoToolbox's own BGRA-to-YCbCr pass is asked for
-/// Rec.709 primaries, transfer and matrix. That pass also lands the result in
-/// VIDEO range, which is what a receiver decoding a 709-tagged stream expects —
-/// nominal black on 16, nominal white on 235 — so there is no swing decision to
-/// get wrong here. `SRTEncodeTests` measures it through a real encode and decode
-/// rather than asserting it.
+/// **The colour is declared, not converted — and the declaration is READ off
+/// the buffer.** The display buffer holds full-range BGRA, and VideoToolbox's
+/// own BGRA-to-YCbCr pass is asked for the primaries, transfer and matrix that
+/// buffer is tagged with. That pass also lands the result in VIDEO range, which
+/// is what a receiver decoding the stream expects — nominal black on 16,
+/// nominal white on 235 — so there is no swing decision to get wrong here.
+/// `SRTEncodeTests` measures it through a real encode and decode rather than
+/// asserting it.
+///
+/// It used to say Rec.709 and mean it as a constant. On an SDR day that is
+/// right and is what `ColorTags` answers anyway. On an HDR day it was a lie the
+/// app told about its own buffer: `CapturePipeline` tone maps a PQ or HLG frame
+/// into a Rec.709 CURVE and tags it Rec.2020 PRIMARIES, because tone mapping is
+/// per channel and cannot move the primaries. Declaring 709 over that handed
+/// the director a desaturated picture beside a correct one on the cart — and
+/// colour accuracy is not a nicety on this cart, it is the reason the operator
+/// is looking at the monitor at all.
 ///
 /// Confined to `SRTMirror`'s queue.
 final class SRTVideoEncoder {
@@ -52,6 +62,15 @@ final class SRTVideoEncoder {
         /// rate controller's expectation, and neither wants three decimals.
         var framesPerSecond: Int
         var bitsPerSecond: Int
+        /// The colour the display buffer says it is in, as a `ColorTags`
+        /// preset — nil for Rec.709, which is every SDR signal and therefore
+        /// almost every day.
+        ///
+        /// Part of the session's identity, so an HDR camera swapped for an SDR
+        /// one mid-day rebuilds rather than going on declaring the old colour.
+        /// A rebuild is a keyframe and the parameter sets, which is exactly
+        /// what a receiver needs in order to follow the change.
+        var colorPreset: String?
 
         /// A keyframe a second.
         ///
@@ -197,6 +216,7 @@ final class SRTVideoEncoder {
     @discardableResult
     private static func apply(_ configuration: Configuration,
                               to session: VTCompressionSession) -> [String] {
+        let colour = ColorTags.values(for: configuration.colorPreset)
         // A ceiling on top of the average, over one second. Without it a keyframe
         // is free to burst past whatever the link can carry, and on an SRT link a
         // burst is exactly what fills the send buffer and drops the frames behind
@@ -214,13 +234,11 @@ final class SRTVideoEncoder {
                 NSNumber(value: 1.0),
             kVTCompressionPropertyKey_ExpectedFrameRate:
                 NSNumber(value: configuration.framesPerSecond),
-            // The colour the display buffer is already in. See the type comment.
-            kVTCompressionPropertyKey_ColorPrimaries:
-                kCVImageBufferColorPrimaries_ITU_R_709_2,
-            kVTCompressionPropertyKey_TransferFunction:
-                kCVImageBufferTransferFunction_ITU_R_709_2,
-            kVTCompressionPropertyKey_YCbCrMatrix:
-                kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+            // The colour the display buffer is already in, out of the one table
+            // that decides what any tag in this app says. See the type comment.
+            kVTCompressionPropertyKey_ColorPrimaries: colour.cvPrimaries,
+            kVTCompressionPropertyKey_TransferFunction: colour.cvTransfer,
+            kVTCompressionPropertyKey_YCbCrMatrix: colour.cvMatrix,
         ]
         return properties.compactMap { key, value in
             VTSessionSetProperty(session, key: key, value: value) == noErr

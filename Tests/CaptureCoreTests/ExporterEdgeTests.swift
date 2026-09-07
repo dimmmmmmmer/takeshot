@@ -144,7 +144,9 @@ import Testing
             duration: 4,
             markers: [TakeMarker(seconds: 1)])
         let edl = try #require(EDLExporter.selectsEDL(takes: [take], title: "t"))
-        #expect(edl.contains("* LOC: 01:00:01:00 ORANGE MARKER"))
+// YELLOW: the default swatch is orange and the `* LOC:` palette has
+        // no such colour — see `EDLExporter.locatorColors`.
+        #expect(edl.contains("* LOC: 01:00:01:00 YELLOW MARKER"))
     }
 
     /// A take with no roll gets a counter reel — and the SAME counter reel in

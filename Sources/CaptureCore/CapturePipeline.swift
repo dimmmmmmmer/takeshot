@@ -49,10 +49,18 @@ public final class CapturePipeline: @unchecked Sendable {
     /// badge and switches the scopes' scale into nits. Delivered on main.
     public var onColorimetry: ((WireColorimetry) -> Void)?
 
-    /// These two are the only callbacks read away from the main queue: the
-    /// detached finalize task snapshots them on its own thread (see
-    /// `takeReport`). Every other callback above is both written and read on
-    /// main, so a plain property is fine for them — these two are not.
+    /// These two are the only callbacks read away from the main queue while
+    /// they can still be WRITTEN: the detached finalize task snapshots them on
+    /// its own thread (see `takeReport`) and the controller re-routes them.
+    ///
+    /// Every callback above them is read inside a `DispatchQueue.main.async`,
+    /// so both ends are on main and a plain property is right. The ones BELOW
+    /// them that are read off main — `onMonitorAudio` on the capture queue,
+    /// `onVisualRecReading` and `onScopeData` on their watchers' — are assigned
+    /// once when the controller binds the pipeline and never again, which is
+    /// the condition these two fail and the reason each of those says so at
+    /// its own declaration. This comment used to claim the pair were the only
+    /// ones read off main at all, which is a different and false sentence.
     ///
     /// A closure property is a two-word value with an ARC-managed context. Read
     /// it on one thread while another writes it and you get a function pointer

@@ -383,8 +383,29 @@ static CNDRuntime *CNDSharedRuntime(void) {
         frame.FourCC = NDIlib_FourCC_video_type_BGRX;
         frame.frame_rate_N = frameRateN;
         frame.frame_rate_D = frameRateD;
-        // 0 means "xres/yres", which is right for every raster the app shows.
+        // 0 means "xres/yres", which is right for every raster the app shows
+        // EXCEPT the two standard-definition ones. 720x576 and 720x486 are
+        // BT.601 sampling and are not square-pixel: xres/yres reads them as
+        // 1.25:1 and 1.48:1, so a receiver draws everybody slightly too tall
+        // or too wide. The recorded file states the same fact as a `pasp`
+        // atom (`TakeWriter.pixelAspect`), and 4:3 is the same choice for the
+        // same reason — the signal does not say which it is, and anamorphic
+        // 16:9 SD is a one-click reinterpretation at the far end.
         frame.picture_aspect_ratio = 0.0f;
+        if (frame.xres == 720 &&
+            (frame.yres == 576 || frame.yres == 486 || frame.yres == 480)) {
+            frame.picture_aspect_ratio = 4.0f / 3.0f;
+        }
+        // **There is no colour field, and that is a property of the wire.**
+        // NDIlib_video_frame_v2_t carries a raster, a FourCC, a rate, an
+        // aspect, a format type, a timecode and a metadata string — and
+        // nothing that says which primaries the BGRX is in. NDI defines BGRX
+        // as Rec.709, so a display buffer this app tagged Rec.2020 (an HDR
+        // source, tone mapped per channel into an SDR curve with the camera's
+        // primaries intact) arrives at the receiver undersaturated, and no
+        // field here can prevent it. The SRT leg CAN say it and does; what
+        // this leg can do is not pretend, so the app tells the operator where
+        // the transport is chosen — see `WireColorimetry.exceedsRec709`.
         frame.frame_format_type = NDIlib_frame_format_type_progressive;
         // The runtime stamps the clock. The app's own timecode is the camera's
         // and belongs to the file, not to a monitoring feed that drops frames.

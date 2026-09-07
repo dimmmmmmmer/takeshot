@@ -57,6 +57,36 @@ import Testing
         }
     }
 
+    /// **`preset(of:)` is the inverse of `tag`, on every preset there is.**
+    ///
+    /// It exists because a consumer downstream of the display stage has to
+    /// DECLARE the colour it was handed. `SRTVideoEncoder` did not ask — it
+    /// declared Rec.709 as a constant over a buffer this app had itself tagged
+    /// Rec.2020 on every HDR day.
+    @Test func aTaggedBufferCanBeAskedWhichPresetItIs() {
+        for preset in [ColorTags.rec2020Preset, ColorTags.pqPreset,
+                       ColorTags.hlgPreset, "601"] {
+            let buffer = TestMedia.pixelBuffer()
+            ColorTags.tag(buffer, preset: preset)
+            #expect(ColorTags.preset(of: buffer) == preset,
+                    """
+                    \(preset) came back as \
+                    \(ColorTags.preset(of: buffer) ?? "nil")
+                    """)
+        }
+    }
+
+    /// 709 and an untagged buffer are the SAME answer — the default — and both
+    /// are nil, which is what every caller passes back into `values(for:)`.
+    @Test func sevenOhNineAndAnUntaggedBufferAreBothTheDefault() {
+        let untouched = TestMedia.pixelBuffer()
+        #expect(ColorTags.preset(of: untouched) == nil)
+        let tagged = TestMedia.pixelBuffer()
+        ColorTags.tag(tagged, preset: "709")
+        #expect(ColorTags.preset(of: tagged) == nil,
+                "709 came back as something other than the default")
+    }
+
     /// `tag` stamps the buffer with exactly the preset's three attachments.
     @Test func taggingABufferStampsThePresetsAttachments() {
         for preset in ["709", "601", "2020"] {

@@ -544,9 +544,11 @@ socket (`RemoteClient.commandBurst`) and per set (`RemoteServer.commandBurst`),
 because a phone in a pocket or a page in a retry loop would otherwise cycle
 begin/finish at message rate, one file per cycle.
 
-**Two narrower reaches, both behind the PIN.** The live page's picture
-subscription calls `CapturePipeline.setOnMonitorFrame`, which takes `displayFrameLock` — the same
-lock `publishDisplayFrame` takes once per frame — for two pointer assignments.
+**Two narrower reaches, both behind the PIN.** The live page asks for a picture
+with `POST /live-picture` (`{"pin":…,"viewer":…,"picture":"grid"}`), and what
+that reaches is `CaptureController.refreshMonitorTaps` → each pipeline's
+`setOnMonitorFrame`, which takes `displayFrameLock` — the same lock
+`publishDisplayFrame` takes once per frame — for two pointer assignments.
 And `rate`/`comment`/`slate`/`good`/`bad` drive `exportTakeLog()`, which rewrites
 three sidecar files on the volume the take is being written to (the log, the
 markers and the slate; the in/out ranges are a fourth, written by

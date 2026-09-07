@@ -122,6 +122,16 @@ final class LiveAudioEncoder: @unchecked Sendable {
     /// The 90 kHz stamp the NEXT produced access unit gets; -1 before the
     /// anchor has been taken.
     private var nextTicks: Int64 = -1
+    /// Whether the converter has ever produced a unit. Queue-confined, and the
+    /// only thing that separates the codec priming from the codec refusing —
+    /// see `drain`.
+    private var producedAnyUnit = false
+    /// Access units the converter refused after the stream was running. Never
+    /// observed on this OS; counted rather than assumed away, because the
+    /// alternative reading of a nil used to be the only one.
+    private(set) var refusedUnits = 0
+    /// One line per this many refusals, at 47 units a second.
+    private static let refusalLogInterval = 50
 
     init(bitsPerSecond: Int = LiveAudioEncoder.defaultBitsPerSecond,
          clock: LiveClock = LiveClock(),
@@ -188,36 +198,82 @@ final class LiveAudioEncoder: @unchecked Sendable {
             converter = nil
             pending.removeAll()
             nextTicks = -1
+            // A NEW converter primes again, so the "has it ever produced one"
+            // question is about this converter and not about the object.
+            producedAnyUnit = false
         }
         if nextTicks < 0 {
-            nextTicks = ticks(at: now)
+            nextTicks = anchor(at: now)
         } else if ticks(at: now) - nextTicks
             > Int64(Self.resyncTolerance * Double(MPEGTSMuxer.clockHz)) {
             // The sound's clock has fallen behind the wall clock by more than
             // any jitter explains: the source went away and came back.
-            nextTicks = ticks(at: now)
+            nextTicks = anchor(at: now)
         }
         pending += samples
         drain()
+    }
+
+    /// **Where a run of sound starts on the shared clock, with the codec's own
+    /// delay taken off.**
+    ///
+    /// The encoder is handed a packet that arrived at `now` and its first
+    /// access unit decodes to a window 2112 frames EARLIER (see
+    /// `AACConverter.primingFrames`). Stamped at `now`, that unit tells the
+    /// receiver to play the codec's priming at the instant the sound really
+    /// began, and everything after it lands 44 ms late — for the life of the
+    /// stream, on the director's feed, against a picture that is on time.
+    /// Nothing said so and nothing measured it; `LiveAudioPrimingTests` now
+    /// does both.
+    ///
+    /// **Asked of a moment slightly in the past, on purpose.** When the sound
+    /// leg is the first thing to stamp, `LiveClock` adopts whatever instant it
+    /// is given as the origin — so asking for `now − priming` makes the origin
+    /// 44 ms earlier and every stamp on both legs stays positive with the
+    /// correction exact. When the picture leg started first and long enough
+    /// ago, the subtraction is likewise exact. The floor bites in one window
+    /// only: the picture started LESS than 44 ms ago, where the residual is at
+    /// most that gap and shrinks to nothing as it grows. A negative stamp is
+    /// not an option to weigh — `MPEGTSMuxer.timestamp` masks to 33 bits, so
+    /// one would reach the receiver as a PTS twenty-six hours in the future.
+    private func anchor(at now: TimeInterval) -> Int64 {
+        max(0, ticks(at: now - Self.primingSeconds))
+    }
+
+    /// The anchor, for the suite. `anchor(at:)` is queue-confined and private
+    /// because only `accept` may move the stamp; this reads the same
+    /// arithmetic without touching anything.
+    func anchorForTests(at now: TimeInterval) -> Int64 { anchor(at: now) }
+
+    /// The codec's delay in seconds, for the anchor.
+    static var primingSeconds: Double {
+        Double(AACConverter.primingFrames) / Double(sampleRate)
     }
 
     /// Everything the pending samples can make, one access unit at a time.
     ///
     /// The converter is asked for exactly one packet per call and handed
     /// exactly one packet's worth of input, so nothing about the pacing is left
-    /// to AudioToolbox's own buffering. Its first call or two legitimately
-    /// produce NOTHING — AAC-LC's transform overlaps two windows, so the
-    /// encoder is one unit behind its input for the life of the stream — and
-    /// that is a constant delay rather than a dropped unit: the stamps advance
-    /// per unit PRODUCED, so the series stays whole.
+    /// to AudioToolbox's own buffering.
     ///
-    /// What that costs is said out loud: a nil that is NOT priming — a
-    /// converter that refused one block — is indistinguishable here and is
-    /// treated the same way, so 21.3 ms of sound would go missing with the
-    /// stamps continuing as if it had not. Never observed; AAC-LC's only
-    /// documented nil is the window it is filling, and the alternative
-    /// (advancing the clock over a block that produced nothing) would put a
-    /// permanent 21.3 ms error into every stamp after it instead.
+    /// **A nil before the first unit is priming; a nil after it is a refusal,
+    /// and the two are no longer treated alike.** This used to say the first
+    /// call or two legitimately produce nothing, and folded both cases into
+    /// "hold the clock". Measured, that is not what AudioToolbox does: eight
+    /// blocks in, eight units out, from the very first call. The codec's delay
+    /// is carried INSIDE the first unit — 2112 frames of priming that a
+    /// decoder plays before the first real sample, which `anchor(at:)` takes
+    /// off the stamps — and not by producing nothing.
+    ///
+    /// So a nil once the stream is running is a converter refusing a block,
+    /// and holding the clock over it puts a permanent 21.3 ms error into every
+    /// stamp after it: the sound would run further and further behind the
+    /// picture for the rest of the day. The clock advances instead. What was
+    /// lost stays lost, and everything after it is still where it belongs.
+    ///
+    /// The other half is kept for an OS whose encoder DOES prime by producing
+    /// nothing: before the first unit there is no series to keep whole, so
+    /// nothing advances and nothing is counted.
     private func drain() {
         // A width of zero would make `stride` zero and the loop below endless,
         // on the encode queue, forever. `accept` cannot let that through today
@@ -237,7 +293,17 @@ final class LiveAudioEncoder: @unchecked Sendable {
                 pending.removeAll()
                 return
             }
-            guard let unit = codec.encode(block) else { continue }
+            guard let unit = codec.encode(block) else {
+                guard producedAnyUnit else { continue }
+                refusedUnits += 1
+                nextTicks += Self.ticksPerAccessUnit
+                if refusedUnits % Self.refusalLogInterval == 0 {
+                    os_log("live audio: %d access units refused by the encoder",
+                           refusedUnits)
+                }
+                continue
+            }
+            producedAnyUnit = true
             let frame = AccessUnit(payload: unit, ticks: nextTicks,
                                    sampleRate: Self.sampleRate,
                                    channels: channels)

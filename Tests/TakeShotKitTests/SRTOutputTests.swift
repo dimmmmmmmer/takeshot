@@ -27,6 +27,10 @@ final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
     private var storedOutcomes: [SRTSendOutcome]
     private var storedOpenFailures: [SRTStreamError]
     private var storedRoundTrip: Double?
+    /// Whether this link can be measured at all — NO is an older libsrt with
+    /// no `srt_bstats`, where a round trip is never coming and the row used to
+    /// promise one all day.
+    var canMeasureRoundTrip = true
 
     /// `outcomes` is consumed one entry per send and the last one repeats, so a
     /// suite writes the story it wants — "two frames through, then the link goes".
@@ -67,8 +71,9 @@ final class FakeSRTStream: SRTStreamSending, @unchecked Sendable {
     var lastSendError: String? { "the fake link says so" }
 
     /// What the link answers when asked how far away the far end is. nil is a
-    /// link that cannot say, which is an older libsrt or an unfinished
-    /// handshake — the case `SRTLatency` reads as its floor.
+    /// link that has not answered YET; `canMeasureRoundTrip` is the separate
+    /// question of whether it ever will — the two used to be one nil, and
+    /// `SRTLatency` reads either as its floor.
     var roundTripMs: Double? {
         get { lock.withLock { storedRoundTrip } }
         set { lock.withLock { storedRoundTrip = newValue } }

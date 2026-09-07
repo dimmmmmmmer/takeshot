@@ -29,16 +29,102 @@ import Testing
         // will hand out a 0×0 buffer.
         let stuck = PlayoutFeeder(output: FakePlayoutOutput(width: 0, height: 0))
         let reports = StallLog()
-        stuck.onStall = { reports.record($0) }
+        stuck.onState = { reports.record($0) }
 
         let buffer = try frame()
-        for _ in 0..<5 { stuck.submit(buffer) }
+        // **Settled between each, so five frames really do reach `display`.**
+        // Submission coalesces latest-wins, so a plain loop of five submits
+        // lands as one or two — and a version of this test that looped without
+        // settling passed against a feeder with no de-duplication at all,
+        // because there was nothing to de-duplicate.
+        for _ in 0..<5 {
+            stuck.submit(buffer)
+            stuck.settle()
+        }
         #expect(await ControllerWait.untilWritten { reports.count >= 1 },
                 "a frozen output said nothing")
         // Five frames, one sentence: a stall reported per frame would be a
         // toast per frame at 25 a second.
         #expect(reports.count == 1, "said \(reports.count) times for one stall")
-        #expect(reports.all.first??.isEmpty == false)
+        #expect(reports.reasons.first??.isEmpty == false)
+    }
+
+    /// **A board that refuses the frame is a stall, and the frame is not
+    /// counted as shown.**
+    ///
+    /// This is the path a matched raster takes — every frame on a cart whose
+    /// output mode follows the signal — and it was the one place `display`'s
+    /// answer was thrown away. `CDLPlayout.displayFrame` returns NO when the
+    /// board has gone, which on this project's own development Mac means a
+    /// second copy of the app took it: the director's monitor holds the last
+    /// frame and the app says nothing at all.
+    @Test func aBoardThatRefusesAMatchedFrameIsAStall() async throws {
+        let board = FakePlayoutOutput(width: 320, height: 180)
+        let feeder = PlayoutFeeder(output: board)
+        let reports = StallLog()
+        feeder.onState = { reports.record($0) }
+
+        let buffer = try frame()
+        feeder.submit(buffer)
+        #expect(await ControllerWait.untilWritten { reports.states == [.feeding] },
+                "a working board did not report feeding: \(reports.states)")
+
+        board.setAccepts(false)
+        for _ in 0..<5 {
+            feeder.submit(buffer)
+            feeder.settle()
+        }
+        #expect(await ControllerWait.untilWritten { reports.count >= 2 },
+                "the board refused five frames and nothing was said")
+        guard case .stalled(let why) = reports.states.last else {
+            Issue.record("the refusal was not a stall: \(reports.states)")
+            return
+        }
+        #expect(why == L("playout_refused"), "said \(why)")
+        // Five refusals, one sentence.
+        #expect(reports.count == 2, "said \(reports.count) times for one stall")
+        #expect(board.displayed.count == 1,
+                "a refused frame was counted as shown")
+
+        // …and a board that comes back says so, so the lamp goes green again.
+        board.setAccepts(true)
+        feeder.submit(buffer)
+        #expect(await ControllerWait.untilWritten {
+            reports.states.last == .feeding
+        }, "the board came back and the lamp stayed orange: \(reports.states)")
+    }
+
+    /// **A stall of one kind arriving on top of a stall of another kind is a
+    /// change, and is said.**
+    ///
+    /// The old seam stored a nullable REASON and only reported when the new
+    /// reason differed from the stored one — which sounds like the same rule
+    /// and is not, because nothing ever cleared the store except a full
+    /// recovery. A board that started refusing frames while the pool was
+    /// already empty went on saying the pool, all day. Driven through
+    /// `display` and not by calling the callback: the first version of this
+    /// test called the callback and therefore asserted nothing at all.
+    @Test func oneStallReplacingAnotherIsSaid() async throws {
+        let board = FakePlayoutOutput(width: 320, height: 180)
+        let feeder = PlayoutFeeder(output: board)
+        let reports = StallLog()
+        feeder.onState = { reports.record($0) }
+        let buffer = try frame()
+
+        board.setAccepts(false)
+        feeder.submit(buffer)
+        #expect(await ControllerWait.untilWritten {
+            reports.reasons.last == L("playout_refused")
+        }, "the refusal was not reported: \(reports.states)")
+
+        // …and now the output changes to a mode nothing can be fitted into,
+        // while it is STILL refusing: a second kind of trouble on top of the
+        // first.
+        board.setMode(width: 0, height: 0)
+        feeder.submit(buffer)
+        #expect(await ControllerWait.untilWritten {
+            reports.reasons.last == L("playout_stalled_pool")
+        }, "the second kind of trouble was swallowed: \(reports.states)")
     }
 
     /// An output that takes its frames says nothing at all.
@@ -46,25 +132,36 @@ import Testing
         let board = FakePlayoutOutput(width: 320, height: 180)
         let feeder = PlayoutFeeder(output: board)
         let reports = StallLog()
-        feeder.onStall = { reports.record($0) }
+        feeder.onState = { reports.record($0) }
 
         let buffer = try frame()
-        for _ in 0..<3 { feeder.submit(buffer) }
-        #expect(await ControllerWait.untilWritten { !board.displayed.isEmpty },
-                "the board never got a frame")
-        #expect(reports.count == 0,
-                "a working output reported a stall: \(reports.all)")
+        for _ in 0..<3 {
+            feeder.submit(buffer)
+            feeder.settle()
+        }
+        #expect(await ControllerWait.untilWritten { board.displayed.count == 3 },
+                "the board got \(board.displayed.count) of three frames")
+        // Three frames REALLY shown, ONE report: `feeding` is said on the way
+        // in and not per frame, because this runs at the signal's rate and the
+        // report crosses onto the main actor.
+        #expect(reports.states == [.feeding],
+                "a working output reported \(reports.states)")
     }
 }
 
-/// Stall reports, in order. Written on the feeder's queue.
+/// State reports, in order. Written on the feeder's queue.
 final class StallLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var stored: [String?] = []
+    private var stored: [PlayoutState] = []
 
-    func record(_ reason: String?) { lock.withLock { stored.append(reason) } }
+    func record(_ state: PlayoutState) { lock.withLock { stored.append(state) } }
     var count: Int { lock.withLock { stored.count } }
-    var all: [String?] { lock.withLock { stored } }
+    var states: [PlayoutState] { lock.withLock { stored } }
+
+    /// Only the sentences, for the assertions that are about the wording.
+    var reasons: [String?] {
+        states.map { if case .stalled(let why) = $0 { why } else { nil } }
+    }
 }
 
 /// **A board that would not take the signal's own mode is a notice, not a
@@ -121,7 +218,7 @@ struct PlayoutFallbackNoticeTests {
             let feeder = try #require(controller.mirrors.playout)
 
             controller.lastError = L("playout_stalled_render")
-            feeder.onStall?(nil)
+            feeder.onState?(.feeding)
             // Bounded well under the five seconds the toast register takes to
             // clear a message on its own — an unbounded wait here passes
             // against a recovery that does nothing, which is how the first
@@ -132,7 +229,7 @@ struct PlayoutFallbackNoticeTests {
 
             // …and a message that is somebody else's outranks a resolved stall.
             controller.lastError = "the card is full"
-            feeder.onStall?(nil)
+            feeder.onState?(.feeding)
             try await Task.sleep(for: .milliseconds(150))
             #expect(controller.lastError == "the card is full",
                     "a recovered monitor wiped an unrelated error")

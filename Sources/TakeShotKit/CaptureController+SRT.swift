@@ -114,12 +114,13 @@ extension CaptureController {
                     self?.applySRTEvent(event, generation: generation)
                 }
             },
-            onMeasurement: { [weak self] buffer, roundTrip in
+            onMeasurement: { [weak self] timing in
                 Task { @MainActor in
                     guard let self, self.mirrors.srt != nil,
                           self.mirrors.srtGeneration == generation else { return }
-                    self.mirrors.srtLatencyMs = buffer
-                    self.mirrors.srtRoundTripMs = roundTrip
+                    self.mirrors.srtLatencyMs = timing.bufferMs
+                    self.mirrors.srtRoundTripMs = timing.roundTripMs
+                    self.mirrors.srtCanMeasureRoundTrip = timing.canMeasure
                 }
             })
         mirrors.srt = mirror

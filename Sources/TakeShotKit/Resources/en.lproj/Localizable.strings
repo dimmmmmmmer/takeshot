@@ -747,6 +747,8 @@
 "settings_unreadable" = "The saved settings could not be read and defaults are in use. The old copy has been kept, not overwritten.";
 "playout_stalled_pool" = "The monitor output is frozen: no memory for a frame";
 "playout_stalled_render" = "The monitor output is frozen: the frame could not be scaled";
+"playout_refused" = "The monitor output is frozen: the board refused the frame — another application may have taken it";
+"playout_not_open" = "The monitor output could not be opened: no picture is going to it";
 "live_retry" = "Try again";
 /* The picture switch. One label per LivePicture case, and the key is built
    from the case's raw value — a case with no string here is a build that fails
@@ -891,12 +893,15 @@
 "srt_retuned" = "Re-opening on a longer buffer for this link";
 "srt_latency_auto" = "Buffer %1$d ms, round trip %2$d ms";
 "srt_latency_measuring" = "Buffer %1$d ms — measuring the link";
+"srt_latency_unmeasurable" = "Buffer %1$d ms — this libsrt cannot measure the link";
 "srt_latency_stated" = "Buffer %1$d ms, from the address";
 "srt_passphrase" = "Passphrase";
 "srt_stream_id" = "Stream ID";
 "stream_link_up" = "a receiver is taking it";
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";
+/* the hardware monitor output, as a lamp beside the stream button */
+"stream_playout_label" = "SDI";
 "stream_stop_help" = "Click to stop sending";
 "sidecar_unreadable" = "%1$@ — %2$@";
 "sidecars_not_rewritten" = "The day's ratings, comments and slates are NOT being saved: a sidecar in the record folder will not open, and rewriting it would overwrite what is in it. They are kept in this session and written as soon as the folder reads again.";
@@ -926,6 +931,8 @@
 "ndi_sending_to" = "Sending to %d";
 "ndi_announced" = "On the network, no receivers";
 "ndi_not_sending" = "Not sending";
+"ndi_rec709_only" = "Rec.709 wire";
+"ndi_rec709_only_help" = "NDI has no field for colour: BGRX on that wire is Rec.709 by definition, so this wide-gamut signal reaches an NDI receiver undersaturated. The SRT stream declares the real primaries — use it for a colour-critical feed.";
 "ndi_picture_only" = "Picture only";
 "ndi_picture_only_help" = "This NDI runtime has no audio entry point, so the source carries picture and no sound. Receivers will show the feed and hear nothing. Installing a newer NDI runtime fixes it.";
 "still_unreadable" = "%@ will not open — the viewer is still showing the previous picture";

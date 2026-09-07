@@ -100,6 +100,9 @@ final class DisplayMirrors: ObservableObject {
     /// запустить/остановить поток", and that is two words).
     @Published var pausedStreams = PausedStreams()
 
+    /// What the hardware monitor output is doing — the third lamp, and the
+    /// one whose absence let a director's monitor freeze in silence.
+    @Published var playoutState: PlayoutState = .off
     @Published var srtState: SRTOutputState = .off
     /// The delivery buffer the open link is running with, and the round trip it
     /// reported. Both nil while nothing is streaming: the settings row states a
@@ -107,6 +110,9 @@ final class DisplayMirrors: ObservableObject {
     /// last link would be neither.
     @Published var srtLatencyMs: Int?
     @Published var srtRoundTripMs: Double?
+    /// Whether a round trip can be measured on this build at all. False is a
+    /// different sentence from "not yet" — see `LinkTiming`.
+    @Published var srtCanMeasureRoundTrip = true
     /// Which SRT link is current. Every event and measurement closure carries
     /// the number of the link it was made for, and one from a link since
     /// replaced is dropped — a stopped mirror's `refused` used to put the

@@ -58,9 +58,13 @@ extension CapturePipeline {
 
     /// Whether anything outgoing is listening.
     ///
-    /// For the per-packet guard, and for the tests — "nothing listening costs
-    /// nothing" is a claim about this being false, and a tap that was never
-    /// removed and one that was are indistinguishable from outside otherwise.
+    /// For the TESTS, and not for the per-packet guard, which this comment used
+    /// to claim: `feedStereo` takes a SNAPSHOT of the taps (`audioTaps()`) and
+    /// guards on that, because testing a collection and then iterating it is
+    /// two reads with a release in between — the same argument the line above
+    /// `onMonitorAudio` makes. "Nothing listening costs nothing" is a claim
+    /// about this being false, and a tap that was never removed and one that
+    /// was are indistinguishable from outside otherwise.
     public var hasAudioTaps: Bool {
         audioTapLock.lock()
         defer { audioTapLock.unlock() }
@@ -189,9 +193,14 @@ extension CapturePipeline {
     /// first, from the untouched packet, and nothing here is upstream of
     /// anything the take gets.
     private func feedStereo(_ sampleBuffer: CMSampleBuffer) {
-        // The slot is read ONCE. `onMonitorAudio` is re-routed from the main
-        // actor while packets are in flight, and testing it and then calling it
-        // is two reads of the same optional with a release in between.
+        // The slot is read ONCE, and the gate with it. `monitorEnabled` is
+        // written from the main actor while packets are in flight, so testing
+        // `monitorEnabled && onMonitorAudio != nil` and then calling through
+        // the property is two reads that can disagree — the speakers going
+        // quiet between them, or coming back. (The closure itself is assigned
+        // once at bind time and never re-routed; an earlier version of this
+        // comment said otherwise and made the pattern look like it was
+        // guarding a hazard it is not.)
         let speakers = monitorEnabled ? onMonitorAudio : nil
         let outgoing = audioTaps()
         guard speakers != nil || !outgoing.isEmpty else { return }

@@ -34,12 +34,18 @@ extension CaptureController {
         Task.detached(priority: .utility) { [weak self] in
             let (candidates, busy) = Self.findForeignVideos(root: root,
                                                             excluding: ownTakePaths)
-            await self?.finishScan(candidates, rescanSoon: busy,
-                                   generation: generation)
+            // …and, on the same hop, which of our own takes are still there.
+            // One stat per take, once a minute, and they used to run on the
+            // main actor: a day of two hundred takes on a share whose timeout
+            // is a second is three minutes of a frozen REC button.
+            let present = await DiskProbe.present(ownTakePaths)
+            await self?.finishScan(candidates,
+                                   missing: ownTakePaths.subtracting(present),
+                                   rescanSoon: busy, generation: generation)
         }
     }
-    private func finishScan(_ candidates: [URL], rescanSoon: Bool,
-                            generation: Int) async {
+    private func finishScan(_ candidates: [URL], missing: Set<String>,
+                            rescanSoon: Bool, generation: Int) async {
         defer {
             scanInFlight = false
             if rescanWhenIdle {
@@ -48,11 +54,12 @@ extension CaptureController {
             }
         }
         guard generation == libraryGeneration else { return }
-        await classifyFoundFiles(candidates, rescanSoon: rescanSoon)
+        await classifyFoundFiles(candidates, missing: missing,
+                                 rescanSoon: rescanSoon)
     }
     /// Our files (the com.takeshot.origin QuickTime tag) return to the takes list
     /// after a restart; the rest are Other content.
-    private func classifyFoundFiles(_ candidates: [URL],
+    private func classifyFoundFiles(_ candidates: [URL], missing: Set<String>,
                                     rescanSoon: Bool) async {
         // a file was skipped as "still being written" — nothing will re-trigger
         // the scan once the copy finishes, so come back for it ourselves
@@ -64,7 +71,7 @@ extension CaptureController {
                 self.scanDestinationFolder()
             }
         }
-        retireMissingTakes()
+        retireMissingTakes(missing)
         let stored = loadStoredMetadata()
         noteUnreadableSidecars(stored.unreadable)
         var restored: [Take] = []
@@ -103,8 +110,13 @@ extension CaptureController {
     /// structure, and rewriting the CSV from the shrunken list turned that
     /// safe-looking move into the destruction of every rating, comment and
     /// marker of the day.
-    private func retireMissingTakes() {
-        let gone = takes.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
+    /// `missing` was measured off the actor at the start of this pass, against
+    /// the take paths as they were THEN. A take recorded while the pass ran is
+    /// not in that set and therefore cannot be retired by it, which is the
+    /// property the old per-take `fileExists` had for free and this one has to
+    /// state.
+    private func retireMissingTakes(_ missing: Set<String>) {
+        let gone = takes.filter { missing.contains($0.url.path) }
         guard !gone.isEmpty else { return }
         let goneIDs = Set(gone.map(\.id))
         takes.removeAll { goneIDs.contains($0.id) }

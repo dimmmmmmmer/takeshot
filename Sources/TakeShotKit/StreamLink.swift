@@ -40,6 +40,15 @@ enum StreamLink: Equatable {
         }
     }
 
+    init(_ state: PlayoutState) {
+        switch state {
+        case .off: self = .off
+        case .opened: self = .waiting
+        case .feeding: self = .up
+        case .stalled(let why): self = .trouble(why)
+        }
+    }
+
     init(_ state: NDIOutputState) {
         switch state {
         case .off: self = .off

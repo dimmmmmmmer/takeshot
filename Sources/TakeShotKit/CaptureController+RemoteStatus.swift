@@ -177,7 +177,9 @@ extension CaptureController {
             var lastTakeLog: RemoteTakeLog?
             while !Task.isCancelled {
                 guard let self else { return }
-                if ticks % Self.remoteDiskTicks == 0 { self.sampleRemoteDisk() }
+                if ticks % Self.remoteDiskTicks == 0 {
+                    await self.sampleRemoteDisk()
+                }
                 let status = self.remoteStatus()
                 if status != lastSent || ticks % Self.remoteHeartbeatTicks == 0 {
                     self.remoteServer?.broadcast(status)
@@ -199,10 +201,16 @@ extension CaptureController {
         }
     }
 
-    private func sampleRemoteDisk() {
-        let values = try? destinationRoot.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        guard let free = values?.volumeAvailableCapacityForImportantUsage else {
+    /// The free-space figure the phone shows, read off the main actor.
+    ///
+    /// Same `statfs` the watchdog asks and the same reason it is not on this
+    /// actor: on a share that has gone to sleep it parks for the SMB timeout,
+    /// and a number for a status page must never be able to stop the app —
+    /// see `DiskProbe`.
+    private func sampleRemoteDisk() async {
+        let reading = await DiskProbe.read(root: destinationRoot,
+                                           openTake: nil)
+        guard let free = reading.freeBytes else {
             // The volume is gone. -1 shows as a dash on the phone rather than
             // as a confident 0.0 GB.
             remoteDiskFreeGB = -1

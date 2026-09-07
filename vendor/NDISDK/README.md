@@ -73,16 +73,23 @@ SDK-3 era leaves one behind, and this bridge is compiled against SDK 4 spellings
 — loading a 3 runtime would resolve some names and not others, which is a worse
 failure than not finding it at all.
 
-Only six symbols are resolved — `NDIlib_initialize`, `NDIlib_version`,
-`NDIlib_send_create`, `NDIlib_send_destroy`, `NDIlib_send_send_video_v2` and
-`NDIlib_send_send_audio_v3` — and each takes its type from the SDK header via
+Only seven symbols are resolved — `NDIlib_initialize`, `NDIlib_version`,
+`NDIlib_send_create`, `NDIlib_send_destroy`, `NDIlib_send_send_video_v2`,
+`NDIlib_send_send_audio_v3` and `NDIlib_send_get_no_connections` — and each
+takes its type from the SDK header via
 `decltype`. No part of the NDI ABI is hand-declared anywhere in this project:
 guessing a struct layout or an argument list would be silent memory corruption,
 invisible until it mattered on a set, so the bridge is arranged such that a wrong
 name or a changed signature is a compile error instead.
 
-**Five of the six are REQUIRED and the audio one is not**, which is a promise
-rather than a leniency: adding sound must not be able to take the picture away.
+**Four of the seven are REQUIRED**, which is a promise rather than a leniency:
+adding a feature must not be able to take the picture away. The four are
+`NDIlib_initialize`, `NDIlib_send_create`, `NDIlib_send_destroy` and
+`NDIlib_send_send_video_v2`. `NDIlib_version` is a readout for the status row
+and its absence costs a line of text; the audio send and the connection count
+are the two features, and a runtime missing either keeps its picture — without
+the connection count the app knows only that the source was ANNOUNCED, which is
+the difference the main window's lamp exists to show.
 The header this build compiles against declares `NDIlib_send_send_audio_v3` (it
 is SDK 4 and newer, the same floor the FourCC spellings already set), but the
 dylib loaded at runtime is whatever the machine has — two different facts. A
@@ -128,8 +135,9 @@ sound. Measured here: both `/usr/local/lib/libndi.4.dylib` and
   recorder. Measured app-side cost of the whole hop, release, median of 15:
   0.014 ms at 1080p, 0.018 ms at UHD, against a 40 ms frame interval at 25 fps.
   NDI's own compression happens inside the send and is not in that figure — it
-  cannot be measured until the headers are here, and the budget above is what is
-  left for it.
+  is not separable from `NDIlib_send_send_video_v2`, which is one call that
+  compresses and transmits, so the budget above is what is left for it rather
+  than a number that can be taken on its own.
 - **Sound goes too, off the tap the SRT output already uses.**
   `CapturePipeline.feedStereo` builds ONE stereo mix per packet — after
   `recordAudio`, so nothing it does can reach the file — and hands the same
@@ -180,7 +188,7 @@ compiles and RUNS here for the first time. What that has established, by running
 it rather than by reading it:
 
 - `CNDSender.isSDKAvailable()` and `isAudioAvailable()` are both true here: the
-  runtime loaded, `NDIlib_initialize` returned true, and all six symbols resolved
+  runtime loaded, `NDIlib_initialize` returned true, and all seven symbols resolved
   out of the installed dylib. `NDIRealBridgeTests` asserts it and runs in the
   normal battery wherever the headers are.
 - `NDIlib_send_send_audio_v3` is CALLABLE with the frame this bridge builds — the

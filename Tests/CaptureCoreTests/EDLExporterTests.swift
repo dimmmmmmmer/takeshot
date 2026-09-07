@@ -37,7 +37,9 @@ import Testing
             duration: 4,
             markers: [TakeMarker(seconds: 1, timecodeText: "10:00:01:00")])
         let edl = try #require(EDLExporter.selectsEDL(takes: [take], title: "t"))
-        #expect(edl.contains("* LOC: 01:00:01:00 ORANGE 10:00:01:00"))
+        // YELLOW and not ORANGE: the `* LOC:` palette is Avid's eight and
+        // orange is in none of them. See `EDLExporter.locatorColors`.
+        #expect(edl.contains("* LOC: 01:00:01:00 YELLOW 10:00:01:00"))
     }
 
     // MARK: - ASC CDL
@@ -127,5 +129,44 @@ import Testing
         let edl = try #require(EDLExporter.selectsEDL(takes: takes, title: "t"))
         // the second event starts where the first ended
         #expect(edl.contains("01:00:02:00 01:00:05:00"))
+    }
+
+    /// **Every swatch the app offers lands on a colour a conform tool reads.**
+    ///
+    /// The `* LOC:` convention is Avid's and so is its palette: white, red,
+    /// green, blue, cyan, magenta, yellow, black. Two of the app's seven
+    /// swatches — orange, which is the DEFAULT, and purple — are in none of
+    /// them, and were written through verbatim. An importer that meets
+    /// `ORANGE` on a line it otherwise understands drops the colour, so an
+    /// assistant conforming a day of colour-coded markers sees a wall of
+    /// identical locators.
+    @Test func everySwatchLandsInThePaletteTheFormatHas() {
+        let palette: Set<String> = ["WHITE", "RED", "GREEN", "BLUE", "CYAN",
+                                    "MAGENTA", "YELLOW", "BLACK"]
+        for swatch in TakeMarker.colors {
+            let mapped = EDLExporter.locatorColor(for: swatch)
+            #expect(palette.contains(mapped),
+                    "\(swatch) became \(mapped), which is in no importer")
+        }
+        // Orange lands on yellow and NOT on red: red is what every set uses
+        // for "do not use this one", and moving a note there would make the
+        // EDL say something the operator did not.
+        #expect(EDLExporter.locatorColor(for: "orange") == "YELLOW")
+        #expect(EDLExporter.locatorColor(for: "purple") == "MAGENTA")
+        // …and the ones that already were in the palette are untouched, so
+        // this is a mapping and not a flattening.
+        #expect(EDLExporter.locatorColor(for: "red") == "RED")
+        #expect(EDLExporter.locatorColor(for: "cyan") == "CYAN")
+    }
+
+    /// A swatch from a palette this build does not know still draws.
+    ///
+    /// White rather than the word itself: a marker drawn in the wrong colour
+    /// is recoverable in a way one that never appeared is not.
+    @Test func anUnknownSwatchStillDrawsAsAMarker() {
+        #expect(EDLExporter.locatorColor(for: "chartreuse") == "WHITE")
+        #expect(EDLExporter.locatorColor(for: "") == "WHITE")
+        // Case is the operator's, not the format's.
+        #expect(EDLExporter.locatorColor(for: "Cyan") == "CYAN")
     }
 }

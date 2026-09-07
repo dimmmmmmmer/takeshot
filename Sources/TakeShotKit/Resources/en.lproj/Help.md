@@ -226,7 +226,7 @@ the look is not applied twice.
 
 ## Exports
 
-Three sidecars are kept up to date in the record folder as you work:
+Four sidecars are kept up to date in the record folder as you work:
 
 - `takeshot-log.csv` — the Resolve metadata table (File Name, Reel Name, Take,
   Good Take, Comments). Import it in Resolve with Media Pool → Import Metadata;
@@ -243,6 +243,10 @@ Three sidecars are kept up to date in the record folder as you work:
   but a correction made afterwards — the ones you make between setups — lives
   only here, because the .mov has already been written. Leaving it behind loses
   every fix.
+- `takeshot-ranges.csv` — file name, in point, out point: the loop range you
+  marked while reviewing a clip. Its own file because the Resolve table's
+  columns are Resolve's and this is ours; an unmarked end is an empty cell and
+  not a zero, because a clip looping from its own start has no in point.
 
 On demand, from the export menu in the takes panel or the File menu:
 

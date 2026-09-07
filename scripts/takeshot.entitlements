@@ -10,5 +10,16 @@
          carries it. -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
+    <!-- The app opens a CoreAudio INPUT device: the audio-device picker in
+         Settings, and the external-audio path that takes sound from a USB
+         interface rather than off the SDI embed (AudioInputDevices,
+         CapturePipeline+ExternalAudio). Under the hardened runtime that needs
+         this key; Info.plist already carries NSMicrophoneUsageDescription for
+         the TCC prompt, and without the entitlement the prompt never comes —
+         the device simply returns nothing, on the one path a sound recordist
+         hands the cart. Latent until the first Developer ID build, which is
+         exactly when nobody is looking for it. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>

@@ -40,6 +40,24 @@ final class AACConverter {
         (try? AACConverter(channels: 2, bitsPerSecond: 128_000)) != nil
     }
 
+    /// **The encoder's own delay, in input frames — asked, not written down.**
+    ///
+    /// AAC-LC's transform is lapped, so the first access unit an encoder
+    /// produces decodes to a window BEFORE the samples it was handed: a
+    /// decoder plays this many frames of the codec's own priming and only then
+    /// the first real sample. AudioToolbox answers 2112 on this OS, and
+    /// `LiveAudioPrimingTests` measures the same number end to end by decoding
+    /// a stream back — the number belongs to the codec, so this asks for it
+    /// instead of stating it.
+    ///
+    /// Zero if the query fails, which is exactly the "no correction" answer
+    /// and the behaviour every build before this one had.
+    static let primingFrames: Int = {
+        guard let probe = try? AACConverter(channels: 2, bitsPerSecond: 128_000)
+        else { return 0 }
+        return probe.reportedPrimingFrames
+    }()
+
     let channels: Int
     private let converter: AudioConverterRef
     /// The input side of one call, handed to the C callback through
@@ -90,6 +108,15 @@ final class AACConverter {
 
     deinit {
         AudioConverterDispose(converter)
+    }
+
+    /// What this instance's converter says its leading delay is.
+    private var reportedPrimingFrames: Int {
+        var info = AudioConverterPrimeInfo()
+        var size = UInt32(MemoryLayout<AudioConverterPrimeInfo>.size)
+        guard AudioConverterGetProperty(converter, kAudioConverterPrimeInfo,
+                                        &size, &info) == noErr else { return 0 }
+        return Int(info.leadingFrames)
     }
 
     /// Exactly one access unit's worth of interleaved 16-bit samples in, one

@@ -10,14 +10,15 @@ import SwiftUI
 /// slate is filled in between takes, on set, and a control you have to open
 /// before you can type into it is one nobody keeps up to date.
 ///
-/// **Compact, and where the height went.** Each field used to be a caption
-/// STACKED over a box, the shape the file-name row above uses, and three of
-/// those made the whole footer a caption-line taller than the picture could
-/// spare — the owner's complaint. The caption sits beside its field here
-/// instead, so the row costs exactly one control's height (about 14pt less than
-/// the stack), and each field has the pair of arrows he asked for. The captions
-/// are still the row above's: same 9pt semibold, same caps (SCENE/SHOT/TAKE
-/// beside CAM/ROLL/CLIP), only turned through ninety degrees.
+/// **Where the height went, and where it came back.** Each field was a caption
+/// STACKED over a box; three of those made the footer a caption-line taller
+/// than the picture could spare, so the captions moved BESIDE their fields and
+/// the row cost one control's height. They are back above them now (owner:
+/// "подписи scene shot take в мете должны быть над полями ввода") — this
+/// paragraph described the middle state for a while after that, which is how a
+/// reader ended up with two adjacent paragraphs saying opposite things. The
+/// captions are the file-name row's: same 9pt semibold, same caps
+/// (SCENE/SHOT/TAKE beside CAM/ROLL/CLIP), same place.
 ///
 /// **The captions must fit their own boxes, and that is load-bearing.** These
 /// three are the only localized strings in the footer's right half, and the

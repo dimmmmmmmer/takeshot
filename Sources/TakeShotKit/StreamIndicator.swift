@@ -25,12 +25,21 @@ import SwiftUI
 /// screen, in its off state, and the next press starts it again. A stream
 /// switched off in Settings still takes the control away with it: that was a
 /// decision, not a pause.
+///
+/// **The hardware output is a LAMP beside the button, not a third link inside
+/// it.** It answers the same question — is the picture leaving this machine —
+/// and it is the leg a director's monitor actually hangs off, so it belongs
+/// here. But the button STOPS the network streams, and a control that goes
+/// orange because a DeckLink was taken by another process, and whose press then
+/// kills SRT, is a trap. So the SDI reading gets the same capsule, the same
+/// shapes and the same colours, and no press.
 struct StreamIndicator: View {
     @EnvironmentObject private var controller: CaptureController
     @ObservedObject var mirrors: DisplayMirrors
 
     private var srt: StreamLink { StreamLink(mirrors.srtState) }
     private var ndi: StreamLink { StreamLink(mirrors.ndiState) }
+    private var playout: StreamLink { StreamLink(mirrors.playoutState) }
     private var combined: StreamLink { StreamLink.combined([srt, ndi]) }
 
     /// The button is showing a paused stream rather than a live one — the state
@@ -38,6 +47,23 @@ struct StreamIndicator: View {
     private var isPaused: Bool { !combined.isEngaged && mirrors.pausedStreams.any }
 
     var body: some View {
+        HStack(spacing: 6) {
+            streamButton
+            if playout.isEngaged { playoutLamp }
+        }
+    }
+
+    /// The hardware monitor output. A capsule and not a button — see the type
+    /// comment — and absent entirely when no board is selected, like the
+    /// streams beside it.
+    private var playoutLamp: some View {
+        capsule(symbol: Self.symbol(playout), tint: Self.tint(playout),
+                text: L("stream_playout_label"))
+            .help(L("stream_playout_label") + " — " + Self.words(playout))
+    }
+
+    @ViewBuilder
+    private var streamButton: some View {
         if combined.isEngaged || isPaused {
             Button {
                 if isPaused {
@@ -46,35 +72,46 @@ struct StreamIndicator: View {
                     controller.stopAllStreams()
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(label)
-                        .font(.system(size: 10, weight: .semibold))
-                        .fixedSize()
-                }
-                .foregroundStyle(tint)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(tint.opacity(0.15), in: Capsule())
-                .contentShape(Capsule())
+                capsule(symbol: symbol, tint: tint, text: label)
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .help(helpText)
         }
     }
 
+    /// The one shape both readings wear, so the SDI lamp cannot drift into
+    /// looking like a different kind of thing than the streams beside it.
+    private func capsule(symbol: String, tint: Color,
+                         text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+            Text(text)
+                .font(.system(size: 10, weight: .semibold))
+                .fixedSize()
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.15), in: Capsule())
+    }
+
     /// One dot for a live link, a hollow one for a link nobody has taken, and
     /// the alarm triangle for trouble. The SHAPE carries it as well as the
     /// colour, because a colour alone is a poor signal on a bright cart.
-    private var symbol: String {
-        if isPaused { return "antenna.radiowaves.left.and.right.slash" }
-        switch combined {
-        case .up: return "dot.radiowaves.left.and.right"
-        case .waiting: return "antenna.radiowaves.left.and.right.slash"
-        case .trouble: return "exclamationmark.triangle.fill"
-        case .off: return ""
+    private static func symbol(_ link: StreamLink) -> String {
+        switch link {
+        case .up: "dot.radiowaves.left.and.right"
+        case .waiting: "antenna.radiowaves.left.and.right.slash"
+        case .trouble: "exclamationmark.triangle.fill"
+        case .off: ""
         }
+    }
+
+    private var symbol: String {
+        isPaused ? "antenna.radiowaves.left.and.right.slash"
+                 : Self.symbol(combined)
     }
 
     /// Which transports are ON, not which are up: the label names what the
@@ -87,14 +124,17 @@ struct StreamIndicator: View {
         return names.joined(separator: "+")
     }
 
-    private var tint: Color {
-        if isPaused { return .secondary }
-        switch combined {
-        case .up: return .green
-        case .waiting: return .secondary
-        case .trouble: return .orange
-        case .off: return .clear
+    private static func tint(_ link: StreamLink) -> Color {
+        switch link {
+        case .up: .green
+        case .waiting: .secondary
+        case .trouble: .orange
+        case .off: .clear
         }
+    }
+
+    private var tint: Color {
+        isPaused ? .secondary : Self.tint(combined)
     }
 
     /// The tooltip says what a glance cannot: which link is in which state, and

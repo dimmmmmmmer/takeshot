@@ -142,16 +142,35 @@ struct SRTSettingsSection: View {
         .help(L("srt_latency_help"))
     }
 
-    /// Three things it can say: a measured link, a link still being measured,
-    /// and a figure that came from the address the operator pasted.
+    /// Four things it can say: a measured link, a link still being measured, a
+    /// link this build cannot measure, and a figure that came from the address
+    /// the operator pasted.
     private var latencyText: String {
-        let buffer = controller.mirrors.srtLatencyMs
-            ?? controller.settings.srt.latencyEffective
-        if controller.settings.srt.latencyMs != nil {
+        Self.latencyText(mirrors: controller.mirrors,
+                         srt: controller.settings.srt)
+    }
+
+    /// The sentence for the latency row, out of the two values it reads.
+    ///
+    /// A static over its inputs rather than a computed property over an
+    /// `@EnvironmentObject`, so the suite can read the four sentences
+    /// directly: rendering the row and comparing sizes says that the row
+    /// changed and not WHICH of the four it changed to — and the finding here
+    /// is precisely that two of them used to be one sentence.
+    static func latencyText(mirrors: DisplayMirrors,
+                            srt: SRTSettings) -> String {
+        let buffer = mirrors.srtLatencyMs ?? srt.latencyEffective
+        if srt.latencyMs != nil {
             return L("srt_latency_stated", buffer)
         }
-        guard let rtt = controller.mirrors.srtRoundTripMs else {
-            return L("srt_latency_measuring", buffer)
+        guard let rtt = mirrors.srtRoundTripMs else {
+            // FOUR things it can say. A libsrt without `srt_bstats` cannot
+            // report a round trip at all, and saying "measuring" over that is
+            // a promise the build cannot keep — for the whole day, on the one
+            // row an operator opens to find out why the picture breaks up.
+            return mirrors.srtCanMeasureRoundTrip
+                ? L("srt_latency_measuring", buffer)
+                : L("srt_latency_unmeasurable", buffer)
         }
         return L("srt_latency_auto", buffer, Int(rtt.rounded()))
     }

@@ -21,21 +21,21 @@ final class PlayoutFeeder: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: CVPixelBuffer?
     private var scheduled = false
-    /// The last frame this feeder could not put on the board, if it is still
-    /// failing. Queue-confined: only `display` touches it.
+    /// What the board is doing, as the board answers it. Queue-confined: only
+    /// `display` touches it.
     ///
     /// **A monitor that freezes silently is the failure mode this exists for.**
-    /// Both ways the scale can fail — no buffer out of the pool, CoreImage
-    /// refusing the render — used to `return`, leaving the LAST frame on the
-    /// board with nothing said. An operator judging framing on a picture that
-    /// stopped being live is worse off than one looking at black, and the two
-    /// look identical when the camera is on sticks.
-    private var stallReason: String?
+    /// Three ways a frame can fail to reach the wire — no buffer out of the
+    /// pool, CoreImage refusing the render, and the board itself saying no —
+    /// used to `return` or drop a `Bool`, leaving the LAST frame on the board
+    /// with nothing said. An operator judging framing on a picture that stopped
+    /// being live is worse off than one looking at black, and the two look
+    /// identical when the camera is on sticks.
+    private var state: PlayoutState = .opened
 
-    /// Told once when the output stops taking frames, and once more when it
-    /// starts again — never per frame, because this runs at the signal's rate.
-    /// nil is the recovery.
-    var onStall: (@Sendable (String?) -> Void)?
+    /// Told on every CHANGE of that state and never per frame, because this
+    /// runs at the signal's rate.
+    var onState: (@Sendable (PlayoutState) -> Void)?
 
     /// How a feeder is built. Replaced by the suite so the controller's own
     /// routing (`rebuildPlayout`) can be driven with a fake board; never by the
@@ -99,12 +99,19 @@ final class PlayoutFeeder: @unchecked Sendable {
         if CVPixelBufferGetWidth(buffer) == width,
            CVPixelBufferGetHeight(buffer) == height,
            CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA {
-            output.display(buffer)
+            // **The answer is read.** `CDLPlayout.displayFrame` returns NO when
+            // the output has gone — most often because a second copy of this
+            // app took the board — and dropping it counted a refused frame as
+            // a shown one. This is the path a matched raster takes, which is
+            // every frame on a correctly set up cart: the one place a silent
+            // freeze was guaranteed to stay silent.
+            report(output.display(buffer) ? .feeding
+                                          : .stalled(L("playout_refused")))
             return
         }
         // geometry differs (e.g. UHD viewer on an HD output): aspect-fit
         guard let scaled = pool.buffer(width: width, height: height)
-        else { return stall(L("playout_stalled_pool")) }
+        else { return report(.stalled(L("playout_stalled_pool"))) }
         let image = CIImage(cvPixelBuffer: buffer,
                             options: [.colorSpace: NSNull()])
         let fitted = CompareCompositor.fitted(
@@ -114,23 +121,36 @@ final class PlayoutFeeder: @unchecked Sendable {
         guard let task = try? context.startTask(toRender: fitted,
                                                 to: destination),
               (try? task.waitUntilCompleted()) != nil else {
-            return stall(L("playout_stalled_render"))
+            return report(.stalled(L("playout_stalled_render")))
         }
-        output.display(scaled)
-        clearStall()
+        report(output.display(scaled) ? .feeding : .stalled(L("playout_refused")))
     }
 
-    /// Say it once, on the way into a stall.
-    private func stall(_ reason: String) {
-        guard stallReason != reason else { return }
-        stallReason = reason
-        onStall?(reason)
+    /// Say it once, on every change — which is both halves of what the two
+    /// separate `stall`/`clearStall` calls used to do, and, because the state
+    /// is a value and not a nullable reason, one stall replacing a DIFFERENT
+    /// stall is now a change too. It was not: a board that stopped taking
+    /// frames while the pool was already empty kept saying the pool.
+    private func report(_ next: PlayoutState) {
+        guard state != next else { return }
+        state = next
+        onState?(next)
     }
+}
 
-    /// …and once on the way out, so a row that went red goes back.
-    private func clearStall() {
-        guard stallReason != nil else { return }
-        stallReason = nil
-        onStall?(nil)
-    }
+/// What the hardware monitor output is doing, as the BOARD answers it.
+///
+/// The third of the three output states, beside `SRTOutputState` and
+/// `NDIOutputState`, and honest in the same way: there is no case that means
+/// "a board is selected in Settings". `feeding` is written when the hardware
+/// took a frame and at no other time.
+enum PlayoutState: Equatable {
+    /// No board is selected, or the one that was is gone.
+    case off
+    /// The output is open and no frame has reached it yet.
+    case opened
+    /// The board took the last frame.
+    case feeding
+    /// It refused one, or the app could not make one for it.
+    case stalled(String)
 }

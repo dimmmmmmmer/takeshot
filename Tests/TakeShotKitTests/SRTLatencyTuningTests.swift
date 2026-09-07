@@ -87,6 +87,82 @@ struct SRTLatencyTuningTests {
     }
 
     /// The settings row is told what the link is running on, which is what makes
+    /// **A build that cannot measure says so, instead of promising a number.**
+    ///
+    /// libsrt's statistics call is `srt_bstats` and older runtimes do not
+    /// export it. The bridge has always known (`CSRTSender.isRoundTripAvailable`)
+    /// and nothing asked, so the Settings row read "measuring the link…" from
+    /// call time to wrap — over the one number an operator opens that row to
+    /// find, on the day the picture is breaking up and the buffer is the thing
+    /// to change.
+    @Test func aLinkThatCannotBeMeasuredIsNotStillMeasuring() async throws {
+        let stream = FakeSRTStream()
+        stream.canMeasureRoundTrip = false
+        let log = SRTEventLog()
+        let seen = SRTMeasurementLog()
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        let mirror = SRTMirror(
+            endpoint: SRTFixtures.autoEndpoint, encoder: encoder,
+            factory: { _ in stream }, onEvent: { log.record($0) },
+            onMeasurement: { seen.record($0) })
+        let rig = SRTRig(encoder: encoder, log: log, mirror: mirror)
+        defer { rig.stop() }
+        rig.start()
+        let timing = try #require(seen.all.first)
+        #expect(timing.roundTripMs == nil)
+        #expect(!timing.canMeasure,
+                "a link with no statistics call claimed it was still measuring")
+    }
+
+    /// …and a link that CAN says so, which is what makes the assertion above a
+    /// distinction rather than a constant.
+    @Test func aLinkThatCanBeMeasuredSaysSoBeforeItHas() async throws {
+        let stream = FakeSRTStream()
+        let log = SRTEventLog()
+        let seen = SRTMeasurementLog()
+        let encoder = LiveVideoEncoder(bitsPerSecond: 4_000_000)
+        let mirror = SRTMirror(
+            endpoint: SRTFixtures.autoEndpoint, encoder: encoder,
+            factory: { _ in stream }, onEvent: { log.record($0) },
+            onMeasurement: { seen.record($0) })
+        let rig = SRTRig(encoder: encoder, log: log, mirror: mirror)
+        defer { rig.stop() }
+        rig.start()
+        let timing = try #require(seen.all.first)
+        #expect(timing.roundTripMs == nil)
+        #expect(timing.canMeasure)
+    }
+
+    /// …and the row says the fourth sentence, which is the point of carrying
+    /// the fact at all.
+    @MainActor
+    @Test func theRowSaysWhatTheBuildCannotDo() {
+        let mirrors = DisplayMirrors()
+        var srt = SRTSettings()
+        srt.latencyMs = nil
+        mirrors.srtLatencyMs = 260
+        mirrors.srtRoundTripMs = nil
+
+        mirrors.srtCanMeasureRoundTrip = true
+        let measuring = SRTSettingsSection.latencyText(mirrors: mirrors,
+                                                       srt: srt)
+        mirrors.srtCanMeasureRoundTrip = false
+        let never = SRTSettingsSection.latencyText(mirrors: mirrors, srt: srt)
+        #expect(measuring == L("srt_latency_measuring", 260))
+        #expect(never == L("srt_latency_unmeasurable", 260), """
+            a build that can never measure said \(never)
+            """)
+
+        // …and the two sentences an actual measurement produces are still the
+        // ones they were, so this is a fourth case and not a replacement.
+        mirrors.srtRoundTripMs = 40
+        #expect(SRTSettingsSection.latencyText(mirrors: mirrors, srt: srt)
+                == L("srt_latency_auto", 260, 40))
+        srt.latencyMs = 300
+        #expect(SRTSettingsSection.latencyText(mirrors: mirrors, srt: srt)
+                == L("srt_latency_stated", 260))
+    }
+
     /// an automatic number different from a hidden one.
     @Test func theMeasurementReachesTheSettingsRow() async throws {
         let stream = FakeSRTStream()
@@ -96,22 +172,22 @@ struct SRTLatencyTuningTests {
         let mirror = SRTMirror(
             endpoint: SRTFixtures.autoEndpoint, encoder: encoder,
             factory: { _ in stream }, onEvent: { log.record($0) },
-            onMeasurement: { seen.record($0, $1) })
+            onMeasurement: { seen.record($0) })
         let rig = SRTRig(encoder: encoder, log: log, mirror: mirror)
         defer { rig.stop() }
         rig.start()
-        #expect(seen.all.first?.buffer == SRTLatency.floorMs)
-        #expect(seen.all.first?.roundTrip == nil,
+        #expect(seen.all.first?.bufferMs == SRTLatency.floorMs)
+        #expect(seen.all.first?.roundTripMs == nil,
                 "a round trip was reported before anything was measured")
 
         stream.roundTripMs = 40
         let buffer = try SRTFixtures.displayBuffer()
         let deadline = Date().addingTimeInterval(20)
-        while seen.all.last?.roundTrip == nil, Date() < deadline {
+        while seen.all.last?.roundTripMs == nil, Date() < deadline {
             rig.offer(buffer, framesPerSecond: 60)
             try await Task.sleep(for: .milliseconds(4))
         }
-        #expect(seen.all.last?.roundTrip == 40,
+        #expect(seen.all.last?.roundTripMs == 40,
                 "the row was never told what the link measured")
         // 40 ms wants 160, so this link does get re-opened once — and then it
         // SETTLES: at the buffer it asked for, the same measurement no longer
@@ -135,9 +211,7 @@ final class SRTOpenedLatencies: @unchecked Sendable {
 /// Every measurement handed to the settings row, in order.
 final class SRTMeasurementLog: @unchecked Sendable {
     private let lock = NSLock()
-    private var stored: [(buffer: Int, roundTrip: Double?)] = []
-    func record(_ buffer: Int, _ roundTrip: Double?) {
-        lock.withLock { stored.append((buffer, roundTrip)) }
-    }
-    var all: [(buffer: Int, roundTrip: Double?)] { lock.withLock { stored } }
+    private var stored: [LinkTiming] = []
+    func record(_ timing: LinkTiming) { lock.withLock { stored.append(timing) } }
+    var all: [LinkTiming] { lock.withLock { stored } }
 }

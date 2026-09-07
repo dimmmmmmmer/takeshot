@@ -1,7 +1,13 @@
-# Shapes the notes that `gh release create --generate-notes` writes in
-# .github/workflows/release.yml. Without this the notes are one flat list of
-# pull request titles; with it an operator reading a release page can see at a
-# glance whether anything about recording changed.
+# Shapes GitHub's generated release notes: the "Generate release notes" button
+# in the web UI, and any `--generate-notes` run.
+#
+# **The release workflow does NOT pass `--generate-notes`** — its body is the
+# operator notes out of CHANGELOG.md, with a compare link under them, and the
+# reason is written at that step. So this file shapes the notes a HUMAN
+# generates from the web UI, and nothing on the automated path. It is kept
+# because that button is what somebody reaches for when cutting a release by
+# hand, and a flat list of pull request titles is what it gives without this;
+# it is not kept because the workflow reads it. It does not.
 #
 # Anything not carrying one of these labels still appears, under "Other
 # changes" — nothing is silently dropped.

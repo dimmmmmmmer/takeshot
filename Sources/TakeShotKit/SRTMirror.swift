@@ -41,6 +41,19 @@ import os.log
 /// told once, and nothing here can reach the recorder: the whole file calls an
 /// encoder's samples and a socket, and neither the pipeline nor the writer
 /// appears in it.
+/// What the settings row knows about the link's timing, as one value.
+///
+/// Three facts and not two, which is the whole point of the type: the buffer
+/// the socket is running with, the round trip if one has arrived, and whether a
+/// round trip CAN arrive. The last one used to be folded into the second one's
+/// nil, so a build of libsrt without `srt_bstats` — where no measurement is
+/// ever coming — showed "measuring the link…" from call time to wrap.
+struct LinkTiming: Equatable, Sendable {
+    var bufferMs: Int
+    var roundTripMs: Double?
+    var canMeasure: Bool
+}
+
 final class SRTMirror: @unchecked Sendable {
     /// What the operator is told, hopped to the MainActor by the controller.
     enum Event: Equatable, Sendable {
@@ -111,11 +124,10 @@ final class SRTMirror: @unchecked Sendable {
     private let audioEncoder: LiveAudioEncoder?
     private let factory: @Sendable (SRTEndpoint) throws -> SRTStreamSending
     private let onEvent: @Sendable (Event) -> Void
-    /// The buffer the link is running with and the round trip it reported, for
-    /// the settings row. Separate from `Event` on purpose: the events are a
-    /// state machine that dedupes itself, and a measurement that changes by a
-    /// millisecond is not a state change.
-    private let onMeasurement: @Sendable (Int, Double?) -> Void
+    /// What the link's timing is, for the settings row. Separate from `Event`
+    /// on purpose: the events are a state machine that dedupes itself, and a
+    /// measurement that changes by a millisecond is not a state change.
+    private let onMeasurement: @Sendable (LinkTiming) -> Void
 
     // MARK: - queue-confined state
 
@@ -143,8 +155,8 @@ final class SRTMirror: @unchecked Sendable {
          audioEncoder: LiveAudioEncoder? = nil,
          factory: @escaping @Sendable (SRTEndpoint) throws -> SRTStreamSending,
          onEvent: @escaping @Sendable (Event) -> Void,
-         onMeasurement: @escaping @Sendable (Int, Double?) -> Void
-             = { _, _ in }) {
+         onMeasurement: @escaping @Sendable (LinkTiming) -> Void
+             = { _ in }) {
         self.endpoint = endpoint
         self.openLatencyMs = endpoint.latencyMs
         self.encoder = encoder
@@ -248,8 +260,15 @@ final class SRTMirror: @unchecked Sendable {
             var opening = endpoint
             opening.latencyMs = wantedLatencyMs
             openLatencyMs = opening.latencyMs
-            onMeasurement(openLatencyMs, roundTrip)
             let link = try factory(opening)
+            // Reported BEFORE `open`, which can park for seconds on a caller:
+            // the buffer the socket is being opened with is what the row shows
+            // while the connect is in flight, and whether this build can
+            // measure at all is a property of the runtime rather than of the
+            // link, so both are known already.
+            onMeasurement(LinkTiming(bufferMs: openLatencyMs,
+                                     roundTripMs: roundTrip,
+                                     canMeasure: link.canMeasureRoundTrip))
             try link.open()
             stream = link
             backoff = Self.reconnectDelay
@@ -305,9 +324,12 @@ final class SRTMirror: @unchecked Sendable {
     /// monitoring picture, not the deliverable, and a second of black on it is
     /// cheaper than a take's worth of a picture that is breaking up.
     private func probeRoundTrip() {
-        guard let measured = stream?.roundTripMs else { return }
+        guard let stream else { return }
+        guard let measured = stream.roundTripMs else { return }
         roundTrip = measured
-        onMeasurement(openLatencyMs, measured)
+        onMeasurement(LinkTiming(bufferMs: openLatencyMs,
+                                 roundTripMs: measured,
+                                 canMeasure: stream.canMeasureRoundTrip))
         guard !endpoint.latencyIsExplicit,
               SRTLatency.wantsReconnect(current: openLatencyMs, forRTT: measured)
         else { return }

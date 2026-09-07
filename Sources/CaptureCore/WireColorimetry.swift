@@ -164,6 +164,17 @@ public struct WireColorimetry: Equatable, Sendable {
         return ColorTags.rec2020Preset
     }
 
+    /// The signal's primaries are wider than Rec.709 can carry.
+    ///
+    /// Asked by every output that has to DECLARE a colour: the SRT stream
+    /// answers it by declaring Rec.2020 (`ColorTags.preset(of:)` reads it off
+    /// the buffer), and the NDI output answers it by admitting it cannot —
+    /// `NDIlib_video_frame_v2_t` has no colour field at all and BGRX on that
+    /// wire is Rec.709 by definition, so a wide-gamut signal reaches an NDI
+    /// receiver undersaturated and the only honest thing the app can do is say
+    /// so where the operator chooses the transport.
+    public var exceedsRec709: Bool { primaries == .rec2020 }
+
     /// A short human label for badges, diagnostics and the scopes' readout.
     /// Not localized on purpose: "PQ", "HLG" and "Rec.2020" are what the crew
     /// says out loud in every language on the call sheet.

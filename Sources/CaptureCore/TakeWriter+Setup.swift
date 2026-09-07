@@ -66,6 +66,34 @@ extension TakeWriter {
         return [mdta, udta]
     }
 
+    /// **Standard definition is not square-pixel, and a file with no `pasp`
+    /// claims it is.**
+    ///
+    /// 720 samples across an active line is ITU-R BT.601's number, and it is
+    /// not 720/576 in shape. Without the atom a player reads PAL SD as
+    /// 1.25:1 and NTSC SD as 1.48:1 — everybody slightly too tall or too wide,
+    /// on a raster that matches no preset in any NLE, which is exactly the
+    /// kind of wrongness an assistant fixes by eye and gets subtly different
+    /// each time. HD and above ARE square-pixel, so this is only ever the two
+    /// SD rasters a DeckLink can hand over.
+    ///
+    /// **4:3 and not 16:9, and that is a choice.** The signal does not say
+    /// which it is — the app does not read WSS or AFD out of SD VANC — and
+    /// 4:3 is the shape BT.601 sampling was defined for. A 16:9 SD source is
+    /// ANAMORPHIC: the same samples, meant to be stretched further, and every
+    /// NLE has a one-click "interpret as 16:9" for precisely that. Neither
+    /// reading is available to a file that claims square pixels.
+    static func pixelAspect(width: Int, height: Int)
+        -> (horizontal: Int, vertical: Int)? {
+        switch (width, height) {
+        // 625-line: 59:54 is the 4:3 sampling aspect for 702 of the 720.
+        case (720, 576): return (59, 54)
+        // 525-line, both the full 486 and the 480 a converter may hand over.
+        case (720, 486), (720, 480): return (10, 11)
+        default: return nil
+        }
+    }
+
     static func videoSettings(format: CaptureFormat, codec: CaptureCodec,
                               colorTagPreset: String?,
                               displayMetadata: HDRStaticMetadata? = nil)
@@ -77,6 +105,12 @@ extension TakeWriter {
             // explicit colorimetry (nclc): file and preview are interpreted the same
             AVVideoColorPropertiesKey: ColorTags.videoColorProperties(for: colorTagPreset),
         ]
+        if let aspect = pixelAspect(width: format.width, height: format.height) {
+            videoSettings[AVVideoPixelAspectRatioKey] = [
+                AVVideoPixelAspectRatioHorizontalSpacingKey: aspect.horizontal,
+                AVVideoPixelAspectRatioVerticalSpacingKey: aspect.vertical,
+            ]
+        }
         var compression: [String: Any] = [:]
         if codec.needsBitrate {
             // visibly good H.264/HEVC for on-set viewing: ~0.12 bpp

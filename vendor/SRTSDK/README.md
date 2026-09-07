@@ -22,8 +22,7 @@ the bottom.
 ## Status
 
 **Implemented, and a stub until the headers are here.** `Sources/CSRT` is the
-bridge (`CSRTSender`), wired the way `CDeckLink`, `CBraw` and the retired NDI
-bridge were: it compiles against the headers in this directory when they are
+bridge (`CSRTSender`), wired the way `CDeckLink`, `CBraw` and `CNDI` are: it compiles against the headers in this directory when they are
 present and builds as a stub when they are not. Nothing is committed here and
 nothing links at build time.
 
@@ -76,10 +75,11 @@ feature on — never at launch, never at link time. The paths tried, in order:
 When none of them resolves, Settings says so and lists every path that was
 looked at.
 
-Twelve symbols are resolved — `srt_startup`, `srt_getversion`,
+Thirteen symbols are resolved — `srt_startup`, `srt_getversion`,
 `srt_create_socket`, `srt_setsockflag`, `srt_bind`, `srt_listen`, `srt_accept`,
-`srt_connect`, `srt_send`, `srt_close`, `srt_getlasterror` and
-`srt_getlasterror_str` — and each takes its type from the SDK header via
+`srt_connect`, `srt_send`, `srt_close`, `srt_getlasterror`,
+`srt_getlasterror_str` and `srt_bstats` — and each takes its type from the SDK
+header via
 `decltype`. **No part of the SRT ABI is hand-declared anywhere in this
 project.** Guessing a struct layout or an argument list would be silent memory
 corruption, invisible until it mattered on a set, so the bridge is arranged such
@@ -111,11 +111,20 @@ state, and the app can switch the feature off and on again inside one launch.
   the bytes returns "again" and the frame is dropped rather than waited on. The
   measured app-side cost is in `SRTPerformanceTests`.
 - **A dead link is a notice and a reconnect**, which on a venue network is the
-  normal case rather than the exception. See `SRTVideoMirror` for the backoff
-  and `CaptureController+SRT` for what the operator is shown.
-- **Picture only.** SRT and MPEG-TS both carry audio perfectly well; the reason
-  this does not is about where the app's stereo feed comes from, and it is
-  written up at the top of `Sources/TakeShotKit/CaptureController+SRT.swift`.
+  normal case rather than the exception. See `SRTMirror` for the backoff and
+  `CaptureController+SRT` for what the operator is shown.
+- **`srt_bstats` is the one OPTIONAL symbol.** It is libsrt's statistics call
+  and it is where the link's round trip comes from, which is what sizes the
+  delivery buffer. A runtime that does not export it keeps its stream; what it
+  loses is the automatic buffer, and the Settings row says so in as many words
+  rather than promising a measurement that is not coming
+  (`CSRTSender.isRoundTripAvailable`).
+- **Sound goes too.** It did not when this was written. The stereo feed is
+  `CapturePipeline.addAudioTap` — one mix per packet, served to every outgoing
+  transport and independent of the cart's speakers — encoded once by
+  `LiveAudioEncoder` and muxed onto PID 0x0101. Why it could not come off the
+  monitor's own slot is written up at the top of
+  `Sources/TakeShotKit/CaptureController+SRT.swift`.
 
 ## Licence note
 

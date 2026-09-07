@@ -133,6 +133,32 @@ struct SRTLoopbackTests {
         }
     }
 
+    /// **`isRetryable` and the mirror's own switch say the same thing.**
+    ///
+    /// The retry decision is ENACTED in `SRTMirror.openLink`, which switches
+    /// over the three cases because it needs a different report for each;
+    /// `isRetryable` states the same rule as a yes/no for readers. Two
+    /// statements of one rule with nothing holding them together is how a rule
+    /// drifts — a case added to the enum picks up a `false` here for free, and
+    /// the mirror would go on reconnecting over it in silence.
+    @Test func theRetryableCasesAreTheOnesTheMirrorRetries() {
+        let bridge = BridgeUnavailable(code: "srt_not_built",
+                                       english: "no libsrt in this build")
+        for failure: SRTStreamError in [.link("far end gone"),
+                                        .configuration("port taken"),
+                                        .unavailable(bridge)] {
+            // The mirror's own arms, named here rather than reached: `linkLost`
+            // backs off and re-opens, and the other two report and stop.
+            let mirrorRetries: Bool
+            switch failure {
+            case .link: mirrorRetries = true
+            case .configuration, .unavailable: mirrorRetries = false
+            }
+            #expect(failure.isRetryable == mirrorRetries,
+                    "\(failure) is classed \(failure.isRetryable)")
+        }
+    }
+
     /// An address that resolves to nothing is the operator's problem, so it is a
     /// CONFIGURATION failure and is not retried.
     @Test func anUnresolvableAddressIsAConfigurationFailure() throws {

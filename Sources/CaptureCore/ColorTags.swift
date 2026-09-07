@@ -100,6 +100,35 @@ public enum ColorTags {
     /// directly regardless of tags — the display path renders it with a
     /// video-range squeeze (washed blacks). The pipeline converts preview
     /// frames to 2vuy first (see CapturePipeline.previewBuffer).
+    /// Which preset a buffer is already TAGGED with, or nil for 709.
+    ///
+    /// The inverse of `tag`, and it exists because a consumer downstream of the
+    /// display stage has to declare the colour it was handed rather than assume
+    /// one. `SRTVideoEncoder` assumed 709 for its whole life — over a display
+    /// buffer this app had itself tagged Rec.2020 one file along, because an
+    /// HDR frame is tone mapped into an SDR curve and KEEPS the camera's
+    /// primaries. The director's laptop then read wide-gamut coordinates as
+    /// narrow ones: a visibly desaturated picture standing next to a correct
+    /// one on the cart.
+    ///
+    /// Reading the buffer rather than being told a second time is the point.
+    /// A setting passed down a second path is a second path for it to drift,
+    /// which is the argument this whole type is built on.
+    public static func preset(of pixelBuffer: CVPixelBuffer) -> String? {
+        guard let primaries = CVBufferCopyAttachment(
+                pixelBuffer, kCVImageBufferColorPrimariesKey, nil) as? String,
+              let transfer = CVBufferCopyAttachment(
+                pixelBuffer, kCVImageBufferTransferFunctionKey, nil) as? String
+        else { return nil }
+        // 709 and an untagged buffer are the same answer — the default — so
+        // neither is in this list and both fall out as nil.
+        return [rec2020Preset, pqPreset, hlgPreset, "601"].first {
+            let table = values(for: $0)
+            return table.cvPrimaries as String == primaries
+                && table.cvTransfer as String == transfer
+        }
+    }
+
     public static func tag(_ pixelBuffer: CVPixelBuffer, preset: String?) {
         let v = values(for: preset)
         CVBufferSetAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey,

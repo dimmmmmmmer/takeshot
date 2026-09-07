@@ -334,7 +334,7 @@ extension CaptureController {
     func startDiskWatch() {
         Task { [weak self] in
             while let self, !Task.isCancelled {
-                self.checkDiskSpace()
+                await self.checkDiskSpace()
                 // Ten seconds idle, two while a take rolls: at UHD ProRes the
                 // 0.5 GB floor lasts under six seconds, so a ten-second tick
                 // let the writer hit ENOSPC between two looks.
@@ -360,14 +360,17 @@ extension CaptureController {
 
     /// Bytes per second the open take is growing at, from two looks at its
     /// size; nil until there have been two, or when nothing is open.
-    func measuredWriteRate() -> Double? {
-        guard isRecording, let name = pipeline.health.takeFileName else {
+    ///
+    /// Takes the size rather than reading it: the `stat` happens on
+    /// `DiskProbe`'s queue with the rest of the volume's questions, because on
+    /// a share that has gone to sleep it parks for the SMB timeout and this
+    /// used to run on the main actor twice a second while a take rolled.
+    func measuredWriteRate(takeBytes: Int64?) -> Double? {
+        guard isRecording, pipeline.health.takeFileName != nil else {
             Self.lastGrowth = nil
             return nil
         }
-        let url = destinationRoot.appendingPathComponent(name)
-        guard let size = (try? FileManager.default.attributesOfItem(
-            atPath: url.path))?[.size] as? Int64 else { return nil }
+        guard let size = takeBytes else { return nil }
         let now = Date()
         defer { Self.lastGrowth = TakeGrowth(bytes: size, at: now) }
         guard let last = Self.lastGrowth else { return nil }
@@ -378,23 +381,33 @@ extension CaptureController {
     /// One tick of the watch above. Internal rather than private so the suite can
     /// drive exactly one, instead of waiting out a ten-second timer — which is a
     /// wall-clock window, and the one thing a wait in this repo may not be.
-    func checkDiskSpace() {
+    ///
+    /// **`async` because the READING is off the main actor.** Every question it
+    /// asks the volume can park for the filesystem's own timeout, and this ran
+    /// on the actor that draws the REC button — see `DiskProbe`. The loop above
+    /// awaits it, so two probes can never overlap however slow the volume gets.
+    func checkDiskSpace() async {
         guard isCapturing else { return }
-        let values = try? destinationRoot.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        guard let free = values?.volumeAvailableCapacityForImportantUsage
-        else {
-            // Asking a volume that is no longer mounted is exactly how this
+        let reading = await DiskProbe.read(
+            root: destinationRoot,
+            openTake: isRecording ? pipeline.health.takeFileName : nil)
+        // The volume may have gone away, or capture stopped, while the probe
+        // was parked. Everything below is a claim about NOW.
+        guard isCapturing else { return }
+        applyDiskReading(reading)
+    }
+
+    /// What one reading means, decided on the main actor.
+    private func applyDiskReading(_ reading: DiskProbe.Reading) {
+        guard let free = reading.freeBytes else {
+            // Asking a volume that is no longer mounted is exactly how the
             // query fails, so returning quietly meant the watchdog went silent
             // in the one case it exists for. A take still "recording" onto a
             // vanished destination writes nothing at all.
             // A merely absent folder is recoverable and normal (a fresh
-            // destination path), so try that first and only alarm if the
-            // volume itself is unreachable.
-            try? FileManager.default.createDirectory(
-                at: destinationRoot, withIntermediateDirectories: true)
-            guard !FileManager.default.fileExists(atPath: destinationRoot.path)
-            else {
+            // destination path), and the probe has already tried to recreate
+            // it — so this only alarms if the volume itself is unreachable.
+            guard !reading.folderExists else {
                 // recreated, or there all along: a watcher that never armed
                 // (the folder was not there to open) gets its chance now
                 if folderWatcher == nil { startFolderWatcher() }
@@ -415,7 +428,8 @@ extension CaptureController {
         // own: it watches a volume, which is not something CaptureCore knows
         // about, so there is no boundary to carry a severity across.
         switch Self.diskVerdict(freeBytes: free, isRecording: isRecording,
-                                bytesPerSecond: measuredWriteRate()) {
+                                bytesPerSecond: measuredWriteRate(
+                                    takeBytes: reading.takeBytes)) {
         case .fine:
             break
         case .full(let freeGB):

@@ -36,6 +36,7 @@ extension CaptureController {
         mirrors.playout = nil
         guard let deviceID = settings.capture.monitorDeviceID,
               deviceID.hasPrefix("decklink:") else {
+            mirrors.playoutState = .off
             wireDisplayMirrors()
             return
         }
@@ -62,28 +63,45 @@ extension CaptureController {
                               BridgeUnavailable(error: error).localizedText)
             }
         }
+        // A board that could not be opened at all is a stalled lamp, not an
+        // absent one: the operator picked an output in Settings and there is
+        // no picture on it.
+        mirrors.playoutState = mirrors.playout == nil
+            ? .stalled(L("playout_not_open")) : .opened
         // A frozen output says so once, and says so again when it recovers.
         // The feeder cannot reach the controller on its own — it runs on its
         // own queue and holds no reference — so the hop is here.
-        mirrors.playout?.onStall = { [weak self] reason in
-            Task { @MainActor in
-                guard let self else { return }
-                guard let reason else {
-                    // nil is the RECOVERY, which the first version of this
-                    // threw away — so the comment above it was not kept and a
-                    // board that came back left its own complaint on screen.
-                    // Only this message is cleared: anything else on the line
-                    // is somebody else's and outranks a resolved stall.
-                    if self.lastError == L("playout_stalled_pool")
-                        || self.lastError == L("playout_stalled_render") {
-                        self.lastError = nil
-                    }
-                    return
-                }
-                self.lastError = reason
-            }
+        mirrors.playout?.onState = { [weak self] state in
+            Task { @MainActor in self?.notePlayoutState(state) }
         }
         wireDisplayMirrors()
+    }
+
+    /// The lamp always, and the toast only on the way into trouble.
+    ///
+    /// The lamp is the record — it stays for as long as the board is unhappy,
+    /// which is the point of having one. The toast is the interruption, and it
+    /// clears itself after five seconds; what this has to do on the way OUT is
+    /// take back the message it put there, and nothing else. Anything else on
+    /// that line is somebody else's and outranks a resolved stall.
+    func notePlayoutState(_ state: PlayoutState) {
+        mirrors.playoutState = state
+        if case .stalled(let why) = state {
+            lastError = why
+            return
+        }
+        if let shown = lastError, Self.playoutComplaints.contains(shown) {
+            lastError = nil
+        }
+    }
+
+    /// Every sentence `notePlayoutState` is allowed to take back. Listed rather
+    /// than compared one by one, because the third of them — the board refusing
+    /// a frame — was added a year after the two comparisons were written, and
+    /// a list is the shape that does not need editing twice.
+    static var playoutComplaints: Set<String> {
+        [L("playout_stalled_pool"), L("playout_stalled_render"),
+         L("playout_refused"), L("playout_not_open")]
     }
     /// The mirrors of whatever the viewer shows: the hardware output, the NDI
     /// source and the SRT stream when they are switched on, and every browser

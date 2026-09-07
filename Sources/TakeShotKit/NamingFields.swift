@@ -45,11 +45,15 @@ struct NamingFieldsView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            // The two rows are different HEIGHTS — the file row stacks its
-            // captions over its boxes, the slate row puts them beside — so a
-            // switch above them made the whole footer jump on every press
-            // (owner: "высота подвала прыгает при переключении"). Beside them
-            // it cannot: the block is as tall as whichever row is showing, and
+            // A switch ABOVE the rows made the whole footer jump on every
+            // press (owner: "высота подвала прыгает при переключении"), back
+            // when the two rows were different heights — the file row stacked
+            // its captions over its boxes and the slate row put them beside.
+            // Both stack now, so the heights match and the jump is gone twice
+            // over; the switch stays beside them, because that is what the
+            // layout was rebuilt around and what the tests measure. Beside
+            // them it cannot jump: the block is as tall as whichever row is
+            // showing, and
             // the switch is shorter than both.
             Group {
                 switch controller.namingPane {

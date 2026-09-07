@@ -1,3 +1,4 @@
+import CaptureCore
 import CoreMedia
 @preconcurrency import CoreVideo
 import Foundation
@@ -267,14 +268,21 @@ final class LiveVideoEncoder: @unchecked Sendable {
         let wanted = SRTVideoEncoder.Configuration(
             width: CVPixelBufferGetWidth(buffer),
             height: CVPixelBufferGetHeight(buffer),
-            framesPerSecond: max(1, rate), bitsPerSecond: bitsPerSecond)
-        // The RASTER and the rate, and deliberately not the bitrate: that one
-        // moves on a running session (`setBitsPerSecond`), so comparing it here
-        // would rebuild for a number VideoToolbox would have taken live — and
-        // a rebuild is a gap and a keyframe for every consumer at once.
+            framesPerSecond: max(1, rate), bitsPerSecond: bitsPerSecond,
+            // Asked of the BUFFER, which the pipeline has already tagged. See
+            // `ColorTags.preset(of:)` for why it is not passed down instead.
+            colorPreset: ColorTags.preset(of: buffer))
+        // The RASTER, the rate and the COLOUR, and deliberately not the
+        // bitrate: that one moves on a running session (`setBitsPerSecond`), so
+        // comparing it here would rebuild for a number VideoToolbox would have
+        // taken live — and a rebuild is a gap and a keyframe for every consumer
+        // at once. The colour cannot move on a running session, and a camera
+        // change from HDR to SDR is exactly when a receiver needs the new
+        // parameter sets a rebuild brings with it.
         if let encoder, encoder.configuration.width == wanted.width,
            encoder.configuration.height == wanted.height,
-           encoder.configuration.framesPerSecond == wanted.framesPerSecond {
+           encoder.configuration.framesPerSecond == wanted.framesPerSecond,
+           encoder.configuration.colorPreset == wanted.colorPreset {
             return encoder
         }
         encoder?.invalidate()

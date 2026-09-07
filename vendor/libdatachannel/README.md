@@ -40,8 +40,10 @@ at build time.
 - **Without the header** — CI, and every build until somebody drops it in: the
   app builds and ships as it always did, `CDCPeerConnection.isSDKAvailable` is
   `NO`, the `/live` page reports the feature as absent with the text of the next
-  section as the reason, and every other page — including the camera grid, which
-  is the JPEG path this replaces — behaves exactly as before.
+  section as the reason, and every other page — the takes list, the slate, the
+  script supervisor's page — behaves exactly as before. What it does NOT have is
+  a moving picture on the remote at all: the JPEG camera grid this replaced has
+  been removed, so this is the only path to one there is.
 - **With the header and the runtime**: the same page plays the viewer.
 
 ## Where to get it
@@ -194,10 +196,12 @@ both fail the build rather than shipping something broken:
 
 **A build made WITHOUT the drop still builds, runs and ships**, exactly as
 `CDeckLink` and `CBraw` do without theirs: `CDataChannel` compiles as a stub,
-the `/live` page says the feature is absent and names what is missing, the
-camera grid keeps working, and nothing else about the app is different. That is
-what CI builds on every push, and it is what a release built on a machine with
-no vendor drops is.
+the `/live` page says the feature is absent and names what is missing, every
+other page works, and nothing else about the app is different — except that
+there is no live picture on the remote, the JPEG grid that used to stand in for
+one having been removed. That is what CI builds on every push, and it is why the
+release workflow builds the library from a pinned tag and TESTS AGAINST IT
+before it publishes.
 
 ## Licence note
 

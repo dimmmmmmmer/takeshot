@@ -15,14 +15,22 @@ enum SRTSendOutcome: Equatable, Sendable {
     case broken
 }
 
-/// Why a link could not be opened — and, in `isRetryable`, whether the app should
-/// keep trying or hand the problem to the operator.
+/// Why a link could not be opened: whether the app should keep trying or hand
+/// the problem to the operator.
 ///
 /// That distinction is the one thing this type exists for. "The receiver is not
 /// running yet" and "the port is already taken" look the same at a socket and
 /// need opposite responses: the first is the normal state of a venue network
 /// thirty seconds before it becomes fine, and the second is a thing to go and
 /// fix that a reconnect loop would hide forever.
+///
+/// **Where it is ENACTED is `SRTMirror.openLink`**, which switches over the
+/// three cases exhaustively — it needs a different report per case and not a
+/// yes/no. `isRetryable` says the same rule in one word for readers who only
+/// need the yes/no, which is the suites and this comment; the pair is held
+/// together by `theRetryableCasesAreTheOnesTheMirrorRetries`. Two statements of
+/// one rule with nothing holding them together is how the rule drifts, and this
+/// file has been the place that happened before.
 enum SRTStreamError: Error, Equatable {
     /// No SDK headers when this was built, or no libsrt on this machine.
     ///
@@ -79,6 +87,15 @@ protocol SRTStreamSending: AnyObject, Sendable {
     /// nothing to measure — an older libsrt, no socket, or a handshake that has
     /// not completed. Called only on `SRTMirror`'s queue.
     var roundTripMs: Double? { get }
+    /// Whether this link can be measured AT ALL, as against not having been
+    /// measured yet.
+    ///
+    /// Two facts wearing one nil. libsrt's statistics call is `srt_bstats`,
+    /// which older runtimes do not export — the bridge has always known
+    /// (`CSRTSender.isRoundTripAvailable`) and nothing asked, so on such a
+    /// machine the Settings row said "measuring the link…" for the entire day
+    /// over a number that was never going to arrive.
+    var canMeasureRoundTrip: Bool { get }
 }
 
 extension SRTStreamSending {
@@ -87,6 +104,11 @@ extension SRTStreamSending {
     /// statistics call can, and `SRTLatency` already treats "no measurement" as
     /// its floor rather than as an error.
     var roundTripMs: Double? { nil }
+
+    /// …and a link that cannot say, cannot be measured. The two defaults are
+    /// one statement: a transport with no statistics call is not "still
+    /// measuring".
+    var canMeasureRoundTrip: Bool { false }
 }
 
 /// The real link: a thin Swift face on `CSRTSender`, which is a stub in any build
@@ -132,6 +154,8 @@ final class SRTStream: SRTStreamSending, @unchecked Sendable {
         let measured = sender.roundTripMs()
         return measured > 0 ? measured : nil
     }
+
+    var canMeasureRoundTrip: Bool { CSRTSender.isRoundTripAvailable() }
 
     func open() throws {
         do {

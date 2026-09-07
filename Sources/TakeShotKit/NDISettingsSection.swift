@@ -40,7 +40,9 @@ struct NDISettingsSection: View {
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of
                 // the settings window does not re-render with it.
-                NDIStatusRow(mirrors: controller.mirrors)
+                NDIStatusRow(mirrors: controller.mirrors,
+                             wideGamut: controller.signalColorimetry
+                                 .exceedsRec709)
             }
         }
     }
@@ -76,9 +78,15 @@ struct NDISettingsSection: View {
 /// things to type, and a translated path is a worse instruction than the path.
 struct NDIStatusRow: View {
     @ObservedObject private var mirrors: DisplayMirrors
+    /// The signal carries primaries this wire cannot express. Passed in rather
+    /// than mirrored: it is a fact about the SIGNAL, and `DisplayMirrors` is
+    /// where facts about the OUTPUTS live — a copy here would be a second
+    /// place for it to go stale.
+    private let wideGamut: Bool
 
-    init(mirrors: DisplayMirrors) {
+    init(mirrors: DisplayMirrors, wideGamut: Bool = false) {
         self.mirrors = mirrors
+        self.wideGamut = wideGamut
     }
 
     var body: some View {
@@ -118,6 +126,16 @@ struct NDIStatusRow: View {
                 // said here rather than left to be discovered on the receiver:
                 // "the feed has no audio" is a question somebody asks from
                 // another room, halfway through a take.
+                // …and a wire that cannot carry the signal's colour. Beside
+                // the audio line and for the same reason: it is a question
+                // somebody asks from another room, halfway through a take, and
+                // "the picture looks flat on my laptop" is an hour of arguing
+                // about which screen is lying if nothing here said it first.
+                if wideGamut {
+                    Text(L("ndi_rec709_only"))
+                        .foregroundStyle(.orange)
+                        .help(L("ndi_rec709_only_help"))
+                }
                 if mirrors.ndiCarriesAudio == false {
                     // Short enough to stay on ONE line in both languages — a
                     // grouped Form wraps rather than truncates, and a row that

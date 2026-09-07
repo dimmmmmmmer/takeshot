@@ -23,11 +23,13 @@ import Foundation
 /// | `playbackPositionSeconds` | **no** | yes | yes |
 ///
 /// `seekPlayback` is the one still asking raw → single, and it is left that
-/// way deliberately: its only caller is `jumpToMarker`, which is menu-only and
-/// gated to the single clip, and seeking a GRID is `SyncPlayModel.seek`, which
-/// re-issues a synchronized start across every tile rather than moving one
-/// player. Making it "handle" a grid would mean routing to a different verb,
-/// not adding an arm.
+/// way deliberately. Its callers are `jumpToMarker` — from the File menu and
+/// from the prev/next buttons in `MarkerControls` — and the marker rows in
+/// that same panel, which seek by timecode; all of them are gated to the
+/// single clip. Seeking a GRID is `SyncPlayModel.seek`, which re-issues a
+/// synchronized start across every tile rather than moving one player. Making
+/// this one "handle" a grid would mean routing to a different verb, not adding
+/// an arm.
 ///
 /// **Every one of them was wrong over a grid, and the grid is not an exotic
 /// state.** `startSyncPlay` pauses the single player and leaves it holding the

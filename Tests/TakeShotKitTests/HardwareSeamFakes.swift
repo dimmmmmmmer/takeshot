@@ -132,9 +132,11 @@ final class FakeAudioRoute: AudioRenderRoute, @unchecked Sendable {
 /// over untouched, or fit it into the output raster first — can be told apart by
 /// identity rather than by inspecting the feeder.
 final class FakePlayoutOutput: PlayoutOutput, @unchecked Sendable {
-    let outputWidth: Int
-    let outputHeight: Int
+    var outputWidth: Int { lock.withLock { width } }
+    var outputHeight: Int { lock.withLock { height } }
 
+    private var width: Int
+    private var height: Int
     private let lock = NSLock()
     private var frames: [CVPixelBuffer] = []
     private var stopCount = 0
@@ -144,13 +146,27 @@ final class FakePlayoutOutput: PlayoutOutput, @unchecked Sendable {
     private let gate = DispatchSemaphore(value: 0)
     private let entered = DispatchSemaphore(value: 0)
     private var gated = false
+    /// What `display` answers. A real board answers NO when the output has
+    /// gone — most often to a second copy of this app — and the fake could
+    /// only ever say yes, so the one path a matched raster takes had no way to
+    /// be tested at all.
+    private var accepts = true
     /// Nothing here should ever wait, so a budget only decides whether a broken
     /// test fails or wedges the whole suite.
     private static let budget = DispatchTime.now() + .seconds(30)
 
     init(width: Int, height: Int) {
-        outputWidth = width
-        outputHeight = height
+        self.width = width
+        self.height = height
+    }
+
+    /// Put the output in a mode nothing can be fitted into, which is how the
+    /// suite reaches the pool's own failure without a second board.
+    func setMode(width: Int, height: Int) {
+        lock.withLock {
+            self.width = width
+            self.height = height
+        }
     }
 
     var displayed: [CVPixelBuffer] { lock.withLock { frames } }
@@ -171,14 +187,23 @@ final class FakePlayoutOutput: PlayoutOutput, @unchecked Sendable {
         gate.signal()
     }
 
+    /// Make this and every later `display` answer NO, as a board does when
+    /// another process has taken it. `true` gives it back.
+    func setAccepts(_ value: Bool) {
+        lock.withLock { accepts = value }
+    }
+
     @discardableResult
     func display(_ buffer: CVPixelBuffer) -> Bool {
         if lock.withLock({ gated }) {
             entered.signal()
             _ = gate.wait(timeout: Self.budget)
         }
-        lock.withLock { frames.append(buffer) }
-        return true
+        return lock.withLock {
+            guard accepts else { return false }
+            frames.append(buffer)
+            return true
+        }
     }
 
     func stop() {
