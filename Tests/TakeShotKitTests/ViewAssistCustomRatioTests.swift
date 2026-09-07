@@ -43,6 +43,43 @@ import Testing
         #expect(AssistCustomField.text(for: 2.76) == "2.76")
     }
 
+    /// **A refusal snaps the box back.** A field that keeps a rejected "0" on
+    /// screen looks accepted, and the operator walks away believing the
+    /// frameline is set to something the app quietly ignored.
+    @Test func aRefusedNumberChangesNothingAndTheBoxSaysSo() {
+        let outcome = AssistCustomField.committed(
+            text: "0", current: 2.39, in: AssistRatioInput.framelineRange)
+
+        #expect(outcome.value == nil, "a zero was applied to the frameline")
+        #expect(outcome.text == "2.39", "the box kept a number nothing is drawn at")
+    }
+
+    /// …and the empty box comes back empty when the control is off, rather
+    /// than filling itself in with a value nobody set.
+    @Test func aRefusedNumberOnAControlThatIsOffLeavesItEmpty() {
+        let outcome = AssistCustomField.committed(
+            text: "nonsense", current: nil, in: AssistRatioInput.framelineRange)
+
+        #expect(outcome.value == nil)
+        #expect(outcome.text == "")
+    }
+
+    /// An accepted value is rewritten from the NUMBER, not left as typed — so
+    /// the box and the picker cannot spell one value two ways.
+    @Test func anAcceptedNumberSettlesIntoOneSpelling() throws {
+        let outcome = AssistCustomField.committed(
+            text: " 2,39 ", current: nil, in: AssistRatioInput.framelineRange)
+
+        #expect(outcome.value == 2.39)
+        #expect(outcome.text == "2.39")
+
+        let fraction = AssistCustomField.committed(
+            text: "16/9", current: nil, in: AssistRatioInput.framelineRange)
+        let value = try #require(fraction.value)
+        #expect(abs(value - 16.0 / 9.0) < 0.000001)
+        #expect(fraction.text == AssistRatioInput.text(value))
+    }
+
     /// End to end through the controller: a typed aspect is what the renderer
     /// draws, and it is what the next launch comes back to.
     @Test func aTypedFramelineIsDrawnAndRemembered() async throws {

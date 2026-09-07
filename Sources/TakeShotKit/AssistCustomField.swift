@@ -82,12 +82,32 @@ struct AssistCustomField: View {
     }
 
     private func commit() {
+        let outcome = Self.committed(text: text, current: value, in: range)
+        if let accepted = outcome.value { apply(accepted) }
+        text = outcome.text
+    }
+
+    /// What pressing Return does: the value to apply — nil, nothing changes —
+    /// and what the box says afterwards.
+    ///
+    /// Static and pure, like the chroma key's `committed` beside it and for the
+    /// same reason: the interesting half of a field is what it does with what
+    /// was typed, and that half is unreachable through a view. Two things it
+    /// pins that are easy to get subtly wrong —
+    ///
+    /// - a refusal SNAPS BACK. The box that keeps a rejected "0" on screen
+    ///   looks accepted, and the operator walks away believing the frameline is
+    ///   set to something the app quietly ignored.
+    /// - an accepted value is rewritten from the NUMBER, not left as typed. So
+    ///   "16/9" and " 2,39 " settle into what the picker's row would say, and
+    ///   the box and the picker cannot end up spelling one value two ways.
+    static func committed(text: String, current: Double?,
+                          in range: ClosedRange<Double>)
+        -> (value: Double?, text: String) {
         guard let parsed = AssistRatioInput.parse(text, in: range) else {
-            text = Self.text(for: value) // refused, visibly
-            return
+            return (nil, self.text(for: current))
         }
-        apply(parsed)
-        text = AssistRatioInput.text(parsed)
+        return (parsed, AssistRatioInput.text(parsed))
     }
 
     /// What the box shows for a control that is off — nothing, rather than a
