@@ -252,6 +252,8 @@
 /* LUT folder + placeholders */
 "settings_luts" = "LUTs";
 "luts_folder" = "Imported LUTs";
+"luts_folder_path" = "LUT folder";
+"luts_folder_default" = "Default";
 "open_in_finder" = "Open in Finder";
 "clear_data" = "Clear";
 "cancel" = "Cancel";

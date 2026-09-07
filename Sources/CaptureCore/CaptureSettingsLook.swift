@@ -124,6 +124,7 @@ public struct ReviewSettings: Codable, Equatable, Sendable {
 public struct LUTSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case fileName = "lutFileName"
+        case folderPath = "lutFolderPath"
         case previewEnabled = "lutPreviewEnabled"
         case recordEnabled = "lutRecordEnabled"
         case intensity = "lutIntensity"
@@ -131,6 +132,17 @@ public struct LUTSettings: Codable, Equatable, Sendable {
 
     /// Filename of the selected LUT (in the app's LUTs folder); nil — no LUT.
     public var fileName: String?
+    /// The look library the operator pointed the app at; nil — the app's own
+    /// Application Support folder, which is where imports land.
+    ///
+    /// A path and not a bookmark: the folder a unit keeps its looks in is on
+    /// the show drive next to the record folder, which is stored the same way
+    /// (`CaptureSettings.capture.destinationPath`) and for the same reason —
+    /// the operator can read it back, and a drive that comes up under a
+    /// different mount point is a broken path they can see rather than a
+    /// bookmark that silently resolves somewhere else. Optional, like every
+    /// added field, so settings written by an older build still decode.
+    public var folderPath: String?
     /// Apply the LUT to preview (live and playback).
     public var previewEnabled: Bool?
     /// Bake the LUT into the recorded file (otherwise a clean signal is written).

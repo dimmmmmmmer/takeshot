@@ -53,12 +53,21 @@ protocol AudioCaptureDevice: AnyObject {
     func stop()
 }
 
-/// Where the controller gets its input devices. A protocol for the same
-/// reason the backend list is injected: the real provider touches the
-/// machine's hardware, and no headless test may depend on what happens to be
-/// plugged into the runner.
+/// Where the controller gets its audio devices — the inputs it can RECORD
+/// from and the outputs it can PLAY to. A protocol for the same reason the
+/// backend list is injected: the real provider touches the machine's hardware,
+/// and no headless test may depend on what happens to be plugged into the
+/// runner.
+///
+/// Outputs share this provider rather than getting one of their own because
+/// they share the notification: CoreAudio has ONE device-set property
+/// (`kAudioHardwarePropertyDevices`), and an interface arriving adds an input
+/// and an output in the same breath. Two watchers would be two listeners on
+/// the same property answering the same event.
 protocol AudioInputDeviceProviding: AnyObject {
     func list() -> [AudioInputDeviceInfo]
+    /// The machine's audio outputs, for routing playback and the live monitor.
+    func outputs() -> [AudioOutputDevices.Device]
     /// Fire `onChange` on the main queue whenever the device set changes.
     func startWatching(onChange: @escaping () -> Void)
     func makeCaptureDevice(uid: String) -> AudioCaptureDevice?
@@ -94,6 +103,8 @@ final class SystemAudioInputProvider: AudioInputDeviceProviding {
                                         channelCount: channels)
         }
     }
+
+    func outputs() -> [AudioOutputDevices.Device] { AudioOutputDevices.list() }
 
     func startWatching(onChange: @escaping () -> Void) {
         var address = AudioObjectPropertyAddress(

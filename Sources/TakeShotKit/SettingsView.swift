@@ -174,6 +174,30 @@ struct SettingsView: View {
                 HDRModePicker()
             }
             Section(L("settings_luts")) {
+                // Same shape as the record-folder row above, because it is the
+                // same question: a path the operator reads back and re-points.
+                // A unit keeps its show LUTs on the show drive, and before this
+                // the only library was the app's own Application Support folder
+                // (owner: "path папки лутов хочу чтобы можно было выбирать").
+                HStack(spacing: 8) {
+                    Text(L("luts_folder_path"))
+                        .fixedSize()
+                    Text(controller.lutsDirectory.path)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    // only once there is something to go back FROM: a button
+                    // that resets to where you already are is a dead control
+                    if controller.settings.lut.folderPath != nil {
+                        Button(L("luts_folder_default")) {
+                            controller.setLUTsFolder(nil)
+                        }
+                        .fixedSize()
+                    }
+                    Button(L("choose_folder")) { controller.chooseLUTsFolder() }
+                        .fixedSize()
+                }
                 LabeledContent(L("luts_folder")) {
                     HStack {
                         Text("\(controller.availableLUTs.count)")

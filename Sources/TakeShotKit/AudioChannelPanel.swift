@@ -190,11 +190,14 @@ struct AudioChannelPanel: View {
 /// setting as the Settings pane (`playbackOutputUID`: player and live monitor).
 struct AudioOutputMenu: View {
     @EnvironmentObject private var controller: CaptureController
-    /// Enumerated once when the panel appears, not in `body`: this panel
-    /// re-renders with the meters (~25/s) and a CoreAudio device walk per frame
-    /// is not free. A device plugged in while the panel is open shows up the
-    /// next time it is opened.
-    @State private var devices: [AudioOutputDevices.Device] = []
+    /// The list comes off the controller, which reads it at startup and again
+    /// on every hot-plug. It used to be `@State` filled in `onAppear` — not in
+    /// `body`, because this panel re-renders with the meters (~25/s) and a
+    /// CoreAudio device walk per frame is not free. What that cost instead was
+    /// the FIRST render, which drew the name from an empty list: the operator's
+    /// chosen output came up as `audio_output_missing` at launch even though
+    /// playback was already routed to it.
+    private var devices: [AudioOutputDevices.Device] { controller.audioOutputDevices }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -225,17 +228,26 @@ struct AudioOutputMenu: View {
             .menuStyle(.borderlessButton)
         }
         .help(L("audio_output_help"))
-        .onAppear { devices = AudioOutputDevices.list() }
+        // still refreshed on appear: the watcher covers hot-plug, and this
+        // covers a device that changed while nothing was listening yet
+        .onAppear { controller.refreshAudioOutputDevices() }
+    }
+
+    private var currentName: String {
+        Self.name(for: controller.playbackOutputUID, in: devices)
     }
 
     /// What the selected device is called. A UID with no device behind it is
     /// worth saying out loud: monitoring is coming out of the system default
     /// instead, and silence from the wrong output is a call to the sound
     /// department that nobody needs.
-    private var currentName: String {
-        guard let uid = controller.playbackOutputUID else {
-            return L("system_default")
-        }
+    ///
+    /// Static, and taking the list rather than reading it: "missing" is a
+    /// claim about the machine, and the suite has to be able to make it say
+    /// that — and say the device's name — from a list it states itself.
+    static func name(for uid: String?,
+                     in devices: [AudioOutputDevices.Device]) -> String {
+        guard let uid else { return L("system_default") }
         return devices.first { $0.uid == uid }?.name ?? L("audio_output_missing")
     }
 

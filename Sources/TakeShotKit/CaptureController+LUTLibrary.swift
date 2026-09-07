@@ -140,6 +140,55 @@ extension CaptureController {
     func openLUTsInFinder() {
         FinderOpen.ownFolder(lutsDirectory)
     }
+    /// Where a stored `lut.folderPath` points. Empty counts as unset, which is
+    /// what a hand-edited blob (or a cleared text field, if this ever becomes
+    /// one) would otherwise turn into a library at "/".
+    nonisolated static func lutsDirectory(forStoredPath path: String?) -> URL {
+        guard let path, !path.isEmpty else { return defaultLUTsDirectory }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+    /// Take up the library the operator chose, at launch.
+    ///
+    /// Only when they chose one. The suites inject `lutsDirectory` so their
+    /// fixtures never land in the operator's real Application Support folder
+    /// (and `clearLUTs` never deletes the looks they went on set with), and an
+    /// unset path assigned unconditionally would undo that injection for every
+    /// one of them.
+    func adoptStoredLUTFolder(_ stored: CaptureSettings) {
+        guard stored.lut.folderPath != nil else { return }
+        lutsDirectory = Self.lutsDirectory(forStoredPath: stored.lut.folderPath)
+    }
+    /// Ask the operator for a look library.
+    ///
+    /// A folder picker rather than a text field: the answer is a path that has
+    /// to exist, and the panel is the one control that cannot produce one that
+    /// does not (owner: "path папки лутов хочу чтобы можно было выбирать").
+    func chooseLUTsFolder() {
+        guard let url = FilePanel.openOne(.init(
+            files: false, directories: true, createDirectories: true,
+            directory: lutsDirectory)) else { return }
+        setLUTsFolder(url)
+    }
+    /// Point the library at `url` — nil puts it back at the app's own folder.
+    ///
+    /// Everything downstream of the folder is re-derived here rather than left
+    /// to the next read. Two things would otherwise survive the move: the
+    /// cached cube, which is keyed by FILE NAME alone, so a second library with
+    /// its own `Rec709.cube` would keep showing the first one's grade; and a
+    /// selection the new folder does not contain, which would reach the
+    /// operator as a load error they did not ask for instead of simply no look.
+    func setLUTsFolder(_ url: URL?) {
+        settings.lut.folderPath = url?.path
+        lutsDirectory = Self.lutsDirectory(forStoredPath: settings.lut.folderPath)
+        cubeCache = nil
+        reloadLUTList()
+        if let fileName = settings.lut.fileName,
+           !availableLUTs.contains(where: { $0.fileName == fileName }) {
+            selectLUT(fileName: nil)
+        } else {
+            rebuildLUT()
+        }
+    }
     /// Delete every imported look and clear the selected one.
     func clearLUTs() {
         let dir = lutsDirectory

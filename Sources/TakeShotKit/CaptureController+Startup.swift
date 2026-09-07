@@ -86,6 +86,10 @@ extension CaptureController {
         playbackTap.setLivePreLUTBufferProvider { [pipeline] in
             pipeline.currentPreLUTPreviewBuffer()
         }
+        // before the first picker is ever opened: the two lines above have
+        // already pointed playback and the monitor at the stored device, and
+        // the panel has to be able to name it (see refreshAudioOutputDevices)
+        refreshAudioOutputDevices()
         refreshDevices() // selecting the first device starts capture via didSet
         // the stored USB audio source comes back like the output device does;
         // a device missing at launch falls back to embedded with the warning
@@ -93,6 +97,9 @@ extension CaptureController {
         startFolderSync()
         refreshNameCollision()
         applyLetterboxColor()
+        // before the scan, not after: the library the operator chose IS the
+        // folder the list is read from
+        adoptStoredLUTFolder(stored)
         reloadLUTList()
         // the persisted LUT + "apply to preview" must take effect immediately —
         // without this the checkbox showed enabled while nothing was applied

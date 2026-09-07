@@ -432,11 +432,22 @@ final class CaptureController: ObservableObject {
     var externalAudioSource: ExternalAudioSource?
     /// Input devices for the Settings picker, refreshed on hot-plug.
     @Published var audioInputDevices: [AudioInputDeviceInfo] = []
+    /// Output devices for the playback/monitor pickers, refreshed on hot-plug.
+    ///
+    /// Held here rather than enumerated by the two views that show it, which is
+    /// what they each used to do — one in its `body` (a CoreAudio device walk
+    /// per render) and one in `onAppear` (empty for the first render, so the
+    /// device the app was ALREADY routing playback to came up named "missing",
+    /// and a device that registered a moment after launch never appeared at
+    /// all). Owner: "playback audio output сразу не определился при запуске".
+    @Published var audioOutputDevices: [AudioOutputDevices.Device] = []
     /// The pipeline is being fed by the external source right now — what the
     /// channels panel and Settings state as the live source.
     @Published var externalAudioActive = false
     /// The hot-plug watcher is installed once, on first use (see +AudioInput).
-    var audioInputWatchStarted = false
+    /// One watcher for inputs and outputs both — CoreAudio has one device-set
+    /// property and it answers for both directions.
+    var audioDeviceWatchStarted = false
     /// Level to restore when the speaker button un-mutes (see +Audio).
     var monitorVolumeBeforeMute: Double = 1
     /// Channel selection to come back to when the bank key leaves mix-only (see

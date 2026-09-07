@@ -33,13 +33,25 @@ extension CaptureController {
     /// machine's devices is work the app has no business doing until someone
     /// asks to see them (and a selected device installs the watcher itself).
     func refreshAudioInputDevices() {
-        startAudioInputWatchIfNeeded()
+        startAudioDeviceWatchIfNeeded()
         audioInputDevices = audioInputs.list()
     }
 
-    private func startAudioInputWatchIfNeeded() {
-        guard !audioInputWatchStarted else { return }
-        audioInputWatchStarted = true
+    /// Refresh the output list and make sure the hot-plug watcher runs.
+    ///
+    /// Called AT STARTUP, unlike the input list above, and the difference is
+    /// not an inconsistency: the app is already routing playback and the live
+    /// monitor through the stored output UID before anyone opens a picker, and
+    /// the channels panel puts that device's NAME on screen. A list read later
+    /// than the routing means the app cannot say what it is already doing.
+    func refreshAudioOutputDevices() {
+        startAudioDeviceWatchIfNeeded()
+        audioOutputDevices = audioInputs.outputs()
+    }
+
+    private func startAudioDeviceWatchIfNeeded() {
+        guard !audioDeviceWatchStarted else { return }
+        audioDeviceWatchStarted = true
         audioInputs.startWatching { [weak self] in
             self?.audioInputDevicesChanged()
         }
@@ -51,6 +63,9 @@ extension CaptureController {
     /// change waits for it to close (see `reconcileAudioInputAfterTake`).
     func audioInputDevicesChanged() {
         audioInputDevices = audioInputs.list()
+        // the same notification answers for both directions — an interface
+        // arriving brings an input and an output with it
+        audioOutputDevices = audioInputs.outputs()
         guard let uid = settings.audio.audioInputDeviceUID, externalAudioSource == nil,
               !isRecording,
               audioInputDevices.contains(where: { $0.uid == uid })
@@ -68,7 +83,7 @@ extension CaptureController {
             return
         }
         // the reattach path needs to see the device return
-        startAudioInputWatchIfNeeded()
+        startAudioDeviceWatchIfNeeded()
         guard let device = audioInputs.makeCaptureDevice(uid: uid) else {
             activateEmbeddedAudio(warning: L("usb_audio_missing"))
             return

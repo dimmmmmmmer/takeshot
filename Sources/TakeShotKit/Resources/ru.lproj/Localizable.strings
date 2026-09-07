@@ -254,6 +254,8 @@
 /* LUT folder + placeholders */
 "settings_luts" = "LUT-файлы";
 "luts_folder" = "Импортированные LUT";
+"luts_folder_path" = "Папка LUT";
+"luts_folder_default" = "По умолчанию";
 "open_in_finder" = "Открыть в Finder";
 "clear_data" = "Очистить";
 "cancel" = "Отмена";

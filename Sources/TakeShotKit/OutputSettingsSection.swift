@@ -46,11 +46,14 @@ struct AudioSettingsSection: View {
     var body: some View {
         Section(L("settings_audio")) {
             AudioInputPicker()
+            // off the controller, like the input picker above it: the list
+            // used to be enumerated HERE, which put a CoreAudio device walk in
+            // a Form body — once per render of the whole audio section
             Picker(L("playback_output"), selection: Binding(
                 get: { controller.playbackOutputUID },
                 set: { controller.playbackOutputUID = $0 })) {
                 Text(L("system_default")).tag(String?.none)
-                ForEach(AudioOutputDevices.list()) { device in
+                ForEach(controller.audioOutputDevices) { device in
                     Text(device.name).tag(String?.some(device.uid))
                 }
             }

@@ -24,6 +24,12 @@ final class FakeAudioInputProvider: AudioInputDeviceProviding {
         }
     }
 
+    /// The "plugged-in" outputs. The suite states them; the machine running
+    /// the tests is never asked what it has plugged in.
+    var connectedOutputs: [AudioOutputDevices.Device] = []
+
+    func outputs() -> [AudioOutputDevices.Device] { connectedOutputs }
+
     func startWatching(onChange: @escaping () -> Void) {
         self.onChange = onChange
     }
