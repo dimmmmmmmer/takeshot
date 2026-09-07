@@ -80,7 +80,7 @@ struct PreviewView: View {
                         // it draws and hit-tests nothing otherwise
                         ChromaPickOverlay()
                         // …and the same again for the taught REC indicator's box
-                        VisualRecTeachOverlay()
+                        VisualRecTeachOverlay(live: controller.visualRecLive)
                     }
                 }
             }

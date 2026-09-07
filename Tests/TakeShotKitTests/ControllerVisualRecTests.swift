@@ -1,5 +1,6 @@
 import AppKit
 import CaptureCore
+import Combine
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -121,6 +122,113 @@ struct ControllerVisualRecTests {
             #expect(lit != dark, """
                 both pushes read the same frame back — a teach here would
                 learn one picture twice and report itself too alike
+                """)
+        }
+    }
+
+    // MARK: - what a drag costs the window
+
+    /// **A drag publishes ONCE, when it settles — not sixty times a second.**
+    ///
+    /// `visualRecTeaching` is `@Published` on the controller, so every write
+    /// fires `objectWillChange` and re-lays out every view observing it: the
+    /// settings panel, the takes list, the footer. The earlier round debounced
+    /// the SETTINGS write and left the publish, which is why the box and the
+    /// two size sliders still dragged badly (owner: "лагают и ползунки высоты
+    /// и ширины"). Counted rather than timed, for the reason
+    /// `DisplayStageCostTests` counts: a publish is a publish whatever the
+    /// machine, and a wall clock here would go red for unrelated reasons.
+    @Test func aDragOnTheBoxPublishesOnceAndNotPerTick() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await VisualRecControllerProbe.push(controller, dot: true)
+            controller.placeVisualRecRegion(at: VisualRecControllerProbe.dotPoint,
+                                            viewport: VisualRecControllerProbe.viewport)
+
+            var publishes = 0
+            let token = controller.objectWillChange.sink { _ in publishes += 1 }
+            defer { token.cancel() }
+
+            // a drag across the picture, as the gesture delivers it
+            for step in 1...40 {
+                controller.moveVisualRecRegion(
+                    by: CGSize(width: Double(step) * 2, height: 0),
+                    from: VisualRecControllerProbe.dotPoint,
+                    viewport: VisualRecControllerProbe.viewport)
+            }
+            #expect(publishes == 0, """
+                \(publishes) window-wide re-renders for 40 drag events — the \
+                box is being published per tick again
+                """)
+            // …and the box really did move: a draft that changed nothing would
+            // pass the count above for the wrong reason
+            #expect(controller.liveVisualRec.region.centerX
+                        > controller.visualRecTeaching.region.centerX,
+                    "the drag never reached the picture")
+
+            controller.commitVisualRecDraft()
+            #expect(publishes >= 1, "the settled value was never published")
+            #expect(controller.visualRecTeaching.region.centerX
+                        == controller.liveVisualRec.region.centerX,
+                    "the draft was not folded into the published value")
+        }
+    }
+
+    /// The same for the size sliders, which take the other door into the box.
+    @Test func aSizeSliderPublishesOnceAndNotPerTick() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            var publishes = 0
+            let token = controller.objectWillChange.sink { _ in publishes += 1 }
+            defer { token.cancel() }
+
+            for step in 1...30 {
+                controller.visualRecWidth = 0.05 + Double(step) * 0.005
+            }
+            #expect(publishes == 0, """
+                \(publishes) window-wide re-renders for 30 slider ticks
+                """)
+            #expect(controller.visualRecWidth > 0.05,
+                    "the slider never reached the box")
+
+            controller.commitVisualRecDraft()
+            #expect(publishes >= 1)
+        }
+    }
+
+    /// **A click still publishes at once.** A tap is one event and there is
+    /// nothing to coalesce; only the tail of a rubber band that never reached
+    /// the size floor is a draft, because that one arrives per change event.
+    @Test func aTapOnThePicturePublishesStraightAway() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await VisualRecControllerProbe.push(controller, dot: true)
+
+            controller.placeVisualRecRegion(at: VisualRecControllerProbe.dotPoint,
+                                            viewport: VisualRecControllerProbe.viewport)
+
+            #expect(abs(controller.visualRecTeaching.region.centerX - 0.8) < 0.01,
+                    "a tap was left as a draft")
+        }
+    }
+
+    /// A CLICK folds in whatever the drag left on screen rather than throwing
+    /// it away — the rule `setAssist` follows for the aids beside this.
+    @Test func aClickFoldsInTheBoxTheOperatorJustLetGoOf() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await VisualRecControllerProbe.push(controller, dot: true)
+            controller.moveVisualRecRegion(
+                by: CGSize(width: 40, height: 0),
+                from: VisualRecControllerProbe.dotPoint,
+                viewport: VisualRecControllerProbe.viewport)
+            let dragged = controller.liveVisualRec.region.centerX
+
+            // a click on something else entirely
+            controller.forgetVisualRecReferences()
+
+            #expect(controller.visualRecTeaching.region.centerX == dragged, """
+                the click threw away the box the operator had just dragged
                 """)
         }
     }

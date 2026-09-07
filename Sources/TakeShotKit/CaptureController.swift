@@ -320,6 +320,9 @@ final class CaptureController: ObservableObject {
     /// The aids as the preview surfaces are showing them right now, sliders and
     /// zoom gestures included (see `applyAssistPreview` in +Assist).
     let assistLive = AssistLiveState()
+    /// The taught REC box as the picture is showing it, drag by drag — see
+    /// `VisualRecLiveState`, which is `assistLive` one control along.
+    let visualRecLive = VisualRecLiveState()
     /// Debounced fold of a dragged aid value into `assist`.
     var assistPersistTask: Task<Void, Never>?
 

@@ -30,6 +30,12 @@ import SwiftUI
 /// only the first one.
 struct VisualRecRows: View {
     @EnvironmentObject private var controller: CaptureController
+    /// Observed but not read directly: the values come from the controller's
+    /// `liveVisualRec`, and this is the subscription that redraws the size
+    /// readouts while a slider is being dragged (the controller itself does not
+    /// publish per tick — that is the whole point). Removing it freezes the
+    /// percentages mid-gesture. Same shape as `AssistControlRows`.
+    @ObservedObject var live: VisualRecLiveState
 
     /// Shown when the operator has CHOSEN this mode, whether or not the box has
     /// been taught yet.
@@ -43,8 +49,8 @@ struct VisualRecRows: View {
         RecDetectionMode.visualModes
             .contains(controller.settings.capture.detectionMode)
             || controller.visualRecTeachArmed
-            || controller.visualRecTeaching.rolling != nil
-            || controller.visualRecTeaching.idle != nil
+            || controller.liveVisualRec.rolling != nil
+            || controller.liveVisualRec.idle != nil
     }
 
     var body: some View {
@@ -114,9 +120,9 @@ struct VisualRecRows: View {
     private var learnRow: some View {
         HStack(spacing: 8) {
             learnButton(L("visual_rec_learn_rolling"), which: .rolling,
-                        have: controller.visualRecTeaching.rolling != nil)
+                        have: controller.liveVisualRec.rolling != nil)
             learnButton(L("visual_rec_learn_idle"), which: .idle,
-                        have: controller.visualRecTeaching.idle != nil)
+                        have: controller.liveVisualRec.idle != nil)
             Spacer(minLength: 0)
         }
     }
@@ -198,6 +204,10 @@ struct VisualRecSliderRow: View {
 /// mode is off.
 struct VisualRecTeachOverlay: View {
     @EnvironmentObject private var controller: CaptureController
+    /// The subscription that makes the box follow the pointer — see
+    /// `VisualRecRows.live`. Without it the rectangle is redrawn only when the
+    /// controller publishes, which is once per gesture now.
+    @ObservedObject var live: VisualRecLiveState
     /// Which half of the gesture in flight is — see `VisualRecBoxDrag`.
     @State private var drag: VisualRecBoxDrag?
 
@@ -297,7 +307,7 @@ struct VisualRecTeachOverlay: View {
     @ViewBuilder private func box(in viewport: CGSize) -> some View {
         if let placed = controller.liveAssist.placement(
             sourceSize: controller.displaySourceSize(), in: viewport) {
-            let unit = controller.visualRecTeaching.region.normalizedBox
+            let unit = controller.liveVisualRec.region.normalizedBox
             let rect = CGRect(
                 x: placed.rect.minX + unit.x * placed.rect.width,
                 y: placed.rect.minY + unit.y * placed.rect.height,

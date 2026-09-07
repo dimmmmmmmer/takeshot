@@ -88,12 +88,18 @@ extension CapturePipeline {
     ///
     /// **Latest-wins, like `enqueuePreview`** — and it was not, which is what
     /// an operator felt as the app going treacly under a slider (owner: "лагает
-    /// action safe, title safe", "лагают и ползунки высоты и ширины"). A drag
-    /// delivers about sixty changes a second and each one queued a FULL display
-    /// pass: the chroma key, the assist stage and every sink, at the signal's
-    /// raster. Sixty of those cannot finish in a second at UHD, so the queue
-    /// grew for as long as the finger moved and the picture followed a second
-    /// behind it.
+    /// action safe, title safe"). A drag delivers about sixty changes a second
+    /// and each one queued a FULL display pass: the chroma key, the assist
+    /// stage and every sink, at the signal's raster. Sixty of those cannot
+    /// finish in a second at UHD, so the queue grew for as long as the finger
+    /// moved and the picture followed a second behind it.
+    ///
+    /// The REC-box sliders the same report named ("лагают и ползунки высоты и
+    /// ширины") were cited here and do not come through this door at all — the
+    /// box is not an aid and never reaches the assist stage. What was costing
+    /// them is `VisualRecLiveState`, one publish per gesture instead of one per
+    /// tick; naming them here made this look like their fix and left the real
+    /// one unwritten for a round.
     ///
     /// Dropping the passes in between is safe here in a way it would not be for
     /// a FRAME: a redraw carries no picture of its own — it re-publishes

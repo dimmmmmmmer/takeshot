@@ -38,6 +38,9 @@ extension CaptureController {
         // The pipeline gets it AT ONCE — that is what makes the box follow the
         // pointer, and it is one struct copy onto a queue.
         pipeline.setVisualRec(visualRecTeaching)
+        // a write from anywhere else supersedes a draft the debounce has not
+        // folded in yet — same rule, and the same reason, as `applyAssistChange`
+        visualRecLive.settle(visualRecTeaching)
         // The settings write is DEBOUNCED, on the same 400 ms the volume slider
         // and the DIM hold already use and for exactly the same reason: a
         // settings write fans out through `applySettingsChange` and re-renders
@@ -50,6 +53,60 @@ extension CaptureController {
             guard !Task.isCancelled, let self else { return }
             self.persistVisualRec()
         }
+    }
+
+    /// The teaching as the picture is showing it: the draft while a drag or a
+    /// slider is in flight, the published value otherwise.
+    ///
+    /// Every reader takes this rather than `visualRecTeaching` — the overlay
+    /// that draws the box, the rows that read its size back, and the hit test
+    /// that decides whether a press lands inside it. A reader that took the
+    /// published value would be a frame behind the pointer, which for the hit
+    /// test means the wrong half of the gesture.
+    var liveVisualRec: VisualRecTeaching {
+        visualRecLive.hasDraft ? visualRecLive.teaching : visualRecTeaching
+    }
+
+    /// Change the teaching from a DRAG: on screen and in the pipeline now,
+    /// published once the gesture settles.
+    ///
+    /// The published write is what costs — it re-lays out every view observing
+    /// the controller — so it happens once per gesture instead of once per
+    /// tick. Same shape as `applyAssistPreview`, which is the control beside
+    /// this one.
+    func applyVisualRecPreview(_ change: (inout VisualRecTeaching) -> Void) {
+        let current = liveVisualRec
+        var draft = current
+        change(&draft)
+        // an unchanged value must not restart the debounce: a slider held at
+        // its limit and a drag that has stopped moving are both this
+        guard draft != current else { return }
+        visualRecLive.preview(draft)
+        pipeline.setVisualRec(draft)
+        visualRecPersistTask?.cancel()
+        visualRecPersistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            self.commitVisualRecDraft()
+        }
+    }
+
+    /// Fold the draft into the published state — one re-render per gesture.
+    func commitVisualRecDraft() {
+        guard visualRecLive.hasDraft else { return }
+        // didSet settles the draft, pushes the pipeline and persists
+        visualRecTeaching = visualRecLive.teaching
+    }
+
+    /// Change the teaching from a CLICK (a switch, a capture, a reset):
+    /// published at once, but a dragged value still on screen is folded in
+    /// first — otherwise the click would throw away the box the operator has
+    /// just let go of.
+    func setVisualRec(_ change: (inout VisualRecTeaching) -> Void) {
+        commitVisualRecDraft()
+        var value = visualRecTeaching
+        change(&value)
+        visualRecTeaching = value
     }
 
     // MARK: - the switch and the dials
@@ -71,9 +128,7 @@ extension CaptureController {
     var visualRecOn: Bool {
         get { visualRecTeaching.isOn }
         set {
-            var teaching = visualRecTeaching
-            teaching.isOn = newValue && teaching.isTaught
-            visualRecTeaching = teaching
+            setVisualRec { $0.isOn = newValue && $0.isTaught }
             // teaching mode is for setting the box up; leaving the crosshair and
             // the rectangle on the picture once the trigger is live reads as a
             // stuck mode, and the box is the last thing an operator wants over
@@ -83,29 +138,29 @@ extension CaptureController {
     }
 
     var visualRecWidth: Double {
-        get { visualRecTeaching.region.width }
+        get { liveVisualRec.region.width }
         set {
-            var teaching = visualRecTeaching
-            teaching.region.width = newValue
-            teaching.clamp()
-            visualRecTeaching = teaching
+            applyVisualRecPreview {
+                $0.region.width = newValue
+                $0.clamp()
+            }
         }
     }
 
     var visualRecHeight: Double {
-        get { visualRecTeaching.region.height }
+        get { liveVisualRec.region.height }
         set {
-            var teaching = visualRecTeaching
-            teaching.region.height = newValue
-            teaching.clamp()
-            visualRecTeaching = teaching
+            applyVisualRecPreview {
+                $0.region.height = newValue
+                $0.clamp()
+            }
         }
     }
 
     /// The margin, for the READOUT only — it is derived from the taught
     /// separation now and there is nothing to set. See
     /// `VisualRecTeaching.margin`.
-    var visualRecMargin: Double { visualRecTeaching.margin }
+    var visualRecMargin: Double { liveVisualRec.margin }
 
     // MARK: - marking the box
 
@@ -139,7 +194,7 @@ extension CaptureController {
             of: point, sourceSize: displaySourceSize(), in: viewport) else {
             return false
         }
-        let box = visualRecTeaching.region.normalizedBox
+        let box = liveVisualRec.region.normalizedBox
         return Double(fraction.x) >= box.x && Double(fraction.x) <= box.x + box.width
             && Double(fraction.y) >= box.y && Double(fraction.y) <= box.y + box.height
     }
@@ -161,11 +216,11 @@ extension CaptureController {
                 of: CGPoint(x: start.x + translation.width,
                             y: start.y + translation.height),
                 sourceSize: source, in: viewport) else { return }
-        var teaching = visualRecTeaching
-        teaching.region.centerX += Double(to.x - from.x)
-        teaching.region.centerY += Double(to.y - from.y)
-        teaching.clamp()
-        visualRecTeaching = teaching
+        applyVisualRecPreview {
+            $0.region.centerX += Double(to.x - from.x)
+            $0.region.centerY += Double(to.y - from.y)
+            $0.clamp()
+        }
     }
 
     /// Draw the box between two points on the picture.
@@ -190,26 +245,33 @@ extension CaptureController {
         let height = abs(Double(b.y - a.y))
         guard width >= VisualRecRegion.minSize,
               height >= VisualRecRegion.minSize else {
-            placeVisualRecRegion(at: end, viewport: viewport)
+            placeVisualRecRegion(at: end, viewport: viewport, dragging: true)
             return
         }
-        var teaching = visualRecTeaching
-        teaching.region.centerX = Double(a.x + b.x) / 2
-        teaching.region.centerY = Double(a.y + b.y) / 2
-        teaching.region.width = width
-        teaching.region.height = height
-        teaching.clamp()
-        visualRecTeaching = teaching
+        applyVisualRecPreview {
+            $0.region.centerX = Double(a.x + b.x) / 2
+            $0.region.centerY = Double(a.y + b.y) / 2
+            $0.region.width = width
+            $0.region.height = height
+            $0.clamp()
+        }
     }
 
-    func placeVisualRecRegion(at point: CGPoint, viewport: CGSize) {
+    /// `dragging` is what tells a TAP from the tail of a rubber band that never
+    /// reached the size floor. A tap is a click and publishes at once — it is
+    /// one event and there is nothing to coalesce — while the band calls this
+    /// on every change event of the stroke and must stay a draft until the
+    /// operator lets go (see `applyVisualRecPreview`).
+    func placeVisualRecRegion(at point: CGPoint, viewport: CGSize,
+                              dragging: Bool = false) {
         guard let fraction = liveAssist.imageFraction(
             of: point, sourceSize: displaySourceSize(), in: viewport) else { return }
-        var teaching = visualRecTeaching
-        teaching.region.centerX = Double(fraction.x)
-        teaching.region.centerY = Double(fraction.y)
-        teaching.clamp()
-        visualRecTeaching = teaching
+        let move: (inout VisualRecTeaching) -> Void = {
+            $0.region.centerX = Double(fraction.x)
+            $0.region.centerY = Double(fraction.y)
+            $0.clamp()
+        }
+        if dragging { applyVisualRecPreview(move) } else { setVisualRec(move) }
     }
 
     // MARK: - capturing the two references
@@ -225,13 +287,14 @@ extension CaptureController {
             lastError = L("visual_rec_learn_failed")
             return
         }
-        var teaching = visualRecTeaching
-        switch which {
-        case .rolling: teaching.rolling = signature
-        case .idle: teaching.idle = signature
+        setVisualRec {
+            switch which {
+            case .rolling: $0.rolling = signature
+            case .idle: $0.idle = signature
+            }
+            $0.isOn = false
         }
-        teaching.isOn = false
-        visualRecTeaching = teaching
+        let teaching = visualRecTeaching
         lastNotice = teaching.isTaught
             ? L("visual_rec_taught", visualRecSeparationText ?? "")
             : L("visual_rec_learned_one")
@@ -240,9 +303,7 @@ extension CaptureController {
     /// Forget both references, keeping the box and the margin — what a re-teach
     /// is after the camera's overlay changes.
     func forgetVisualRecReferences() {
-        var teaching = visualRecTeaching
-        teaching.forgetReferences()
-        visualRecTeaching = teaching
+        setVisualRec { $0.forgetReferences() }
     }
 
     // MARK: - what the panel reads back

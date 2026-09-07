@@ -46,14 +46,14 @@ struct ViewVisualRecTests {
             let form = ViewBudget.settingsFormWidth
 
             // 1. untouched: the switch and the way in, nothing else
-            var minimum = probe.minimumWidths { VisualRecRows() }
+            var minimum = probe.minimumWidths { VisualRecRows(live: probe.controller.visualRecLive) }
             #expect(minimum.ru <= form,
                     "the resting switch wants \(minimum.ru)pt of \(form) in Russian")
             #expect(minimum.en <= form)
 
             // 2. teaching mode armed: the box controls appear
             probe.controller.visualRecTeachArmed = true
-            minimum = probe.minimumWidths { VisualRecRows() }
+            minimum = probe.minimumWidths { VisualRecRows(live: probe.controller.visualRecLive) }
             #expect(minimum.ru <= form,
                     "teaching mode wants \(minimum.ru)pt of \(form) in Russian")
             #expect(minimum.en <= form)
@@ -62,7 +62,7 @@ struct ViewVisualRecTests {
             probe.controller.visualRecTeachArmed = false
             taught(probe, on: true)
             probe.controller.visualRecReading = .rolling
-            minimum = probe.minimumWidths { VisualRecRows() }
+            minimum = probe.minimumWidths { VisualRecRows(live: probe.controller.visualRecLive) }
             #expect(minimum.ru <= form,
                     "the armed rows want \(minimum.ru)pt of \(form) in Russian")
             #expect(minimum.en <= form)
@@ -101,12 +101,12 @@ struct ViewVisualRecTests {
             // the box is taught — with the teaching row inside the expansion.
             // Choosing the mode is what opens them now, and the mode can be
             // chosen from a fresh install.
-            let idle: CGSize = probe.fittingSize(VisualRecRows())
+            let idle: CGSize = probe.fittingSize(VisualRecRows(live: probe.controller.visualRecLive))
             #expect(idle.height == 0,
                     "the rows are offered under a mode that does not watch the picture")
 
             probe.controller.settings.capture.detectionMode = .visual
-            let fresh: CGSize = probe.fittingSize(VisualRecRows())
+            let fresh: CGSize = probe.fittingSize(VisualRecRows(live: probe.controller.visualRecLive))
             let door: CGSize = probe.fittingSize(VisualRecTeachRow())
             #expect(door.height > 0, "the teach row renders as nothing")
             #expect(fresh.height >= door.height - 1,
@@ -123,7 +123,7 @@ struct ViewVisualRecTests {
             probe.controller.toggleVisualRecTeach()
             #expect(probe.controller.visualRecTeachArmed,
                     "the teach button did not arm teaching mode")
-            #expect(probe.fittingSize(VisualRecRows()).height >= fresh.height,
+            #expect(probe.fittingSize(VisualRecRows(live: probe.controller.visualRecLive)).height >= fresh.height,
                     "arming teaching took rows away")
         }
     }
@@ -133,10 +133,10 @@ struct ViewVisualRecTests {
     /// a width check would never catch.
     @Test func theRowsAppearOnlyOnceSomethingIsTaught() async throws {
         try await ViewProbe.run { probe in
-            let resting = probe.fittingSizes { VisualRecRows() }
+            let resting = probe.fittingSizes { VisualRecRows(live: probe.controller.visualRecLive) }
             taught(probe, on: true)
             probe.controller.visualRecReading = .rolling
-            let open = probe.fittingSizes { VisualRecRows() }
+            let open = probe.fittingSizes { VisualRecRows(live: probe.controller.visualRecLive) }
             #expect(open.en.height > resting.en.height,
                     "the rows never opened: \(resting) → \(open)")
             #expect(open.ru.height > resting.ru.height,
@@ -173,7 +173,9 @@ struct ViewVisualRecTests {
             for language in [AppLanguage.english, .russian] {
                 let size = ViewRender.withLanguage(language) {
                     ViewRender.laidOutSize(
-                        probe.hosted(Color.clear.overlay { VisualRecTeachOverlay() }),
+                        probe.hosted(Color.clear.overlay {
+                            VisualRecTeachOverlay(live: probe.controller.visualRecLive)
+                        }),
                         in: base)
                 }
                 #expect(size == base,
@@ -187,7 +189,7 @@ struct ViewVisualRecTests {
     @Test func theTeachOverlayIsEmptyWhenDisarmed() async throws {
         try await ViewProbe.run { probe in
             probe.controller.visualRecTeachArmed = false
-            let size = probe.fittingSize(VisualRecTeachOverlay())
+            let size = probe.fittingSize(VisualRecTeachOverlay(live: probe.controller.visualRecLive))
             #expect(size == .zero, "the disarmed overlay measured \(size)")
         }
     }

@@ -233,7 +233,7 @@ struct SettingsView: View {
                 // shares its numbers with — it has no debounce of its own (see
                 // RecDetector+Visual) and it is a switch orthogonal to the mode
                 // above, not a fifth entry in it.
-                VisualRecRows()
+                VisualRecRows(live: controller.visualRecLive)
             }
             OffloadSettingsSection()
             RemoteSettingsSection()
