@@ -217,7 +217,7 @@ enum RemoteAddress {
         // Shared with the other one-shot decodes: this is drawn once when the
         // remote's row appears, and a context of its own is 2.4 ms and a set
         // of kernels nothing else will use. See `DecodeContext`.
-        guard let cgImage = DecodeContext.shared.createCGImage(
+        guard let cgImage = DecodeContext.shared.context.createCGImage(
             scaled, from: scaled.extent)
         else { return nil }
         return NSImage(cgImage: cgImage,

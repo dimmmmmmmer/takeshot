@@ -34,7 +34,7 @@ enum CIBufferRender {
         // off the main actor on a one-shot decode, and a CIContext holds
         // caches sized for the work it has seen" — reasonable, and measured,
         // wrong by a factor of ten. See `DecodeContext`.
-        guard let task = try? DecodeContext.shared.startTask(toRender: image,
+        guard let task = try? DecodeContext.shared.context.startTask(toRender: image,
                                                              to: destination),
               (try? task.waitUntilCompleted()) != nil else { return nil }
         return buffer

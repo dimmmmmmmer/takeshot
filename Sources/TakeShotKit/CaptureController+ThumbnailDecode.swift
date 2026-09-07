@@ -110,7 +110,7 @@ extension CaptureController {
         // Shared: a fresh context per thumbnail measured ten times the cost
         // of this one, which on a card of two hundred files is two seconds of
         // a folder scan. See `DecodeContext`.
-        guard let cg = DecodeContext.shared.createCGImage(scaled,
+        guard let cg = DecodeContext.shared.context.createCGImage(scaled,
                                                           from: scaled.extent)
         else { return nil }
         return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))

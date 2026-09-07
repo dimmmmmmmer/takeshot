@@ -26,16 +26,16 @@ import Foundation
 /// player's. Those are hot paths with caches sized for one raster, and putting
 /// them behind one context would make every frame of one wait on a thumbnail
 /// of another.
-enum DecodeContext {
+/// A holder, and the shape is not decoration: `CIContext` is `Sendable` to
+/// this machine's compiler and not to the runner's, so a bare
+/// `static let shared = CIContext(...)` is an ERROR on one and
+/// `nonisolated(unsafe) static let` is an unnecessary-annotation WARNING on the
+/// other — and this project treats a warning as a finding. Conforming a type of
+/// our own says the thing once, in a sentence both toolchains accept, and the
+/// sentence is the one above: Apple documents `CIContext` as thread-safe.
+struct DecodeContext: @unchecked Sendable {
     /// Built on first use, which is the first decode rather than launch.
-    ///
-    /// `nonisolated(unsafe)` because `CIContext` is not marked `Sendable` and
-    /// IS thread-safe — Apple documents it as such, which is the property the
-    /// whole type rests on, and every long-lived context in this app relies on
-    /// the same thing. The runner's toolchain rejects the plain `static let`
-    /// and this machine's compiles it, which is the two-releases-apart gap
-    /// this project already knows about: a strict-concurrency error here is
-    /// CI's to find and it found it.
-    nonisolated(unsafe) static let shared =
-        CIContext(options: [.cacheIntermediates: false])
+    static let shared = DecodeContext()
+
+    let context = CIContext(options: [.cacheIntermediates: false])
 }

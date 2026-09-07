@@ -135,7 +135,7 @@ extension CaptureController {
     private func saveGrab(buffer: CVPixelBuffer) {
         Task.detached(priority: .userInitiated) { [weak self] in
             let png = CapturePipeline.pngData(from: buffer,
-                                              ciContext: DecodeContext.shared)
+                                              ciContext: DecodeContext.shared.context)
             await MainActor.run { [weak self] in
                 self?.saveGrab(png)
             }
