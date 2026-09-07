@@ -52,8 +52,17 @@ struct DisplayStageCostTests {
                 "nothing was ever displayed, so nothing can be redrawn")
 
         let before = pipeline.assistRedrawCount
+        // The display queue is HELD while the ticks are issued, so what is
+        // measured is the gate and not the machine. Without this the bound is
+        // a race: each pass clears the flag as it starts, so a run where the
+        // forty-tick loop is slower than a display pass legitimately costs more
+        // than two — which is what a ThreadSanitizer runner is, and it read 4.
+        // Held, all forty arrive with nothing running: one pass is scheduled,
+        // and the pass that follows can be joined by at most one more.
+        pipeline.displayQueue.suspend()
         // a drag across a slider's range, as the UI delivers it
         for _ in 0..<40 { pipeline.redrawDisplayStage() }
+        pipeline.displayQueue.resume()
         #expect(await TestWait.becomesTrue {
             pipeline.assistRedrawCount > before
         }, "the drag redrew nothing at all")
