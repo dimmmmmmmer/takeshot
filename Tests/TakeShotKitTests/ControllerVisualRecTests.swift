@@ -29,6 +29,7 @@ enum VisualRecControllerProbe {
                                   y: dotY * viewport.height)
 
     static func push(_ controller: CaptureController, dot: Bool) async {
+        let passesBefore = controller.pipeline.displayStagePasses
         let buffer = MediaFixtures.pixelBuffer(level: 0, width: width,
                                                height: height)
         CVPixelBufferLockBaseAddress(buffer, [])
@@ -56,9 +57,22 @@ enum VisualRecControllerProbe {
         controller.pipeline.handleFrame(
             pixelBuffer: buffer, pts: CMTime(value: 40, timescale: 1000),
             timecode: nil, vancTrigger: nil)
-        await ControllerWait.until {
-            controller.pipeline.captureVisualRecSignature() != nil
-        }
+        // Waited on THIS frame reaching the display stage, not on "a signature
+        // exists" — which is already true from the push before it. The teach
+        // sequence pushes the dot, learns `.rolling`, pushes the dark frame and
+        // learns `.idle`, so a wait the first push already satisfies lets the
+        // second capture read the dot back: two references that are identical,
+        // a separation of 0.0 codes, and a trigger the bundle reports as "too
+        // alike". Never on the development machine, once on the CI runner —
+        // which is what a wait that is not waiting for anything looks like.
+        //
+        // The pass counter and not the signature itself: two pushes can be
+        // asked for whose box content is identical (a region placed off the
+        // dot), and "wait until the signature CHANGES" would then wait for
+        // something that is never going to happen.
+        #expect(await ControllerWait.until {
+            controller.pipeline.displayStagePasses > passesBefore
+        }, "the pushed frame never reached the display stage")
     }
 
     /// The box on the dot, both references captured — the state every test past
@@ -78,6 +92,38 @@ enum VisualRecControllerProbe {
 /// diagnostics bundle says are `ControllerVisualRecReportTests`.
 @MainActor
 struct ControllerVisualRecTests {
+    // MARK: - the probe's own contract
+
+    /// **A push does not return until its own frame is the one on the pipeline.**
+    ///
+    /// The helper every test in this file starts from, asserted on directly:
+    /// what the reading is taken from has to be the frame that was just pushed,
+    /// or a teach captures the previous one and the two references come out
+    /// identical. The failure that costs is silent — a separation of 0.0 reads
+    /// as "too alike", which looks like a fixture problem rather than a test
+    /// that raced.
+    @Test func eachPushedFrameIsTheOneTheReadingComesFrom() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            controller.visualRecTeaching.region = VisualRecRegion(
+                centerX: VisualRecControllerProbe.dotX,
+                centerY: VisualRecControllerProbe.dotY)
+
+            await VisualRecControllerProbe.push(controller, dot: true)
+            let lit = try #require(controller.pipeline.captureVisualRecSignature())
+            let afterFirst = controller.pipeline.displayStagePasses
+
+            await VisualRecControllerProbe.push(controller, dot: false)
+            let dark = try #require(controller.pipeline.captureVisualRecSignature())
+
+            #expect(controller.pipeline.displayStagePasses > afterFirst,
+                    "the second push returned without its frame being displayed")
+            #expect(lit != dark, """
+                both pushes read the same frame back — a teach here would learn                 one picture twice and report itself too alike
+                """)
+        }
+    }
+
     // MARK: - marking the box
 
     /// A click on the picture puts the box's centre on the pixel under the
