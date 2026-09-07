@@ -193,6 +193,14 @@ extension CaptureController {
     /// And if the card is still in the reader it is offered NOW. An "ask again"
     /// that waits for the card to be unplugged and put back is indistinguishable
     /// from having done nothing at all.
+    /// Empty the whole ledger, and the session's copy of it with it — a card
+    /// still in the reader is offered again at once, which is the point.
+    func forgetAllOffloadedCards() {
+        offloadedCards.forgetAll()
+        ignoredCardKeys.removeAll()
+        for candidate in seenCards.values { considerCard(candidate) }
+    }
+
     func forgetOffloadedCard(_ key: String) {
         offloadedCards.forget(key)
         ignoredCardKeys.remove(key)

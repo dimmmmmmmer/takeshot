@@ -24,15 +24,32 @@ struct TakeListView: View {
 
     var body: some View {
         sections
-            .focusable()
-            .focused($focused)
+            // **The focus target sits BEHIND the panel, not around it.**
+            //
+            // `.focusable()` applied to the sections themselves put a
+            // full-size focus view OVER the list and the grid, and a scroll
+            // wheel is an AppKit responder-chain event: it goes to whatever is
+            // under the pointer. Clicks still worked — SwiftUI routes those
+            // through its own gesture system — so the panel looked fine and
+            // simply would not scroll (owner: "скролл колесом мышки почему то
+            // не работает ни на тейках ни на другом контенте… в настройках
+            // общих работало").
+            //
+            // A clear background is focusable in exactly the same way, takes
+            // the same Delete command, and is underneath the scroll views
+            // instead of on top of them.
+            .background {
+                Color.clear
+                    .focusable()
+                    .focused($focused)
+                    .onDeleteCommand {
+                        guard !controller.selectedInOrder.isEmpty else { return }
+                        controller.trashPromptOpen = true
+                    }
+            }
             // clicking a tile is the operator saying "I am working in the panel
             // now"; Delete has to land here without a second click somewhere
             .onChange(of: controller.selectedItems) { _, _ in focused = true }
-            .onDeleteCommand {
-                guard !controller.selectedInOrder.isEmpty else { return }
-                controller.trashPromptOpen = true
-            }
             // .visible, not .automatic: the count IS the dialog — an operator
             // has to see whether Delete is about to take one clip or fifty.
             // Counted off `selectedInOrder`, which is also what `trashSelection`

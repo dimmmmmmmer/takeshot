@@ -70,12 +70,19 @@ struct OffloadHistoryList: View {
 
     // MARK: - what a row says
 
-    /// `CARD_A001 → DAILIES_SSD_1` for one copy, `→ 3 copies` for several. The
-    /// name of the single destination is worth more than the number 1, and four
-    /// destination names on one line is worth less than the count.
+    /// `CARD_A001 → /Volumes/SSD_1/DAY_03` for one copy, `→ 3 copies` for
+    /// several.
+    ///
+    /// The PATH and not the last component (owner: "recent offloads должен
+    /// показывать paths, а не имена скопированных папок"). Two shuttle drives
+    /// with a `DAILIES` folder each produce two rows that read identically, and
+    /// the question this log answers — "have I copied this card, and where to?"
+    /// — is exactly the one a folder name cannot. Several destinations still
+    /// collapse to a count: four paths on one line is worth less than the
+    /// number, and the run's own summary beside the copy lists them.
     static func headline(_ run: OffloadRunRecord) -> String {
         let target = run.destinationPaths.count == 1
-            ? run.destinationURLs[0].lastPathComponent
+            ? run.destinationURLs[0].path
             : L("offload_history_copies", run.destinationPaths.count)
         return "\(run.sourceName) → \(target)"
     }

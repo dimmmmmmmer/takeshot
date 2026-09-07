@@ -115,9 +115,22 @@ enum OffloadVolumeFacts {
         return Capacity(total: Int64(total), free: Int64(free))
     }
 
-    /// What the tile leads with. The mount name for a volume, the folder name
-    /// otherwise — and the path itself for a root, which has no last component.
+    /// What the tile leads with: the DISK.
+    ///
+    /// It used to be the last path component, which for
+    /// `/Volumes/punkt_backup2_main/yep` is "yep" — the folder, which the path
+    /// under it already says (owner: "название источника должно быть названием
+    /// диска, а не папки; имя папки мы итак видим в path"). What an operator
+    /// needs to read off a destination at a glance is WHICH DRIVE, because that
+    /// is the thing they plug in, unplug and hand over.
+    ///
+    /// Falls back to the last component for a path whose volume cannot be
+    /// named, and to the path itself for a root, which has no last component.
     static func name(of url: URL) -> String {
+        if let values = try? url.resourceValues(forKeys: [.volumeNameKey]),
+           let volume = values.volumeName, !volume.isEmpty {
+            return volume
+        }
         let last = url.lastPathComponent
         return last.isEmpty || last == "/" ? url.path : last
     }

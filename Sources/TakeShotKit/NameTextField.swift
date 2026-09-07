@@ -50,10 +50,16 @@ struct NameTextField: NSViewRepresentable {
         view.delegate = context.coordinator
         view.target = context.coordinator
         view.action = #selector(Coordinator.submitted(_:))
+        // `isBezeled` and `isBordered` are the same switch seen from two
+        // sides in AppKit: setting the second clears the first, so a field
+        // asked for both comes out with neither.
         view.isBezeled = bezeled
-        view.bezelStyle = .roundedBezel
+        if bezeled {
+            view.bezelStyle = .roundedBezel
+        } else {
+            view.isBordered = false
+        }
         view.drawsBackground = bezeled
-        view.isBordered = bezeled
         view.alignment = alignment
         view.isEditable = true
         view.isSelectable = true

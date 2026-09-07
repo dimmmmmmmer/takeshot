@@ -51,6 +51,10 @@ struct NDISettingsSection: View {
     /// is the runtime's, so this field is the project and the camera.
     private var nameRow: some View {
         LabeledContent(L("ndi_source_name")) {
+            // Plain and right-aligned, like every other value in this window
+            // (owner: "так же как и название проекта – бокс для названия камеры
+            // тут не нужен"). A rounded border here made one value in the
+            // section look like a control somebody bolted on.
             TextField("", text: Binding(
                 get: { controller.settings.ndi.sourceName
                     ?? controller.settings.ndi.sourceNameEffective(
@@ -59,9 +63,9 @@ struct NDISettingsSection: View {
                 // the placeholder above is already showing.
                 set: { controller.settings.ndi.sourceName =
                     $0.isEmpty ? nil : $0 }))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 180)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 

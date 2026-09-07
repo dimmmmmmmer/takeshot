@@ -180,27 +180,59 @@ struct OffloadDestinationSection: View {
         }
     }
 
+    /// One destination.
+    ///
+    /// **Choose comes last inside the tile, and Remove is outside it** (owner:
+    /// "по логике должно быть choose после остальных кнопок" and "кнопка
+    /// удаления должна быть по логике не внутри него а правее например и
+    /// красным выделена"). The two belong to different things: Choose and Open
+    /// act ON this destination and live on its plate; Remove acts on the LIST
+    /// and takes the plate away with it, so it sits beside the plate and wears
+    /// the colour destructive actions wear everywhere else in the app.
+    ///
+    /// Everything the row can do is also under the secondary click, because a
+    /// row with three affordances spread across two containers is one an
+    /// operator should be able to right-click instead of aim at.
     private func destinationTile(_ row: OffloadSheetModel.Row) -> some View {
-        OffloadPathTile(icon: "externaldrive",
-                        title: OffloadVolumeFacts.name(of: row.url),
-                        path: row.url.path,
-                        detail: destinationDetail(row),
-                        finderTarget: model.finderTarget(for: row)) {
-            Button(L("choose")) {
-                if let url = pickDestination() {
-                    model.setDestination(url, at: row.id)
-                }
+        HStack(spacing: OffloadChrome.rowSpacing) {
+            OffloadPathTile(icon: "externaldrive",
+                            title: OffloadVolumeFacts.name(of: row.url),
+                            path: row.url.path,
+                            detail: destinationDetail(row),
+                            finderTarget: model.finderTarget(for: row)) {
+                Button(L("choose")) { chooseDestination(row) }
+                    .disabled(controller.isOffloadRunning)
             }
-            .disabled(controller.isOffloadRunning)
+            .contextMenu { destinationMenu(row) }
             Button {
                 model.removeDestination(row.id)
             } label: {
                 Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.red)
             .disabled(controller.isOffloadRunning)
             .help(L("offload_remove_dest"))
         }
+    }
+
+    @ViewBuilder
+    private func destinationMenu(_ row: OffloadSheetModel.Row) -> some View {
+        Button(L("choose")) { chooseDestination(row) }
+            .disabled(controller.isOffloadRunning)
+        Button(L("offload_open_dest")) {
+            FinderOpen.folder(model.finderTarget(for: row))
+        }
+        Divider()
+        Button(L("offload_remove_dest"), role: .destructive) {
+            model.removeDestination(row.id)
+        }
+        .disabled(controller.isOffloadRunning)
+    }
+
+    private func chooseDestination(_ row: OffloadSheetModel.Row) {
+        guard let url = pickDestination() else { return }
+        model.setDestination(url, at: row.id)
     }
 
     /// Where this copy lands and whether the disk can hold it — the two facts the

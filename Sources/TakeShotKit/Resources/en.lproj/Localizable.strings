@@ -837,6 +837,8 @@
 "offer_mounted_cards_hint" = "A card plugged in raises a dismissible line in the takes panel. Nothing is copied until you start it.";
 /* the cards the app has stopped asking about, listed on the offload sheet */
 "cards_remembered" = "Cards already dealt with";
+"cards_forget_all" = "Clear";
+"cards_forget_all_help" = "Forget every card on this list. Any of them still in a reader is offered again at once.";
 "cards_forget" = "Ask again";
 "cards_kind_offloaded" = "offloaded";
 "cards_kind_never" = "never ask";

@@ -91,14 +91,24 @@ struct RemoteSettingsSection: View {
     /// Languages` exists to catch. Nothing is lost by hiding it: the section
     /// header already says Remote, the segments are the page NAMES, and the
     /// address row directly beneath is the answer to "for what".
+    /// **Centred on the row** (owner: "почему ремоут/скрипт/лайв все еще не
+    /// центровано по окну"). A label-less segmented control in a grouped Form
+    /// takes its intrinsic width and sits against the leading edge, so it read
+    /// as a control that had been pushed aside rather than one that owns its
+    /// row. The spacers are what centre it; it still grows if a language needs
+    /// the width.
     private var pageRow: some View {
-        Picker(L("remote_page"), selection: $link) {
-            ForEach(RemoteLink.allCases) { target in
-                Text(L(target.labelKey)).tag(target)
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Picker(L("remote_page"), selection: $link) {
+                ForEach(RemoteLink.allCases) { target in
+                    Text(L(target.labelKey)).tag(target)
+                }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Spacer(minLength: 0)
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
     }
 
     /// Which line is the one being handed out, given what was picked and what
@@ -173,6 +183,14 @@ struct RemoteSettingsSection: View {
             }
         }
         .buttonStyle(.link)
+        // **A double click opens it** (owner: "двойной клик по адресу http
+        // должен открывать его в браузере"). Simultaneous rather than
+        // instead-of: the first click of the pair still copies and still points
+        // the QR at this line, which is what a single click means, so the two
+        // gestures agree instead of the second one having to undo the first.
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            RemoteHandout.open(url)
+        })
         .help(L("remote_address_copy"))
         .contextMenu {
             Button(L("remote_address_copy")) {

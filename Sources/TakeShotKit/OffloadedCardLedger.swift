@@ -113,13 +113,28 @@ final class OffloadedCardLedger: ObservableObject {
     /// decision taken by one click is not a decision an app should be able to
     /// impose.
     ///
-    /// One card at a time rather than a "forget everything" button (owner item
-    /// 18): the operator who wants to be asked about one disk again should not
-    /// have to re-answer for every card of the shoot to get it. Nothing calls
-    /// this directly — `CaptureController.forgetOffloadedCard` does, because
-    /// the session's own copy of the decision has to go with it.
+    /// One card at a time: the operator who wants to be asked about one disk
+    /// again should not have to re-answer for every card of the shoot to get
+    /// it. Nothing calls this directly — `CaptureController.forgetOffloadedCard`
+    /// does, because the session's own copy of the decision has to go with it.
     func forget(_ key: String) {
         cards.removeAll { $0.key == key }
+        save()
+    }
+
+    /// …and all of them, which used to be refused on the strength of the
+    /// sentence above (owner item 18). The argument was that a "forget
+    /// everything" button makes the operator re-answer for the whole shoot to
+    /// get one card back — true, and it is an argument for keeping the per-card
+    /// one, not against having both. A list that can only ever grow is its own
+    /// problem: at the end of a job every card on it belongs to a job that is
+    /// over (owner: "менюшка оффлоада карт оставляет все старые данные – это
+    /// хорошо, но возможность почистить было бы классно иметь").
+    ///
+    /// Nothing calls this directly either, for the same reason.
+    func forgetAll() {
+        guard !cards.isEmpty else { return }
+        cards.removeAll()
         save()
     }
 

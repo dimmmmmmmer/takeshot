@@ -198,15 +198,18 @@ import Testing
             let store = controller.offloadHistory
             store.record(self.report(destinations: ["/Volumes/SSD1/CARD_A001"]))
             let single = try #require(store.runs.first)
+            // The PATH and not the folder: two shuttle drives with a
+            // `CARD_A001` folder each produced two rows that read identically,
+            // and "where did this card go" is the question this log answers.
             #expect(OffloadHistoryList.headline(single)
-                == "CARD_A001 → CARD_A001")
+                == "CARD_A001 → /Volumes/SSD1/CARD_A001")
 
             store.record(self.report(destinations: ["/Volumes/SSD1/CARD_A001",
                                                     "/Volumes/SSD2/CARD_A001",
                                                     "/Volumes/SSD3/CARD_A001"]))
             let several = try #require(store.runs.first)
-            // Three names on one line is worth less than the count; one name is
-            // worth more than the number 1.
+            // Three paths on one line is worth less than the count; one path
+            // is worth more than the number 1.
             #expect(OffloadHistoryList.headline(several)
                 .hasPrefix("CARD_A001 → "))
             #expect(OffloadHistoryList.headline(several).contains("3"))

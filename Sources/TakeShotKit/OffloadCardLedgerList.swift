@@ -43,8 +43,20 @@ struct OffloadCardLedgerList: View {
     var body: some View {
         if !ledger.cards.isEmpty {
             VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
-                Text(L("cards_remembered"))
-                    .offloadText(.section)
+                HStack {
+                    Text(L("cards_remembered"))
+                        .offloadText(.section)
+                    Spacer()
+                    // The whole list, for the end of a job when every card on
+                    // it belongs to one that is over. The per-row ⊖ stays: it
+                    // is the one an operator uses mid-shoot, and this is the
+                    // one they use at wrap.
+                    Button(L("cards_forget_all")) {
+                        controller.forgetAllOffloadedCards()
+                    }
+                    .buttonStyle(.link)
+                    .help(L("cards_forget_all_help"))
+                }
                 ForEach(rows) { card in
                     row(card)
                 }
