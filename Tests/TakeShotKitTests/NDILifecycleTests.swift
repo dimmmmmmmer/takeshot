@@ -183,7 +183,13 @@ struct NDILifecycleTests {
             #expect(await ControllerWait.until { log.names.count == 2 },
                     "the settled name was never announced")
             #expect(log.names.last == "Client feed")
-            #expect(log.all.first?.isStopped == true,
+            // WAITED for, not asserted at the instant the new name appears:
+            // `NDIVideoMirror.stop()` hands the sender's own queue the job, so
+            // the old source going away and the new one being created have no
+            // ordering between them. Under a loaded battery the create lands
+            // first, which is how this read as "the old source was left on the
+            // network" once in a full run and never once on its own.
+            #expect(await ControllerWait.until { log.all.first?.isStopped == true },
                     "the old source was left on the network")
             // ANNOUNCED, not sending: the source is on the network and
             // nobody has opened it. "Sending" one line after
