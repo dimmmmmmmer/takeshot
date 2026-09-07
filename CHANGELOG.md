@@ -108,9 +108,13 @@ Gatekeeper's refusal instead of the app.
   on nothing in particular, while dimming the monitor from behind another
   application is exactly the thing you want a menu bar for.
 - **A clean feed**, on the button at the bottom-left of the player and on ⌃U:
-  every overlay the app draws over the picture goes away — badges, timecode,
-  transport, scopes — and comes back the same way. For showing the frame to a
-  director without the app around it.
+  everything the app draws over the picture goes away — badges, timecode, the
+  transport bar, the scopes, the audio panel, the REC mark and the red
+  recording border — and comes back the same way. For showing the frame to a
+  director without the app around it. Two things stay: the sticky alarm, which
+  a display mode may never hide, and the button itself at a quarter opacity, so
+  there is always a visible way back. The bottom bar is not part of the player,
+  so the REC button there still shows a white square while a take rolls.
 - **Framelines and the desqueeze take a number you type.** The lists cover the
   aspects most shows are shot in and the squeeze factors most anamorphics have,
   and a show that is not one of them — 1.66, 2.76, a 1.25x front element — had
@@ -118,14 +122,28 @@ Gatekeeper's refusal instead of the app.
   way it is engraved on the lens; a number nothing can be drawn at is refused
   and the box snaps back.
 - **The SRT and NDI badges sit beside the timecode** at the top of the player
-  instead of in the bottom bar, which had no room left in it, and they stay
-  where they are when you switch a stream off — the icon changes to say so
-  rather than the badge disappearing and moving everything else along.
+  instead of in the bottom bar, which had no room left in it. Each transport
+  keeps its own name and its own place whatever it is doing: switch one off and
+  its icon changes to a crossed-out antenna instead of the badge shrinking and
+  moving everything else along.
 - **Dragging in the assist panel keeps up with your hand.** The safe-area
-  sliders, the frameline and the record-trigger box each queued a fresh redraw
-  of the whole preview per pointer tick, so the thing you were dragging fell
-  behind your hand on a 4K signal. The redraws coalesce now: the last value you
-  dragged to is the one drawn, and it is drawn once.
+  sliders and the frameline each queued a fresh redraw of the whole preview per
+  pointer tick, so the thing you were dragging fell behind your hand on a 4K
+  signal. The redraws coalesce now: the last value you dragged to is the one
+  drawn, and it is drawn once.
+- **So does the record-trigger box.** It had a second cost of its own — every
+  drag event and every width/height tick was published to the whole window, so
+  the settings panel, the takes list and the footer were rebuilt sixty times a
+  second while you moved a rectangle. The box now reaches the picture at once
+  and the window once, when you let go.
+- **The scopes stop dropping a frame on every update.** The measurement of what
+  the picture costs was right and unchanged — the analysis fits its window with
+  room, at UHD as at 1080p — but the DRAWING was not: the vectorscope and the
+  histogram were built out of dozens of small pieces that were laid out again
+  on every update, twelve and a half times a second. Redrawing them the way the
+  waveform's graticule is already drawn takes a four-scope grid from 20 ms an
+  update to under 11, which is the difference between missing a frame every
+  time and not.
 - **Drawing the record-trigger box draws it.** A drag that started inside the
   box you already had would grab it and move it instead of starting a new one,
   which made a box you wanted smaller impossible to draw without moving it out
