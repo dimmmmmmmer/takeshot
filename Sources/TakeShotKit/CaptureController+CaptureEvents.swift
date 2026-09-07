@@ -332,7 +332,9 @@ extension CaptureController {
     /// Free-space watch on the record volume: warn early, stop the take
     /// before the writer hits a hard wall (nothing watched disk space at all).
     func startDiskWatch() {
-        Task { [weak self] in
+        // One watch at a time — see `diskWatchTask`.
+        diskWatchTask?.cancel()
+        diskWatchTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 await self.checkDiskSpace()
                 // Ten seconds idle, two while a take rolls: at UHD ProRes the

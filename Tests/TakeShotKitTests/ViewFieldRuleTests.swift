@@ -44,17 +44,23 @@ struct ViewFieldRuleTests {
             files += 1
             guard let raw = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
-            let lines = raw.components(separatedBy: "\n")
-            for (index, line) in lines.enumerated() {
-                let code = line.contains("//")
-                    ? String(line[line.startIndex..<line.range(of: "//")!.lowerBound])
-                    : line
+            let lines = raw.components(separatedBy: "\n").map(Self.code)
+            for (index, line) in lines.enumerated()
+            where line.contains("TextField(") {
+                // **The whole CALL, not the line it starts on.** SwiftUI wraps
+                // these — a localized label and a binding do not fit in a
+                // hundred and twenty columns — and a detector that asked for
+                // `TextField(` and `text:` on ONE line silently passed every
+                // wrapped site, which by now is most of them. The rule below
+                // asserts an absence, so missing a site is the failure mode
+                // that looks like success.
+                let call = Self.joinedCall(lines, from: index)
                 // `NameTextField(` contains `TextField(`. It is the filtered
                 // one — the thing this hunts the ABSENCE of — so a substring
                 // match that counted it would report every correct site.
-                guard Self.isBareTextField(code) else { continue }
+                guard Self.isBareTextField(call) else { continue }
                 found.append(Site(file: url.lastPathComponent, line: index + 1,
-                                  text: code.trimmingCharacters(in: .whitespaces)))
+                                  text: call.trimmingCharacters(in: .whitespaces)))
             }
         }
         try #require(files > 100, "the walk did not find the source tree")
@@ -72,7 +78,34 @@ struct ViewFieldRuleTests {
         return found
     }
 
-    /// One line's worth of the decision, so it can be checked against lines
+    /// One line with its trailing comment taken off.
+    static func code(_ line: String) -> String {
+        guard let comment = line.range(of: "//") else { return line }
+        return String(line[line.startIndex..<comment.lowerBound])
+    }
+
+    /// The call starting at `index`, followed to its closing bracket.
+    ///
+    /// Bounded at eight lines: a `TextField` longer than that is a modifier
+    /// chain rather than an argument list, and an unbalanced line — a string
+    /// literal holding a bracket — must not swallow the rest of the file.
+    static func joinedCall(_ lines: [String], from index: Int) -> String {
+        var joined = lines[index]
+        var depth = Self.balance(lines[index])
+        var next = index + 1
+        while depth > 0, next < lines.count, next - index < 8 {
+            joined += " " + lines[next]
+            depth += Self.balance(lines[next])
+            next += 1
+        }
+        return joined
+    }
+
+    static func balance(_ code: String) -> Int {
+        code.filter { $0 == "(" }.count - code.filter { $0 == ")" }.count
+    }
+
+    /// One call's worth of the decision, so it can be checked against text
     /// whose answer is known (`theDetectorKnowsTheShapeItHunts`).
     ///
     /// `NameTextField(` contains `TextField(`. It is the FILTERED one — the
@@ -126,6 +159,19 @@ struct ViewFieldRuleTests {
         // filtered: `NameTextField` carries the rule
         #expect(!ViewFieldRuleTests.isBareTextField(
             #"NameTextField(field: .prefix, text: $text)"#))
+        // …and the WRAPPED shape, which is what the detector missed for as
+        // long as it looked at one line: a localized label and a binding do
+        // not fit in a hundred and twenty columns, so most real sites look
+        // like this one.
+        let wrapped = ["            TextField(L(\"srt_address\"),",
+                       "                      text: $address)"]
+        #expect(ViewFieldRuleTests.isBareTextField(
+            ViewFieldRuleTests.joinedCall(wrapped, from: 0)))
+        #expect(!ViewFieldRuleTests.isBareTextField(wrapped[0]),
+                "one line of a wrapped call must not answer for the whole call")
+        // A comment on the line is not code.
+        #expect(ViewFieldRuleTests.code("let x = 1 // TextField(text:)")
+            == "let x = 1 ")
         // typed: a format IS a rule, and the value it parses into is the type
         #expect(!ViewFieldRuleTests.isBareTextField(
             #"TextField("", value: $port, format: .number.grouping(.never))"#))

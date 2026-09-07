@@ -39,6 +39,12 @@ final class InMemoryDefaults: UserDefaults {
         storage.removeValue(forKey: defaultName)
     }
 
+    /// Only what this store holds. Without the override the superclass answers
+    /// for the whole GLOBAL domain — every key of every app on the machine —
+    /// so a test that goes looking for "the settings key" in here would find
+    /// the operator's, and one that counted keys would be counting Finder's.
+    override func dictionaryRepresentation() -> [String: Any] { storage }
+
     // The typed setters are separate Obj-C selectors; route them through the
     // one override above rather than trusting them to call it.
     override func set(_ value: Int, forKey defaultName: String) {

@@ -280,8 +280,14 @@ struct NDIVideoMirrorTests {
             offered.append(buffer)
             mirror.offer(buffer, rate: NDIFrameRate(fps: 25))
         }
-        // Two pace intervals: long enough for the immediate pass and one more.
-        await ControllerWait.until { sender.frames.count >= 2 }
+        // **Waited on the FIRST frame, which is the one that is certain.** The
+        // immediate pass sends it; whether a SECOND ever goes out is exactly
+        // what coalescing decides, so waiting for two burned the whole budget
+        // on every run and then asserted `count <= 2` anyway.
+        #expect(await ControllerWait.until { !sender.frames.isEmpty },
+                "not one frame reached the sender")
+        // Two pace intervals at 5 fps, so anything the mirror still owes has
+        // gone out and the count below is final.
         try await Task.sleep(for: .milliseconds(500))
 
         let frames = sender.frames

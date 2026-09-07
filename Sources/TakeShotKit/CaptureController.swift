@@ -506,6 +506,16 @@ final class CaptureController: ObservableObject {
     var remoteGeneration = 0
     /// Feeds the remote its status; cancelled with the server.
     var remoteStatusTask: Task<Void, Never>?
+    /// The free-space watch, held so a second `startDiskWatch` replaces the
+    /// first rather than joining it.
+    ///
+    /// Startup arms one; a destination change arms another; the suite arms one
+    /// per test to drive a single tick. Each used to be a loop of its own on
+    /// the same controller, so N watches asked the volume N times per interval
+    /// — on a sleeping share, N stacked timeouts — and a test that waited for
+    /// a TRANSIENT state could be handed the second watch's answer instead of
+    /// the first's.
+    var diskWatchTask: Task<Void, Never>?
     /// Free space on the record volume, GB; -1 — unreadable. Sampled a few
     /// times a minute rather than per push: the status goes out four times a
     /// second and a volume query is a syscall on the MainActor.

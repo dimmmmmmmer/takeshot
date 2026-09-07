@@ -325,56 +325,6 @@ struct BridgeLocalizationTests {
         #expect(!full.contains("%d"), "\(full)")
     }
 
-    // MARK: - the rows read the chosen words and not the diagnostic
-
-    /// **A view must render `localizedText` and never `english`.**
-    ///
-    /// The two are both non-empty paragraphs of similar length, so a row that
-    /// went back to showing the bridge's diagnostic sentence would lay out at
-    /// very nearly the same size and no render test would notice: the defect
-    /// this whole change is about is invisible to a measurement and visible
-    /// only to a reader. So it is checked the way `ViewDisabledRuleTests`
-    /// checks its rule — by walking the sources.
-    ///
-    /// What this does NOT catch: a row that spelled an English sentence out
-    /// inline instead of reading either property. Nothing here can; what covers
-    /// that is that neither section has any literal prose in it at all, which
-    /// `theNDIRowLabelsFitTheSettingsForm` and its SRT twin already depend on.
-    /// Nor does it reach `WebRTCError.message`, which is `english` on purpose
-    /// and lives in `WebRTCPeer.swift` — the diagnostic accessor has to exist
-    /// somewhere, and the rule is only that a SURFACE does not read it.
-    @Test func theSettingsRowsShowTheWordsAndNotTheDiagnostic() throws {
-        let root: URL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/TakeShotKit")
-        // The two settings rows, and the route that answers the /live page —
-        // the third surface, and the one whose reader cannot read a log.
-        // The two settings rows and the /live route, plus the four surfaces
-        // the media bridges reach: the MAIN WINDOW's banner (+Capture), the
-        // hardware-output toast (+Windows), a multicam channel's toast
-        // (+Multicam) and the RAW player's open failure (RawPlayback). The
-        // banner is the one that matters most — it is read while a camera is
-        // rolling, not on a settings page somebody visits once.
-        for name in ["NDISettingsSection", "SRTSettingsSection",
-                     "CaptureController+WebRTC", "CaptureController+Capture",
-                     "CaptureController+Windows", "CaptureController+Multicam",
-                     "RawPlayback"] {
-            let url: URL = root.appendingPathComponent("\(name).swift")
-            let source: String = try String(contentsOf: url, encoding: .utf8)
-            let code: String = source
-                .components(separatedBy: "\n")
-                .filter { !$0.trimmingCharacters(in: .whitespaces)
-                    .hasPrefix("//") }
-                .joined(separator: "\n")
-            #expect(code.contains("localizedText"),
-                    "\(name) no longer renders the localized reason")
-            #expect(!code.contains("english"),
-                    "\(name) renders the bridge's English diagnostic")
-        }
-    }
-
     // MARK: - what the bridges themselves promise
 
     /// A bridge states a code exactly when it states a reason.

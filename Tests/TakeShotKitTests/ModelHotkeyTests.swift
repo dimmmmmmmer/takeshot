@@ -254,26 +254,18 @@ struct ModelHotkeyTests {
 /// "TakeShot.Hotkeys" key, so each case runs against its own defaults suite.
 @MainActor
 struct ModelHotkeyStorageTests {
+    /// **No domain at all**, which is the only way this leaves nothing behind.
+    ///
+    /// It used to be `UserDefaults(suiteName:)` with a careful teardown:
+    /// remove the domain, synchronize, remove the suite, delete the plist.
+    /// cfprefsd still wrote a 42-byte empty dictionary back afterwards, on its
+    /// own schedule, and 7,237 of them had collected in ~/Library/Preferences
+    /// on the development machine — one per test case per run since the suite
+    /// was written, every one of them scanned by Preferences on every launch
+    /// of every app. `InMemoryDefaults` is the same answer
+    /// `ControllerHarness` already reached: a store that dies with the test.
     private func withSuite(_ body: (UserDefaults) throws -> Void) throws {
-        let name = "TakeShot.tests.hotkeys.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: name) else {
-            Issue.record("could not create a defaults suite")
-            return
-        }
-        defer {
-            defaults.removePersistentDomain(forName: name)
-            UserDefaults.standard.removeSuite(named: name)
-            // **And the file.** Removing the domain empties it; cfprefsd
-            // leaves the 42-byte plist behind. Measured on the development
-            // Mac: 6,469 of them in ~/Library/Preferences, one per test case
-            // per run since this suite was written — every one an empty
-            // dictionary that Preferences has to scan on every launch of
-            // every app.
-            let plist = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Preferences/\(name).plist")
-            try? FileManager.default.removeItem(at: plist)
-        }
-        try body(defaults)
+        try body(InMemoryDefaults())
     }
 
     private func store(_ bindings: [HotkeyAction: KeyCombo],

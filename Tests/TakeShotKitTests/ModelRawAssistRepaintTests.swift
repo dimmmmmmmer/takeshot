@@ -74,7 +74,12 @@ import Testing
         // Settle, so a pass still in flight is counted.
         try await Task.sleep(for: .milliseconds(400))
         let drawn = draws.count - seeded
-        #expect(drawn < 60, "sixty slider ticks cost \(drawn) full renders")
+        // **Eight, not sixty.** `< 60` passes against fifty-nine renders, which
+        // is no coalescing at all — the bound was the number of TICKS and so
+        // could never fail for the thing it was written about. Measured here:
+        // two. Eight is the loosest number that still says "coalesced" and
+        // leaves a loaded runner room for a few passes in flight.
+        #expect(drawn <= 8, "sixty slider ticks cost \(drawn) full renders")
         #expect(!draws.anyOnMain, "a frame was rendered on the main thread")
     }
 

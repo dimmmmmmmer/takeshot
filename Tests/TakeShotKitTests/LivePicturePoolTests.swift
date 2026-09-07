@@ -329,16 +329,10 @@ struct LiveEncoderFailureReportTests {
 @MainActor
 struct ControllerSettingsRecoveryTests {
     @Test func alaunchThatFoundDamagedSettingsSaysSo() throws {
-        let suite = "takeshot.recovery.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            UserDefaults.standard.removeSuite(named: suite)
-            // and the plist cfprefsd leaves behind (see `ModelHotkeyTests`)
-            try? FileManager.default.removeItem(
-                at: FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("Library/Preferences/\(suite).plist"))
-        }
+        // No domain on disk: cfprefsd writes an empty plist back after any
+        // teardown and they collect in the operator's Preferences folder by
+        // the thousand (see `ModelHotkeyStorageTests.withSuite`).
+        let defaults = InMemoryDefaults()
         // Written the way the app writes it — the key is CaptureCore's own and
         // is not exported, so the damage is planted by corrupting a real save.
         CaptureSettings().save(to: defaults)
@@ -369,16 +363,10 @@ struct ControllerSettingsRecoveryTests {
 
     /// A good configuration starts silently.
     @Test func anordinaryLaunchSaysNothing() throws {
-        let suite = "takeshot.recovery.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            UserDefaults.standard.removeSuite(named: suite)
-            // and the plist cfprefsd leaves behind (see `ModelHotkeyTests`)
-            try? FileManager.default.removeItem(
-                at: FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("Library/Preferences/\(suite).plist"))
-        }
+        // No domain on disk: cfprefsd writes an empty plist back after any
+        // teardown and they collect in the operator's Preferences folder by
+        // the thousand (see `ModelHotkeyStorageTests.withSuite`).
+        let defaults = InMemoryDefaults()
         CaptureSettings().save(to: defaults)
 
         let controller = CaptureController(backends: [], defaults: defaults)

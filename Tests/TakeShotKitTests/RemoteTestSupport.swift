@@ -114,8 +114,35 @@ enum RemoteHarness {
     /// On a set network the phone and the guesser are different addresses and
     /// this does not arise; on loopback it is the whole difference between a
     /// measurement and a hang.
+    ///
+    /// **Free for a whole HOLD, not free at an instant.** The burst's answers
+    /// go out one every `RemotePINTarpit.delay`, so the slot is briefly free
+    /// BETWEEN two of them — and a guess sent into that gap lands while the
+    /// next answer is already due, which the server handles by not answering
+    /// it AT ALL. The caller then waits out its whole budget for a message
+    /// that is never coming. Only a gap LONGER than one delay means the queue
+    /// is empty.
+    ///
+    /// This used to be a single `!pinAnswerPending` poll, and it passed for as
+    /// long as `ControllerWait.until` counted polls instead of seconds and
+    /// every wait ran for nearly three times its stated length. That is not a
+    /// margin, it is an accident, and it came apart the day the harness was
+    /// fixed.
     static func pinSlotFree(_ server: RemoteServer) async -> Bool {
-        await ControllerWait.until { !server.pinAnswerPending }
+        let deadline = ContinuousClock.now + .seconds(90)
+        while ContinuousClock.now < deadline {
+            guard await ControllerWait.until({ !server.pinAnswerPending },
+                                             timeout: .seconds(90))
+            else { return false }
+            var stayedFree = true
+            // Three seconds of quiet against a two-second hold.
+            for _ in 0..<12 where stayedFree {
+                try? await Task.sleep(for: .milliseconds(250))
+                stayedFree = !server.pinAnswerPending
+            }
+            if stayedFree { return true }
+        }
+        return false
     }
 }
 

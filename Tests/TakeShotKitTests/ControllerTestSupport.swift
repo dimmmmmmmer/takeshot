@@ -212,6 +212,11 @@ enum ControllerHarness {
         // the suite. Harmless when the remote was never started.
         controller.stopRemoteServer()
         controller.stopCapture()
+        // The free-space watch asks the record volume every two to ten
+        // seconds forever; a controller the test is done with keeps doing it
+        // against a scratch folder about to be deleted.
+        controller.diskWatchTask?.cancel()
+        controller.diskWatchTask = nil
         // a fake USB device keeps its delivery timer otherwise
         controller.externalAudioSource?.stop()
     }
@@ -222,14 +227,23 @@ enum ControllerWait {
     /// Poll until `condition` holds or the budget runs out. Used for both
     /// directions: an expected change, and the full-budget wait that proves a
     /// change did NOT happen.
+    ///
+    /// **The budget is a DEADLINE and not a count of polls.** It used to be
+    /// `timeout / 50 ms` iterations of "check, then sleep 50 ms", which bounds
+    /// the number of sleeps and nothing else: each iteration also costs
+    /// whatever `condition()` costs and whatever the scheduler adds, so on a
+    /// loaded runner a ten-second budget ran for nearly thirty. That never
+    /// failed a test — it made every negative wait in the suite three times
+    /// its stated price, in a job that has a `timeout-minutes`.
     @discardableResult
     static func until(_ condition: () -> Bool,
                       timeout: Duration = .seconds(10)) async -> Bool {
-        let steps = max(1, Int(timeout / .milliseconds(50)))
-        for _ in 0..<steps where !condition() {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() {
+            guard ContinuousClock.now < deadline else { return condition() }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        return condition()
+        return true
     }
 
     /// For a condition that waits on encoding, finalizing and writing a file.

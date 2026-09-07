@@ -169,17 +169,39 @@ struct VisualRecPipelineTests {
         push(pipeline, rolling, frames: 10)
         await TestWait.until { pipeline.visualRecReading != nil }
 
-        // park the watcher's queue for a third of a second — eight frame
-        // intervals at 25 fps — and push frames through
-        pipeline.visualRecQueue.async { Thread.sleep(forTimeInterval: 0.35) }
-        let start = DispatchTime.now().uptimeNanoseconds
-        push(pipeline, rolling, frames: 40, from: 11)
-        // the frame path is synchronous on its own queue; wait for it to drain
-        pipeline.queue.sync {}
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+        // **This machine against ITSELF, not against a number written down on
+        // another one.** The old form parked the watcher for 350 ms and
+        // required forty frames through the capture queue in under 300 — an
+        // absolute budget that a loaded runner can miss for reasons that have
+        // nothing to do with the stall, which is a test reporting the machine.
+        // What the claim actually is: the frame path did not WAIT on the
+        // watcher, and a path that waited would be a whole stall longer.
+        let stallMs = 350.0
+        let baseline = Self.milliseconds {
+            push(pipeline, rolling, frames: 40, from: 11)
+            pipeline.queue.sync {}
+        }
+        pipeline.visualRecQueue.async {
+            Thread.sleep(forTimeInterval: stallMs / 1000)
+        }
+        let stalled = Self.milliseconds {
+            push(pipeline, rolling, frames: 40, from: 51)
+            // the frame path is synchronous on its own queue; wait for it to
+            // drain
+            pipeline.queue.sync {}
+        }
 
-        #expect(elapsed < 300,
-                "40 frames took \(elapsed) ms; the watcher's stall reached the capture queue")
+        #expect(stalled - baseline < stallMs / 2, """
+            forty frames took \(stalled) ms against a \(baseline) ms baseline \
+            — the watcher's \(stallMs) ms stall reached the capture queue
+            """)
+    }
+
+    /// Wall-clock milliseconds a block took.
+    private static func milliseconds(_ body: () -> Void) -> Double {
+        let start = DispatchTime.now().uptimeNanoseconds
+        body()
+        return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
     }
 
     /// Latest-wins: while one pass is in flight the frames that arrive are

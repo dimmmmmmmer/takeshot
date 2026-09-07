@@ -10,24 +10,13 @@ import Testing
 /// those defaults over it. A shoot's whole setup gone, with nothing to put back
 /// and nothing said.
 struct SettingsRecoveryTests {
-    /// A defaults suite of its own, removed — the domain AND the plist
-    /// cfprefsd leaves behind — when the test is done. It used to be
-    /// `?? .standard`, which on a machine that refused the suite would have
-    /// planted the damage in the operator's real settings.
+    /// **A store with no domain on disk.** It used to be `?? .standard` —
+    /// which on a machine that refused the suite would have planted the damage
+    /// in the operator's real settings — and then a scratch suite with a
+    /// careful teardown, which cfprefsd defeated by writing an empty plist
+    /// back afterwards. See `InMemoryDefaults`.
     private func withScratch(_ body: (UserDefaults) throws -> Void) throws {
-        let suite = "takeshot.settings.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer {
-            defaults.removePersistentDomain(forName: suite)
-            // cfprefsd writes lazily: without this the plist can land AFTER
-            // the removeItem below and outlive the test anyway.
-            defaults.synchronize()
-            UserDefaults.standard.removeSuite(named: suite)
-            try? FileManager.default.removeItem(
-                at: FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("Library/Preferences/\(suite).plist"))
-        }
-        try body(defaults)
+        try body(InMemoryDefaults())
     }
 
     @Test func adamagedBlobIsKeptAndReportedOnce() throws {

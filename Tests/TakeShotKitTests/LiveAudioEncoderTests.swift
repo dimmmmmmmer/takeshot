@@ -81,10 +81,16 @@ enum LiveAudioFixtures {
     /// changes the input: the queue is still draining, and the units that land
     /// afterwards belong to the old state. Polling for the count to hold still
     /// is what separates the two runs.
-    static func settle(_ taken: AACCollector) async {
+    /// `atLeast` is what separates "the stream has stopped growing" from "the
+    /// stream has not started". Without it the poll returned after one 80 ms
+    /// gap on a count of zero — declaring a run settled before a single unit
+    /// had been encoded, which makes every assertion after it a statement
+    /// about an empty collector.
+    static func settle(_ taken: AACCollector, atLeast: Int = 1) async {
         var last = -1
         let deadline = Date().addingTimeInterval(5)
-        while last != taken.count, Date() < deadline {
+        while last != taken.count || taken.count < atLeast,
+              Date() < deadline {
             last = taken.count
             try? await Task.sleep(for: .milliseconds(80))
         }

@@ -184,10 +184,15 @@ typealias TakeCollector = EventCollector<Take>
 enum TestWait {
     /// Poll until `condition` holds or the budget runs out. The pipeline
     /// finishes takes asynchronously, so every assertion about a file waits.
+    /// **A DEADLINE and not a count of polls**, for the reason
+    /// `ControllerWait.until` states: the old form bounded the number of
+    /// sleeps and nothing else, so a five-second budget cost fifteen on a
+    /// loaded runner — every negative wait in the suite, three times over.
     static func until(_ condition: () -> Bool,
                       timeout: Duration = .seconds(5)) async {
-        let steps = Int(timeout / .milliseconds(50))
-        for _ in 0..<steps where !condition() {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() {
+            guard ContinuousClock.now < deadline else { return }
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
