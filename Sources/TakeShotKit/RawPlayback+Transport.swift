@@ -106,7 +106,7 @@ extension RawPlayerModel {
         let clip = clip
         let generation = playGeneration
         Task.detached(priority: .userInitiated) { [weak self] in
-            guard let buffer = clip.copyFrame(at: index) else { return }
+            guard let buffer = await clip.frame(at: index) else { return }
             guard let self else { return }
             // the scope state is read BEFORE the pass, not after it: every
             // paused seek and every poster frame used to run a full analysis

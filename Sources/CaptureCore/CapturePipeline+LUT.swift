@@ -116,6 +116,29 @@ extension CapturePipeline {
     /// `using` defaults to the armed filter, which is what the preview wants.
     /// The RECORD path passes the take's latched filter instead, so a look
     /// swapped mid-take cannot reach a file that is already open.
+    /// **On the capture queue, synchronously, and measured.**
+    ///
+    /// This is the one place in the app where a slow pass does not make a late
+    /// picture — it makes a HOLE in the file, because the capture queue is
+    /// what appends to the writer. An audit read the shape, said "not
+    /// measured", reached for the keyer as the nearest analogue (1.5 ms at
+    /// 1080p, 3.3 at UHD) and proposed moving the preview half to the display
+    /// queue.
+    ///
+    /// Measured on this machine, release (`LUTPathCostTests`,
+    /// `TAKESHOT_BENCH=1`): **0.59 ms at 1080p, 1.19 ms at UHD** — a third of
+    /// the estimate. The tightest frame interval the app shoots is 16.7 ms at
+    /// 60 fps, so the LUT is seven per cent of it, and the pinned compare
+    /// beside it (`presentProcessedFrame`) is another 1.47 ms at UHD. Both on
+    /// at once at UHD60: sixteen per cent.
+    ///
+    /// And the dissolve the audit named separately — `CIFilter(name:)` built
+    /// per frame at partial intensity — costs nothing measurable: 1.29 ms
+    /// against 1.19 at UHD, inside the run-to-run spread. Building a filter is
+    /// not what a render costs.
+    ///
+    /// So it stays here, where the LUT the file is baked with and the LUT the
+    /// operator is looking at are decided in one place.
     func applyLUT(to pixelBuffer: CVPixelBuffer,
                   using chosen: CIFilter? = nil) -> CVPixelBuffer? {
         guard let filter = chosen ?? lutFilter else { return nil }

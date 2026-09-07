@@ -29,7 +29,7 @@ extension CaptureController {
                                 duration: Double(frames.count) / 24.0)
         }
         if ext == "braw" || ext == "r3d" {
-            let (image, duration) = rawThumbnail(at: url, extension: ext)
+            let (image, duration) = await rawThumbnail(at: url, extension: ext)
             return OtherPreview(image: image, duration: duration)
         }
         let (image, duration) = await videoThumbnail(at: url)
@@ -68,7 +68,8 @@ extension CaptureController {
     /// one decode contract, and the R3D options (a small decode scale for a
     /// 256 px thumbnail) are stated in one place.
     nonisolated private static func rawThumbnail(
-        at url: URL, extension ext: String) -> (image: NSImage?, duration: Double?) {
+        at url: URL, extension ext: String) async
+        -> (image: NSImage?, duration: Double?) {
         let clip: RawClipSource?
         if ext == "r3d" {
             // A thumbnail is 256 px: an eighth-res decode of an 8K frame is
@@ -79,7 +80,7 @@ extension CaptureController {
             clip = try? BRAWSource(url: url)
         }
         guard let clip, clip.frameCount > 0 else { return (nil, nil) }
-        let image = clip.copyFrame(at: clip.frameCount / 2)
+        let image = await clip.frame(at: clip.frameCount / 2)
             .flatMap { thumbnail(from: $0, maxSize: 256) }
         let duration = clip.frameRate > 0
             ? Double(clip.frameCount) / clip.frameRate : nil

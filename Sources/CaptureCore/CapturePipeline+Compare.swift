@@ -52,6 +52,18 @@ extension CapturePipeline {
     /// pre-LUT frame against the pre-LUT pin and its output bypasses the
     /// viewing LUT entirely — a look bent over |A−B| would bend the very
     /// numbers the operator is checking.
+    /// **Measured, on the capture queue like the LUT before it.**
+    ///
+    /// Only when the operator has pinned a reference AND chosen a mode, so
+    /// unlike the LUT it is not a cost the frame path pays all day — with the
+    /// mode off it is one comparison and 0.00 ms. When it is on it is on for
+    /// as long as somebody is comparing setups, which is exactly when a hole
+    /// in the file would be least welcome.
+    ///
+    /// Measured, release (`LUTPathCostTests`): **0.58–0.74 ms at 1080p,
+    /// 1.41–1.47 ms at UHD**, the same for all three modes — the composite is
+    /// one CoreImage pass whatever it is compositing. See `applyLUT` for what
+    /// that adds up to against a frame interval.
     func presentProcessedFrame(_ displayBuffer: CVPixelBuffer,
                                preLUT: CVPixelBuffer) {
         var screenBuffer = displayBuffer

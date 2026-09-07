@@ -28,5 +28,14 @@ import Foundation
 /// of another.
 enum DecodeContext {
     /// Built on first use, which is the first decode rather than launch.
-    static let shared = CIContext(options: [.cacheIntermediates: false])
+    ///
+    /// `nonisolated(unsafe)` because `CIContext` is not marked `Sendable` and
+    /// IS thread-safe — Apple documents it as such, which is the property the
+    /// whole type rests on, and every long-lived context in this app relies on
+    /// the same thing. The runner's toolchain rejects the plain `static let`
+    /// and this machine's compiles it, which is the two-releases-apart gap
+    /// this project already knows about: a strict-concurrency error here is
+    /// CI's to find and it found it.
+    nonisolated(unsafe) static let shared =
+        CIContext(options: [.cacheIntermediates: false])
 }

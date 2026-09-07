@@ -74,6 +74,29 @@ extension RawClipSource {
     var colorNote: RawColorNote? { nil }
     var infoLines: [String] { [] }
     var lastDecodeError: String? { nil }
+
+    /// **The same decode, off the cooperative pool.**
+    ///
+    /// Every implementation of `copyFrame` blocks — a DNG develop through
+    /// CoreImage, a BRAW read, an R3D decode — and each one also waits behind
+    /// its own serial queue while an earlier frame finishes. Every caller is
+    /// inside a `Task`, and a blocking call there holds one of the cooperative
+    /// pool's threads for the whole time: the pool is the width of the machine
+    /// and does not grow, so a scrub that fires four seeks parks four of them
+    /// and every other piece of async work on the machine waits behind decodes
+    /// whose results are already stale.
+    ///
+    /// GCD's global pool DOES grow, which is exactly the property wanted here:
+    /// the thread that waits is one nobody else needs. Each source keeps its
+    /// own serial queue, so what is serialized is still one clip's decodes
+    /// against each other and not one clip's against another's.
+    func frame(at index: Int) async -> CVPixelBuffer? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: copyFrame(at: index))
+            }
+        }
+    }
 }
 
 /// Blackmagic RAW via the CBraw bridge.
