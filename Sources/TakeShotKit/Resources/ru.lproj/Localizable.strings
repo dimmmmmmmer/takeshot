@@ -898,6 +898,7 @@
 "stream_link_up" = "приёмник забирает поток";
 "stream_link_waiting" = "в сети, никто не забирает";
 "stream_link_off" = "выключено";
+"stream_off_help" = "Поток не идёт. Включите SRT или NDI в настройках.";
 "stream_playout_label" = "SDI";
 "stream_stop_help" = "Нажмите, чтобы остановить отдачу";
 "sidecar_unreadable" = "%1$@ — %2$@";

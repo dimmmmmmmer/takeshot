@@ -244,7 +244,7 @@ struct PlayerTopBadgeRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            sideZone(alignment: .leading) { PlayerTimecodeBadge() }
+            sideZone(alignment: .leading) { leftBadges }
             modeSwitch
             sideZone(alignment: .trailing) { rightBadges }
         }
@@ -261,6 +261,19 @@ struct PlayerTopBadgeRow: View {
     @ViewBuilder private var modeSwitch: some View {
         if showsModeSwitch {
             ViewerModeSwitch()
+        }
+    }
+
+    /// TC, and the stream state beside it (owner: "давай ка значки srt и ndi
+    /// перенесем вверх правее от таймкода"). One plate for both readings — the
+    /// network streams and the hardware output — because they answer one
+    /// question between them and the row has no width for two more plates.
+    private var leftBadges: some View {
+        HStack(spacing: 6) {
+            PlayerTimecodeBadge()
+            playerOverlayBadge {
+                StreamIndicator(mirrors: controller.mirrors)
+            }
         }
     }
 

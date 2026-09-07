@@ -48,11 +48,9 @@ struct FooterShootingControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Whether the picture is leaving this machine. Draws nothing at all
-            // while both outputs are off, so a cart that does not stream pays
-            // no width for it — see `StreamIndicator`.
-            StreamIndicator(mirrors: controller.mirrors)
-
+            // The stream badges used to be here. They are beside the timecode
+            // now (owner: "в нижнем баре уже и так места нет") — see
+            // `PlayerTopBadgeRow`.
             FooterFolderButton()
             // The folder and the codec are icon-only (owner item 3) — their
             // names live in the tooltips — so the meters are the one thing left

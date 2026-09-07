@@ -1,38 +1,40 @@
 import SwiftUI
 
-/// Whether the picture is leaving this machine, in the footer where the
-/// operator is already looking.
+/// Whether the picture is leaving this machine, in the player's own top row.
 ///
-/// Until now the only place either output's state appeared was its own row in
-/// the Settings WINDOW — which is shut during a shooting day. So "is the stream
-/// going out" was a question you had to open a window to answer, and the answer
-/// there was half honest: SRT's state means the link is up, NDI's meant the
-/// source had been announced (owner: "нам нужен в главном окне какой-то
+/// Until this existed the only place either output's state appeared was its own
+/// row in the Settings WINDOW — which is shut during a shooting day. So "is the
+/// stream going out" was a question you had to open a window to answer, and the
+/// answer there was half honest: SRT's state means the link is up, NDI's meant
+/// the source had been announced (owner: "нам нужен в главном окне какой-то
 /// визуальный индикатор что поток уходит по срт/нди. и должна быть кнопка
 /// запустить/остановить поток").
 ///
 /// **It shows the LINK, never the switch.** `StreamLink` is where that
-/// distinction lives, and both transports are read through it — a lamp that
+/// distinction lives, and all three outputs are read through it — a lamp that
 /// lights because a checkbox is ticked is a lamp nobody can use.
 ///
-/// **Nothing at all when both are off — until this button is what turned them
-/// off.** The footer is crowded and an operator who does not stream should not
-/// be paying for a control that says "not streaming" all day. But the first
-/// version took that literally and became a one-way door: one press turned both
-/// switches off, `isEngaged` went false, the control erased itself, and the only
-/// way to stream again was the Settings window — the window this control exists
-/// so nobody has to open. So a stream this button PAUSED keeps the button on
-/// screen, in its off state, and the next press starts it again. A stream
-/// switched off in Settings still takes the control away with it: that was a
-/// decision, not a pause.
+/// **Beside the timecode, not in the footer** (owner: "давай ка значки srt и
+/// ndi перенесем вверх правее от таймкода, в нижнем баре уже и так места нет").
+/// It wears the row's plate like every other badge there, which is also what
+/// took its own capsule away: two backgrounds under one reading is a slab.
 ///
-/// **The hardware output is a LAMP beside the button, not a third link inside
-/// it.** It answers the same question — is the picture leaving this machine —
-/// and it is the leg a director's monitor actually hangs off, so it belongs
-/// here. But the button STOPS the network streams, and a control that goes
-/// orange because a DeckLink was taken by another process, and whose press then
-/// kills SRT, is a trap. So the SDI reading gets the same capsule, the same
-/// shapes and the same colours, and no press.
+/// **And it stays put when the streams are off** (owner: "сделай так чтоб при
+/// выключении они меняли значок а не исчезали"). It used to draw nothing at
+/// all — the argument was that a cart which does not stream should not pay for
+/// a control saying "not streaming" all day, and in the crowded footer that
+/// argument held. In the top row it does not: the width is there, and a badge
+/// that vanishes leaves the operator with no way to tell "switched off" from
+/// "this build has no NDI" without opening Settings. Off is a state, so it gets
+/// a symbol — a SLASHED antenna, which is the one shape that reads as "not
+/// sending" at a glance and on a bright cart.
+///
+/// The hardware output rides beside it as a LAMP and not a third link inside
+/// the button: it answers the same question — is the picture leaving this
+/// machine — and it is the leg a director's monitor actually hangs off, but the
+/// button STOPS the network streams, and a control that goes orange because a
+/// DeckLink was taken by another process, and whose press then kills SRT, is a
+/// trap.
 struct StreamIndicator: View {
     @EnvironmentObject private var controller: CaptureController
     @ObservedObject var mirrors: DisplayMirrors
@@ -48,22 +50,20 @@ struct StreamIndicator: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            streamButton
+            streamReading
             if playout.isEngaged { playoutLamp }
         }
     }
 
-    /// The hardware monitor output. A capsule and not a button — see the type
-    /// comment — and absent entirely when no board is selected, like the
-    /// streams beside it.
-    private var playoutLamp: some View {
-        capsule(symbol: Self.symbol(playout), tint: Self.tint(playout),
-                text: L("stream_playout_label"))
-            .help(L("stream_playout_label") + " — " + Self.words(playout))
-    }
-
-    @ViewBuilder
-    private var streamButton: some View {
+    /// **A button while there is something to stop or resume; a LAMP when there
+    /// is not.**
+    ///
+    /// Nothing is switched on and nothing was paused: there is no start action
+    /// to offer, because "start" would have to guess SRT or NDI or both, and
+    /// the switches that decide it are in Settings. A button that did nothing
+    /// would be worse than a reading that says so — so the reading says so, and
+    /// its tooltip says where to turn it on.
+    @ViewBuilder private var streamReading: some View {
         if combined.isEngaged || isPaused {
             Button {
                 if isPaused {
@@ -72,46 +72,76 @@ struct StreamIndicator: View {
                     controller.stopAllStreams()
                 }
             } label: {
-                capsule(symbol: symbol, tint: tint, text: label)
-                    .contentShape(Capsule())
+                reading(symbol: symbol, tint: tint, text: label)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(helpText)
+            .controlHelp(helpText)
+        } else {
+            reading(symbol: Self.symbol(.off), tint: Self.tint(.off), text: "")
+                .controlHelp(L("stream_off_help"))
         }
     }
 
-    /// The one shape both readings wear, so the SDI lamp cannot drift into
-    /// looking like a different kind of thing than the streams beside it.
-    private func capsule(symbol: String, tint: Color,
+    /// The hardware monitor output. Absent entirely when no board is selected —
+    /// unlike the streams beside it, this is not a switch the operator can
+    /// throw from here, so "no board" has nothing to report rather than a state
+    /// to show.
+    private var playoutLamp: some View {
+        reading(symbol: Self.symbol(playout), tint: Self.tint(playout),
+                text: L("stream_playout_label"))
+            .controlHelp(L("stream_playout_label") + " — " + Self.words(playout))
+    }
+
+    /// The one shape every reading wears, so none of them can drift into
+    /// looking like a different kind of thing than the others.
+    private func reading(symbol: String, tint: Color,
                          text: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
-            Text(text)
-                .font(.system(size: 10, weight: .semibold))
-                .fixedSize()
+            if !text.isEmpty {
+                Text(text)
+                    .font(.system(size: 10, weight: .semibold))
+                    .fixedSize()
+            }
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(tint.opacity(0.15), in: Capsule())
     }
 
-    /// One dot for a live link, a hollow one for a link nobody has taken, and
-    /// the alarm triangle for trouble. The SHAPE carries it as well as the
-    /// colour, because a colour alone is a poor signal on a bright cart.
+    /// One dot for a live link, a bare antenna for one nobody has taken, a
+    /// SLASHED antenna for one that is off, and the alarm triangle for trouble.
+    /// The SHAPE carries it as well as the colour, because a colour alone is a
+    /// poor signal on a bright cart — and because off and waiting are the very
+    /// distinction this whole type exists to keep, they may not share one.
     private static func symbol(_ link: StreamLink) -> String {
         switch link {
         case .up: "dot.radiowaves.left.and.right"
-        case .waiting: "antenna.radiowaves.left.and.right.slash"
+        case .waiting: "antenna.radiowaves.left.and.right"
         case .trouble: "exclamationmark.triangle.fill"
-        case .off: ""
+        case .off: "antenna.radiowaves.left.and.right.slash"
         }
     }
 
     private var symbol: String {
-        isPaused ? "antenna.radiowaves.left.and.right.slash"
-                 : Self.symbol(combined)
+        isPaused ? Self.symbol(.off) : Self.symbol(combined)
+    }
+
+    /// The shape one link state wears, for the suite: that off and waiting are
+    /// DIFFERENT shapes is a rule, and it is invisible from a rendered badge.
+    static func symbolForTests(_ link: StreamLink) -> String { symbol(link) }
+
+    private static func tint(_ link: StreamLink) -> Color {
+        switch link {
+        case .up: .green
+        case .waiting: .secondary
+        case .trouble: .orange
+        case .off: .secondary
+        }
+    }
+
+    private var tint: Color {
+        isPaused ? .secondary : Self.tint(combined)
     }
 
     /// Which transports are ON, not which are up: the label names what the
@@ -122,19 +152,6 @@ struct StreamIndicator: View {
                      ndi.isEngaged || (isPaused && paused.ndi) ? "NDI" : nil]
             .compactMap { $0 }
         return names.joined(separator: "+")
-    }
-
-    private static func tint(_ link: StreamLink) -> Color {
-        switch link {
-        case .up: .green
-        case .waiting: .secondary
-        case .trouble: .orange
-        case .off: .clear
-        }
-    }
-
-    private var tint: Color {
-        isPaused ? .secondary : Self.tint(combined)
     }
 
     /// The tooltip says what a glance cannot: which link is in which state, and
