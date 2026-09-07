@@ -122,14 +122,28 @@ struct ViewScopeGeometryTests {
                 let side = min(box.width, box.height)
                 let margin = side * (1 - VectorscopeView.boxFill) / 2
                 let gutter = (box.width - side) / 2 + margin
-                // a point of slack each way for the stroke's own antialiasing
-                #expect(drawn.minY >= margin - 1,
+                // **Two points of slack, not one**, and the difference is the
+                // rasterizer rather than the drawing. The boundary ring's ink
+                // ends on the analytic edge, so what is left over is its own
+                // antialiasing — and how far that spreads depends on the
+                // backing scale: this machine renders at 2x and the CI runner
+                // at 1x, where the same circle rounds a third of a point
+                // wider. One point was inside that difference.
+                //
+                // Measured, before and after the graticule became a `Canvas`:
+                // identical bounds to the pixel, (97.5, 8.5, 278.0, 278.0) in
+                // the 472x295 box. So this is not slack bought to let a change
+                // through — the geometry did not move. What the test is for is
+                // eight points of overflow (see above), and two still catches
+                // it with room to spare.
+                let slack: CGFloat = 2
+                #expect(drawn.minY >= margin - slack,
                         "\(box): drawn from y \(drawn.minY), margin \(margin)")
-                #expect(drawn.maxY <= box.height - margin + 1,
+                #expect(drawn.maxY <= box.height - margin + slack,
                         "\(box): drawn to y \(drawn.maxY), margin \(margin)")
-                #expect(drawn.minX >= gutter - 1,
+                #expect(drawn.minX >= gutter - slack,
                         "\(box): drawn x starts at \(drawn.minX), gutter \(gutter)")
-                #expect(drawn.maxX <= box.width - gutter + 1,
+                #expect(drawn.maxX <= box.width - gutter + slack,
                         "\(box): drawn x ends at \(drawn.maxX)")
                 // …and it still uses most of what it was given
                 #expect(drawn.height > side * 0.9,
