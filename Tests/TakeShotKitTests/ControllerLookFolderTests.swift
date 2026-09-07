@@ -163,6 +163,101 @@ import Testing
         }
     }
 
+    // MARK: - somebody else's folder
+
+    /// **A chosen library is never created.** It lives on the show drive, and a
+    /// drive that is not mounted yet leaves its mount point free: creating
+    /// `/Volumes/SHOW/LUTs` there puts a folder on the BOOT disk and the real
+    /// drive then mounts as "SHOW 1", with every path in the app pointing at
+    /// the phantom. An absent library is an empty list and the path on screen.
+    @Test func aChosenLibraryThatIsNotThereIsNotMade() async throws {
+        try await withTwoLibraries { controller, _, second in
+            let absent = second.appendingPathComponent("not-mounted")
+
+            controller.setLUTsFolder(absent)
+
+            #expect(!FileManager.default.fileExists(atPath: absent.path),
+                    "the app made a folder on a mount point that is not mounted")
+            #expect(controller.availableLUTs.isEmpty)
+        }
+    }
+
+    /// …and the app's own one still is. It is in Application Support, nobody
+    /// else puts it there, and a first launch has to find it ready.
+    @Test func theAppsOwnLibraryIsStillCreated() async throws {
+        try await withTwoLibraries { controller, _, second in
+            let own = second.appendingPathComponent("made-by-us")
+            controller.lutsDirectory = own // injected, so no path is stored
+
+            controller.reloadLUTList()
+
+            #expect(controller.ownsLUTsDirectory)
+            #expect(FileManager.default.fileExists(atPath: own.path),
+                    "the app's own library was not created")
+        }
+    }
+
+    /// **Clear does not empty somebody else's folder.** Pointed at the show's
+    /// LUT folder it would delete the crew's master looks, under a confirmation
+    /// that talks about "imported LUTs".
+    @Test func clearingRefusesALibraryTheOperatorChose() async throws {
+        try await withTwoLibraries { controller, _, second in
+            let look = second.appendingPathComponent("show.cube")
+            try writeCube(at: look, white: 1)
+            controller.setLUTsFolder(second)
+            try #require(controller.availableLUTs.count == 1)
+
+            controller.clearLUTs()
+
+            #expect(FileManager.default.fileExists(atPath: look.path),
+                    "Clear deleted a look out of the crew's own LUT folder")
+            #expect(controller.availableLUTs.count == 1)
+        }
+    }
+
+    /// An import into a library that is not there says so, rather than making
+    /// the folder and copying into a phantom.
+    @Test func importingIntoALibraryThatIsNotThereSaysSo() async throws {
+        try await withTwoLibraries { controller, first, second in
+            let source = first.appendingPathComponent("show.cube")
+            try writeCube(at: source, white: 1)
+            let absent = second.appendingPathComponent("not-mounted")
+            controller.setLUTsFolder(absent)
+
+            controller.adoptLooks(from: [source])
+
+            #expect(controller.lastError?.contains(absent.path) == true,
+                    "an import into an absent library went unannounced")
+            #expect(!FileManager.default.fileExists(atPath: absent.path))
+        }
+    }
+
+    /// "Open in Finder" does not create it either — the Finder helper has a
+    /// door for each case and the library uses the right one.
+    @Test func openingAChosenLibraryInFinderDoesNotMakeIt() async throws {
+        let opened = FinderBox()
+        let previous = FinderOpen.handler
+        FinderOpen.handler = { opened.urls.append($0) }
+        defer { FinderOpen.handler = previous }
+
+        try await withTwoLibraries { controller, _, second in
+            let absent = second.appendingPathComponent("not-mounted")
+            controller.setLUTsFolder(absent)
+
+            controller.openLUTsInFinder()
+
+            #expect(!FileManager.default.fileExists(atPath: absent.path))
+            #expect(opened.urls.isEmpty,
+                    "the Finder was sent to a folder that is not there")
+        }
+    }
+
+    /// What the Finder handler collects — a reference type because it is a
+    /// plain closure and the test reads it afterwards.
+    private final class FinderBox {
+        var urls: [URL] = []
+    }
+
     // MARK: - the next launch
 
     /// The stored path IS the library at launch, and it is read before the list

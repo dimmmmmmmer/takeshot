@@ -96,7 +96,9 @@ build is any use to you:
 
 - False color, EL Zone, zebra and focus peaking — stacking, with a legend that
   is burned into the picture, so the hardware monitor gets it too.
-- Framelines, safe areas, anamorphic desqueeze, punch-in with drag-to-pan.
+- Framelines, safe areas, anamorphic desqueeze — presets or a ratio you
+  type — and punch-in with drag-to-pan.
+- A clean feed on one key: every overlay off, the picture and nothing else.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
 - SRT output: the same mirrored viewer, H.264 in an MPEG-TS, sent to an address
   on the set network — VLC on a director's laptop, OBS, a Resolve station, a

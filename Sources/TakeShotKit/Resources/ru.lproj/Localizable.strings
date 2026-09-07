@@ -260,6 +260,7 @@
 "clear_data" = "Очистить";
 "cancel" = "Отмена";
 "clear_luts_confirm" = "Удалить все импортированные LUT? Действие необратимо.";
+"clear_luts_not_ours" = "Это выбранная вами папка — TakeShot её не чистит";
 "placeholders_legend" = "Поля: {prefix} {cam} {roll} {clip} {postfix}. Таймкод: {tc}. Даты: {date}=YYYY-MM-DD, {yymmdd}, {mmdd}. Время: {hhmm}, {hhmmss}.";
 
 /* Take comments */
@@ -1023,6 +1024,7 @@
 "toast_grab_failed_reason" = "Не удалось снять кадр: %@";
 "toast_record_folder_recreated" = "Папку записи переместили или удалили — создана заново";
 "toast_lut_import_failed" = "Не удалось импортировать LUT: %@";
+"toast_lut_folder_missing" = "Папки LUT нет: %@";
 "toast_lut_failed" = "LUT: %@";
 "toast_metadata_log_not_saved" = "Журнал метаданных НЕ сохранён: %@";
 "toast_ranges_not_saved" = "Точки in/out НЕ сохранены: %@";

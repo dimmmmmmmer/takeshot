@@ -19,9 +19,28 @@ extension CaptureController {
 
     enum DuplicateLUTChoice { case replace, keepBoth, skip }
 
-    /// The library holds something: what "Clear looks" is enabled by. Not the
-    /// same question as `canApplyLUT`, which asks whether one is SELECTED.
+    /// The library holds something. Not the same question as `canApplyLUT`,
+    /// which asks whether one is SELECTED.
     var hasLUTs: Bool { !availableLUTs.isEmpty }
+
+    /// The library is the app's own folder rather than one the operator pointed
+    /// it at — which decides three things the app may do to a folder and three
+    /// it may not do to somebody else's.
+    ///
+    /// Creating it when it is missing is the sharp one. A chosen library lives
+    /// on the show drive, and a drive that is not mounted yet leaves its mount
+    /// point free: creating `/Volumes/SHOW/LUTs` there makes a folder on the
+    /// BOOT disk, and the real drive then mounts as "SHOW 1" with every path in
+    /// the app pointing at the phantom. So a chosen folder is only ever read.
+    /// Emptying it is the other one — "Clear" belongs to the folder the app
+    /// filled, not to the crew's master looks.
+    var ownsLUTsDirectory: Bool { settings.lut.folderPath == nil }
+
+    /// What "Clear looks" is enabled by: the app's own library, with something
+    /// in it. One name for the pair, because a condition written at a surface
+    /// is a condition the next surface writes slightly differently — and the
+    /// deletion itself asks the same question again (`clearLUTs`).
+    var canClearLUTs: Bool { hasLUTs && ownsLUTsDirectory }
 
     /// Where looks live when nobody says otherwise. The controller reads the
     /// instance property seeded from this, not the static — see `lutsDirectory`.
@@ -49,7 +68,10 @@ extension CaptureController {
 
     func reloadLUTList() {
         let dir = lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if ownsLUTsDirectory {
+            try? FileManager.default.createDirectory(at: dir,
+                                                     withIntermediateDirectories: true)
+        }
         let files = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil)) ?? []
         availableLUTs = files
@@ -79,7 +101,15 @@ extension CaptureController {
     /// a caller with names it knows are new never reaches one.
     func adoptLooks(from urls: [URL]) {
         let dir = lutsDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if ownsLUTsDirectory {
+            try? FileManager.default.createDirectory(at: dir,
+                                                     withIntermediateDirectories: true)
+        } else if !FileManager.default.fileExists(atPath: dir.path) {
+            // a chosen library that is not there is a drive that is not
+            // mounted, and the answer is to say so — not to make the folder
+            lastError = L("toast_lut_folder_missing", dir.path)
+            return
+        }
         var lastName: String?
         for url in urls {
             var dest = dir.appendingPathComponent(url.lastPathComponent)
@@ -136,9 +166,14 @@ extension CaptureController {
         let cdl = try CDLLook.load(url: url)
         return (cdl.cube(), cdl)
     }
-    /// Open the imported-LUTs folder in Finder.
+    /// Open the look library in Finder. Created first only when it is the
+    /// app's own — see `ownsLUTsDirectory`.
     func openLUTsInFinder() {
-        FinderOpen.ownFolder(lutsDirectory)
+        if ownsLUTsDirectory {
+            FinderOpen.ownFolder(lutsDirectory)
+        } else {
+            FinderOpen.folder(lutsDirectory)
+        }
     }
     /// Where a stored `lut.folderPath` points. Empty counts as unset, which is
     /// what a hand-edited blob (or a cleared text field, if this ever becomes
@@ -190,7 +225,14 @@ extension CaptureController {
         }
     }
     /// Delete every imported look and clear the selected one.
+    ///
+    /// Only ever the app's OWN library. Pointed at the show's LUT folder, this
+    /// button would delete the crew's master looks — and the operator who
+    /// pressed it would be reading a confirmation about "imported LUTs", which
+    /// is not what that folder holds. Refused here as well as disabled in
+    /// Settings: the guard belongs with the deletion, not with the button.
     func clearLUTs() {
+        guard ownsLUTsDirectory else { return }
         let dir = lutsDirectory
         let files = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil)) ?? []

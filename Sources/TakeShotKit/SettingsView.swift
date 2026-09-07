@@ -203,10 +203,16 @@ struct SettingsView: View {
                         Text("\(controller.availableLUTs.count)")
                             .foregroundStyle(.secondary)
                         Button(L("open_in_finder")) { controller.openLUTsInFinder() }
+                        // only the app's own library. Pointed at the show's
+                        // LUT folder this would delete the crew's master looks,
+                        // under a confirmation that says "imported LUTs" — see
+                        // `ownsLUTsDirectory`.
                         Button(L("clear_data"), role: .destructive) {
                             confirmClearLUTs = true
                         }
-                        .disabled(!controller.hasLUTs)
+                        .disabled(!controller.canClearLUTs)
+                        .help(controller.ownsLUTsDirectory
+                              ? L("clear_luts_confirm") : L("clear_luts_not_ours"))
                     }
                 }
             }

@@ -83,8 +83,14 @@ Gatekeeper's refusal instead of the app.
   re-keyed and is not camera original. The scopes keep measuring the camera
   either way.
 - **Difference compare** joins wipe, blend and A/B: the per-pixel difference of
-  the two sources with a ×1/×4/×16 gain, for the mismatch that is too small to
-  see any other way.
+  the two sources with a ×1/×4/×16/×64 gain, for the mismatch that is too small
+  to see any other way. ×64 is there because the lower gains were not enough to
+  be useful on the thing they exist for: a one-code difference reads 22 of 255
+  at ×16 — a dark grey you have to hunt for — and 89 at ×64, which you can see
+  from across the room.
+- **The diagonal wipe goes both ways.** It ran from the top-left corner only,
+  which is the wrong corner half the time: the seam has to be able to cross the
+  part of the frame you are actually arguing about.
 - **Sync-play**: select two to four takes and play them in one transport-locked
   grid, aligned either from each take's first frame or on the timecode they
   share. **The grid goes out with you**: the hardware monitor, the SDI output,
@@ -97,7 +103,34 @@ Gatekeeper's refusal instead of the app.
   rather than holding the last four-up frame.
 - **Menu bar item** (off by default): the recorder's state and the running
   take's timecode stay visible, and stoppable, with the main window closed or
-  behind another application.
+  behind another application. It carries **Dim monitoring** rather than "Add
+  marker": a marker dropped from a menu with no picture in front of you lands
+  on nothing in particular, while dimming the monitor from behind another
+  application is exactly the thing you want a menu bar for.
+- **A clean feed**, on the button at the bottom-left of the player and on ⌃U:
+  every overlay the app draws over the picture goes away — badges, timecode,
+  transport, scopes — and comes back the same way. For showing the frame to a
+  director without the app around it.
+- **Framelines and the desqueeze take a number you type.** The lists cover the
+  aspects most shows are shot in and the squeeze factors most anamorphics have,
+  and a show that is not one of them — 1.66, 2.76, a 1.25x front element — had
+  no way in at all. Write it as "2.39", as "4:3" or "16/9", or as "1.5x" the
+  way it is engraved on the lens; a number nothing can be drawn at is refused
+  and the box snaps back.
+- **The SRT and NDI badges sit beside the timecode** at the top of the player
+  instead of in the bottom bar, which had no room left in it, and they stay
+  where they are when you switch a stream off — the icon changes to say so
+  rather than the badge disappearing and moving everything else along.
+- **Dragging in the assist panel keeps up with your hand.** The safe-area
+  sliders, the frameline and the record-trigger box each queued a fresh redraw
+  of the whole preview per pointer tick, so the thing you were dragging fell
+  behind your hand on a 4K signal. The redraws coalesce now: the last value you
+  dragged to is the one drawn, and it is drawn once.
+- **Drawing the record-trigger box draws it.** A drag that started inside the
+  box you already had would grab it and move it instead of starting a new one,
+  which made a box you wanted smaller impossible to draw without moving it out
+  of the way first. The decision is taken once, when the drag starts, and held
+  for the rest of it.
 - The app keeps to **one window per thing**. A second launch hands off to the
   copy already running instead of opening a second recorder against the same
   board.
@@ -165,7 +198,17 @@ Gatekeeper's refusal instead of the app.
 - **Camera cards are noticed.** Plug one in and the takes panel says what it
   found and offers to offload it — Offload, Ignore or Never. Nothing is ever
   copied without that answer, and you are never asked during a take: a card
-  mounted mid-roll waits until the take closes.
+  mounted mid-roll waits until the take closes. The list of cards you have
+  already dealt with can be cleared, for the day the same card comes back with
+  a different day's material on it.
+- **A destination says which disk it is.** The offload destinations were
+  labelled with the last folder in the path, so three drives all copying into
+  `Footage` were three tiles reading `Footage`; the tile now carries the
+  VOLUME's name, with the folder still spelled out underneath it in the path.
+  Choose sits after the other buttons, removing a destination is a red button
+  outside the tile rather than inside it, and a right-click on one offers the
+  same three things without hunting for the button. **Recent offloads** lists
+  where a copy went, not what the folder at the end of it was called.
 
 ### New when something is wrong
 
@@ -242,6 +285,27 @@ Gatekeeper's refusal instead of the app.
 - **Nothing writes to the take parked behind a comparison** — no markers, no
   grabs, and the scopes and the format badge stop describing it instead of
   quietly measuring a paused frame nobody is looking at.
+
+- **The LUT folder is yours to choose.** The look library was the app's own
+  folder in Application Support and nothing else; point it at the show's LUT
+  folder on the show drive instead, and put it back with one button. Switching
+  libraries switches the look with it — a `Show.cube` in the new folder is the
+  new folder's, not the old one's — and a look the new library does not have is
+  simply not selected any more, without an error about a file you did not ask
+  for.
+- **The playback output is known at launch.** The app was already sending
+  playback and the live monitor to the device you chose, and the panel showed
+  that device as missing until you opened the picker — and a device that
+  registered a moment after the app did never appeared in the list at all. The
+  list is read at startup now and follows anything you plug in.
+- **The takes panel scrolls with the wheel again.** Clicks worked, the wheel
+  did not, on the takes list and on Other content both — an invisible focus
+  layer sat over them and swallowed it. Delete still reaches the panel; the
+  focus target is behind the content now instead of over it.
+- **Settings stopped putting boxes around text you rarely type.** The project
+  name and the NDI source name are plain right-aligned text again, the
+  remote/script/live picker is centred in the window like everything else
+  around it, and a double-click on the phone address opens it in a browser.
 
 - **Every tile says which take or camera it is.** The name, a red REC dot and
   the tile's own running timecode are drawn into the picture rather than over

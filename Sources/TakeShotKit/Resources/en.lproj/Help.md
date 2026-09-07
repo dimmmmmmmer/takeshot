@@ -384,6 +384,7 @@ refuses a chord another action already holds, and names the one that has it.
 - `⌃L` — preview LUT on/off (with a LUT selected)
 - `⌃A` — mute/unmute monitoring
 - `⌃D` — DIM: monitoring at half level
+- `⌃U` — clean feed: every overlay off, the picture and nothing else
 - `⌃V` — switch record/playback
 - `⌃I` — record the mix on 1-2 only, or every selected channel (not while a
   take is recording)

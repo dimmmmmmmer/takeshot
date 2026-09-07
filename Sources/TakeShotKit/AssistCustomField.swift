@@ -67,11 +67,18 @@ struct AssistCustomField: View {
                 .onSubmit(commit)
                 // committing on the way out as well as on Return: an operator
                 // who types a number and clicks back onto the picture means it
-                .onChange(of: editing) { if !editing { commit() } }
+                // (same shape as the chroma key's hex field, for the same
+                // reasons — see `ChromaColorField`)
+                .onChange(of: editing) { _, focused in
+                    if !focused { commit() }
+                }
         }
         .onAppear { text = Self.text(for: value) }
-        // the picker moved it: the box says what the control says
-        .onChange(of: value) { if !editing { text = Self.text(for: value) } }
+        // the picker moved it: the box says what the control says. Never while
+        // it is being typed in — that would fight the operator's cursor.
+        .onChange(of: value) { _, moved in
+            if !editing { text = Self.text(for: moved) }
+        }
     }
 
     private func commit() {

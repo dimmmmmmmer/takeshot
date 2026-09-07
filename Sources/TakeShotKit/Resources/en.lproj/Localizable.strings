@@ -258,6 +258,7 @@
 "clear_data" = "Clear";
 "cancel" = "Cancel";
 "clear_luts_confirm" = "Delete all imported LUTs? This cannot be undone.";
+"clear_luts_not_ours" = "This library is a folder you chose — TakeShot will not empty it";
 "placeholders_legend" = "Fields: {prefix} {cam} {roll} {clip} {postfix}. Timecode: {tc}. Dates: {date}=YYYY-MM-DD, {yymmdd}, {mmdd}. Times: {hhmm}, {hhmmss}.";
 
 /* Take comments */
@@ -1041,6 +1042,7 @@
 "toast_grab_failed_reason" = "Frame grab failed: %@";
 "toast_record_folder_recreated" = "Record folder was moved/deleted — recreated";
 "toast_lut_import_failed" = "LUT import failed: %@";
+"toast_lut_folder_missing" = "LUT folder is not there: %@";
 "toast_lut_failed" = "LUT: %@";
 "toast_metadata_log_not_saved" = "Metadata log NOT saved: %@";
 "toast_ranges_not_saved" = "Loop ranges NOT saved: %@";

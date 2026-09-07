@@ -33,8 +33,12 @@ enum FinderOpen {
 
     /// Open a folder the app owns, creating it first.
     ///
-    /// Only for folders this app is the author of — the record folder, the LUT
-    /// library. Creating a missing OFFLOAD destination would be the wrong
+    /// Only for folders this app is the author of — the record folder, and the
+    /// look library while it is still the app's own one (a library the operator
+    /// pointed at the show drive goes through `folder` above: creating a
+    /// missing mount point there would put a phantom folder on the boot disk
+    /// and send the real drive to "SHOW 1"). Creating a missing OFFLOAD
+    /// destination would be the wrong
     /// favour: an empty folder appearing where the copies were supposed to be
     /// is worse than being told nothing happened.
     static func ownFolder(_ url: URL) {
