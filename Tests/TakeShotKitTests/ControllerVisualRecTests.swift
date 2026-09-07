@@ -119,7 +119,8 @@ struct ControllerVisualRecTests {
             #expect(controller.pipeline.displayStagePasses > afterFirst,
                     "the second push returned without its frame being displayed")
             #expect(lit != dark, """
-                both pushes read the same frame back — a teach here would learn                 one picture twice and report itself too alike
+                both pushes read the same frame back — a teach here would
+                learn one picture twice and report itself too alike
                 """)
         }
     }
