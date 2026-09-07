@@ -386,6 +386,7 @@
 "assist_help" = "Operator aids: exposure, framelines, desqueeze, punch-in";
 "assist_tool" = "Exposure assist";
 "assist_off" = "Off";
+"assist_custom" = "Custom";
 "assist_false_color" = "False color";
 "assist_zebra" = "Zebra";
 "assist_zebra_hint" = "The level the stripes start at. On an HDR signal it reads in cd/m²: the stripes fire on the same fraction of diffuse white they do in SDR, and the number says what that is in luminance.";

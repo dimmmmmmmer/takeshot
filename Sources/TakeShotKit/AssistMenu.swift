@@ -222,12 +222,22 @@ private struct AssistControlRows: View {
             get: { controller.settings.assist.framelineRatio ?? 0 },
             set: { controller.settings.assist.framelineRatio = $0 == 0 ? nil : $0 })) {
             Text(L("assist_off")).tag(0.0)
-            Text(verbatim: "1.85").tag(1.85)
-            Text(verbatim: "2.00").tag(2.0)
-            Text(verbatim: "2.35").tag(2.35)
-            Text(verbatim: "2.39").tag(2.39)
-            Text(verbatim: "4:3").tag(4.0 / 3.0)
-            Text(verbatim: "9:16").tag(9.0 / 16.0)
+            ForEach(AssistPresets.frameline, id: \.value) { preset in
+                Text(verbatim: preset.label).tag(preset.value)
+            }
+            // A typed aspect is a tag of its own, or the picker would have a
+            // selection none of its rows carries and would show nothing at all
+            // — the operator's own 2.76 would read as an empty control.
+            if let custom = AssistPresets.custom(
+                controller.settings.assist.framelineRatio,
+                among: AssistPresets.frameline) {
+                Text(verbatim: AssistRatioInput.text(custom)).tag(custom)
+            }
+        }
+        AssistCustomField(label: L("assist_custom"),
+                          range: AssistRatioInput.framelineRange,
+                          value: controller.settings.assist.framelineRatio) {
+            controller.settings.assist.framelineRatio = $0
         }
         Toggle(L("safe_areas"), isOn: Binding(
             get: { controller.settings.assist.safeAreasOn ?? false },
@@ -266,11 +276,18 @@ private struct AssistControlRows: View {
         Picker(L("desqueeze"), selection: Binding(
             get: { controller.liveAssist.desqueeze },
             set: { factor in controller.setAssist { $0.desqueeze = factor } })) {
-            Text(verbatim: "1x").tag(1.0)
-            Text(verbatim: "1.33x").tag(1.33)
-            Text(verbatim: "1.5x").tag(1.5)
-            Text(verbatim: "1.8x").tag(1.8)
-            Text(verbatim: "2x").tag(2.0)
+            ForEach(AssistPresets.desqueeze, id: \.value) { preset in
+                Text(verbatim: preset.label).tag(preset.value)
+            }
+            if let custom = AssistPresets.custom(controller.liveAssist.desqueeze,
+                                                 among: AssistPresets.desqueeze) {
+                Text(verbatim: AssistRatioInput.text(custom) + "x").tag(custom)
+            }
+        }
+        AssistCustomField(label: L("assist_custom"),
+                          range: AssistRatioInput.desqueezeRange,
+                          value: controller.liveAssist.desqueeze) { factor in
+            controller.setAssist { $0.desqueeze = factor }
         }
 
         HStack(spacing: 6) {
