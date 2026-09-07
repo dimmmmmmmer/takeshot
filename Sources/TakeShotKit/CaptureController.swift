@@ -516,6 +516,9 @@ final class CaptureController: ObservableObject {
     /// a TRANSIENT state could be handed the second watch's answer instead of
     /// the first's.
     var diskWatchTask: Task<Void, Never>?
+    /// Everything the app draws over the picture is hidden — see
+    /// `toggleCleanFeed`.
+    @Published var cleanFeed = false
     /// Free space on the record volume, GB; -1 — unreadable. Sampled a few
     /// times a minute rather than per push: the status goes out four times a
     /// second and a volume query is a syscall on the MainActor.

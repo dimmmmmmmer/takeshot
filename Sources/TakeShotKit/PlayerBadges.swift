@@ -141,7 +141,11 @@ struct PlayerTopBadgesModifier: ViewModifier {
     var autoHide = false
     @State private var topVisible = true
 
-    private var chromeVisible: Bool { !autoHide || topVisible }
+    /// Clean feed hides it outright; otherwise it is the fullscreen auto-hide
+    /// that decides.
+    private var chromeVisible: Bool {
+        !controller.cleanFeed && (!autoHide || topVisible)
+    }
 
     func body(content: Content) -> some View {
         content
@@ -205,13 +209,18 @@ struct PlayerTopBadgesModifier: ViewModifier {
     }
 
     @ViewBuilder private var scopesOverlay: some View {
-        if controller.showScopesOverlay, !controller.scopesWindowOpen {
+        if controller.showScopesOverlay, !controller.scopesWindowOpen,
+           !controller.cleanFeed {
             ScopesPanel(scopes: controller.scopes, singleScope: true)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(.white.opacity(0.12)))
                 .frame(maxWidth: 860, maxHeight: 320)
                 .padding(10)
+                // Clear of the clean-feed button, which owns this corner
+                // (`PlayerArea`). Two things stacked in one corner is one of
+                // them unreachable.
+                .padding(.leading, PlayerChrome.height + 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

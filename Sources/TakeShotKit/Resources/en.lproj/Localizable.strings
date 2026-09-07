@@ -556,6 +556,9 @@
 "hotkey_monitor_dim" = "DIM monitoring (half level)";
 "hotkey_viewer_mode" = "Switch record / playback";
 "hotkey_audio_bank" = "Audio: mix only (1-2) / all channels";
+"clean_feed_hide" = "Hide the controls — clean picture";
+"clean_feed_show" = "Show the controls again";
+"hotkey_clean_feed" = "Hide the controls (clean picture)";
 /* web remote: the browser page phones on the set network control the app from */
 "settings_remote" = "Remote control";
 "remote_enable" = "Web remote";

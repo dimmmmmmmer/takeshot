@@ -559,6 +559,9 @@
 "hotkey_monitor_dim" = "DIM мониторинга (вдвое тише)";
 "hotkey_viewer_mode" = "Переключить запись / плейбек";
 "hotkey_audio_bank" = "Звук: только микс (1-2) / все каналы";
+"clean_feed_hide" = "Скрыть элементы — чистая картинка";
+"clean_feed_show" = "Вернуть элементы";
+"hotkey_clean_feed" = "Скрыть элементы (чистая картинка)";
 /* web remote: the browser page phones on the set network control the app from */
 "settings_remote" = "Пульт в браузере";
 "remote_enable" = "Веб-пульт";

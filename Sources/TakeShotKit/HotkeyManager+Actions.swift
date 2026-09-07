@@ -22,7 +22,8 @@ extension HotkeyManager {
         case .instantReplay:
             controller.instantReplay()
         case .fullscreen, .addMarker, .removeMarker, .punchIn,
-             .toggleScopesOverlay, .toggleLUTPreview, .toggleViewerMode:
+             .toggleScopesOverlay, .toggleLUTPreview, .toggleViewerMode,
+             .toggleCleanFeed:
             performViewer(action, controller: controller)
         case .toggleMonitorMute, .toggleMonitorDim, .toggleAudioChannelBank:
             performMonitoring(action, controller: controller)
@@ -56,6 +57,8 @@ extension HotkeyManager {
             }
         case .toggleViewerMode:
             controller.toggleViewerMode()
+        case .toggleCleanFeed:
+            controller.toggleCleanFeed()
         default:
             break // handled by perform(_:controller:)
         }

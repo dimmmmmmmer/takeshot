@@ -116,6 +116,21 @@ extension CaptureController {
     /// Punched in, the operator is judging the exposure of the magnified part
     /// of the frame — a full-frame waveform then answers a question nobody
     /// asked. Not punched in, this is the whole frame and costs nothing.
+    /// **Everything the app draws OVER the picture, off** — the badges, the
+    /// compare bar, the scopes overlay, the corner buttons (owner: "в левом
+    /// нижнем углу нужна кнопка типа скрыть интерфейсные кнопки чтоб был чистый
+    /// вывод").
+    ///
+    /// Warnings are not chrome and stay: the sticky alarm that says the card is
+    /// full or the volume has gone is the one thing a display mode may never
+    /// hide, because the operator turned this on to SHOW somebody the picture
+    /// and would be the last to know.
+    ///
+    /// Not persisted. An app that opens with its own controls hidden reads as
+    /// broken, and this is a thing you switch on for a minute to show the
+    /// director, not a preference.
+    func toggleCleanFeed() { cleanFeed.toggle() }
+
     var scopeRegion: ScopeRegion {
         ScopeRegion(assist: assist)
     }

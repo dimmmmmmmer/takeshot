@@ -223,6 +223,7 @@ struct ModelHotkeyTests {
             "grabFrame", "instantReplay", "addMarker", "removeMarker", "punchIn",
             "toggleScopesOverlay", "toggleLUTPreview", "toggleMonitorMute",
             "toggleMonitorDim", "toggleViewerMode", "toggleAudioChannelBank",
+            "toggleCleanFeed",
         ])
     }
 

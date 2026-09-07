@@ -192,6 +192,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleMonitorDim
     case toggleViewerMode
     case toggleAudioChannelBank
+    case toggleCleanFeed
 
     var id: String { rawValue }
 
@@ -212,6 +213,7 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .toggleMonitorDim: return "hotkey_monitor_dim"
         case .toggleViewerMode: return "hotkey_viewer_mode"
         case .toggleAudioChannelBank: return "hotkey_audio_bank"
+        case .toggleCleanFeed: return "hotkey_clean_feed"
         }
     }
 
@@ -287,6 +289,13 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "i",
                             modifiers: NSEvent.ModifierFlags.control.rawValue,
                             keyCode: 34)
+        case .toggleCleanFeed:
+            // ⌃U — the UI, off and on. The one key in this family an operator
+            // presses while somebody is standing behind them looking at the
+            // picture, so it has to be reachable without looking.
+            return KeyCombo(key: "u",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 32)
         }
     }
 }

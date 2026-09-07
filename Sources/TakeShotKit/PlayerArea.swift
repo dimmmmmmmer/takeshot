@@ -19,7 +19,7 @@ struct PlayerArea: View {
             .playerTopBadges()
             .overlay(alignment: .bottomTrailing) {
                 // player fullscreen — bottom-right (in playback this button is in the transport)
-                if controller.viewerMode == .record {
+                if controller.viewerMode == .record, !controller.cleanFeed {
                     Button {
                         controller.toggleLiveFullscreen()
                     } label: {
@@ -30,9 +30,35 @@ struct PlayerArea: View {
                                         in: RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(.plain)
-                    .help(L("fullscreen"))
+                    .controlHelp(L("fullscreen"))
                     .padding(8)
                 }
+            }
+            // **The way out of a clean feed, and the way in** (owner: "в левом
+            // нижнем углу нужна кнопка типа скрыть интерфейсные кнопки чтоб был
+            // чистый вывод"). Bottom-left, mirroring the fullscreen button
+            // opposite it and wearing the same plate.
+            //
+            // It is the ONE thing clean feed does not hide, at a quarter
+            // opacity: a mode with no visible way back is a mode an operator
+            // has to know a key for, and the key (⌃U) is the answer for the
+            // person who set it up rather than for the one who finds it on.
+            .overlay(alignment: .bottomLeading) {
+                Button {
+                    controller.toggleCleanFeed()
+                } label: {
+                    Image(systemName: controller.cleanFeed
+                          ? "eye.slash" : "eye")
+                        .font(.system(size: 13))
+                        .padding(6)
+                        .background(.black.opacity(0.45),
+                                    in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .opacity(controller.cleanFeed ? 0.25 : 1)
+                .controlHelp(controller.cleanFeed
+                             ? L("clean_feed_show") : L("clean_feed_hide"))
+                .padding(8)
             }
             .overlay {
                 if controller.showAudioPanel {
