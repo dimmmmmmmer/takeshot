@@ -154,7 +154,10 @@ struct ModelContactSheetTests {
                                                            with: "к")
         #expect(body.contains("контактный лист"), "the title is not translated")
         #expect(body.contains("Камера A"))
-        #expect(body.contains("2 дублей"))
+        // "2 дубля" and NOT "2 дублей": the summary line shares
+        // `ReportSummary` with the shift report, and Russian agrees the noun
+        // with the number. See `CountedNoun`.
+        #expect(body.contains("2 дубля"), "the count does not agree: \(body)")
         #expect(body.contains("ГОДЕН"))
         #expect(body.contains("БРАК"))
     }

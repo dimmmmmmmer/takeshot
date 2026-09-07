@@ -414,7 +414,7 @@
 "offload_dest_prompt" = "Сюда";
 "offload_scanning" = "Сканирую...";
 "offload_progress" = "Офлоад %d/%d";
-"offload_done" = "Офлоад сверен: %d файлов";
+"offload_done" = "Офлоад сверен: %@";
 "close" = "Закрыть";
 
 /* i18n layout pass */
@@ -500,7 +500,7 @@
 "offload_resume_dest_full" = "%@ — всё будет скопировано заново: %@.";
 "offload_resume_gate" = "Пропуск решается по контрольной сумме, а не по размеру: каждый файл читается с диска обратно и сверяется. Что не сошлось — копируется заново.";
 "offload_resume_cost" = "Диск при этом читается целиком — карта не перечитывается, и ничего не пишется дважды.";
-"offload_resume_accept" = "Продолжить (пропустить до %d файлов)";
+"offload_resume_accept" = "Продолжить (пропустить: %@)";
 "offload_resume_decline" = "Копировать карту целиком";
 "offload_resume_why_new" = "в эту папку ещё ничего не копировали";
 "offload_resume_why_unstamped" = "копия здесь не говорит, с какой карты она сделана";
@@ -539,6 +539,12 @@
 "item_count_one" = "%d объект";
 "item_count_few" = "%d объекта";
 "item_count_many" = "%d объектов";
+"file_count_one" = "%d файл";
+"file_count_few" = "%d файла";
+"file_count_many" = "%d файлов";
+"take_count_one" = "%d дубль";
+"take_count_few" = "%d дубля";
+"take_count_many" = "%d дублей";
 "trash_confirm" = "Переместить %@ в Корзину?";
 "trash_done" = "В Корзину перемещено: %@";
 "trash_selection" = "Переместить %@ в Корзину";
@@ -610,7 +616,7 @@
 "verify_list_extra" = "Есть на диске, но ни в одном списке (%d)";
 "verify_list_more" = "...и ещё %d";
 "verify_scan_problems" = "Не удалось прочитать папок: %d — список посторонних файлов неполный";
-"verify_done" = "Диск сверен: %d файлов";
+"verify_done" = "Диск сверен: %@";
 "verify_done_strays" = "Диск сверен: файлов — %d, вне списка сумм — %d";
 "verify_alert_problem" = "Проверка: испорчено или потеряно %d из %d файлов (%@). Этот диск не удалять.";
 "verify_error_no_manifest" = "В папке «%@» нет офлоада TakeShot — сверять не с чем.";
@@ -641,7 +647,7 @@
 /* the contact sheet shares the report's header and vocabulary */
 "contact_title" = "контактный лист";
 "report_camera" = "Камера %@";
-"report_takes_summary" = "%d дублей (%d годных, %d брак)";
+"report_takes_summary" = "%1$@ (годных — %2$d, брак — %3$d)";
 "report_footage" = "материал %@";
 "report_col_clip" = "КЛИП";
 "report_col_tc_in" = "TC НАЧ";
@@ -781,7 +787,7 @@
 /* === dailies with burn-ins (DailiesSheet, DailiesStatusStrip) === */
 "dailies_menu" = "Дейлизы…";
 "dailies_title" = "Дейлизы с бёрн-инами";
-"dailies_batch" = "%d дублей → H.264 дейлизы (<имя>_DAILY.mp4)";
+"dailies_batch" = "%@ → H.264 дейлизы (<имя>_DAILY.mp4)";
 "dailies_burn_section" = "Впечатанный текст";
 "dailies_burn_tc" = "Бегущий таймкод (сверху по центру)";
 "dailies_burn_name" = "Имя клипа (внизу слева)";
@@ -799,7 +805,7 @@
 "dailies_frames" = "%d/%d кадров";
 "dailies_status_reopen" = "Открыть очередь дейлизов";
 "dailies_cancelling" = "Дейлизы: остановка…";
-"dailies_done" = "Дейлизы готовы: %d файлов";
+"dailies_done" = "Дейлизы готовы: %@";
 "dailies_failed" = "Дейлизы: %d с ошибкой (%@)";
 "dailies_cancelled" = "Дейлизы остановлены: готово %d из %d";
 "dailies_result_done" = "Готово: %d из %d";

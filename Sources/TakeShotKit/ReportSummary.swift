@@ -52,10 +52,15 @@ struct ReportSummary: Equatable {
         // back non-finite, and a sum poisons on one such take.
         let total = takes.reduce(0.0) { $0 + $1.durationSeconds }
         let cameraPart = camera.isEmpty ? "" : "   \(L("report_camera", camera))"
+        // The count is a PHRASE and not a number: Russian agrees the noun with
+        // it and has three forms, so "1 дублей" was on the headline of every
+        // shift report a single-take day produced. See `localizedCount`.
+        let takeLine = L("report_takes_summary",
+                         localizedCount(takes.count, .take), good, bad)
         return ReportSummary(
             title: "\(project.isEmpty ? "TakeShot" : project) — \(L(titleKey))",
             summary: "\(formatter.string(from: date))\(cameraPart)   "
-                + "\(L("report_takes_summary", takes.count, good, bad))   "
+                + takeLine + "   "
                 + "\(L("report_footage", ClipTimeText.hoursMinutesSeconds.text(total)))")
     }
 }

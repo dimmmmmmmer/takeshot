@@ -45,6 +45,18 @@ final class OffloadTarget {
     /// from the card rather than trusted.
     private var replaced: [String] = []
     private let startedAt = Date()
+    /// What this run is copying, for the progress journal — nil until the run
+    /// says, which is also what switches journalling on. A destination that was
+    /// never told the card writes no journal, which is what keeps every fake
+    /// and fixture in the suites from leaving one.
+    private var journalCard: OffloadCardIdentity?
+    private var journalAlgorithm: OffloadHashAlgorithm = .xxh64
+    /// When the last checkpoint was written. `distantPast`, so the FIRST file
+    /// boundary always writes one: a run that dies after one file of a 2 TB
+    /// card should still have recorded that file, and waiting out the interval
+    /// before the first note would make the shortest interruptions the ones
+    /// that lose the most.
+    private var lastCheckpoint = Date.distantPast
     /// When this destination stopped, if it did — the clock has to stop with it,
     /// or a disk that died in the first minute of an hour-long run reports a
     /// rate of 0.4 MB/s in its summary and nobody can read the number.
@@ -81,6 +93,37 @@ final class OffloadTarget {
     /// own summary then states WHY everything was copied, which is the
     /// difference between a tool that was careful and one that ignored the
     /// question.
+    /// Which card this destination is being written from, so the running note
+    /// it leaves can be recognised — or refused — by the next run.
+    ///
+    /// Separate from `adopt` because the two are independent: a run that was
+    /// NOT asked to resume still journals, and that is the case this feature is
+    /// for. The first offload of a card is the one that gets interrupted.
+    func journal(card: OffloadCardIdentity,
+                 algorithm: OffloadHashAlgorithm) {
+        journalCard = card
+        journalAlgorithm = algorithm
+    }
+
+    /// Write the note if it is due. Called at file boundaries, which is the
+    /// only place there is anything new to write down.
+    ///
+    /// Best-effort by construction: a journal that could not be written costs a
+    /// later run its shortcut, which is the safe direction — it copies
+    /// everything instead. Failing a destination over it would trade a
+    /// verified copy for a convenience.
+    func checkpoint(force: Bool = false) {
+        guard let journalCard, isAlive else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(lastCheckpoint)
+            >= OffloadProgressJournal.checkpointSeconds else { return }
+        lastCheckpoint = now
+        _ = try? OffloadProgressJournal.write(
+            OffloadJournal(card: journalCard, algorithm: journalAlgorithm,
+                           entries: entries),
+            into: root)
+    }
+
     func adopt(_ offer: OffloadResumeOffer) {
         isResuming = offer.isUsable
         resume = OffloadResumeFacts(claimed: offer.files,

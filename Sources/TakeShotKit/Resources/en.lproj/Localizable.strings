@@ -409,7 +409,7 @@
 "offload_dest_prompt" = "Copy here";
 "offload_scanning" = "Scanning...";
 "offload_progress" = "Offload %d/%d";
-"offload_done" = "Offload verified: %d files";
+"offload_done" = "Offload verified: %@";
 "close" = "Close";
 
 /* i18n layout pass */
@@ -495,7 +495,7 @@
 "offload_resume_dest_full" = "%@ — everything will be copied: %@.";
 "offload_resume_gate" = "Skipping is decided by checksum, not by size: each file is read back off the disk and compared. Anything that does not match is copied again.";
 "offload_resume_cost" = "The disk is still read in full — the card is not, and nothing is written twice.";
-"offload_resume_accept" = "Resume (skip up to %d files)";
+"offload_resume_accept" = "Resume (skip up to %@)";
 "offload_resume_decline" = "Copy the whole card";
 "offload_resume_why_new" = "nothing has been copied into this folder before";
 "offload_resume_why_unstamped" = "the copy here does not say which card it was made from";
@@ -531,9 +531,17 @@
 "audio_output_help" = "Where monitoring and playback go (the same device as in Settings)";
 "audio_output_missing" = "Device not connected";
 /* takes panel: selection, multi-select, Trash (items 9/22/32) */
+/* Counted nouns. Three forms because Russian has three; English lands both
+   its own on _few/_many. See `localizedCount`. */
 "item_count_one" = "%d item";
 "item_count_few" = "%d items";
 "item_count_many" = "%d items";
+"file_count_one" = "%d file";
+"file_count_few" = "%d files";
+"file_count_many" = "%d files";
+"take_count_one" = "%d take";
+"take_count_few" = "%d takes";
+"take_count_many" = "%d takes";
 "trash_confirm" = "Move %@ to the Trash?";
 "trash_done" = "Moved %@ to the Trash";
 "trash_selection" = "Move %@ to Trash";
@@ -605,7 +613,7 @@
 "verify_list_extra" = "On the disk and in no checksum list (%d)";
 "verify_list_more" = "...and %d more";
 "verify_scan_problems" = "%d folder(s) could not be read — the stray list is incomplete";
-"verify_done" = "Disk verified: %d files";
+"verify_done" = "Disk verified: %@";
 "verify_done_strays" = "Disk verified: %d files, %d not in the checksum list";
 "verify_alert_problem" = "Verify: %d of %d files are wrong or missing — %@. Do not delete this disk.";
 "verify_error_no_manifest" = "“%@” holds no TakeShot offload — there is no checksum list to check it against.";
@@ -636,7 +644,7 @@
 /* the contact sheet shares the report's header and vocabulary */
 "contact_title" = "contact sheet";
 "report_camera" = "Cam %@";
-"report_takes_summary" = "%d takes (%d good, %d bad)";
+"report_takes_summary" = "%1$@ (%2$d good, %3$d bad)";
 "report_footage" = "footage %@";
 "report_col_clip" = "CLIP";
 "report_col_tc_in" = "TC IN";
@@ -789,7 +797,7 @@
 /* === dailies with burn-ins (DailiesSheet, DailiesStatusStrip) === */
 "dailies_menu" = "Dailies…";
 "dailies_title" = "Dailies with burn-ins";
-"dailies_batch" = "%d takes → H.264 dailies (<name>_DAILY.mp4)";
+"dailies_batch" = "%@ → H.264 dailies (<name>_DAILY.mp4)";
 "dailies_burn_section" = "Burned-in text";
 "dailies_burn_tc" = "Running timecode (top center)";
 "dailies_burn_name" = "Clip name (bottom left)";
@@ -807,7 +815,7 @@
 "dailies_frames" = "%d/%d frames";
 "dailies_status_reopen" = "Open the dailies queue";
 "dailies_cancelling" = "Dailies: stopping…";
-"dailies_done" = "Dailies done: %d files";
+"dailies_done" = "Dailies done: %@";
 "dailies_failed" = "Dailies: %d failed (%@)";
 "dailies_cancelled" = "Dailies stopped: %d of %d done";
 "dailies_result_done" = "Done: %d of %d";

@@ -77,4 +77,58 @@ import Testing
         #expect(drawn < 60, "sixty slider ticks cost \(drawn) full renders")
         #expect(!draws.anyOnMain, "a frame was rendered on the main thread")
     }
+
+    /// **Two presents never overlap, whichever four callers race.**
+    ///
+    /// The play loop, a seek's detached decode, the paused repaint and a layer
+    /// mounting itself on the main actor all reach `present`. Two of them
+    /// racing put the OLDER frame on the surface last: a seek that visibly
+    /// does not take, once in twenty tries and never in front of anyone who
+    /// could help. `AssistStage` was already safe — it takes a render lock and
+    /// names this player as the reason it has one — so what was missing was
+    /// ORDER, and order is a serial queue.
+    @Test func twoPresentsNeverOverlap() async throws {
+        let root = MediaFixtures.scratchDirectory("RawPresentOverlap")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, _) = try RawClipFixtures.player(frames: 4, in: root)
+        let overlap = Overlap()
+        model.seek(to: 1)
+        #expect(await ControllerWait.untilWritten { model.lastBuffer != nil },
+                "no frame reached the model")
+        let buffer = try #require(model.lastBuffer)
+        model.setOnDisplayFrame { _ in overlap.enter() }
+
+        // Eight presents from eight threads at once, which is more than a real
+        // run ever has and is the point: one overlap is enough to fail.
+        DispatchQueue.concurrentPerform(iterations: 8) { _ in
+            model.present(buffer)
+        }
+        model.settlePresents()
+        #expect(overlap.peak == 1, "\(overlap.peak) presents ran at once")
+        #expect(overlap.total >= 8,
+                "only \(overlap.total) of the presents landed")
+    }
+}
+
+/// How many presents were inside the handler at once.
+private final class Overlap: @unchecked Sendable {
+    private let lock = NSLock()
+    private var inside = 0
+    private var highest = 0
+    private var count = 0
+
+    func enter() {
+        lock.withLock {
+            inside += 1
+            count += 1
+            highest = max(highest, inside)
+        }
+        // Long enough that an overlapping caller is certain to be seen, and
+        // short enough that eight of them cost a fifth of a second.
+        Thread.sleep(forTimeInterval: 0.02)
+        lock.withLock { inside -= 1 }
+    }
+
+    var peak: Int { lock.withLock { highest } }
+    var total: Int { lock.withLock { count } }
 }

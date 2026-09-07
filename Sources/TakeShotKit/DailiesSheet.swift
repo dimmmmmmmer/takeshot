@@ -34,7 +34,8 @@ struct DailiesSheet: View {
         VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
             Text(L("dailies_title"))
                 .offloadText(.title)
-            Text(L("dailies_batch", model.queuedTakes.count))
+            Text(L("dailies_batch",
+                   localizedCount(model.queuedTakes.count, .take)))
                 .offloadText(.caption)
             DailiesBurninSection(model: model)
             Divider()

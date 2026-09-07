@@ -107,7 +107,8 @@ extension CaptureController {
             lastNotice = L("dailies_cancelled", report.completed.count,
                            report.items.count)
         } else if report.isFullySucceeded {
-            lastNotice = L("dailies_done", report.completed.count)
+            lastNotice = L("dailies_done",
+                           localizedCount(report.completed.count, .file))
         } else {
             lastError = L("dailies_failed", report.failed.count,
                           report.failed.first?.failure ?? "")

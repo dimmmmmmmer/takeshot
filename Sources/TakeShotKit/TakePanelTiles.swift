@@ -221,14 +221,49 @@ extension View {
 /// `Locale.current` — and the app chooses its UI language itself by swapping
 /// the .lproj bundle (see L10n), so on an English Mac running the Russian UI
 /// the rule applied would be the wrong language's. Hence the arithmetic here.
-func localizedItemCount(_ count: Int) -> String {
+func localizedItemCount(_ count: Int) -> String { localizedCount(count, .item) }
+
+/// **A noun that is counted, with its three keys spelled out.**
+///
+/// Russian agrees the noun with the number and has three forms, so a bare
+/// `"%d дублей"` is wrong for 1, 2, 3 and 4 — and it was on screen in every
+/// place an operator reads a number: the shift report's own headline
+/// ("1 дублей"), the offload's "verified: N files", the dailies batch, the
+/// button that asks whether to resume. English has two and lands both on
+/// `_few`/`_many`.
+///
+/// The keys are LITERALS and not a stem plus a suffix, which is not a style
+/// choice: `LocalizationTests.everyKeyInTheTableIsReachedFromTheCode` proves
+/// every translated string is reachable from the code, and a key assembled as
+/// `"\(stem)_one"` is reachable to a reader and to nothing else — the walker
+/// would have called all nine of these dead and the next person would have
+/// deleted them.
+struct CountedNoun {
+    let one: String
+    let few: String
+    let many: String
+
+    static let item = CountedNoun(one: "item_count_one",
+                                  few: "item_count_few",
+                                  many: "item_count_many")
+    static let file = CountedNoun(one: "file_count_one",
+                                  few: "file_count_few",
+                                  many: "file_count_many")
+    static let take = CountedNoun(one: "take_count_one",
+                                  few: "take_count_few",
+                                  many: "take_count_many")
+
+    static let all: [CountedNoun] = [.item, .file, .take]
+    var keys: [String] { [one, few, many] }
+}
+
+/// A counted noun, in the form the number requires.
+func localizedCount(_ count: Int, _ noun: CountedNoun) -> String {
     let lastDigit = abs(count) % 10
     let lastTwo = abs(count) % 100
-    if lastDigit == 1, lastTwo != 11 {
-        return L("item_count_one", count)
-    }
+    if lastDigit == 1, lastTwo != 11 { return L(noun.one, count) }
     if (2...4).contains(lastDigit), !(12...14).contains(lastTwo) {
-        return L("item_count_few", count)
+        return L(noun.few, count)
     }
-    return L("item_count_many", count)
+    return L(noun.many, count)
 }

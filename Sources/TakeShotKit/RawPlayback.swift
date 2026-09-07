@@ -82,10 +82,22 @@ final class RawPlayerModel: ObservableObject {
     // sinks follow the PlaybackFrameTap pattern: one layer per mount
     private let sinks = PreviewSinkRegistry()
     /// The operator aids, drawn into the frame on its way out (see
-    /// `AssistStage`). Confined to whichever thread `present` runs on — the
-    /// decode task, or main when a paused clip is re-presented; both are
-    /// serialized by the play generation.
+    /// `AssistStage`).
     private let assistStage = AssistStage()
+    /// **Every present goes through here, one at a time and in order.**
+    ///
+    /// Not for safety — `AssistStage` takes its own render lock and names this
+    /// player as the reason it has one. For ORDER. Four callers reach `present`
+    /// from four places: the play loop, a seek's detached decode, the paused
+    /// repaint, and a layer mounting itself on the main actor. Two of them
+    /// racing put the OLDER frame on the surface last, which is a seek that
+    /// visibly does not take — the operator scrubs to a mark and the picture
+    /// snaps back to where it was, once in twenty tries and never in front of
+    /// anyone who could help.
+    ///
+    /// `userInitiated` because a seek is a person waiting.
+    private let presentQueue = DispatchQueue(label: "takeshot.raw-present",
+                                             qos: .userInitiated)
     /// Every presented frame — hardware playout mirror. Set from the main
     /// actor, read on the decode task; a tiny lock keeps it honest.
     private let displayFrameLock = NSLock()
@@ -156,7 +168,11 @@ final class RawPlayerModel: ObservableObject {
     func addSink(_ layer: MetalPreviewLayer) {
         sinks.add(layer)
         if let buffer = lastBuffer {
-            layer.present(assistStage.rendered(buffer) ?? buffer)
+            // Through the queue like every other present, and for the same
+            // reason: a layer mounting itself while a seek is in flight used to
+            // render on the main actor beside the decode task's render and put
+            // whichever finished last on the surface.
+            present(buffer)
         } else {
             showFrame(currentFrame) // first mount: decode the poster frame
         }
@@ -227,6 +243,12 @@ final class RawPlayerModel: ObservableObject {
     /// out of a RAW clip is taken from — and only the copy on its way to the
     /// surfaces carries the aids.
     nonisolated func present(_ buffer: CVPixelBuffer) {
+        let boxed = UncheckedSendable(buffer)
+        presentQueue.async { [self] in show(boxed.value) }
+    }
+
+    /// One frame onto every surface. `presentQueue`-confined.
+    private nonisolated func show(_ buffer: CVPixelBuffer) {
         let shown = assistStage.rendered(buffer) ?? buffer
         sinks.present(shown)
         displayFrameLock.lock()
@@ -236,6 +258,13 @@ final class RawPlayerModel: ObservableObject {
         // frame IS `LivePicture.clean` for a RAW clip, and only the copy on its
         // way to the surfaces carries the aids.
         handler?(LiveFrame(decorated: shown, clean: buffer))
+    }
+
+    /// Wait until everything already submitted has been shown. For the suite —
+    /// the queue is private and `present` is async onto it, so this is how a
+    /// test knows a frame has landed without a wall-clock window.
+    nonisolated func settlePresents() {
+        presentQueue.sync {}
     }
 }
 

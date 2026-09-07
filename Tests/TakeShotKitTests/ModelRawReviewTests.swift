@@ -75,11 +75,19 @@ import Testing
 
         let second = MetalPreviewLayer()
         model.addSink(second)
-        // full budget on purpose: this waits for a decode that must NOT happen
-        _ = await ControllerWait.until({ presented.count > 1 },
+        // Full budget on purpose: this waits for a decode that must NOT happen.
+        _ = await ControllerWait.until({ presented.distinctBuffers > 1 },
                                        timeout: .milliseconds(500))
-        #expect(presented.count == 1,
+        // The BUFFER and not the count of presents. A second mount re-presents
+        // the frame already on screen, and a re-present is a present like any
+        // other — it reaches the hardware playout mirror too, which is the
+        // whole reason it goes through `present` rather than straight at the
+        // layer. What must not happen is a DECODE, and a decode is a new
+        // buffer out of the pool.
+        #expect(presented.distinctBuffers == 1,
                 "the second mount decoded again instead of re-presenting")
+        #expect(presented.all.allSatisfy { $0 == 0 },
+                "a frame other than the poster reached the surfaces")
         model.removeSink(first)
         model.removeSink(second)
     }

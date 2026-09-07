@@ -142,7 +142,8 @@ extension CaptureController {
             // One destination is still the common case (a single shuttle drive),
             // and "1 copies" is not what anybody wants to read.
             lastNotice = report.destinations.count == 1
-                ? L("offload_done", report.run.card.files)
+                ? L("offload_done",
+                    localizedCount(report.run.card.files, .file))
                 : L("offload_done_multi", report.run.card.files,
                     report.destinations.count)
             return
@@ -232,7 +233,7 @@ extension CaptureController {
         // to say so until somebody clears a .DS_Store teaches its operator to
         // stop reading it.
         lastNotice = report.extra.isEmpty
-            ? L("verify_done", report.verified.count)
+            ? L("verify_done", localizedCount(report.verified.count, .file))
             : L("verify_done_strays", report.verified.count, report.extra.count)
     }
 

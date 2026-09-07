@@ -110,14 +110,30 @@ enum RawClipFixtures {
     final class Presented: @unchecked Sendable {
         private let lock = NSLock()
         private var frames: [Int] = []
+        private var buffers: [UInt] = []
 
         var count: Int { lock.withLock { frames.count } }
         var all: [Int] { lock.withLock { frames } }
         var last: Int? { lock.withLock { frames.last } }
+        /// Which BUFFER each present carried, as its address.
+        ///
+        /// A decode makes a new buffer out of the pool; a re-present hands the
+        /// one already on screen, which `lastBuffer` is still holding, so the
+        /// pool cannot have recycled it. That makes "was this decoded again?"
+        /// answerable as a fact rather than inferred from a count of presents
+        /// — which is what it used to be, and which stopped meaning anything
+        /// the day a second mount started reporting itself to the mirror slot
+        /// like every other present does.
+        var distinctBuffers: Int { lock.withLock { Set(buffers).count } }
 
         func record(_ buffer: CVPixelBuffer) {
             guard let index = RawClipFixtures.frameIndex(of: buffer) else { return }
-            lock.withLock { frames.append(index) }
+            let address = UInt(bitPattern: Unmanaged.passUnretained(buffer)
+                .toOpaque())
+            lock.withLock {
+                frames.append(index)
+                buffers.append(address)
+            }
         }
     }
 

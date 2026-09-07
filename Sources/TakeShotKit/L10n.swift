@@ -107,5 +107,85 @@ func L(_ key: String) -> String {
 }
 
 func L(_ key: String, _ arguments: CVarArg...) -> String {
-    String(format: L10n.string(key), arguments: arguments)
+    let format = L10n.string(key)
+    guard LocalizedFormat.matches(format, arguments) else {
+        // **A string that does not match its arguments must not be able to
+        // take the app down.** `String(format:)` reads its argument list by
+        // the conversions IN THE STRING, so a `%@` handed an Int builds a
+        // pointer out of a small integer and dereferences it: EXC_BAD_ACCESS
+        // at address 2, inside CoreFoundation, with nothing in the trace
+        // naming the key. `LocalizationTests` holds the two languages to the
+        // same conversions, which is the half that can be checked statically;
+        // this is the other half — a CALL SITE that passes the wrong kind,
+        // which no amount of reading the .strings files can see.
+        //
+        // The fallback is the format itself: visible nonsense on one line of
+        // one panel, rather than a process that dies mid-take. In a debug
+        // build it also trips an assertion, so the suite says which key.
+        assertionFailure("L(\(key)) does not match its arguments: \(format)")
+        return format
+    }
+    return String(format: format, arguments: arguments)
+}
+
+/// Whether a localized format and the values handed to it agree.
+///
+/// Deliberately conservative: it reports a mismatch only for the cases that
+/// are certainly wrong — a different NUMBER of conversions, or a `%@` against
+/// a number, or a numeric conversion against a string. Anything it cannot
+/// judge it passes, because a false alarm here would replace a working
+/// sentence with its own format string.
+enum LocalizedFormat {
+    static func matches(_ format: String, _ arguments: [CVarArg]) -> Bool {
+        let conversions = self.conversions(in: format)
+        // A positional format (`%1$@`) may legitimately use an argument twice
+        // or leave a later one unused, so only a format asking for MORE than
+        // it was given is certainly wrong there.
+        if conversions.contains(where: \.isPositional) {
+            return (conversions.compactMap(\.position).max() ?? 0)
+                <= arguments.count
+        }
+        guard conversions.count == arguments.count else { return false }
+        for (conversion, argument) in zip(conversions, arguments) {
+            let isText = argument is String || argument is NSString
+            if conversion.wantsObject != isText { return false }
+        }
+        return true
+    }
+
+    struct Conversion {
+        /// `1` in `%1$@`, or nil for a plain conversion.
+        var position: Int?
+        /// `@` conversions take an object; every other one takes a scalar.
+        var wantsObject: Bool
+        var isPositional: Bool { position != nil }
+    }
+
+    /// The printf conversions in a format, in order, `%%` excluded.
+    static func conversions(in format: String) -> [Conversion] {
+        var found: [Conversion] = []
+        var rest = Substring(format)
+        while let percent = rest.firstIndex(of: "%") {
+            rest = rest[rest.index(after: percent)...]
+            guard let head = rest.first else { break }
+            if head == "%" {
+                rest = rest.dropFirst()
+                continue
+            }
+            // `1$` is the position; then flags, width and precision; then the
+            // conversion letter.
+            var position: Int?
+            let digits = rest.prefix(while: \.isNumber)
+            if !digits.isEmpty, rest.dropFirst(digits.count).first == "$" {
+                position = Int(digits)
+                rest = rest.dropFirst(digits.count + 1)
+            }
+            rest = rest.drop { "+- #0123456789.'".contains($0) }
+            rest = rest.drop { "hlLqjzt".contains($0) }
+            guard let letter = rest.first else { break }
+            rest = rest.dropFirst()
+            found.append(Conversion(position: position, wantsObject: letter == "@"))
+        }
+        return found
+    }
 }

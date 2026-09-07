@@ -260,39 +260,109 @@ public enum OffloadResume {
                               destination: URL,
                               algorithm: OffloadHashAlgorithm)
         -> OffloadResumeOffer {
-        guard let url = OffloadManifestReader.latest(in: destination) else {
-            return refuse(destination, nil, .noManifest)
-        }
-        guard let stamp = readStamp(in: destination),
-              stamp.manifest == url.lastPathComponent else {
-            return refuse(destination, url, .noStamp)
-        }
-        guard stamp.card.isSameSource(as: identity) else {
-            return refuse(destination, url, .differentCard)
-        }
-        guard stamp.card == identity else {
-            return refuse(destination, url, .cardChanged)
-        }
-        let manifest: OffloadManifest
-        do {
-            manifest = try OffloadManifestReader.read(url)
-        } catch {
-            return refuse(destination, url,
-                          .unreadable(error.localizedDescription))
-        }
-        guard manifest.algorithm == algorithm else {
-            return refuse(destination, url, .differentHash(manifest.algorithm))
-        }
         // Entries the card no longer has at that size are NOT claimed, so they
         // are copied fresh rather than trusted. Nothing is lost by leaving them
         // out of this run's manifest either: ASC MHL keeps every generation, and
         // the one that listed them is still on the disk.
         var sizes: [String: Int64] = [:]
         for file in card { sizes[file.relativePath] = file.size }
-        let claimed = manifest.entries
-            .filter { sizes[$0.relativePath] == $0.size }
-        return OffloadResumeOffer(destination: destination, manifest: url,
-                                  claimed: claimed, refusal: nil)
+        // **Two sources, and the running note is the one that survives a
+        // pulled disk.** The manifest is written at the END of a run, so a run
+        // that ended the way runs end on set left nothing behind at all; the
+        // journal is written as it goes. Both are gated on the same card
+        // identity and the same algorithm, and neither is TRUSTED — every
+        // claim is re-hashed off this disk before a file is skipped.
+        let fromJournal = journalClaim(in: destination, identity: identity,
+                                       algorithm: algorithm, sizes: sizes)
+        switch manifestClaim(in: destination, identity: identity,
+                             algorithm: algorithm, sizes: sizes) {
+        case .found(let url, let entries):
+            return OffloadResumeOffer(
+                destination: destination, manifest: url,
+                claimed: union(entries, fromJournal), refusal: nil)
+        case .refused(let refusal):
+            // A journal on its own is enough, and is the whole point: the run
+            // that gets interrupted is usually the FIRST offload of a card,
+            // which has no manifest here to be refused about.
+            guard fromJournal.isEmpty else {
+                return OffloadResumeOffer(destination: destination,
+                                          manifest: nil,
+                                          claimed: fromJournal, refusal: nil)
+            }
+            return refuse(destination,
+                          OffloadManifestReader.latest(in: destination),
+                          refusal)
+        }
+    }
+
+    /// What a destination's newest manifest generation turned out to be.
+    private enum ManifestClaim {
+        case found(url: URL, entries: [OffloadEntry])
+        case refused(OffloadResumeRefusal)
+    }
+
+    /// One manifest generation and its stamp, put through the four gates.
+    private static func manifestClaim(in destination: URL,
+                                      identity: OffloadCardIdentity,
+                                      algorithm: OffloadHashAlgorithm,
+                                      sizes: [String: Int64]) -> ManifestClaim {
+        guard let url = OffloadManifestReader.latest(in: destination) else {
+            return .refused(.noManifest)
+        }
+        guard let stamp = readStamp(in: destination),
+              stamp.manifest == url.lastPathComponent else {
+            return .refused(.noStamp)
+        }
+        guard stamp.card.isSameSource(as: identity) else {
+            return .refused(.differentCard)
+        }
+        guard stamp.card == identity else { return .refused(.cardChanged) }
+        let manifest: OffloadManifest
+        do {
+            manifest = try OffloadManifestReader.read(url)
+        } catch {
+            return .refused(.unreadable(error.localizedDescription))
+        }
+        guard manifest.algorithm == algorithm else {
+            return .refused(.differentHash(manifest.algorithm))
+        }
+        return .found(url: url, entries: manifest.entries
+            .filter { sizes[$0.relativePath] == $0.size })
+    }
+
+    /// What the running note claims, through the SAME gates the manifest goes
+    /// through — a journal from another card, or from this card before it was
+    /// shot on again, claims nothing.
+    ///
+    /// No refusal comes out of here. A journal is a shortcut and never
+    /// evidence: the only cost of ignoring one is the copying a build without
+    /// it would have done anyway, and an operator told "the note here is from
+    /// a different card" about a file they never heard of is being handed a
+    /// worry rather than a fact.
+    private static func journalClaim(in destination: URL,
+                                     identity: OffloadCardIdentity,
+                                     algorithm: OffloadHashAlgorithm,
+                                     sizes: [String: Int64]) -> [OffloadEntry] {
+        guard let journal = OffloadProgressJournal.read(in: destination),
+              journal.algorithm == algorithm,
+              journal.card.isSameSource(as: identity),
+              journal.card == identity
+        else { return [] }
+        return journal.entries.filter { sizes[$0.relativePath] == $0.size }
+    }
+
+    /// The manifest's entries and the note's, once each. The manifest comes
+    /// first so its version of a path wins — it is the generation `ascmhl` will
+    /// verify against, and two claims for one path would put the file in this
+    /// run's manifest twice.
+    private static func union(_ manifest: [OffloadEntry],
+                              _ journal: [OffloadEntry]) -> [OffloadEntry] {
+        var seen = Set(manifest.map(\.relativePath))
+        var out = manifest
+        for entry in journal where seen.insert(entry.relativePath).inserted {
+            out.append(entry)
+        }
+        return out
     }
 
     /// The whole question, for the sheet: scan the card once and ask every

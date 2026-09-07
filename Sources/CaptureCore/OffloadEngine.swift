@@ -139,6 +139,12 @@ private final class OffloadRun {
         adoptPreviousRuns()
         for target in targets {
             target.prepare(bytesNeeded: bytesTotal - target.claimedBytes)
+            // **Told the card BEFORE the first file, not asked to resume.**
+            // Journalling is not the resume feature and does not depend on it:
+            // the run that gets interrupted is usually the FIRST offload of a
+            // card, which by definition has nothing to resume from. See
+            // `OffloadJournal`.
+            target.journal(card: identity, algorithm: plan.algorithm)
         }
         report(force: true)
 
@@ -149,6 +155,10 @@ private final class OffloadRun {
             currentFile = file.relativePath
             copy(file)
             filesProcessed += 1
+            // At the file boundary, which is the only place there is anything
+            // new to write down: a partly copied file has not been verified
+            // and is not an entry. The target decides whether it is due.
+            for target in targets { target.checkpoint() }
             report(force: true)
         }
         // Cancel only counts if it actually cut the run short. Stop pressed
@@ -311,6 +321,11 @@ private final class OffloadRun {
             // the safe direction — it copies everything instead.
             _ = try? OffloadResume.stamp(identity, manifest: manifest,
                                          into: target.root)
+            // The manifest now states everything the running note stated, so
+            // the note goes. Only on the path where a manifest was actually
+            // written: a destination whose manifest failed keeps its journal,
+            // which is the one thing that can still rescue the next run.
+            OffloadProgressJournal.remove(in: target.root)
         } catch {
             // "A vanished destination must not report offload done": an offload
             // without its manifest is not a verified offload, whatever the

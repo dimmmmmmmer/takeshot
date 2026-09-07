@@ -185,7 +185,7 @@ public struct OffloadSourceFile: Sendable, Equatable {
 }
 
 /// One verified file, as it goes into the manifest.
-public struct OffloadEntry: Sendable, Equatable {
+public struct OffloadEntry: Sendable, Equatable, Codable {
     public let relativePath: String
     public let size: Int64
     public let hash: String

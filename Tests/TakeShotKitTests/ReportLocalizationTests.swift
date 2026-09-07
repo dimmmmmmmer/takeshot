@@ -42,7 +42,11 @@ struct ReportLocalizationTests {
 
         #expect(body.contains("отчёт смены"), "the title is not translated")
         #expect(body.contains("Камера A"))
-        #expect(body.contains("2 дублей"))
+        // "2 дубля" and NOT "2 дублей": Russian agrees the noun with the
+        // number and has three forms, and this line — the headline of every
+        // shift report — used to write the third one for every count. See
+        // `CountedNoun`.
+        #expect(body.contains("2 дубля"), "the count does not agree: \(body)")
         // The note left the columns (it is a "✎" line inside the row), so
         // the Russian note itself is what proves that half of the sheet —
         // see aRussianNoteReachesThePaperWhole.

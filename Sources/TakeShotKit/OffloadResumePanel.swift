@@ -37,7 +37,8 @@ struct OffloadResumePanel: View {
                 .offloadText(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button(L("offload_resume_accept", review.bestCase),
+                Button(L("offload_resume_accept",
+                         localizedCount(review.bestCase, .file)),
                        action: resume)
                     .keyboardShortcut(.defaultAction)
                 Button(L("offload_resume_decline"), action: copyEverything)

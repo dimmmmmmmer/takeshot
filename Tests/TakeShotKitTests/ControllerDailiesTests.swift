@@ -71,7 +71,11 @@ import Testing
                     "\(name) is missing")
             }
             #expect(controller.dailiesStatus == nil)
-            #expect(controller.lastNotice == L("dailies_done", 2))
+            // A PHRASE and not a number: the sentence takes a counted noun
+            // now, because "2 файлов" was wrong in Russian for every count
+            // between one and four. See `CountedNoun`.
+            #expect(controller.lastNotice
+                    == L("dailies_done", localizedCount(2, .file)))
         }
     }
 
