@@ -205,4 +205,57 @@ struct CompareCompositorTests {
         #expect(fitted.extent == image.extent)
         #expect(pixel(fitted, x: 2, y: 2).g == 255)
     }
+
+    /// **What the difference gain is FOR, measured.**
+    ///
+    /// A framing check compares two setups that are supposed to match, so the
+    /// difference it produces is a handful of code values — invisible on a
+    /// monitor at ×1, which is exactly when an operator asks what the ×4 and
+    /// ×16 are for (owner: "смысла в режиме diff на x4 и x16 я не понял
+    /// вообще"). This is the answer as a number: two frames two codes apart,
+    /// through each gain, read off the composited result.
+    @Test func theDifferenceGainIsWhatMakesASmallErrorVisible() {
+        // Two greys two codes apart out of 255 — a camera nudged on the
+        // tripod, not a different shot.
+        let a = solid(CIColor(red: 100.0 / 255, green: 100.0 / 255,
+                              blue: 100.0 / 255))
+        let b = solid(CIColor(red: 102.0 / 255, green: 102.0 / 255,
+                              blue: 102.0 / 255))
+        var seen: [Int: Int] = [:]
+        for gain in [1.0, 4.0, 16.0, 64.0] {
+            let composed = CompareCompositor.compose(
+                front: a, back: b, mode: .difference(gain: gain))
+            seen[Int(gain)] = Int(pixel(composed, x: side / 2, y: side / 2).r)
+        }
+        // ×1 is the two codes themselves: a difference nobody can see on a
+        // monitor, which is the whole reason the control exists.
+        #expect((seen[1] ?? 0) <= 4, "×1 reads \(seen[1] ?? -1) of 255")
+        // …and each step multiplies it, which is the claim the labels make.
+        #expect((seen[4] ?? 0) >= (seen[1] ?? 0) * 3,
+                "×4 reads \(seen[4] ?? -1) against ×1's \(seen[1] ?? -1)")
+        #expect((seen[16] ?? 0) >= (seen[4] ?? 0) * 3,
+                "×16 reads \(seen[16] ?? -1) against ×4's \(seen[4] ?? -1)")
+        // **And the top of the ladder has to reach the job.** Measured here:
+        // ×1 reads 2, ×4 reads 6, ×16 reads 22 — nine per cent grey, which is
+        // why an operator looked at the control and asked what it was for. ×64
+        // reads 89, a third of the way up the scale, which is obvious on any
+        // monitor in any light.
+        #expect((seen[64] ?? 0) >= 80, """
+            the top gain reads \(seen[64] ?? -1) of 255, which is still not \
+            something anybody can see on a monitor
+            """)
+    }
+
+    /// Identical frames stay exact black at every gain: the gain amplifies a
+    /// difference and must never manufacture one, or the tool that says "these
+    /// two setups match" would stop being able to say it.
+    @Test func identicalFramesStayBlackAtEveryGain() {
+        for gain in [1.0, 4.0, 16.0, 64.0] {
+            let composed = CompareCompositor.compose(
+                front: red, back: red, mode: .difference(gain: gain))
+            let sample = pixel(composed, x: side / 2, y: side / 2)
+            #expect(sample.r == 0 && sample.g == 0 && sample.b == 0,
+                    "×\(Int(gain)) lit up two identical frames")
+        }
+    }
 }

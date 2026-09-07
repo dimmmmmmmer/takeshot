@@ -871,6 +871,7 @@
 "menubar_take" = "Дубль: %@";
 "menubar_no_take" = "Дубля ещё нет";
 "menubar_mute_monitor" = "Заглушить мониторинг";
+"menubar_dim_monitor" = "DIM мониторинга";
 "menubar_open_main" = "Открыть TakeShot";
 "menubar_quit" = "Завершить TakeShot";
 "menubar_status_idle" = "TakeShot — нет сигнала";

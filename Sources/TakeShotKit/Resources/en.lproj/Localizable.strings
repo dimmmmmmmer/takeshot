@@ -881,6 +881,7 @@
 "menubar_take" = "Take: %@";
 "menubar_no_take" = "No take yet";
 "menubar_mute_monitor" = "Mute monitoring";
+"menubar_dim_monitor" = "DIM monitoring";
 "menubar_open_main" = "Open TakeShot";
 "menubar_quit" = "Quit TakeShot";
 "menubar_status_idle" = "TakeShot — no signal";

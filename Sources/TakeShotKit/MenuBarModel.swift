@@ -35,8 +35,8 @@ final class MenuBarModel: ObservableObject {
     /// path to anything.
     enum Command: String, CaseIterable {
         case toggleRecord
-        case addMarker
         case toggleMute
+        case toggleDim
         case openMain
         case quit
     }
@@ -151,20 +151,26 @@ final class MenuBarModel: ObservableObject {
                  enabled: controller.isCapturing),
             Item(command: nil, title: L("menubar_take", takeName), enabled: false),
             .separator,
-            // `canDropMarker` itself, not a copy of it: a marker needs either a
-            // take being written or a clip in the SINGLE player — a grid of two
-            // to four has no one file to put it in. This was that rule spelled
-            // out a second time, which is how the METHOD came to be missing it
-            // (see `addMarker`).
-            Item(command: .addMarker, title: L("hotkey_marker"),
-                 enabled: controller.canDropMarker),
-            // Deliberately ungated, unlike the footer's speaker (which greys
-            // with no capture and no clip): "kill the sound NOW" is the one
-            // thing the status item exists for with the window closed, and the
-            // ⌃A key is ungated too. Noted here because the two DO differ and
-            // the difference is a choice, not an oversight.
+            // **No marker item** (owner: "add marker в статус баре в приложении
+            // бесполезен, убери оттуда это"). A marker is placed at a moment
+            // the operator is watching, and the status item is what they reach
+            // for with the WINDOW CLOSED — by which time the moment worth
+            // marking is one they cannot see. The key and the footer button
+            // are where a marker is dropped.
+            //
+            // Both of these are deliberately ungated, unlike the footer's
+            // speaker (which greys with no capture and no clip): "quieten the
+            // sound NOW" is the one thing the status item exists for with the
+            // window closed, and the ⌃A and ⌃D keys are ungated too. Noted
+            // because the two DO differ and the difference is a choice.
             Item(command: .toggleMute, title: L("menubar_mute_monitor"),
                  enabled: true, checked: controller.live.muted),
+            // DIM is the half of monitoring an operator actually reaches for
+            // mid-take (owner: "лучше добавь dim monitoring"): mute is for the
+            // moment somebody walks in, DIM is for the whole take you are
+            // talking over.
+            Item(command: .toggleDim, title: L("menubar_dim_monitor"),
+                 enabled: true, checked: controller.live.dimmed),
             .separator,
             Item(command: .openMain, title: L("menubar_open_main"), enabled: true),
             .separator,
@@ -191,8 +197,8 @@ final class MenuBarModel: ObservableObject {
               let controller else { return false }
         switch command {
         case .toggleRecord: controller.toggleManualRecord()
-        case .addMarker: controller.addMarker()
         case .toggleMute: controller.toggleMonitorMute()
+        case .toggleDim: controller.toggleMonitorDim()
         case .openMain: AppWindows.present(.main)
         // Through the normal terminate path, never a bespoke shutdown: that is
         // what runs `flushOnTerminate`, and quitting from the menu bar with no

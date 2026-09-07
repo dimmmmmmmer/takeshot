@@ -46,10 +46,27 @@ extension CaptureController {
     /// difference is amplified the way DaVinci and Nuke amplify theirs — and
     /// the steps are the values, not an index, so the compositor takes the raw
     /// value directly.
+    /// **How far the ladder has to reach, measured.**
+    ///
+    /// A framing check compares two setups that are supposed to match, so what
+    /// it produces is a couple of code values. Measured through the compositor
+    /// on two greys two codes apart (`CompareCompositorTests`), out of 255:
+    /// ×1 reads 2, ×4 reads 6, ×16 reads 22. Twenty-two is nine per cent grey
+    /// — dark enough that an operator looks at the control and asks what it is
+    /// supposed to be doing (owner: "смысла в режиме diff на x4 и x16 я не
+    /// понял вообще"). They were right: the top of the ladder did not reach
+    /// the job.
+    ///
+    /// ×64 reads 89 on the same pair — a third of the way up the scale, and
+    /// obvious on any monitor in any light. The lower steps stay because they are the ones
+    /// that survive NOISE: a sensor's own floor is a code or two, so at the top
+    /// step a clean pair of frames still glows grey, and the step that answers
+    /// "is this a real difference or is it the noise" is a lower one.
     enum DifferenceGain: Int, CaseIterable, Identifiable {
         case x1 = 1
         case x4 = 4
         case x16 = 16
+        case x64 = 64
         var id: Int { rawValue }
         /// The segment label. A multiplication sign and a number are symbols,
         /// not words — the same rule as the "%" beside the blend field.

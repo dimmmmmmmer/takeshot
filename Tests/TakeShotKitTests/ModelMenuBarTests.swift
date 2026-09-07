@@ -110,30 +110,45 @@ import Testing
         }
     }
 
-    // MARK: - marker
+    // MARK: - what the menu does NOT offer
 
-    /// Greyed with nothing to mark, and it refuses the command in that state
-    /// rather than trusting AppKit not to send it. Rolling, it drops a marker
-    /// on the take in progress.
-    @Test func theMarkerItemIsGatedAndThenAddsAMarker() async throws {
+    /// **No marker.** A marker is placed at a moment the operator is watching,
+    /// and the status item is what they reach for with the WINDOW CLOSED — by
+    /// which time the moment worth marking is one they cannot see (owner: "add
+    /// marker в статус баре в приложении бесполезен, убери оттуда это"). The
+    /// key and the footer button are where a marker is dropped.
+    @Test func theMenuOffersNoMarker() async throws {
         try await ControllerHarness.run(live: true) { controller, _ in
-            await ControllerWait.until { controller.signalFormat != nil }
             let model = MenuBarModel(controller: controller)
+            #expect(!MenuBarModel.Command.allCases.contains(where: {
+                String(describing: $0).contains("arker")
+            }), "the marker command is back in the menu's command set")
+            #expect(model.items.allSatisfy { $0.title != L("hotkey_marker") },
+                    "the marker item is back in the menu")
+        }
+    }
 
-            let idle = try #require(model.items.first { $0.command == .addMarker })
-            #expect(!idle.enabled)
-            #expect(!model.perform(.addMarker),
-                    "a greyed item that still fires is worse than a greyed one")
-            #expect(controller.recordingMarkers.isEmpty)
+    /// **DIM is.** Mute is for the moment somebody walks in; DIM is for the
+    /// whole take you are talking over, which is the half an operator reaches
+    /// for mid-roll (owner: "лучше добавь dim monitoring").
+    ///
+    /// Ungated like mute, and for the same reason: quietening the sound with
+    /// the window closed is what the status item is for, and the ⌃D key is
+    /// ungated too.
+    @Test func theDimItemIsUngatedAndShowsItsState() async throws {
+        try await ControllerHarness.run(live: true) { controller, _ in
+            let model = MenuBarModel(controller: controller)
+            let idle = try #require(model.items.first { $0.command == .toggleDim })
+            #expect(idle.enabled, "DIM is greyed with the window closed")
+            #expect(!idle.checked)
 
-            model.perform(.toggleRecord)
-            await ControllerWait.until { controller.isRecording }
-            #expect(model.items.first { $0.command == .addMarker }?.enabled == true)
-            #expect(model.perform(.addMarker))
-            #expect(controller.recordingMarkers.count == 1)
+            #expect(model.perform(.toggleDim))
+            #expect(controller.live.dimmed, "the menu did not dim monitoring")
+            #expect(model.items.first { $0.command == .toggleDim }?.checked
+                    == true, "the tick does not follow the state")
 
-            controller.toggleManualRecord()
-            await ControllerWait.until { !controller.isRecording }
+            #expect(model.perform(.toggleDim))
+            #expect(!controller.live.dimmed)
         }
     }
 

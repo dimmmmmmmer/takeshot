@@ -16,6 +16,7 @@ import Testing
 /// that is the thing they plug in, unplug and hand over — and two shuttle
 /// drives with a `DAILIES` folder each produced two log rows that read
 /// identically.
+@MainActor
 struct OffloadRowNamingTests {
     /// The volume, not the folder. Asked of a real path on this machine: the
     /// rule is a filesystem question and a made-up URL cannot answer it.
@@ -71,5 +72,50 @@ struct OffloadRowNamingTests {
                                   "/Volumes/SSD_2/DAY_03"])
         #expect(OffloadHistoryList.headline(several)
                 == "CARD_A001 → " + L("offload_history_copies", 2))
+    }
+}
+
+/// **A decision made once cannot be unmade by its own effect.**
+///
+/// The watched-box gesture asked "did this drag start inside the box?" on every
+/// change event — against a box the drag itself had just moved. Press outside:
+/// the first event draws a box AT the press point, and the second finds the
+/// start point inside that brand-new box and switches to moving it. Drawing
+/// worked for exactly one frame and then became a drag, every time (owner:
+/// "рисование прямоугольника мышкой начинает его перетягивать").
+struct VisualRecBoxDragTests {
+    /// The press decides, and the rest of the stroke obeys.
+    @Test func theFirstEventDecidesAndTheRestFollow() {
+        // Started outside: draw, and it stays draw even once the box has moved
+        // under the start point — which is exactly what drawing DOES.
+        var mode = VisualRecBoxDrag.decide(latched: nil,
+                                           startedInsideBox: false)
+        #expect(mode == .draw)
+        for insideNow in [true, true, false, true] {
+            mode = VisualRecBoxDrag.decide(latched: mode,
+                                           startedInsideBox: insideNow)
+            #expect(mode == .draw, "the stroke changed its mind mid-drag")
+        }
+    }
+
+    /// …and the other way, which is what makes the latch a latch rather than a
+    /// constant: a press INSIDE moves, and keeps moving even as the box slides
+    /// out from under the start point.
+    @Test func aPressInsideMovesForTheWholeStroke() {
+        var mode = VisualRecBoxDrag.decide(latched: nil, startedInsideBox: true)
+        #expect(mode == .move)
+        for insideNow in [false, false, true] {
+            mode = VisualRecBoxDrag.decide(latched: mode,
+                                           startedInsideBox: insideNow)
+            #expect(mode == .move, "the stroke stopped moving mid-drag")
+        }
+    }
+
+    /// A fresh gesture asks again — the latch is per stroke, not for ever.
+    @Test func theNextGestureDecidesAfresh() {
+        #expect(VisualRecBoxDrag.decide(latched: nil, startedInsideBox: true)
+                == .move)
+        #expect(VisualRecBoxDrag.decide(latched: nil, startedInsideBox: false)
+                == .draw)
     }
 }

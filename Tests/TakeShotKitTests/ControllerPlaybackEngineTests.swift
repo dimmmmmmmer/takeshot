@@ -312,24 +312,20 @@ import Testing
         }
     }
 
-    /// The menu item and the method are enabled by the same rule.
+    /// The METHOD is gated by the grid rule, and comes back when the grid does.
     ///
-    /// The menu bar spelled `canDropMarker` out a second time, which is how the
-    /// method came to be missing it. Asserted across the states rather than by
-    /// reading the source, so it survives either one being rewritten.
-    @Test func theMenuItemAndTheMethodAgreeAboutTheGrid() async throws {
+    /// This used to check the menu-bar item against `canDropMarker` as well:
+    /// the menu spelled the rule out a second time, which is how the method
+    /// came to be missing it. There is no marker item in the status menu any
+    /// more (owner: "add marker в статус баре бесполезен"), so what is left is
+    /// the rule itself, asserted across the states rather than by reading the
+    /// source.
+    @Test func theMarkerMethodRespectsTheGrid() async throws {
         try await withGrid { controller, _, _ in
-            let model = MenuBarModel(controller: controller)
-            let marker = try #require(
-                model.items.first { $0.command == .addMarker })
-            #expect(!marker.enabled, "the menu offers a marker over a grid")
-            #expect(marker.enabled == controller.canDropMarker)
-
+            #expect(!controller.canDropMarker,
+                    "a grid of two to four has no one file to mark")
             controller.endSyncPlay()
-            let enabled = try #require(
-                model.items.first { $0.command == .addMarker })
-            #expect(enabled.enabled, "the menu did not come back")
-            #expect(enabled.enabled == controller.canDropMarker)
+            #expect(controller.canDropMarker, "the rule did not come back")
         }
     }
 }

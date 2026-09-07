@@ -198,6 +198,8 @@ struct VisualRecSliderRow: View {
 /// mode is off.
 struct VisualRecTeachOverlay: View {
     @EnvironmentObject private var controller: CaptureController
+    /// Which half of the gesture in flight is — see `VisualRecBoxDrag`.
+    @State private var drag: VisualRecBoxDrag?
 
     var body: some View {
         if controller.visualRecTeachArmed {
@@ -234,21 +236,39 @@ struct VisualRecTeachOverlay: View {
                         // operator sizing a box against a camera's REC dot is
                         // watching the box, and a rectangle that only appears
                         // when the mouse comes up cannot be aimed.
+                        //
+                        // **Decided ONCE, and latched for the gesture.** It
+                        // used to be re-asked on every change event, against a
+                        // box the drag itself had just moved: press outside,
+                        // the first event draws a box AT the press point, and
+                        // the second event finds the start point inside that
+                        // new box and switches to moving it for the rest of the
+                        // stroke. Every attempt to draw turned into a drag on
+                        // the second frame (owner: "рисование прямоугольника
+                        // мышкой начинает его перетягивать").
                         .gesture(DragGesture(minimumDistance: 0,
                                              coordinateSpace: .local)
                             .onChanged { value in
-                                if controller.visualRecBoxContains(
-                                    value.startLocation, viewport: geo.size) {
+                                let mode = VisualRecBoxDrag.decide(
+                                    latched: drag,
+                                    startedInsideBox:
+                                        controller.visualRecBoxContains(
+                                            value.startLocation,
+                                            viewport: geo.size))
+                                drag = mode
+                                switch mode {
+                                case .move:
                                     controller.moveVisualRecRegion(
                                         by: value.translation,
                                         from: value.startLocation,
                                         viewport: geo.size)
-                                } else {
+                                case .draw:
                                     controller.drawVisualRecRegion(
                                         from: value.startLocation,
                                         to: value.location, viewport: geo.size)
                                 }
-                            })
+                            }
+                            .onEnded { _ in drag = nil })
                         // …and the pointer says which one is under it, so the
                         // gesture is never a surprise.
                         .onContinuousHover { phase in
@@ -296,4 +316,31 @@ struct VisualRecTeachOverlay: View {
 /// enum — that module has no L10n.
 extension RecTrigger {
     var labelKey: String { "trigger_" + rawValue }
+}
+
+/// Which half of a drag over the watched box this is.
+///
+/// **Decided once, at the press, and kept for the whole stroke.** The view used
+/// to ask "did this start inside the box?" on every change event — against a
+/// box the drag itself had just moved. Press outside: the first event draws a
+/// box AT the press point, and the second event finds the start point inside
+/// that brand-new box and switches to moving it. So drawing worked for exactly
+/// one frame and then became a drag, every time (owner: "рисование
+/// прямоугольника мышкой начинает его перетягивать").
+///
+/// A value rather than an `if` inside the gesture, because the rule — a
+/// decision that is made once cannot be unmade by its own effect — is the whole
+/// fix, and it is invisible from a rendered view.
+enum VisualRecBoxDrag {
+    /// The press landed inside the box: the stroke moves it.
+    case move
+    /// It landed outside: the stroke draws a new one.
+    case draw
+
+    /// The mode for this event: whatever was latched, or the press's own
+    /// answer the first time.
+    static func decide(latched: VisualRecBoxDrag?,
+                       startedInsideBox: Bool) -> VisualRecBoxDrag {
+        latched ?? (startedInsideBox ? .move : .draw)
+    }
 }
