@@ -116,12 +116,6 @@ public enum TakeLogExporter {
         return result
     }
 
-    /// Ratings only (kept for callers that don't need comments); unrated files
-    /// are omitted, matching the original contract.
-    public static func parseRatings(csv: String) -> [String: TakeRating] {
-        parseMetadata(csv: csv).compactMapValues { $0.rating == .none ? nil : $0.rating }
-    }
-
     /// Split the Comments column into a rating and a free-text comment.
     /// A ticked Good Take → .good; a bad marker ("Bad"/"Bad: text", and the "NG"
     /// this build no longer writes) → .bad; else .none — an EMPTY checkbox and a

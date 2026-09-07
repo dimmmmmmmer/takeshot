@@ -109,13 +109,6 @@ extern NSString *const CNDUnavailableRuntimeRefused;
 /// dark because their sound could not be carried.
 + (BOOL)isAudioAvailable;
 
-/// Whether this runtime can say how many receivers are watching.
-///
-/// Optional on the same terms as `isAudioAvailable`: a runtime without it
-/// keeps its picture, and the app then knows only that the source was
-/// announced — which is the switch, not the link.
-+ (BOOL)isConnectionCountAvailable;
-
 /// Announce a source under `name`. NDI presents a source to receivers as
 /// "MACHINE (name)" — the machine half comes from the runtime — so `name`
 /// carries the project and the camera and nothing else.
@@ -165,7 +158,7 @@ extern NSString *const CNDUnavailableRuntimeRefused;
 /// concurrently from two queues and neither can hold the other up. See the note
 /// on `stop`.
 /// How many receivers are connected to this source right now, or -1 when the
-/// runtime cannot say (see `isConnectionCountAvailable`).
+/// runtime cannot say — which is the only way to ask.
 ///
 /// A POLL and not a callback, because the SDK offers no callback: NDI has no
 /// "somebody connected" event, so the app asks on the same tick it pushes its

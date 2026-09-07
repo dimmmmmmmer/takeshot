@@ -90,7 +90,7 @@ struct FooterCenterControls: View {
             }
             .buttonStyle(.borderless)
             .disabled(!controller.hasTakes)
-            .help("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
+            .controlHelp("\(L("instant_replay_help")) — \(hotkeys.combo(for: .instantReplay).display)")
             RecordButton()
             Button {
                 controller.grabFrame()
@@ -100,7 +100,7 @@ struct FooterCenterControls: View {
             }
             .buttonStyle(.borderless)
             .disabled(!controller.canGrabFrame)
-            .help(L("grab_frame"))
+            .controlHelp(L("grab_frame"))
         }
     }
 }
@@ -163,7 +163,7 @@ private struct FooterMonitorButton: View {
                     .frame(width: 24, height: 20)
             }
             .disabled(!controller.canMonitorAudio)
-            .help("\(L("monitor_mute_help")) — \(hotkeys.combo(for: .toggleMonitorMute).display)")
+            .controlHelp("\(L("monitor_mute_help")) — \(hotkeys.combo(for: .toggleMonitorMute).display)")
 
             Button {
                 showPopover.toggle()
@@ -173,7 +173,7 @@ private struct FooterMonitorButton: View {
                     .frame(width: 11, height: 20)
             }
             .disabled(!controller.canMonitorAudio)
-            .help(L("monitor_volume_help"))
+            .controlHelp(L("monitor_volume_help"))
             .popover(isPresented: $showPopover, arrowEdge: .top) {
                 VStack(spacing: 10) {
                     TextField("", value: Binding(
@@ -217,7 +217,7 @@ struct NamingPresetMenu: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help(L("naming_preset"))
+        .controlHelp(L("naming_preset"))
     }
 }
 
@@ -249,7 +249,10 @@ struct RecordButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!controller.isCapturing)
-        .help("\(controller.isRecording ? L("stop") : L("record")) — \(hotkeys.combo(for: .toggleRecord).display)")
+        // **The name, not only the tooltip.** A disc and a square announce
+        // themselves to VoiceOver as "button" — see `controlHelp`.
+        .controlHelp("\(controller.isRecording ? L("stop") : L("record")) "
+            + "— \(hotkeys.combo(for: .toggleRecord).display)")
         .animation(.easeInOut(duration: 0.15), value: controller.isRecording)
     }
 }

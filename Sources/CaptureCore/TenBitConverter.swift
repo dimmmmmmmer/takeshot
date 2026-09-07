@@ -64,13 +64,6 @@ public final class TenBitConverter: WireConverter {
 
     public init() {}
 
-    /// `limited` mirrors the 8-bit levels setting (auto → limited for RGB444).
-    /// Kept because it says exactly what the choice is; the named form below is
-    /// what the pipeline calls.
-    public func setLimitedRange(_ limited: Bool) {
-        setLevels(limited ? .limited : .full)
-    }
-
     /// The resolved input-levels mode for the current source.
     /// Only the display table has a mode to rebuild for; the record table is a
     /// constant, which is the same statement as "levels never reach the file".

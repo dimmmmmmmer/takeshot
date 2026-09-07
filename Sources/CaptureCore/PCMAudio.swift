@@ -63,9 +63,9 @@ public enum PCMAudio {
     /// The same samples at EXACTLY `channelCount` channels: extra channels
     /// dropped, missing ones silent, the ones in common kept where they are.
     ///
-    /// `trimChannels` below can only narrow, and narrowing is only half of what
-    /// a source that changed its own count can do to a track whose width is
-    /// already latched (see `CapturePipeline.recordAudio`). Returns the original
+    /// `selectChannels` below can only NARROW, and narrowing is only half of
+    /// what a source that changed its own count can do to a track whose width
+    /// is already latched (see `CapturePipeline.recordAudio`). Returns the original
     /// buffer when it is already the right width, so the case that happens on
     /// every packet costs one comparison.
     public static func conformChannels(
@@ -94,13 +94,6 @@ public enum PCMAudio {
                                     channelCount: channelCount, ptsSeconds: pts,
                                     formatCache: &formatCache)
         }
-    }
-
-    /// Keep the first `channelCount` channels (a wrapper over selectChannels).
-    public static func trimChannels(_ sampleBuffer: CMSampleBuffer, to channelCount: Int,
-                                    formatCache: inout CMAudioFormatDescription?) -> CMSampleBuffer? {
-        selectChannels(sampleBuffer, indices: Array(0..<max(0, channelCount)),
-                       formatCache: &formatCache)
     }
 
     /// Keep an arbitrary set of channels from an interleaved Int16 buffer

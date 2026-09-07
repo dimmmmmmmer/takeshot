@@ -103,13 +103,13 @@ struct LevelsExcursionTests {
     /// display buffer, which is the only product a levels mode reaches now.
     @Test func theBooleanSwitchStillMeansTheTwoModes() throws {
         let limited = TenBitConverter()
-        limited.setLimitedRange(true)
+        limited.setLevels(.limited)
         let viaBool = try #require(limited.convert(try bandedFrame()))
         let named = TenBitConverter()
         named.setLevels(.limited)
         let viaEnum = try #require(named.convert(try bandedFrame()))
         let full = TenBitConverter()
-        full.setLimitedRange(false)
+        full.setLevels(.full)
         let unexpanded = try #require(full.convert(try bandedFrame()))
         for band in 0..<4 {
             #expect(displayByte(viaBool.display, band: band)

@@ -157,7 +157,7 @@ struct ScopeWireTests {
         let wire = try #require(ScopeAnalyzer.analyze(
             try r210(width: width) { ramp($0) }, wireLevels: .limited))
         let converter = TenBitConverter()
-        converter.setLimitedRange(false) // full: the display buffer is a plain >>2
+        converter.setLevels(.full) // full: the display buffer is a plain >>2
         let split = try #require(
             converter.convert(try r210(width: width) { ramp($0) }))
         let display = try #require(ScopeAnalyzer.analyze(split.display))

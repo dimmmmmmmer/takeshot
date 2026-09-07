@@ -123,16 +123,22 @@ struct TakeLogExporterTests {
         #expect(csv.contains("\"INT, kitchen \"\"day\"\"\""))
     }
 
-    @Test func parseRatingsRoundTrip() {
+    /// Asked of `parseMetadata`, which is what the app reads a log back
+    /// with. There used to be a `parseRatings` beside it "for callers that
+    /// don't need comments"; there were none, and a helper only a test calls
+    /// is a second reading of the same file that nothing keeps in step with
+    /// the first.
+    @Test func ratingsComeBackOutOfTheLog() {
         let csv = TakeLogExporter.resolveCSV(takes: [
             makeTake(name: "a.mov", scene: "1", number: 1, rating: .good),
             makeTake(name: "b.mov", scene: "1", number: 2),
             makeTake(name: "c.mov", scene: "1", number: 3, rating: .bad),
         ])
-        let ratings = TakeLogExporter.parseRatings(csv: csv)
-        #expect(ratings["a.mov"] == .good)
-        #expect(ratings["b.mov"] == nil)
-        #expect(ratings["c.mov"] == .bad)
+        let read = TakeLogExporter.parseMetadata(csv: csv)
+        #expect(read["a.mov"]?.rating == .good)
+        #expect(read["b.mov"]?.rating == TakeRating.none,
+                "an unrated take came back rated")
+        #expect(read["c.mov"]?.rating == .bad)
     }
 
     @Test func commentsRoundTripWithRatings() {

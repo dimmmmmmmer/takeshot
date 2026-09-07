@@ -214,8 +214,11 @@ enum RemoteAddress {
         let scale = side / max(1, output.extent.width)
         let scaled = output.transformed(by: CGAffineTransform(scaleX: scale,
                                                               y: scale))
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(scaled, from: scaled.extent)
+        // Shared with the other one-shot decodes: this is drawn once when the
+        // remote's row appears, and a context of its own is 2.4 ms and a set
+        // of kernels nothing else will use. See `DecodeContext`.
+        guard let cgImage = DecodeContext.shared.createCGImage(
+            scaled, from: scaled.extent)
         else { return nil }
         return NSImage(cgImage: cgImage,
                        size: NSSize(width: side, height: side))

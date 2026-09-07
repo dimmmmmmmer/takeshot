@@ -197,10 +197,13 @@ enum NDIOutputState: Equatable {
     /// indicator on the main window has to be able to tell those apart, or it
     /// is a lamp that lights because a checkbox is ticked.
     ///
-    /// Only reachable on a runtime that exports the connection count (see
-    /// `CNDSender.isConnectionCountAvailable`). Without it the app knows only
-    /// that the source was announced, and says `.sending` as it always did —
-    /// an older runtime keeps exactly the behaviour it had.
+    /// Only reachable on a runtime that exports the connection count. There
+    /// is one way to ask and it is `connectedReceivers`, which answers −1 when
+    /// the runtime cannot say — the app reads that and says `.sending` as it
+    /// always did, so an older runtime keeps exactly the behaviour it had.
+    /// (There used to be an `isConnectionCountAvailable` beside it stating the
+    /// same fact a second way, and nothing called it: two answers to one
+    /// question is one of them going stale.)
     case announced
     /// A receiver has the source open and frames are going to it.
     case sending

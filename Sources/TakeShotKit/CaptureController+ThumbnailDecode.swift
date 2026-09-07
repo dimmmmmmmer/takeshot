@@ -106,8 +106,11 @@ extension CaptureController {
         let image = CIImage(cvPixelBuffer: buffer)
         let scale = min(1, maxSize / max(image.extent.width, image.extent.height))
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let context = CIContext(options: [.cacheIntermediates: false])
-        guard let cg = context.createCGImage(scaled, from: scaled.extent)
+        // Shared: a fresh context per thumbnail measured ten times the cost
+        // of this one, which on a card of two hundred files is two seconds of
+        // a folder scan. See `DecodeContext`.
+        guard let cg = DecodeContext.shared.createCGImage(scaled,
+                                                          from: scaled.extent)
         else { return nil }
         return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }

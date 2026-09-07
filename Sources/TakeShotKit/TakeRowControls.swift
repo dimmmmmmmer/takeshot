@@ -38,7 +38,7 @@ struct TakeLogButton: View {
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(.plain)
-        .help(L("comment_help"))
+        .controlHelp(L("comment_help"))
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
             editor
         }

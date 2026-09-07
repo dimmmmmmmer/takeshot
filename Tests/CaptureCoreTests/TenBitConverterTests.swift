@@ -74,7 +74,7 @@ struct TenBitConverterTests {
 
     @Test func fullRangeSourcePassesCodesThroughToDisplay() throws {
         let converter = TenBitConverter()
-        converter.setLimitedRange(false)
+        converter.setLevels(.full)
         // 940 in, no expansion: the display byte is just the top 8 bits
         let source = makeR210(width: 8, height: 2) { _, _ in 940 }
         let result = try #require(converter.convert(source))
@@ -103,7 +103,7 @@ struct TenBitConverterTests {
 
     @Test func recordValuesLandInsideVideoToolboxsWindow() throws {
         let converter = TenBitConverter()
-        converter.setLimitedRange(false)
+        converter.setLevels(.full)
         let source = makeR210(width: 4, height: 2) { x, _ in x == 0 ? 0 : 1023 }
         let result = try #require(converter.convert(source))
         // the ends of the wire map onto the 64-960 window VideoToolbox expands
@@ -160,7 +160,7 @@ struct TenBitConverterTests {
     /// rows carrying another row's value, so every row gets its own code here.
     @Test func everyRowSurvivesTheParallelBandSplit() throws {
         let converter = TenBitConverter()
-        converter.setLimitedRange(false)
+        converter.setLevels(.full)
         let height = 1080 // enough rows to split into the maximum number of bands
         let source = makeR210(width: 8, height: height) { _, y in (y * 7) % 1024 }
         let result = try #require(converter.convert(source))

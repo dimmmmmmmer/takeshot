@@ -30,11 +30,12 @@ enum CIBufferRender {
         guard let buffer else { return nil }
         let destination = CIRenderDestination(pixelBuffer: buffer)
         destination.colorSpace = colorSpace
-        // Its own context, not a shared one: both callers run off the main
-        // actor on a one-shot decode, and a CIContext holds caches sized for
-        // the work it has seen.
-        let context = CIContext(options: [.cacheIntermediates: false])
-        guard let task = try? context.startTask(toRender: image, to: destination),
+        // **Shared, and this used to argue the opposite.** "Both callers run
+        // off the main actor on a one-shot decode, and a CIContext holds
+        // caches sized for the work it has seen" — reasonable, and measured,
+        // wrong by a factor of ten. See `DecodeContext`.
+        guard let task = try? DecodeContext.shared.startTask(toRender: image,
+                                                             to: destination),
               (try? task.waitUntilCompleted()) != nil else { return nil }
         return buffer
     }

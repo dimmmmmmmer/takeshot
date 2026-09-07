@@ -134,8 +134,8 @@ extension CaptureController {
     /// PNG of a playback buffer (RAW engine / still tap) in display code values.
     private func saveGrab(buffer: CVPixelBuffer) {
         Task.detached(priority: .userInitiated) { [weak self] in
-            let context = CIContext(options: [.cacheIntermediates: false])
-            let png = CapturePipeline.pngData(from: buffer, ciContext: context)
+            let png = CapturePipeline.pngData(from: buffer,
+                                              ciContext: DecodeContext.shared)
             await MainActor.run { [weak self] in
                 self?.saveGrab(png)
             }

@@ -91,7 +91,7 @@ struct ChromaKeyRows: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(L("chroma_pick_help"))
+            .controlHelp(L("chroma_pick_help"))
             preset(ChromaKey.greenScreen, help: L("chroma_preset_green"))
             preset(ChromaKey.blueScreen, help: L("chroma_preset_blue"))
             ChromaColorField(color: Binding(
@@ -286,7 +286,7 @@ struct ChromaPlateControls: View {
             }
             .buttonStyle(.plain)
             .disabled(!controller.chromaPlateIsAdjusted)
-            .help(L("chroma_plate_reset"))
+            .controlHelp(L("chroma_plate_reset"))
         }
     }
 

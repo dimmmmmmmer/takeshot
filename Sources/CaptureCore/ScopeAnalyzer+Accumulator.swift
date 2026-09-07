@@ -423,8 +423,32 @@ extension ScopeAnalyzer.Accumulator {
     /// The six drawn surfaces, one per core.
     ///
     /// Separate from `finish()` so the parallel section is a function of the
-    /// maps and nothing else — and because the surfaces are what a future pass
-    /// would move to the GPU, whole.
+    /// maps and nothing else.
+    ///
+    /// **It was going to move to the GPU, and the measurement says not to.**
+    /// An audit read these six CPU blurs as the reason the app feels slow with
+    /// the scopes open — the owner's own complaint — and the SHARE of the pass
+    /// they take is exactly as the audit said. Measured on this machine,
+    /// release, 1080p (`ScopePerformanceTests`, `TAKESHOT_BENCH=1`):
+    ///
+    /// - the whole pass, GPU accumulate: **7.0 ms**
+    /// - of which `finish`, which is this: **4.88 ms** — 70 % of it
+    /// - the stride a pass has to fit inside at 25 fps: **80 ms**
+    /// - delivered rate over a real pipeline: **20 of 20 offered passes,
+    ///   12.5 Hz** — the full target, nothing skipped
+    /// - two passes on two threads: **1.05×** one pass, where 2.00 would be
+    ///   fully serial
+    ///
+    /// So moving these to Metal would save 4.9 ms twelve and a half times a
+    /// second: 61 ms of one core per second, under one per cent of the
+    /// machine, on a pass that already finishes with 73 ms of its window
+    /// unused and already delivers every frame it is offered. Whatever makes
+    /// the app feel slow with the scopes open, it is not this — and a Metal
+    /// rewrite of a correct blur, on the strength of a share rather than a
+    /// budget, would be a day spent making a green number greener.
+    ///
+    /// The numbers are in the bench so the next reader argues with a
+    /// measurement instead of with a shape.
     struct Surfaces {
         var y: [UInt8] = []
         var r: [UInt8] = []

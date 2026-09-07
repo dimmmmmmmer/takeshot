@@ -49,7 +49,7 @@ struct MarkerButton: View {
                 .foregroundStyle(markerColor(controller.newMarkerColor))
         }
         .buttonStyle(.plain)
-        .help("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
+        .controlHelp("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
 
         // Choose the color BEFORE placing a marker. Click-to-cycle rather than a
         // menu, exactly like the per-marker swatch in the list: at this size a
@@ -75,7 +75,7 @@ struct MarkerButton: View {
                     .foregroundStyle(Self.navigationTint(controller))
             }
             .buttonStyle(.plain)
-            .help(L("marker_prev_help"))
+            .controlHelp(L("marker_prev_help"))
 
             Button {
                 showList.toggle()
@@ -98,7 +98,7 @@ struct MarkerButton: View {
                     .foregroundStyle(Self.navigationTint(controller))
             }
             .buttonStyle(.plain)
-            .help(L("marker_next_help"))
+            .controlHelp(L("marker_next_help"))
         }
     }
 }
@@ -186,7 +186,7 @@ struct MarkerListEditor: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help(L("marker_delete_help"))
+                    .controlHelp(L("marker_delete_help"))
                 }
             }
         }

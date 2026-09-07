@@ -185,7 +185,7 @@ struct ComparePinControls: View {
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            .help(L("pin_reference_help"))
+            .controlHelp(L("pin_reference_help"))
         }
         if controller.referencePinned {
             Button {
@@ -196,7 +196,7 @@ struct ComparePinControls: View {
                     .foregroundStyle(.orange)
             }
             .buttonStyle(.plain)
-            .help(L("unpin_reference_help"))
+            .controlHelp(L("unpin_reference_help"))
         }
     }
 }

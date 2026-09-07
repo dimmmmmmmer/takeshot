@@ -149,7 +149,11 @@ struct CapturePipelineTests {
                 "duration=\(duration.seconds)")
     }
 
-    @Test func trimChannelsKeepsFirstN() throws {
+    /// Asked of `selectChannels`, which is what the pipeline calls. There
+    /// used to be a `trimChannels` wrapping it with `0..<n`; nothing wrapped,
+    /// and a wrapper only a test calls makes the suite look like it covers a
+    /// path the app takes.
+    @Test func selectingTheFirstNChannelsKeepsThem() throws {
         // 16-channel buffer: channel k is filled with (k+1)*100
         let frames = 48
         let channels = 16
@@ -168,8 +172,8 @@ struct CapturePipelineTests {
         let sourceBuffer = try #require(source)
 
         var trimCache: CMAudioFormatDescription?
-        let trimmed = try #require(PCMAudio.trimChannels(
-            sourceBuffer, to: 2, formatCache: &trimCache))
+        let trimmed = try #require(PCMAudio.selectChannels(
+            sourceBuffer, indices: [0, 1], formatCache: &trimCache))
         let levels = PCMAudio.peakLevels(of: trimmed)
         #expect(levels.count == 2)
         // levels correspond to the source's channels 1 and 2
@@ -179,7 +183,8 @@ struct CapturePipelineTests {
         #expect(abs(levels[1] - expected2) < 0.01)
 
         // if there are already fewer channels than the limit — the buffer is returned as-is
-        let untouched = PCMAudio.trimChannels(sourceBuffer, to: 32, formatCache: &trimCache)
+        let untouched = PCMAudio.selectChannels(
+            sourceBuffer, indices: Array(0..<32), formatCache: &trimCache)
         #expect(untouched === sourceBuffer)
     }
 

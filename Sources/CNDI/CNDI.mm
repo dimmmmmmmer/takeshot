@@ -212,11 +212,6 @@ static CNDRuntime *CNDSharedRuntime(void) {
     return runtime->send_create != NULL && runtime->send_audio != NULL;
 }
 
-+ (BOOL)isConnectionCountAvailable {
-    CNDRuntime *runtime = CNDSharedRuntime();
-    return runtime->send_create != NULL && runtime->send_connections != NULL;
-}
-
 + (nullable NSString *)unavailableReason {
     CNDRuntime *runtime = CNDSharedRuntime();
     return runtime->send_create != NULL ? nil : runtime->failure;
@@ -562,10 +557,6 @@ static NSString *const kCNDNoSDKMessage =
 /// says `.sending` on announce, as an older runtime does (see
 /// `NDIOutputState.announced`). Declared in the header for both halves; the
 /// real one resolves `NDIlib_send_get_no_connections`, this one answers NO.
-+ (BOOL)isConnectionCountAvailable {
-    return NO;
-}
-
 - (void)stop {
 }
 

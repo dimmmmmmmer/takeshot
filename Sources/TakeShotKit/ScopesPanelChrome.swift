@@ -212,7 +212,7 @@ extension ScopesPanel {
                 .foregroundStyle(.white.opacity(0.6))
         }
         .buttonStyle(.plain)
-        .help(L("scope_open_window"))
+        .controlHelp(L("scope_open_window"))
     }
 
     private var closeButton: some View {
@@ -224,7 +224,7 @@ extension ScopesPanel {
                 .foregroundStyle(.white.opacity(0.5))
         }
         .buttonStyle(.plain)
-        .help(L("close"))
+        .controlHelp(L("close"))
     }
 
     func scopeToggle(_ title: String, isOn: Binding<Bool>) -> some View {
