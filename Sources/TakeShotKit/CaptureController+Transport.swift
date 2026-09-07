@@ -58,6 +58,12 @@ extension CaptureController {
     /// on screen there is a "could not open" notice, and a transport under it
     /// would be driving whatever clip was open before.
     var transportBarKind: TransportBarKind {
+        // A clean feed has no bar. HERE and not at the bar's own mounting
+        // point, because this property is what the toast measures its offset
+        // against (see above): hiding the bar anywhere else would float the
+        // toast 42 points above nothing, which is the drift this property was
+        // extracted to end.
+        guard !cleanFeed else { return .none }
         guard viewerMode == .playback, syncPlay == nil, let url = playbackURL
         else { return .none }
         if rawPlayer?.url == url { return .raw }

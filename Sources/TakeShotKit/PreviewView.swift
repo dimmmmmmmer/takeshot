@@ -105,7 +105,7 @@ struct PreviewView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomLeading) {
-            if controller.isRecording, controller.viewerMode == .record {
+            if controller.showsRecordingMark {
                 // …and WHICH trigger rolled it. On the picture rather than in a
                 // panel because a spurious roll has to be diagnosable by the
                 // person who notices it, and what they are looking at is the

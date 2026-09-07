@@ -72,15 +72,55 @@ struct StreamIndicator: View {
                     controller.stopAllStreams()
                 }
             } label: {
-                reading(symbol: symbol, tint: tint, text: label)
+                transportRow
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .controlHelp(helpText)
         } else {
-            reading(symbol: Self.symbol(.off), tint: Self.tint(.off), text: "")
+            transportRow
                 .controlHelp(L("stream_off_help"))
         }
+    }
+
+    /// **One reading per transport, always both, always in this order.**
+    ///
+    /// The badge used to be a single combined reading with a "SRT+NDI" label
+    /// built from the ENGAGED transports, so switching NDI off while SRT ran
+    /// took the letters NDI off the row entirely — the disappearance the owner
+    /// asked to be rid of ("сделай так чтоб при выключении они меняли значок а
+    /// не исчезали"), still there for the one-of-two case after the all-off
+    /// case was fixed. A transport now keeps its place and its name whatever it
+    /// is doing, and only its ICON and colour move.
+    private var transportRow: some View {
+        HStack(spacing: 6) {
+            ForEach(Self.readings(srt: srt, ndi: ndi, paused: isPaused),
+                    id: \.name) { entry in
+                reading(symbol: Self.symbol(entry.link),
+                        tint: Self.tint(entry.link),
+                        text: entry.name)
+            }
+        }
+    }
+
+    /// One transport's line on the badge: what it is called, and how its link
+    /// is doing.
+    struct Reading: Equatable {
+        var name: String
+        var link: StreamLink
+    }
+
+    /// The row's content, as data. A paused transport reads OFF, because that
+    /// is what it is right now — the mirror is torn down and the button offers
+    /// to bring it back; what "paused" adds is in the tooltip, not in the icon.
+    ///
+    /// Static and pure so the suite can ask the question a rendered badge
+    /// cannot answer: whether a transport that is off still has a line of its
+    /// own, or has been dropped out of the row.
+    static func readings(srt: StreamLink, ndi: StreamLink,
+                         paused: Bool) -> [Reading] {
+        [Reading(name: "SRT", link: paused ? .off : srt),
+         Reading(name: "NDI", link: paused ? .off : ndi)]
     }
 
     /// The hardware monitor output. Absent entirely when no board is selected —
@@ -123,10 +163,6 @@ struct StreamIndicator: View {
         }
     }
 
-    private var symbol: String {
-        isPaused ? Self.symbol(.off) : Self.symbol(combined)
-    }
-
     /// The shape one link state wears, for the suite: that off and waiting are
     /// DIFFERENT shapes is a rule, and it is invisible from a rendered badge.
     static func symbolForTests(_ link: StreamLink) -> String { symbol(link) }
@@ -138,20 +174,6 @@ struct StreamIndicator: View {
         case .trouble: .orange
         case .off: .secondary
         }
-    }
-
-    private var tint: Color {
-        isPaused ? .secondary : Self.tint(combined)
-    }
-
-    /// Which transports are ON, not which are up: the label names what the
-    /// operator switched on, and the symbol and colour say how it is going.
-    private var label: String {
-        let paused = mirrors.pausedStreams
-        let names = [srt.isEngaged || (isPaused && paused.srt) ? "SRT" : nil,
-                     ndi.isEngaged || (isPaused && paused.ndi) ? "NDI" : nil]
-            .compactMap { $0 }
-        return names.joined(separator: "+")
     }
 
     /// The tooltip says what a glance cannot: which link is in which state, and

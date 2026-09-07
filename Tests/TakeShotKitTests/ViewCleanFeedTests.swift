@@ -50,6 +50,102 @@ struct ViewCleanFeedTests {
         }
     }
 
+    /// **The transport bar is chrome too.** The pixel test above samples the
+    /// top of the frame, where the badges are, so the bar under the picture
+    /// was outside everything that had ever been asserted — and it stayed
+    /// drawn, with its scrubber and its buttons, through a mode whose whole
+    /// job is to take the controls off the picture.
+    ///
+    /// Asserted through `transportBarKind` because that is where the decision
+    /// now lives: the toast measures its own offset against the same property,
+    /// so a bar hidden anywhere else would have left the toast floating over
+    /// nothing.
+    @Test func theTransportBarGoesWithTheRestOfTheChrome() async throws {
+        try await ControllerHarness.run { controller, root in
+            controller.viewerMode = .playback
+            controller.playbackURL = root.appendingPathComponent("A001C001.mov")
+            try #require(controller.transportBarKind == .video,
+                         "the fixture has no transport bar to hide")
+
+            controller.toggleCleanFeed()
+            #expect(controller.transportBarKind == .none,
+                    "the transport bar is still drawn over a clean feed")
+            // …and the toast comes down with it rather than floating above a
+            // bar that is no longer there
+            #expect(PlayerToastPlan.current(
+                error: "x", notice: nil, noticeTint: nil,
+                transport: controller.transportBarKind)?.bottomInset
+                == PlayerToastPlan.insetOverPicture)
+
+            controller.toggleCleanFeed()
+            #expect(controller.transportBarKind == .video, "the bar did not come back")
+        }
+    }
+
+    /// The rolling mark — the red border and the REC label — is one fact drawn
+    /// in two files, and a clean feed takes both.
+    ///
+    /// Nothing is lost by hiding it: the REC button in the bottom bar is a
+    /// white square while a take rolls, and the bottom bar is a SIBLING of the
+    /// player rather than something drawn on it, so it is untouched.
+    @Test func theRecordingMarkGoesWithIt() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.viewerMode = .record
+            controller.isRecording = true
+            try #require(controller.showsRecordingMark,
+                         "the fixture is not showing a rolling take")
+
+            controller.toggleCleanFeed()
+            #expect(!controller.showsRecordingMark)
+
+            controller.toggleCleanFeed()
+            #expect(controller.showsRecordingMark, "the mark did not come back")
+        }
+    }
+
+    /// The audio panel is a panel of controls, so it goes — but it is not
+    /// CLOSED. An operator who put it up before showing the director the
+    /// picture finds it still up afterwards.
+    @Test func theAudioPanelGoesButIsNotClosed() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.showAudioPanel = true
+            try #require(controller.showsAudioPanel)
+
+            controller.toggleCleanFeed()
+            #expect(!controller.showsAudioPanel)
+            #expect(controller.showAudioPanel,
+                    "the clean feed closed the panel instead of hiding it")
+
+            controller.toggleCleanFeed()
+            #expect(controller.showsAudioPanel, "the panel did not come back")
+        }
+    }
+
+    /// **Both drawings of the rolling mark read the one name.** They are in
+    /// two files — the border in `PlayerArea`, the label in `PreviewView` —
+    /// and they used to spell `isRecording && viewerMode == .record`
+    /// separately, which is how the clean feed came to hide one thing and not
+    /// the other. Asserted on the source: a condition written at a surface is
+    /// a condition the next surface writes slightly differently.
+    @Test func theRollingMarkIsSpelledOnceOnTheController() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/TakeShotKit")
+        for name in ["PlayerArea", "PreviewView"] {
+            let code = try String(
+                contentsOf: root.appendingPathComponent("\(name).swift"),
+                encoding: .utf8)
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            #expect(code.contains("controller.showsRecordingMark"),
+                    Comment(rawValue: "\(name) does not read the shared rule"))
+            #expect(!code.contains("isRecording, controller.viewerMode == .record"),
+                    Comment(rawValue: "\(name) spells the rolling condition itself again"))
+        }
+    }
+
     /// The key and the button are the same switch. Every hotkey in this app
     /// calls the method its button calls — that is the rule `HotkeyManager`
     /// is built on — and this one is the case where it matters most: the

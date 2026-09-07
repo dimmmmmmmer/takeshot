@@ -131,6 +131,32 @@ extension CaptureController {
     /// director, not a preference.
     func toggleCleanFeed() { cleanFeed.toggle() }
 
+    /// The take-is-rolling mark on the picture: the red border round the player
+    /// and the REC label in its corner.
+    ///
+    /// ONE name for both, because they are one fact drawn twice and they used
+    /// to spell it separately in two files — the divergence
+    /// `ViewDisabledRuleTests` was written about, one control short of being
+    /// caught by it.
+    ///
+    /// Hidden by a clean feed, and nothing is lost by that: the REC button in
+    /// the bottom bar is a white square while a take rolls, and the bottom bar
+    /// is a sibling of the player rather than something drawn on it, so it
+    /// stays. The only sign this mode takes away from the picture is a sign
+    /// that is still on screen an inch below.
+    var showsRecordingMark: Bool {
+        isRecording && viewerMode == .record && !cleanFeed
+    }
+
+    /// The player's own fullscreen button, bottom-right. Live signal only —
+    /// in playback the transport carries one — and not over a clean feed,
+    /// where it is one of the corner buttons being taken off the picture.
+    var showsLiveFullscreenButton: Bool { viewerMode == .record && !cleanFeed }
+
+    /// The audio channel panel over the picture — a panel of controls, so a
+    /// clean feed takes it with the rest of them.
+    var showsAudioPanel: Bool { showAudioPanel && !cleanFeed }
+
     var scopeRegion: ScopeRegion {
         ScopeRegion(assist: assist)
     }

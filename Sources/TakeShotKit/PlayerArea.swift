@@ -11,7 +11,7 @@ struct PlayerArea: View {
             .overlay(RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(.white.opacity(0.08)))
             .overlay {
-                if controller.isRecording, controller.viewerMode == .record {
+                if controller.showsRecordingMark {
                     RoundedRectangle(cornerRadius: 14)
                         .strokeBorder(Color.red.opacity(0.85), lineWidth: 3)
                 }
@@ -19,7 +19,7 @@ struct PlayerArea: View {
             .playerTopBadges()
             .overlay(alignment: .bottomTrailing) {
                 // player fullscreen — bottom-right (in playback this button is in the transport)
-                if controller.viewerMode == .record, !controller.cleanFeed {
+                if controller.showsLiveFullscreenButton {
                     Button {
                         controller.toggleLiveFullscreen()
                     } label: {
@@ -61,7 +61,7 @@ struct PlayerArea: View {
                 .padding(8)
             }
             .overlay {
-                if controller.showAudioPanel {
+                if controller.showsAudioPanel {
                     AudioChannelPanel(live: controller.live)
                 }
             }
