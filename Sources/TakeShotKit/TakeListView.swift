@@ -103,11 +103,26 @@ private struct TakesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(L("takes"))
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
+            // **The title is ON the header row**, beside the folder button and
+            // level with the slider and the view picker — the arrangement Other
+            // content has always had (owner: "название тейкс… можно поставить
+            // теперь так же как другой контент, на одном уровне с ползунком и
+            // выбором вида. ну и после названия кнопку открытия папки").
+            //
+            // It could not be before: the row also carried the export button,
+            // and a title in front of it left the picker no width. The export
+            // control is two menus in the utility row now, and the space it
+            // freed is what the title moved into — one row where there were
+            // two, which is the height the panel gets back.
+            //
+            // Same size and weight as Other content's title so the two panels
+            // read as siblings; NOT its secondary grey, because this is the
+            // section the operator works in and the quieter voice is what
+            // marks the other one as subordinate.
             PanelSectionHeader(viewMode: $viewMode, tileSize: $tileSize) {
+                Text(L("takes"))
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize()
                 Button {
                     controller.openDestinationInFinder()
                 } label: {
@@ -131,8 +146,7 @@ private struct TakesSection: View {
                 // a bar, a file name and a Stop button now, and it reads out at
                 // the bottom of this panel (see `PanelRunStatus`).
             }
-            .padding(.top, 4)
-            .padding(.bottom, 8)
+            .padding(.vertical, 6)
             Divider()
             if controller.takes.isEmpty {
                 Spacer()

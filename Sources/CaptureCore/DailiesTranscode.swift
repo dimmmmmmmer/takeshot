@@ -16,6 +16,7 @@ final class DailiesTranscode {
     private let count: Int
     private let burnins: DailiesBurnins
     private let folder: URL
+    private let codec: CaptureCodec
     private let control: DailiesControl
     private let publish: @Sendable (DailiesProgress) -> Void
 
@@ -30,13 +31,14 @@ final class DailiesTranscode {
     private var pendingAudio: CMSampleBuffer?
 
     init(item: DailiesItem, index: Int, count: Int, burnins: DailiesBurnins,
-         folder: URL, control: DailiesControl,
+         folder: URL, codec: CaptureCodec = .h264, control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
         self.item = item
         self.index = index
         self.count = count
         self.burnins = burnins
         self.folder = folder
+        self.codec = codec
         self.control = control
         self.publish = publish
     }
@@ -74,9 +76,10 @@ final class DailiesTranscode {
         // daily) is about to take. Collisions get the app's `_2` suffix.
         let url = CapturePipeline.uniqueURL(
             for: folder.appendingPathComponent(item.outputName)
-                .appendingPathExtension("mp4"))
+                .appendingPathExtension(codec.dailiesFileExtension))
         outputURL = url
-        let session = try DailiesSession.open(at: url, facts: facts)
+        let session = try DailiesSession.open(at: url, facts: facts,
+                                              codec: codec)
         self.session = session
         publishProgress(force: true)
         try await pump(session, composer: DailiesFrameComposer(

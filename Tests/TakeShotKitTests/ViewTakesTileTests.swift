@@ -160,9 +160,16 @@ import Testing
 
             let panel = ViewBudget.panelMinWidth
             let minimum = probe.minimumWidths(proposedHeight: 600) { TakeListView() }
+            // The panel's minimum is language-DEPENDENT now, and the
+            // equality that used to be asserted here is gone with it: the
+            // takes title moved onto the header row, beside the folder button
+            // and level with the view controls, so "Takes" and "Дубли" are
+            // part of what the row has to hold (4pt apart, measured). What
+            // matters is that both fit, and both are asserted.
             #expect(minimum.ru <= panel,
                     "the smallest-tile grid needs \(minimum.ru)pt of \(panel)")
-            #expect(minimum.ru == minimum.en)
+            #expect(minimum.en <= panel,
+                    "the smallest-tile grid needs \(minimum.en)pt of \(panel)")
         }
     }
 

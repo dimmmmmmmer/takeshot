@@ -37,8 +37,30 @@ struct PanelUtilityButtons: View {
     /// the panel above them is the content.
     private static let iconSize: CGFloat = 14
 
+    /// **One slot for every icon, so the row has one rhythm.**
+    ///
+    /// The six glyphs are not the same width — measured at 14pt:
+    /// `doc.text` 16, `gearshape` 17, `waveform.badge.magnifyingglass` 17,
+    /// `film.stack` 19, `externaldrive.badge.checkmark` 20, and
+    /// `timeline.selection` **28**. Laid out with a constant gap, unequal
+    /// widths put the CENTRES on an irregular pitch, and an icon row is read
+    /// by its centres: the last two sat 6 points off everything before them
+    /// (owner: "иконки которые у нас внизу слева новые появились выглядят так
+    /// как будто между ними всеми разные отступы").
+    ///
+    /// The widest glyph sets the slot, and `everyUtilityIconFitsItsSlot`
+    /// measures all of them against it — so a future icon that does not fit
+    /// fails a test instead of quietly bending the row again.
+    static let slotWidth: CGFloat = 28
+    /// Gap between slots. Tightened from 18 as the slots were introduced: the
+    /// slot already carries the whitespace the gap used to supply, and the row
+    /// has to stay about as wide as it was (218pt against 207) — it is centred
+    /// on the panel above it and a wider row is one that overflows a narrow
+    /// panel.
+    static let slotSpacing: CGFloat = 10
+
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: Self.slotSpacing) {
             // Both of these FOCUS a window that is already open rather than
             // doing nothing visible: a Settings window behind the main one is
             // exactly where these get clicked twice (see AppWindows).
@@ -107,10 +129,17 @@ struct PanelUtilityButtons: View {
     private func button(_ symbol: String, help: String,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: Self.iconSize))
+            icon(symbol)
         }
         .help(help)
+    }
+
+    /// One glyph in its slot. Every item in the row goes through this, buttons
+    /// and menus alike, so there is a single place the pitch is set.
+    private func icon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: Self.iconSize))
+            .frame(width: Self.slotWidth)
     }
 
     /// A menu that looks like the buttons beside it.
@@ -131,8 +160,7 @@ struct PanelUtilityButtons: View {
         Menu {
             content()
         } label: {
-            Image(systemName: symbol)
-                .font(.system(size: Self.iconSize))
+            icon(symbol)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

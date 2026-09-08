@@ -22,8 +22,16 @@ public final class DailiesOverlay {
         public var custom: String?
         /// Bottom-left clip/take name.
         public var clipName: String?
-        /// Bottom-right project line (already composed with the date).
+        /// Bottom-right project line.
         public var project: String?
+        /// Recording date. Its OWN strip since the positions became the
+        /// operator's: it used to be joined onto the project line with " · "
+        /// because four corners could not hold five facts, and that stopped
+        /// being the constraint the moment every line got a place of its own —
+        /// leaving the date as the one fact that could not be moved and no way
+        /// to say why (owner: "не оч понятно почему у рекординг дейт нельзя
+        /// выбрать положение").
+        public var date: String?
         /// Widest text the TC strip must hold ("00:00:00:00"); nil — TC off.
         /// A template rather than a live value so the plate never resizes as
         /// the digits run.
@@ -35,13 +43,19 @@ public final class DailiesOverlay {
         public var clipNamePosition: DailiesBurninPosition = .bottomLeft
         public var projectPosition: DailiesBurninPosition = .bottomRight
         public var timecodePosition: DailiesBurninPosition = .topCenter
+        /// Bottom-right by default, which is where the date has always been
+        /// drawn — stacked under the project line when both are on, by the
+        /// same rule any two strips in one corner follow.
+        public var datePosition: DailiesBurninPosition = .bottomRight
 
         public init(custom: String? = nil, clipName: String? = nil,
                     project: String? = nil, timecodeTemplate: String? = nil,
+                    date: String? = nil,
                     customPosition: DailiesBurninPosition = .topLeft,
                     clipNamePosition: DailiesBurninPosition = .bottomLeft,
                     projectPosition: DailiesBurninPosition = .bottomRight,
-                    timecodePosition: DailiesBurninPosition = .topCenter) {
+                    timecodePosition: DailiesBurninPosition = .topCenter,
+                    datePosition: DailiesBurninPosition = .bottomRight) {
             self.custom = custom
             self.clipName = clipName
             self.project = project
@@ -50,6 +64,8 @@ public final class DailiesOverlay {
             self.clipNamePosition = clipNamePosition
             self.projectPosition = projectPosition
             self.timecodePosition = timecodePosition
+            self.date = date
+            self.datePosition = datePosition
         }
     }
 
@@ -60,6 +76,7 @@ public final class DailiesOverlay {
         public var clipName: CGRect?
         public var project: CGRect?
         public var custom: CGRect?
+        public var date: CGRect?
     }
 
     /// One pre-rendered strip and where it goes (CG bottom-left coordinates).
@@ -78,20 +95,27 @@ public final class DailiesOverlay {
     private let timecodeFont: CTFont
     private let textAttributes: [NSAttributedString.Key: Any]
 
-    public init(size: CGSize, texts: Texts) {
-        self.size = size
-        let metrics = DailiesStripMetrics(height: size.height)
-        self.metrics = metrics
-        self.timecodeFont = metrics.timecodeFont
-
+    /// Where the five strips land.
+    ///
+    /// **Stacked when two lines want the same place.** The positions are the
+    /// operator's, and nothing stops them putting the clip name and the
+    /// project in the same corner — which used to be impossible and is now one
+    /// picker away. Strips at one position step INWARD from their edge, in the
+    /// order below, so the arrangement is the same every run and no line is
+    /// ever hidden under another.
+    ///
+    /// The date is placed LAST, so project and date sharing bottom-right come
+    /// out in the order they were joined in when the date had no place of its
+    /// own.
+    ///
+    /// Its own function rather than part of `init` because the fifth strip
+    /// took the initializer past the body-length rule — and because "where
+    /// does each line go" is one question, answerable without a whole overlay.
+    private static func arrange(_ texts: Texts,
+                                metrics: DailiesStripMetrics,
+                                in size: CGSize) -> Layout {
         var layout = Layout()
         let bodyFont = metrics.bodyFont
-        // **Stacked when two lines want the same place.** The positions are
-        // the operator's now, and nothing stops them putting the clip name and
-        // the project in the same corner — which used to be impossible and is
-        // now one picker away. Strips at one position step INWARD from their
-        // edge, in this order, so the arrangement is the same every run and no
-        // line is ever hidden under another.
         var used: [DailiesBurninPosition: Int] = [:]
         func place(_ text: String, font: CTFont,
                    at position: DailiesBurninPosition) -> CGRect {
@@ -120,6 +144,20 @@ public final class DailiesOverlay {
             layout.project = place(project, font: bodyFont,
                                    at: texts.projectPosition)
         }
+        if let date = texts.date {
+            layout.date = place(date, font: bodyFont, at: texts.datePosition)
+        }
+        return layout
+    }
+
+    public init(size: CGSize, texts: Texts) {
+        self.size = size
+        let metrics = DailiesStripMetrics(height: size.height)
+        self.metrics = metrics
+        self.timecodeFont = metrics.timecodeFont
+
+        let bodyFont = metrics.bodyFont
+        let layout = Self.arrange(texts, metrics: metrics, in: size)
         self.layout = layout
         self.timecodePlate = layout.timecode.map { Self.flip($0, in: size) }
         self.textAttributes = [
@@ -130,7 +168,8 @@ public final class DailiesOverlay {
 
         for (rect, text) in [(layout.custom, texts.custom),
                              (layout.clipName, texts.clipName),
-                             (layout.project, texts.project)] {
+                             (layout.project, texts.project),
+                             (layout.date, texts.date)] {
             guard let rect, let text,
                   let image = renderStrip(text: text, font: bodyFont,
                                           size: rect.size) else { continue }
@@ -261,7 +300,7 @@ public enum DailiesBurninPosition: String, CaseIterable, Sendable, Codable {
     }
 }
 
-struct DailiesStripMetrics {
+public struct DailiesStripMetrics {
     typealias Corner = DailiesBurninPosition
 
     /// Dark enough to hold white text over a blown-out window, transparent
@@ -269,13 +308,19 @@ struct DailiesStripMetrics {
     static let plateColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.55)
     static let textColor = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
 
+    /// Below this a strip is a line nobody can read, whatever the raster —
+    /// named because the dailies PREVIEW has to be rendered large enough that
+    /// this floor does not bind, or it shows thicker plates than the daily
+    /// will carry (`thePreviewRasterIsBigEnoughToShowTheRealStripHeight`).
+    public static let minimumStripHeight: CGFloat = 14
+
     /// Strip height, text size and margins as fractions of the frame height.
     let stripHeight: CGFloat
     let margin: CGFloat
     let textInset: CGFloat
 
     init(height: CGFloat) {
-        stripHeight = max(14, (height * 0.05).rounded())
+        stripHeight = max(Self.minimumStripHeight, (height * 0.05).rounded())
         margin = (height * 0.04).rounded()
         textInset = (stripHeight * 0.45).rounded()
     }
@@ -321,25 +366,25 @@ struct DailiesStripMetrics {
 
 public extension DailiesBurnins {
     /// The toggles applied to one item's facts: what each strip actually says.
-    /// Project and date share the bottom-right strip (four corners, five
-    /// facts), joined with the separator the take log already uses.
+    ///
+    /// Five strips, not four. The date used to be joined onto the project line
+    /// because the layout had four corners and this set has five facts; every
+    /// line carries its own position now, so the date carries one too and the
+    /// stacking rule handles the pair when both are pointed at one corner —
+    /// which is what they default to, so the classic arrangement is unchanged
+    /// on screen while the date has become movable.
     func overlayTexts(for item: DailiesItem) -> DailiesOverlay.Texts {
-        var bottomRight: [String] = []
-        if project, !item.projectLine.isEmpty {
-            bottomRight.append(item.projectLine)
-        }
-        if date, !item.dateText.isEmpty {
-            bottomRight.append(item.dateText)
-        }
-        return DailiesOverlay.Texts(
+        DailiesOverlay.Texts(
             custom: customText.isEmpty ? nil : customText,
             clipName: clipName ? item.clipName : nil,
-            project: bottomRight.isEmpty ? nil
-                : bottomRight.joined(separator: " · "),
+            project: project && !item.projectLine.isEmpty
+                ? item.projectLine : nil,
             timecodeTemplate: timecode ? "00:00:00:00" : nil,
+            date: date && !item.dateText.isEmpty ? item.dateText : nil,
             customPosition: customPosition,
             clipNamePosition: clipNamePosition,
             projectPosition: projectPosition,
-            timecodePosition: timecodePosition)
+            timecodePosition: timecodePosition,
+            datePosition: datePosition)
     }
 }

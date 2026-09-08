@@ -220,10 +220,21 @@ struct PlayerTopBadgesModifier: ViewModifier {
                     .strokeBorder(.white.opacity(0.12)))
                 .frame(maxWidth: 860, maxHeight: 320)
                 .padding(10)
-                // Clear of the clean-feed button, which owns this corner
-                // (`PlayerArea`). Two things stacked in one corner is one of
-                // them unreachable.
-                .padding(.leading, PlayerChrome.height + 8)
+                // **Above the corner controls, not beside them.**
+                //
+                // This used to be a LEADING inset clearing the clean-feed
+                // button alone, and the button opposite it was not accounted
+                // for: at its full 860pt the panel ran under the fullscreen
+                // button in the other corner (owner: "скопы не залезают на
+                // глазик но залезают на кнопку фул скрина"). A third inset for
+                // the REC label beside the eye would have been next.
+                //
+                // So the bottom edge of the picture is the controls' strip and
+                // the panel sits above it — one rule instead of three, and it
+                // holds however wide the panel gets or however long the REC
+                // label's trigger name is. The panel gets the full width back
+                // in exchange.
+                .padding(.bottom, PlayerChrome.height + 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

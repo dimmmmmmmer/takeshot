@@ -32,8 +32,12 @@ public enum DailiesEngine {
     static let bitsPerSecondAt1080p = 10_000_000
 
     /// Run the queue to completion (or to Stop) and report every item.
+    ///
+    /// `codec` defaults to H.264, which is what every daily this app has ever
+    /// written was — so a caller that does not care is unchanged.
     public static func run(
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
+        codec: CaptureCodec = .h264,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -59,8 +63,8 @@ public enum DailiesEngine {
             }
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
-                burnins: burnins, folder: folder, control: control,
-                publish: progress)
+                burnins: burnins, folder: folder, codec: codec,
+                control: control, publish: progress)
             results.append(await transcode.run())
         }
         // Cancel only counts if it cut the run short (the offload's rule):
@@ -110,22 +114,31 @@ public enum DailiesEngine {
     /// scratch, to reach a result a colour-managed player computes exactly and
     /// for free from the tag.
     static func videoSettings(size: CGSize, frameRate: Double,
-                              colorimetry: WireColorimetry = .sdr)
+                              colorimetry: WireColorimetry = .sdr,
+                              codec: CaptureCodec = .h264)
         -> [String: Any] {
         let areaFraction = size.width * size.height
             / (maxSize.width * maxSize.height)
         let bitrate = max(1_000_000,
                           Int(Double(bitsPerSecondAt1080p) * areaFraction))
         var settings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoCodecKey: codec.avCodecType,
             AVVideoWidthKey: Int(size.width),
             AVVideoHeightKey: Int(size.height),
-            AVVideoCompressionPropertiesKey: [
+        ]
+        // **ProRes is not given a bitrate, and that is not an omission.** Its
+        // rate is a property of the picture and the flavour — the encoder is
+        // told what to preserve, not how many bits to spend — and a bitrate
+        // key handed to it is either ignored or refused depending on the
+        // build. `needsBitrate` is the same question `TakeWriter` asks of the
+        // same enum for the same reason.
+        if codec.needsBitrate {
+            settings[AVVideoCompressionPropertiesKey] = [
                 AVVideoAverageBitRateKey: bitrate,
                 AVVideoExpectedSourceFrameRateKey:
                     Int(max(1, frameRate.rounded())),
-            ],
-        ]
+            ]
+        }
         if colorimetry.isHDR {
             settings[AVVideoColorPropertiesKey] = ColorTags
                 .videoColorProperties(for: colorimetry.displayPreset)

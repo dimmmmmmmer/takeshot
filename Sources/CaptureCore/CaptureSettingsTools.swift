@@ -129,6 +129,11 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case clipNamePosition = "dailiesClipNamePosition"
         case projectPosition = "dailiesProjectPosition"
         case customPosition = "dailiesCustomPosition"
+        case datePosition = "dailiesDatePosition"
+        case burnCustom = "dailiesBurnCustom"
+        case codec = "dailiesCodec"
+        case namePrefix = "dailiesNamePrefix"
+        case nameSuffix = "dailiesNameSuffix"
     }
 
     /// Burn the running timecode into dailies; nil — on.
@@ -154,6 +159,24 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var clipNamePosition: String?
     public var projectPosition: String?
     public var customPosition: String?
+    public var datePosition: String?
+    /// Whether the custom line is burned in.
+    ///
+    /// **nil is not "off" here, it is "ask the old blob what it meant".** The
+    /// custom line used to be its own switch — a non-empty text WAS the on
+    /// state — so a settings file from before this field says nothing about a
+    /// flag and everything about intent: text present means the operator had
+    /// the line on. `burnCustomEffective` reads it that way, which is what
+    /// keeps an upgrade from quietly dropping a line somebody was burning.
+    public var burnCustom: Bool?
+    /// Codec for the dailies (`CaptureCodec` raw values); nil — H.264, which
+    /// is what every daily was before the choice existed.
+    public var codec: String?
+    /// Put in front of / after the take's name in the output file name;
+    /// nil — nothing in front and "_DAILY" after, the name this app has
+    /// always written.
+    public var namePrefix: String?
+    public var nameSuffix: String?
 
     public init() {}
 
@@ -175,6 +198,37 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var customPositionEffective: DailiesBurninPosition {
         customPosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .topLeft
     }
+
+    public var datePositionEffective: DailiesBurninPosition {
+        datePosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .bottomRight
+    }
+
+    /// Whether the custom line is on, reading an older blob's intent when the
+    /// flag was never written (see `burnCustom`).
+    public var burnCustomEffective: Bool {
+        burnCustom ?? !(customText ?? "").isEmpty
+    }
+
+    /// The codec, resolved. Restricted to `dailiesChoices`: a blob naming
+    /// ProRes 4444 — or a codec that has since left the list — lands on H.264
+    /// rather than starting a run that writes a daily bigger than the take.
+    public var codecEffective: CaptureCodec {
+        guard let codec, let parsed = CaptureCodec(rawValue: codec),
+              CaptureCodec.dailiesChoices.contains(parsed) else { return .h264 }
+        return parsed
+    }
+
+    /// **The output name's two ends.** The suffix defaults to `_DAILY`, which
+    /// is what this app has always appended, so a blob from before these
+    /// fields produces byte-identical names.
+    ///
+    /// Both are stored as the operator typed them and sanitized where the name
+    /// is built (`DailiesQueueModel.item`), not here: a settings accessor that
+    /// silently rewrote what was typed is the divergence `NameTextField` was
+    /// introduced to end.
+    public var namePrefixEffective: String { namePrefix ?? "" }
+
+    public var nameSuffixEffective: String { nameSuffix ?? "_DAILY" }
 }
 
 /// The DIT offload: where it copies to, and whether it offers itself.

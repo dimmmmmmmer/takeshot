@@ -17,11 +17,24 @@ final class DailiesQueueModel: ObservableObject {
     @Published var clipNamePosition: DailiesBurninPosition = .bottomLeft
     @Published var projectPosition: DailiesBurninPosition = .bottomRight
     @Published var customPosition: DailiesBurninPosition = .topLeft
+    @Published var datePosition: DailiesBurninPosition = .bottomRight
     @Published var burnTimecode = true
     @Published var burnClipName = true
     @Published var burnProject = true
     @Published var burnDate = false
+    /// The custom line has a switch of its own now (owner: "не хватает как
+    /// будто галочки у кастом тайтла"). It used to be the TEXT: non-empty was
+    /// on, so the only way to turn the line off was to delete what you had
+    /// written — and `rememberDailiesChoices` then stored nil, which threw it
+    /// away for good. Off keeps the words.
+    @Published var burnCustom = false
     @Published var customText = ""
+    /// What the dailies are written in, and therefore also which container
+    /// and extension they get (`CaptureCodec.dailiesChoices`).
+    @Published var codec: CaptureCodec = .h264
+    /// The output name's two ends, around the take's own name.
+    @Published var namePrefix = ""
+    @Published var nameSuffix = "_DAILY"
     /// Where the dailies land. Defaults to a Dailies folder beside the takes.
     @Published var destination: URL?
     /// The folder beside the footage — what `destination` means when the
@@ -66,11 +79,16 @@ final class DailiesQueueModel: ObservableObject {
         clipNamePosition = settings.dailies.clipNamePositionEffective
         projectPosition = settings.dailies.projectPositionEffective
         customPosition = settings.dailies.customPositionEffective
+        datePosition = settings.dailies.datePositionEffective
         burnTimecode = settings.dailies.burnTimecode ?? true
         burnClipName = settings.dailies.burnClipName ?? true
         burnProject = settings.dailies.burnProject ?? true
         burnDate = settings.dailies.burnDate ?? false
+        burnCustom = settings.dailies.burnCustomEffective
         customText = settings.dailies.customText ?? ""
+        codec = settings.dailies.codecEffective
+        namePrefix = settings.dailies.namePrefixEffective
+        nameSuffix = settings.dailies.nameSuffixEffective
         self.defaultFolder = defaultFolder
         destination = settings.dailies.destinationPath
             .map { URL(fileURLWithPath: $0) } ?? defaultFolder
@@ -98,11 +116,49 @@ final class DailiesQueueModel: ObservableObject {
         DailiesBurnins(
             timecode: burnTimecode, clipName: burnClipName,
             project: burnProject, date: burnDate,
-            customText: customText.trimmingCharacters(in: .whitespaces),
+            // The switch decides, and the words are left alone: the engine's
+            // rule is still "empty text, no strip", so switching the line off
+            // is expressed by handing it nothing while the operator's sentence
+            // stays in the field and in settings.
+            customText: burnCustom
+                ? customText.trimmingCharacters(in: .whitespaces) : "",
             timecodePosition: timecodePosition,
             clipNamePosition: clipNamePosition,
             projectPosition: projectPosition,
-            customPosition: customPosition)
+            customPosition: customPosition,
+            datePosition: datePosition)
+    }
+
+    /// The name one take's daily will be written under, without the extension
+    /// — what the sheet shows as a live example.
+    func outputName(for takeName: String) -> String {
+        Self.outputName(take: takeName, prefix: namePrefix, suffix: nameSuffix)
+    }
+
+    /// **The whole naming rule, in one place.**
+    ///
+    /// `NameField.prefix.normalized` is what the operator's typing already
+    /// goes through in the fields, but the RESULT is what reaches
+    /// `appendingPathComponent`, and nothing on that path sanitized it before:
+    /// a prefix of "../" or a name that came out empty had a filesystem answer
+    /// and no app answer. So the joined name is normalized again here.
+    ///
+    /// Two things `normalized` alone does not do, both found by the test that
+    /// tried them:
+    ///
+    /// - **Leading dots are dropped.** `normalized` removes the separators, so
+    ///   "../../" cannot climb out of the dailies folder — but it leaves the
+    ///   dots, and a name beginning with one is a file macOS hides. A daily
+    ///   the operator cannot see in Finder is worse than a daily with an odd
+    ///   name.
+    /// - **An empty result falls back to the take's own name.** An empty path
+    ///   component handed to `appendingPathComponent` names the dailies
+    ///   FOLDER, and a daily with no name is not a daily.
+    static func outputName(take: String, prefix: String,
+                           suffix: String) -> String {
+        let joined = NameField.prefix.normalized(prefix + take + suffix)
+        let visible = String(joined.drop(while: { $0 == "." }))
+        return visible.isEmpty ? take : visible
     }
 
     // MARK: - the run
@@ -110,7 +166,8 @@ final class DailiesQueueModel: ObservableObject {
     func start() {
         guard canStart, let destination, let controller else { return }
         let items = queuedTakes.map {
-            Self.item(for: $0, settings: controller.settings)
+            Self.item(for: $0, settings: controller.settings,
+                      prefix: namePrefix, suffix: nameSuffix)
         }
         let token = DailiesControl()
         // Recording protection from the first frame: a queue started while a
@@ -124,6 +181,9 @@ final class DailiesQueueModel: ObservableObject {
         controller.rememberDailiesChoices(from: self)
         controller.dailiesStatus = L("dailies_status", 0, items.count)
         let burnins = burnins
+        // Captured on this side, like `burnins` and for the reason spelled out
+        // below: the detached task is handed values, never this object.
+        let codec = codec
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -148,7 +208,7 @@ final class DailiesQueueModel: ObservableObject {
         Task.detached(priority: .utility) {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
-                control: token, progress: publish)
+                codec: codec, control: token, progress: publish)
             complete(result)
         }
     }
@@ -179,7 +239,9 @@ final class DailiesQueueModel: ObservableObject {
 
     /// A take as a queue item: the file, the `<name>_DAILY` output, and the
     /// burn-in facts composed from the settings that own them.
-    static func item(for take: Take, settings: CaptureSettings) -> DailiesItem {
+    static func item(for take: Take, settings: CaptureSettings,
+                     prefix: String = "", suffix: String = "_DAILY")
+        -> DailiesItem {
         let cameraRoll = take.roll.isEmpty
             ? settings.naming.cameraLabel : settings.naming.cameraLabel + take.roll
         let projectLine = [settings.naming.projectName, cameraRoll]
@@ -191,7 +253,8 @@ final class DailiesQueueModel: ObservableObject {
         stamp.locale = Locale(identifier: "en_US_POSIX")
         return DailiesItem(
             source: take.url,
-            outputName: take.displayName + "_DAILY",
+            outputName: outputName(take: take.displayName, prefix: prefix,
+                                   suffix: suffix),
             clipName: take.displayName,
             projectLine: projectLine,
             dateText: stamp.string(from: take.recordedAt),

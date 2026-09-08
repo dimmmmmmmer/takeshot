@@ -823,9 +823,15 @@
 /* === dailies with burn-ins (DailiesSheet, DailiesStatusStrip) === */
 "dailies_menu" = "Dailies…";
 "dailies_title" = "Dailies with burn-ins";
-"dailies_batch" = "%@ → H.264 dailies (<name>_DAILY.mp4)";
+"dailies_batch" = "%@ → %@ dailies";
 "dailies_burn_section" = "Burned-in text";
-"dailies_burn_tc" = "Running timecode (top center)";
+"dailies_custom_hint" = "e.g. INTERNAL — NOT FOR DISTRIBUTION";
+"dailies_name_label" = "File name";
+"dailies_name_prefix" = "prefix";
+"dailies_name_suffix" = "suffix";
+"dailies_name_example" = "Each file: %@";
+"dailies_reset_dest_button" = "Default folder";
+"dailies_burn_tc" = "Running timecode";
 "dailies_position_topLeft" = "Top left";
 "dailies_position_topCenter" = "Top centre";
 "dailies_position_topRight" = "Top right";
@@ -833,10 +839,10 @@
 "dailies_position_bottomCenter" = "Bottom centre";
 "dailies_position_bottomRight" = "Bottom right";
 "dailies_preview_help" = "How the burn-ins will sit on the frame";
-"dailies_burn_name" = "Clip name (bottom left)";
-"dailies_burn_project" = "Project · camera/roll (bottom right)";
-"dailies_burn_date" = "Recording date (bottom right)";
-"dailies_custom_placeholder" = "Custom line (top left)";
+"dailies_burn_name" = "Clip name";
+"dailies_burn_project" = "Project · camera/roll";
+"dailies_burn_date" = "Recording date";
+"dailies_custom_placeholder" = "Custom line";
 "dailies_dest_label" = "Destination:";
 "dailies_pick_dest" = "Where the dailies land";
 "dailies_reset_dest" = "Back to a Dailies folder beside the footage";

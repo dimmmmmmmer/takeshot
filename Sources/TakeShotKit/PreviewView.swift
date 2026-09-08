@@ -104,19 +104,11 @@ struct PreviewView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottomLeading) {
-            if controller.showsRecordingMark {
-                // …and WHICH trigger rolled it. On the picture rather than in a
-                // panel because a spurious roll has to be diagnosable by the
-                // person who notices it, and what they are looking at is the
-                // frame. The suffix is absent for a take with no recorded
-                // trigger rather than guessed at.
-                Label(controller.recBadgeText, systemImage: "record.circle.fill")
-                    .font(.headline.bold())
-                    .foregroundStyle(.red)
-                    .padding(10)
-            }
-        }
+        // The REC label used to be HERE, in this corner, on its own overlay —
+        // and the clean-feed eye is mounted in the same corner one layer above
+        // it, so the eye sat on top of the words (owner: "подпись при реке
+        // накрывается значком глазика"). Both are in one row on `PlayerArea`
+        // now, which is the only place that knows it has an eye at all.
     }
 }
 

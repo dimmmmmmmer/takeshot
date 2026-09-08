@@ -88,19 +88,25 @@ struct DailiesSession {
 
     /// Open the whole rig against an already-reserved output URL (the caller
     /// holds the reservation so it can clean up whatever happens here).
-    static func open(at url: URL, facts: DailiesSourceFacts) throws
+    static func open(at url: URL, facts: DailiesSourceFacts,
+                     codec: CaptureCodec = .h264) throws
         -> DailiesSession {
         let reader: AVAssetReader
         let writer: AVAssetWriter
         do {
             reader = try AVAssetReader(asset: facts.asset)
-            writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+            // The container follows the CODEC and is not a constant any more:
+            // ProRes has no registered MPEG-4 sample entry, so the pair has to
+            // move together or the run produces a file nothing opens.
+            writer = try AVAssetWriter(outputURL: url,
+                                       fileType: codec.dailiesContainer)
         } catch {
             throw DailiesAbort.failed(error.localizedDescription)
         }
         let (videoOutput, audioOutput) = try addOutputs(facts: facts,
                                                         to: reader)
-        let (videoInput, adaptor) = addVideoInput(facts: facts, to: writer)
+        let (videoInput, adaptor) = try addVideoInput(facts: facts,
+                                                      codec: codec, to: writer)
         let audioInput = audioOutput != nil ? addAudioInput(to: writer) : nil
         // moov up front: a daily gets dropped into review players and file
         // shares, where a streamable file starts playing before it finishes
@@ -148,17 +154,31 @@ struct DailiesSession {
         return (video, audio)
     }
 
-    /// The writer's picture end: H.264 at the daily raster, fed through a
-    /// pixel-buffer adaptor.
+    /// The writer's picture end: the chosen codec at the daily raster, fed
+    /// through a pixel-buffer adaptor.
+    ///
+    /// **The writer is asked whether it can take the settings**, and that is
+    /// the guard rather than the codec/container table alone: a mismatch there
+    /// is otherwise discovered as a `startWriting` failure with a message
+    /// nobody can act on, or — worse on some builds — as a file that writes
+    /// and does not play. Asking costs nothing and the refusal names the
+    /// combination.
     private static func addVideoInput(facts: DailiesSourceFacts,
-                                      to writer: AVAssetWriter)
+                                      codec: CaptureCodec,
+                                      to writer: AVAssetWriter) throws
         -> (input: AVAssetWriterInput,
             adaptor: AVAssetWriterInputPixelBufferAdaptor) {
-        let video = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: DailiesEngine.videoSettings(
-                size: facts.outputSize, frameRate: facts.frameRate,
-                colorimetry: facts.colorimetry))
+        let settings = DailiesEngine.videoSettings(
+            size: facts.outputSize, frameRate: facts.frameRate,
+            colorimetry: facts.colorimetry, codec: codec)
+        guard writer.canApply(outputSettings: settings, forMediaType: .video)
+        else {
+            throw DailiesAbort.failed(
+                "\(codec.rawValue) cannot be written into "
+                    + "\(codec.dailiesFileExtension.uppercased())")
+        }
+        let video = AVAssetWriterInput(mediaType: .video,
+                                       outputSettings: settings)
         video.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: video, sourcePixelBufferAttributes: nil)
@@ -181,5 +201,15 @@ struct DailiesSession {
     static func failure(of writer: AVAssetWriter) -> String {
         writer.error?.localizedDescription
             ?? "writer failed (status \(writer.status.rawValue))"
+    }
+}
+
+extension CaptureCodec {
+    /// The `AVFileType` a daily in this codec is written into — the
+    /// AVFoundation half of `dailiesFileExtension`, kept beside the writer
+    /// that uses it and derived from the same question so the extension on
+    /// disk and the container inside it cannot disagree.
+    var dailiesContainer: AVFileType {
+        dailiesFileExtension == "mp4" ? .mp4 : .mov
     }
 }

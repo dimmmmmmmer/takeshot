@@ -813,9 +813,15 @@
 /* === dailies with burn-ins (DailiesSheet, DailiesStatusStrip) === */
 "dailies_menu" = "Дейлизы…";
 "dailies_title" = "Дейлизы с бёрн-инами";
-"dailies_batch" = "%@ → H.264 дейлизы (<имя>_DAILY.mp4)";
+"dailies_batch" = "%@ → дейлиз %@";
 "dailies_burn_section" = "Впечатанный текст";
-"dailies_burn_tc" = "Бегущий таймкод (сверху по центру)";
+"dailies_custom_hint" = "напр. ВНУТРЕННЯЯ КОПИЯ — НЕ ДЛЯ РАСПРОСТРАНЕНИЯ";
+"dailies_name_label" = "Имя файла";
+"dailies_name_prefix" = "префикс";
+"dailies_name_suffix" = "суффикс";
+"dailies_name_example" = "Каждый файл: %@";
+"dailies_reset_dest_button" = "Папка по умолчанию";
+"dailies_burn_tc" = "Бегущий таймкод";
 "dailies_position_topLeft" = "Слева сверху";
 "dailies_position_topCenter" = "По центру сверху";
 "dailies_position_topRight" = "Справа сверху";
@@ -823,10 +829,10 @@
 "dailies_position_bottomCenter" = "По центру снизу";
 "dailies_position_bottomRight" = "Справа снизу";
 "dailies_preview_help" = "Как надписи лягут на кадр";
-"dailies_burn_name" = "Имя клипа (внизу слева)";
-"dailies_burn_project" = "Проект · камера/ролл (внизу справа)";
-"dailies_burn_date" = "Дата съёмки (внизу справа)";
-"dailies_custom_placeholder" = "Своя строка (сверху слева)";
+"dailies_burn_name" = "Имя клипа";
+"dailies_burn_project" = "Проект · камера/ролл";
+"dailies_burn_date" = "Дата съёмки";
+"dailies_custom_placeholder" = "Своя строка";
 "dailies_dest_label" = "Папка:";
 "dailies_pick_dest" = "Куда сложить дейлизы";
 "dailies_reset_dest" = "Вернуть папку Dailies рядом с материалом";

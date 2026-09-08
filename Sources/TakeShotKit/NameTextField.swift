@@ -35,6 +35,11 @@ struct NameTextField: NSViewRepresentable {
     var bezeled = true
     /// Which edge the text sits against. `.right` is the Form's convention.
     var alignment: NSTextAlignment = .natural
+    /// Greyed hint shown while the field is empty. Empty — no hint, which is
+    /// right for a field whose LABEL already names it; the dailies name row
+    /// needs one because two identical boxes either side of the take's name
+    /// are otherwise indistinguishable.
+    var placeholder: String = ""
     /// Enter, or focus leaving the field. Where a field has a commit step
     /// (the clip number sets the filename padding from what was typed), this
     /// is it; the binding itself updates on every accepted keystroke.
@@ -61,6 +66,7 @@ struct NameTextField: NSViewRepresentable {
         }
         view.drawsBackground = bezeled
         view.alignment = alignment
+        if !placeholder.isEmpty { view.placeholderString = placeholder }
         view.isEditable = true
         view.isSelectable = true
         view.usesSingleLineMode = true

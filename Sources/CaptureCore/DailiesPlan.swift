@@ -14,8 +14,8 @@ public struct DailiesBurnins: Sendable, Equatable {
     public var clipName = true
     /// Project plus camera/roll, bottom-right.
     public var project = true
-    /// Recording date — it shares the bottom-right strip with the project line
-    /// (the classic layout has four corners and this set has five facts).
+    /// Recording date, bottom-right — its own strip, stacked under the project
+    /// line when both are on and both are pointed there.
     public var date = false
     /// Free text, top-left. Empty — no strip.
     public var customText = ""
@@ -25,6 +25,7 @@ public struct DailiesBurnins: Sendable, Equatable {
     public var clipNamePosition: DailiesBurninPosition = .bottomLeft
     public var projectPosition: DailiesBurninPosition = .bottomRight
     public var customPosition: DailiesBurninPosition = .topLeft
+    public var datePosition: DailiesBurninPosition = .bottomRight
 
     public init() {}
 
@@ -33,7 +34,8 @@ public struct DailiesBurnins: Sendable, Equatable {
                 timecodePosition: DailiesBurninPosition = .topCenter,
                 clipNamePosition: DailiesBurninPosition = .bottomLeft,
                 projectPosition: DailiesBurninPosition = .bottomRight,
-                customPosition: DailiesBurninPosition = .topLeft) {
+                customPosition: DailiesBurninPosition = .topLeft,
+                datePosition: DailiesBurninPosition = .bottomRight) {
         self.timecode = timecode
         self.clipName = clipName
         self.project = project
@@ -43,11 +45,42 @@ public struct DailiesBurnins: Sendable, Equatable {
         self.clipNamePosition = clipNamePosition
         self.projectPosition = projectPosition
         self.customPosition = customPosition
+        self.datePosition = datePosition
     }
 
     /// Nothing is burned in at all — the run is a plain transcode.
     public var isEmpty: Bool {
         !timecode && !clipName && !project && !date && customText.isEmpty
+    }
+}
+
+public extension CaptureCodec {
+    /// **The codecs a daily is worth writing in** (owner: "дейлики хочу
+    /// выбирать по кодеку").
+    ///
+    /// A subset of the app's one codec vocabulary rather than an enum of its
+    /// own: `CaptureCodec` already names these, already maps to AVFoundation
+    /// and already knows which of them take a bitrate, and a parallel dailies
+    /// enum would be a second spelling of the same product names — the mistake
+    /// `LivePicture` is injected into the remote pages to avoid.
+    ///
+    /// The three heavier ProRes flavours are deliberately absent: a daily is a
+    /// review copy, and 422/HQ/4444 produce a file at or above the size of the
+    /// take it was made from. Order is lightest-to-heaviest within each family,
+    /// H.264 first because it is the one every review station opens.
+    static var dailiesChoices: [CaptureCodec] {
+        [.h264, .hevc, .proResProxy, .proResLT]
+    }
+
+    /// The container this codec's daily has to go in.
+    ///
+    /// Not a preference: MPEG-4 Part 14 has no registered sample entry for
+    /// ProRes, so a ProRes daily in .mp4 is a file the writer refuses or a
+    /// player cannot open. `DailiesSession` asks the writer itself as well
+    /// (`canApply(outputSettings:forMediaType:)`), because this table being
+    /// right is not the same as it staying right.
+    var dailiesFileExtension: String {
+        needsBitrate ? "mp4" : "mov"
     }
 }
 

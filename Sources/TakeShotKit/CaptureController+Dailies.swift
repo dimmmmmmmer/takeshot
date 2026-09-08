@@ -62,8 +62,16 @@ extension CaptureController {
         !dailies.isRunning && !dailies.isDestinationDefault
     }
 
-    /// Put the destination back to the Dailies folder beside the footage — the
-    /// minus the offload sheet's destination rows have had all along.
+    /// Whether there is an override at all — the question the way-back button
+    /// asks to decide whether to exist. Separate from
+    /// `canClearDailiesDestination`, which also refuses while a run is going:
+    /// the button is SHOWN whenever there is something to undo and DISABLED
+    /// while the queue is busy, so it greys instead of vanishing mid-run.
+    var hasDailiesDestinationOverride: Bool {
+        !dailies.isDestinationDefault
+    }
+
+    /// Put the destination back to the Dailies folder beside the footage.
     ///
     /// Written through on the spot rather than at the next Start, and that is
     /// the half that was actually missing: `destinationPath` had no writer that
@@ -89,6 +97,12 @@ extension CaptureController {
         settings.dailies.burnClipName = model.burnClipName
         settings.dailies.burnProject = model.burnProject
         settings.dailies.burnDate = model.burnDate
+        settings.dailies.burnCustom = model.burnCustom
+        // The TEXT is stored whether the line is on or not. It used to be
+        // stored only when non-empty, which was the same statement back when
+        // emptiness WAS the off switch — with a real switch beside it, that
+        // spelling deletes the operator's sentence every time they untick the
+        // box, and there is nothing to put back when they tick it again.
         let custom = model.customText.trimmingCharacters(in: .whitespaces)
         settings.dailies.customText = custom.isEmpty ? nil : custom
         // nil at the classic arrangement, like every other added field: a
@@ -102,6 +116,13 @@ extension CaptureController {
             ? nil : model.projectPosition.rawValue
         settings.dailies.customPosition = model.customPosition == .topLeft
             ? nil : model.customPosition.rawValue
+        settings.dailies.datePosition = model.datePosition == .bottomRight
+            ? nil : model.datePosition.rawValue
+        settings.dailies.codec = model.codec == .h264 ? nil : model.codec.rawValue
+        settings.dailies.namePrefix = model.namePrefix.isEmpty
+            ? nil : model.namePrefix
+        settings.dailies.nameSuffix = model.nameSuffix == "_DAILY"
+            ? nil : model.nameSuffix
         settings.dailies.destinationPath = model.isDestinationDefault
             ? nil : model.destination?.path
     }

@@ -121,29 +121,45 @@ struct ViewCleanFeedTests {
         }
     }
 
-    /// **Both drawings of the rolling mark read the one name.** They are in
-    /// two files — the border in `PlayerArea`, the label in `PreviewView` —
-    /// and they used to spell `isRecording && viewerMode == .record`
-    /// separately, which is how the clean feed came to hide one thing and not
-    /// the other. Asserted on the source: a condition written at a surface is
-    /// a condition the next surface writes slightly differently.
+    /// **Every drawing of the rolling mark reads the one name.**
+    ///
+    /// The border and the label used to spell `isRecording && viewerMode ==
+    /// .record` separately, in two files, which is how the clean feed came to
+    /// hide one of them and not the other. Asserted on the source: a condition
+    /// written at a surface is a condition the next surface writes slightly
+    /// differently.
+    ///
+    /// It used to name the two files. Both drawings live in `PlayerArea` now —
+    /// the label moved there because the clean-feed eye is mounted in its
+    /// corner and was sitting on top of the words — so the walk is over the
+    /// whole module instead: the rule is "nobody re-spells this", and pinning
+    /// it to a file list is what made a legitimate move look like a failure.
     @Test func theRollingMarkIsSpelledOnceOnTheController() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/TakeShotKit")
-        for name in ["PlayerArea", "PreviewView"] {
-            let code = try String(
-                contentsOf: root.appendingPathComponent("\(name).swift"),
-                encoding: .utf8)
-                .components(separatedBy: "\n")
+        let walker = try #require(FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: nil))
+        var readers: [String] = []
+        var files = 0
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            guard let raw = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            files += 1
+            let code = raw.components(separatedBy: "\n")
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
                 .joined(separator: "\n")
-            #expect(code.contains("controller.showsRecordingMark"),
-                    Comment(rawValue: "\(name) does not read the shared rule"))
+            if code.contains("controller.showsRecordingMark") {
+                readers.append(url.lastPathComponent)
+            }
             #expect(!code.contains("isRecording, controller.viewerMode == .record"),
-                    Comment(rawValue: "\(name) spells the rolling condition itself again"))
+                    Comment(rawValue: "\(url.lastPathComponent) spells the rolling condition itself again"))
         }
+        try #require(files > 100, "the walk did not find the source tree")
+        #expect(!readers.isEmpty, "nothing draws the rolling mark any more")
+        #expect(readers.contains("PlayerArea.swift"),
+                "the player no longer reads the shared rule: \(readers)")
     }
 
     /// The key and the button are the same switch. Every hotkey in this app

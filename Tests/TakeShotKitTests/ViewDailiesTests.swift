@@ -105,3 +105,122 @@ import Testing
         }
     }
 }
+
+/// **The sheet has no scroll view, so its height is now a rule.**
+///
+/// It used to be `ScrollView { … }`, and a scroll view answers whatever
+/// proposal it is given — so nothing could be measured and nothing was: the
+/// sheet quietly grew past the window and put a scrollbar on content the owner
+/// could see fit ("почему-то это окошко скролл еще выдает"). Measured instead,
+/// the three states were 558, 660 and 841pt against a 560pt budget.
+///
+/// The footer is measured on its own because that is how the sheet is built —
+/// `DailiesSheetFooter` takes its dismissal in precisely so a test can host it
+/// — plus the divider and the 14pt above and below it.
+@Suite @MainActor struct ViewDailiesHeightTests {
+    /// Divider plus the footer's own vertical padding, from `DailiesSheet`.
+    static let footerChrome: CGFloat = 29
+
+    private func seed(_ model: DailiesQueueModel, controller: CaptureController,
+                      root: URL) {
+        model.prepare(takes: ["A001C01", "A001C02"].map {
+            ControllerFixtures.take(named: $0, in: root)
+        }, settings: controller.settings,
+           defaultFolder: root.appendingPathComponent("Dailies"))
+        model.customText = "FOR REVIEW"
+        model.burnCustom = true
+    }
+
+    /// The worst report this sheet can be handed: every take in a long batch
+    /// failed, each with a sentence for a reason.
+    private func worstReport(root: URL) -> DailiesReport {
+        DailiesReport(items: (1...14).map { index in
+            DailiesItemResult(
+                source: root.appendingPathComponent("A001C\(index).mov"),
+                failure: "the disk went away in the middle of the write")
+        }, wasCancelled: false)
+    }
+
+    @Test func everyStateOfTheSheetFitsAWindowAtItsMinimum() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.dailies
+            self.seed(model, controller: probe.controller, root: probe.root)
+
+            @MainActor func height() -> (en: CGFloat, ru: CGFloat) {
+                let content = probe.sizes(proposedWidth: DailiesSheet.width) {
+                    DailiesSheet(model: model).content.padding(20)
+                }
+                let footer = probe.sizes(proposedWidth: DailiesSheet.width - 40) {
+                    DailiesSheetFooter(model: model) {}
+                }
+                return (content.en.height + footer.en.height + Self.footerChrome,
+                        content.ru.height + footer.ru.height + Self.footerChrome)
+            }
+
+            let idle = height()
+            #expect(idle.en <= ViewBudget.sheetHeight,
+                    "the idle sheet needs \(idle.en)pt of \(ViewBudget.sheetHeight)")
+            #expect(idle.ru <= ViewBudget.sheetHeight,
+                    "the idle sheet needs \(idle.ru)pt of \(ViewBudget.sheetHeight)")
+
+            model.progress = DailiesProgress(
+                itemIndex: 0, itemCount: 14,
+                currentFile: "A001C042_260802_R1AB.mov",
+                framesDone: 512, framesTotal: 1500, isPaused: true,
+                isCancelling: false)
+            let running = height()
+            #expect(running.en <= ViewBudget.sheetHeight,
+                    "the running sheet needs \(running.en)pt")
+            #expect(running.ru <= ViewBudget.sheetHeight,
+                    "the running sheet needs \(running.ru)pt")
+
+            model.progress = nil
+            model.report = self.worstReport(root: probe.root)
+            let finished = height()
+            #expect(finished.en <= ViewBudget.sheetHeight,
+                    "the worst finished sheet needs \(finished.en)pt")
+            #expect(finished.ru <= ViewBudget.sheetHeight,
+                    "the worst finished sheet needs \(finished.ru)pt")
+
+            // …and the point of the right column taking turns: the height does
+            // not depend on the run at all. A stacked layout would make the
+            // finished state the tallest by a wide margin.
+            #expect(finished.en == idle.en,
+                    "idle \(idle.en) vs finished \(finished.en)")
+            #expect(running.en == idle.en,
+                    "idle \(idle.en) vs running \(running.en)")
+        }
+    }
+
+    /// The preview is the size it says it is.
+    ///
+    /// It was `maxWidth: .infinity` with an aspect ratio, so inside the
+    /// sheet's content width it laid out at 430×241.875 — 62pt taller than
+    /// declared, fractional, and a 320px bitmap stretched over 430pt. That one
+    /// number is where the scrollbar came from.
+    @Test func thePreviewKeepsTheSizeItDeclares() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.dailies
+            self.seed(model, controller: probe.controller, root: probe.root)
+            let size = probe.sizes(proposedWidth: 900) {
+                DailiesBurninPreview(model: model).picture
+            }
+            #expect(size.en == DailiesBurninPreview.size,
+                    "the preview took \(size.en) of \(DailiesBurninPreview.size)")
+        }
+    }
+
+    /// The 2x raster is load-bearing, not a nicety: the strips are 5% of the
+    /// frame's height but never under 14 points, so at the DISPLAY size the
+    /// floor binds and the preview draws plates half again as thick as the
+    /// daily will carry. At twice that it does not bind, and the preview shows
+    /// the proportion a real frame gets.
+    @Test func thePreviewRasterIsBigEnoughToShowTheRealStripHeight() {
+        let display = DailiesBurninPreview.size.height
+        let raster = display * DailiesBurninPreview.raster
+        #expect(display * 0.05 < DailiesStripMetrics.minimumStripHeight,
+                "the floor no longer binds at the display size")
+        #expect(raster * 0.05 >= DailiesStripMetrics.minimumStripHeight,
+                "at \(raster)pt the strip floor still binds")
+    }
+}

@@ -5,6 +5,38 @@ import SwiftUI
 struct PlayerArea: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// **The bottom-left corner, as ONE row.**
+    ///
+    /// The REC label used to be an overlay of its own inside `PreviewView`,
+    /// in this same corner. The eye is mounted on top of it here, so while a
+    /// take rolled the eye sat over the words (owner: "подпись при реке
+    /// накрывается значком глазика") — two overlays at one alignment stack,
+    /// they do not make room for each other.
+    ///
+    /// A row cannot do that. And it belongs on THIS view rather than on the
+    /// picture: the eye is the main window's control, and `PlayerArea` is the
+    /// only surface that has one.
+    ///
+    /// Nothing to arbitrate in a clean feed, either: it takes the label away
+    /// (`showsRecordingMark`) and leaves the dimmed eye, which is the one way
+    /// back out of the mode.
+    @ViewBuilder private var bottomLeftCorner: some View {
+        HStack(spacing: 8) {
+            CleanFeedButton()
+            if controller.showsRecordingMark {
+                // …and WHICH trigger rolled it. On the picture rather than in a
+                // panel because a spurious roll has to be diagnosable by the
+                // person who notices it, and what they are looking at is the
+                // frame. The suffix is absent for a take with no recorded
+                // trigger rather than guessed at.
+                Label(controller.recBadgeText, systemImage: "record.circle.fill")
+                    .font(.headline.bold())
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(8)
+    }
+
     var body: some View {
         PreviewView()
             .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -43,23 +75,7 @@ struct PlayerArea: View {
             // opacity: a mode with no visible way back is a mode an operator
             // has to know a key for, and the key (⌃U) is the answer for the
             // person who set it up rather than for the one who finds it on.
-            .overlay(alignment: .bottomLeading) {
-                Button {
-                    controller.toggleCleanFeed()
-                } label: {
-                    Image(systemName: controller.cleanFeed
-                          ? "eye.slash" : "eye")
-                        .font(.system(size: 13))
-                        .padding(6)
-                        .background(.black.opacity(0.45),
-                                    in: RoundedRectangle(cornerRadius: 7))
-                }
-                .buttonStyle(.plain)
-                .opacity(controller.cleanFeed ? 0.25 : 1)
-                .controlHelp(controller.cleanFeed
-                             ? L("clean_feed_show") : L("clean_feed_hide"))
-                .padding(8)
-            }
+            .overlay(alignment: .bottomLeading) { bottomLeftCorner }
             .overlay {
                 if controller.showsAudioPanel {
                     AudioChannelPanel(live: controller.live)
@@ -160,5 +176,38 @@ private struct PlayerToast: View {
                         in: RoundedRectangle(cornerRadius: 8))
             .padding(.bottom, plan.bottomInset)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+/// **The way out of a clean feed, and the way in** (owner: "в левом нижнем углу
+/// нужна кнопка типа скрыть интерфейсные кнопки чтоб был чистый вывод").
+/// Bottom-left, mirroring the fullscreen button opposite it and wearing the
+/// same plate.
+///
+/// It is the ONE thing clean feed does not hide, at a quarter opacity: a mode
+/// with no visible way back is a mode an operator has to know a key for, and
+/// the key (⌃U) is the answer for the person who set it up rather than for the
+/// one who finds it on.
+///
+/// A view of its own so a render test can measure it: what the REC label beside
+/// it needs to clear is this button's real width, and a number copied into the
+/// test would be a number that stops being true.
+struct CleanFeedButton: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        Button {
+            controller.toggleCleanFeed()
+        } label: {
+            Image(systemName: controller.cleanFeed ? "eye.slash" : "eye")
+                .font(.system(size: 13))
+                .padding(6)
+                .background(.black.opacity(0.45),
+                            in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .opacity(controller.cleanFeed ? 0.25 : 1)
+        .controlHelp(controller.cleanFeed
+                     ? L("clean_feed_show") : L("clean_feed_hide"))
     }
 }

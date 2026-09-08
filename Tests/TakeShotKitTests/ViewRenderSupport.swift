@@ -507,6 +507,16 @@ enum ViewBudget {
     static var footerSideZoneWidth: CGFloat {
         (footerWidth - 28 - 8) / 2 - BottomBarView.centerReserve
     }
+    /// **What a sheet may be tall.**
+    ///
+    /// `TakeShotApp` sets the window's minimum height to 620, and a sheet is
+    /// clamped to the window that presents it (`OffloadSheet` states the same
+    /// constraint). 560 leaves 60 for the sheet's own inset and shadow, which
+    /// is what a sheet on a window at exactly its minimum has to live inside.
+    ///
+    /// A sheet over this does not throw: it grows a scrollbar, which is how
+    /// the dailies sheet came to have one on content that looked like it fit.
+    static let sheetHeight: CGFloat = 560
     /// `PlayerArea` pads the player by 12 on each side.
     static let playerWidth: CGFloat = mainColumnWidth - 24
     /// `PlayerBadges.topChrome` insets the badge row by 8 on each side.

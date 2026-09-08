@@ -105,14 +105,59 @@ struct DailiesTimelineTests {
                     startTimecode: nil)
     }
 
-    @Test func projectAndDateShareTheBottomRightStrip() {
+    /// **The date is its own strip, and it still lands where it always did.**
+    ///
+    /// It used to be JOINED onto the project line with " · " because the
+    /// layout had four corners and this set has five facts. Every line carries
+    /// its own place now, so the date carries one too — and both still default
+    /// to bottom-right, where the stacking rule puts the date under the
+    /// project line. What changed is that the date can be moved and that the
+    /// two texts are two texts.
+    @Test func theDateIsItsOwnStripStackedUnderTheProjectLine() throws {
         var burnins = DailiesBurnins()
         burnins.date = true
         let texts = burnins.overlayTexts(for: item)
-        #expect(texts.project == "UnitFilm · A001 · 2026-08-02")
+        #expect(texts.project == "UnitFilm · A001")
+        #expect(texts.date == "2026-08-02")
+        #expect(texts.datePosition == .bottomRight)
+        #expect(texts.projectPosition == .bottomRight)
         #expect(texts.clipName == "A001C01")
         #expect(texts.timecodeTemplate == "00:00:00:00")
         #expect(texts.custom == nil)
+
+        // …and in the frame the two do not sit on top of each other: same
+        // corner, stepped inward, project first.
+        let overlay = DailiesOverlay(size: CGSize(width: 1920, height: 1080),
+                                     texts: texts)
+        let project = try #require(overlay.layout.project)
+        let date = try #require(overlay.layout.date)
+        #expect(project != date)
+        #expect(date.maxY <= project.minY,
+                "project \(project) and date \(date) overlap")
+    }
+
+    /// …and pointed somewhere else it goes there, which is the whole point of
+    /// the date having a position at all.
+    @Test func theDateGoesWhereItIsPointed() throws {
+        var burnins = DailiesBurnins()
+        burnins.date = true
+        burnins.datePosition = .topRight
+        let texts = burnins.overlayTexts(for: item)
+        let overlay = DailiesOverlay(size: CGSize(width: 1920, height: 1080),
+                                     texts: texts)
+        let date = try #require(overlay.layout.date)
+        let project = try #require(overlay.layout.project)
+        // **Absolute, not relative to the project line.** Comparing the two
+        // rects passed even with the date placed at the PROJECT's position:
+        // two strips in one bottom corner stack upward, so the second one is
+        // higher there too, and "higher" was the whole assertion. The claim
+        // that means something is which half of the frame it is in.
+        #expect(date.maxY < 1080 / 2,
+                "the date is not in the top half: \(date)")
+        #expect(project.minY > 1080 / 2,
+                "the project line moved as well: \(project)")
+        // …and on the right edge rather than centred or left.
+        #expect(date.maxX > 1920 * 0.6, "the date is not on the right: \(date)")
     }
 
     @Test func everySwitchedOffLineVanishesFromTheOverlay() {
@@ -120,7 +165,8 @@ struct DailiesTimelineTests {
                                      project: false, date: true,
                                      customText: "FOR REVIEW")
         let texts = burnins.overlayTexts(for: item)
-        #expect(texts.project == "2026-08-02")
+        #expect(texts.project == nil)
+        #expect(texts.date == "2026-08-02")
         #expect(texts.clipName == nil)
         #expect(texts.timecodeTemplate == nil)
         #expect(texts.custom == "FOR REVIEW")

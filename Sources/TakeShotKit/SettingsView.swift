@@ -127,10 +127,8 @@ struct SettingsView: View {
                 // без него как раньше просто чтобы текст названия центровался
                 // по правому борту").
                 LabeledContent(L("project")) {
-                    NameTextField(field: .prefix,
-                                  text: $controller.settings.naming.projectName,
-                                  bezeled: false, alignment: .right)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    ProjectNameField(
+                        text: $controller.settings.naming.projectName)
                 }
                 HStack(spacing: 8) {
                     Text(L("destination_folder"))
@@ -290,5 +288,33 @@ struct SettingsView: View {
         // renamed the show. Tab order is untouched (and kept released across
         // reopens — see InitialFocusKeeper).
         .releasesInitialFocus()
+    }
+}
+
+/// The project name row's field.
+///
+/// **A box, not the whole row.** It used to be `maxWidth: .infinity`, and an
+/// editable `NSTextField` draws a focus ring around whatever width it is given
+/// — so touching a three-letter project name lit up the entire settings row
+/// (owner: "а че у нас тут все поле выделяется?"). Bounded, the ring is a
+/// control-sized box against the right edge, which is what a value field looks
+/// like everywhere else in this window.
+///
+/// A view of its own so the bound can be MEASURED: rendered against a wide
+/// proposal it has to come back at its own width rather than the proposal's,
+/// and that is the difference the old spelling would fail on.
+struct ProjectNameField: View {
+    /// Wide enough for a real long name at rest — measured at the system font,
+    /// a 20-character name like "THE_LONG_GOODBYE_S02" is 171pt — and narrow
+    /// enough to read as a field rather than a row. Anything longer scrolls
+    /// inside it, which is what `isScrollable` on the cell is for.
+    static let width: CGFloat = 200
+
+    @Binding var text: String
+
+    var body: some View {
+        NameTextField(field: .prefix, text: $text,
+                      bezeled: false, alignment: .right)
+            .frame(width: Self.width, alignment: .trailing)
     }
 }
