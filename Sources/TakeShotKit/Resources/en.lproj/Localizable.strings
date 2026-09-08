@@ -811,6 +811,13 @@
 "dailies_batch" = "%@ → H.264 dailies (<name>_DAILY.mp4)";
 "dailies_burn_section" = "Burned-in text";
 "dailies_burn_tc" = "Running timecode (top center)";
+"dailies_position_topLeft" = "Top left";
+"dailies_position_topCenter" = "Top centre";
+"dailies_position_topRight" = "Top right";
+"dailies_position_bottomLeft" = "Bottom left";
+"dailies_position_bottomCenter" = "Bottom centre";
+"dailies_position_bottomRight" = "Bottom right";
+"dailies_preview_help" = "How the burn-ins will sit on the frame";
 "dailies_burn_name" = "Clip name (bottom left)";
 "dailies_burn_project" = "Project · camera/roll (bottom right)";
 "dailies_burn_date" = "Recording date (bottom right)";

@@ -19,16 +19,30 @@ public struct DailiesBurnins: Sendable, Equatable {
     public var date = false
     /// Free text, top-left. Empty — no strip.
     public var customText = ""
+    /// Where each line sits. The defaults are the classic arrangement; the
+    /// operator can move any of them (see `DailiesBurninPosition`).
+    public var timecodePosition: DailiesBurninPosition = .topCenter
+    public var clipNamePosition: DailiesBurninPosition = .bottomLeft
+    public var projectPosition: DailiesBurninPosition = .bottomRight
+    public var customPosition: DailiesBurninPosition = .topLeft
 
     public init() {}
 
     public init(timecode: Bool, clipName: Bool, project: Bool, date: Bool,
-                customText: String) {
+                customText: String,
+                timecodePosition: DailiesBurninPosition = .topCenter,
+                clipNamePosition: DailiesBurninPosition = .bottomLeft,
+                projectPosition: DailiesBurninPosition = .bottomRight,
+                customPosition: DailiesBurninPosition = .topLeft) {
         self.timecode = timecode
         self.clipName = clipName
         self.project = project
         self.date = date
         self.customText = customText
+        self.timecodePosition = timecodePosition
+        self.clipNamePosition = clipNamePosition
+        self.projectPosition = projectPosition
+        self.customPosition = customPosition
     }
 
     /// Nothing is burned in at all — the run is a plain transcode.

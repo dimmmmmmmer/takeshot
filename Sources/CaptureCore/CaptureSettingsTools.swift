@@ -125,6 +125,10 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case burnDate = "dailiesBurnDate"
         case customText = "dailiesCustomText"
         case destinationPath = "dailiesDestinationPath"
+        case timecodePosition = "dailiesTimecodePosition"
+        case clipNamePosition = "dailiesClipNamePosition"
+        case projectPosition = "dailiesProjectPosition"
+        case customPosition = "dailiesCustomPosition"
     }
 
     /// Burn the running timecode into dailies; nil — on.
@@ -139,8 +143,38 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var customText: String?
     /// Where the dailies land; nil — a Dailies folder beside the takes.
     public var destinationPath: String?
+    /// Where each burned-in line sits (`DailiesBurninPosition` raw values);
+    /// nil — the classic arrangement, which is what each `…Effective` below
+    /// answers.
+    ///
+    /// Persisted because it is a crew convention rather than a per-clip
+    /// choice, and stored as nil at the default like every added field, so
+    /// settings written by an older build still decode.
+    public var timecodePosition: String?
+    public var clipNamePosition: String?
+    public var projectPosition: String?
+    public var customPosition: String?
 
     public init() {}
+
+    /// The four positions, resolved. Read through these rather than the raw
+    /// fields: a hand-edited blob naming a position that does not exist must
+    /// land on the classic arrangement rather than draw nothing.
+    public var timecodePositionEffective: DailiesBurninPosition {
+        timecodePosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .topCenter
+    }
+
+    public var clipNamePositionEffective: DailiesBurninPosition {
+        clipNamePosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .bottomLeft
+    }
+
+    public var projectPositionEffective: DailiesBurninPosition {
+        projectPosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .bottomRight
+    }
+
+    public var customPositionEffective: DailiesBurninPosition {
+        customPosition.flatMap(DailiesBurninPosition.init(rawValue:)) ?? .topLeft
+    }
 }
 
 /// The DIT offload: where it copies to, and whether it offers itself.

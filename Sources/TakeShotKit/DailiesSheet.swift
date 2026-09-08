@@ -69,6 +69,12 @@ struct DailiesSheet: View {
 /// the view — a property the render tests ask for directly is evaluated by the
 /// test instead, with no environment at all.
 struct DailiesBurninSection: View {
+    /// The place picker's width. Fixed so the six rows line up, and named so
+    /// the render test can ask whether the longest place name fits inside it —
+    /// a menu Picker truncates rather than pushing wider, and the two names
+    /// that would collide first are the two centre ones.
+    static let pickerWidth: CGFloat = 150
+
     @ObservedObject var model: DailiesQueueModel
     @EnvironmentObject private var controller: CaptureController
 
@@ -76,15 +82,124 @@ struct DailiesBurninSection: View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             Text(L("dailies_burn_section"))
                 .offloadText(.section)
-            Toggle(L("dailies_burn_tc"), isOn: $model.burnTimecode)
-            Toggle(L("dailies_burn_name"), isOn: $model.burnClipName)
-            Toggle(L("dailies_burn_project"), isOn: $model.burnProject)
+            // Each line with its own place. A toggle and a picker on one row,
+            // because "is it on" and "where is it" are one decision about one
+            // line and reading them apart is how an operator ends up with the
+            // reel where the timecode should be.
+            burnRow(L("dailies_burn_tc"), on: $model.burnTimecode,
+                    at: $model.timecodePosition)
+            burnRow(L("dailies_burn_name"), on: $model.burnClipName,
+                    at: $model.clipNamePosition)
+            burnRow(L("dailies_burn_project"), on: $model.burnProject,
+                    at: $model.projectPosition)
+            // The date has no place of its own: it JOINS the project strip
+            // (four corners, five facts — see `DailiesBurnins.date`).
             Toggle(L("dailies_burn_date"), isOn: $model.burnDate)
-            TextField(L("dailies_custom_placeholder"), text: $model.customText)
-                .textFieldStyle(.roundedBorder)
+            HStack(spacing: OffloadChrome.rowSpacing) {
+                TextField(L("dailies_custom_placeholder"), text: $model.customText)
+                    .textFieldStyle(.roundedBorder)
+                positionPicker(at: $model.customPosition)
+            }
+            // **What it will look like**, drawn by the code that burns the
+            // frame (owner: "а главное визуализации").
+            DailiesBurninPreview(model: model)
         }
         .toggleStyle(.checkbox)
         .disabled(controller.isDailiesRunning)
+    }
+
+    private func burnRow(_ title: String, on: Binding<Bool>,
+                         at position: Binding<DailiesBurninPosition>) -> some View {
+        HStack(spacing: OffloadChrome.rowSpacing) {
+            Toggle(title, isOn: on)
+            Spacer(minLength: 4)
+            positionPicker(at: position)
+                // disabled(exception): per-ROW, and about THIS row's own
+                // toggle rather than about app state — a place is only worth
+                // choosing for a line that is being burned. The condition is
+                // the argument the row was handed, and `burnRow` is the single
+                // definition all four rows go through, so there is no second
+                // surface that could spell it differently. The whole section
+                // is disabled from the controller while a run is going, which
+                // is the app-state rule and is named once, below.
+                .disabled(!on.wrappedValue)
+        }
+    }
+
+    private func positionPicker(
+        at position: Binding<DailiesBurninPosition>) -> some View {
+        Picker("", selection: position) {
+            ForEach(DailiesBurninPosition.allCases, id: \.self) { place in
+                Text(L(place.labelKey)).tag(place)
+            }
+        }
+        .labelsHidden()
+        .frame(width: Self.pickerWidth)
+    }
+}
+
+extension DailiesBurninPosition {
+    /// The strings key for this place, in the picker.
+    ///
+    /// The keys are LITERALS and not `"dailies_position_" + rawValue`, for the
+    /// reason `CountedNoun` spells out: a key the sources never write is a key
+    /// `everyKeyWrittenAsALiteralIsInBothStringsFiles` cannot check and
+    /// `everyKeyInTheTableIsReachedFromTheCode` reads as dead. Written out,
+    /// both walks see all six — and `everyBurninPositionHasWordsInBothLanguages`
+    /// closes the loop by asking this property for each case.
+    var labelKey: String {
+        switch self {
+        case .topLeft: return "dailies_position_topLeft"
+        case .topCenter: return "dailies_position_topCenter"
+        case .topRight: return "dailies_position_topRight"
+        case .bottomLeft: return "dailies_position_bottomLeft"
+        case .bottomCenter: return "dailies_position_bottomCenter"
+        case .bottomRight: return "dailies_position_bottomRight"
+        }
+    }
+}
+
+/// **The burn-ins as they will be**, rendered by the same code that burns the
+/// frame — see `DailiesOverlay.previewImage`.
+///
+/// A rendering and not a mock-up on purpose: a preview drawn by different code
+/// is a preview that can be wrong, and the one question it exists to answer is
+/// whether the real thing will look like this.
+struct DailiesBurninPreview: View {
+    @ObservedObject var model: DailiesQueueModel
+
+    /// 16:9 at a size that shows the arrangement without taking the sheet
+    /// over. The strips scale with the height, so this is the layout at any
+    /// raster rather than a layout of its own.
+    static let size = CGSize(width: 320, height: 180)
+
+    var body: some View {
+        ZStack {
+            if let image = DailiesOverlay.previewImage(
+                size: Self.size, texts: texts,
+                background: CGColor(gray: 0.22, alpha: 1)) {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6)
+            .strokeBorder(.white.opacity(0.12)))
+        .accessibilityLabel(L("dailies_preview_help"))
+        .help(L("dailies_preview_help"))
+    }
+
+    /// A sample take's facts, so the preview has something to place. The
+    /// operator's own custom line and toggles are real; the clip name and the
+    /// project line are examples, because a queue may be empty when the
+    /// arrangement is being set up.
+    private var texts: DailiesOverlay.Texts {
+        model.burnins.overlayTexts(for: DailiesItem(
+            source: URL(fileURLWithPath: "/"), outputName: "",
+            clipName: "A001C001", projectLine: "PROJECT · A001",
+            dateText: "12.07.26"))
     }
 }
 

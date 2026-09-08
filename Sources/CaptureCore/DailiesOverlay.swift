@@ -29,12 +29,27 @@ public final class DailiesOverlay {
         /// the digits run.
         public var timecodeTemplate: String?
 
+        /// Where each line sits. Defaults are the classic dailies
+        /// arrangement, which is what every existing caller means.
+        public var customPosition: DailiesBurninPosition = .topLeft
+        public var clipNamePosition: DailiesBurninPosition = .bottomLeft
+        public var projectPosition: DailiesBurninPosition = .bottomRight
+        public var timecodePosition: DailiesBurninPosition = .topCenter
+
         public init(custom: String? = nil, clipName: String? = nil,
-                    project: String? = nil, timecodeTemplate: String? = nil) {
+                    project: String? = nil, timecodeTemplate: String? = nil,
+                    customPosition: DailiesBurninPosition = .topLeft,
+                    clipNamePosition: DailiesBurninPosition = .bottomLeft,
+                    projectPosition: DailiesBurninPosition = .bottomRight,
+                    timecodePosition: DailiesBurninPosition = .topCenter) {
             self.custom = custom
             self.clipName = clipName
             self.project = project
             self.timecodeTemplate = timecodeTemplate
+            self.customPosition = customPosition
+            self.clipNamePosition = clipNamePosition
+            self.projectPosition = projectPosition
+            self.timecodePosition = timecodePosition
         }
     }
 
@@ -71,22 +86,39 @@ public final class DailiesOverlay {
 
         var layout = Layout()
         let bodyFont = metrics.bodyFont
-        if let custom = texts.custom {
-            layout.custom = metrics.strip(
-                for: custom, font: bodyFont, in: size, corner: .topLeft)
-        }
-        if let name = texts.clipName {
-            layout.clipName = metrics.strip(
-                for: name, font: bodyFont, in: size, corner: .bottomLeft)
-        }
-        if let project = texts.project {
-            layout.project = metrics.strip(
-                for: project, font: bodyFont, in: size, corner: .bottomRight)
+        // **Stacked when two lines want the same place.** The positions are
+        // the operator's now, and nothing stops them putting the clip name and
+        // the project in the same corner — which used to be impossible and is
+        // now one picker away. Strips at one position step INWARD from their
+        // edge, in this order, so the arrangement is the same every run and no
+        // line is ever hidden under another.
+        var used: [DailiesBurninPosition: Int] = [:]
+        func place(_ text: String, font: CTFont,
+                   at position: DailiesBurninPosition) -> CGRect {
+            let index = used[position, default: 0]
+            used[position] = index + 1
+            var rect = metrics.strip(for: text, font: font, in: size,
+                                     corner: position)
+            let step = (metrics.stripHeight + metrics.stripHeight * 0.25).rounded()
+            rect.origin.y += position.isTop
+                ? step * CGFloat(index) : -step * CGFloat(index)
+            return rect
         }
         if let template = texts.timecodeTemplate {
-            layout.timecode = metrics.strip(
-                for: template, font: metrics.timecodeFont, in: size,
-                corner: .topCenter)
+            layout.timecode = place(template, font: metrics.timecodeFont,
+                                    at: texts.timecodePosition)
+        }
+        if let custom = texts.custom {
+            layout.custom = place(custom, font: bodyFont,
+                                  at: texts.customPosition)
+        }
+        if let name = texts.clipName {
+            layout.clipName = place(name, font: bodyFont,
+                                    at: texts.clipNamePosition)
+        }
+        if let project = texts.project {
+            layout.project = place(project, font: bodyFont,
+                                   at: texts.projectPosition)
         }
         self.layout = layout
         self.timecodePlate = layout.timecode.map { Self.flip($0, in: size) }
@@ -128,6 +160,40 @@ public final class DailiesOverlay {
             x: plate.midX - width / 2,
             y: plate.midY - (ascent - descent) / 2)
         CTLineDraw(line, context)
+    }
+
+    /// **The burn-ins as a picture — the same code that burns the frame.**
+    ///
+    /// What the operator asked to see before committing a batch (owner: "а
+    /// главное визуализации"). Worth saying why this is a rendering rather than
+    /// a mock-up of the layout in SwiftUI: a preview drawn by different code is
+    /// a preview that can be WRONG, and the one question it exists to answer is
+    /// whether the real thing will look like this. So it goes through the same
+    /// `init` and the same `draw`, at a smaller size — the metrics are
+    /// fractions of the frame height, so a small frame gives proportionally
+    /// smaller strips, which is what a preview is.
+    ///
+    /// `timecodeText` is a sample: the plate is sized from the template, so
+    /// what an operator needs to see is where the digits sit, not which.
+    public static func previewImage(size: CGSize, texts: Texts,
+                                    background: CGColor,
+                                    timecodeText: String = "01:23:45:12")
+        -> CGImage? {
+        let width = max(1, Int(size.width.rounded()))
+        let height = max(1, Int(size.height.rounded()))
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)
+                ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        context.setFillColor(background)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        DailiesOverlay(size: CGSize(width: width, height: height), texts: texts)
+            .draw(in: context, timecodeText: timecodeText)
+        return context.makeImage()
     }
 
     /// One static strip as a bitmap: the plate and its text, rendered once.
@@ -172,10 +238,31 @@ public final class DailiesOverlay {
 
 /// The measurements every strip shares, derived from the output height so a
 /// 720p daily and a 1080p daily read the same on the same monitor.
-struct DailiesStripMetrics {
-    enum Corner {
-        case topLeft, topCenter, bottomLeft, bottomRight
+/// Where one burn-in line sits on the frame.
+///
+/// **Six places, and they are the operator's to choose.** The layout used to be
+/// fixed — timecode top-centre, clip name bottom-left, project bottom-right,
+/// the free line top-left — which is the classic arrangement and is right until
+/// it is not: a camera that burns its own timecode into the top of the frame,
+/// a slate in one corner, a client who wants the reel where they are used to
+/// reading it (owner: "в дейлизах хочется при настройке оверлеев какой-то
+/// большей кастомизации положения и настроек").
+///
+/// A raw-valued enum because these are persisted, and the raw values are the
+/// stored keys — see `DailiesSettings`.
+public enum DailiesBurninPosition: String, CaseIterable, Sendable, Codable {
+    case topLeft, topCenter, topRight
+    case bottomLeft, bottomCenter, bottomRight
+
+    /// Whether this sits along the top edge — the half of the answer that
+    /// decides the y, and the half two positions in the same corner share.
+    public var isTop: Bool {
+        self == .topLeft || self == .topCenter || self == .topRight
     }
+}
+
+struct DailiesStripMetrics {
+    typealias Corner = DailiesBurninPosition
 
     /// Dark enough to hold white text over a blown-out window, transparent
     /// enough that the picture stays readable behind it.
@@ -220,18 +307,14 @@ struct DailiesStripMetrics {
         switch corner {
         case .topLeft, .bottomLeft:
             x = margin
-        case .topCenter:
+        case .topCenter, .bottomCenter:
             x = ((size.width - width) / 2).rounded()
-        case .bottomRight:
+        case .topRight, .bottomRight:
             x = size.width - margin - width
         }
-        let y: CGFloat
-        switch corner {
-        case .topLeft, .topCenter:
-            y = margin
-        case .bottomLeft, .bottomRight:
-            y = size.height - margin - stripHeight
-        }
+        let y = corner.isTop
+            ? margin
+            : size.height - margin - stripHeight
         return CGRect(x: x, y: y, width: width, height: stripHeight)
     }
 }
@@ -253,6 +336,10 @@ public extension DailiesBurnins {
             clipName: clipName ? item.clipName : nil,
             project: bottomRight.isEmpty ? nil
                 : bottomRight.joined(separator: " · "),
-            timecodeTemplate: timecode ? "00:00:00:00" : nil)
+            timecodeTemplate: timecode ? "00:00:00:00" : nil,
+            customPosition: customPosition,
+            clipNamePosition: clipNamePosition,
+            projectPosition: projectPosition,
+            timecodePosition: timecodePosition)
     }
 }

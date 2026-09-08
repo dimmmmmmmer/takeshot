@@ -91,6 +91,17 @@ extension CaptureController {
         settings.dailies.burnDate = model.burnDate
         let custom = model.customText.trimmingCharacters(in: .whitespaces)
         settings.dailies.customText = custom.isEmpty ? nil : custom
+        // nil at the classic arrangement, like every other added field: a
+        // settings blob written by an older build still decodes, and one
+        // written here does not carry four strings nobody changed.
+        settings.dailies.timecodePosition = model.timecodePosition == .topCenter
+            ? nil : model.timecodePosition.rawValue
+        settings.dailies.clipNamePosition = model.clipNamePosition == .bottomLeft
+            ? nil : model.clipNamePosition.rawValue
+        settings.dailies.projectPosition = model.projectPosition == .bottomRight
+            ? nil : model.projectPosition.rawValue
+        settings.dailies.customPosition = model.customPosition == .topLeft
+            ? nil : model.customPosition.rawValue
         settings.dailies.destinationPath = model.isDestinationDefault
             ? nil : model.destination?.path
     }

@@ -11,6 +11,12 @@ import Foundation
 @MainActor
 final class DailiesQueueModel: ObservableObject {
     // The burn-in switches, seeded from settings and written back on Start.
+    /// Where each burned-in line sits. Published like the toggles beside them,
+    /// so the preview under the rows follows a picker as it is changed.
+    @Published var timecodePosition: DailiesBurninPosition = .topCenter
+    @Published var clipNamePosition: DailiesBurninPosition = .bottomLeft
+    @Published var projectPosition: DailiesBurninPosition = .bottomRight
+    @Published var customPosition: DailiesBurninPosition = .topLeft
     @Published var burnTimecode = true
     @Published var burnClipName = true
     @Published var burnProject = true
@@ -56,6 +62,10 @@ final class DailiesQueueModel: ObservableObject {
             isCancelling = false
             queuedTakes = takes
         }
+        timecodePosition = settings.dailies.timecodePositionEffective
+        clipNamePosition = settings.dailies.clipNamePositionEffective
+        projectPosition = settings.dailies.projectPositionEffective
+        customPosition = settings.dailies.customPositionEffective
         burnTimecode = settings.dailies.burnTimecode ?? true
         burnClipName = settings.dailies.burnClipName ?? true
         burnProject = settings.dailies.burnProject ?? true
@@ -88,7 +98,11 @@ final class DailiesQueueModel: ObservableObject {
         DailiesBurnins(
             timecode: burnTimecode, clipName: burnClipName,
             project: burnProject, date: burnDate,
-            customText: customText.trimmingCharacters(in: .whitespaces))
+            customText: customText.trimmingCharacters(in: .whitespaces),
+            timecodePosition: timecodePosition,
+            clipNamePosition: clipNamePosition,
+            projectPosition: projectPosition,
+            customPosition: customPosition)
     }
 
     // MARK: - the run

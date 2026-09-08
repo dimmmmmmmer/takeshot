@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 import Testing
 @testable import TakeShotKit
@@ -204,6 +205,35 @@ struct LocalizationTests {
                     \(language) has no words for keys a served page labels \
                     with, so the raw key is what reaches the phone:
                     \(absent.joined(separator: "\n"))
+                    """)
+        }
+    }
+
+    /// The six burn-in places are a closed set the picker walks with
+    /// `allCases`, so their keys reach `L` through `labelKey` rather than as
+    /// literals at the call site — the same blind spot the page labels above
+    /// have, and closed the same way: walk the set and ask each case.
+    ///
+    /// It is the check that would have caught what actually happened here: the
+    /// six Russian strings were written into `en.lproj` by a bad edit, and a
+    /// run in Russian would have shown `dailies_position_topLeft` in the menu.
+    @Test func everyBurninPositionHasWordsInBothLanguages() throws {
+        let bundle = Bundle.module
+        try #require(DailiesBurninPosition.allCases.count == 6,
+                     "the set of places changed; this test walks all of them")
+        for language in ["en", "ru"] {
+            let folder: String = try #require(
+                bundle.path(forResource: language, ofType: "lproj"))
+            let table: [String: String] = try #require(NSDictionary(
+                contentsOfFile: folder + "/Localizable.strings")
+                as? [String: String])
+            let absent: [String] = DailiesBurninPosition.allCases
+                .map(\.labelKey)
+                .filter { table[$0] == nil }
+            #expect(absent.isEmpty,
+                    """
+                    \(language) has no words for burn-in places, so the raw \
+                    key is what the picker shows: \(absent.joined(separator: ", "))
                     """)
         }
     }

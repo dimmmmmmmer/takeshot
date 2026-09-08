@@ -801,6 +801,13 @@
 "dailies_batch" = "%@ → H.264 дейлизы (<имя>_DAILY.mp4)";
 "dailies_burn_section" = "Впечатанный текст";
 "dailies_burn_tc" = "Бегущий таймкод (сверху по центру)";
+"dailies_position_topLeft" = "Слева сверху";
+"dailies_position_topCenter" = "По центру сверху";
+"dailies_position_topRight" = "Справа сверху";
+"dailies_position_bottomLeft" = "Слева снизу";
+"dailies_position_bottomCenter" = "По центру снизу";
+"dailies_position_bottomRight" = "Справа снизу";
+"dailies_preview_help" = "Как надписи лягут на кадр";
 "dailies_burn_name" = "Имя клипа (внизу слева)";
 "dailies_burn_project" = "Проект · камера/ролл (внизу справа)";
 "dailies_burn_date" = "Дата съёмки (внизу справа)";
