@@ -517,6 +517,8 @@
 "offload_status_percent" = "%d%%";
 /* the log of past offloads, at the bottom of the sheet (item 18) */
 "offload_history_title" = "Recent offloads";
+"offload_history_clear" = "Clear";
+"offload_history_clear_help" = "Forget every offload listed here. The copies themselves are untouched.";
 "offload_history_empty" = "Nothing has been offloaded from this Mac yet.";
 "offload_history_copies" = "%d copies";
 "offload_history_files" = "%d of %d files";
@@ -901,13 +903,8 @@
    it there is a where and a which-end to be told about. === */
 "settings_srt" = "SRT output";
 "srt_enable" = "Send the viewer over SRT";
-"srt_role" = "Connection";
-"srt_role_caller" = "Dial the receiver";
-"srt_role_listener" = "Wait for the receiver";
 "srt_address" = "Address";
-"srt_port" = "Port";
-"srt_latency" = "Delivery buffer";
-"srt_latency_help" = "How long SRT has to notice a lost packet and ask for it again. Sized from the round trip the link reports — four times over, so a re-request has room to be lost as well — and re-applied when the network changes. A latency in a pasted srt:// address is kept as given.";
+"srt_address_help" = "The whole link: srt://host:port, plus ?mode=listener, ?streamid= or ?latency= if the receiver needs them";
 "srt_bitrate" = "Bitrate, Mbit/s";
 "srt_retuned" = "Re-opening on a longer buffer for this link";
 "srt_latency_auto" = "Buffer %1$d ms, round trip %2$d ms";
@@ -915,7 +912,6 @@
 "srt_latency_unmeasurable" = "Buffer %1$d ms — this libsrt cannot measure the link";
 "srt_latency_stated" = "Buffer %1$d ms, from the address";
 "srt_passphrase" = "Passphrase";
-"srt_stream_id" = "Stream ID";
 "stream_link_up" = "a receiver is taking it";
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";

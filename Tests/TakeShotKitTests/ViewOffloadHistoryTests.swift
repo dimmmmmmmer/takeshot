@@ -89,6 +89,61 @@ import Testing
 
     /// The first shooting day. The heading stays — a section that comes and
     /// goes moves everything under it — and the empty sentence is the answer.
+    /// **The list can be emptied, and the control is only there when there is
+    /// something to empty.**
+    ///
+    /// Asked for twice (owner: "возможность почистить было бы классно иметь";
+    /// "recent offloads так и не чистятся?"). The list is kept on purpose — an
+    /// old row is how an operator answers "has this card been copied" weeks
+    /// later — and that is exactly why it needs a way out: a list nobody can
+    /// empty is a list that stops being read.
+    @Test func theHistoryCanBeEmptiedAndSaysSoOnlyWhenItHasRows() async throws {
+        try await ViewProbe.run { probe in
+            let store = probe.controller.offloadHistory
+            for report in self.pastRuns() { store.record(report) }
+            try #require(!store.runs.isEmpty)
+
+            store.clear()
+
+            #expect(store.runs.isEmpty, "clearing left rows behind")
+        }
+        // …and the list really mounts a control that calls it. Asserted on the
+        // source because the width of this list is set by its widest ROW: a
+        // control added to or taken from the heading does not change it, so a
+        // rendered measurement here passes either way — which is exactly what
+        // the first version of this test did.
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/OffloadHistoryList.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.contains("store.clear()"),
+                "the history list has no control that empties it")
+        #expect(code.contains("if !store.runs.isEmpty {"),
+                "the Clear control is offered with nothing to clear")
+    }
+
+    /// Clearing the LIST does not touch the copies. The rows are a
+    /// convenience; the footage, its manifests and its reports are on the
+    /// destination disks and are nobody's to delete from here.
+    @Test func clearingTheListLeavesTheCopiesAlone() async throws {
+        try await ViewProbe.run { probe in
+            let store = probe.controller.offloadHistory
+            let file = probe.root.appendingPathComponent("copied.mov")
+            try Data([0x01]).write(to: file)
+            for report in self.pastRuns() { store.record(report) }
+
+            store.clear()
+
+            #expect(FileManager.default.fileExists(atPath: file.path),
+                    "clearing the history deleted something on disk")
+        }
+    }
+
     @Test func theEmptyHistoryStillDrawsItsHeading() async throws {
         try await ViewProbe.run { probe in
             let store = probe.controller.offloadHistory

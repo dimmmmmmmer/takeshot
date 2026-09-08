@@ -27,10 +27,6 @@ struct SRTSettingsSection: View {
 
     private var isOn: Bool { controller.settings.srt.enabled == true }
 
-    private var isCaller: Bool {
-        controller.settings.srt.roleEffective == .caller
-    }
-
     var body: some View {
         Section(L("settings_srt")) {
             Toggle(L("srt_enable"), isOn: Binding(
@@ -40,13 +36,9 @@ struct SRTSettingsSection: View {
                 // build able to decode the blob.
                 set: { controller.settings.srt.enabled = $0 ? true : nil }))
             if isOn {
-                roleRow
-                if isCaller { addressRow }
-                portRow
-                latencyRow
+                addressRow
                 bitrateRow
                 passphraseRow
-            streamIDRow
                 // Its own view because the state lives on `mirrors`, a nested
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of the
@@ -56,78 +48,26 @@ struct SRTSettingsSection: View {
         }
     }
 
-    private var roleRow: some View {
-        Picker(L("srt_role"), selection: Binding(
-            get: { controller.settings.srt.roleEffective },
-            set: { controller.settings.srt.role = $0.rawValue })) {
-                Text(L("srt_role_caller")).tag(SRTRole.caller)
-                Text(L("srt_role_listener")).tag(SRTRole.listener)
-        }
-    }
-
-    /// Where a caller dials. Absent for a listener, which binds every interface —
-    /// a field that had to be left blank would be a field to get wrong.
+    /// **The whole link, as one address.**
+    ///
+    /// Port, connection type and stream ID used to be rows of their own, and a
+    /// pasted URL was taken apart across them — which is backwards twice over:
+    /// none of the three is a setting an operator decides (they are parts of an
+    /// address somebody handed them), and a paste that scatters itself is
+    /// harder to read back than the line they were given (owner: "и все еще
+    /// тут есть порт, delivery buffer и connection type — обсуждали же что это
+    /// не настройки"; "разложило мне все по разным полям (это скорее минус чем
+    /// плюс)").
+    ///
+    /// So the field holds what a receiver is typed with, and the parts stay
+    /// where the operator can see them: `srt://host:port?mode=…&streamid=…`.
+    /// A listener is `srt://:port?mode=listener`, which is how ffmpeg and
+    /// libsrt's own tools spell it. What is NOT in it is the passphrase, which
+    /// has a secure field of its own, and the delivery buffer, which the link
+    /// measures for itself and the status row reports.
     private var addressRow: some View {
         LabeledContent(L("srt_address")) {
-            // **What is typed here fills the other rows in.**
-            //
-            // `host:port`, `srt://host:port`, and libsrt's query parameters
-            // after either — the form every other tool takes, and the reason
-            // the mode looked like a setting OBS does not have (it is in the
-            // URL there). The rows stay on screen and stay editable: this
-            // arrives AT them rather than hiding where the values went.
-            //
-            // A bare host leaves the port and the mode alone. A paste that
-            // names only the host must not reset a port set on purpose.
-            TextField("", text: Binding(
-                get: { controller.settings.srt.address ?? "" },
-                set: { typed in
-                    guard let parsed = SRTAddress.parse(typed) else {
-                        controller.settings.srt.address =
-                            typed.isEmpty ? nil : typed
-                        return
-                    }
-                    controller.settings.srt.address = parsed.host
-                    if let port = parsed.port { controller.settings.srt.port = port }
-                    if let mode = parsed.mode { controller.settings.srt.role = mode }
-                    if let latency = parsed.latencyMs {
-                        controller.settings.srt.latencyMs =
-                            min(8000, max(20, latency))
-                    }
-                    // **A pasted URL is authoritative about encryption.**
-                    // Every other field here is additive, and this one cannot
-                    // be: a URL that carries a query and no `passphrase=` says
-                    // the link is unencrypted, which is what every other tool
-                    // means by it. A passphrase left in the field from an
-                    // earlier experiment used to survive the paste, so the app
-                    // dialled a plain endpoint with AES-128 — refused at the
-                    // handshake, reported as a link loss, retried for ever and
-                    // never said why (owner: "и все равно не работает").
-                    if parsed.hadQuery || parsed.passphrase != nil {
-                        controller.settings.srt.passphrase = parsed.passphrase
-                    }
-                    if let streamID = parsed.streamID {
-                        controller.settings.srt.streamID = streamID
-                    }
-                }))
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 180)
-        }
-    }
-
-    private var portRow: some View {
-        LabeledContent(L("srt_port")) {
-            TextField("", value: Binding(
-                get: { controller.settings.srt.portEffective },
-                // Below 1024 needs root and above 65535 does not exist; a typo
-                // either way would fail the open with an error naming a port the
-                // operator never meant to ask for.
-                set: { controller.settings.srt.port = min(65535, max(1024, $0)) }),
-                format: .number.grouping(.never))
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.trailing)
-                .frame(width: Self.numberWidth)
+            SRTAddressField(settings: $controller.settings)
         }
     }
 
@@ -141,16 +81,6 @@ struct SRTSettingsSection: View {
     /// reports. `SRTMirror` reads it and re-opens on it; this row is where the
     /// operator can see what it decided, which is the difference between an
     /// automatic value and a hidden one.
-    private var latencyRow: some View {
-        LabeledContent(L("srt_latency")) {
-            Text(latencyText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
-        }
-        .help(L("srt_latency_help"))
-    }
-
     /// Four things it can say: a measured link, a link still being measured, a
     /// link this build cannot measure, and a figure that came from the address
     /// the operator pasted.
@@ -210,19 +140,6 @@ struct SRTSettingsSection: View {
         }
     }
 
-    /// The gateway's stream ID. Plain text, unlike the passphrase: it is the
-    /// publishing point's name, not a secret, and the operator has to be able
-    /// to read it back to whoever runs the gateway.
-    private var streamIDRow: some View {
-        LabeledContent(L("srt_stream_id")) {
-            TextField("", text: Binding(
-                get: { controller.settings.srt.streamID ?? "" },
-                set: { controller.settings.srt.streamID =
-                    $0.isEmpty ? nil : $0 }))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 180)
-        }
-    }
 }
 
 /// Sending, or the reason it is not — and the address to read out to whoever is

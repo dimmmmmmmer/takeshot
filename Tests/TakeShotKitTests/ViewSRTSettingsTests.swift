@@ -37,10 +37,13 @@ struct ViewSRTSettingsTests {
         }
     }
 
-    /// A listener has no address row, so it is SHORTER than a caller. Worth a test
-    /// because the row is conditional and the easiest way to get that wrong is to
-    /// leave a blank field a listener would have to ignore.
-    @Test func aListenerHasNoAddressRow() async throws {
+    /// **A listener and a caller are the same three rows.** The connection type
+    /// is part of the ADDRESS now — `srt://:8890?mode=listener` — rather than a
+    /// picker of its own, so nothing appears or disappears with the role and
+    /// the section does not change shape under the operator (owner: "и все еще
+    /// тут есть порт, delivery buffer и connection type — обсуждали же что это
+    /// не настройки").
+    @Test func aListenerAndACallerAreTheSameRows() async throws {
         try await ViewProbe.run { probe in
             probe.controller.settings.srt.enabled = true
             let caller = probe.fittingSizes {
@@ -50,10 +53,37 @@ struct ViewSRTSettingsTests {
             let listener = probe.fittingSizes {
                 Form { SRTSettingsSection() }.formStyle(.grouped)
             }
-            #expect(listener.en.height < caller.en.height,
-                    "the listener section is not shorter: \(listener)")
+            #expect(listener.en.height == caller.en.height, """
+                the section changed shape with the role: \(listener) vs \(caller)
+                """)
             #expect(abs(listener.ru.height - listener.en.height) <= 8,
                     "the Russian listener section differs: \(listener)")
+        }
+    }
+
+    /// **A long address does not stretch the pane.** A MediaMTX publish URL is
+    /// a hundred characters, and the field used to grow with its content —
+    /// stretching the row, the box and the window with it (owner: "длинный
+    /// адрес srt увеличивает строчку его ввода, увеличивает бокс и ломает ui").
+    @Test func aLongAddressDoesNotStretchTheSection() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.settings.srt.enabled = true
+            let short = probe.fittingSizes {
+                Form { SRTSettingsSection() }.formStyle(.grouped)
+            }
+            probe.controller.settings.srt.address = "192.168.1.119"
+            probe.controller.settings.srt.port = 8890
+            probe.controller.settings.srt.streamID =
+                "publish:live:admin:14190b05fadd3bf5b8fad550600c686ccf79224b3939c3e0"
+            let long = probe.fittingSizes {
+                Form { SRTSettingsSection() }.formStyle(.grouped)
+            }
+            #expect(long.en.width == short.en.width, """
+                the pane grew from \(short.en.width) to \(long.en.width) for a \
+                long address
+                """)
+            #expect(long.en.height == short.en.height,
+                    "the address row wrapped: \(long) vs \(short)")
         }
     }
 

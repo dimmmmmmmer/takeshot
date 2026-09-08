@@ -55,6 +55,56 @@ import Testing
         #expect(parsed.hadQuery)
     }
 
+    /// **The address composes back into what was pasted.** The field shows one
+    /// URL and `SRTAddress.parse` takes it apart; if the two disagreed, an
+    /// operator who pasted a line and looked at it again would see a different
+    /// one (owner, of the old behaviour: "разложило мне все по разным полям
+    /// (это скорее минус чем плюс)").
+    @Test func theAddressComposesBackIntoWhatWasPasted() throws {
+        var srt = SRTSettings()
+        let parsed = try #require(SRTAddress.parse(mediaMTX))
+        srt.address = parsed.host
+        srt.port = parsed.port
+        srt.streamID = parsed.streamID
+
+        #expect(srt.addressURL == mediaMTX, "composed \(srt.addressURL)")
+    }
+
+    /// A caller does not spell out `mode=caller`: it is the default, and a URL
+    /// that stated it would differ from the one the operator pasted for no
+    /// reason they could see.
+    @Test func aCallerDoesNotSpellOutTheDefaultMode() {
+        var srt = SRTSettings()
+        srt.address = "10.0.0.4"
+        srt.port = 9000
+
+        #expect(srt.addressURL == "srt://10.0.0.4:9000")
+        #expect(!srt.addressURL.contains("mode="))
+    }
+
+    /// **A listener is an address with no host.** The connection type is part
+    /// of the URL now rather than a picker, so this spelling is the only way
+    /// to ask for one — and it is the spelling ffmpeg and libsrt's own tools
+    /// use.
+    @Test func aListenerIsAnAddressWithNoHost() throws {
+        var srt = SRTSettings()
+        srt.port = 8890
+        srt.role = SRTRole.listener.rawValue
+        #expect(srt.addressURL == "srt://:8890?mode=listener")
+
+        let parsed = try #require(SRTAddress.parse("srt://:8890?mode=listener"))
+        #expect(parsed.host.isEmpty)
+        #expect(parsed.port == 8890)
+        #expect(parsed.mode == SRTRole.listener.rawValue)
+    }
+
+    /// …and a string with neither a host nor a port is still nothing at all.
+    @Test func nothingIsStillNothing() {
+        #expect(SRTAddress.parse("") == nil)
+        #expect(SRTAddress.parse("srt://") == nil)
+        #expect(SRTAddress.parse("   ") == nil)
+    }
+
     /// **The status row says when the link is encrypted.** The passphrase is
     /// typed into a `SecureField`, so a stale one is invisible; this line is
     /// the only place an operator could have seen it. The passphrase itself is

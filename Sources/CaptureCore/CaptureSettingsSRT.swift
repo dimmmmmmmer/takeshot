@@ -142,6 +142,33 @@ public struct SRTSettings: Codable, Equatable, Sendable {
 
     public var roleEffective: SRTRole { SRTRole.resolved(role) }
 
+    /// **The whole link as one URL — the only thing the settings pane asks
+    /// for.**
+    ///
+    /// Port, connection type and stream ID are not settings; they are parts of
+    /// an address, and an operator who has been handed one has been handed all
+    /// of them at once (owner: "и все еще тут есть порт, delivery buffer и
+    /// connection type — обсуждали же что это не настройки", and of the paste
+    /// being split across fields: "это скорее минус чем плюс"). This composes
+    /// what `SRTAddress.parse` takes apart, so what the field shows is what a
+    /// paste would have said.
+    ///
+    /// Only the non-default parts are spelled out. A caller does not carry
+    /// `mode=caller` — it is the default, and a URL that stated it would differ
+    /// from the one the operator pasted for no reason they could see. The
+    /// passphrase is never composed in: it is a secret with a field of its own,
+    /// and this string is on screen.
+    public var addressURL: String {
+        let host = address ?? ""
+        var text = "srt://" + host + ":\(portEffective)"
+        var query: [String] = []
+        if roleEffective == .listener { query.append("mode=listener") }
+        if let streamID, !streamID.isEmpty { query.append("streamid=" + streamID) }
+        if latencyMs != nil { query.append("latency=\(latencyEffective)") }
+        if !query.isEmpty { text += "?" + query.joined(separator: "&") }
+        return text
+    }
+
     /// 9000 is the port every SRT example and every receiver's placeholder uses,
     /// it is unassigned by IANA, and it is outside the range macOS hands out as
     /// an ephemeral port — so it does not collide with a client socket the machine

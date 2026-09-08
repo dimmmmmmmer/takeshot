@@ -64,7 +64,14 @@ public enum SRTAddress {
         if let slash = rest.firstIndex(of: "/") { rest = String(rest[..<slash]) }
 
         let (host, port) = splitHostAndPort(rest)
-        guard !host.isEmpty else { return nil }
+        // **An empty host is a LISTENER**, and only when a port came with it.
+        // `srt://:8890?mode=listener` is how ffmpeg and libsrt's own tools
+        // spell "bind every interface on this port", and it is the only way to
+        // ask for a listener now that the connection type is a part of the
+        // address rather than a picker of its own. A string with neither a
+        // host nor a port is still nothing — an empty field, or a stray
+        // "srt://".
+        guard !host.isEmpty || port != nil else { return nil }
 
         var parsed = Parsed(host: host, port: port, mode: nil,
                             latencyMs: nil, passphrase: nil, streamID: nil,

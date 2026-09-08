@@ -168,29 +168,37 @@ struct RemoteSettingsSection: View {
     /// the same one.
     private func addressButton(_ url: String, index: Int,
                                picked: Bool) -> some View {
-        Button {
+        // **Not a `Button`, and that is the whole fix.** The double click was a
+        // `.simultaneousGesture(TapGesture(count: 2))` on a `Button`, and a
+        // button's own gesture recognizes the first click and ends the
+        // sequence — the pair never completes, so the second click did nothing
+        // and the address never opened (owner: "клики по ссылкам ремоут
+        // контрола все еще не открывают браузер").
+        //
+        // Two `onTapGesture`s on a plain row is the arrangement that works:
+        // SwiftUI tries the higher count first and falls back to the single
+        // click, so one click still copies and points the QR at this line.
+        HStack(spacing: 6) {
+            Text(url)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.link)
+            // Which line the code belongs to, said with the code's own
+            // glyph instead of a sentence. Hidden from VoiceOver: the QR
+            // below carries the address as its label already.
+            Image(systemName: "qrcode")
+                .opacity(picked ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { RemoteHandout.open(url) }
+        .onTapGesture {
             chosen = index
             RemoteHandout.copy(url)
-        } label: {
-            HStack(spacing: 6) {
-                Text(url).font(.system(.body, design: .monospaced))
-                // Which line the code belongs to, said with the code's own
-                // glyph instead of a sentence. Hidden from VoiceOver: the QR
-                // below carries the address as its label already.
-                Image(systemName: "qrcode")
-                    .opacity(picked ? 1 : 0)
-                    .accessibilityHidden(true)
-            }
         }
-        .buttonStyle(.link)
-        // **A double click opens it** (owner: "двойной клик по адресу http
-        // должен открывать его в браузере"). Simultaneous rather than
-        // instead-of: the first click of the pair still copies and still points
-        // the QR at this line, which is what a single click means, so the two
-        // gestures agree instead of the second one having to undo the first.
-        .simultaneousGesture(TapGesture(count: 2).onEnded {
-            RemoteHandout.open(url)
-        })
+        // the row answers to VoiceOver and to the keyboard as the control it
+        // is, which a bare `HStack` would not — see `controlHelp`
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .help(L("remote_address_copy"))
         .contextMenu {
             Button(L("remote_address_copy")) {

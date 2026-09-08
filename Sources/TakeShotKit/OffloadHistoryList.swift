@@ -25,8 +25,23 @@ struct OffloadHistoryList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
-            Text(L("offload_history_title"))
-                .offloadText(.section)
+            HStack {
+                Text(L("offload_history_title"))
+                    .offloadText(.section)
+                Spacer(minLength: 8)
+                // **A way to empty it**, asked for twice (owner: "возможность
+                // почистить было бы классно иметь"; "recent offloads так и не
+                // чистятся?"). The list is kept on purpose — an old row is how
+                // an operator answers "has this card been copied" weeks later —
+                // and that is exactly why it needs a way out: a list nobody can
+                // empty is a list that stops being read. Beside the ledger's
+                // own, in the same place and the same shape.
+                if !store.runs.isEmpty {
+                    Button(L("offload_history_clear")) { store.clear() }
+                        .buttonStyle(.link)
+                        .help(L("offload_history_clear_help"))
+                }
+            }
             if store.runs.isEmpty {
                 Text(L("offload_history_empty"))
                     .offloadText(.caption)
