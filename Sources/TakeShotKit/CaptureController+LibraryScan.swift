@@ -18,6 +18,26 @@ extension CaptureController {
         case known       // already in the takes list; nothing to do
     }
 
+    /// The folders this app writes into, so the scan does not report our own
+    /// output as somebody else's — see `findForeignVideos(root:excluding:skipping:)`.
+    ///
+    /// Read on the main actor and passed in: these are settings, and reaching
+    /// for them from the detached walk is the race Swift 6 mode exists to
+    /// catch.
+    var foldersThisAppWritesInto: Set<String> {
+        // Standardized, because that is what the walk compares against — see
+        // `isOurs`, which explains why that is the transform that folds
+        // `/private/var` and `/var` onto one spelling.
+        var folders: Set<String> = [defaultDailiesFolder.standardizedFileURL.path]
+        if let chosen = settings.dailies.destinationPath {
+            folders.insert(URL(fileURLWithPath: chosen).standardizedFileURL.path)
+        }
+        for path in settings.offload.destinationPaths ?? [] {
+            folders.insert(URL(fileURLWithPath: path).standardizedFileURL.path)
+        }
+        return folders
+    }
+
     func scanDestinationFolder() {
         guard !scanInFlight else {
             // classifyFoundFiles suspends on metadata loads, and the MainActor
@@ -31,9 +51,10 @@ extension CaptureController {
         let root = destinationRoot
         let generation = libraryGeneration
         let ownTakePaths = Set(takes.map { $0.url.path })
+        let ourFolders = foldersThisAppWritesInto
         Task.detached(priority: .utility) { [weak self] in
-            let (candidates, busy) = Self.findForeignVideos(root: root,
-                                                            excluding: ownTakePaths)
+            let (candidates, busy) = Self.findForeignVideos(
+                root: root, excluding: ownTakePaths, skipping: ourFolders)
             // …and, on the same hop, which of our own takes are still there.
             // One stat per take, once a minute, and they used to run on the
             // main actor: a day of two hundred takes on a share whose timeout

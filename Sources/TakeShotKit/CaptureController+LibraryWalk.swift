@@ -15,8 +15,18 @@ extension CaptureController {
         case ignore
     }
 
+    /// `skipping` names folders this app WRITES INTO, and the walk does not
+    /// descend into them.
+    ///
+    /// Foreign content means content this app did not put there. Dailies land
+    /// in `<record folder>/Dailies` by default, so every transcode the operator
+    /// asked for came back as somebody else's file (owner: "dailies добавляются
+    /// as other content"). An offload destination is the same rule with a
+    /// sharper edge: a card copied into the record folder is a hundred thousand
+    /// files, and the panel would list every one of them.
     nonisolated static func findForeignVideos(
-        root: URL, excluding ownPaths: Set<String>) -> (files: [URL], busy: Bool) {
+        root: URL, excluding ownPaths: Set<String>,
+        skipping ourFolders: Set<String> = []) -> (files: [URL], busy: Bool) {
         var found: [URL] = []
         var busy = false
         let cutoff = Date().addingTimeInterval(-3) // don't touch files still being written
@@ -26,6 +36,19 @@ extension CaptureController {
         else { return ([], false) }
 
         for case let url as URL in enumerator {
+            // **Resolved on both sides, and matched by PREFIX.** Two traps
+            // here, and each one silently skips nothing. `/var/folders/…` and
+            // `/private/var/folders/…` are the same folder spelled two ways —
+            // `standardizedFileURL` prefers one and `resolvingSymlinksInPath`
+            // the other, so a comparison that mixes them never matches. And a
+            // directory enumerator is not required to hand back the directory
+            // itself before its contents, so a rule that only recognises the
+            // folder can miss everything inside it. Asking whether each path
+            // is UNDER one of ours cannot be defeated by either.
+            if !ourFolders.isEmpty, isOurs(url, folders: ourFolders) {
+                enumerator.skipDescendants()
+                continue
+            }
             switch classify(url, excluding: ownPaths, settledBefore: cutoff) {
             case .clip:
                 found.append(url)
@@ -39,6 +62,25 @@ extension CaptureController {
             }
         }
         return (found.sorted { $0.lastPathComponent < $1.lastPathComponent }, busy)
+    }
+
+    /// Whether `url` is one of our folders or anything inside one.
+    ///
+    /// **Both sides go through `standardizedFileURL`, and that is the only
+    /// thing that makes the comparison work.** `/var/folders/…` and
+    /// `/private/var/folders/…` name the same place, and on a path that EXISTS
+    /// this is what folds them onto one spelling (measured: both forms of the
+    /// temp directory come back as `/var/…`). On a path that does not exist
+    /// neither this nor `resolvingSymlinksInPath` changes anything — which is
+    /// fine here, because the folders being compared are folders that are
+    /// there.
+    ///
+    /// Matched by PREFIX rather than equality: a directory enumerator is not
+    /// required to hand back a directory before its contents, so a rule that
+    /// only recognised the folder itself could miss everything inside it.
+    nonisolated static func isOurs(_ url: URL, folders: Set<String>) -> Bool {
+        let path = url.standardizedFileURL.path
+        return folders.contains { path == $0 || path.hasPrefix($0 + "/") }
     }
 
     nonisolated private static func classify(
