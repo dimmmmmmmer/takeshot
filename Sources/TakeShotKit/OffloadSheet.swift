@@ -142,7 +142,7 @@ struct OffloadSourceSection: View {
     private func pickSource() {
         if let url = OffloadPanels.pickFolder(
             message: L("offload_pick_source"),
-            prompt: L("offload_source_prompt")) {
+            prompt: L("offload_source_prompt"), near: model.source) {
             model.source = url
         }
     }
@@ -231,7 +231,7 @@ struct OffloadDestinationSection: View {
     }
 
     private func chooseDestination(_ row: OffloadSheetModel.Row) {
-        guard let url = pickDestination() else { return }
+        guard let url = pickDestination(near: row.url) else { return }
         model.setDestination(url, at: row.id)
     }
 
@@ -245,9 +245,12 @@ struct OffloadDestinationSection: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func pickDestination() -> URL? {
+    /// `near` is the destination being REPLACED, when there is one — see
+    /// `OffloadPanels.pickFolder`. Adding a new destination has nothing to be
+    /// near, and the panel opens where it last was.
+    private func pickDestination(near: URL? = nil) -> URL? {
         OffloadPanels.pickFolder(message: L("offload_pick_dest"),
-                                 prompt: L("offload_dest_prompt"))
+                                 prompt: L("offload_dest_prompt"), near: near)
     }
 }
 
@@ -297,10 +300,46 @@ struct OffloadSheetFooter: View {
 /// model does stays reachable from a test; the dialog itself is `FilePanel`, so
 /// the call sites are reachable too.
 enum OffloadPanels {
+    /// `near` is what is chosen NOW, and the panel opens at the root of the
+    /// disk that path is on rather than inside the path itself.
+    ///
+    /// Choosing again is almost always "same drive, different folder" — the
+    /// drive is the thing the operator plugged in and the folder is the thing
+    /// they are changing — and a panel that opens inside the current folder
+    /// makes them climb out of it first (owner: "сделай так чтоб у источника
+    /// или результирующего источника finder изначально открывал его корень.
+    /// типа диск я выбрал но папку может поменять зочу").
     @MainActor
-    static func pickFolder(message: String, prompt: String) -> URL? {
+    static func pickFolder(message: String, prompt: String,
+                           near: URL? = nil) -> URL? {
         FilePanel.openOne(.init(files: false, directories: true,
                                 createDirectories: true,
+                                directory: volumeRoot(of: near),
                                 message: message, prompt: prompt))
+    }
+
+    /// The root of the volume `url` is on — `/Volumes/SHUTTLE` for anything
+    /// under it, and the boot volume's `/` for a path in the home folder.
+    ///
+    /// **Climbs until something answers.** `volumeURLKey` is answered by the
+    /// file system, so it says nothing at all about a path that is not there —
+    /// and the paths this is asked about are exactly the ones that may not be:
+    /// a destination folder that has not been created yet, or a shuttle that
+    /// has been unplugged since. Walking up finds the nearest ancestor that
+    /// does exist, which for an unmounted drive is `/Volumes` — where the
+    /// operator would go looking for it anyway.
+    static func volumeRoot(of url: URL?) -> URL? {
+        guard let url else { return nil }
+        var candidate = url.standardizedFileURL
+        while true {
+            if let volume = try? candidate
+                .resourceValues(forKeys: [.volumeURLKey]).volume {
+                return volume
+            }
+            let parent = candidate.deletingLastPathComponent()
+                .standardizedFileURL
+            guard parent != candidate else { return nil }
+            candidate = parent
+        }
     }
 }

@@ -328,11 +328,12 @@
 "reference_pin_failed" = "Не удалось закрепить референс";
 
 "export_edl" = "EDL селектов (хорошие тейки)";
+"export_reports_help" = "Шифт-репорт и контактный лист — PDF или CSV";
+"export_timeline_help" = "EDL селектов и Avid ALE для монтажа";
 "export_ale" = "Лог для Avid (ALE)";
 "export_report_pdf" = "Отчёт смены (PDF)";
 "export_report_csv" = "Отчёт смены (CSV)";
 "export_contact_pdf" = "Контактный лист (PDF)";
-"export_menu_help" = "Экспорт: EDL, ALE, отчёт смены, контактный лист";
 "report_no_takes" = "Нет тейков для отчёта";
 "report_saved" = "Отчёт сохранён: %@";
 "contact_saved" = "Контактный лист сохранён: %@";

@@ -118,52 +118,14 @@ private struct TakesSection: View {
                 .controlSize(.small)
                 .fixedSize()
                 .help(L("open_folder"))
-                // a real bordered Button for the chrome (pixel-identical to the
-                // folder button), with an invisible Menu stretched on top —
-                // no Menu style matched the Button metrics exactly
-                Button {} label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .frame(width: 14, height: 14)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .allowsHitTesting(false)
-                .overlay {
-                    Menu {
-                        Button(L("export_edl")) { controller.exportSelectsEDL() }
-                            .disabled(!controller.canExportSelects)
-                        Button(L("export_ale")) { controller.exportALE() }
-                            .disabled(!controller.hasTakes)
-                        Button(L("export_report_pdf")) {
-                            controller.exportShiftReport(pdf: true)
-                        }
-                        Button(L("export_report_csv")) {
-                            controller.exportShiftReport(pdf: false)
-                        }
-                        Button(L("export_contact_pdf")) {
-                            controller.exportContactSheet()
-                        }
-                        Divider()
-                        // Dailies IS here, unlike the offload below: it is an
-                        // export OF takes, so "disabled while there are no
-                        // takes" is exactly right for it.
-                        Button(L("dailies_menu")) {
-                            controller.showDailiesSheet()
-                        }
-                        // Offload is NOT here: it copies an arbitrary card and
-                        // has nothing to do with takes, so a menu disabled by
-                        // "no takes yet" made card offload unreachable exactly
-                        // when it is most needed — before anything was shot.
-                        // Its home is the utility row under this panel.
-                    } label: {
-                        Color.clear
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                }
-                .fixedSize()
-                .disabled(!controller.hasTakes)
-                .help(L("export_menu_help"))
+                // The export control USED to be here — a bordered button
+                // with an invisible menu stretched over it. It is two menus in
+                // the utility row under this panel now, beside the offload and
+                // the dailies (owner: "кнопку экспорта давай туда же вниз
+                // перенесем и разделим на 2"). Its label was a `Color.clear`,
+                // which claims no hit points, so it opened only where the
+                // menu's own chrome landed — the row's menus carry real icons
+                // and cannot have that problem.
                 // The offload status line used to sit here, squeezed between
                 // the export button and the view picker. It is a live job with
                 // a bar, a file name and a Stop button now, and it reads out at

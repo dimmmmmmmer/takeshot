@@ -60,6 +60,38 @@ struct PanelUtilityButtons: View {
             button("externaldrive.badge.checkmark", help: L("offload_menu_copy")) {
                 controller.showOffloadSheet()
             }
+            // **Dailies stands beside the offload, not inside an export menu**
+            // (owner: "кнопку дейлизов давай рядом с кнопкой оффлоада добавим,
+            // а не в экспорт там где тейки"). The two are the same kind of
+            // thing from the operator's side: a long job you start and then
+            // watch in the strip under this row.
+            button("film.stack", help: L("dailies_menu")) {
+                controller.showDailiesSheet()
+            }
+            // **Two menus, not one** (owner: "кнопку экспорта давай туда же
+            // вниз перенесем и разделим на 2 – шифт репорты ксв/пдф и экспорт
+            // авид и хмл таймлайна"). What goes to the production office and
+            // what goes to an edit suite are different errands, and one menu
+            // holding both made the operator read five items to find either.
+            menu("doc.text", help: L("export_reports_help")) {
+                Button(L("export_report_pdf")) {
+                    controller.exportShiftReport(pdf: true)
+                }
+                Button(L("export_report_csv")) {
+                    controller.exportShiftReport(pdf: false)
+                }
+                Button(L("export_contact_pdf")) {
+                    controller.exportContactSheet()
+                }
+            }
+            .disabled(!controller.hasTakes)
+            menu("timeline.selection", help: L("export_timeline_help")) {
+                Button(L("export_edl")) { controller.exportSelectsEDL() }
+                    .disabled(!controller.canExportSelects)
+                Button(L("export_ale")) { controller.exportALE() }
+                    .disabled(!controller.hasTakes)
+            }
+            .disabled(!controller.hasTakes)
         }
         .buttonStyle(.borderless)
         // The row hugs its three icons; the CENTRING is the frame around it, and
@@ -76,6 +108,33 @@ struct PanelUtilityButtons: View {
             Image(systemName: symbol)
                 .font(.system(size: Self.iconSize))
         }
+        .help(help)
+    }
+
+    /// A menu that looks like the buttons beside it.
+    ///
+    /// The label is the ICON, and that is why the control answers everywhere it
+    /// is drawn.
+    ///
+    /// The export control used to be a bordered `Button` that took no hits with
+    /// a `Menu` overlaid on it whose label was a `Color.clear`. A clear colour
+    /// IS hit-tested — measured — but it has no size of its own, so the menu
+    /// collapsed to its intrinsic width and sat CENTRED in a button several
+    /// times wider: a click in the middle opened it and a click near the edge
+    /// hit the button that had been told to ignore clicks. It opened sometimes
+    /// (owner: "кнопка экспорта хмл/пдф не всегда прожимается"). Measured on
+    /// this row: an icon label makes it 214 points wide, a clear one 175.
+    private func menu(_ symbol: String, help: String,
+                      @ViewBuilder content: () -> some View) -> some View {
+        Menu {
+            content()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: Self.iconSize))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .help(help)
     }
 }

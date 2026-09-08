@@ -326,11 +326,12 @@
 "reference_pin_failed" = "Couldn't pin the reference";
 
 "export_edl" = "Selects EDL (good takes)";
+"export_reports_help" = "Shift report and contact sheet — PDF or CSV";
+"export_timeline_help" = "Selects EDL and Avid ALE for the edit";
 "export_ale" = "Avid log (ALE)";
 "export_report_pdf" = "Shift report (PDF)";
 "export_report_csv" = "Shift report (CSV)";
 "export_contact_pdf" = "Contact sheet (PDF)";
-"export_menu_help" = "Export: EDL, ALE, shift report, contact sheet";
 "report_no_takes" = "No takes to report";
 "report_saved" = "Report saved: %@";
 "contact_saved" = "Contact sheet saved: %@";
