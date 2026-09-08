@@ -71,6 +71,37 @@ extension CaptureController {
             lastError = L("toast_ale_failed", error.localizedDescription)
         }
     }
+    /// FCPXML timeline: every take, back to back, each clip pointing at its
+    /// own file.
+    ///
+    /// The third of the three and the only one that carries the MEDIA. The EDL
+    /// beside it is a cut list of reels and the ALE is a log; both leave the
+    /// assistant to relink, which on a video-assist day means relinking against
+    /// names that were never on a camera original. This opens with the picture
+    /// already on the timeline, in Resolve and in Premiere alike.
+    ///
+    /// Every take rather than the selects, for the ALE's reason: this is the
+    /// day, and a take marked bad is metadata about it rather than grounds for
+    /// leaving it out of the assistant's bin.
+    func exportFCPXML() {
+        guard let xml = FCPXMLExporter.timeline(
+            takes: takes, project: settings.naming.projectName,
+            format: signalFormat) else {
+            lastError = L("fcpxml_no_takes")
+            return
+        }
+        let name = NamingEngine.sanitize(
+            "\(settings.naming.projectName)_timeline") + ".fcpxml"
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return }
+        do {
+            try xml.write(to: url, atomically: true, encoding: .utf8)
+            lastNotice = L("fcpxml_saved", url.lastPathComponent)
+        } catch {
+            lastError = L("toast_fcpxml_failed", error.localizedDescription)
+        }
+    }
+
     /// Shift report: A4 PDF with thumbnails or a full CSV table.
     func exportShiftReport(pdf: Bool) {
         guard !takes.isEmpty else {

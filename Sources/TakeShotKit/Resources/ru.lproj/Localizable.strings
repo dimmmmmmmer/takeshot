@@ -331,6 +331,10 @@
 "export_reports_help" = "Шифт-репорт и контактный лист — PDF или CSV";
 "export_timeline_help" = "EDL селектов и Avid ALE для монтажа";
 "export_ale" = "Лог для Avid (ALE)";
+"export_fcpxml" = "Таймлайн (FCPXML)…";
+"fcpxml_no_takes" = "Нет тейков для таймлайна.";
+"fcpxml_saved" = "Таймлайн сохранён: %@";
+"toast_fcpxml_failed" = "Не удалось сохранить таймлайн: %@";
 "export_report_pdf" = "Отчёт смены (PDF)";
 "export_report_csv" = "Отчёт смены (CSV)";
 "export_contact_pdf" = "Контактный лист (PDF)";

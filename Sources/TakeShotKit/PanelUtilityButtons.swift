@@ -90,6 +90,8 @@ struct PanelUtilityButtons: View {
                     .disabled(!controller.canExportSelects)
                 Button(L("export_ale")) { controller.exportALE() }
                     .disabled(!controller.hasTakes)
+                Button(L("export_fcpxml")) { controller.exportFCPXML() }
+                    .disabled(!controller.hasTakes)
             }
             .disabled(!controller.hasTakes)
         }

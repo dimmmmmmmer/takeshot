@@ -162,14 +162,18 @@ network with no route out. Settings shows a QR code for each.
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
   locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`, an Avid log (ALE)
   of every take for a Media Composer bin, shift report as PDF and CSV.
+- FCPXML timeline of the day, every take back to back with its markers — and,
+  unlike the EDL and the ALE, each clip points at its own file, so Resolve and
+  Premiere open it with the picture already on the timeline instead of with a
+  relink dialog.
 - Scene, shot and take recorded per take beside the rating and the comment,
   written into the file and into the sidecars — a correction typed after the
   fact still reaches post.
 - Contact sheet: the day as one PDF of poster frames, a cell per take.
 - Dailies: the day's takes batch-transcoded to H.264 with timecode, clip name,
   project and camera burned in. The queue pauses itself while a take rolls.
-- DIT offload of a camera card to several SSDs at once: the card is read once
-  and written to every destination in the same pass, each copy is verified by
+- DIT offload of several camera cards to several SSDs at once: each card is
+  read once and written to every destination in the same pass, each copy is verified by
   re-reading it off the disk, and every destination gets a report — a picture
   to hand over and the same thing as plain text — beside the ASC MHL checksum
   list that post re-verifies it against. xxHash64, which is what Silverstack,

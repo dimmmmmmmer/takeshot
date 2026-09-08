@@ -55,7 +55,26 @@ struct OtherRow: View {
                 .font(.callout)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Spacer()
+            // The folder it is in, after the name and in the quieter voice:
+            // the name is what the operator is reading for, and the folder is
+            // what tells two files of that name apart. Nothing at all for a
+            // file in the record folder itself, which is most of them.
+            if let folder = controller.otherFolderText(for: url) {
+                Text(folder)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    // The HEAD is what gives way: the folder nearest the file
+                    // is the one that tells two rows apart, and "…/100CANON"
+                    // says more than "CARD_A/DCI…".
+                    .truncationMode(.head)
+                    // Space goes to the name first. The probe cannot read a
+                    // rendered truncation, so what the tests pin is the half
+                    // they can: the label truncates instead of widening the
+                    // row (`aLongFolderDoesNotWidenTheRow`).
+                    .layoutPriority(-1)
+            }
+            Spacer(minLength: 4)
             if let metric = controller.otherMetricText(for: url) {
                 Text(metric)
                     .font(.caption)
@@ -116,6 +135,11 @@ struct OtherCell: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
+                    // A tile has one caption line and the name already fills
+                    // it, so the folder is what the tooltip is for.
+                    .help(controller.otherFolderText(for: url)
+                        .map { "\($0)/\(url.lastPathComponent)" }
+                        ?? url.lastPathComponent)
                 if let metric, !metricOnImage,
                    TakeTileBadges.metricFitsBesideName(metric,
                                                        tileWidth: tileWidth) {
@@ -215,5 +239,42 @@ extension CaptureController {
         // nobody wrote, so it is the one most likely to be NaN — see the note
         // on the type.
         return otherDurations[url].map(ClipTimeText.minutesSeconds.text)
+    }
+}
+
+extension CaptureController {
+    /// **Which folder an Other-content item is in**, relative to the record
+    /// folder — nil for a file sitting directly in it.
+    ///
+    /// The list is flat and stays flat: it is a "what else is in here" list,
+    /// not a file browser, and a tree would answer a question nobody opened
+    /// this panel to ask. What it could not answer before is where a row's
+    /// file actually IS (owner: "other content в принципе не учитывает
+    /// папки") — and the scan walks the whole tree, so two rows reading
+    /// `A001C001.mov` were routinely two different files in two folders, with
+    /// nothing on screen to tell them apart and Play, Reveal and Delete all
+    /// aimed at whichever one the row happened to hold.
+    ///
+    /// Compared through `comparablePath`, which is `standardized` and purely
+    /// lexical. `standardizedFileURL` is the trap here and the comment on
+    /// `comparablePath` names it: it folds a leading `/private` only when what
+    /// is left EXISTS, so the record folder (which does) and a file inside it
+    /// standardize to two different roots the moment the file has just been
+    /// deleted — and every row would then be labelled with an absolute path.
+    /// Lexical also keeps this cheap, which matters: it is asked per row while
+    /// a list scrolls.
+    func otherFolderText(for url: URL) -> String? {
+        let root = CaptureController.comparablePath(destinationRoot)
+        let folder = CaptureController
+            .comparablePath(url.deletingLastPathComponent())
+        guard folder != root else { return nil }
+        guard folder.hasPrefix(root + "/") else {
+            // Outside the record folder entirely — nothing in the scan puts a
+            // file there, but a stale row from a folder that has since been
+            // re-pointed would otherwise be labelled with a path fragment cut
+            // at the wrong place. The whole folder is the honest answer.
+            return folder
+        }
+        return String(folder.dropFirst(root.count + 1))
     }
 }

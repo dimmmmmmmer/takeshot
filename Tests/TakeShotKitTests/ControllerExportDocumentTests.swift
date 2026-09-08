@@ -74,18 +74,20 @@ import Testing
             try await FakeFilePanel.installed { panel in
                 controller.exportSelectsEDL()
                 controller.exportALE()
+                controller.exportFCPXML()
                 controller.exportShiftReport(pdf: false)
                 #expect(controller.exportContactSheet() == nil,
                         "a cancelled contact sheet started decoding anyway")
 
-                #expect(panel.saveRequests.count == 4,
+                #expect(panel.saveRequests.count == 5,
                         "an export never got as far as the panel")
                 #expect(controller.lastNotice == nil)
                 #expect(controller.lastError == nil)
                 let written = try FileManager.default.contentsOfDirectory(
                     atPath: root.path)
                     .filter { $0.hasSuffix(".edl") || $0.hasSuffix(".ale")
-                        || $0.hasSuffix(".csv") || $0.hasSuffix(".pdf") }
+                        || $0.hasSuffix(".csv") || $0.hasSuffix(".pdf")
+                        || $0.hasSuffix(".fcpxml") }
                 #expect(written.isEmpty, "a cancelled export wrote \(written)")
             }
         }
@@ -103,6 +105,7 @@ import Testing
             try await FakeFilePanel.installed(
                 saving: [dead.appendingPathExtension("edl"),
                          dead.appendingPathExtension("ale"),
+                         dead.appendingPathExtension("fcpxml"),
                          dead.appendingPathExtension("csv")]) { _ in
                 controller.exportSelectsEDL()
                 #expect(controller.lastError?
@@ -113,6 +116,11 @@ import Testing
                 #expect(controller.lastError?
                     .hasPrefix(localizedHead("toast_ale_failed")) == true,
                         "ALE failure said: \(controller.lastError ?? "nothing")")
+
+                controller.exportFCPXML()
+                #expect(controller.lastError?
+                    .hasPrefix(localizedHead("toast_fcpxml_failed")) == true,
+                        "FCPXML failure said: \(controller.lastError ?? "nothing")")
 
                 controller.exportShiftReport(pdf: false)
                 #expect(controller.lastError?
@@ -250,6 +258,81 @@ import Testing
                 #expect(!offered.contains("/"), "the panel was offered \(offered)")
                 #expect(!offered.contains(":"), "the panel was offered \(offered)")
                 #expect(offered.hasSuffix("_log.ale"))
+            }
+        }
+    }
+}
+
+/// The FCPXML timeline as the controller writes it.
+///
+/// Its own suite rather than more of the one above: that type is at the length
+/// ceiling, and the questions here are the document's — a file the NLE can
+/// open, naming files it can find.
+@MainActor
+struct ControllerFCPXMLExportTests {
+    /// The same two helpers the suite above uses, and for the same reasons —
+    /// see them there. Copied rather than shared because a `private` helper on
+    /// a suite is the project's convention and the two suites are one file.
+    private func project(
+        _ name: String,
+        _ body: (CaptureController, URL) async throws -> Void) async throws {
+        try await ControllerHarness.run(
+            configure: { $0.naming.projectName = name }, body)
+    }
+
+    private func day(_ controller: CaptureController,
+                     in root: URL) throws -> (good: Take, bad: Take) {
+        var good = ControllerFixtures.take(named: "A001C001", in: root, clip: 1)
+        good.rating = .good
+        var bad = ControllerFixtures.take(named: "A001C002", in: root, clip: 2)
+        bad.rating = .bad
+        try ControllerFixtures.placeholder(for: good)
+        try ControllerFixtures.placeholder(for: bad)
+        controller.takes = [good, bad]
+        return (good, bad)
+    }
+
+    /// The timeline is the LOG's shape, not the cut's: every take, rejected
+    /// ones included. An assistant building a bin needs the day, and a take
+    /// marked bad is metadata about it rather than grounds for hiding it.
+    @Test func theTimelineCarriesEveryTakeAndOpensAsXML() async throws {
+        try await project("Nightshoot") { controller, root in
+            let day = try self.day(controller, in: root)
+            let destination = root.appendingPathComponent("cut.fcpxml")
+
+            try await FakeFilePanel.installed(saving: [destination]) { panel in
+                controller.exportFCPXML()
+
+                #expect(panel.lastSaveName == "Nightshoot_timeline.fcpxml")
+                let text = try String(contentsOf: destination, encoding: .utf8)
+                // Parsed, not searched: a document that does not parse is one
+                // no NLE will open, and it would pass every `contains` check.
+                let document = try XMLDocument(xmlString: text, options: [])
+                let clips = try document.nodes(forXPath: "//spine/asset-clip")
+                #expect(clips.count == 2, "the timeline holds \(clips.count) clips")
+                let sources = try document.nodes(forXPath: "//media-rep/@src")
+                    .compactMap(\.stringValue)
+                for take in [day.good, day.bad] {
+                    #expect(sources.contains { $0.hasSuffix(
+                        take.url.lastPathComponent) },
+                            "\(take.url.lastPathComponent) is not on the timeline")
+                }
+                #expect(controller.lastNotice
+                    == L("fcpxml_saved", "cut.fcpxml"))
+                #expect(controller.lastError == nil)
+            }
+        }
+    }
+
+    /// Nothing recorded: the operator is told, and no panel is put in front of
+    /// them for a document that would have been empty.
+    @Test func anEmptyDayIsRefusedBeforeThePanel() async throws {
+        try await ControllerHarness.run { controller, _ in
+            try await FakeFilePanel.installed { panel in
+                controller.exportFCPXML()
+                #expect(controller.lastError == L("fcpxml_no_takes"))
+                #expect(panel.saveRequests.isEmpty,
+                        "an empty timeline asked where to save")
             }
         }
     }

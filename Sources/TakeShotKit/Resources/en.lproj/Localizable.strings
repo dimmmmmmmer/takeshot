@@ -329,6 +329,10 @@
 "export_reports_help" = "Shift report and contact sheet — PDF or CSV";
 "export_timeline_help" = "Selects EDL and Avid ALE for the edit";
 "export_ale" = "Avid log (ALE)";
+"export_fcpxml" = "Timeline (FCPXML)…";
+"fcpxml_no_takes" = "No takes to put on a timeline.";
+"fcpxml_saved" = "Timeline saved: %@";
+"toast_fcpxml_failed" = "Could not save the timeline: %@";
 "export_report_pdf" = "Shift report (PDF)";
 "export_report_csv" = "Shift report (CSV)";
 "export_contact_pdf" = "Contact sheet (PDF)";
