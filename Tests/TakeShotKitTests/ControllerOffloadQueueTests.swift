@@ -1,4 +1,5 @@
 import CaptureCore
+import Combine
 import Foundation
 import Testing
 
@@ -305,6 +306,114 @@ import Testing
             model.isSurveying = false
             #expect(!controller.isOffloadBusy)
             #expect(controller.canStartOffload)
+        }
+    }
+}
+
+/// What a queue SAYS, which is not the same as what it does.
+///
+/// A run of three cards used to put three "verified" toasts on screen back to
+/// back and then a fourth saying how many — four messages about one press, on
+/// a monitor somebody is watching a take on. The queue speaks once. What is
+/// never quiet is the alarm: a card that failed second of three has to say so
+/// while the third is still copying, not twenty minutes later.
+@Suite @MainActor struct ControllerOffloadQueueNoticeTests {
+    private func scratch(_ name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("takeshot-notice-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url,
+                                                withIntermediateDirectories: true)
+        return url
+    }
+
+    private func makeCard(_ name: String, salt: UInt8) throws -> URL {
+        let source = try scratch(name)
+        try Data([1 + salt, 2, 3])
+            .write(to: source.appendingPathComponent("A001C001.mov"))
+        return source
+    }
+
+    /// Every message the run puts on screen, in order — not just the last one.
+    ///
+    /// The first version of this test read `lastNotice` at the end and passed
+    /// with the fix removed: `lastNotice` is one value, so the three per-card
+    /// toasts were overwritten by the queue's own closing line and the final
+    /// reading was identical either way. What the operator sees is the
+    /// SEQUENCE, so the sequence is what is collected.
+    @Test func aQueueSpeaksOnceAndNotOncePerCard() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let first = try self.makeCard("a", salt: 0)
+            let second = try self.makeCard("b", salt: 40)
+            let third = try self.makeCard("c", salt: 80)
+            let dest = try self.scratch("dst")
+            defer {
+                for url in [first, second, third, dest] {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            let model = controller.offload
+            for card in [first, second, third] { model.addSource(card) }
+            model.addDestination(dest)
+
+            var said: [String] = []
+            let watch = controller.$lastNotice.sink { notice in
+                if let notice { said.append(notice) }
+            }
+            defer { watch.cancel() }
+
+            model.start()
+            #expect(await ControllerWait.untilWritten {
+                !model.isRunning && model.reports.count == 3 })
+
+            #expect(said.count == 1,
+                    "three cards put \(said.count) messages on screen: \(said)")
+            #expect(said.first
+                == L("offload_done_cards", localizedCount(3, .card)),
+                    "the queue said: \(said)")
+            #expect(controller.persistentAlert == nil)
+        }
+    }
+
+    /// One card still speaks for itself — the ordinary case, and the message it
+    /// always gave.
+    @Test func oneCardStillReportsItself() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let card = try self.makeCard("solo", salt: 0)
+            let dest = try self.scratch("solo-dst")
+            defer {
+                for url in [card, dest] {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            let model = controller.offload
+            model.addSource(card)
+            model.addDestination(dest)
+            model.start()
+            #expect(await ControllerWait.untilWritten {
+                !model.isRunning && model.reports.count == 1 })
+            #expect(controller.lastNotice
+                == L("offload_done", localizedCount(1, .file)),
+                    "a single card said: \(controller.lastNotice ?? "nothing")")
+        }
+    }
+
+    /// **A card that fails inside a queue raises the alarm at once**, and the
+    /// quiet is only ever about the good news.
+    @Test func aFailedCardAlarmsImmediatelyEvenInAQueue() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let card = try self.makeCard("fail", salt: 0)
+            let dead = URL(fileURLWithPath: "/nonexistent-volume/does-not-exist")
+            defer { try? FileManager.default.removeItem(at: card) }
+            let model = controller.offload
+            model.addSource(card)
+            // …a second card so the run is a QUEUE, which is what turns the
+            // success toast off.
+            model.addSource(try self.makeCard("fail2", salt: 40))
+            model.addDestination(dead)
+            model.start()
+            #expect(await ControllerWait.untilWritten { model.reports.count >= 1 })
+            #expect(controller.persistentAlert != nil,
+                    "a card failed inside a queue and nothing was said")
         }
     }
 }

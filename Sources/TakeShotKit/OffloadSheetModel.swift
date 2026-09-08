@@ -398,7 +398,7 @@ final class OffloadSheetModel: ObservableObject {
         report = result
         reports.append(result)
         cancellation = nil
-        controller?.offloadDidFinish(result)
+        controller?.offloadDidFinish(result, announce: cardCount <= 1)
         // A cancelled card cancels the queue: `cancel()` has already emptied
         // it, and a card that stopped on its own (a source that went away
         // mid-copy) is not a reason to walk on to the next one silently.

@@ -158,6 +158,77 @@ import Testing
         #expect(marker.attribute(forName: "duration")?.stringValue == "1/25s")
     }
 
+    /// **A day that mixed rates.** A 23.976 pickup dropped into a 25 fps day
+    /// is ordinary, and it is where a timeline goes quietly wrong: the record
+    /// side is measured in the SEQUENCE's frames, so a clip at another rate
+    /// takes the number of sequence frames its real LENGTH is worth — not its
+    /// own frame count. Counting frames instead of seconds would leave every
+    /// clip after the odd one out of step, by more each time.
+    @Test func aClipAtAnotherRateAdvancesByItsRealLength() throws {
+        let pal = take("A", fps: 25, rate: 25, seconds: 10)
+        let ntsc = take("B", fps: 24, rate: 24000.0 / 1001.0, seconds: 10)
+        let xml = try #require(FCPXMLExporter.timeline(takes: [pal, ntsc, pal],
+                                                       project: "FILM"))
+        let document = try parse(xml)
+        let clips = try document.nodes(forXPath: "//spine/asset-clip")
+            .compactMap { $0 as? XMLElement }
+        #expect(clips.count == 3)
+
+        // Clip B is 10 s: 240 frames of its own (23.976 rounds to 240), which
+        // is 250 frames of the 25 fps sequence — NOT 240.
+        #expect(clips[1].attribute(forName: "offset")?.stringValue == "250/25s")
+        #expect(clips[1].attribute(forName: "duration")?.stringValue
+            == "240240/24000s", "the clip lost its own rate")
+        #expect(clips[2].attribute(forName: "offset")?.stringValue == "500/25s",
+                "the clip after the odd rate is out of step")
+        let sequence = try #require((try document.nodes(forXPath: "//sequence")
+            .first as? XMLElement))
+        #expect(sequence.attribute(forName: "duration")?.stringValue
+            == "750/25s")
+    }
+
+    /// …and it gets a format of its own, which is what makes the clip play at
+    /// its own rate rather than being conformed to the sequence's.
+    @Test func aClipAtAnotherRateGetsItsOwnFormat() throws {
+        let xml = try #require(FCPXMLExporter.timeline(
+            takes: [take("A", fps: 25, rate: 25),
+                    take("B", fps: 24, rate: 24000.0 / 1001.0)],
+            project: "FILM"))
+        let document = try parse(xml)
+        let durations = try document.nodes(forXPath: "//format/@frameDuration")
+            .compactMap(\.stringValue)
+        #expect(Set(durations) == ["1/25s", "1001/24000s"],
+                "the formats are \(durations)")
+        // …and each asset points at the right one.
+        let assets = try document.nodes(forXPath: "//asset")
+            .compactMap { $0 as? XMLElement }
+        let formats = try document.nodes(forXPath: "//format")
+            .compactMap { $0 as? XMLElement }
+        // Built with a uniquing rule rather than `uniqueKeysWithValues`,
+        // which TRAPS on a duplicate: a resource id written twice is invalid
+        // FCPXML and a real failure mode of this exporter, and a test that
+        // crashes on it takes the whole run down instead of reporting it.
+        let ids = formats.compactMap { $0.attribute(forName: "id")?.stringValue }
+        #expect(Set(ids).count == ids.count,
+                "a resource id is written twice: \(ids)")
+        let byID = Dictionary(formats.map { node in
+            (node.attribute(forName: "id")?.stringValue ?? "",
+             node.attribute(forName: "frameDuration")?.stringValue ?? "")
+        }, uniquingKeysWith: { first, _ in first })
+        #expect(assets.compactMap {
+            byID[$0.attribute(forName: "format")?.stringValue ?? ""]
+        } == ["1/25s", "1001/24000s"],
+                "an asset points at the wrong format")
+    }
+
+    /// A day at one rate writes ONE format and every asset shares it — a
+    /// document with a format per clip is one every NLE reads as a conform.
+    @Test func aSingleRateDayWritesOneFormat() throws {
+        let xml = try #require(FCPXMLExporter.timeline(
+            takes: [take("A"), take("B"), take("C")], project: "FILM"))
+        #expect(try parse(xml).nodes(forXPath: "//format").count == 1)
+    }
+
     /// A take with no timecode at all still exports, from zero — the manual
     /// take on a source that carries none.
     @Test func aTakeWithoutTimecodeStartsAtZero() throws {

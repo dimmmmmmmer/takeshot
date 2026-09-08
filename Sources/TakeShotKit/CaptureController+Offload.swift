@@ -142,7 +142,19 @@ extension CaptureController {
     /// about to be formatted on the strength of this result, and a five-second
     /// toast that scrolled past while the operator was lighting the next setup
     /// is how footage disappears.
-    func offloadDidFinish(_ report: OffloadReport) {
+    /// One card is done.
+    ///
+    /// `announce` is false for a card inside a QUEUE: the history entry, the
+    /// verified-card note and the sticky alarm are per card and always happen,
+    /// but a run of three cards would otherwise put three "verified" toasts on
+    /// screen back to back and then a fourth saying how many — four messages
+    /// about one press, on a monitor somebody is watching a take on. The queue
+    /// speaks once, at the end (`OffloadSheetModel.finishQueue`).
+    ///
+    /// The ALARM is never suppressed. It means footage is at risk, and a card
+    /// that failed second of three has to say so while the third is still
+    /// copying rather than twenty minutes later.
+    func offloadDidFinish(_ report: OffloadReport, announce: Bool = true) {
         offloadStatus = nil
         // Logged whatever happened, and before the toast or the alarm: a run
         // that failed is exactly the one somebody comes back to the list
@@ -153,6 +165,7 @@ extension CaptureController {
         // verified end to end (see `noteOffloadedCard`).
         noteOffloadedCard(report)
         guard !report.isFullyVerified else {
+            guard announce else { return }
             // One destination is still the common case (a single shuttle drive),
             // and "1 copies" is not what anybody wants to read.
             lastNotice = report.destinations.count == 1
