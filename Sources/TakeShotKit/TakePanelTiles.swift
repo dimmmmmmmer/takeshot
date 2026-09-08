@@ -51,6 +51,36 @@ enum TakeTileBadges {
     /// type glyph and the length-or-size pill. They share the leading edge —
     /// glyph above, pill below — so it is their heights that decide, and both
     /// are smaller than the takes' controls capsule.
+    /// **What the caption keeps when the tile is too narrow for all of it.**
+    ///
+    /// The name's BEGINNING first, then a duration, then a pixel size — the
+    /// operator's own order (owner: "лучше при минималке оставлять начало
+    /// названий, потом по важности хрон, а потом уже резолюшн"). It used to be
+    /// the other way round and deliberately so: the badge kept its full width
+    /// and the name gave way, which at the narrowest tile left "3840×2160" and
+    /// no name at all — the file identified by the one fact every other file
+    /// on the card shares.
+    ///
+    /// The size is estimated rather than measured because the caller is a
+    /// layout that has not run yet. `.caption2` monospaced digits are about
+    /// six points wide, and the badge sits after a 4-point space and a 2-point
+    /// minimum spacer.
+    static func metricFitsBesideName(_ metric: String,
+                                     tileWidth: Double) -> Bool {
+        tileWidth - (Double(metric.count) * metricDigitWidth + metricSpacing)
+            >= minimumNameWidth
+    }
+
+    /// Six points a glyph, six of spacing, and room for five characters of
+    /// name. At the narrowest tile (70pt) that keeps a duration — "0:02" and
+    /// "12:34" both — and drops a nine-character pixel size, which is the
+    /// distinction the order above asks for. A duration long enough to need an
+    /// hours field goes too, and that is the same rule rather than an
+    /// exception: the name comes first at every width.
+    static let metricDigitWidth: Double = 6
+    static let metricSpacing: Double = 6
+    static let minimumNameWidth: Double = 30
+
     static func typeAndMetricFitOnImage(thumbnailHeight: CGFloat) -> Bool {
         thumbnailHeight >= typeBadgeHeight + durationHeight + 3 * inset
     }
@@ -157,13 +187,16 @@ struct TileMetricBadge: View {
 
     /// One line, always (owner item 43).
     ///
-    /// A duration is four characters and a pixel size is nine ("6000×4000"), and
-    /// on the caption line of the smallest tile the long one wrapped into a
+    /// A duration is four characters and a pixel size is nine ("6000×4000"),
+    /// and on the caption line of the smallest tile the long one wrapped into a
     /// column — which does not just look wrong, it makes that tile taller than
     /// its neighbours and breaks the grid's row. `lineLimit(1)` alone would
-    /// truncate it into "6000×…", so the badge keeps its full width
-    /// (`fixedSize`) and the FILE NAME beside it gives way instead: the name is
-    /// already middle-truncated and reads fine short, the size does not.
+    /// truncate it into "6000×…", so the badge keeps its full width.
+    ///
+    /// What CHANGED is what gives way. It used to be the file name, which at
+    /// the narrowest tile left the size and nothing else; the caller decides
+    /// whether the badge is drawn at all now
+    /// (`TakeTileBadges.metricFitsBesideName`), and when it is, it is whole.
     private var label: some View {
         Text(text)
             .font(.caption2.monospacedDigit())

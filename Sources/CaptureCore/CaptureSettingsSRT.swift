@@ -67,10 +67,22 @@ public struct SRTEndpoint: Equatable, Sendable {
     /// How the status row names this link. `srt://` because that is the URL every
     /// receiver on a set is typed into, so it is the string an operator can read
     /// back to whoever is at the other end.
+    ///
+    /// **Encryption is named, and it is the only field here that has to be.**
+    /// The passphrase is typed into a `SecureField`, so a value left in it from
+    /// an earlier experiment is invisible — and an encrypted socket dialled at
+    /// a plain endpoint is refused at the handshake and comes back as a link
+    /// loss, which reads as "nobody has opened the stream yet". The operator
+    /// spent an evening on a link that could never come up with nothing on
+    /// screen naming the reason. The PASSPHRASE is not printed, only the fact
+    /// that there is one: this string is read out loud to whoever is at the
+    /// other end.
     public var url: String {
         let base = role == .listener ? "srt://:\(port)" : "srt://\(address):\(port)"
-        guard let streamID else { return base }
-        return base + "?streamid=" + streamID
+        var text = base
+        if let streamID { text += "?streamid=" + streamID }
+        if passphrase?.isEmpty == false { text += " · AES" }
+        return text
     }
 }
 

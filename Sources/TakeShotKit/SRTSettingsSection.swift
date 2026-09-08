@@ -94,8 +94,17 @@ struct SRTSettingsSection: View {
                         controller.settings.srt.latencyMs =
                             min(8000, max(20, latency))
                     }
-                    if let passphrase = parsed.passphrase {
-                        controller.settings.srt.passphrase = passphrase
+                    // **A pasted URL is authoritative about encryption.**
+                    // Every other field here is additive, and this one cannot
+                    // be: a URL that carries a query and no `passphrase=` says
+                    // the link is unencrypted, which is what every other tool
+                    // means by it. A passphrase left in the field from an
+                    // earlier experiment used to survive the paste, so the app
+                    // dialled a plain endpoint with AES-128 — refused at the
+                    // handshake, reported as a link loss, retried for ever and
+                    // never said why (owner: "и все равно не работает").
+                    if parsed.hadQuery || parsed.passphrase != nil {
+                        controller.settings.srt.passphrase = parsed.passphrase
                     }
                     if let streamID = parsed.streamID {
                         controller.settings.srt.streamID = streamID

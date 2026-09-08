@@ -310,11 +310,23 @@ struct TakeCell: View {
                 }
             }
             HStack(spacing: 4) {
+                // Middle truncation HERE and tail truncation on the Other
+                // content beside it, which is not an inconsistency: a take's
+                // name is the project and the day at the front and the take
+                // number at the back, and the back is what tells two of them
+                // apart. A foreign file's name is distinguished by its front.
                 Text(take.displayName)
                     .font(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if !durationOnImage {
+                    .layoutPriority(1)
+                // A duration is four characters and survives the narrowest
+                // tile; the same rule the Other-content caption follows, so
+                // the two cannot drift about which fact gives way first.
+                if !durationOnImage,
+                   TakeTileBadges.metricFitsBesideName(
+                    ClipTimeText.minutesSeconds.text(take.durationSeconds),
+                    tileWidth: tileWidth) {
                     Spacer(minLength: 2)
                     TakeDurationBadge(seconds: take.durationSeconds,
                                       onImage: false)

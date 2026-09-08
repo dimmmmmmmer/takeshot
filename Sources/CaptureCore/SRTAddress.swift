@@ -24,6 +24,19 @@ public enum SRTAddress {
         public var latencyMs: Int?
         public var passphrase: String?
         public var streamID: String?
+        /// The typed string carried a `?…` query.
+        ///
+        /// **What makes a paste authoritative about encryption.** Every other
+        /// field here is additive — a bare `host:port` must not reset a port
+        /// set on purpose — but an SRT URL that carries a query and no
+        /// `passphrase=` is a statement that the link is UNENCRYPTED, which is
+        /// what ffmpeg, OBS and libsrt's own tools take it to mean. Without
+        /// this flag a passphrase left in the field from an earlier experiment
+        /// survived the paste and the app dialled a plain endpoint with
+        /// AES-128; the handshake was refused, and the refusal came back as a
+        /// link loss, so it retried for ever and said nothing (owner: "и все
+        /// равно не работает").
+        public var hadQuery = false
     }
 
     /// Ports below 1024 need root and above 65535 do not exist.
@@ -41,9 +54,11 @@ public enum SRTAddress {
         if let scheme = rest.range(of: "://") { rest = String(rest[scheme.upperBound...]) }
 
         var query: Substring = ""
+        var hadQuery = false
         if let mark = rest.firstIndex(of: "?") {
             query = rest[rest.index(after: mark)...]
             rest = String(rest[..<mark])
+            hadQuery = true
         }
         // A trailing path is not part of an SRT endpoint; libsrt has no path.
         if let slash = rest.firstIndex(of: "/") { rest = String(rest[..<slash]) }
@@ -52,7 +67,8 @@ public enum SRTAddress {
         guard !host.isEmpty else { return nil }
 
         var parsed = Parsed(host: host, port: port, mode: nil,
-                            latencyMs: nil, passphrase: nil, streamID: nil)
+                            latencyMs: nil, passphrase: nil, streamID: nil,
+                            hadQuery: hadQuery)
         apply(query: query, to: &parsed)
         return parsed
     }

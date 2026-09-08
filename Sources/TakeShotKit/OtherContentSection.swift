@@ -108,11 +108,17 @@ struct OtherCell: View {
                 }
             }
             HStack(spacing: 4) {
+                // the BEGINNING of the name, and it wins the space: middle
+                // truncation on a narrow tile spends what little there is on
+                // an ellipsis between two fragments of two characters each
                 Text(url.lastPathComponent)
                     .font(.caption)
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                if let metric, !metricOnImage {
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                if let metric, !metricOnImage,
+                   TakeTileBadges.metricFitsBesideName(metric,
+                                                       tileWidth: tileWidth) {
                     Spacer(minLength: 2)
                     TileMetricBadge(text: metric, onImage: false)
                 }

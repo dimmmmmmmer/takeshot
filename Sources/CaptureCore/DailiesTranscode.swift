@@ -168,7 +168,17 @@ final class DailiesTranscode {
                         session: DailiesSession) async throws {
         // Offline encode back-pressure: wait it out rather than drop — every
         // frame of a daily exists on disk already, unlike a live capture.
+        //
+        // **And the wait reads the stop flag.** These two back-pressure loops
+        // were the only places in the engine that did not: everywhere else the
+        // cancel is checked at the top of the frame loop and between items, so
+        // a batch stops within a frame. Here, an input that stops asking for
+        // data — the classic multi-input `AVAssetWriter` stall — parks the run
+        // in a two-millisecond sleep for ever, with the panel already saying
+        // "stopping…" and nothing ever ending (owner: "попытка остановить
+        // дейлисы в ui так и не стопнула их").
         while !session.videoInput.isReadyForMoreMediaData {
+            try checkCancelled()
             guard session.writer.status == .writing else {
                 throw DailiesAbort.failed(DailiesSession.failure(of: session.writer))
             }
@@ -191,6 +201,7 @@ final class DailiesTranscode {
                   CMSampleBufferGetPresentationTimeStamp(sample) <= limit
             else { return }
             while !input.isReadyForMoreMediaData {
+                try checkCancelled() // see `append` above
                 guard session.writer.status == .writing else {
                     throw DailiesAbort.failed(
                         DailiesSession.failure(of: session.writer))
