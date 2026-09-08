@@ -615,7 +615,6 @@
 "remote_online" = "Онлайн";
 "remote_connecting" = "Соединение...";
 "remote_offline" = "Офлайн";
-"remote_connect" = "Подключиться";
 "remote_pin_prompt" = "Введите PIN из настроек TakeShot";
 "remote_pin_bad" = "Неверный PIN";
 "remote_markers" = "Маркеры";

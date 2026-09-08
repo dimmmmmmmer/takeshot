@@ -132,7 +132,8 @@ extension CaptureController {
     /// The stored PIN, generated the first time the remote is switched on.
     @discardableResult
     func ensureRemotePIN() -> String {
-        if let stored = settings.remote.pin, stored.count == 4,
+        if let stored = settings.remote.pin,
+           stored.count == RemoteSettings.pinLength,
            stored.allSatisfy(\.isNumber) {
             return stored
         }

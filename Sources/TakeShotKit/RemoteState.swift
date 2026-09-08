@@ -427,7 +427,9 @@ enum RemotePIN {
     /// clock: this is the only thing between the set network and the REC
     /// button, and 0000-style predictable codes are how that becomes nothing.
     static func generate() -> String {
-        String(format: "%04d", Int.random(in: 0...9999))
+        let ceiling = Int(pow(10.0, Double(RemoteSettings.pinLength)))
+        return String(format: "%0\(RemoteSettings.pinLength)d",
+                      Int.random(in: 0..<ceiling))
     }
 
     /// Whether `candidate` matches, compared in constant time.

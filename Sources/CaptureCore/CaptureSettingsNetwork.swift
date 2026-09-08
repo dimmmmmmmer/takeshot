@@ -20,6 +20,12 @@ public struct RemoteSettings: Codable, Equatable, Sendable {
     public var enabled: Bool?
     /// TCP port for the remote; nil — `portEffective`.
     public var port: Int?
+    /// How many digits a PIN has. Named because three places depend on it —
+    /// the generator, the validity check that decides whether a stored code is
+    /// usable, and the pages, which submit as the last digit lands and have to
+    /// know when that is.
+    public static let pinLength = 4
+
     /// Four digits, generated on first enable and shown in Settings. Stored so
     /// the same code keeps working after a relaunch — a PIN that changed every
     /// launch would have to be re-read off the laptop mid-take.

@@ -100,10 +100,15 @@ struct ViewPanelTests {
                 let minimum = probe.minimumWidths(proposedHeight: 300) {
                     OtherContentSection()
                 }
+                // Both languages, and no equality between them: the section
+                // title is `.fixedSize()` now — it sits on the header row
+                // beside a folder button and may not compress to an ellipsis —
+                // so "Other content" and "Другой контент" are part of what the
+                // row has to hold, 5pt apart.
                 #expect(minimum.ru <= panel,
                         "\(mode) other-content needs \(minimum.ru)pt of \(panel)")
-                #expect(minimum.ru == minimum.en,
-                        "\(mode) other-content differs by language: \(minimum)")
+                #expect(minimum.en <= panel,
+                        "\(mode) other-content needs \(minimum.en)pt of \(panel)")
             }
         }
     }

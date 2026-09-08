@@ -612,7 +612,6 @@
 "remote_online" = "Online";
 "remote_connecting" = "Connecting...";
 "remote_offline" = "Offline";
-"remote_connect" = "Connect";
 "remote_pin_prompt" = "Enter the PIN shown in TakeShot settings";
 "remote_pin_bad" = "Wrong PIN";
 "remote_markers" = "Markers";

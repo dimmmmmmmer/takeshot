@@ -216,7 +216,6 @@ body.flash #flash { display: block; }
   <p id="gateHint"></p>
   <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4"
          autocomplete="off" autocorrect="off" spellcheck="false">
-  <button id="connect"></button>
   <div id="gateError"></div>
   <p id="gateNote"></p>
 </div>
@@ -325,6 +324,9 @@ document.title = S.title;
 var el = function (id) { return document.getElementById(id); };
 var socket = null;
 var pin = "";
+// Whether the code in flight was typed just now rather than remembered from a
+// previous visit — see `refusePIN`.
+var typedPIN = false;
 var retry = null;
 var retryDelay = 700;
 var watchdog = null;
@@ -382,7 +384,6 @@ function now() {
 
 function paintLabels() {
   el("gateHint").textContent = S.pinPrompt;
-  el("connect").textContent = S.connect;
   el("pin").placeholder = "····";
   el("kScene").textContent = S.scene;
   el("kShot").textContent = S.shot;
@@ -525,6 +526,22 @@ function fireSync() {
   paint();
 }
 
+// **A code the operator did not just type must not accuse them.**
+//
+// The page reconnects on its own with whatever is in localStorage, so a code
+// the app no longer recognises — regenerated, or last used on another machine
+// — put "Wrong PIN" on screen before anybody had touched anything (owner:
+// "ремоут страницы дефолтно открываются с надписью неправильный пин"). A
+// remembered code that is refused sends the page back to the PROMPT and
+// forgets itself; the error belongs to an attempt somebody made.
+function refusePIN() {
+  var accused = typedPIN;
+  typedPIN = false;
+  pin = "";
+  try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+  showGate(accused ? S.pinBad : "");
+}
+
 function showGate(message) {
   el("gateError").textContent = message || "";
   el("gate").classList.add("show");
@@ -577,10 +594,8 @@ function connect() {
       setLink("live");
       el("gate").classList.remove("show");
     } else if (msg.type === "auth") {
-      pin = "";
       connected = false;
-      try { localStorage.removeItem(PIN_KEY); } catch (e) {}
-      showGate(S.pinBad);
+      refusePIN();
     }
   };
   socket.onclose = function () { dropped(); };
@@ -610,18 +625,27 @@ window.addEventListener("online", connect);
 window.addEventListener("pageshow", connect);
 
 el("face").addEventListener("click", fireSync);
-el("connect").addEventListener("click", function () {
+// **The code is tried as the last digit lands, and there is no button**
+// (owner: "давай сразу при вводе пина без кнопки коннект пускать/не
+// пускать"). The PIN is a fixed length the app injects, so the page knows
+// when the operator has finished typing without being told.
+function submitPIN() {
   var value = el("pin").value.replace(/\D/g, "");
-  if (!value) { return; }
+  if (value.length < CFG.pinLength) { return; }
+  // This attempt is the operator's own, so a refusal may say so.
+  typedPIN = true;
   pin = value;
   try { localStorage.setItem(PIN_KEY, pin); } catch (e) {}
+  el("gateError").textContent = "";
   el("gate").classList.remove("show");
   connect();
-});
+}
+el("pin").addEventListener("input", submitPIN);
 el("pin").addEventListener("keydown", function (event) {
-  if (event.key === "Enter") { el("connect").click(); }
+  if (event.key === "Enter") { submitPIN(); }
 });
 
+el("pin").maxLength = CFG.pinLength;
 paintLabels();
 setLink("down");
 loop();

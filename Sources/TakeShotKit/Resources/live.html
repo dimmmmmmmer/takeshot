@@ -166,7 +166,6 @@ body.rec #rec { display: inline; }
   <p id="gateHint"></p>
   <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4"
          autocomplete="off" autocorrect="off" spellcheck="false">
-  <button id="connect"></button>
   <div id="gateError"></div>
 </div>
 
@@ -199,6 +198,9 @@ document.title = S.title;
 
 var el = function (id) { return document.getElementById(id); };
 var pin = "";
+// Whether the code in flight was typed just now rather than remembered from a
+// previous visit — see `refusePIN`.
+var typedPIN = false;
 var peer = null;
 var socket = null;
 var retryTimer = null;
@@ -308,10 +310,8 @@ function answered(pc, response) {
   if (response.status === 403) {
     // The code is stale or wrong: back to the gate rather than into a retry
     // loop that will be refused the same way every time.
-    pin = "";
-    try { localStorage.removeItem(PIN_KEY); } catch (e) {}
     dropPeer();
-    showGate(S.pinBad);
+    refusePIN();
     return null;
   }
   if (response.status === 503) {
@@ -502,10 +502,8 @@ function connectStatus() {
     try { msg = JSON.parse(event.data); } catch (e) { return; }
     if (msg.type === "status") { render(msg); }
     else if (msg.type === "auth" && !msg.ok) {
-      pin = "";
-      try { localStorage.removeItem(PIN_KEY); } catch (e) {}
       dropPeer();
-      showGate(S.pinBad);
+      refusePIN();
     }
   };
   socket.onclose = socket.onerror = function () {
@@ -565,12 +563,27 @@ function setConnection(state) {
 
 function paintLabels() {
   el("gateHint").textContent = S.pinPrompt;
-  el("connect").textContent = S.connect;
   el("pin").placeholder = "····";
   el("wait").textContent = S.wait;
   el("blockedTitle").textContent = S.unavailable;
   el("retry").textContent = S.retry;
   paintPictures();
+}
+
+// **A code the operator did not just type must not accuse them.**
+//
+// The page reconnects on its own with whatever is in localStorage, so a code
+// the app no longer recognises — regenerated, or last used on another machine
+// — put "Wrong PIN" on screen before anybody had touched anything (owner:
+// "ремоут страницы дефолтно открываются с надписью неправильный пин"). A
+// remembered code that is refused sends the page back to the PROMPT and
+// forgets itself; the error belongs to an attempt somebody made.
+function refusePIN() {
+  var accused = typedPIN;
+  typedPIN = false;
+  pin = "";
+  try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+  showGate(accused ? S.pinBad : "");
 }
 
 function showGate(message) {
@@ -587,16 +600,24 @@ function showBlocked(reason) {
   setConnection("down");
 }
 
-el("connect").addEventListener("click", function () {
+// **The code is tried as the last digit lands, and there is no button**
+// (owner: "давай сразу при вводе пина без кнопки коннект пускать/не
+// пускать"). The PIN is a fixed length the app injects, so the page knows
+// when the operator has finished typing without being told.
+function submitPIN() {
   var value = el("pin").value.replace(/\D/g, "");
-  if (!value) { return; }
+  if (value.length < CFG.pinLength) { return; }
+  // This attempt is the operator's own, so a refusal may say so.
+  typedPIN = true;
   pin = value;
   try { localStorage.setItem(PIN_KEY, pin); } catch (e) {}
+  el("gateError").textContent = "";
   el("gate").classList.remove("show");
   start();
-});
+}
+el("pin").addEventListener("input", submitPIN);
 el("pin").addEventListener("keydown", function (event) {
-  if (event.key === "Enter") { el("connect").click(); }
+  if (event.key === "Enter") { submitPIN(); }
 });
 el("retry").addEventListener("click", function () {
   blocked = false;
@@ -637,6 +658,7 @@ try {
   if (CFG.pictures.indexOf(stored) >= 0) { picture = stored; }
 } catch (e) {}
 
+el("pin").maxLength = CFG.pinLength;
 paintLabels();
 setConnection("down");
 // WebRTC is not in every browser, and some gate it on a secure context — which

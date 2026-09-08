@@ -53,6 +53,18 @@ extension CaptureController {
     func openDestinationInFinder() {
         FinderOpen.ownFolder(destinationRoot)
     }
+
+    /// Where the foreign files are — the record folder itself, which is what
+    /// the Other content section is a listing of.
+    ///
+    /// A method of its own rather than the takes' one called twice: the two
+    /// sections are about two sets of files, and the day the app writes its
+    /// takes into a subfolder of their own is the day these become different
+    /// folders. One named answer per question is what makes that a change in
+    /// one place.
+    func openOtherContentInFinder() {
+        FinderOpen.ownFolder(destinationRoot)
+    }
     /// Change-record-folder dialog (used from both Settings and the bottom bar).
     func chooseDestinationFolder() {
         guard let url = FilePanel.openOne(.init(

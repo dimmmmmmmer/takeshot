@@ -18,6 +18,21 @@ struct OtherContentSection: View {
                 Text(L("other_content"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .fixedSize()
+                // Its own way into Finder, like the takes above (owner: "давай
+                // у другого контента тоже сделаем кнопку открытия папки"). It
+                // opens the record folder itself — which is where foreign
+                // files land, and what this section is a listing OF.
+                Button {
+                    controller.openOtherContentInFinder()
+                } label: {
+                    Image(systemName: "folder")
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .fixedSize()
+                .help(L("open_folder"))
             }
             .padding(.vertical, 6)
             Divider()

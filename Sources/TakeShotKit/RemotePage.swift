@@ -144,7 +144,6 @@ enum RemotePage {
         ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
         ("disconnected", "remote_offline"),
-        ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
         ("markers", "remote_markers"),
@@ -176,7 +175,6 @@ enum RemotePage {
         ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
         ("disconnected", "remote_offline"),
-        ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
         ("noSignal", "remote_no_signal"),
@@ -226,7 +224,6 @@ enum RemotePage {
         ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
         ("disconnected", "remote_offline"),
-        ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
         // Named for the page that shows them. They were
@@ -278,7 +275,6 @@ enum RemotePage {
         ("connected", "remote_online"),
         ("connecting", "remote_connecting"),
         ("disconnected", "remote_offline"),
-        ("connect", "remote_connect"),
         ("pinPrompt", "remote_pin_prompt"),
         ("pinBad", "remote_pin_bad"),
         ("noSignal", "remote_no_signal"),
@@ -359,6 +355,10 @@ enum RemotePage {
         // page carrying the literal "grid" would be a second spelling of a wire
         // word this file exists to state once.
         return "{lang:\(RemoteJSON.quoted(L10n.current.pageCode)),"
+            // The pages submit the code as the last digit lands, so they have
+            // to know how long it is — from the settings type that decides it
+            // rather than from a 4 typed into four HTML files.
+            + "pinLength:\(RemoteSettings.pinLength),"
             + "gridPicture:\(RemoteJSON.quoted(LivePicture.grid.rawValue)),"
             + "watchdogMs:\(watchdogMilliseconds),"
             + "holdMs:\(slateHoldMilliseconds),"
