@@ -103,37 +103,82 @@ extension CaptureController {
     }
 
     /// Shift report: A4 PDF with thumbnails or a full CSV table.
-    func exportShiftReport(pdf: Bool) {
+    ///
+    /// The PDF's pictures come from the panel's cache where it has them and are
+    /// DECODED where it does not. The cache holds only what the grid scrolled
+    /// past, so a report written after a long day carried blank cells for every
+    /// take the operator never scrolled to — silently, with no gap in the table
+    /// to notice it by. That is the contact sheet's own stated rule ("a sheet
+    /// whose cells depend on scroll history is wrong") applied to the document
+    /// beside it, which had it backwards.
+    ///
+    /// The Task is handed back for the contact sheet's reason: a test can await
+    /// the decode instead of polling for a file. The app ignores it, and the
+    /// CSV — which has no pictures — returns nil and is finished when it
+    /// returns.
+    @discardableResult
+    func exportShiftReport(pdf: Bool) -> Task<Void, Never>? {
         guard !takes.isEmpty else {
             lastError = L("report_no_takes")
-            return
+            return nil
         }
         let name = NamingEngine.sanitize(
             "\(settings.naming.projectName)_report_\(Self.reportDateStamp())")
             + (pdf ? ".pdf" : ".csv")
         guard let url = FilePanel.save(named: name, in: destinationRoot)
-        else { return }
+        else { return nil }
+        if pdf { return writeShiftReportPDF(to: url) }
         do {
-            if pdf {
-                guard let data = ShiftReport.pdfData(
-                    takes: takes, thumbnails: thumbnails,
-                    project: settings.naming.projectName,
-                    camera: settings.naming.cameraLabel) else {
-                    lastError = L("toast_pdf_render_failed")
-                    return
-                }
-                try data.write(to: url)
-            } else {
-                // labelled in the app language, like the PDF beside it — the
-                // frozen Resolve sidecar is a different writer and stays as is
-                try TakeLogExporter.reportCSV(takes: takes, labels: .current())
-                    .write(to: url, atomically: true, encoding: .utf8)
-            }
+            // labelled in the app language, like the PDF beside it — the
+            // frozen Resolve sidecar is a different writer and stays as is
+            try TakeLogExporter.reportCSV(takes: takes, labels: .current())
+                .write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("report_saved", url.lastPathComponent)
         } catch {
             lastError = L("toast_report_failed", error.localizedDescription)
         }
+        return nil
     }
+
+    /// **Which takes the panel never loaded a picture for.**
+    ///
+    /// Its own function because it is the whole of the fix: the report used to
+    /// pass the cache through as it stood, and a take the operator never
+    /// scrolled to came out as a blank cell. Only the missing ones, so a day
+    /// that has been scrolled through decodes nothing at all.
+    static func takesNeedingPosters(_ takes: [Take],
+                                    cached: [UUID: NSImage]) -> [Take] {
+        takes.filter { cached[$0.id] == nil }
+    }
+
+    /// The PDF half: fill in the pictures the panel never loaded, then render.
+    private func writeShiftReportPDF(to url: URL) -> Task<Void, Never> {
+        let takes = takes
+        let cached = thumbnails
+        let project = settings.naming.projectName
+        let camera = settings.naming.cameraLabel
+        let missing = Self.takesNeedingPosters(takes, cached: cached)
+        return Task { [weak self] in
+            var pictures = cached
+            for (id, image) in await ContactSheet.exportThumbnails(for: missing) {
+                pictures[id] = image
+            }
+            guard let data = ShiftReport.pdfData(
+                takes: takes, thumbnails: pictures,
+                project: project, camera: camera) else {
+                self?.lastError = L("toast_pdf_render_failed")
+                return
+            }
+            do {
+                try data.write(to: url)
+                self?.lastNotice = L("report_saved", url.lastPathComponent)
+            } catch {
+                self?.lastError = L("toast_report_failed",
+                                    error.localizedDescription)
+            }
+        }
+    }
+
     /// Contact sheet: the day as an A4 thumbnail grid, one cell per take —
     /// the shift report's visual sibling (same header, same vocabulary).
     ///

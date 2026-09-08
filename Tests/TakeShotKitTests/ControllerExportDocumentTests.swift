@@ -179,7 +179,10 @@ import Testing
             let destination = root.appendingPathComponent("report.pdf")
 
             try await FakeFilePanel.installed(saving: [destination]) { _ in
-                controller.exportShiftReport(pdf: true)
+                // Awaited: the PDF decodes the pictures the panel never
+                // loaded, so it is written on the way back rather than before
+                // the call returns.
+                await controller.exportShiftReport(pdf: true)?.value
 
                 let data = try Data(contentsOf: destination)
                 #expect(data.starts(with: Array("%PDF".utf8)),
