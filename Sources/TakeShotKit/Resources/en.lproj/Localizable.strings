@@ -384,7 +384,7 @@
 
 "marker_color_help" = "Click to cycle the marker color";
 
-"assist_help" = "Operator aids: exposure, framelines, desqueeze, punch-in";
+"assist_help" = "Operator aids: exposure, framelines, desqueeze, zoom";
 "assist_tool" = "Exposure assist";
 "assist_off" = "Off";
 "assist_custom" = "Custom";
@@ -395,8 +395,8 @@
 "framelines" = "Framelines";
 "safe_areas" = "Safe areas";
 "desqueeze" = "Desqueeze";
-"punch_in" = "Punch-in";
-"hotkey_punch_in" = "Punch-in zoom";
+"punch_in" = "Zoom";
+"hotkey_punch_in" = "Zoom";
 
 "loop_in_help" = "Set/clear the loop IN point";
 "loop_out_help" = "Set/clear the loop OUT point";
@@ -920,7 +920,6 @@
 "stream_link_waiting" = "on the network, nobody taking it";
 "stream_link_off" = "off";
 /* the hardware monitor output, as a lamp beside the stream button */
-"stream_off_help" = "Not streaming. Switch SRT or NDI on in Settings.";
 "stream_playout_label" = "SDI";
 "stream_stop_help" = "Click to stop sending";
 "sidecar_unreadable" = "%1$@ — %2$@";

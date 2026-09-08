@@ -15,24 +15,31 @@ import Testing
     /// it is 1.3333333333333333 either way, and a second row a ten-thousandth
     /// off it would be two rows for one aspect.
     @Test func aTypedPresetIsStillThePreset() throws {
-        #expect(AssistPresets.custom(2.39, among: AssistPresets.frameline) == nil)
+        #expect(AssistPresets.custom(2.39, among: AssistPresets.frameline,
+                                       off: AssistPresets.framelineOff) == nil)
         let typed = try #require(
             AssistRatioInput.parse("4:3", in: AssistRatioInput.framelineRange))
-        #expect(AssistPresets.custom(typed, among: AssistPresets.frameline) == nil)
-        #expect(AssistPresets.custom(1.0, among: AssistPresets.desqueeze) == nil)
+        #expect(AssistPresets.custom(typed, among: AssistPresets.frameline,
+                                       off: AssistPresets.framelineOff) == nil)
+        #expect(AssistPresets.custom(1.0, among: AssistPresets.desqueeze,
+                                       off: AssistPresets.desqueezeOff) == nil)
     }
 
     /// …and an aspect nobody listed gets its own row, so the picker can show it.
     @Test func anAspectNoPresetCoversGetsItsOwnRow() {
-        #expect(AssistPresets.custom(2.76, among: AssistPresets.frameline) == 2.76)
-        #expect(AssistPresets.custom(1.25, among: AssistPresets.desqueeze) == 1.25)
+        #expect(AssistPresets.custom(2.76, among: AssistPresets.frameline,
+                                       off: AssistPresets.framelineOff) == 2.76)
+        #expect(AssistPresets.custom(1.25, among: AssistPresets.desqueeze,
+                                       off: AssistPresets.desqueezeOff) == 1.25)
     }
 
     /// Off is not a custom value — the framelines picker already has an Off row
     /// and a second one tagged 0 would be two ways to spell the same nothing.
     @Test func offIsNotACustomRow() {
-        #expect(AssistPresets.custom(nil, among: AssistPresets.frameline) == nil)
-        #expect(AssistPresets.custom(0, among: AssistPresets.frameline) == nil)
+        #expect(AssistPresets.custom(nil, among: AssistPresets.frameline,
+                                       off: AssistPresets.framelineOff) == nil)
+        #expect(AssistPresets.custom(0, among: AssistPresets.frameline,
+                                       off: AssistPresets.framelineOff) == nil)
     }
 
     /// The box is empty when the control is off, rather than showing a number
@@ -43,12 +50,54 @@ import Testing
         #expect(AssistCustomField.text(for: 2.76) == "2.76")
     }
 
+    /// **A value nobody typed is not committed.** The box commits on the way
+    /// out as well as on Return, and "the way out" includes clicking the
+    /// picker: type 2.76, press Return, then choose Off, and the blur that the
+    /// click causes wrote 2.76 straight back over the Off — so neither aid
+    /// could be switched off at all once anything had been typed into its box
+    /// (owner: "если в кастоме вписано значение – фреймлайнсы и десквиз не
+    /// выключается").
+    @Test func choosingOffIsNotUndoneByTheBoxOnItsWayOut() {
+        // the state right after a commit: the box and the control agree
+        let outcome = AssistCustomField.committed(
+            text: "2.76", written: "2.76", current: nil,
+            in: AssistRatioInput.framelineRange)
+
+        #expect(outcome.value == nil, "the box re-applied a value nobody typed")
+        #expect(outcome.text == "2.76")
+    }
+
+    /// …and a value the operator DID type still lands.
+    @Test func aValueTypedOverThePickersOwnIsCommitted() {
+        let outcome = AssistCustomField.committed(
+            text: "2.76", written: "1.85", current: 1.85,
+            in: AssistRatioInput.framelineRange)
+
+        #expect(outcome.value == 2.76)
+        #expect(outcome.text == "2.76")
+    }
+
+    /// **Both aids have an Off, and it carries the value that means it.** A
+    /// desqueeze is off at a factor of one, and the picker said "1x" — a
+    /// number rather than a state, which read as the control having no way to
+    /// turn it off (owner: "у десквиза нет теперь опции off").
+    @Test func bothAidsHaveAnOffRowCarryingTheValueThatMeansIt() {
+        #expect(AssistPresets.desqueezeOff == 1)
+        #expect(AssistPresets.framelineOff == 0)
+        // …and the off value never doubles as a custom row: a typed "1" on the
+        // desqueeze IS the Off row, not a second entry saying the same thing
+        #expect(AssistPresets.custom(1, among: AssistPresets.desqueeze,
+                                     off: AssistPresets.desqueezeOff) == nil)
+        #expect(!AssistPresets.desqueeze.contains { $0.value == 1 },
+                "the preset list still carries the off value as a preset too")
+    }
+
     /// **A refusal snaps the box back.** A field that keeps a rejected "0" on
     /// screen looks accepted, and the operator walks away believing the
     /// frameline is set to something the app quietly ignored.
     @Test func aRefusedNumberChangesNothingAndTheBoxSaysSo() {
         let outcome = AssistCustomField.committed(
-            text: "0", current: 2.39, in: AssistRatioInput.framelineRange)
+            text: "0", written: "2.39", current: 2.39, in: AssistRatioInput.framelineRange)
 
         #expect(outcome.value == nil, "a zero was applied to the frameline")
         #expect(outcome.text == "2.39", "the box kept a number nothing is drawn at")
@@ -58,7 +107,7 @@ import Testing
     /// than filling itself in with a value nobody set.
     @Test func aRefusedNumberOnAControlThatIsOffLeavesItEmpty() {
         let outcome = AssistCustomField.committed(
-            text: "nonsense", current: nil, in: AssistRatioInput.framelineRange)
+            text: "nonsense", written: "", current: nil, in: AssistRatioInput.framelineRange)
 
         #expect(outcome.value == nil)
         #expect(outcome.text == "")
@@ -68,13 +117,13 @@ import Testing
     /// the box and the picker cannot spell one value two ways.
     @Test func anAcceptedNumberSettlesIntoOneSpelling() throws {
         let outcome = AssistCustomField.committed(
-            text: " 2,39 ", current: nil, in: AssistRatioInput.framelineRange)
+            text: " 2,39 ", written: "", current: nil, in: AssistRatioInput.framelineRange)
 
         #expect(outcome.value == 2.39)
         #expect(outcome.text == "2.39")
 
         let fraction = AssistCustomField.committed(
-            text: "16/9", current: nil, in: AssistRatioInput.framelineRange)
+            text: "16/9", written: "", current: nil, in: AssistRatioInput.framelineRange)
         let value = try #require(fraction.value)
         #expect(abs(value - 16.0 / 9.0) < 0.000001)
         #expect(fraction.text == AssistRatioInput.text(value))

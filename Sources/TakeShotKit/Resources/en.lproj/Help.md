@@ -194,7 +194,7 @@ never bends it.
   peaking.
 - Framing: framelines with a chosen aspect, action and title safe areas,
   anamorphic desqueeze.
-- **Punch-in** magnifies the center for a focus check; drag the image to pan.
+- **Zoom** magnifies the center for a focus check; drag the image to pan.
 - **Chroma key** shows the actor against the intended background instead of the
   cyc. Take the screen color off the picture with the eyedropper — a lit green
   is nowhere near the digital green a preset can offer — then dial in tolerance,
@@ -379,7 +379,7 @@ refuses a chord another action already holds, and names the one that has it.
 - `M` — add a marker
 - `⇧M` — remove the marker under the playhead
 - `F` — fullscreen player
-- `Z` — punch-in
+- `Z` — zoom
 - `⌃S` — scopes overlay
 - `⌃L` — preview LUT on/off (with a LUT selected)
 - `⌃A` — mute/unmute monitoring

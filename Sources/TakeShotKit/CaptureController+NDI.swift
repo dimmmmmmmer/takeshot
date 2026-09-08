@@ -247,6 +247,36 @@ extension CaptureController {
     /// It writes the SETTINGS rather than calling the two stop methods, so the
     /// switches move with it: a stream stopped from the footer must not come
     /// back the next time something re-applies the settings.
+    /// One transport, switched by itself.
+    ///
+    /// The badge draws a reading PER TRANSPORT now, so a press on one has to
+    /// mean that one — it was still calling the bulk stop, and a click on the
+    /// NDI half took SRT down with it (owner: "клик по srt/ndi в рабочем окне
+    /// включает и выключает оба").
+    ///
+    /// It toggles rather than only stopping, because a per-transport control
+    /// that is dead in the off state is worse than no control: the bulk button
+    /// refused to START for a reason that does not apply here — it could not
+    /// know which of the two was meant, and this does. Written through the
+    /// SETTINGS switch, like the bulk stop, so the Settings row moves with it.
+    func toggleStream(_ which: LiveStreamKind) {
+        let on: Bool
+        switch which {
+        case .srt: on = settings.srt.enabled == true
+        case .ndi: on = settings.ndi.enabled == true
+        }
+        // Stopping REMEMBERS, so `resumeStreams` still brings back exactly what
+        // was taken down and no more.
+        switch which {
+        case .srt:
+            mirrors.pausedStreams.srt = on
+            settings.srt.enabled = !on
+        case .ndi:
+            mirrors.pausedStreams.ndi = on
+            settings.ndi.enabled = !on
+        }
+    }
+
     func stopAllStreams() {
         var paused = PausedStreams()
         if settings.ndi.enabled == true {

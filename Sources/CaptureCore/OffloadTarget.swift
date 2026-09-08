@@ -193,12 +193,42 @@ final class OffloadTarget {
             + "\(OffloadFormat.bytes(available)) free", at: nil)
     }
 
+    /// Free space on the destination's volume, or nil — **which means "no
+    /// number", not "no room"**.
+    ///
+    /// A zero is treated as no number, and that is the whole point of this
+    /// function. `volumeAvailableCapacityForImportantUsage` is the key written
+    /// for the BOOT volume: it counts space the system could purge, and a
+    /// volume that cannot account for that can answer 0 with terabytes on it.
+    /// It did, on a 4 TB shuttle with 1.5 TB free, and the preflight refused an
+    /// offload that would have completed — "not enough space: needs 31.5 GB,
+    /// 0 bytes free", with the tile beside it reading 1.5 TB free off the same
+    /// key (owner, 2026-09-08). `volumeAvailableCapacity` is the plain number
+    /// and is what an external drive can always answer.
+    ///
+    /// And when neither key gives a positive number the copy GOES AHEAD. A
+    /// preflight exists to save an operator an hour and a half-copy; one that
+    /// refuses on a number it could not read costs them the offload instead,
+    /// and a disk that really is full fails on the first write with an error
+    /// that says so.
     private func availableBytes() -> Int64? {
-        let keys: Set<URLResourceKey> = [.volumeAvailableCapacityForImportantUsageKey]
-        guard let values = try? root.resourceValues(forKeys: keys),
-              let capacity = values.volumeAvailableCapacityForImportantUsage
-        else { return nil }
-        return Int64(capacity)
+        let keys: Set<URLResourceKey> = [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey,
+        ]
+        guard let values = try? root.resourceValues(forKeys: keys) else { return nil }
+        return Self.available(
+            important: values.volumeAvailableCapacityForImportantUsage,
+            plain: values.volumeAvailableCapacity)
+    }
+
+    /// Which of the volume's two free-space answers to believe. Separate from
+    /// the read so the rule can be asserted without a disk that misreports —
+    /// the case it exists for cannot be produced on demand.
+    static func available(important: Int64?, plain: Int?) -> Int64? {
+        if let important, important > 0 { return important }
+        guard let plain, plain > 0 else { return nil }
+        return Int64(plain)
     }
 
     // MARK: - one file

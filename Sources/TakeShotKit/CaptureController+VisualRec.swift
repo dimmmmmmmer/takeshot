@@ -207,8 +207,22 @@ extension CaptureController {
     /// gesture doing two different things at random (owner: "курсор при марке
     /// река визуального странно работает – то тащит, то рисует квадрат").
     /// Inside the box drags it; outside draws a new one; the cursor says which.
-    func moveVisualRecRegion(by translation: CGSize, from start: CGPoint,
-                             viewport: CGSize) {
+    /// **From the box the stroke STARTED on, not from wherever it is now.**
+    ///
+    /// `DragGesture.translation` is cumulative — the distance from the press,
+    /// re-reported on every change event — and this added it each time. Ten
+    /// points of movement arrived as 10, then 20, then 30, and the box had
+    /// moved 60: it ran away from the pointer, faster the further the operator
+    /// went, which is what a runaway feels like from the other side (owner:
+    /// "чувствительность перетаскивания маркера слишком большая", "поле
+    /// начинает оттаскиваться в сторону мышки").
+    ///
+    /// Taking the base as an argument rather than latching it here is what
+    /// makes it right: the caller latches it at the press, so every event of
+    /// the stroke is an absolute answer to the same question and the box cannot
+    /// drift by accumulating its own output.
+    func moveVisualRecRegion(_ base: VisualRecRegion, by translation: CGSize,
+                             from start: CGPoint, viewport: CGSize) {
         let source = displaySourceSize()
         guard let from = liveAssist.imageFraction(of: start, sourceSize: source,
                                                   in: viewport),
@@ -217,8 +231,9 @@ extension CaptureController {
                             y: start.y + translation.height),
                 sourceSize: source, in: viewport) else { return }
         applyVisualRecPreview {
-            $0.region.centerX += Double(to.x - from.x)
-            $0.region.centerY += Double(to.y - from.y)
+            $0.region = base
+            $0.region.centerX = base.centerX + Double(to.x - from.x)
+            $0.region.centerY = base.centerY + Double(to.y - from.y)
             $0.clamp()
         }
     }
@@ -234,6 +249,14 @@ extension CaptureController {
     ///
     /// A band smaller than the floor is a CLICK, and a click outside the box
     /// puts the box where it was clicked: that is what a tap has always done.
+    /// Draw the box between two points on the picture.
+    ///
+    /// The crosshair over this overlay promised exactly this and delivered a
+    /// move (owner: "курсор превращается в крестик, подразумевая что можно
+    /// нарисовать область нужную, но это невозможно"). Both corners go through
+    /// `imageFraction`, so a rubber band that starts on the picture and ends on
+    /// the letterbox is refused rather than clamped to a shape the operator did
+    /// not draw — the same rule a click outside the picture already follows.
     func drawVisualRecRegion(from start: CGPoint, to end: CGPoint,
                              viewport: CGSize) {
         let source = displaySourceSize()
@@ -241,37 +264,30 @@ extension CaptureController {
                                                in: viewport),
               let b = liveAssist.imageFraction(of: end, sourceSize: source,
                                                in: viewport) else { return }
-        let width = abs(Double(b.x - a.x))
-        let height = abs(Double(b.y - a.y))
-        guard width >= VisualRecRegion.minSize,
-              height >= VisualRecRegion.minSize else {
-            placeVisualRecRegion(at: end, viewport: viewport, dragging: true)
-            return
-        }
+        let drawnWidth = abs(Double(b.x - a.x))
+        let drawnHeight = abs(Double(b.y - a.y))
+        // A band under the floor does NOTHING. It used to place the box at the
+        // pointer, which put a teleport at the start of every draw and moved
+        // the box on a bare click (owner: "при клике на пустом пространстве в
+        // режиме рисования области он сразу туда телепортит эту область").
+        guard drawnWidth >= VisualRecRegion.minSize,
+              drawnHeight >= VisualRecRegion.minSize else { return }
+        // Capped HERE and anchored on the press, not clamped after centring on
+        // the band: the box has a ceiling a quarter of the frame wide and a
+        // mouse crosses it easily, and a centre computed from the band's middle
+        // went on following the pointer once the size had saturated — a draw
+        // that turned into a drag exactly when the sliders hit their end, which
+        // is where the owner placed it ("потому что ползунки добегают до
+        // максимума"). Anchored, the box grows away from the press and stops.
+        let width = min(VisualRecRegion.maxSize, drawnWidth)
+        let height = min(VisualRecRegion.maxSize, drawnHeight)
         applyVisualRecPreview {
-            $0.region.centerX = Double(a.x + b.x) / 2
-            $0.region.centerY = Double(a.y + b.y) / 2
+            $0.region.centerX = Double(a.x) + (b.x >= a.x ? width : -width) / 2
+            $0.region.centerY = Double(a.y) + (b.y >= a.y ? height : -height) / 2
             $0.region.width = width
             $0.region.height = height
             $0.clamp()
         }
-    }
-
-    /// `dragging` is what tells a TAP from the tail of a rubber band that never
-    /// reached the size floor. A tap is a click and publishes at once — it is
-    /// one event and there is nothing to coalesce — while the band calls this
-    /// on every change event of the stroke and must stay a draft until the
-    /// operator lets go (see `applyVisualRecPreview`).
-    func placeVisualRecRegion(at point: CGPoint, viewport: CGSize,
-                              dragging: Bool = false) {
-        guard let fraction = liveAssist.imageFraction(
-            of: point, sourceSize: displaySourceSize(), in: viewport) else { return }
-        let move: (inout VisualRecTeaching) -> Void = {
-            $0.region.centerX = Double(fraction.x)
-            $0.region.centerY = Double(fraction.y)
-            $0.clamp()
-        }
-        if dragging { applyVisualRecPreview(move) } else { setVisualRec(move) }
     }
 
     // MARK: - capturing the two references

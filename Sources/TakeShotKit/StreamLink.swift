@@ -19,6 +19,20 @@ import Foundation
 /// Both initializers switch EXHAUSTIVELY, with no `default:`. A case added to
 /// either transport's enum then fails to compile here rather than silently
 /// arriving as a green light.
+/// Which network transport a reading or a press is about.
+///
+/// Two of them, named once: the badge draws a row per transport and the
+/// controller switches them one at a time, and both used to spell the pair out
+/// separately — which is how a press on one came to act on both.
+enum LiveStreamKind: String, CaseIterable {
+    case srt
+    case ndi
+
+    /// What it is called on the badge. Not localized on purpose: SRT and NDI
+    /// are the protocols' own names and read the same in every language.
+    var name: String { rawValue.uppercased() }
+}
+
 enum StreamLink: Equatable {
     /// No mirror: the switch is off.
     case off

@@ -210,18 +210,27 @@ struct VisualRecTeachOverlay: View {
     @ObservedObject var live: VisualRecLiveState
     /// Which half of the gesture in flight is — see `VisualRecBoxDrag`.
     @State private var drag: VisualRecBoxDrag?
+    /// The box as it was when the stroke started. Latched with the mode and for
+    /// the same reason: a move is an absolute answer from here, and computing
+    /// it from the box's CURRENT place makes each event move it again — see
+    /// `moveVisualRecRegion`.
+    @State private var dragBase: VisualRecRegion?
 
     var body: some View {
         if controller.visualRecTeachArmed {
             GeometryReader { geo in
                 ZStack(alignment: .topLeading) {
                     // not `Color.clear`: a fully transparent view is not hit-tested
+                    // **A click does not move the box.** There was a tap
+                    // handler here that put the box's centre under the pointer,
+                    // and it fired on the way into every draw as well as on a
+                    // bare click — so the box teleported to the press point
+                    // before the drawing started (owner: "при клике на пустом
+                    // пространстве ... сразу туда телепортит эту область. не
+                    // надо так"). The box is drawn and dragged; a click on the
+                    // picture is not a placement.
                     Color.white.opacity(0.001)
                         .contentShape(Rectangle())
-                        .onTapGesture(coordinateSpace: .local) { location in
-                            controller.placeVisualRecRegion(at: location,
-                                                            viewport: geo.size)
-                        }
                         // Dragging, because tapping was the ONLY way to move
                         // the box and nothing said so (owner: "бокс не могу
                         // никуда подвинуть"). A guide you place by clicking
@@ -266,10 +275,13 @@ struct VisualRecTeachOverlay: View {
                                             value.startLocation,
                                             viewport: geo.size))
                                 drag = mode
+                                let base = dragBase
+                                    ?? controller.liveVisualRec.region
+                                dragBase = base
                                 switch mode {
                                 case .move:
                                     controller.moveVisualRecRegion(
-                                        by: value.translation,
+                                        base, by: value.translation,
                                         from: value.startLocation,
                                         viewport: geo.size)
                                 case .draw:
@@ -278,7 +290,10 @@ struct VisualRecTeachOverlay: View {
                                         to: value.location, viewport: geo.size)
                                 }
                             }
-                            .onEnded { _ in drag = nil })
+                            .onEnded { _ in
+                                drag = nil
+                                dragBase = nil
+                            })
                         // …and the pointer says which one is under it, so the
                         // gesture is never a surprise.
                         .onContinuousHover { phase in

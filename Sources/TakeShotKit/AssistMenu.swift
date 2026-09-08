@@ -230,14 +230,21 @@ private struct AssistControlRows: View {
             // — the operator's own 2.76 would read as an empty control.
             if let custom = AssistPresets.custom(
                 controller.settings.assist.framelineRatio,
-                among: AssistPresets.frameline) {
+                among: AssistPresets.frameline,
+                off: AssistPresets.framelineOff) {
                 Text(verbatim: AssistRatioInput.text(custom)).tag(custom)
             }
         }
-        AssistCustomField(label: L("assist_custom"),
-                          range: AssistRatioInput.framelineRange,
-                          value: controller.settings.assist.framelineRatio) {
-            controller.settings.assist.framelineRatio = $0
+        // Only while the aid is ON (owner: "пускай поле кастома появляется
+        // когда десквиз/фреймлайнс включены"). A box for a number that is not
+        // being drawn is a row of panel spent on nothing, and this panel is
+        // read on a cart between takes.
+        if controller.settings.assist.framelineRatio != nil {
+            AssistCustomField(label: L("assist_custom"),
+                              range: AssistRatioInput.framelineRange,
+                              value: controller.settings.assist.framelineRatio) {
+                controller.settings.assist.framelineRatio = $0
+            }
         }
         Toggle(L("safe_areas"), isOn: Binding(
             get: { controller.settings.assist.safeAreasOn ?? false },
@@ -276,18 +283,25 @@ private struct AssistControlRows: View {
         Picker(L("desqueeze"), selection: Binding(
             get: { controller.liveAssist.desqueeze },
             set: { factor in controller.setAssist { $0.desqueeze = factor } })) {
+            // A spherical lens IS a factor of one, and the row said so with the
+            // number instead of the state — so the control read as having no
+            // off at all. It says Off and carries the 1.
+            Text(L("assist_off")).tag(AssistPresets.desqueezeOff)
             ForEach(AssistPresets.desqueeze, id: \.value) { preset in
                 Text(verbatim: preset.label).tag(preset.value)
             }
             if let custom = AssistPresets.custom(controller.liveAssist.desqueeze,
-                                                 among: AssistPresets.desqueeze) {
+                                                 among: AssistPresets.desqueeze,
+                                                 off: AssistPresets.desqueezeOff) {
                 Text(verbatim: AssistRatioInput.text(custom) + "x").tag(custom)
             }
         }
-        AssistCustomField(label: L("assist_custom"),
-                          range: AssistRatioInput.desqueezeRange,
-                          value: controller.liveAssist.desqueeze) { factor in
-            controller.setAssist { $0.desqueeze = factor }
+        if controller.liveAssist.desqueeze != AssistPresets.desqueezeOff {
+            AssistCustomField(label: L("assist_custom"),
+                              range: AssistRatioInput.desqueezeRange,
+                              value: controller.liveAssist.desqueeze) { factor in
+                controller.setAssist { $0.desqueeze = factor }
+            }
         }
 
         HStack(spacing: 6) {

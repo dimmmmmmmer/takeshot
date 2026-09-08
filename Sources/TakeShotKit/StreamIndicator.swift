@@ -64,23 +64,7 @@ struct StreamIndicator: View {
     /// would be worse than a reading that says so — so the reading says so, and
     /// its tooltip says where to turn it on.
     @ViewBuilder private var streamReading: some View {
-        if combined.isEngaged || isPaused {
-            Button {
-                if isPaused {
-                    controller.resumeStreams()
-                } else {
-                    controller.stopAllStreams()
-                }
-            } label: {
-                transportRow
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .controlHelp(helpText)
-        } else {
-            transportRow
-                .controlHelp(L("stream_off_help"))
-        }
+        transportRow
     }
 
     /// **One reading per transport, always both, always in this order.**
@@ -96,9 +80,20 @@ struct StreamIndicator: View {
         HStack(spacing: 6) {
             ForEach(Self.readings(srt: srt, ndi: ndi, paused: isPaused),
                     id: \.name) { entry in
-                reading(symbol: Self.symbol(entry.link),
-                        tint: Self.tint(entry.link),
-                        text: entry.name)
+                // **A press acts on THIS transport.** The row draws a reading
+                // each, and one button around both meant a click on the NDI
+                // half took SRT down with it (owner: "клик по srt/ndi в рабочем
+                // окне включает и выключает оба").
+                Button {
+                    controller.toggleStream(entry.kind)
+                } label: {
+                    reading(symbol: Self.symbol(entry.link),
+                            tint: Self.tint(entry.link),
+                            text: entry.name)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .controlHelp(helpText(for: entry))
             }
         }
     }
@@ -106,8 +101,9 @@ struct StreamIndicator: View {
     /// One transport's line on the badge: what it is called, and how its link
     /// is doing.
     struct Reading: Equatable {
-        var name: String
+        var kind: LiveStreamKind
         var link: StreamLink
+        var name: String { kind.name }
     }
 
     /// The row's content, as data. A paused transport reads OFF, because that
@@ -119,8 +115,8 @@ struct StreamIndicator: View {
     /// own, or has been dropped out of the row.
     static func readings(srt: StreamLink, ndi: StreamLink,
                          paused: Bool) -> [Reading] {
-        [Reading(name: "SRT", link: paused ? .off : srt),
-         Reading(name: "NDI", link: paused ? .off : ndi)]
+        [Reading(kind: .srt, link: paused ? .off : srt),
+         Reading(kind: .ndi, link: paused ? .off : ndi)]
     }
 
     /// The hardware monitor output. Absent entirely when no board is selected —
@@ -176,21 +172,17 @@ struct StreamIndicator: View {
         }
     }
 
-    /// The tooltip says what a glance cannot: which link is in which state, and
-    /// what pressing this does.
-    private var helpText: String {
-        var lines: [String] = []
-        guard !isPaused else { return L("stream_start_help") }
-        if srt.isEngaged { lines.append("SRT — " + Self.words(srt)) }
-        if ndi.isEngaged {
-            lines.append("NDI — " + Self.words(ndi))
-            if mirrors.ndiCarriesAudio == false {
-                // The sentence, not the two-word label: a tooltip has room and
-                // this is where an operator finds out WHY the feed is silent.
-                lines.append(L("ndi_picture_only_help"))
-            }
+    /// The tooltip says what a glance cannot: what this link is doing, and
+    /// what pressing it does to THIS transport and no other.
+    private func helpText(for entry: Reading) -> String {
+        var lines = [entry.name + " — " + Self.words(entry.link)]
+        if entry.kind == .ndi, ndi.isEngaged, mirrors.ndiCarriesAudio == false {
+            // The sentence, not the two-word label: a tooltip has room and
+            // this is where an operator finds out WHY the feed is silent.
+            lines.append(L("ndi_picture_only_help"))
         }
-        lines.append(L("stream_stop_help"))
+        lines.append(entry.link.isEngaged ? L("stream_stop_help")
+                     : L("stream_start_help"))
         return lines.joined(separator: "\n")
     }
 
