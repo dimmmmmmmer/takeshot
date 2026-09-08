@@ -29,6 +29,17 @@ extension CaptureController {
     /// reach a run that has already been planned.
     var isOffloadRunning: Bool { offload.isRunning }
 
+    /// **The rig is spoken for.** Copying, or about to be: the survey walks
+    /// the card before the first byte moves, and the queue is already fixed by
+    /// then (`OffloadSheetModel.start`).
+    ///
+    /// The sheet's editing controls read THIS and not `isOffloadRunning`. A
+    /// card removed while the survey was out stayed in the run and left the
+    /// list disagreeing with "card 2 of 3" — the list saying one thing and the
+    /// progress line another, with the operator having no way to tell which
+    /// was true.
+    var isOffloadBusy: Bool { offload.isRunning || offload.isSurveying }
+
     /// Start: a source, at least one destination, nothing already running and
     /// nothing left to answer (see `OffloadSheetModel.canStart`).
     var canStartOffload: Bool { offload.canStart }

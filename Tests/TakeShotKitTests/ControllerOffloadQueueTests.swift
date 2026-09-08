@@ -201,3 +201,110 @@ import Testing
         }
     }
 }
+
+/// The resume question, asked in the middle of a queue.
+///
+/// Its own suite because it needs a card that has already been copied once, and
+/// building that is the whole fixture. The path matters more than it looks:
+/// the queue is a chain of callbacks, and the question is the one place the
+/// chain STOPS and waits for a person. A chain that could not be restarted from
+/// there would strand every card behind the one being asked about — with the
+/// sheet showing a question and the run showing nothing.
+@Suite @MainActor struct ControllerOffloadQueueResumeTests {
+    private func scratch(_ name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("takeshot-qresume-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url,
+                                                withIntermediateDirectories: true)
+        return url
+    }
+
+    private func makeCard(_ name: String, salt: UInt8) throws -> URL {
+        let source = try scratch(name)
+        try Data([1 + salt, 2, 3])
+            .write(to: source.appendingPathComponent("A001C001.mov"))
+        return source
+    }
+
+    @Test func aQuestionOnTheSecondCardDoesNotStrandTheThird() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let first = try self.makeCard("a", salt: 0)
+            let second = try self.makeCard("b", salt: 40)
+            let third = try self.makeCard("c", salt: 80)
+            let dest = try self.scratch("dst")
+            defer {
+                for url in [first, second, third, dest] {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            let model = controller.offload
+            model.addDestination(dest)
+
+            // Card B alone, first, so the disk already holds a copy of it.
+            model.addSource(second)
+            model.start()
+            #expect(await ControllerWait.untilWritten { !model.isRunning
+                && model.reports.count == 1 })
+
+            // Now all three, B in the middle: its copy is already there, so
+            // the queue stops on it and asks.
+            model.sourceRows = []
+            for card in [first, second, third] { model.addSource(card) }
+            model.start()
+            #expect(await ControllerWait.untilWritten { model.resumeReview != nil },
+                    "the queue never asked about the card already on the disk")
+            #expect(model.cardIndex == 2, "it asked about card \(model.cardIndex)")
+            #expect(model.reports.count == 1, "it walked past the question")
+
+            // Answered — and the queue picks up where it stopped, card C
+            // included.
+            model.copyEverything()
+            #expect(await ControllerWait.untilWritten { !model.isRunning
+                && model.reports.count == 3 },
+                    "the queue stranded \(3 - model.reports.count) card(s)")
+            for card in [first, second, third] {
+                #expect(FileManager.default.fileExists(atPath: dest
+                    .appendingPathComponent(card.lastPathComponent)
+                    .appendingPathComponent("A001C001.mov").path),
+                        "\(card.lastPathComponent) never got copied")
+            }
+        }
+    }
+}
+
+/// The sheet's editing controls, against the state of the run.
+///
+/// One rule, asked once, because the last time this was two rules they
+/// disagreed: `isOffloadRunning` gated the rows and `canStart` gated the
+/// button, and the survey — which fixes the queue before the first byte
+/// moves — was inside one and outside the other.
+@Suite @MainActor struct ControllerOffloadBusyTests {
+    @Test func theRigIsSpokenForWhileTheSurveyIsOut() async throws {
+        try await ControllerHarness.run { controller, root in
+            let card = root.appendingPathComponent("CARD_A001")
+            let dest = root.appendingPathComponent("SSD1")
+            for url in [card, dest] {
+                try FileManager.default.createDirectory(
+                    at: url, withIntermediateDirectories: true)
+            }
+            try Data([1, 2, 3])
+                .write(to: card.appendingPathComponent("A001C001.mov"))
+            let model = controller.offload
+            model.addSource(card)
+            model.addDestination(dest)
+            #expect(!controller.isOffloadBusy, "idle and already busy")
+
+            model.isSurveying = true
+            #expect(controller.isOffloadBusy,
+                    "the card list was editable while the queue was being fixed")
+            // …and Start is not offered twice over.
+            #expect(!controller.canStartOffload)
+            #expect(controller.canStopDiskJob,
+                    "there was no way to stop a survey")
+
+            model.isSurveying = false
+            #expect(!controller.isOffloadBusy)
+            #expect(controller.canStartOffload)
+        }
+    }
+}

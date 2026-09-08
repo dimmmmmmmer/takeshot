@@ -125,7 +125,7 @@ struct OffloadSourceSection: View {
                 } label: {
                     Label(L("offload_add_source"), systemImage: "plus")
                 }
-                .disabled(controller.isOffloadRunning)
+                .disabled(controller.isOffloadBusy)
             }
             if model.sourceRows.isEmpty {
                 Text(L("offload_no_cards"))
@@ -149,7 +149,7 @@ struct OffloadSourceSection: View {
                             detail: sourceDetail(row),
                             finderTarget: row.url) {
                 Button(L("choose")) { chooseSource(row) }
-                    .disabled(controller.isOffloadRunning)
+                    .disabled(controller.isOffloadBusy)
             }
             .contextMenu { sourceMenu(row) }
             Button {
@@ -159,7 +159,7 @@ struct OffloadSourceSection: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.red)
-            .disabled(controller.isOffloadRunning)
+            .disabled(controller.isOffloadBusy)
             .help(L("offload_remove_source"))
         }
     }
@@ -167,13 +167,13 @@ struct OffloadSourceSection: View {
     @ViewBuilder
     private func sourceMenu(_ row: OffloadSheetModel.Row) -> some View {
         Button(L("choose")) { chooseSource(row) }
-            .disabled(controller.isOffloadRunning)
+            .disabled(controller.isOffloadBusy)
         Button(L("offload_open_source")) { FinderOpen.folder(row.url) }
         Divider()
         Button(L("offload_remove_source"), role: .destructive) {
             model.removeSource(row.id)
         }
-        .disabled(controller.isOffloadRunning)
+        .disabled(controller.isOffloadBusy)
     }
 
     private func chooseSource(_ row: OffloadSheetModel.Row) {
@@ -215,7 +215,7 @@ struct OffloadDestinationSection: View {
                 } label: {
                     Label(L("offload_add_dest"), systemImage: "plus")
                 }
-                .disabled(controller.isOffloadRunning)
+                .disabled(controller.isOffloadBusy)
             }
             if model.rows.isEmpty {
                 Text(L("offload_no_dest"))
@@ -248,7 +248,7 @@ struct OffloadDestinationSection: View {
                             detail: destinationDetail(row),
                             finderTarget: model.finderTarget(for: row)) {
                 Button(L("choose")) { chooseDestination(row) }
-                    .disabled(controller.isOffloadRunning)
+                    .disabled(controller.isOffloadBusy)
             }
             .contextMenu { destinationMenu(row) }
             Button {
@@ -258,7 +258,7 @@ struct OffloadDestinationSection: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.red)
-            .disabled(controller.isOffloadRunning)
+            .disabled(controller.isOffloadBusy)
             .help(L("offload_remove_dest"))
         }
     }
@@ -266,7 +266,7 @@ struct OffloadDestinationSection: View {
     @ViewBuilder
     private func destinationMenu(_ row: OffloadSheetModel.Row) -> some View {
         Button(L("choose")) { chooseDestination(row) }
-            .disabled(controller.isOffloadRunning)
+            .disabled(controller.isOffloadBusy)
         Button(L("offload_open_dest")) {
             FinderOpen.folder(model.finderTarget(for: row))
         }
@@ -274,7 +274,7 @@ struct OffloadDestinationSection: View {
         Button(L("offload_remove_dest"), role: .destructive) {
             model.removeDestination(row.id)
         }
-        .disabled(controller.isOffloadRunning)
+        .disabled(controller.isOffloadBusy)
     }
 
     private func chooseDestination(_ row: OffloadSheetModel.Row) {

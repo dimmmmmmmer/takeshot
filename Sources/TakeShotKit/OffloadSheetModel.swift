@@ -104,6 +104,7 @@ final class OffloadSheetModel: ObservableObject {
         if !isRunning {
             progress = nil
             report = nil
+            reports = []
             isCancelling = false
             resumeReview = nil
         }
