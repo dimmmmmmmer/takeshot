@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 
 /// One look at the record volume, taken OFF the main actor.
@@ -69,9 +70,11 @@ enum DiskProbe {
     private static func probe(root: URL, openTake: String?) -> Reading {
         var reading = Reading()
         reading.queue = currentQueueLabel()
-        let values = try? root.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        reading.freeBytes = values?.volumeAvailableCapacityForImportantUsage
+        // `VolumeSpace` owns which of the volume's two answers to believe:
+        // this used to ask for the boot-volume key alone, so a record folder
+        // on an external drive that answers 0 for it would have raised the
+        // disk alarm over a disk with terabytes free.
+        reading.freeBytes = VolumeSpace.free(of: root)
         if reading.freeBytes == nil {
             // Asking a volume that is no longer mounted is exactly how the
             // query above fails. A merely absent FOLDER is recoverable and

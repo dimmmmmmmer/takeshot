@@ -116,6 +116,28 @@ extension CaptureController {
     /// Closes the ACTIVE take too (quitting mid-record used to leave a .mov
     /// without its moov atom), and waits on a detached task: a MainActor task
     /// can never run while the main thread is parked in semaphore.wait.
+    /// **What quitting right now would interrupt** — nil when nothing is at
+    /// risk, otherwise a sentence naming it.
+    ///
+    /// The app used to go down without a word. The owner closed it while a
+    /// card was being copied ("я закрыл приложение но при этом у меня шло
+    /// копирование флешки"), and a card copy is the one job in this app where
+    /// the source gets wiped afterwards on the strength of it having finished.
+    ///
+    /// Ordered by what is least recoverable. A rolling take is first: the
+    /// moment is gone, and everything below it can be started again.
+    ///
+    /// A named rule on the controller rather than a condition written in the
+    /// delegate, so a test can ask it — the alert itself is AppKit's and is
+    /// not reachable from a headless run.
+    var quitRisk: String? {
+        if isRecording { return L("quit_risk_recording") }
+        if offload.isRunning { return L("quit_risk_offload") }
+        if verify.isRunning { return L("quit_risk_verify") }
+        if dailies.isRunning { return L("quit_risk_dailies") }
+        return nil
+    }
+
     func flushOnTerminate() {
         // The debounced settings writes, before anything blocks. Each of these
         // is a value the operator SET and would expect back: a box dragged, a

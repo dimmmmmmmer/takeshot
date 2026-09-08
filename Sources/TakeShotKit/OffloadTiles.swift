@@ -105,14 +105,13 @@ enum OffloadVolumeFacts {
     /// nil for a path that is not there, which is the normal state of a
     /// destination the operator saved last week and has not plugged in yet.
     static func capacity(of url: URL) -> Capacity? {
-        let keys: Set<URLResourceKey> = [
-            .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey,
-        ]
-        guard let values = try? url.resourceValues(forKeys: keys),
-              let total = values.volumeTotalCapacity, total > 0,
-              let free = values.volumeAvailableCapacityForImportantUsage
-        else { return nil }
-        return Capacity(total: Int64(total), free: Int64(free))
+        // Through `VolumeSpace`, which is where the rule lives. This used to
+        // read `volumeAvailableCapacityForImportantUsage` and nothing else —
+        // the boot-volume key — so an external drive that cannot account for
+        // purgeable space was reported wrongly here while the preflight two
+        // files away had already learned to fall back.
+        guard let capacity = VolumeSpace.capacity(of: url) else { return nil }
+        return Capacity(total: capacity.total, free: capacity.free)
     }
 
     /// What the tile leads with: the DISK.

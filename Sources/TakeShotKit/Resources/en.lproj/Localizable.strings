@@ -1153,3 +1153,10 @@
 "live_too_many_viewers" = "This Mac is already carrying %d viewers.";
 "live_shutting_down" = "The app is shutting down.";
 "live_no_app" = "No app is attached to this server.";
+"quit_risk_title" = "TakeShot is in the middle of something";
+"quit_risk_recording" = "A take is recording. Quitting now ends it here.";
+"quit_risk_offload" = "A card is being copied. Quitting now leaves the copy unfinished — do not wipe the card.";
+"quit_risk_verify" = "A disk is being re-checked. Quitting now abandons the check.";
+"quit_risk_dailies" = "Dailies are being made. Quitting now leaves the batch unfinished.";
+"quit_risk_stay" = "Keep working";
+"quit_risk_quit" = "Quit anyway";

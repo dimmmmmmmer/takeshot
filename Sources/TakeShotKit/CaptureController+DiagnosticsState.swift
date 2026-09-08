@@ -19,14 +19,15 @@ extension CaptureController {
             FileManager.default.fileExists(atPath: root.path)
         recording.recordFolderWritable =
             FileManager.default.isWritableFile(atPath: root.path)
-        let values = try? root.resourceValues(
-            forKeys: [.volumeAvailableCapacityForImportantUsageKey,
-                      .volumeNameKey])
+        let values = try? root.resourceValues(forKeys: [.volumeNameKey])
         recording.volumeName = values?.volumeName
         // Left nil rather than 0 when the query fails: a volume that has gone
         // away is exactly how it fails, and "0 GB free" would send whoever
-        // reads this after the wrong fault.
-        recording.freeSpaceGB = values?.volumeAvailableCapacityForImportantUsage
+        // reads this after the wrong fault — which is also why the number
+        // comes from `VolumeSpace` rather than from the boot-volume key alone.
+        // A diagnostics bundle carrying a figure the app itself does not act
+        // on is a bundle that sends the reader after the wrong fault too.
+        recording.freeSpaceGB = VolumeSpace.free(of: root)
             .map { Double($0) / 1_000_000_000 }
         recording.codec = settings.capture.codec.rawValue
         recording.health = pipeline.health

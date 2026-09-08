@@ -146,6 +146,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppDelegate.shared = self
     }
 
+    /// **Ask before going down on top of something that matters.**
+    ///
+    /// The app used to quit silently whatever was in flight, and the owner
+    /// closed it mid-card-copy. The rule is `CaptureController.quitRisk`,
+    /// named there so it can be tested; this is the dialog and nothing else.
+    ///
+    /// Cancel is the DEFAULT button: the operator who meant to quit presses
+    /// the other one, and the operator who did not is the one this exists for.
+    /// The destructive answer is `.terminateNow` — the partial output of an
+    /// offload is handled by the resume survey on the next run, and a rolling
+    /// take is still finalized by `applicationWillTerminate` on the way out.
+    func applicationShouldTerminate(
+        _ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let risk = controller?.quitRisk else { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = L("quit_risk_title")
+        alert.informativeText = risk
+        alert.addButton(withTitle: L("quit_risk_stay"))
+        alert.addButton(withTitle: L("quit_risk_quit"))
+        return alert.runModal() == .alertFirstButtonReturn
+            ? .terminateCancel : .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         controller?.flushOnTerminate()
     }
