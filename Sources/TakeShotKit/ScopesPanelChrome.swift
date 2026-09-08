@@ -95,7 +95,7 @@ extension ScopesPanel {
                 .font(.system(size: 8, weight: .semibold))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
-                .background(controller.accentColor.opacity(0.35), in: Capsule())
+                .background(accent.opacity(0.35), in: Capsule())
                 .foregroundStyle(.white.opacity(0.9))
                 .help(L("scope_wire_hint"))
         }
@@ -129,7 +129,7 @@ extension ScopesPanel {
                 .font(.system(size: 8, weight: .semibold))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
-                .background(controller.accentColor.opacity(0.55), in: Capsule())
+                .background(accent.opacity(0.55), in: Capsule())
                 .foregroundStyle(.white.opacity(0.95))
                 .help(L("scope_hdr_hint"))
         }
@@ -195,7 +195,7 @@ extension ScopesPanel {
         ForEach(ScopeChromeButton.allCases) { button in
             switch button {
             case .openInWindow:
-                if !controller.scopesWindowOpen { openInWindowButton }
+                if !windowIsOpen { openInWindowButton }
             case .close:
                 if singleScope { closeButton }
             }
@@ -205,7 +205,7 @@ extension ScopesPanel {
     private var openInWindowButton: some View {
         Button {
             AppWindows.present(.scopes, opening: openWindow)
-            controller.showScopesOverlay = false
+            onCloseOverlay()
         } label: {
             Image(systemName: "macwindow.on.rectangle")
                 .font(.system(size: 10))
@@ -217,7 +217,7 @@ extension ScopesPanel {
 
     private var closeButton: some View {
         Button {
-            controller.showScopesOverlay = false
+            onCloseOverlay()
         } label: {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 11))
@@ -241,7 +241,7 @@ extension ScopesPanel {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(isOn.wrappedValue
-                        ? AnyShapeStyle(controller.accentColor.opacity(0.35))
+                        ? AnyShapeStyle(accent.opacity(0.35))
                         : AnyShapeStyle(.white.opacity(0.08)),
                         in: Capsule())
             .foregroundStyle(isOn.wrappedValue ? .white : .white.opacity(0.55))

@@ -15,6 +15,7 @@ struct ScopesWindowView: View {
         // the traffic lights sit on top of the first scope toggle. Same
         // measured value the main window reserves.
         ScopesPanel(scopes: controller.scopes,
+                    accent: controller.accentColor,
                     topInset: controller.windowTopInset)
             .ignoresSafeArea(.container, edges: .top)
             .background(ScopesWindowFrameKeeper(controller: controller))
@@ -62,7 +63,22 @@ enum ScopeKind: String, CaseIterable, Identifiable {
 /// width and whose boxes drag to reorder, and the in-player overlay holds
 /// exactly one scope. Each keeps its own persisted selection.
 struct ScopesPanel: View {
-    @EnvironmentObject var controller: CaptureController
+    // **No `@EnvironmentObject` here, and that is a performance decision.**
+    //
+    // This panel read exactly one thing off the controller — the switch that
+    // closes the overlay — and paid for it with a subscription to EVERY change
+    // the controller publishes: the recorder's state, the take list, the
+    // device list, the disk, the settings. Each of those re-ran this body, and
+    // this body is four scope boxes at about eleven milliseconds together
+    // (`ViewScopePanelCostTests`), so on a shooting day the scopes were being
+    // redrawn tens of times a second for reasons that had nothing to do with
+    // the picture (owner: "мелкое открытое окошко скопов все так же тормозит
+    // как и раньше").
+    //
+    // That is the same mistake `ScopeFeed` was extracted to fix, left half
+    // undone: the data was moved to its own publisher and the panel went on
+    // observing the controller anyway. The one thing it needed is passed in as
+    // a closure.
     @Environment(\.openWindow) var openWindow
     /// Scope data updates 12-15/s and NOTHING else does — observed separately
     /// from both the controller and `LiveSignal`, whose timecode and audio
@@ -70,6 +86,17 @@ struct ScopesPanel: View {
     @ObservedObject var scopes: ScopeFeed
     /// The in-player overlay: one scope, its own selection, no reordering.
     var singleScope = false
+    /// What Escape does in the overlay. A closure rather than a reach into the
+    /// controller — see the note on the missing `@EnvironmentObject` above.
+    var onCloseOverlay: () -> Void = {}
+    /// Whether the separate scopes window is already up — the overlay's
+    /// "open in window" button is absent when it is. A value for the same
+    /// reason as `accent`.
+    var windowIsOpen = false
+    /// The operator's accent colour, for the two chrome badges that carry it.
+    /// A value and not a read, for the same reason: a colour that changes twice
+    /// a year does not justify a subscription to everything else.
+    var accent: Color = .accentColor
     /// Room reserved above the toolbar for the window buttons (window only).
     var topInset: CGFloat = 0
 
@@ -212,7 +239,7 @@ struct ScopesPanel: View {
         // control too many.
         .overlay {
             if singleScope {
-                EscapeKeyCatcher { controller.showScopesOverlay = false }
+                EscapeKeyCatcher(action: onCloseOverlay)
             }
         }
         // scope chrome is white-on-dark whatever the app's appearance is: a
@@ -313,6 +340,22 @@ private struct ScopeReorderDrag: ViewModifier {
                     commit()
                     dragged = kind
                     return NSItemProvider(object: kind.rawValue as NSString)
+                } preview: {
+                    // **A cheap preview, not a snapshot of the scope.** Without
+                    // one, AppKit rasterizes the dragged view to carry under
+                    // the pointer — and the dragged view is a trace image and a
+                    // graticule `Canvas`, so picking a scope up cost a full
+                    // offscreen render of it before the drag even began (owner:
+                    // "попытка перетащить скопы в отдельном окне — та еще боль
+                    // в жопе"). A label says which one is in the hand, which is
+                    // all the operator needs while it is moving.
+                    Text(L(kind.titleKey))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.8),
+                                    in: RoundedRectangle(cornerRadius: 6))
+                        .foregroundStyle(.white)
                 }
                 .onDrop(of: [UTType.plainText], delegate: ScopeDropDelegate(
                     target: kind, dragged: $dragged, live: $live,

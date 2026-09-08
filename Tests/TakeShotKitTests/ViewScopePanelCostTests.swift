@@ -68,6 +68,70 @@ struct ViewScopePanelCostTests {
         }
     }
 
+    /// **The panel does not observe the controller.**
+    ///
+    /// It read one switch off it and paid for that with a subscription to
+    /// everything the controller publishes — the recorder's state, the takes,
+    /// the devices, the disk, the settings. Every one of those re-ran this
+    /// body, and this body is four scope boxes at about eleven milliseconds
+    /// together (the measurements above), so on a shooting day the scopes were
+    /// redrawn tens of times a second for reasons that had nothing to do with
+    /// the picture (owner: "мелкое открытое окошко скопов все так же тормозит
+    /// как и раньше").
+    ///
+    /// That is the same mistake `ScopeFeed` was extracted to fix, left half
+    /// undone: the data got its own publisher and the panel went on observing
+    /// the controller anyway. Asserted on the source because a subscription is
+    /// not observable from a rendered size — the panel looks identical either
+    /// way and simply costs more.
+    @Test func theScopePanelDoesNotSubscribeToTheController() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/TakeShotKit")
+        for name in ["ScopesPanel", "ScopesPanelChrome"] {
+            var code = try String(
+                contentsOf: root.appendingPathComponent("\(name).swift"),
+                encoding: .utf8)
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            // From the panel's own declaration onwards. The WINDOW wrapper
+            // above it legitimately observes the controller — turning its
+            // state into the panel's values is exactly that type's job — and
+            // the rule is about the panel and its chrome doing so.
+            if let start = code.range(of: "struct ScopesPanel: View {") {
+                code = String(code[start.lowerBound...])
+            }
+            #expect(!code.contains("controller."), Comment(rawValue:
+                "\(name) reaches into the controller again, which subscribes "
+                    + "the scopes to every change in the app"))
+        }
+    }
+
+    /// **Picking a scope up does not rasterize it.**
+    ///
+    /// `onDrag` without a preview makes AppKit snapshot the dragged view to
+    /// carry under the pointer, and a scope box is a trace image plus a
+    /// graticule `Canvas` — so the drag paid for a full offscreen render of the
+    /// most expensive view in the app before it had moved a pixel (owner:
+    /// "попытка перетащить скопы в отдельном окне — та еще боль в жопе"). A
+    /// label is enough to say which one is in the hand.
+    @Test func theScopeDragCarriesALabelAndNotTheScope() throws {
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/ScopesPanel.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.contains("} preview: {"),
+                "the scope drag snapshots the scope again")
+        #expect(code.contains(".onDrag {"))
+    }
+
     /// A frame with structure in it — a flat one produces a single-column trace
     /// and an image build that is not representative. Deterministic: a fixed
     /// linear congruential walk, so two runs measure the same picture.

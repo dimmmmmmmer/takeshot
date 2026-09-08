@@ -172,7 +172,15 @@ struct ViewScopesTests {
             probe.controller.showScopesOverlay = true
 
             let host = NSHostingView(rootView: AnyView(probe.hosted(
-                ScopesPanel(scopes: probe.controller.scopes, singleScope: true))))
+                ScopesPanel(
+                    scopes: probe.controller.scopes, singleScope: true,
+                    // built the way the overlay builds it: the panel does not
+                    // observe the controller any more (see the note on its
+                    // missing @EnvironmentObject), so closing is a closure the
+                    // caller supplies — and this test is what proves the
+                    // caller still supplies one that works
+                    onCloseOverlay: { probe.controller.showScopesOverlay = false }
+                ))))
             host.frame = CGRect(x: 0, y: 0, width: 700, height: 300)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled],
                                   backing: .buffered, defer: false)
