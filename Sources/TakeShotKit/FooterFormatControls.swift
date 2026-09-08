@@ -91,21 +91,23 @@ struct FooterCodecMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "film.stack")
-                    .font(.system(size: 13))
-                // the chevron is what says "picker, not readout" once the
-                // codec name is gone from the bar
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
-            }
-            // colour only: a disabled picker that also changed size would
-            // reflow the whole footer the moment a take starts
-            .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
-            .foregroundStyle(.primary)
+            Image(systemName: "film.stack")
+                .font(.system(size: 15))
+                // colour only: a disabled picker that also changed size would
+                // reflow the whole footer the moment a take starts
+                .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
+                .foregroundStyle(.primary)
         }
         .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        // **The system's indicator, like the naming menu beside it.**
+        //
+        // This used to hide it and draw a 7pt `chevron.up.chevron.down` by
+        // hand. Measured, that made the control 24pt wide against the naming
+        // menu's 38 — and at 7pt the mark reads as nothing at all, so the
+        // codec looked like a readout while its neighbour looked like a menu
+        // (owner: "у кнопки кодека нет рядом с иконкой стрелочки вниз как у
+        // иконки наименований, не читается что там будет выпадающее окно").
+        // Two menus side by side in one bar wear one disclosure.
         .fixedSize()
     }
 }

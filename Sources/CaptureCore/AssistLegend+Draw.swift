@@ -108,7 +108,7 @@ extension AssistLegend {
             canvas.fillPanel()
             let entries = Self.entries(for: tool, transfer: transfer)
             if placement.isVertical {
-                canvas.drawColumn(entries)
+                canvas.drawColumn(entries, mirrored: placement == .right)
             } else {
                 canvas.drawRow(entries, elZone: tool == .elZone)
             }
@@ -176,24 +176,37 @@ private struct LegendCanvas {
     /// The same bands stacked, labels alongside, DARKEST AT THE BOTTOM — the
     /// strip runs the way a light meter does, and the same way the horizontal
     /// one runs darkest-at-the-left.
-    func drawColumn(_ entries: [AssistLegend.Entry]) {
-        let labelX = metrics.padding + metrics.swatchThickness + metrics.labelGap
+    /// **The swatch bar hugs the edge of the picture, both sides.**
+    ///
+    /// It used to be drawn at the panel's left whichever edge the legend was
+    /// on, so a legend placed RIGHT put its labels against the bezel and
+    /// pushed the swatches inward — the plate reading as if it were taking
+    /// extra room off one border (owner: "легенды фалс колора и эл зона если
+    /// стоят по бокам их подложка подзабирает лишнее пространство либо с
+    /// левого либо с правого борта"). Mirrored, the two side placements are
+    /// each other's reflection: scale on the outside, numbers reading inward.
+    func drawColumn(_ entries: [AssistLegend.Entry], mirrored: Bool) {
+        let columns = AssistLegend.columnLayout(mirrored: mirrored,
+                                                metrics: metrics,
+                                                panelWidth: panel.width)
         for (index, entry) in entries.enumerated() {
             let y = metrics.verticalPadding
                 + CGFloat(index) * (metrics.bandHeight + metrics.gap)
             context.setFillColor(Self.color(of: entry))
-            context.fill(CGRect(x: metrics.padding, y: y,
+            context.fill(CGRect(x: columns.swatch, y: y,
                                 width: metrics.swatchThickness,
                                 height: metrics.bandHeight))
             draw(entry.label,
-                 in: CGRect(x: labelX, y: y, width: metrics.labelWidth,
-                            height: metrics.bandHeight), centered: false)
+                 in: CGRect(x: columns.label, y: y, width: metrics.labelWidth,
+                            height: metrics.bandHeight),
+                 centered: false, alignedRight: mirrored)
         }
     }
 
     /// One label inside `box`, vertically centered on it. A gray-ramp band
     /// carries no label at all, and neither does a strip too small to read.
-    private func draw(_ text: String, in box: CGRect, centered: Bool) {
+    private func draw(_ text: String, in box: CGRect, centered: Bool,
+                      alignedRight: Bool = false) {
         guard labels, !text.isEmpty else { return }
         let line = CTLineCreateWithAttributedString(NSAttributedString(
             string: text, attributes: [
@@ -206,7 +219,8 @@ private struct LegendCanvas {
         let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent,
                                                        nil))
         context.textPosition = CGPoint(
-            x: centered ? box.midX - width / 2 : box.minX,
+            x: centered ? box.midX - width / 2
+                : (alignedRight ? box.maxX - width : box.minX),
             y: box.midY - (ascent - descent) / 2)
         CTLineDraw(line, context)
     }

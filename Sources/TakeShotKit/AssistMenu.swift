@@ -218,31 +218,48 @@ private struct AssistControlRows: View {
     // MARK: - framing
 
     @ViewBuilder private var framingRows: some View {
-        Picker(L("framelines"), selection: Binding(
-            get: { controller.settings.assist.framelineRatio ?? 0 },
-            set: { controller.settings.assist.framelineRatio = $0 == 0 ? nil : $0 })) {
-            Text(L("assist_off")).tag(0.0)
-            ForEach(AssistPresets.frameline, id: \.value) { preset in
-                Text(verbatim: preset.label).tag(preset.value)
+        // **A checkbox on the left, like every other aid in this panel**
+        // (owner: "давай и у фреймлайнов и у десквиза вместо опции офф тоже
+        // сделаем галочки слева как у остальных пунктов"). The Off row it
+        // replaces was also the thing that deleted the aspect on the way out —
+        // see `AssistSettings.framelinesOn`.
+        Toggle(L("framelines"), isOn: Binding(
+            get: { controller.settings.assist.framelinesOnEffective },
+            set: { on in
+                controller.settings.assist.framelinesOn = on
+                // A guide switched on with nothing ever chosen draws the
+                // aspect a set asks for first; the ratio is written down so
+                // the picker below has a selection to show.
+                if on, controller.settings.assist.framelineRatio == nil {
+                    controller.settings.assist.framelineRatio =
+                        AssistSettings.defaultFramelineRatio
+                }
+            }))
+        if controller.settings.assist.framelinesOnEffective {
+            Picker(L("assist_ratio"), selection: Binding(
+                get: { controller.settings.assist.framelineRatioChosen },
+                set: { controller.settings.assist.framelineRatio = $0 })) {
+                ForEach(AssistPresets.frameline, id: \.value) { preset in
+                    Text(verbatim: preset.label).tag(preset.value)
+                }
+                // A typed aspect is a tag of its own, or the picker would have
+                // a selection none of its rows carries and would show nothing
+                // at all — the operator's own 2.76 would read as an empty
+                // control.
+                if let custom = AssistPresets.custom(
+                    controller.settings.assist.framelineRatioChosen,
+                    among: AssistPresets.frameline,
+                    off: AssistPresets.framelineOff) {
+                    Text(verbatim: AssistRatioInput.text(custom)).tag(custom)
+                }
             }
-            // A typed aspect is a tag of its own, or the picker would have a
-            // selection none of its rows carries and would show nothing at all
-            // — the operator's own 2.76 would read as an empty control.
-            if let custom = AssistPresets.custom(
-                controller.settings.assist.framelineRatio,
-                among: AssistPresets.frameline,
-                off: AssistPresets.framelineOff) {
-                Text(verbatim: AssistRatioInput.text(custom)).tag(custom)
-            }
-        }
-        // Only while the aid is ON (owner: "пускай поле кастома появляется
-        // когда десквиз/фреймлайнс включены"). A box for a number that is not
-        // being drawn is a row of panel spent on nothing, and this panel is
-        // read on a cart between takes.
-        if controller.settings.assist.framelineRatio != nil {
+            // The custom box only while the aid is ON (owner: "пускай поле
+            // кастома появляется когда десквиз/фреймлайнс включены"). A box
+            // for a number that is not being drawn is a row of panel spent on
+            // nothing, and this panel is read on a cart between takes.
             AssistCustomField(label: L("assist_custom"),
                               range: AssistRatioInput.framelineRange,
-                              value: controller.settings.assist.framelineRatio) {
+                              value: controller.settings.assist.framelineRatioChosen) {
                 controller.settings.assist.framelineRatio = $0
             }
         }
@@ -280,23 +297,32 @@ private struct AssistControlRows: View {
     // MARK: - desqueeze and zoom
 
     @ViewBuilder private var zoomRows: some View {
-        Picker(L("desqueeze"), selection: Binding(
-            get: { controller.liveAssist.desqueeze },
-            set: { factor in controller.setAssist { $0.desqueeze = factor } })) {
-            // A spherical lens IS a factor of one, and the row said so with the
-            // number instead of the state — so the control read as having no
-            // off at all. It says Off and carries the 1.
-            Text(L("assist_off")).tag(AssistPresets.desqueezeOff)
-            ForEach(AssistPresets.desqueeze, id: \.value) { preset in
-                Text(verbatim: preset.label).tag(preset.value)
+        // The same checkbox the framelines got, for the same two reasons: it
+        // matches every other aid in the panel, and Off as a picker row is
+        // what threw the factor away.
+        Toggle(L("desqueeze"), isOn: Binding(
+            get: { controller.settings.assist.desqueezeOnEffective },
+            set: { on in
+                controller.settings.assist.desqueezeOn = on
+                controller.setAssist {
+                    $0.desqueeze = on
+                        ? controller.settings.assist.desqueezeFactorChosen : 1
+                }
+            }))
+        if controller.settings.assist.desqueezeOnEffective {
+            Picker(L("assist_ratio"), selection: Binding(
+                get: { controller.liveAssist.desqueeze },
+                set: { factor in controller.setAssist { $0.desqueeze = factor } })) {
+                ForEach(AssistPresets.desqueeze, id: \.value) { preset in
+                    Text(verbatim: preset.label).tag(preset.value)
+                }
+                if let custom = AssistPresets.custom(
+                    controller.liveAssist.desqueeze,
+                    among: AssistPresets.desqueeze,
+                    off: AssistPresets.desqueezeOff) {
+                    Text(verbatim: AssistRatioInput.text(custom) + "x").tag(custom)
+                }
             }
-            if let custom = AssistPresets.custom(controller.liveAssist.desqueeze,
-                                                 among: AssistPresets.desqueeze,
-                                                 off: AssistPresets.desqueezeOff) {
-                Text(verbatim: AssistRatioInput.text(custom) + "x").tag(custom)
-            }
-        }
-        if controller.liveAssist.desqueeze != AssistPresets.desqueezeOff {
             AssistCustomField(label: L("assist_custom"),
                               range: AssistRatioInput.desqueezeRange,
                               value: controller.liveAssist.desqueeze) { factor in

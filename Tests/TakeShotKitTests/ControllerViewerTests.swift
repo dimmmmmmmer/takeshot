@@ -33,16 +33,27 @@ import Testing
     }
 
     /// The desqueeze lives on the assist struct but has to survive a relaunch,
-    /// so it is mirrored into settings — and a spherical lens stores nothing.
+    /// so it is mirrored into settings.
+    ///
+    /// **A live factor of 1 no longer clears the stored one**, and that is the
+    /// change rather than a regression: the aid has a checkbox now, off is
+    /// `desqueezeOn == false`, and clearing the factor on the way out is what
+    /// used to throw away the 2x the operator had chosen. What a live 1 does
+    /// is store nothing new.
     @Test func theDesqueezeFactorIsMirroredIntoSettings() async throws {
         try await ControllerHarness.run { controller, _ in
             #expect(controller.settings.assist.desqueezeFactor == nil)
 
             controller.assist.desqueeze = 1.33
             #expect(controller.settings.assist.desqueezeFactor == 1.33)
+            #expect(controller.settings.assist.desqueezeOn == true,
+                    "a factor other than 1 IS the aid being on")
 
             controller.assist.desqueeze = 1
-            #expect(controller.settings.assist.desqueezeFactor == nil)
+            #expect(controller.settings.assist.desqueezeFactor == 1.33,
+                    "the operator's factor was thrown away")
+            #expect(controller.settings.assist.desqueezeApplied == 1,
+                    "the picture is still squeezed")
         }
     }
 

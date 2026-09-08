@@ -1160,3 +1160,4 @@
 "quit_risk_dailies" = "Dailies are being made. Quitting now leaves the batch unfinished.";
 "quit_risk_stay" = "Keep working";
 "quit_risk_quit" = "Quit anyway";
+"assist_ratio" = "Ratio";

@@ -338,6 +338,24 @@ public struct AssistLegend: Equatable, Sendable {
                 + metrics.labelHeight + 2 * metrics.verticalPadding)
     }
 
+    /// Where the swatch bar and the label column sit inside a vertical panel.
+    ///
+    /// A pure function so the mirroring can be asserted without rendering: the
+    /// bug it fixes was a matter of which side of the panel the SCALE was on,
+    /// and that is a number rather than a picture.
+    static func columnLayout(mirrored: Bool, metrics: AssistLegendMetrics,
+                             panelWidth: CGFloat)
+        -> (swatch: CGFloat, label: CGFloat) {
+        guard mirrored else {
+            return (swatch: metrics.padding,
+                    label: metrics.padding + metrics.swatchThickness
+                        + metrics.labelGap)
+        }
+        let swatch = panelWidth - metrics.padding - metrics.swatchThickness
+        return (swatch: swatch,
+                label: swatch - metrics.labelGap - metrics.labelWidth)
+    }
+
     /// The panel's bottom-left corner against the chosen edge, centered on the
     /// other axis.
     private func origin(panel: CGSize, inset: CGFloat,

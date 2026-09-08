@@ -41,12 +41,29 @@ public struct ThemeSettings: Codable, Equatable, Sendable {
 /// The aids drawn over the picture: framelines, safe areas, the anamorphic
 /// desqueeze, the exposure legend and focus peaking.
 public struct AssistSettings: Codable, Equatable, Sendable {
-    /// Frameline aspect (2.39, 1.85…); nil — off.
+    /// Frameline aspect (2.39, 1.85…). The VALUE, kept whether the guide is
+    /// drawn or not — see `framelinesOn`.
     public var framelineRatio: Double?
+    /// Whether the framelines are drawn.
+    ///
+    /// **A switch of its own, so switching off does not forget the aspect.**
+    /// Off used to be `framelineRatio = nil`, which was the same statement
+    /// back when the picker carried an Off row — with a checkbox beside it
+    /// (owner: "давай и у фреймлайнов и у десквиза вместо опции офф тоже
+    /// сделаем галочки слева как у остальных пунктов") that spelling throws
+    /// away the 2.39 the operator set, every time they untick the box.
+    ///
+    /// nil reads the old blob's intent: a stored aspect meant the guide was
+    /// on, which is exactly what it meant before this field existed.
+    public var framelinesOn: Bool?
     /// Action/title safe-area guides.
     public var safeAreasOn: Bool?
-    /// Anamorphic desqueeze factor for the preview (nil = 1).
+    /// Anamorphic desqueeze factor. The VALUE, like `framelineRatio` and for
+    /// the same reason — `desqueezeOn` decides whether it is applied.
     public var desqueezeFactor: Double?
+    /// Whether the desqueeze is applied. nil reads intent: a stored factor
+    /// other than 1 meant it was on.
+    public var desqueezeOn: Bool?
     /// Action-safe area as a percentage of the frame; nil — 93.
     ///
     /// 93/90 and in that order, per SMPTE RP 218 (EBU R 95 states the same two
@@ -80,9 +97,55 @@ public struct AssistSettings: Codable, Equatable, Sendable {
     /// change to the scale silently re-tuned every operator's saved setting.
     public var peakingIntensity: Double?
 
-    public init() {}
+    /// The aspect a frameline is drawn at when the guide is switched on and
+    /// nothing has ever been chosen. 2.39 is the one a set asks for first.
+    public static let defaultFramelineRatio = 2.39
+    /// …and the factor a desqueeze is applied at on the same terms. 2x is the
+    /// classic anamorphic squeeze.
+    public static let defaultDesqueezeFactor = 2.0
 
-    /// Safe-area percentages, clamped to a range that can still be drawn.
+    /// Whether the framelines are drawn, reading an older blob's intent when
+    /// the flag was never written.
+    public var framelinesOnEffective: Bool {
+        framelinesOn ?? (framelineRatio != nil)
+    }
+
+    /// The aspect the picker shows — the operator's choice, whether the guide
+    /// is being drawn or not.
+    public var framelineRatioChosen: Double {
+        guard let framelineRatio, framelineRatio > 0 else {
+            return Self.defaultFramelineRatio
+        }
+        return framelineRatio
+    }
+
+    /// **What the renderer draws**: nil when the guide is off, whatever aspect
+    /// is remembered. One conversion, so the value drawn and the value the
+    /// popover edits cannot disagree about what "off" means.
+    public var framelineRatioDrawn: Double? {
+        framelinesOnEffective ? framelineRatioChosen : nil
+    }
+
+    /// Whether the desqueeze is applied, reading intent for an older blob.
+    public var desqueezeOnEffective: Bool {
+        desqueezeOn ?? ((desqueezeFactor ?? 1) != 1)
+    }
+
+    /// The factor the picker shows, on or off.
+    public var desqueezeFactorChosen: Double {
+        guard let desqueezeFactor, desqueezeFactor > 0 else {
+            return Self.defaultDesqueezeFactor
+        }
+        return desqueezeFactor
+    }
+
+    /// What the renderer applies — 1 is "no squeeze", which is what off means
+    /// to every stage downstream.
+    public var desqueezeApplied: Double {
+        desqueezeOnEffective ? desqueezeFactorChosen : 1
+    }
+
+    public init() {}  /// Safe-area percentages, clamped to a range that can still be drawn.
     /// Read through these rather than the raw fields: a stored 0 (or a 400 from
     /// a hand-edited blob) would otherwise put the guides outside the picture.
     public var safeActionPercentEffective: Double {

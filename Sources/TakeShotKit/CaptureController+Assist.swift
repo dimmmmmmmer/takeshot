@@ -60,9 +60,28 @@ extension CaptureController {
         // the scopes measure what the viewer SHOWS, so a punch-in or a pan
         // moves the region they sample (see updateScopeRegion)
         updateScopeRegion()
+        // **A live factor other than 1 IS the aid being on**, so it stores
+        // both — and a live 1 stores nothing at all.
+        //
+        // This line used to write `nil` for a factor of 1, which was the same
+        // statement while emptiness was the off switch. With a checkbox beside
+        // it, that spelling threw away the 2x the operator had chosen every
+        // time they unticked the box; off is the flag's job now.
+        // **A live factor of 1 IS the aid being off, and anything else is it
+        // being on** — so the switch follows the live value and the FACTOR is
+        // never cleared.
+        //
+        // This line used to write nil for a factor of 1, which was the same
+        // statement while emptiness was the off switch. With a checkbox beside
+        // it (`AssistSettings.desqueezeOn`) that spelling threw away the 2x
+        // the operator had chosen every time they unticked the box.
         if oldValue.desqueeze != assist.desqueeze {
-            settings.assist.desqueezeFactor = assist.desqueeze == 1
-                ? nil : assist.desqueeze
+            if assist.desqueeze != 1 {
+                settings.assist.desqueezeFactor = assist.desqueeze
+                settings.assist.desqueezeOn = true
+            } else {
+                settings.assist.desqueezeOn = false
+            }
         }
         // the peaking color is a crew convention, like the marker color:
         // stored as nil at the default so old builds still decode the blob

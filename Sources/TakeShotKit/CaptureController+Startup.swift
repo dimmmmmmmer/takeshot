@@ -194,7 +194,9 @@ extension CaptureController {
     /// call so that adding the next one does not push `completeStartup` past
     /// the length at which nobody reads a function top to bottom.
     private func restoreAssists(from stored: CaptureSettings) {
-        assist.desqueeze = stored.assist.desqueezeFactor ?? 1
+        // The APPLIED factor, which is 1 while the aid is switched off — the
+        // stored factor is the operator's choice and outlives the switch.
+        assist.desqueeze = stored.assist.desqueezeApplied
         assist.peakingColor = stored.assist.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
         // the framelines and the exposure legend are settings rather than

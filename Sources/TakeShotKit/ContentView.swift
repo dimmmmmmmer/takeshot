@@ -18,6 +18,15 @@ struct ContentView: View {
         }
         .background(controller.appBackground.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: .top)
+        // The window's top strip answers the mouse like a title bar: drag to
+        // move, double-click for whatever the Mac is set to do (see
+        // `WindowDragZone`). Full width, above both columns' empty top areas,
+        // and only as tall as the strip itself — the traffic lights live in
+        // AppKit's titlebar above the content view and are untouched.
+        .overlay(alignment: .top) {
+            WindowDragZone()
+                .frame(height: controller.windowTopInset)
+        }
         .id(controller.settings.theme.appLanguage)
         // The DIT offload runs as a sheet over the main window: it needs a
         // destination LIST, live per-destination progress and a verdict card
