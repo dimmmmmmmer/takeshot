@@ -14,12 +14,20 @@ import SwiftUI
 /// and so the numbers can be read next to the destination list they are about.
 struct OffloadResumePanel: View {
     let review: OffloadResumeReview
+    /// Which card is being asked about — nil on a one-card run, where there is
+    /// nothing to disambiguate.
+    ///
+    /// Not decoration once the sheet can queue several: "SSD1 holds 400 of 480
+    /// files" says nothing about WHICH card, and the two answers below it
+    /// (resume, or copy the lot) are decisions about one specific card that the
+    /// operator would otherwise be making blind.
+    var card: String?
     let resume: () -> Void
     let copyEverything: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
-            Label(L("offload_resume_title"),
+            Label(Self.title(card: card),
                   systemImage: "arrow.clockwise.circle.fill")
                 .offloadText(.section, tint: .accentColor)
             ForEach(review.offers) { offer in
@@ -47,6 +55,18 @@ struct OffloadResumePanel: View {
         .padding(OffloadChrome.cardPadding)
         .background(Color.accentColor.opacity(OffloadChrome.cardTintOpacity),
                     in: RoundedRectangle(cornerRadius: OffloadChrome.cardRadius))
+    }
+
+    /// The heading: which card is being asked about, when the run has more
+    /// than one.
+    ///
+    /// A function beside `line` and for its reason — the text is the thing
+    /// worth pinning, and a render probe cannot read it: the panel's width is
+    /// set by the destination lines, so a heading that lost the card's name
+    /// would not move a single measured number.
+    static func title(card: String?) -> String {
+        guard let card, !card.isEmpty else { return L("offload_resume_title") }
+        return L("offload_resume_title_card", card)
     }
 
     /// One destination's line: what it holds, or why it holds nothing this run

@@ -164,6 +164,18 @@ public enum FCPXMLExporter {
             + "width=\"\(width)\" height=\"\(height)\"/>"
     }
 
+    /// One asset. `hasAudio` is declared and the channel count is NOT.
+    ///
+    /// A take carries no audio description — there is nothing on `Take` to read
+    /// — so `audioChannels="2"` would be an invented fact, the same kind the
+    /// EDL refuses to invent when it passes nil for a .cube look rather than
+    /// writing an identity SOP. Declaring the flag without the numbers leaves
+    /// the NLE to read the file's own tracks, which is what it does anyway.
+    ///
+    /// Declared rather than omitted because the two mistakes are not equal: a
+    /// flag on a silent take costs nothing (the NLE finds no audio and links
+    /// none), while omitting it on a take that HAS audio is how the sound
+    /// quietly fails to come across.
     private static func assetElement(_ clip: Placed) -> String {
         """
             <asset id="\(clip.assetID)" name="\(escape(clip.take.displayName))" \

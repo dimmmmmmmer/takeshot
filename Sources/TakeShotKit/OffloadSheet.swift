@@ -69,9 +69,12 @@ struct OffloadSheet: View {
             // hold, and nothing copies until this is answered.
             if let review = model.resumeReview {
                 Divider()
-                OffloadResumePanel(review: review,
-                                   resume: { model.resumeRun() },
-                                   copyEverything: { model.copyEverything() })
+                OffloadResumePanel(
+                    review: review,
+                    card: model.cardCount > 1
+                        ? model.currentSource?.lastPathComponent : nil,
+                    resume: { model.resumeRun() },
+                    copyEverything: { model.copyEverything() })
             }
             if model.isSurveying {
                 Divider()

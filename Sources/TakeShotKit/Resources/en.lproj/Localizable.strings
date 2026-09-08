@@ -510,6 +510,7 @@
 /* resuming a run a lost disk cut short (see OffloadResume) */
 "offload_resume_checking" = "Checking what the destinations already hold...";
 "offload_resume_title" = "This card has already been copied here in part";
+"offload_resume_title_card" = "Already on the disks — %@";
 "offload_resume_dest" = "%@ — %d of %d files are already there (%@), listed in that disk's own checksum list.";
 "offload_resume_dest_nothing" = "%@ — nothing on it can be reused; everything will be copied.";
 "offload_resume_dest_full" = "%@ — everything will be copied: %@.";

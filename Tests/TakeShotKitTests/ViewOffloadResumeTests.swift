@@ -171,3 +171,56 @@ import Testing
         }
     }
 }
+
+/// The resume question, once the sheet can queue several cards.
+///
+/// Its own suite because the question changes shape there: the same three
+/// destination lines now belong to ONE of several cards, and which one is a
+/// fact the panel has to carry. Without it the operator reads "SSD1 holds 400
+/// of 480 files" and answers a question about a card nobody named.
+@MainActor
+struct ViewOffloadResumeCardTests {
+    static let inner: CGFloat = OffloadSheet.width - 40
+
+    private func review() -> OffloadResumeReview {
+        OffloadResumeReview(
+            card: OffloadVolume(files: 900, bytes: 137_000_000_000),
+            offers: [OffloadResumeOffer(
+                destination: URL(fileURLWithPath: "/Volumes/SSD1/CARD_A001"),
+                manifest: nil, claimed: [], refusal: .noManifest)])
+    }
+
+    /// The heading is asked for its TEXT, not measured: the panel's width is
+    /// set by its destination lines, so a heading that lost the card's name
+    /// would not move a single rendered number — which is exactly how the
+    /// first version of this test passed with the name dropped.
+    @Test func theQuestionNamesTheCardWhenThereIsMoreThanOne() {
+        let named = OffloadResumePanel.title(card: "B002_SONY")
+        #expect(named.contains("B002_SONY"),
+                "the card's name did not reach the question: \(named)")
+        #expect(named != OffloadResumePanel.title(card: nil))
+        // A one-card run has nothing to disambiguate and says nothing extra.
+        #expect(OffloadResumePanel.title(card: nil)
+            == L("offload_resume_title"))
+        // …and neither does an empty name, which is what a card at a volume
+        // root with a trailing slash would hand it.
+        #expect(OffloadResumePanel.title(card: "")
+            == L("offload_resume_title"))
+    }
+
+    /// …and it still fits the sheet with a long card name on it, in both
+    /// languages — the title is one line and cannot wrap out of trouble.
+    @Test func theNamedQuestionStillFitsTheSheet() async throws {
+        try await ViewProbe.run { probe in
+            let minimum = probe.minimumWidths {
+                OffloadResumePanel(review: self.review(),
+                                   card: "A001_CANON_C500_DAY12",
+                                   resume: {}, copyEverything: {})
+            }
+            #expect(minimum.en <= Self.inner,
+                    "the named question needs \(minimum.en)pt of \(Self.inner)")
+            #expect(minimum.ru <= Self.inner,
+                    "the named question needs \(minimum.ru)pt of \(Self.inner)")
+        }
+    }
+}
