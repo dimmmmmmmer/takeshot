@@ -471,6 +471,16 @@
 "offload_title" = "Offload card";
 "offload_source_label" = "Card or folder";
 "offload_no_source" = "Nothing chosen yet";
+"offload_no_cards" = "Add at least one card.";
+"offload_add_source" = "Add card";
+"offload_remove_source" = "Remove this card";
+"offload_open_source" = "Show in Finder";
+"offload_error_same_name" = "Two cards have the same name — they would land in one folder.";
+"offload_done_cards" = "Offload verified: %@";
+"offload_card_of" = "card %1$d of %2$d";
+"card_count_one" = "%d card";
+"card_count_few" = "%d cards";
+"card_count_many" = "%d cards";
 "offload_dest_label" = "Copy to";
 "offload_add_dest" = "Add destination";
 "offload_remove_dest" = "Remove this destination";

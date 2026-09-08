@@ -109,7 +109,11 @@ extension CaptureController {
         var jobs = DiagnosticsSnapshot.JobsSection()
         jobs.offloadRunning = offload.isRunning
         jobs.offloadStatus = offloadStatus
-        jobs.offloadSource = offload.source.map(DiagnosticsRedaction.abbreviate)
+        // The card in flight when one is, and the queue's head otherwise —
+        // a diagnostics report is read to answer "what was it doing", and
+        // during a run that is one card even when three are queued.
+        jobs.offloadSource = (offload.currentSource ?? offload.sources.first)
+            .map(DiagnosticsRedaction.abbreviate)
         jobs.offloadDestinations =
             offload.destinations.map(DiagnosticsRedaction.abbreviate)
         jobs.verifyRunning = verify.isRunning

@@ -81,7 +81,9 @@ struct OffloadSheet: View {
             if let progress = model.progress {
                 Divider()
                 OffloadProgressPanel(progress: progress,
-                                     isCancelling: model.isCancelling)
+                                     isCancelling: model.isCancelling,
+                                     cardIndex: model.cardIndex,
+                                     cardCount: model.cardCount)
             }
             if let report = model.report {
                 Divider()
@@ -114,37 +116,82 @@ struct OffloadSourceSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
-            Text(L("offload_source_label"))
-                .offloadText(.section)
-            OffloadPathTile(
-                icon: model.source.map(OffloadVolumeFacts.icon) ?? "folder",
-                title: model.source.map(OffloadVolumeFacts.name)
-                    ?? L("offload_no_source"),
-                path: model.source?.path,
-                detail: sourceDetail,
-                isEmpty: model.source == nil,
-                finderTarget: model.source) {
-                    Button(L("choose")) { pickSource() }
-                        .disabled(controller.isOffloadRunning)
+            HStack {
+                Text(L("offload_source_label"))
+                    .offloadText(.section)
+                Spacer()
+                Button {
+                    if let url = pickSource() { model.addSource(url) }
+                } label: {
+                    Label(L("offload_add_source"), systemImage: "plus")
                 }
+                .disabled(controller.isOffloadRunning)
+            }
+            if model.sourceRows.isEmpty {
+                Text(L("offload_no_cards"))
+                    .offloadText(.caption)
+            }
+            ForEach(model.sourceRows) { row in
+                sourceTile(row)
+            }
         }
+    }
+
+    /// One card, built exactly like a destination row: the plate carries what
+    /// acts ON this card, and Remove sits outside it in red because it acts on
+    /// the LIST. The two lists are the same control now, which is the point of
+    /// the change — an operator who has learned one has learned both.
+    private func sourceTile(_ row: OffloadSheetModel.Row) -> some View {
+        HStack(spacing: OffloadChrome.rowSpacing) {
+            OffloadPathTile(icon: OffloadVolumeFacts.icon(for: row.url),
+                            title: OffloadVolumeFacts.name(of: row.url),
+                            path: row.url.path,
+                            detail: sourceDetail(row),
+                            finderTarget: row.url) {
+                Button(L("choose")) { chooseSource(row) }
+                    .disabled(controller.isOffloadRunning)
+            }
+            .contextMenu { sourceMenu(row) }
+            Button {
+                model.removeSource(row.id)
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.red)
+            .disabled(controller.isOffloadRunning)
+            .help(L("offload_remove_source"))
+        }
+    }
+
+    @ViewBuilder
+    private func sourceMenu(_ row: OffloadSheetModel.Row) -> some View {
+        Button(L("choose")) { chooseSource(row) }
+            .disabled(controller.isOffloadRunning)
+        Button(L("offload_open_source")) { FinderOpen.folder(row.url) }
+        Divider()
+        Button(L("offload_remove_source"), role: .destructive) {
+            model.removeSource(row.id)
+        }
+        .disabled(controller.isOffloadRunning)
+    }
+
+    private func chooseSource(_ row: OffloadSheetModel.Row) {
+        guard let url = pickSource(near: row.url) else { return }
+        model.setSource(url, at: row.id)
     }
 
     /// How full the card is — but only for a volume. The same two numbers over a
     /// folder on a working disk would describe the disk, which is not what the
     /// line beside a sound roll appears to be saying.
-    private var sourceDetail: String? {
-        guard let source = model.source,
-              OffloadVolumeFacts.isVolumeRoot(source) else { return nil }
-        return OffloadVolumeFacts.usedText(of: source)
+    private func sourceDetail(_ row: OffloadSheetModel.Row) -> String? {
+        guard OffloadVolumeFacts.isVolumeRoot(row.url) else { return nil }
+        return OffloadVolumeFacts.usedText(of: row.url)
     }
 
-    private func pickSource() {
-        if let url = OffloadPanels.pickFolder(
-            message: L("offload_pick_source"),
-            prompt: L("offload_source_prompt"), near: model.source) {
-            model.source = url
-        }
+    private func pickSource(near: URL? = nil) -> URL? {
+        OffloadPanels.pickFolder(message: L("offload_pick_source"),
+                                 prompt: L("offload_source_prompt"), near: near)
     }
 }
 
@@ -238,9 +285,17 @@ struct OffloadDestinationSection: View {
     /// Where this copy lands and whether the disk can hold it — the two facts the
     /// operator checks before pressing Start, on one line.
     private func destinationDetail(_ row: OffloadSheetModel.Row) -> String? {
-        let parts = [model.destinationFolder(for: row)
-            .map { "→ \($0.lastPathComponent)" },
-                     OffloadVolumeFacts.freeText(of: row.url)]
+        // One card names the folder it lands in; several name how many, since
+        // the row cannot show three folder names and a free-space figure.
+        let landing: String?
+        switch model.sources.count {
+        case 0: landing = nil
+        case 1: landing = model.sources.first.map {
+            "→ \(model.destinationFolder(for: row, card: $0).lastPathComponent)"
+        }
+        default: landing = "→ " + localizedCount(model.sources.count, .card)
+        }
+        let parts = [landing, OffloadVolumeFacts.freeText(of: row.url)]
             .compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -279,7 +334,7 @@ struct OffloadSheetFooter: View {
 
     var body: some View {
         HStack {
-            if model.isRunning {
+            if model.isRunning || model.isSurveying {
                 Button(L("offload_cancel_run")) { model.cancel() }
                     .disabled(!controller.canStopDiskJob)
             }

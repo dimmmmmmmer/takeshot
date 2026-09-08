@@ -27,7 +27,20 @@ final class OffloadSheetModel: ObservableObject {
     /// still verifies (see `OffloadManifestReader`); what went is the question.
     static let algorithm: OffloadHashAlgorithm = .xxh64
 
-    @Published var source: URL?
+    /// The cards to copy, in the order they will be copied.
+    ///
+    /// A LIST rather than one folder (owner: "вот выбор папок для копирования —
+    /// давай сделаем как во втором блоке. вариант добавлять несколько папок и
+    /// удалять из списка"). A shooting day is several cards and several sound
+    /// rolls, and the sheet used to make that several separate runs — each one
+    /// a wait at the machine before the next could be started.
+    ///
+    /// The cards are copied ONE AT A TIME, each with its own report and its own
+    /// manifest. That is not a limitation: a manifest is per card by
+    /// convention, it is what every downstream tool verifies against, and a
+    /// card that failed has to be identifiable as the card that failed rather
+    /// than as part of a batch.
+    @Published var sourceRows: [Row] = []
     @Published var rows: [Row] = []
     /// Live state of the run; nil when nothing is running.
     @Published var progress: OffloadProgress?
@@ -49,12 +62,31 @@ final class OffloadSheetModel: ObservableObject {
     /// Start is not offered again until it comes back.
     @Published var isSurveying = false
 
+    /// Every finished card's report, oldest first. The sheet lists them; the
+    /// last one is also `report`, which is what the single-card UI reads.
+    @Published var reports: [OffloadReport] = []
+    /// Which card is being copied, 1-based, and how many the run has. Both 0
+    /// when nothing is running. The status line says "card 2 of 3" from these,
+    /// and says nothing extra when there is only one — the ordinary case.
+    @Published var cardIndex = 0
+    @Published var cardCount = 0
+
+    /// The cards still to copy. The one in flight is NOT in here; it is
+    /// `currentSource`, which is what the report and the manifest are about.
+    private var remainingSources: [URL] = []
+    private(set) var currentSource: URL?
+    /// Cancel was pressed while the survey was still out. The survey itself
+    /// cannot be stopped — it is one manifest parse per destination — but its
+    /// answer must not start a copy.
+    private var queueCancelled = false
+
     /// Stamped into every manifest.
     var creator: OffloadCreatorInfo = .current()
     private var cancellation: OffloadCancellation?
     private weak var controller: CaptureController?
 
     var destinations: [URL] { rows.map(\.url) }
+    var sources: [URL] { sourceRows.map(\.url) }
 
     /// Wired once, in `CaptureController.init`, rather than when the sheet
     /// opens: a run reports through the controller (status line, toast, sticky
@@ -83,7 +115,28 @@ final class OffloadSheetModel: ObservableObject {
         rows = saved.map { Row(url: URL(fileURLWithPath: $0)) }
     }
 
-    // MARK: - editing the list
+    // MARK: - editing the card list
+
+    /// Queue a card. Already queued — nothing happens, because the second copy
+    /// of one card into one destination is a name collision, not a plan.
+    func addSource(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        guard !sources.contains(where: { $0.standardizedFileURL.path == path })
+        else { return }
+        sourceRows.append(Row(url: url))
+    }
+
+    func setSource(_ url: URL, at id: Row.ID) {
+        guard let index = sourceRows.firstIndex(where: { $0.id == id })
+        else { return }
+        sourceRows[index].url = url
+    }
+
+    func removeSource(_ id: Row.ID) {
+        sourceRows.removeAll { $0.id == id }
+    }
+
+    // MARK: - editing the destination list
 
     func addDestination(_ url: URL) {
         rows.append(Row(url: url))
@@ -117,13 +170,19 @@ final class OffloadSheetModel: ObservableObject {
     /// Where a row's copy actually lands: the card's own folder name, created
     /// inside the chosen destination. Three SSDs then hold three folders named
     /// after the card rather than three loose DCIM trees.
-    func destinationFolder(for row: Row) -> URL? {
-        guard let source else { return nil }
-        return row.url.appendingPathComponent(source.lastPathComponent)
+    func destinationFolder(for row: Row, card: URL) -> URL {
+        row.url.appendingPathComponent(card.lastPathComponent)
     }
 
-    var destinationFolders: [URL] {
-        rows.compactMap { destinationFolder(for: $0) }
+    /// Where one card lands, on every destination.
+    func destinationFolders(for card: URL) -> [URL] {
+        rows.map { destinationFolder(for: $0, card: card) }
+    }
+
+    /// Every folder this run will write, over every card. What the validation
+    /// reasons about, and what the resume survey would have to ask about.
+    var allDestinationFolders: [URL] {
+        sources.flatMap { destinationFolders(for: $0) }
     }
 
     /// What "show it in the Finder" opens for a row (owner item 23): the copy's
@@ -134,8 +193,11 @@ final class OffloadSheetModel: ObservableObject {
     /// trying. During and after the run it opens the copy itself, which is
     /// what they are actually asking to look at.
     func finderTarget(for row: Row) -> URL {
-        guard let folder = destinationFolder(for: row),
-              FileManager.default.fileExists(atPath: folder.path)
+        // With several cards queued there is no single folder to open — the
+        // destination itself holds all of them, which is the thing to look at.
+        guard sources.count == 1, let card = sources.first else { return row.url }
+        let folder = destinationFolder(for: row, card: card)
+        guard FileManager.default.fileExists(atPath: folder.path)
         else { return row.url }
         return folder
     }
@@ -146,21 +208,31 @@ final class OffloadSheetModel: ObservableObject {
     /// "ready" or "nothing chosen yet" — the button's own disabled state covers
     /// the second case without shouting about it.
     var validationMessage: String? {
-        let folders = destinationFolders
+        let folders = destinations
         if Set(folders.map(\.standardizedFileURL.path)).count != folders.count {
             return L("offload_error_duplicate")
         }
-        guard let source = source?.standardizedFileURL else { return nil }
-        for folder in folders.map(\.standardizedFileURL)
-        where folder == source || folder.path.hasPrefix(source.path + "/") {
-            // Copying a tree into itself grows forever and can never verify.
-            return L("offload_error_nested")
+        // Two cards with the SAME NAME land in one folder on the destination
+        // and overwrite each other. `addSource` refuses the same card twice,
+        // but two different paths can still end in "A001" — two rigs, two
+        // days, one careless label — and that one is worth saying out loud
+        // rather than discovering in the manifest.
+        let names = sources.map(\.lastPathComponent)
+        if Set(names).count != names.count {
+            return L("offload_error_same_name")
+        }
+        for card in sources.map(\.standardizedFileURL) {
+            for folder in destinationFolders(for: card).map(\.standardizedFileURL)
+            where folder == card || folder.path.hasPrefix(card.path + "/") {
+                // Copying a tree into itself grows forever and can never verify.
+                return L("offload_error_nested")
+            }
         }
         return nil
     }
 
     var canStart: Bool {
-        !isRunning && !isSurveying && resumeReview == nil && source != nil
+        !isRunning && !isSurveying && resumeReview == nil && !sourceRows.isEmpty
             && !rows.isEmpty && validationMessage == nil
     }
 
@@ -174,10 +246,33 @@ final class OffloadSheetModel: ObservableObject {
     /// When nothing is reusable it runs straight through, which is every
     /// ordinary card.
     func start() {
-        guard let source, canStart else { return }
+        guard canStart else { return }
+        // The whole queue is fixed here, at the press: a list edited while the
+        // run is going would otherwise change what "card 2 of 3" means halfway
+        // through, and the sheet's controls are disabled for exactly as long
+        // as this queue lasts.
+        remainingSources = sources
+        queueCancelled = false
+        cardCount = remainingSources.count
+        cardIndex = 0
+        reports = []
+        report = nil
+        surveyNextCard()
+    }
+
+    /// Take the next card off the queue and ask the destinations what they
+    /// already hold of it. Nothing left — the run is done.
+    private func surveyNextCard() {
+        guard !remainingSources.isEmpty else {
+            finishQueue()
+            return
+        }
+        let source = remainingSources.removeFirst()
+        currentSource = source
+        cardIndex += 1
         isSurveying = true
         controller?.offloadStatus = L("offload_resume_checking")
-        let folders = destinationFolders
+        let folders = destinationFolders(for: source)
         // Read on the main actor and sent in: `algorithm` is main-actor state,
         // and reaching for it from inside the Sendable closure is the race the
         // Swift 6 mode exists to catch.
@@ -194,6 +289,12 @@ final class OffloadSheetModel: ObservableObject {
     /// means the run the operator already asked for.
     private func answer(_ review: OffloadResumeReview) {
         isSurveying = false
+        // Cancelled while the survey was out: nothing has been copied for this
+        // card and nothing is going to be.
+        guard !queueCancelled else {
+            finishQueue()
+            return
+        }
         guard review.isUsable else {
             begin(resume: false)
             return
@@ -219,11 +320,12 @@ final class OffloadSheetModel: ObservableObject {
     // MARK: - the run
 
     private func begin(resume: Bool) {
-        guard let source, !isRunning else { return }
+        guard let source = currentSource, !isRunning else { return }
         // The report labels are read here, once, in the operator's current UI
         // language: the summary and the card of THIS run speak one language
         // even if the switch is flipped while it copies (owner item 21).
-        let plan = OffloadPlan(source: source, destinations: destinationFolders,
+        let plan = OffloadPlan(source: source,
+                               destinations: destinationFolders(for: source),
                                algorithm: Self.algorithm, creator: creator,
                                resume: resume, reportLabels: .current())
         let token = OffloadCancellation()
@@ -245,8 +347,27 @@ final class OffloadSheetModel: ObservableObject {
     /// Safe cancel: the flag is read between files, so what is on the
     /// destination is always a whole file, and the summary records where it
     /// stopped.
+    /// Stop — the card in flight after the file it is on, and every card
+    /// behind it.
+    ///
+    /// The whole queue, not just the current card: cancel means "stop
+    /// copying", and a run that went quiet and then started the next card by
+    /// itself would be the opposite of what was asked — with the operator
+    /// having pulled the disk on the strength of it.
+    ///
+    /// It works during the SURVEY too. The survey cannot itself be stopped (one
+    /// manifest parse per destination, already in flight), but on a full card
+    /// with three destinations it is long enough to be pressed through, and a
+    /// Cancel that did nothing there would be a Cancel the operator learns not
+    /// to trust.
     func cancel() {
-        guard isRunning else { return }
+        guard isRunning || isSurveying else { return }
+        remainingSources = []
+        queueCancelled = true
+        guard isRunning else {
+            controller?.offloadStatus = L("offload_cancelling")
+            return
+        }
         cancellation?.cancel()
         isCancelling = true
         controller?.offloadStatus = L("offload_cancelling")
@@ -257,16 +378,55 @@ final class OffloadSheetModel: ObservableObject {
         progress = snapshot
         guard !isCancelling else { return }
         let done = snapshot.destinations.map(\.filesDone).max() ?? 0
-        controller?.offloadStatus = L("offload_progress", done,
-                                      snapshot.filesTotal)
+        let line = L("offload_progress", done, snapshot.filesTotal)
+        controller?.offloadStatus = cardCount > 1
+            ? L("offload_card_of", cardIndex, cardCount) + " · " + line
+            : line
     }
 
+    /// One card is done. Logged, reported, and then the next one starts.
+    ///
+    /// Every card goes through `offloadDidFinish` on its own: its own history
+    /// entry, its own verified-card note, and — the half that matters — its own
+    /// sticky alarm the moment it fails, rather than at the end of a queue that
+    /// may still have twenty minutes to run.
     private func finish(_ result: OffloadReport) {
         isRunning = false
         isCancelling = false
         progress = nil
         report = result
+        reports.append(result)
         cancellation = nil
         controller?.offloadDidFinish(result)
+        // A cancelled card cancels the queue: `cancel()` has already emptied
+        // it, and a card that stopped on its own (a source that went away
+        // mid-copy) is not a reason to walk on to the next one silently.
+        guard !result.wasCancelled else {
+            finishQueue()
+            return
+        }
+        surveyNextCard()
+    }
+
+    /// The queue is empty. Says how many cards were copied when there was more
+    /// than one — `offloadDidFinish` has already spoken for the last card, and
+    /// on a batch that line describes a third of what happened.
+    private func finishQueue() {
+        currentSource = nil
+        isSurveying = false
+        queueCancelled = false
+        controller?.offloadStatus = nil
+        guard cardCount > 1 else {
+            cardIndex = 0
+            cardCount = 0
+            return
+        }
+        let verified = reports.filter(\.isFullyVerified).count
+        if verified == reports.count {
+            controller?.lastNotice = L("offload_done_cards",
+                                       localizedCount(verified, .card))
+        }
+        cardIndex = 0
+        cardCount = 0
     }
 }

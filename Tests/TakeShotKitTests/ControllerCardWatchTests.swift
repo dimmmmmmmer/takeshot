@@ -122,7 +122,7 @@ enum CardFixture {
             // …and the whole point: no run, no sheet, nothing written anywhere.
             #expect(!controller.offload.isRunning)
             #expect(!controller.offloadSheetPresented)
-            #expect(controller.offload.source == nil)
+            #expect(controller.offload.sources.isEmpty)
             #expect(controller.offloadStatus == nil)
             #expect(CardFixture.fileCount(under: card) == before,
                     "the card was written to by a prompt")
@@ -142,7 +142,7 @@ enum CardFixture {
             controller.acceptCardOffer()
 
             #expect(controller.offloadSheetPresented)
-            #expect(controller.offload.source == card)
+            #expect(controller.offload.sources == [card])
             #expect(controller.cardOffer == nil)
             #expect(!controller.offload.isRunning, "it started copying by itself")
         }

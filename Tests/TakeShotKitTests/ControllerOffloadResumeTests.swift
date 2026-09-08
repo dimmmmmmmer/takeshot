@@ -58,7 +58,7 @@ import Testing
                 try? FileManager.default.removeItem(at: dest)
             }
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(dest)
 
             // A first offload has nothing to ask about and runs straight through.
@@ -105,7 +105,7 @@ import Testing
                 try? FileManager.default.removeItem(at: dest)
             }
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(dest)
             model.start()
             #expect(await ControllerWait.untilWritten { model.report != nil })
@@ -137,7 +137,7 @@ import Testing
                 try? FileManager.default.removeItem(at: dest)
             }
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(dest)
 
             model.start()
@@ -167,14 +167,18 @@ import Testing
                 }
             }
             let model = controller.offload
-            model.source = first
+            model.addSource(first)
             model.addDestination(dest)
             model.start()
             #expect(await ControllerWait.untilWritten { model.report != nil })
 
             // the same disk, the next card — and the copy already on it is named
-            // after the OTHER card, so this one has its own folder anyway
-            model.source = second
+            // after the OTHER card, so this one has its own folder anyway.
+            // Re-pointed rather than added: this is the sheet's Choose on the
+            // card row, which is what "the next card" means. Two cards QUEUED
+            // is a different run, and `theQueueCopiesEveryCardInTurn` is it.
+            let card = try #require(model.sourceRows.first)
+            model.setSource(second, at: card.id)
             model.report = nil
             model.start()
             #expect(await ControllerWait.untilWritten { model.report != nil })

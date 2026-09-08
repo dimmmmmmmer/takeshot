@@ -37,7 +37,10 @@ extension CaptureController {
     /// stopping. One rule for the offload and the verify, because
     /// `cancelRunningDiskJob` is one button for both.
     var canStopDiskJob: Bool {
-        (offload.isRunning && !offload.isCancelling)
+        // The survey counts: it is the first thing a queued run does, it is
+        // long on a full card, and `OffloadSheetModel.cancel` handles it.
+        (offload.isSurveying && !offload.isCancelling)
+            || (offload.isRunning && !offload.isCancelling)
             || (verify.isRunning && !verify.isCancelling)
     }
 

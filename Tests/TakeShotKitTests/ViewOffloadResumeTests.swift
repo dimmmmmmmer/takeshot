@@ -71,7 +71,7 @@ import Testing
     @Test func theSheetWithTheQuestionFitsItsFixedWidth() async throws {
         try await ViewProbe.run { probe in
             let model = probe.controller.offload
-            model.source = self.card("CARD_A001")
+            model.addSource(self.card("CARD_A001"))
             model.addDestination(self.card("DAILIES_SSD_1/Offload"))
             model.resumeReview = self.review()
 

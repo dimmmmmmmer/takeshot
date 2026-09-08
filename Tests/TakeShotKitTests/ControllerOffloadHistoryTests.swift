@@ -81,7 +81,7 @@ import Testing
             let source = try self.makeCard(box)
             let disk = box.appendingPathComponent("SSD1")
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(disk)
 
             model.start()
@@ -121,7 +121,7 @@ import Testing
                 at: disk, withIntermediateDirectories: true)
             try Data([0]).write(to: disk.appendingPathComponent("CARD_A001"))
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(disk)
 
             model.start()

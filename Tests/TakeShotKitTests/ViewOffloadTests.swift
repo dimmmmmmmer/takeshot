@@ -51,7 +51,7 @@ import Testing
     }
 
     private func configure(_ model: OffloadSheetModel) {
-        model.source = card("CARD_A001")
+        model.addSource(card("CARD_A001"))
         model.addDestination(card("DAILIES_SSD_1/Offload"))
         model.addDestination(card("DAILIES_SSD_2/Offload"))
     }
@@ -364,9 +364,14 @@ import Testing
                         finderTarget: URL(fileURLWithPath: long)) {
                             Button(L("choose")) {}
                         }
+                    // …the verify sheet's "nothing chosen" tile, which is the
+                    // one place a tile still stands in for an empty choice…
                     OffloadPathTile(
                         icon: "folder", title: L("offload_no_source"),
                         isEmpty: true) { Button(L("choose")) {} }
+                    // …and the captions the two LISTS show when they are empty.
+                    Text(L("offload_no_cards")).offloadText(.caption)
+                    Text(L("offload_no_dest")).offloadText(.caption)
                 }
             }
 
@@ -432,6 +437,97 @@ struct ViewCardOfferTests {
                             "\(candidate.evidence) renders its raw key in \(language)")
                 }
             }
+        }
+    }
+}
+
+/// The card list, which is a list now.
+///
+/// Its own suite rather than more of the offload suite above: that type is at
+/// the length ceiling, and this is one question — does the sheet still fit when
+/// the operator queues a day's worth of cards.
+@MainActor
+struct ViewOffloadCardListTests {
+    /// What the sheet's own padding leaves for the content.
+    static let inner: CGFloat = OffloadSheet.width - 40
+
+    private func card(_ name: String) -> URL {
+        URL(fileURLWithPath: "/Volumes/\(name)")
+    }
+
+    /// Three cards and two destinations — a two-camera day — still inside the
+    /// sheet's fixed width, in both languages. Russian is the case that
+    /// matters: "Убрать эту карту" is longer than "Remove this card", and the
+    /// row also carries a path and a free-space line that cannot compress.
+    @Test func aDayOfCardsFitsTheSheetInBothLanguages() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.offload
+            for name in ["A001_CANON", "B002_SONY", "SOUND_R01"] {
+                model.addSource(self.card(name))
+            }
+            for name in ["DAILIES_SSD_1", "SHUTTLE_2"] {
+                model.addDestination(self.card(name))
+            }
+            let minimum = probe.minimumWidths {
+                OffloadSourceSection(model: model)
+                    .environmentObject(probe.controller)
+            }
+            #expect(minimum.en <= Self.inner,
+                    "the card list needs \(minimum.en)pt of \(Self.inner)")
+            #expect(minimum.ru <= Self.inner,
+                    "the card list needs \(minimum.ru)pt of \(Self.inner)")
+        }
+    }
+
+    /// The progress line says WHICH card, and still fits the sheet — the
+    /// counter sits beside a file name that is already truncating, in Russian,
+    /// where "карта 3 из 3" is longer than "card 3 of 3".
+    @Test func theCardCounterFitsBesideTheFileName() async throws {
+        try await ViewProbe.run { probe in
+            let progress = OffloadProgress(
+                filesTotal: 480, bytesTotal: 512_000_000_000,
+                currentFile: "A001C042_260802_R1AB.mov",
+                destinations: [], elapsed: 42, isCancelling: false)
+            let widths = probe.minimumWidths {
+                OffloadProgressPanel(progress: progress, isCancelling: false,
+                                     cardIndex: 3, cardCount: 3)
+            }
+            #expect(widths.ru <= Self.inner,
+                    "the counter needs \(widths.ru)pt of \(Self.inner)")
+            #expect(widths.en <= Self.inner)
+
+            // …and it is not there at all on a one-card run.
+            let alone = probe.fittingSizes {
+                OffloadProgressPanel(progress: progress, isCancelling: false)
+            }
+            let counted = probe.fittingSizes {
+                OffloadProgressPanel(progress: progress, isCancelling: false,
+                                     cardIndex: 1, cardCount: 3)
+            }
+            #expect(counted.en.width > alone.en.width,
+                    "the card counter drew nothing")
+        }
+    }
+
+    /// One row per queued card — the assertion that the list is a list. A
+    /// section that drew only the first card would pass every width check
+    /// above it and lose two cards on screen.
+    @Test func everyQueuedCardGetsARow() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.offload
+            let names = ["A001_CANON", "B002_SONY", "SOUND_R01"]
+            // Built UP rather than trimmed down: taking `prefix(n)` of a list
+            // that is itself being trimmed shrinks it once and then measures
+            // the same one row three times.
+            let heights = names.map { name -> CGFloat in
+                model.addSource(self.card(name))
+                return probe.fittingSizes {
+                    OffloadSourceSection(model: model)
+                        .environmentObject(probe.controller)
+                }.en.height
+            }
+            #expect(heights[1] > heights[0], "the second card drew nothing")
+            #expect(heights[2] > heights[1], "the third card drew nothing")
         }
     }
 }

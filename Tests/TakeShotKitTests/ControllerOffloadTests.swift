@@ -81,7 +81,7 @@ import Testing
                 try? FileManager.default.removeItem(at: source)
                 try? FileManager.default.removeItem(at: dest)
             }
-            controller.offload.source = source
+            controller.offload.addSource(source)
             controller.offload.addDestination(dest)
             controller.offload.start()
             _ = await ControllerWait.untilWritten { controller.offload.report != nil }
@@ -96,10 +96,10 @@ import Testing
     @Test func theCopyLandsInAFolderNamedAfterTheCard() async throws {
         try await ControllerHarness.run { controller, _ in
             let model = controller.offload
-            model.source = URL(fileURLWithPath: "/Volumes/CARD_A001")
+            model.addSource(URL(fileURLWithPath: "/Volumes/CARD_A001"))
             model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1/Dailies"))
 
-            #expect(model.destinationFolders.map(\.path)
+            #expect(model.allDestinationFolders.map(\.path)
                 == ["/Volumes/SSD1/Dailies/CARD_A001"])
             #expect(model.canStart)
         }
@@ -108,7 +108,7 @@ import Testing
     @Test func theSameDestinationTwiceIsRefused() async throws {
         try await ControllerHarness.run { controller, _ in
             let model = controller.offload
-            model.source = URL(fileURLWithPath: "/Volumes/CARD")
+            model.addSource(URL(fileURLWithPath: "/Volumes/CARD"))
             model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
             model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
 
@@ -125,7 +125,7 @@ import Testing
     @Test func aDestinationInsideTheCardIsRefused() async throws {
         try await ControllerHarness.run { controller, _ in
             let model = controller.offload
-            model.source = URL(fileURLWithPath: "/Volumes/CARD")
+            model.addSource(URL(fileURLWithPath: "/Volumes/CARD"))
             model.addDestination(URL(fileURLWithPath: "/Volumes/CARD/DCIM"))
 
             #expect(model.validationMessage != nil)
@@ -137,7 +137,7 @@ import Testing
         try await ControllerHarness.run { controller, _ in
             let model = controller.offload
             #expect(!model.canStart)
-            model.source = URL(fileURLWithPath: "/Volumes/CARD")
+            model.addSource(URL(fileURLWithPath: "/Volumes/CARD"))
             #expect(!model.canStart)
             model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
             #expect(model.canStart)
@@ -161,7 +161,7 @@ import Testing
                 }
             }
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(first)
             model.addDestination(second)
 
@@ -204,7 +204,7 @@ import Testing
             try Data([0]).write(to: broken
                 .appendingPathComponent(source.lastPathComponent))
             let model = controller.offload
-            model.source = source
+            model.addSource(source)
             model.addDestination(good)
             model.addDestination(broken)
 
@@ -274,7 +274,7 @@ import Testing
     @Test func theMenuReopensARunningOffloadRatherThanRefusing() async throws {
         try await ControllerHarness.run { controller, _ in
             let model = controller.offload
-            model.source = URL(fileURLWithPath: "/Volumes/CARD")
+            model.addSource(URL(fileURLWithPath: "/Volumes/CARD"))
             model.addDestination(URL(fileURLWithPath: "/Volumes/SSD1"))
             model.isRunning = true
             model.report = nil

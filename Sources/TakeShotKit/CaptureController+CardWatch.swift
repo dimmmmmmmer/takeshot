@@ -145,7 +145,7 @@ extension CaptureController {
 
     // MARK: - the three answers
 
-    /// Yes. The normal offload sheet, with this card already in the source slot.
+    /// Yes. The normal offload sheet, with this card ADDED to the card list.
     ///
     /// The DESTINATIONS are not guessed and never will be: the sheet seeds them
     /// from the rig the operator saved last time, and picking where footage lands
@@ -158,7 +158,10 @@ extension CaptureController {
         // silently spent — the card still has not been copied.
         guard offloadSheetPresented, !offload.isRunning else { return }
         cardOffer = nil
-        offload.source = offer.url
+        // Added rather than substituted: the list can hold several cards now,
+        // and a second card mounting while the first is still queued means two
+        // cards to copy — not a change of mind about the first.
+        offload.addSource(offer.url)
         drainDeferredCardOffers()
     }
 

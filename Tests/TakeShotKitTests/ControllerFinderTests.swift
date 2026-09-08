@@ -73,12 +73,12 @@ import Testing
         try await recording { recorder in
             try await ControllerHarness.run { controller, _ in
                 let model = controller.offload
-                model.source = card
+                model.addSource(card)
                 model.addDestination(disk)
                 let row = try #require(model.rows.first)
 
                 // nothing copied yet: the copy folder does not exist
-                let planned = try #require(model.destinationFolder(for: row))
+                let planned = model.destinationFolder(for: row, card: card)
                 #expect(model.finderTarget(for: row) == disk)
                 try FileManager.default.createDirectory(
                     at: planned, withIntermediateDirectories: true)
@@ -88,7 +88,7 @@ import Testing
                 // comparing equal halfway through this test.
                 #expect(model.finderTarget(for: row).path == planned.path)
 
-                FinderOpen.folder(try #require(model.source))
+                FinderOpen.folder(try #require(model.sources.first))
                 FinderOpen.folder(model.finderTarget(for: row))
                 #expect(recorder.opened.map(\.path)
                     == [card.path, planned.path])

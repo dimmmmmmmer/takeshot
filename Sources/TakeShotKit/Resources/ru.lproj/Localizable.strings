@@ -476,6 +476,16 @@
 "offload_title" = "Офлоад карты";
 "offload_source_label" = "Карта или папка";
 "offload_no_source" = "Ничего не выбрано";
+"offload_no_cards" = "Добавьте хотя бы одну карту.";
+"offload_add_source" = "Добавить карту";
+"offload_remove_source" = "Убрать эту карту";
+"offload_open_source" = "Показать в Finder";
+"offload_error_same_name" = "Две карты названы одинаково — они лягут в одну папку.";
+"offload_done_cards" = "Офлоад сверен: %@";
+"offload_card_of" = "карта %1$d из %2$d";
+"card_count_one" = "%d карта";
+"card_count_few" = "%d карты";
+"card_count_many" = "%d карт";
 "offload_dest_label" = "Копировать на";
 "offload_add_dest" = "Добавить диск";
 "offload_remove_dest" = "Убрать этот диск";

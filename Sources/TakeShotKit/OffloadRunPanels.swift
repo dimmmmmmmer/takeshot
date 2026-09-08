@@ -16,6 +16,10 @@ import SwiftUI
 struct OffloadProgressPanel: View {
     let progress: OffloadProgress
     let isCancelling: Bool
+    /// Which card of how many, when the run has more than one. Both 0 — one
+    /// card, and the counter says nothing worth the line it would take.
+    var cardIndex = 0
+    var cardCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
@@ -28,6 +32,16 @@ struct OffloadProgressPanel: View {
                     .offloadText(.body)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if cardCount > 1 {
+                    Spacer(minLength: OffloadChrome.rowSpacing)
+                    // Which card the file in flight belongs to. Without it a
+                    // queue looks exactly like a run that is taking a very
+                    // long time, and the file names go by too fast to read.
+                    Text(L("offload_card_of", cardIndex, cardCount))
+                        .offloadText(.caption)
+                        .monospacedDigit()
+                        .fixedSize()
+                }
             }
             ForEach(progress.destinations) { destination in
                 row(destination)
