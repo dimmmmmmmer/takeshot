@@ -324,7 +324,6 @@ final class CaptureController: ObservableObject {
     /// `VisualRecLiveState`, which is `assistLive` one control along.
     let visualRecLive = VisualRecLiveState()
     /// Debounced fold of a dragged aid value into `assist`.
-    var assistPersistTask: Task<Void, Never>?
 
     /// A reference frame is pinned for live compare (rec mode wipe/blend).
     @Published var referencePinned = false
@@ -369,7 +368,6 @@ final class CaptureController: ObservableObject {
         didSet { applyPlaybackLUT() }
     }
     /// Debounced persist of the LUT mix (see `lutIntensity` in +LUT).
-    var lutPersistTask: Task<Void, Never>?
     /// The last look read off disk. A named type rather than a triple: three
     /// positional members read the same whatever order they are in.
     struct LoadedLook {
@@ -478,14 +476,16 @@ final class CaptureController: ObservableObject {
         }
     }
     /// Debounced persist of the volume slider (see `setVolume` in +Audio).
-    var volumePersistTask: Task<Void, Never>?
+    /// **Every settings write that waits**, and the one thing that flushes
+    /// them on the way out (see `DebouncedSettings`). The five values driven
+    /// by a slider or a hotkey are written on a debounce, and a level set
+    /// inside the last 400 ms before Quit used to be gone.
+    let debounced = DebouncedSettings()
     /// Debounced persist of the DIM hold — same debounce as the slider beside it
     /// (see `persistDimState` in +Audio).
-    var dimPersistTask: Task<Void, Never>?
     /// Debounced persist of the full mute — same debounce again (see
     /// `persistMuteState` in +Audio): the speaker sits beside the meters and is
     /// on a hotkey, so a click must not write settings synchronously.
-    var mutePersistTask: Task<Void, Never>?
 
     /// The selected external display (by displayID); nil — off.
     @Published var externalDisplayID: CGDirectDisplayID? {
@@ -547,7 +547,6 @@ final class CaptureController: ObservableObject {
     var lastPushedTimecode: String?
     /// Debounce for the visual-REC box, so a drag across the picture does not
     /// write settings — and re-render the window — on every tick.
-    var visualRecPersistTask: Task<Void, Never>?
     /// Take posters already encoded, by take. The script page asks for one per
     /// row, so the bytes are kept rather than re-encoded per request; the
     /// image behind them never changes once decoded (see +RemoteStatus).

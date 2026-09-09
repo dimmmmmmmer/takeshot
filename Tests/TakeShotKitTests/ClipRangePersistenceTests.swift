@@ -57,8 +57,8 @@ import Testing
         second.folderWatcher?.cancel()
         second.folderWatcher = nil
         defer {
-            second.volumePersistTask?.cancel()
-            second.lutPersistTask?.cancel()
+            second.debounced.cancel(.monitorVolume)
+            second.debounced.cancel(.lutIntensity)
             second.folderWatcher?.cancel()
             second.folderWatcher = nil
             second.stopCapture()

@@ -11,6 +11,14 @@ import SwiftUI
 /// Split out of CaptureController: the type had grown past 2600 lines, the
 /// size at which nobody reads it top to bottom any more.
 extension CaptureController {
+    /// How long a slider-driven value waits before it is written to settings.
+    ///
+    /// A settings write fans out through `applySettingsChange` and re-renders
+    /// the window, and every one of these controls can be moved ten times a
+    /// second. Named once here because five values share it and a debounce
+    /// nobody can find is a debounce that grows a sixth spelling.
+    static let settingsDebounce = Duration.milliseconds(400)
+
     /// Per-channel audio peak levels, dBFS (for the meters; see `live`).
     var audioLevels: [Float] { live.audioLevels }
 
@@ -48,12 +56,10 @@ extension CaptureController {
     /// among the meters and on a hotkey. What is stored is the state alone —
     /// see `AudioSettings.monitorMuted` for why never the zero.
     private func persistMuteState() {
-        mutePersistTask?.cancel()
         let muted = live.muted
-        mutePersistTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            self.settings.audio.monitorMuted = muted ? true : nil
+        debounced.schedule(.monitorMute,
+                           after: Self.settingsDebounce) { [weak self] in
+            self?.settings.audio.monitorMuted = muted ? true : nil
         }
     }
 
@@ -93,12 +99,10 @@ extension CaptureController {
     /// hotkey can hammer. What is stored is the state alone — see
     /// `AudioSettings.monitorDimmed` for why never the halved level.
     private func persistDimState() {
-        dimPersistTask?.cancel()
         let dimmed = live.dimmed
-        dimPersistTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            self.settings.audio.monitorDimmed = dimmed ? true : nil
+        debounced.schedule(.monitorDim,
+                           after: Self.settingsDebounce) { [weak self] in
+            self?.settings.audio.monitorDimmed = dimmed ? true : nil
         }
     }
 
@@ -180,15 +184,13 @@ extension CaptureController {
         // and the level of a drag that was muted or dimmed inside the debounce
         // window was then never persisted at all.
         guard persist else { return }
-        volumePersistTask?.cancel()
         // The level to store is the one being set, not `live.volume` 400 ms
         // later: a mute in between would otherwise store its zero, which is the
         // "every launch starts silent" bug (see toggleMonitorMute).
         let level = newValue
-        volumePersistTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            self.settings.audio.monitorVolume = level
+        debounced.schedule(.monitorVolume,
+                           after: Self.settingsDebounce) { [weak self] in
+            self?.settings.audio.monitorVolume = level
         }
     }
 }

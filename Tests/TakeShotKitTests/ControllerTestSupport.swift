@@ -191,11 +191,11 @@ enum ControllerHarness {
         // debounce. A task still pending when a test ends would write this
         // controller's whole settings blob into the shared scratch preferences
         // part-way through the next one.
-        controller.volumePersistTask?.cancel()
-        controller.lutPersistTask?.cancel()
-        controller.assistPersistTask?.cancel()
-        controller.dimPersistTask?.cancel()
-        controller.mutePersistTask?.cancel()
+        controller.debounced.cancel(.monitorVolume)
+        controller.debounced.cancel(.lutIntensity)
+        controller.debounced.cancel(.assist)
+        controller.debounced.cancel(.monitorDim)
+        controller.debounced.cancel(.monitorMute)
         // The SRT settings fields rebuild the link on a 600 ms debounce; a task
         // still pending would open one for a controller the next test has
         // finished with. This also drops the mirror, its encoder and its socket.

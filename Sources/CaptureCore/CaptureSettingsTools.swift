@@ -279,6 +279,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
 public struct OffloadSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case destinationPaths = "offloadDestinationPaths"
+        case sourcePaths = "offloadSourcePaths"
         case offerMountedCards
     }
 
@@ -286,6 +287,16 @@ public struct OffloadSettings: Codable, Equatable, Sendable {
     /// SSDs come back every shooting day, and re-picking them through a file
     /// panel per card is the part of the old flow that hurt.
     public var destinationPaths: [String]?
+    /// The cards the last run was pointed at.
+    ///
+    /// Stored for the reason the owner noticed it was not (" он не сохранил
+    /// после шатдауна задачку оффлоада последнюю"): a copy interrupted by a
+    /// crash or a quit is resumed from the same card, and re-picking it
+    /// through a file panel is the part of that the operator should not have
+    /// to do twice. Restored only for cards still MOUNTED — a path to a card
+    /// that has been unplugged is not a card, and a list of dead paths is a
+    /// list nobody trusts (the same rule the dailies source list follows).
+    public var sourcePaths: [String]?
     /// Offer to offload a card the moment it is mounted; nil — on.
     ///
     /// On by default because the OFFER is safe: it is one dismissible line in

@@ -108,6 +108,16 @@ final class OffloadSheetModel: ObservableObject {
             isCancelling = false
             resumeReview = nil
         }
+        // The cards the last run was pointed at, but only the ones still
+        // MOUNTED: a path to an unplugged card is not a card. Seeded only into
+        // an empty list, like the destinations below — a sheet reopened over a
+        // list the operator is building must not have rows put back into it.
+        if sourceRows.isEmpty {
+            sourceRows = (settings.offload.sourcePaths ?? [])
+                .map { URL(fileURLWithPath: $0) }
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+                .map { Row(url: $0) }
+        }
         guard rows.isEmpty else { return }
         // The operator's saved destination list. The folder the retired verified
         // backup used to hold is in it too — `CaptureSettings.migrateToVersion2`
@@ -125,16 +135,26 @@ final class OffloadSheetModel: ObservableObject {
         guard !sources.contains(where: { $0.standardizedFileURL.path == path })
         else { return }
         sourceRows.append(Row(url: url))
+        rememberSources()
     }
 
     func setSource(_ url: URL, at id: Row.ID) {
         guard let index = sourceRows.firstIndex(where: { $0.id == id })
         else { return }
         sourceRows[index].url = url
+        rememberSources()
     }
 
     func removeSource(_ id: Row.ID) {
         sourceRows.removeAll { $0.id == id }
+        rememberSources()
+    }
+
+    /// The card list follows the LIST and not the run — the destinations'
+    /// rule, and it is there because a removal has to have somewhere to be
+    /// recorded.
+    private func rememberSources() {
+        controller?.rememberOffloadSources(sources)
     }
 
     // MARK: - editing the destination list

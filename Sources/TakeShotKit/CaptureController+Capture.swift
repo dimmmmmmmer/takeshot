@@ -143,8 +143,13 @@ extension CaptureController {
         // is a value the operator SET and would expect back: a box dragged, a
         // level moved, a hold engaged inside the last 400 ms would otherwise be
         // the one thing a session forgets.
-        visualRecPersistTask?.cancel()
-        persistVisualRec()
+        // **Everything that was waiting, written now.** Each of these is a
+        // value the operator SET and would expect back: a level moved, a box
+        // dragged, a hold engaged inside the last 400 ms. It used to be this
+        // one line for the visual-rec box alone, and the other five debounced
+        // writes went down with the process (owner: "я вижу что он не
+        // сохранил после шатдауна… установленную громкость звука").
+        debounced.flushAll()
         // Before anything blocks: the remote's listener and its clients have to
         // go, or a phone holds a socket open against a process that is parked in
         // a semaphore waiting for the writer.

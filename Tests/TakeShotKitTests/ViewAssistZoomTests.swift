@@ -31,7 +31,7 @@ struct ViewAssistZoomTests {
             for tick in 1...12 {
                 controller.zebraThreshold = 0.70 + Double(tick) * 0.01
             }
-            controller.assistPersistTask?.cancel()
+            controller.debounced.cancel(.assist)
 
             #expect(controller.zebraThreshold == 0.82, "the slider did not take")
             #expect(controller.liveAssist.zebraThreshold == 0.82,
@@ -66,7 +66,7 @@ struct ViewAssistZoomTests {
         try await ViewProbe.run { probe in
             let controller = probe.controller
             controller.peakingIntensity = 26
-            controller.assistPersistTask?.cancel() // mid-gesture, deterministically
+            controller.debounced.cancel(.assist) // mid-gesture, deterministically
             #expect(controller.assist.peakingIntensity != 26)
 
             controller.setAssist { $0.peakingOn = true }
@@ -83,7 +83,7 @@ struct ViewAssistZoomTests {
         try await ViewProbe.run { probe in
             let controller = probe.controller
             for _ in 0..<20 { controller.magnifyPunchIn(by: 1.06) }
-            controller.assistPersistTask?.cancel() // still pinching
+            controller.debounced.cancel(.assist) // still pinching
             #expect(controller.punchInLevel > 2)
             #expect(controller.isPunchedIn)
 
@@ -154,7 +154,7 @@ struct ViewAssistZoomTests {
             let v = (anchor.y - before.rect.minY) / before.rect.height
 
             controller.magnifyPunchIn(by: 1.5, at: anchor, viewport: viewport)
-            controller.assistPersistTask?.cancel() // mid-gesture
+            controller.debounced.cancel(.assist) // mid-gesture
 
             #expect(abs(controller.liveAssist.punchIn - 3) < 0.000_001)
             let after = try #require(controller.liveAssist.placement(
@@ -226,7 +226,7 @@ struct ViewAssistZoomTests {
                 sourceSize: source, in: viewport))
             let u = (anchor.x - before.rect.minX) / before.rect.width
             controller.magnifyPunchIn(by: 2, at: anchor, viewport: viewport)
-            controller.assistPersistTask?.cancel()
+            controller.debounced.cancel(.assist)
             #expect(controller.liveAssist.punchIn == 10)
             let after = try #require(controller.liveAssist.placement(
                 sourceSize: source, in: viewport))

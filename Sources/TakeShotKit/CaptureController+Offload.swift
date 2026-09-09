@@ -131,6 +131,12 @@ extension CaptureController {
     /// constant now (`OffloadSheetModel.algorithm`), so the setting recorded a
     /// value nothing read back and nothing ever did. Which checksum a given run
     /// used is in that run's ASC MHL manifest, which is where post looks for it.
+    /// The cards the sheet is pointed at, so a quit does not lose the queue.
+    func rememberOffloadSources(_ sources: [URL]) {
+        settings.offload.sourcePaths = sources.isEmpty
+            ? nil : sources.map(\.path)
+    }
+
     func rememberOffloadChoices(destinations: [URL]) {
         settings.offload.destinationPaths = destinations.isEmpty
             ? nil : destinations.map(\.path)

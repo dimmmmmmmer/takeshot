@@ -47,11 +47,9 @@ extension CaptureController {
         // the window, and this value moves with a drag. Persisting every tick
         // of a drag across the picture is what made dragging the box sluggish
         // (owner: "перетаскивание марка река по визуалу лагает").
-        visualRecPersistTask?.cancel()
-        visualRecPersistTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            self.persistVisualRec()
+        debounced.schedule(.visualRec,
+                           after: Self.settingsDebounce) { [weak self] in
+            self?.persistVisualRec()
         }
     }
 
@@ -83,11 +81,9 @@ extension CaptureController {
         guard draft != current else { return }
         visualRecLive.preview(draft)
         pipeline.setVisualRec(draft)
-        visualRecPersistTask?.cancel()
-        visualRecPersistTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            self.commitVisualRecDraft()
+        debounced.schedule(.visualRec,
+                           after: Self.settingsDebounce) { [weak self] in
+            self?.commitVisualRecDraft()
         }
     }
 

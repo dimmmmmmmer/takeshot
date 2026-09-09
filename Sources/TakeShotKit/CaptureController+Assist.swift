@@ -54,8 +54,7 @@ extension CaptureController {
         // a write from anywhere else supersedes a draft the debounce has not
         // folded in yet: the pending timer must not put the old slider value
         // back over the change that just arrived
-        assistPersistTask?.cancel()
-        assistPersistTask = nil
+        debounced.cancel(.assist)
         assistLive.settle(assist)
         // the scopes measure what the viewer SHOWS, so a punch-in or a pan
         // moves the region they sample (see updateScopeRegion)
@@ -126,11 +125,8 @@ extension CaptureController {
         pipeline.setViewAssist(draft)
         playbackTap.setViewAssist(draft)
         rawPlayer?.setViewAssist(draft)
-        assistPersistTask?.cancel()
-        assistPersistTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.assistDebounce)
-            guard !Task.isCancelled, let self else { return }
-            self.commitAssistDraft()
+        debounced.schedule(.assist, after: Self.assistDebounce) { [weak self] in
+            self?.commitAssistDraft()
         }
     }
 

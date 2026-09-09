@@ -297,9 +297,9 @@ import Testing
             second.folderWatcher?.cancel()
             second.folderWatcher = nil
             defer {
-                second.volumePersistTask?.cancel()
-                second.lutPersistTask?.cancel()
-                second.assistPersistTask?.cancel()
+                second.debounced.cancel(.monitorVolume)
+                second.debounced.cancel(.lutIntensity)
+                second.debounced.cancel(.assist)
                 second.stopCapture()
                 second.monitorOn = false
                 second.audioMonitor.stop()

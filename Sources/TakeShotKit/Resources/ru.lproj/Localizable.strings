@@ -765,8 +765,8 @@
 "slate_sync_tag" = "СИНХРО";
 "slate_sync_hint" = "Клик или пробел — синхровспышка";
 "slate_page_title" = "TakeShot: хлопушка";
-"slate_page_standby" = "СТОП";
-"slate_page_hold" = "СТОП";
+"slate_page_standby" = "ТК НЕ ИДЁТ";
+"slate_page_hold" = "ТК УСТАРЕЛ";
 "slate_page_offline" = "НЕТ СВЯЗИ";
 "slate_page_hint" = "Тап — синхровспышка. Автоблокировку экрана поставьте на «Никогда».";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.

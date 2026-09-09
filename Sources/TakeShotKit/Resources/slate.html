@@ -23,12 +23,19 @@ __TAKESHOT_FONT__
    Committing to one look is the point: a slate that is dark on the second AC's
    phone and light on the director's is not a slate. */
 :root {
-  --face: #f2f2ee;
-  --ink: #101014;
-  --dim: #6c6c74;
-  --line: #c9c9c2;
-  --rec: #c8102e;
-  --hold: #b06a00;
+  /* **Dark face, white letters** (owner: "давай хлопушка не с белым фоном
+     будет а с черным и буквы белые"). It used to be almost white, on the
+     argument that a light rectangle is what a slate looks like to the editor
+     who has to recognise one in a bin. The owner shoots with it, and a phone
+     at full brightness under a 2K is the case they are answering. Committing
+     to ONE look is still the point — a slate that is dark on the second AC's
+     phone and light on the director's is not a slate. */
+  --face: #0c0c0e;
+  --ink: #f4f4f0;
+  --dim: #8b8b93;
+  --line: #3a3a42;
+  --rec: #ff3b3b;
+  --hold: #ffb020;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -124,6 +131,13 @@ body.off #tag { visibility: visible; background: var(--rec); }
    Above the roll, like the desktop card, and for the same reason: an editor
    syncing off this face reads the slate first. */
 #card { display: flex; gap: 2vw; }
+/* The ROLL is a cell like the other three (owner: "на странице слейта думаю
+   ролл нужно тоже в бокс поставить а не мелкой подписью как все остальные").
+   It was a dim caption in the footer, which is where the connection lamp
+   lives — and a lamp is chrome while the roll is one of the things a camera
+   is pointed at this face FOR. Narrower than the rest, because a roll is
+   three or four characters against a scene that can be "SC 114A pt 2". */
+#rollCell { flex: 0 1 auto; min-width: 4.5em; }
 .cell {
   flex: 1 1 0; min-width: 0; text-align: center;
   border: max(1px, 0.15vh) solid var(--line); border-radius: 0.4em;
@@ -144,10 +158,7 @@ body.off #tag { visibility: visible; background: var(--rec); }
   gap: 2vw; color: var(--dim); font-size: min(3.2vw, 2.3vh);
   min-height: 1.2em;
 }
-#roll {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 600;
-  letter-spacing: 0.04em; white-space: nowrap;
-}
+
 /* Is this thing talking to the Mac? One dim word, and the only chrome on the
    face: whoever is about to hold the phone in front of a lens has to be able to
    answer that before they do, and the readout's own tag answers a different
@@ -160,18 +171,19 @@ body.off #tag { visibility: visible; background: var(--rec); }
 #conn.live::before { background: #2f7d32; }
 #conn.down::before { background: var(--rec); }
 
-/* The sync flash: the face goes BLACK for about two frames at 25p. Black and
-   not white because this face is already almost white — the flash has to be a
-   luminance STEP an editor can find by scrubbing, and on a light slate the only
-   step left is downwards. */
+/* The sync flash: the face goes WHITE for about two frames at 25p.
+   **White because the face is now dark** — the flash exists to be a luminance
+   STEP an editor can find by scrubbing, so it has to go the way the face is
+   not. It was black on the light face for exactly the same reason, and the
+   two changed together: a dark flash on a dark slate is no flash at all. */
 #flash {
-  position: fixed; inset: 0; background: #000;
+  position: fixed; inset: 0; background: #fff;
   display: none; z-index: 8;
 }
 body.flash #flash { display: block; }
 
 #gate {
-  position: fixed; inset: 0; background: rgba(242, 242, 238, 0.98);
+  position: fixed; inset: 0; background: rgba(12, 12, 14, 0.98);
   display: none; flex-direction: column; justify-content: center;
   align-items: center; gap: 16px; padding: 24px; text-align: center;
   z-index: 10;
@@ -180,7 +192,7 @@ body.flash #flash { display: block; }
 #gate p { margin: 0; color: var(--dim); max-width: 22em; line-height: 1.4; }
 #pin {
   width: 100%; max-width: 260px; padding: 14px; border-radius: 14px;
-  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border: 1px solid var(--line); background: #1a1a1f; color: var(--ink);
   font-family: ui-monospace, Menlo, monospace; font-size: 34px;
   text-align: center; letter-spacing: 0.4em;
   -webkit-user-select: text; user-select: text;
@@ -206,8 +218,9 @@ body.flash #flash { display: block; }
     <div class="cell"><div class="k" id="kScene"></div><div class="v" id="vScene">—</div></div>
     <div class="cell"><div class="k" id="kShot"></div><div class="v" id="vShot">—</div></div>
     <div class="cell"><div class="k" id="kTake"></div><div class="v" id="vTake">—</div></div>
+    <div class="cell" id="rollCell"><div class="k" id="kRoll"></div><div class="v" id="vRoll">—</div></div>
   </div>
-  <div id="foot"><span id="roll"></span><span id="conn"></span></div>
+  <div id="foot"><span id="conn"></span></div>
 </div>
 
 <div id="flash"></div>
@@ -385,6 +398,7 @@ function now() {
 function paintLabels() {
   el("gateHint").textContent = S.pinPrompt;
   el("pin").placeholder = "····";
+  el("kRoll").textContent = S.roll;
   el("kScene").textContent = S.scene;
   el("kShot").textContent = S.shot;
   el("kTake").textContent = S.take;
@@ -421,7 +435,7 @@ function render(next) {
   el("vScene").textContent = shown(next.scene);
   el("vShot").textContent = shown(next.shot);
   el("vTake").textContent = shown(next.slateTake);
-  el("roll").textContent = next.roll ? S.roll + " " + next.roll : "";
+  write("vRoll", next.roll || "—", "v");
   document.body.classList.toggle("rec", !!next.recording);
 
   tcRunning = !!next.tcRunning;
@@ -463,8 +477,12 @@ function paint() {
   body.classList.toggle("hold", !offline && !syncing && held);
   body.classList.toggle("standby", standby);
   body.classList.toggle("flash", moment < flashUntil);
+  // **Nothing at all when the clock is live and running.** The last branch
+  // used to be `S.hold`, so a healthy readout carried the word HOLD — hidden
+  // by the CSS, but written, and the next person to make the tag visible
+  // would have shipped it. A state with nothing to say says nothing.
   write("tag", offline ? S.offline
-    : (syncing ? S.sync : (held ? S.hold : (standby ? S.standby : S.hold))),
+    : (syncing ? S.sync : (held ? S.hold : (standby ? S.standby : ""))),
     "tag");
   write("tc", readout(moment, syncing), "tc");
 }

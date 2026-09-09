@@ -174,7 +174,7 @@ import Testing
             #expect(!controller.live.muted)
             #expect(checked() == false)
 
-            controller.mutePersistTask?.cancel()
+            controller.debounced.cancel(.monitorMute)
         }
     }
 

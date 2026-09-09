@@ -60,10 +60,9 @@ extension CaptureController {
             live.lutIntensity = clamped
             pipeline.setLUTIntensity(clamped)
             playbackTap.setLUTIntensity(clamped)
-            lutPersistTask?.cancel()
-            lutPersistTask = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(400))
-                guard !Task.isCancelled, let self else { return }
+            debounced.schedule(.lutIntensity,
+                               after: Self.settingsDebounce) { [weak self] in
+                guard let self else { return }
                 self.settings.lut.intensity = self.live.lutIntensity
             }
         }
