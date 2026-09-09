@@ -148,9 +148,9 @@ import Testing
 
             @MainActor func height() -> (en: CGFloat, ru: CGFloat) {
                 let content = probe.sizes(proposedWidth: DailiesSheet.width) {
-                    DailiesSheet(model: model).content.padding(20)
+                    DailiesSheet(model: model).content.padding(DailiesSheet.margin)
                 }
-                let footer = probe.sizes(proposedWidth: DailiesSheet.width - 40) {
+                let footer = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
                     DailiesSheetFooter(model: model) {}
                 }
                 return (content.en.height + footer.en.height + Self.footerChrome,
@@ -204,9 +204,9 @@ import Testing
             let model = probe.controller.dailies
             self.seed(model, controller: probe.controller, root: probe.root)
             let content = probe.sizes(proposedWidth: DailiesSheet.width) {
-                DailiesSheet(model: model).content.padding(20)
+                DailiesSheet(model: model).content.padding(DailiesSheet.margin)
             }
-            let footer = probe.sizes(proposedWidth: DailiesSheet.width - 40) {
+            let footer = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
                 DailiesSheetFooter(model: model) {}
             }
             let dials = probe.sizes(
@@ -221,6 +221,39 @@ import Testing
                     + (language == "en" ? dials.en.height : dials.ru.height)
                 #expect(open <= ViewBudget.sheetHeight,
                         Comment(rawValue: "\(language) open needs \(open)pt of \(ViewBudget.sheetHeight)"))
+            }
+        }
+    }
+
+    /// **And the burn-ins face fits the tab it is fixed inside.**
+    ///
+    /// `DailiesSheet.tabHeight` is a fixed frame, so a face that outgrows it
+    /// does not make the sheet taller — it is CLIPPED, silently, and the
+    /// bottom of the picture simply is not there. That is the failure mode the
+    /// restack introduced: the switches and the preview used to be side by
+    /// side, where the face's height was the larger of the two, and they are
+    /// stacked now, where it is the sum.
+    ///
+    /// Measured the same way the sheet's own budget is — closed, plus the rows
+    /// the disclosure reveals — and conservative for the same reason.
+    @Test func theBurninsFaceFitsInsideTheTab() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.dailies
+            self.seed(model, controller: probe.controller, root: probe.root)
+            let face = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
+                DailiesSheet(model: model).burninsFace(stretched: false)
+            }
+            let dials = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
+                probe.hosted(DailiesInkRows(model: model))
+            }
+            for (language, closed, open) in [
+                ("en", face.en.height, face.en.height + dials.en.height),
+                ("ru", face.ru.height, face.ru.height + dials.ru.height),
+            ] {
+                #expect(closed <= DailiesSheet.tabHeight, Comment(rawValue:
+                    "\(language) closed face is \(closed)pt of \(DailiesSheet.tabHeight)"))
+                #expect(open <= DailiesSheet.tabHeight, Comment(rawValue:
+                    "\(language) open face is \(open)pt of \(DailiesSheet.tabHeight)"))
             }
         }
     }

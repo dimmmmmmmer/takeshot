@@ -28,26 +28,47 @@ struct DailiesSheet: View {
     /// picture next to the controls that change it. Measured after: 457 idle,
     /// and every state inside the budget with the scroll view gone.
     ///
-    /// 680 = 20 + `DailiesBurninSection.columnWidth` + 20 + the preview + 20,
-    /// plus the inset a `TabView` puts around its own content (measured at
-    /// 4pt, which is what the last 10 are for). The column is 320 because the
-    /// widest Russian burn label is 138pt and the place picker is 150
+    /// 760 = two burn columns of `DailiesBurninSection.columnWidth`, the gap
+    /// between them, the sheet's own 20pt margins and the inset each tab face
+    /// applies (`tabInset`). The column is 320 because the widest Russian burn
+    /// label is 138pt and the place picker is 150
     /// (`aBurnRowFitsTheSheetInBothLanguages`).
-    static let width: CGFloat = 680
+    ///
+    /// It was 680 with the switches in ONE column and the preview beside them.
+    /// The rows moved into two columns so the picture could go underneath them
+    /// (see `burninsTab`), and two of them plus the tab's inset is what the
+    /// extra 80 pays for.
+    static let width: CGFloat = 760
+
+    /// What each tab face keeps between itself and the `TabView`'s own border.
+    ///
+    /// A `TabView` insets its content by about 4pt, which is enough not to
+    /// clip and not enough to look deliberate: every control in both faces sat
+    /// against the box's edge (owner: "какие-то рамки к которым вплотную юи
+    /// стоит, странно выглядит"). Both faces apply this, so neither can drift.
+    static let tabInset: CGFloat = 12
+
+    /// The sheet's own margin, around everything.
+    static let margin: CGFloat = 16
 
     /// What the tabbed area gets. Fixed rather than fitted: the two faces are
     /// different heights, and a sheet that resized as the operator switched
     /// tabs would jump under the pointer. Set by the taller face (the
     /// burn-ins, with the appearance dials open) plus the room the file lists
     /// need for a few rows before they scroll.
-    static let tabHeight: CGFloat = 330
+    ///
+    /// It grew with the restack: the burn-ins face is now the switches ABOVE
+    /// the picture rather than beside it, so its height is the sum of the two
+    /// where it used to be the larger. `theDailiesSheetFitsTheWindowInEveryState`
+    /// is what holds the total against the window.
+    static let tabHeight: CGFloat = 412
 
     var body: some View {
         VStack(spacing: 0) {
-            content.padding(20)
+            content.padding(Self.margin)
             Divider()
             footer
-                .padding(.horizontal, 20)
+                .padding(.horizontal, Self.margin)
                 .padding(.vertical, 14)
         }
         .frame(width: Self.width)
@@ -57,12 +78,21 @@ struct DailiesSheet: View {
     /// (a pinned frame reports the pin, not what the content needed).
     @ViewBuilder var content: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
-            Text(L("dailies_title"))
-                .offloadText(.title)
-            Text(L("dailies_batch",
-                   localizedCount(model.itemCount, .take),
-                   model.codec.rawValue))
-                .offloadText(.caption)
+            // **The batch reads on the title's own line.** It was a caption
+            // under it, and those two lines plus the gap between them were
+            // 29pt of the sheet's height — height the picture underneath
+            // wanted more than the heading did. They are one sentence about
+            // one batch and they sit as one.
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(L("dailies_title"))
+                    .offloadText(.title)
+                Spacer(minLength: 4)
+                Text(L("dailies_batch",
+                       localizedCount(model.itemCount, .take),
+                       model.codec.rawValue))
+                    .offloadText(.caption)
+                    .fixedSize()
+            }
             // **Two tabs, and the reason is height.** The burn-ins and the
             // files are two questions about one batch, and putting both on one
             // face put the sheet past the window it has to fit — the folder
@@ -79,26 +109,46 @@ struct DailiesSheet: View {
         }
     }
 
-    /// The switches on the left; on the right, whatever this batch's state has
-    /// to say. `.top` so the two columns share a baseline at the section
-    /// headers rather than centring against each other.
-    private var burninsTab: some View {
-        HStack(alignment: .top, spacing: 20) {
+    /// **The settings above, the picture centred underneath them.**
+    ///
+    /// It was two columns — switches on the left, whatever the batch had to
+    /// say on the right — which is what first got this sheet's height under
+    /// the window's. The arrangement read as unfinished: the preview was a
+    /// small panel wedged against the tab's own border, beside the controls it
+    /// previews rather than under them (owner: "на первой странице превью
+    /// плейбека должно по центру стоять снизу а параметры над окном этим
+    /// аккуратно").
+    ///
+    /// Stacked, the picture is what the eye lands on and it can be bigger —
+    /// which is what retired the separate fullscreen preview window the owner
+    /// asked for when it was small ("можно будет вырезать функцию фул скрин
+    /// превью"). The switches pay for it by going into two columns; the height
+    /// that buys back is what keeps the sheet inside the window.
+    /// **One definition, two ways of being asked about.**
+    ///
+    /// `stretched` is the only difference between what the tab mounts and what
+    /// the suite measures. The tab's copy fills `tabHeight` and pushes the
+    /// picture to the bottom of it; a stretched view reports the PROPOSAL it
+    /// was handed rather than what it needed, so the measurement that says
+    /// whether the face is being clipped has to ask the unstretched one. Two
+    /// spellings of this face would be two things to keep in step.
+    @ViewBuilder func burninsFace(stretched: Bool) -> some View {
+        VStack(spacing: OffloadChrome.sectionSpacing) {
             DailiesBurninSection(model: model)
-            rightColumn
-                .frame(width: DailiesBurninPreview.size.width,
-                       alignment: .leading)
+            if stretched { Spacer(minLength: 0) }
+            stateColumn
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // No padding of its own: a `TabView` insets its content already, and
-        // a second inset is what pushed the two columns past the sheet's own
-        // width (measured: 658 of 630).
+        .padding(Self.tabInset)
+        .frame(maxWidth: .infinity,
+               maxHeight: stretched ? .infinity : nil, alignment: .top)
     }
 
-    /// **One column, three things to say, never two at once.**
+    private var burninsTab: some View { burninsFace(stretched: true) }
+
+    /// **One slot, three things to say, never two at once.**
     ///
     /// The preview, the live progress and the finished report used to be
-    /// stacked under the switches, so their heights ADDED: a fourteen-take
+    /// stacked under each other, so their heights ADDED: a fourteen-take
     /// batch that all failed came to 646pt against a window that may be 620,
     /// which is the last thing keeping a scrollbar on this sheet. They are
     /// three answers to one question — what is happening with this batch —
@@ -107,7 +157,7 @@ struct DailiesSheet: View {
     ///
     /// The order is the run's own: a report is the newest news, then a run in
     /// flight, then the arrangement you are still setting up.
-    @ViewBuilder private var rightColumn: some View {
+    @ViewBuilder private var stateColumn: some View {
         if let report = model.report {
             DailiesResultPanel(report: report)
         } else if let progress = model.progress {
@@ -159,41 +209,56 @@ struct DailiesBurninSection: View {
             // because "is it on" and "where is it" are one decision about one
             // line and reading them apart is how an operator ends up with the
             // reel where the timecode should be.
-            burnRow(L("dailies_burn_tc"), on: $model.burnTimecode,
-                    at: $model.timecodePosition)
-            burnRow(L("dailies_burn_name"), on: $model.burnClipName,
-                    at: $model.clipNamePosition)
-            burnRow(L("dailies_burn_project"), on: $model.burnProject,
-                    at: $model.projectPosition)
-            // The date has a place of its own now. It used to be joined onto
-            // the project line — four corners could not hold five facts — and
-            // that stopped being true when every line got a picker, leaving
-            // the date as the only fact that could not be moved and no way to
-            // say why (owner: "не оч понятно почему у рекординг дейт нельзя
-            // выбрать положение").
-            burnRow(L("dailies_burn_date"), on: $model.burnDate,
-                    at: $model.datePosition)
-            // The custom line's own checkbox, so switching it off does not
-            // mean deleting what was written (owner: "не хватает как будто
-            // галочки у кастом тайтла").
-            burnRow(L("dailies_custom_placeholder"), on: $model.burnCustom,
-                    at: $model.customPosition)
-            // …and its text on the next line, where there is width for a
-            // sentence. Filtered rather than plain: it is burned into a frame,
-            // not into a file name, but a control that silently rewrites what
-            // was typed is the thing `NameTextField` exists to prevent — here
-            // it is only the placeholder and the alignment that differ.
-            TextField(L("dailies_custom_hint"), text: $model.customText)
-                .textFieldStyle(.roundedBorder)
-                // disabled(exception): about THIS row's own checkbox rather
-                // than about app state, exactly like the place pickers in
-                // `burnRow` — there is nothing to type into a line that is
-                // switched off. The app-state rule (a run is going) is named
-                // once for the whole section, below.
-                .disabled(!model.burnCustom)
+            // **Two columns**, so the picture can stand under them rather
+            // than beside them (see `DailiesSheet.burninsTab`). The split is
+            // by KIND and not by count: the three lines the app writes itself
+            // on the left, the two an operator sets on the right — the date
+            // is a fact of the shoot and the custom line is a sentence they
+            // type, and the text box belongs under the checkbox that arms it.
+            HStack(alignment: .top, spacing: OffloadChrome.sectionSpacing) {
+                VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
+                    burnRow(L("dailies_burn_tc"), on: $model.burnTimecode,
+                            at: $model.timecodePosition)
+                    burnRow(L("dailies_burn_name"), on: $model.burnClipName,
+                            at: $model.clipNamePosition)
+                    burnRow(L("dailies_burn_project"), on: $model.burnProject,
+                            at: $model.projectPosition)
+                }
+                .frame(width: Self.columnWidth)
+                VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
+                    // The date has a place of its own. It used to be joined
+                    // onto the project line — four corners could not hold five
+                    // facts — and that stopped being true when every line got
+                    // a picker, leaving the date as the only fact that could
+                    // not be moved and no way to say why (owner: "не оч
+                    // понятно почему у рекординг дейт нельзя выбрать
+                    // положение").
+                    burnRow(L("dailies_burn_date"), on: $model.burnDate,
+                            at: $model.datePosition)
+                    // The custom line's own checkbox, so switching it off does
+                    // not mean deleting what was written (owner: "не хватает
+                    // как будто галочки у кастом тайтла").
+                    burnRow(L("dailies_custom_placeholder"),
+                            on: $model.burnCustom, at: $model.customPosition)
+                    // …and its text under it. Filtered rather than plain: it
+                    // is burned into a frame, not into a file name, but a
+                    // control that silently rewrites what was typed is the
+                    // thing `NameTextField` exists to prevent — here it is
+                    // only the placeholder and the alignment that differ.
+                    TextField(L("dailies_custom_hint"), text: $model.customText)
+                        .textFieldStyle(.roundedBorder)
+                        // disabled(exception): about THIS row's own checkbox
+                        // rather than about app state, exactly like the place
+                        // pickers in `burnRow` — there is nothing to type into
+                        // a line that is switched off. The app-state rule (a
+                        // run is going) is named once for the whole section.
+                        .disabled(!model.burnCustom)
+                }
+                .frame(width: Self.columnWidth)
+            }
             DailiesInkRows(model: model)
         }
-        .frame(width: Self.columnWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .toggleStyle(.checkbox)
         .disabled(controller.isDailiesRunning)
     }
@@ -264,7 +329,6 @@ struct DailiesBurninPreview: View {
     /// an `@EnvironmentObject` reached that way traps
     /// (`CaptureController.dailiesPreviewStill`).
     var still: CGImage?
-    @Environment(\.openWindow) private var openWindow
 
     /// 16:9 at a size that shows the arrangement without taking the sheet
     /// over.
@@ -276,7 +340,14 @@ struct DailiesBurninPreview: View {
     /// That is what put a scrollbar on a sheet that looks like it fits (owner:
     /// "почему-то это окошко скролл еще выдает"), and it was showing a 320px
     /// bitmap at 430pt besides.
-    static let size = CGSize(width: 288, height: 162)
+    ///
+    /// It grew from 288×162 with the restack: the picture stands under the
+    /// switches now instead of beside them, so its width is no longer half the
+    /// sheet's — and it is the ONLY preview there is, the separate fullscreen
+    /// window having gone with the same change. Every point of it is bought
+    /// from somewhere: the heading and the batch line share a row, the sheet's
+    /// margin came down to 16, and the burn switches went into two columns.
+    static let size = CGSize(width: 368, height: 207)
 
     /// The bitmap is rendered at twice the size it is shown at, for a reason
     /// beyond sharpness: the strips are 5% of the frame's height but never
@@ -287,21 +358,15 @@ struct DailiesBurninPreview: View {
     /// the one question it exists to answer.
     static let raster: CGFloat = 2
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            picture
-            // The name the batch will produce, under the picture it will
-            // carry: both are "what am I about to make", and the operator sets
-            // the two ends of the name three rows below.
-            Text(L("dailies_name_example",
-                   model.outputName(for: "A001C001")
-                       + "." + model.codec.dailiesFileExtension))
-                .offloadText(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(width: Self.size.width, alignment: .leading)
-        }
-    }
+    /// **The picture, and nothing under it.**
+    ///
+    /// The example file name used to be here, on the argument that the picture
+    /// and the name are both "what am I about to make". It is under the PREFIX
+    /// AND SUFFIX FIELDS now, on the other face — which is where the operator
+    /// types the two ends it is made of, so the example changes under the
+    /// control that changes it. What it bought this face is 22 points, and
+    /// this face spends every point it has on the picture.
+    var body: some View { picture }
 
     /// The rendered frame alone, without the name example under it —
     /// internal so `thePreviewKeepsTheSizeItDeclares` can measure the thing
@@ -324,14 +389,12 @@ struct DailiesBurninPreview: View {
         .overlay(RoundedRectangle(cornerRadius: 6)
             .strokeBorder(.white.opacity(0.12)))
         .accessibilityLabel(L("dailies_preview_help"))
-        // …and a way to see it big. A click rather than a button beside it:
-        // the thing you want to enlarge is the picture, and clicking a picture
-        // to enlarge it needs no label (the tooltip says so anyway).
-        .onTapGesture {
-            AppWindows.present(.dailiesPreview, opening: openWindow)
-        }
-        .accessibilityAddTraits(.isButton)
-        .help(L("dailies_preview_open_help"))
+        // No click-to-enlarge, and no window behind it. The picture was 288pt
+        // wide beside the switches and a separate frame-size window was the
+        // answer to that; standing under them it is the size it needed to be
+        // in the first place (owner: "можно будет вырезать функцию фул скрин
+        // превью").
+        .help(L("dailies_preview_help"))
     }
 
     /// A sample take's facts, so the preview has something to place. The
@@ -396,6 +459,16 @@ struct DailiesOutputSection: View {
                     .frame(width: Self.nameFieldWidth)
                 Spacer(minLength: 4)
             }
+            // **What those two ends make, under the fields that set them.**
+            // It used to sit under the burn-in preview on the other face, so
+            // the example was a tab away from the controls that change it —
+            // and the picture's face needed the height for the picture.
+            Text(L("dailies_name_example",
+                   model.outputName(for: "A001C001")
+                       + "." + model.codec.dailiesFileExtension))
+                .offloadText(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .disabled(controller.isDailiesRunning)
     }

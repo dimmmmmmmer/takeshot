@@ -16,8 +16,6 @@ enum AppWindowID: String, CaseIterable {
     case slate
     case vancMonitor = "vanc-monitor"
     case settings
-    /// The dailies burn-in arrangement, big. See `DailiesPreviewWindowView`.
-    case dailiesPreview = "dailies-preview"
 }
 
 /// Where the app's windows are, and the one way to put one in front of the

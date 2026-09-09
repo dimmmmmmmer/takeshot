@@ -29,6 +29,9 @@ struct DailiesFilesTab: View {
                 DailiesOutputSection(model: model)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // The same inset the burn-ins face keeps, so neither stands
+            // against the `TabView`'s own border — see `DailiesSheet.tabInset`.
+            .padding(DailiesSheet.tabInset)
         }
     }
 
