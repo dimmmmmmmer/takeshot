@@ -8,7 +8,13 @@ import Testing
 
 /// **The burn-in arrangement at frame size** (owner: "а превью визуальное было
 /// бы хорошо иметь возможность видеть крупнее, на весь экран например").
-@Suite struct ViewDailiesBigPreviewTests {
+///
+/// `@MainActor` because `DailiesBigPreview` is a `View` and its statics carry
+/// the protocol's isolation. The runner's Swift is two releases behind this
+/// Mac's and enforces that where the local one infers around it — the two-SDK
+/// gap `docs/ARCHITECTURE.md` names, and the test target is the half of it the
+/// local check cannot cover.
+@Suite @MainActor struct ViewDailiesBigPreviewTests {
     /// The raster follows the window, so the strips are the height a frame of
     /// that size gets — a preview rendered small and stretched would be
     /// showing the wrong proportion, which is the very thing the small
