@@ -14,6 +14,9 @@ public struct RemoteSettings: Codable, Equatable, Sendable {
         case enabled = "remoteEnabled"
         case port = "remotePort"
         case pin = "remotePIN"
+        case slatePIN = "remoteSlatePIN"
+        case livePIN = "remoteLivePIN"
+        case scriptPIN = "remoteScriptPIN"
     }
 
     /// The browser remote is listening; nil/false — off, which is the default.
@@ -35,6 +38,21 @@ public struct RemoteSettings: Codable, Equatable, Sendable {
     /// secrets by matching the key NAME, so this is what keeps the PIN out of a
     /// diagnostics bundle that gets emailed to someone.
     public var pin: String?
+    /// **A code per page** (owner: "пины на все страницы ремоута кстати хочу
+    /// иметь уникальные").
+    ///
+    /// The three auxiliary pages get their own, so the second AC holding the
+    /// slate and the script supervisor with the take log are not handed the
+    /// code that presses REC. `pin` above stays the OPERATOR's and is the
+    /// master: it opens every page, so an operator who knows one code is never
+    /// locked out of their own remote.
+    ///
+    /// Generated beside `pin` and stored the same way — the key names carry
+    /// "PIN" for the reason that one does, so `DiagnosticsRedaction` drops all
+    /// four from a bundle that gets emailed to somebody.
+    public var slatePIN: String?
+    public var livePIN: String?
+    public var scriptPIN: String?
 
     public init() {}
 

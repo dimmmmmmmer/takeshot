@@ -494,7 +494,7 @@ function connectStatus() {
     + location.host + "/ws");
   armWatchdog();
   socket.onopen = function () {
-    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+    socket.send(JSON.stringify({ action: "hello", pin: pin, page: CFG.page }));
   };
   socket.onmessage = function (event) {
     armWatchdog();

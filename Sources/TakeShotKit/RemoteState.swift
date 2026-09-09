@@ -241,6 +241,33 @@ enum RemoteCommand: Equatable, Sendable {
     /// app command — so it is never dispatched to the controller.
     case multiview(on: Bool)
 
+    /// What KIND of thing this command is, for the role check.
+    ///
+    /// A family rather than the command itself, so a new command joins an
+    /// existing answer instead of needing a new row in every page's list —
+    /// and a command that fits no family is refused to every page's own code
+    /// until somebody says which one it belongs to, which is the safe way for
+    /// that mistake to go.
+    enum Family: Hashable, Sendable {
+        /// The operator page's four buttons: roll, mark, and the two ratings.
+        case record
+        /// The script page's per-take edits.
+        case edit
+        /// A per-connection subscription, not an app command.
+        case subscribe
+        /// The handshake, which every page performs.
+        case handshake
+    }
+
+    var family: Family {
+        switch self {
+        case .hello: return .handshake
+        case .rec, .marker, .good, .bad: return .record
+        case .rate, .comment, .slate: return .edit
+        case .multiview: return .subscribe
+        }
+    }
+
     /// Longest operator text this protocol will carry into a take.
     ///
     /// The number is the narrowest thing that has to hold it. A take's comment
@@ -358,9 +385,17 @@ enum RemoteCommand: Equatable, Sendable {
 struct RemoteMessage: Equatable, Sendable {
     var command: RemoteCommand
     var pin: String
+    /// Which page the client says it is (`RemoteLink` raw value), from the
+    /// handshake. nil — it did not say, which is every page built before the
+    /// codes were split and is treated as the operator page.
+    ///
+    /// A client can lie about this, and lying gains nothing: claiming to be
+    /// the slate in order to use the slate's code grants the SLATE's role,
+    /// which sends no commands at all (`RemoteRole`).
+    var page: String?
 
-    /// Parse `{"action":"rec","pin":"1234"}`. Anything else is nil — the server
-    /// answers with an error rather than guessing.
+    /// Parse `{"action":"rec","pin":"1234","page":"remote"}`. Anything else is
+    /// nil — the server answers with an error rather than guessing.
     static func parse(_ text: String) -> RemoteMessage? {
         guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
               let dictionary = object as? [String: Any],
@@ -368,7 +403,52 @@ struct RemoteMessage: Equatable, Sendable {
               let command = RemoteCommand.parse(action: action, in: dictionary)
         else { return nil }
         return RemoteMessage(command: command,
-                             pin: dictionary["pin"] as? String ?? "")
+                             pin: dictionary["pin"] as? String ?? "",
+                             page: dictionary["page"] as? String)
+    }
+}
+
+/// **What a code is allowed to do.**
+///
+/// The operator's code is the master and may send everything. A page's own
+/// code buys that page and nothing else, which is the whole point of the codes
+/// being separate (owner: "пины на все страницы ремоута кстати хочу иметь
+/// уникальные"): the second AC holding the slate and the script supervisor
+/// with the take log are not handed the code that presses REC.
+enum RemoteRole: Equatable, Sendable {
+    /// The operator's code. Everything.
+    case operatorRemote
+    /// One page's own code.
+    case page(RemoteLink)
+
+    /// Whether this role may send `command`.
+    ///
+    /// Stated as what each page's OWN buttons are, so the answer cannot drift
+    /// from the pages: the operator page has four, the script page edits
+    /// takes, and the slate and the live page send nothing at all — the slate
+    /// is a face pointed at a lens and the live page is a video element.
+    func maySend(_ command: RemoteCommand) -> Bool {
+        guard case .page(let link) = self else { return true }
+        // Every page may say hello: that is the handshake, and a page that
+        // could not perform it could not open at all.
+        guard command != .hello else { return true }
+        return Self.ownButtons(of: link).contains(command.family)
+    }
+
+    /// What each page's own buttons are.
+    ///
+    /// Stated as a set per page rather than as a switch over both, so the
+    /// answer cannot drift from the pages: the operator page has four buttons
+    /// and a subscription, the script page edits takes, the live page
+    /// subscribes, and the slate sends nothing at all — it is a face pointed
+    /// at a lens.
+    static func ownButtons(of link: RemoteLink) -> Set<RemoteCommand.Family> {
+        switch link {
+        case .remote: return [.record, .subscribe]
+        case .script: return [.edit]
+        case .live: return [.subscribe]
+        case .slate: return []
+        }
     }
 }
 

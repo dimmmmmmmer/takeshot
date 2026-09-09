@@ -305,26 +305,27 @@ enum RemotePage {
     /// Called on the MainActor whenever the language changes; the server holds
     /// the bytes behind its own lock and serves them from its queue.
     static func html() -> Data {
-        render(resource: "remote", labels: labels)
+        render(resource: "remote", labels: labels, page: .remote)
     }
 
     /// The script supervisor's page, same discipline.
     static func scriptHTML() -> Data {
-        render(resource: "script", labels: scriptLabels)
+        render(resource: "script", labels: scriptLabels, page: .script)
     }
 
     /// The live page, same discipline again.
     static func liveHTML() -> Data {
-        render(resource: "live", labels: liveLabels)
+        render(resource: "live", labels: liveLabels, page: .live)
     }
 
     /// The slate, same discipline again.
     static func slateHTML() -> Data {
-        render(resource: "slate", labels: slateLabels)
+        render(resource: "slate", labels: slateLabels, page: .slate)
     }
 
     private static func render(resource: String,
-                               labels: [(field: String, key: String)]) -> Data {
+                               labels: [(field: String, key: String)],
+                               page: RemoteLink) -> Data {
         guard let url = Bundle.module.url(forResource: resource,
                                           withExtension: "html"),
               let template = try? String(contentsOf: url, encoding: .utf8)
@@ -334,7 +335,8 @@ enum RemotePage {
             return Data("<!doctype html><title>TakeShot</title>\(L("help_unavailable"))".utf8)
         }
         return Data(template
-            .replacingOccurrences(of: configToken, with: config(labels: labels))
+            .replacingOccurrences(of: configToken,
+                                  with: config(labels: labels, page: page))
             .replacingOccurrences(of: fontToken, with: fontCSS).utf8)
     }
 
@@ -345,7 +347,8 @@ enum RemotePage {
     /// is a number or a string a page may ignore, and a per-page config would be
     /// four places to forget the language in. `holdMs` is the slate's alone and
     /// costs the other three nine bytes each.
-    static func config(labels: [(field: String, key: String)]) -> String {
+    static func config(labels: [(field: String, key: String)],
+                       page: RemoteLink = .remote) -> String {
         let strings = labels
             .map { "\($0.field):\(RemoteJSON.quoted(L($0.key)))" }
             .joined(separator: ",")
@@ -368,6 +371,11 @@ enum RemotePage {
             // to know how long it is — from the settings type that decides it
             // rather than from a 4 typed into four HTML files.
             + "pinLength:\(RemoteSettings.pinLength),"
+            // Which page this is. Sent back in the handshake so the server
+            // knows which code to accept and what the socket may then send —
+            // see `RemoteRole`. Injected rather than typed into four HTML
+            // files, for the reason the picture names are.
+            + "page:\(RemoteJSON.quoted(page.rawValue)),"
             + "gridPicture:\(RemoteJSON.quoted(LivePicture.grid.rawValue)),"
             + "watchdogMs:\(watchdogMilliseconds),"
             + "holdMs:\(slateHoldMilliseconds),"

@@ -46,7 +46,7 @@ extension CaptureController {
         let generation = remoteGeneration
         let pin = ensureRemotePIN()
         let server = RemoteServer(
-            pin: pin, page: RemotePage.html(),
+            pin: pin, pagePINs: remotePagePINs, page: RemotePage.html(),
             scriptPage: RemotePage.scriptHTML(),
             livePage: RemotePage.liveHTML(),
             slatePage: RemotePage.slateHTML(),
@@ -130,23 +130,69 @@ extension CaptureController {
     }
 
     /// The stored PIN, generated the first time the remote is switched on.
+    ///
+    /// All FOUR are ensured together — the operator's and the three pages' —
+    /// because a page whose code is nil would otherwise fall back to nothing
+    /// and be openable by the master alone, which is not what having its own
+    /// code means.
     @discardableResult
     func ensureRemotePIN() -> String {
-        if let stored = settings.remote.pin,
-           stored.count == RemoteSettings.pinLength,
-           stored.allSatisfy(\.isNumber) {
-            return stored
+        let operatorPIN = Self.usablePIN(settings.remote.pin)
+            ?? RemotePIN.generate()
+        settings.remote.pin = operatorPIN
+        settings.remote.slatePIN = Self.usablePIN(settings.remote.slatePIN)
+            ?? RemotePIN.generate()
+        settings.remote.livePIN = Self.usablePIN(settings.remote.livePIN)
+            ?? RemotePIN.generate()
+        settings.remote.scriptPIN = Self.usablePIN(settings.remote.scriptPIN)
+            ?? RemotePIN.generate()
+        return operatorPIN
+    }
+
+    /// The code that opens one page, as Settings shows it.
+    func remotePIN(for link: RemoteLink) -> String? {
+        switch link {
+        case .remote: return settings.remote.pin
+        case .slate: return settings.remote.slatePIN
+        case .live: return settings.remote.livePIN
+        case .script: return settings.remote.scriptPIN
         }
-        let fresh = RemotePIN.generate()
-        settings.remote.pin = fresh
-        return fresh
+    }
+
+    /// The three auxiliary pages' codes, keyed by `RemoteLink` raw value.
+    ///
+    /// The operator's is not in here: it is the master and the server holds it
+    /// separately (`RemoteServer.currentPIN`), which is what keeps "this code
+    /// opens everything" one statement rather than four entries.
+    var remotePagePINs: [String: String] {
+        var pins: [String: String] = [:]
+        pins[RemoteLink.slate.rawValue] = settings.remote.slatePIN
+        pins[RemoteLink.live.rawValue] = settings.remote.livePIN
+        pins[RemoteLink.script.rawValue] = settings.remote.scriptPIN
+        return pins.compactMapValues { $0 }
+    }
+
+    /// A stored code that is still a code: the right length, all digits.
+    /// Anything else is a hand-edited blob and gets a fresh one.
+    static func usablePIN(_ stored: String?) -> String? {
+        guard let stored, stored.count == RemoteSettings.pinLength,
+              stored.allSatisfy(\.isNumber) else { return nil }
+        return stored
     }
 
     /// A new code, for when the old one has been read out to a unit that has
     /// wrapped. Sockets already open stay up until their next command.
-    func regenerateRemotePIN() {
+    ///
+    /// One page at a time: rotating the slate's code because a runner walked
+    /// off with the phone must not lock out the script supervisor.
+    func regenerateRemotePIN(for link: RemoteLink = .remote) {
         let fresh = RemotePIN.generate()
-        settings.remote.pin = fresh
+        switch link {
+        case .remote: settings.remote.pin = fresh
+        case .slate: settings.remote.slatePIN = fresh
+        case .live: settings.remote.livePIN = fresh
+        case .script: settings.remote.scriptPIN = fresh
+        }
     }
 
     /// The addresses to read out or scan for one page. Empty when the machine
@@ -187,6 +233,7 @@ extension CaptureController {
             // The labels on the phone follow the app's language switch; the
             // pages are bytes behind the server's lock, so this needs no
             // restart.
+            remoteServer?.setPagePINs(remotePagePINs)
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
             remoteServer?.setLivePage(RemotePage.liveHTML())

@@ -196,7 +196,11 @@ extension RemoteClient {
                                             in: request.query) ?? ""
         // The same door the socket's handshake goes through, and never `exempt`:
         // an HTTP fetch has shown nothing this server can remember.
-        switch server.checkPIN(candidate, peer: peer, exempt: false) {
+        // The page is the OPERATOR's: the poster is the card on the operator
+        // page, and it is the take's own frame — the one thing on the remote
+        // that is footage rather than a readout.
+        switch server.checkPIN(candidate, page: RemoteLink.remote.rawValue,
+                               peer: peer, exempt: false) {
         case .silent:
             // This peer already has a PIN answer on the way: the guess is
             // counted and this request gets no response at all. Closed rather

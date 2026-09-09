@@ -445,6 +445,7 @@ final class RemoteFailureBox: @unchecked Sendable {
     private var stored: String?
     private var readies = 0
     private var port: UInt16 = 0
+    private var dispatched: [RemoteCommand] = []
 
     var message: String? {
         lock.lock()
@@ -479,8 +480,23 @@ final class RemoteFailureBox: @unchecked Sendable {
     }
 
     /// Handlers wired to this box, for a server driven without a controller.
+    /// Commands the server dispatched, in order.
+    ///
+    /// The observable a role test needs: whether a command REACHED the app is
+    /// not the same question as whether the app then did anything, and on a
+    /// machine with no board the second answer is "no" either way.
+    var commands: [RemoteCommand] {
+        lock.lock()
+        defer { lock.unlock() }
+        return dispatched
+    }
+
     func handlers() -> RemoteServer.Handlers {
-        RemoteServer.Handlers(command: { _ in },
+        RemoteServer.Handlers(command: { [self] command in
+            lock.lock()
+            dispatched.append(command)
+            lock.unlock()
+        },
                              ready: { [self] port in bound(port) },
                              failed: { [self] message in fail(message) })
     }

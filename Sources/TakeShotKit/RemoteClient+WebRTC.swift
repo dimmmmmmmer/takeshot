@@ -35,7 +35,11 @@ extension RemoteClient {
         }
         // The same door the socket's handshake goes through, and never `exempt`:
         // an HTTP request has shown nothing this server can remember.
-        switch server.checkPIN(parsed.pin, peer: peer, exempt: false) {
+        // The page is named so the LIVE page's own code opens it: this route
+        // is the live page's, and a code that opened the page but not its
+        // video would be a code that does nothing.
+        switch server.checkPIN(parsed.pin, page: RemoteLink.live.rawValue,
+                               peer: peer, exempt: false) {
         case .silent:
             // This peer already has a PIN answer on the way: the guess is
             // counted and this request gets no response at all. Closed rather
@@ -71,7 +75,11 @@ extension RemoteClient {
             writeAndClose(RemoteResponse.badRequest())
             return
         }
-        switch server.checkPIN(parsed.pin, peer: peer, exempt: false) {
+        // The page is named so the LIVE page's own code opens it: this route
+        // is the live page's, and a code that opened the page but not its
+        // video would be a code that does nothing.
+        switch server.checkPIN(parsed.pin, page: RemoteLink.live.rawValue,
+                               peer: peer, exempt: false) {
         case .silent:
             close(code: nil)
         case .accepted(let hold):

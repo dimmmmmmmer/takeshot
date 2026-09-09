@@ -133,6 +133,10 @@ final class RemoteClient: @unchecked Sendable {
     var pendingBodyLength = 0
     /// Whether this socket has shown the PIN. Written only here.
     private(set) var authenticated = false
+    /// What the code this socket authenticated with is allowed to send. The
+    /// operator's code is the master; a page's own code buys that page alone
+    /// (`RemoteRole`).
+    private(set) var role = RemoteRole.operatorRemote
     private var badPINs = 0
     /// No more protocol traffic goes out on this connection.
     var closed = false
@@ -306,7 +310,8 @@ final class RemoteClient: @unchecked Sendable {
         // behind the delay, the dispatch included: a command that ran two
         // seconds before its own acknowledgement would put the status push in
         // front of it and time the two apart for whoever was watching.
-        switch server.checkPIN(message.pin, peer: peer, exempt: authenticated) {
+        switch server.checkPIN(message.pin, page: message.page, peer: peer,
+                               exempt: authenticated) {
         case .silent:
             // This peer already has an answer on the way. The guess was counted
             // and nothing goes back — which is what stops eight sockets from
@@ -335,6 +340,10 @@ final class RemoteClient: @unchecked Sendable {
         }
         if !authenticated {
             authenticated = true
+            // What this code bought. Recorded at the handshake and never
+            // re-read: a socket's role is the code it came in with, so a page
+            // cannot be talked into a bigger one by a later message.
+            role = server.grantedRole
             write(RemoteWebSocketFrame.text(#"{"type":"auth","ok":true}"#))
             // A phone picked up mid-take shows the take, not a blank readout,
             // without waiting for the next heartbeat.
@@ -354,6 +363,13 @@ final class RemoteClient: @unchecked Sendable {
         // hundred and twenty-eight sidecar rewrites a second on the volume the
         // take is being written to.
         guard message.command != .hello else { return }
+        // **A page's code sends that page's own buttons and nothing else.**
+        // Dropped silently rather than answered: a socket that came in with
+        // the slate's code and asked for REC is either a page with a bug or
+        // somebody trying it on, and neither is owed a reply that tells them
+        // which. It costs the sender an allowance either way, so probing is
+        // metered like anything else.
+        guard role.maySend(message.command) else { return }
         guard spendCommandAllowance(), server.spendCommandAllowance() else {
             return
         }

@@ -449,7 +449,7 @@ function armWatchdog() {
 
 function send(action) {
   if (!socket || socket.readyState !== 1) { return; }
-  socket.send(JSON.stringify({ action: action, pin: pin }));
+  socket.send(JSON.stringify({ action: action, pin: pin, page: CFG.page }));
 }
 
 function connect() {
@@ -461,7 +461,7 @@ function connect() {
     + location.host + "/ws");
   armWatchdog();
   socket.onopen = function () {
-    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+    socket.send(JSON.stringify({ action: "hello", pin: pin, page: CFG.page }));
   };
   socket.onmessage = function (event) {
     armWatchdog();

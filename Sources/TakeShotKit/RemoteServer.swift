@@ -67,7 +67,11 @@ final class RemoteServer: @unchecked Sendable {
     /// localized pages. All change without a restart (the operator switches
     /// language, or regenerates the code).
     private struct Shared {
+        /// The operator's code — the master, accepted on every page.
         var pin: String
+        /// A code per auxiliary page, so the second AC with the slate and the
+        /// script supervisor are not handed the code that presses REC.
+        var pagePINs: [String: String] = [:]
         var page: Data
         var scriptPage: Data
         var livePage: Data
@@ -158,7 +162,8 @@ final class RemoteServer: @unchecked Sendable {
     private var commandTokens = RemoteServer.commandBurst
     private var commandTokensAt = RemoteServer.monotonicNow()
 
-    init(pin: String, page: Data, scriptPage: Data = Data(),
+    init(pin: String, pagePINs: [String: String] = [:],
+         page: Data, scriptPage: Data = Data(),
          livePage: Data = Data(),
          slatePage: Data = Data(), handlers: Handlers,
          handshakeDeadline: DispatchTimeInterval
@@ -166,7 +171,8 @@ final class RemoteServer: @unchecked Sendable {
         self.handlers = handlers
         self.handshakeDeadline = handshakeDeadline
         self.shared = OSAllocatedUnfairLock(
-            initialState: Shared(pin: pin, page: page, scriptPage: scriptPage,
+            initialState: Shared(pin: pin, pagePINs: pagePINs,
+                                 page: page, scriptPage: scriptPage,
                                  livePage: livePage,
                                  slatePage: slatePage))
     }
@@ -264,6 +270,12 @@ final class RemoteServer: @unchecked Sendable {
     ///
     /// 1008 (policy violation) rather than 1001: the page is being turned away,
     /// not told the server is going down, and its reconnect asks for a code.
+    /// The codes for the three auxiliary pages, keyed by `RemoteLink` raw
+    /// value. Set beside `setPIN` and from the same place.
+    func setPagePINs(_ pins: [String: String]) {
+        shared.withLock { $0.pagePINs = pins }
+    }
+
     func setPIN(_ pin: String) {
         shared.withLock { $0.pin = pin }
         queue.async { [self] in
@@ -275,6 +287,11 @@ final class RemoteServer: @unchecked Sendable {
     // MARK: - called by RemoteClient, on the same queue
 
     var currentPIN: String { shared.withLock { $0.pin } }
+
+    /// The code that opens `page`, or nil if it has none of its own.
+    func pin(for page: String) -> String? {
+        shared.withLock { $0.pagePINs[page] }
+    }
     var currentPage: Data { shared.withLock { $0.page } }
     var currentScriptPage: Data { shared.withLock { $0.scriptPage } }
     var currentLivePage: Data { shared.withLock { $0.livePage } }
@@ -305,9 +322,28 @@ final class RemoteServer: @unchecked Sendable {
     ///
     /// Queue-confined, like the tarpit it reads. `peer` is the source address,
     /// which is what makes the cost the guesser's rather than the set's.
-    func checkPIN(_ candidate: String, peer: String,
+    /// **Which code opens which page.**
+    ///
+    /// A page accepts its OWN code or the operator's. The operator's is the
+    /// master on purpose: it is the code the person setting the remote up
+    /// knows, and a rig where the one code you remember opens nothing is a rig
+    /// nobody uses. What the page's own code does not buy is the operator
+    /// page's BUTTONS — see `RemoteRole`.
+    ///
+    /// `page` is what the client said it is. A client can lie about it, and
+    /// lying gains nothing: claiming to be the slate to use the slate's code
+    /// grants the slate's role, which sends no commands at all.
+    func checkPIN(_ candidate: String, page: String? = nil, peer: String,
                   exempt: Bool) -> RemotePINVerdict {
-        let accepted = RemotePIN.matches(candidate, expected: currentPIN)
+        var accepted = RemotePIN.matches(candidate, expected: currentPIN)
+        var role = RemoteRole.operatorRemote
+        if !accepted, let page, let link = RemoteLink(rawValue: page),
+           let own = pin(for: page),
+           RemotePIN.matches(candidate, expected: own) {
+            accepted = true
+            role = .page(link)
+        }
+        grantedRole = role
         if exempt, accepted { return .accepted(hold: 0) }
         guard let hold = tarpit.attempt(peer: peer, failed: !accepted,
                                         now: Self.monotonicNow()) else {
@@ -315,6 +351,13 @@ final class RemoteServer: @unchecked Sendable {
         }
         return accepted ? .accepted(hold: hold) : .refused(hold: hold)
     }
+
+    /// The role the last `checkPIN` granted.
+    ///
+    /// Queue-confined like `commandTokens`: every caller is already on this
+    /// queue, and the check and the read are one step of one connection's
+    /// handshake. It is read immediately by the client that asked.
+    private(set) var grantedRole = RemoteRole.operatorRemote
 
     /// Spend one command against the SET's allowance.
     ///

@@ -376,6 +376,10 @@ var seedDrop = false;
 var syncLabel = "";
 var syncUntil = 0;
 var flashUntil = 0;
+// How long the clap sounds. About two frames at 25p, like the flash it goes
+// with: long enough to find in a waveform, short enough not to sit over the
+// first word of the take.
+var BEEP_S = 0.08;
 var connected = false;
 // What the readout and its tag currently say. The loop runs at display rate and
 // the number changes at the signal's, so most passes have nothing to write: a
@@ -541,7 +545,52 @@ function fireSync() {
   syncLabel = TAKESHOT_TC.label(seed + advanced(moment), seedFps, seedDrop);
   syncUntil = moment + SYNC_MS;
   flashUntil = moment + FLASH_MS;
+  beep();
   paint();
+}
+
+// **The clap.**
+//
+// A real slate makes a NOISE at the instant it makes the picture, and that is
+// what gives the sound department a sync point of their own (owner: "а у нас
+// на хлопушке звук то при прыжке яркости есть?"). A flash alone syncs the
+// picture and leaves the sound to be lined up by eye.
+//
+// A short square-ish tone rather than a sample: no file to load on a set
+// network with no internet, no decode to wait on, and the start is scheduled
+// on the audio clock at the moment the flash is painted rather than whenever
+// a decoder happened to be ready.
+//
+// **Created inside the gesture that fires it.** Mobile Safari will not start
+// an `AudioContext` outside a user action, and the sync flash IS one — a tap
+// or the space bar — so the first clap builds the context and every later one
+// reuses it. A browser that refuses audio still flashes: the picture is the
+// half that must never depend on the sound.
+var audio = null;
+function beep() {
+  try {
+    var Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) { return; }
+    if (!audio) { audio = new Context(); }
+    if (audio.state === "suspended") { audio.resume(); }
+    var start = audio.currentTime;
+    var tone = audio.createOscillator();
+    var gain = audio.createGain();
+    tone.type = "square";
+    tone.frequency.value = 1000;
+    // An envelope, not a switch: a square wave cut dead clicks, and a click is
+    // a second transient a few milliseconds off the one being marked.
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.6, start + 0.002);
+    gain.gain.setValueAtTime(0.6, start + BEEP_S - 0.006);
+    gain.gain.linearRampToValueAtTime(0, start + BEEP_S);
+    tone.connect(gain);
+    gain.connect(audio.destination);
+    tone.start(start);
+    tone.stop(start + BEEP_S);
+  } catch (e) {
+    // Audio is the courtesy; the flash is the slate.
+  }
 }
 
 // **A code the operator did not just type must not accuse them.**
@@ -596,7 +645,7 @@ function connect() {
   armWatchdog();
   socket.onopen = function () {
     // The only thing this page ever sends. See the note at the top.
-    socket.send(JSON.stringify({ action: "hello", pin: pin }));
+    socket.send(JSON.stringify({ action: "hello", pin: pin, page: CFG.page }));
   };
   socket.onmessage = function (event) {
     armWatchdog();

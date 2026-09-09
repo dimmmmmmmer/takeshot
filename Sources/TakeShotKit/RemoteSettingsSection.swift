@@ -47,9 +47,15 @@ struct RemoteSettingsSection: View {
                 set: { controller.settings.remote.enabled = $0 ? true : nil }))
             if isOn {
                 portRow
-                pinRow
                 pageRow
+                pinRow
                 addressRow
+                if link != .remote {
+                    Text(L("remote_pin_master_note"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -72,13 +78,28 @@ struct RemoteSettingsSection: View {
     private var pinRow: some View {
         LabeledContent(L("remote_pin")) {
             HStack(spacing: 10) {
-                Text(controller.settings.remote.pin ?? "----")
+                Text(controller.remotePIN(for: link) ?? "----")
                     .font(.system(.title3, design: .monospaced))
                     .textSelection(.enabled)
-                Button(L("remote_pin_new")) { controller.regenerateRemotePIN() }
+                Button(L("remote_pin_new")) {
+                    controller.regenerateRemotePIN(for: link)
+                }
             }
         }
     }
+
+    /// **The code shown is the SELECTED page's** (owner: "пины на все страницы
+    /// ремоута кстати хочу иметь уникальные").
+    ///
+    /// One row rather than four, and paired with the address picker right
+    /// below it, because the two are read out together: this address, this
+    /// code. Four rows would also have made the section taller in Russian than
+    /// in English, which is the divergence `theRemoteSectionRendersExpanded-
+    /// InBothLanguages` exists to catch.
+    ///
+    /// The operator page's code is the master and opens every page; the note
+    /// under the picker says so, because a code that works on a page it does
+    /// not belong to is otherwise a surprise.
 
     /// Which page the address below is for.
     ///
