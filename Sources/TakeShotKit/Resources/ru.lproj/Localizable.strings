@@ -146,7 +146,6 @@
 /* "Дифф" and not "Разница" for the same reason as "Микс" above: every
    segment pays the width of the widest label. */
 "compare_difference" = "Дифф";
-"difference_gain_help" = "Усиление разницы: |A−B| умножается, чтобы мелкие расхождения стали видны";
 "compare_side" = "A|B";
 "playback_speed" = "Скорость воспроизведения";
 "playback_loop" = "Зациклить";
@@ -322,6 +321,7 @@
 
 "pin_reference" = "Закрепить как референс";
 "pin_reference_help" = "Закрепить текущий кадр как референс для сравнения с живым сигналом";
+"repin_reference_help" = "Заменить закреплённый образец этим кадром";
 "unpin_reference_help" = "Открепить референс";
 "reference_pinned" = "Референс закреплён — сравнивайте с живым сигналом";
 "reference_pin_failed" = "Не удалось закрепить референс";

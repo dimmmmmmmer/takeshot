@@ -151,7 +151,36 @@ extension CaptureController {
     /// The player's own fullscreen button, bottom-right. Live signal only —
     /// in playback the transport carries one — and not over a clean feed,
     /// where it is one of the corner buttons being taken off the picture.
-    var showsLiveFullscreenButton: Bool { viewerMode == .record && !cleanFeed }
+    /// The fullscreen button in the picture's own bottom-right corner.
+    ///
+    /// Record mode has always had one. Playback carries its own INSIDE the
+    /// transport bar — and a still has no transport (`transportBarKind`
+    /// excludes images, and a RAW clip the engine could not open), so a photo
+    /// under review had no way to fill the screen at all (owner: "если в
+    /// плейбеке включить не видео а фотку то нет кнопки чтобы открыть ее на
+    /// фулл скрин тк нет управления транспортом плейбека (что логично но
+    /// кнопка фулскрина нужна)").
+    ///
+    /// **Never two.** The corner button is offered exactly when nothing under
+    /// the picture is already offering one, so the two cannot both appear —
+    /// which is why the rule reads `transportBarKind` rather than listing the
+    /// file kinds again. A sync-play grid is excluded for its own reason: what
+    /// would go fullscreen there is the grid, and that is the grid's button.
+    var showsCornerFullscreenButton: Bool {
+        guard !cleanFeed else { return false }
+        guard viewerMode == .playback else { return true }
+        return syncPlay == nil && playbackURL != nil && transportBarKind == .none
+    }
+
+    /// Whether the viewer's own fullscreen window is up.
+    ///
+    /// Asks `isReviewingClip`, which is the same question
+    /// `toggleViewerFullscreen` asks to decide WHICH window to open — so the
+    /// icon and the press cannot come to disagree about which fullscreen the
+    /// button is about.
+    var viewerIsFullscreen: Bool {
+        isReviewingClip ? isPlaybackFullscreen : isLiveFullscreen
+    }
 
     /// The audio channel panel over the picture — a panel of controls, so a
     /// clean feed takes it with the rest of them.

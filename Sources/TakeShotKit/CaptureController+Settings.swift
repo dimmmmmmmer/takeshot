@@ -118,10 +118,14 @@ extension CaptureController {
         // the status item is a window-level affordance; the writer has never
         // heard of it, and toggling it must not rebuild the capture config
         pipelineRelevant.theme.keepInMenuBar = settings.theme.keepInMenuBar
-        // the compare mode/gain reach the pipeline through pushCompare, not
-        // through the capture config — a mode click must not rebuild capture
+        // the compare mode reaches the pipeline through pushCompare, not
+        // through the capture config — a mode click must not rebuild capture.
+        //
+        // The difference GAIN used to be masked on the line below this one.
+        // It is retired and nothing writes it any more, so its value cannot
+        // change and there is nothing left to mask — and a read of a
+        // tombstoned field is exactly what `RetiredSettingTests` forbids.
         pipelineRelevant.review.compareMode = settings.review.compareMode
-        pipelineRelevant.review.compareDifferenceGain = settings.review.compareDifferenceGain
         guard pipelineRelevant != settings else { return }
         pushConfig()
     }

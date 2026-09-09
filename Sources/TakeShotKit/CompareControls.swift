@@ -31,10 +31,12 @@ struct CompareControls: View {
             if controller.compareHasBSide {
                 modePicker
                 if controller.compareMode == .wipe { wipePicker }
-                // The wipe has its seam and the blend its slider; difference has
-                // its gain — the same control family, in the same slot. No wipe
-                // position anywhere near it: a seam through |A−B| means nothing.
-                if controller.compareMode == .difference { gainPicker }
+                // Difference used to have a ×1/×4/×16/×64 gain picker in this
+                // slot. It is gone: the owner has now said twice that the
+                // amplified readings are of no use to them ("кроме х1 смысла
+                // не вижу в них"), and a picker whose other three rows nobody
+                // wants is three ways to leave the instrument reading wrong.
+                // The difference is |A−B| at unity — see `differenceGain`.
                 // The B-side menu belongs to an ENGAGED compare (it names the
                 // other half), so the resting bar goes without it: with five
                 // modes in the picker, the off state has to fit the centered
@@ -85,11 +87,17 @@ struct CompareControls: View {
             Image(systemName: "line.diagonal")
                 .tag(CaptureController.WipeOrientation.diagonal)
                 .help(L("wipe_diagonal"))
-            // The same glyph flipped: there is no mirrored `line.diagonal` in
-            // the symbol set, and a DIFFERENT glyph for the same control in the
-            // other direction would read as a different kind of wipe.
-            Image(systemName: "line.diagonal")
-                .scaleEffect(x: -1, y: 1)
+            // **The flip is in the IMAGE, not on the view.**
+            //
+            // There is no mirrored `line.diagonal` in the symbol set, and a
+            // different glyph would read as a different kind of wipe — so this
+            // was `.scaleEffect(x: -1, y: 1)` on the same symbol, and it drew
+            // NOTHING: a segmented picker takes the content of its rows and
+            // re-hosts it, and a geometry transform outside the image does not
+            // survive the trip. Both diagonals came out "/" (owner: "значок
+            // другой диагональной шторки показан в ту же сторону что и
+            // первый"). `MirroredSymbol` flips the pixels instead.
+            Image(nsImage: MirroredSymbol.diagonal)
                 .tag(CaptureController.WipeOrientation.diagonalMirrored)
                 .help(L("wipe_diagonal_mirrored"))
         }
@@ -97,19 +105,6 @@ struct CompareControls: View {
         .fixedSize()
         .labelsHidden()
         .controlSize(.mini)
-    }
-
-    private var gainPicker: some View {
-        Picker("", selection: $controller.differenceGain) {
-            ForEach(CaptureController.DifferenceGain.allCases) { gain in
-                Text(gain.label).tag(gain)
-            }
-        }
-        .pickerStyle(.segmented)
-        .fixedSize()
-        .labelsHidden()
-        .controlSize(.mini)
-        .help(L("difference_gain_help"))
     }
 
     @ViewBuilder private var blendControls: some View {
@@ -161,6 +156,24 @@ struct CompareControls: View {
 /// suite that can only measure the bar as a block cannot say whether the door
 /// is in it. `ViewPlayerBadgeTests` measures it on its own and holds the
 /// unpinned record bar against exactly this and nothing else.
+/// What the pin button is about to do — the glyph, and the sentence that
+/// explains it.
+///
+/// One value rather than two ternaries in the view, the same shape
+/// `MonitorSpeaker` takes and for the same reason: an icon and its tooltip that
+/// disagree is a control that lies, and a view is where a test cannot look.
+struct ComparePinReading: Equatable {
+    let symbol: String
+    let helpKey: String
+
+    static func reading(pinned: Bool) -> ComparePinReading {
+        pinned
+            ? ComparePinReading(symbol: "pin.fill",
+                                helpKey: "repin_reference_help")
+            : ComparePinReading(symbol: "pin", helpKey: "pin_reference_help")
+    }
+}
+
 struct ComparePinControls: View {
     @EnvironmentObject private var controller: CaptureController
 
@@ -184,15 +197,34 @@ struct ComparePinControls: View {
         // The UNPIN stays unconditional, one line down: a reference pinned in
         // playback outlives the mode switch that pinning performs, so the way
         // out has to exist in the mode the pin drops you into.
+        // **The pin says whether there is already one.**
+        //
+        // It drew the same hollow glyph whatever the state, so on the playback
+        // page a reference that was already pinned offered an identical press
+        // that looked like it did nothing — and that press also throws the
+        // viewer back to record, so it read as a control with a mind of its
+        // own (owner: "запиненый реф на странице плейбека снова можно
+        // запинить. путает это").
+        //
+        // The press is still worth having: scrubbing to a better frame and
+        // pinning THAT is the ordinary way to change a reference. What was
+        // missing is that the button never said which of the two things it was
+        // about to do, so now it does — filled and accented over a reference
+        // that exists, and its tooltip says "replace" rather than "pin".
         if controller.isReviewingSingleClip {
+            let reading = ComparePinReading.reading(
+                pinned: controller.referencePinned)
             Button {
                 controller.pinReferenceFromCurrentFrame()
             } label: {
-                Image(systemName: "pin")
+                Image(systemName: reading.symbol)
                     .font(.system(size: 11))
+                    .foregroundStyle(controller.referencePinned
+                                     ? AnyShapeStyle(controller.accentColor)
+                                     : AnyShapeStyle(.primary))
             }
             .buttonStyle(.plain)
-            .controlHelp(L("pin_reference_help"))
+            .controlHelp(L(reading.helpKey))
         }
         if controller.referencePinned {
             Button {

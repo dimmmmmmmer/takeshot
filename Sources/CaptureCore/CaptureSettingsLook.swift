@@ -167,7 +167,14 @@ public struct ReviewSettings: Codable, Equatable, Sendable {
     /// difference back after a relaunch), the seam position is a moment.
     /// Optional, like every added field, so old saved JSON still decodes.
     public var compareMode: String?
-    /// Difference-compare gain multiplier (1/4/16); nil — 1.
+    /// **Retired.** The difference-compare gain multiplier (1/4/16); nil — 1.
+    ///
+    /// The picker is gone and nothing reads or writes this any more: a
+    /// difference is a measurement, and a multiplier the operator cannot read
+    /// off the picture is a way to be wrong about one (owner: "кроме х1 смысла
+    /// не вижу в них"). The key stays on the record so a blob carrying it still
+    /// decodes and a build that downgrades finds its value — the tombstone
+    /// contract `RetiredSettingTests` states.
     public var compareDifferenceGain: Int?
     /// Color new markers are born with (one of `TakeMarker.colors`); nil — the
     /// palette's first entry.

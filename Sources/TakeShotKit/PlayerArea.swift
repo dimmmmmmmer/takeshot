@@ -50,12 +50,17 @@ struct PlayerArea: View {
             }
             .playerTopBadges()
             .overlay(alignment: .bottomTrailing) {
-                // player fullscreen — bottom-right (in playback this button is in the transport)
-                if controller.showsLiveFullscreenButton {
+                // Player fullscreen — bottom-right. In playback the transport
+                // carries its own, so this appears only where there is no
+                // transport: a still, which used to have no way to fill the
+                // screen at all (see `showsCornerFullscreenButton`).
+                if controller.showsCornerFullscreenButton {
                     Button {
-                        controller.toggleLiveFullscreen()
+                        controller.toggleViewerFullscreen()
                     } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        Image(systemName: controller.viewerIsFullscreen
+                              ? "arrow.down.right.and.arrow.up.left"
+                              : "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 13))
                             .padding(6)
                             .background(.black.opacity(0.45),

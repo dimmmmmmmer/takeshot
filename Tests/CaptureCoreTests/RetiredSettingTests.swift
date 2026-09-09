@@ -36,7 +36,8 @@ import Testing
     /// group `CaptureSignalSettings` is mounted as, so `capture.tenBitCapture` is
     /// what any read of it looks like anywhere in the app.
     static let retired: [String] = ["capture.tenBitCapture",
-                                    "capture.colorTagPreset"]
+                                    "capture.colorTagPreset",
+                                    "review.compareDifferenceGain"]
 
     /// Nothing under `Sources` reads either of them.
     @Test func aRetiredSettingIsReadNowhere() throws {
@@ -77,6 +78,7 @@ import Testing
             let a = settings.capture.tenBitCapture // and a comment after it
             // let b = settings.capture.colorTagPreset — this one must NOT count
             let c = settings.capture.colorTagPreset
+            let d = settings.review.compareDifferenceGain
             """)
         for field in Self.retired {
             try #require(planted.contains(field), """
@@ -94,8 +96,8 @@ import Testing
 
     /// …and it is still on the record, which is the other half of a tombstone: a
     /// key that is REMOVED is a change to the on-disk format, and this one buys
-    /// nothing. A blob carrying either value still decodes, and the value is
-    /// still there afterwards for a build that downgrades.
+    /// nothing. A blob carrying any of the values still decodes, and the value
+    /// is still there afterwards for a build that downgrades.
     @Test func aRetiredSettingIsStillCarriedByTheRecord() throws {
         // The eight non-Optional keys have to be there — a synthesized decoder
         // does not fall back on a property's default — plus the two retired ones.
@@ -117,6 +119,26 @@ import Testing
                 "a retired key was dropped from the record")
         #expect(text.contains("\"colorTagPreset\""),
                 "a retired key was dropped from the record")
+    }
+
+    /// The third tombstone lives on a different group, so it gets its own
+    /// round trip: `compareDifferenceGain` was the ×1/×4/×16/×64 amplifier on
+    /// the difference compare, retired when the owner said for the second time
+    /// that only unity is any use ("кроме х1 смысла не вижу в них"). A
+    /// difference is a MEASUREMENT, and a multiplier the operator cannot read
+    /// off the picture is a way to be wrong about one.
+    @Test func theRetiredDifferenceGainSurvivesARoundTrip() throws {
+        let json: String = """
+            {"compareMode":"difference","compareDifferenceGain":16}
+            """
+        let review: ReviewSettings = try JSONDecoder()
+            .decode(ReviewSettings.self, from: Data(json.utf8))
+        #expect(review.compareDifferenceGain == 16)
+
+        let round: Data = try JSONEncoder().encode(review)
+        let text: String = try #require(String(data: round, encoding: .utf8))
+        #expect(text.contains("\"compareDifferenceGain\""),
+                "the retired gain was dropped from the record")
     }
 
     /// And the behaviour those two sites had: with no colorimetry from the

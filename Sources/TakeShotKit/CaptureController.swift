@@ -177,15 +177,6 @@ final class CaptureController: ObservableObject {
     /// not wake every view in the window — see `CompareLive`.
     let compareLive = CompareLive()
 
-    /// Difference-mode gain (×1/×4/×16 — small differences are invisible
-    /// unamplified). Persisted with the mode, see `persistCompareSettings`.
-    @Published var differenceGain: DifferenceGain = .x1 {
-        didSet {
-            pushCompare()
-            persistCompareSettings()
-        }
-    }
-
     /// One-line offload status for the takes panel ("Offload 41/128"); nil when
     /// nothing is running. The detail lives in the sheet.
     @Published var offloadStatus: String?

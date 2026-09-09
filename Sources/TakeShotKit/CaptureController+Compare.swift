@@ -37,7 +37,7 @@ extension CaptureController {
         case off        // playback only
         case wipe       // wipe
         case blend      // overlay with transparency
-        case difference // per-pixel |A−B|, amplified by differenceGain
+        case difference // per-pixel |A−B|, at unity
         case sideBySide // side by side
         var id: String { rawValue }
     }
@@ -62,17 +62,6 @@ extension CaptureController {
     /// that survive NOISE: a sensor's own floor is a code or two, so at the top
     /// step a clean pair of frames still glows grey, and the step that answers
     /// "is this a real difference or is it the noise" is a lower one.
-    enum DifferenceGain: Int, CaseIterable, Identifiable {
-        case x1 = 1
-        case x4 = 4
-        case x16 = 16
-        case x64 = 64
-        var id: Int { rawValue }
-        /// The segment label. A multiplication sign and a number are symbols,
-        /// not words — the same rule as the "%" beside the blend field.
-        var label: String { "×\(rawValue)" }
-    }
-
     /// Compare wipe direction.
     enum WipeOrientation: String, CaseIterable {
         case vertical    // vertical line, drags horizontally
@@ -327,7 +316,16 @@ extension CaptureController {
         case .wipe: return .wipe(axis: Self.compareAxis(wipeOrientation),
                                  position: wipePosition)
         case .difference:
-            return .difference(gain: Double(differenceGain.rawValue))
+            // **Unity, and no picker over it.**
+            //
+            // The gain was ×1/×4/×16/×64 in the compare bar, and the owner has
+            // said twice that only the first is of any use ("кроме х1 смысла
+            // не вижу в них"). A difference is a MEASUREMENT: three ways to
+            // multiply it are three ways to leave the instrument reading
+            // something other than what it measured, and the operator cannot
+            // see from the picture which one is set. `compareDifferenceGain`
+            // is tombstoned on the record — see `RetiredSettingTests`.
+            return .difference(gain: 1)
         }
     }
 
@@ -344,17 +342,19 @@ extension CaptureController {
         pipeline.setPreviewCompare(referencePinned ? mode : .off)
     }
 
-    /// The compare mode and the difference gain survive a relaunch, like the
-    /// rest of the operator's choices. Stored as nil at the defaults — the
-    /// same convention as every other added settings field, so old saved JSON
-    /// keeps decoding — and guarded so a didSet that changed nothing does not
-    /// re-encode the whole settings blob.
+    /// The compare mode survives a relaunch, like the rest of the operator's
+    /// choices. Stored as nil at the default — the same convention as every
+    /// other added settings field, so old saved JSON keeps decoding — and
+    /// guarded so a didSet that changed nothing does not re-encode the whole
+    /// settings blob.
+    ///
+    /// The difference GAIN used to be written here beside it. It is retired:
+    /// the field stays on the record so a blob carrying it still decodes and a
+    /// downgrade finds its value, and nothing reads or writes it
+    /// (`RetiredSettingTests`).
     func persistCompareSettings() {
         let mode = compareMode == .off ? nil : compareMode.rawValue
-        let gain = differenceGain == .x1 ? nil : differenceGain.rawValue
-        guard settings.review.compareMode != mode
-            || settings.review.compareDifferenceGain != gain else { return }
+        guard settings.review.compareMode != mode else { return }
         settings.review.compareMode = mode
-        settings.review.compareDifferenceGain = gain
     }
 }

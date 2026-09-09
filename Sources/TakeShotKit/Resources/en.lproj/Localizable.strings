@@ -144,7 +144,6 @@
 /* Kept short on purpose: a segmented control charges every segment the width
    of the widest label, and this row has to fit the centered player slot. */
 "compare_difference" = "Diff";
-"difference_gain_help" = "Difference gain: amplify |A−B| so small mismatches become visible";
 "compare_side" = "A|B";
 "playback_speed" = "Playback speed";
 "playback_loop" = "Loop";
@@ -320,6 +319,7 @@
 
 "pin_reference" = "Pin as reference";
 "pin_reference_help" = "Pin the current frame as a reference for live compare";
+"repin_reference_help" = "Replace the pinned reference with this frame";
 "unpin_reference_help" = "Unpin the reference";
 "reference_pinned" = "Reference pinned — compare it with the live signal";
 "reference_pin_failed" = "Couldn't pin the reference";

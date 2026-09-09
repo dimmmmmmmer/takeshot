@@ -220,12 +220,12 @@ extension CaptureController {
         restoreVisualRec(from: stored.visualRec)
     }
 
-    /// The compare mode and its gain come back like every other working
-    /// preference. Gain first: each didSet pushes the whole compare state, and
-    /// the mode's push should already carry the restored gain.
+    /// The compare mode comes back like every other working preference.
+    ///
+    /// The difference GAIN used to be restored here first, so the mode's own
+    /// push would already carry it. It is retired — the difference is |A−B| at
+    /// unity and has no picker (`RetiredSettingTests`).
     private func restoreCompare(from stored: CaptureSettings) {
-        differenceGain = stored.review.compareDifferenceGain
-            .flatMap(DifferenceGain.init(rawValue:)) ?? .x1
         compareMode = stored.review.compareMode
             .flatMap(CompareMode.init(rawValue:)) ?? .off
     }

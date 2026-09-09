@@ -247,16 +247,20 @@ import Testing
         }
     }
 
-    /// Difference reaches the render as ONE compositor mode carrying the
-    /// dialled gain. The mapping is written once in `compareComposite`, and
-    /// "a fourth mode forgotten in the translation" is the exact bug that
-    /// single spelling exists to prevent — asserted here for the mode that
-    /// was added fourth, and re-checked when the gain alone changes (a
-    /// paused player redraws off this push, so a stale gain would sit on
-    /// screen until the next frame).
-    @Test func differenceReachesTheRenderWithItsGain() async throws {
+    /// Difference reaches the render as ONE compositor mode, at UNITY.
+    ///
+    /// The mapping is written once in `compareComposite`, and "a fourth mode
+    /// forgotten in the translation" is the exact bug that single spelling
+    /// exists to prevent — asserted here for the mode that was added fourth.
+    ///
+    /// The gain used to be dialled ×1/×4/×16/×64 from the compare bar and this
+    /// test drove it. It is retired (owner: "кроме х1 смысла не вижу в них"):
+    /// a difference is a measurement, and a multiplier the operator cannot see
+    /// from the picture is a way to read it wrong. The compositor still TAKES
+    /// a gain — `CompareCompositorTests` covers that — the app just never
+    /// sends anything but one.
+    @Test func differenceReachesTheRenderAtUnity() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.differenceGain = .x4
             controller.compareMode = .difference
 
             let tap = controller.playbackTap
@@ -266,26 +270,17 @@ import Testing
                 Issue.record("the tap got \(tapMode), not difference")
                 return
             }
-            #expect(gain == 4)
-
-            controller.differenceGain = .x16
-            tap.queue.sync { tapMode = tap.compare }
-            guard case .difference(let bumped) = tapMode else {
-                Issue.record("the gain change lost the mode: \(tapMode)")
-                return
-            }
-            #expect(bumped == 16)
+            #expect(gain == 1, "the difference reached the render at ×\(gain)")
         }
     }
 
-    /// The compare mode and the difference gain come back after a relaunch —
-    /// a unit that frames against a reference all day wants its difference at
-    /// ×16 back, not a hunt through the compare bar every morning. The
-    /// defaults are stored as nil, like every other settings field.
-    @Test func theCompareModeAndGainSurviveARelaunch() async throws {
+    /// The compare mode comes back after a relaunch — a unit that frames
+    /// against a reference all day wants its mode back, not a hunt through the
+    /// compare bar every morning. The default is stored as nil, like every
+    /// other settings field.
+    @Test func theCompareModeSurvivesARelaunch() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.compareMode = .difference
-            controller.differenceGain = .x16
 
             let second = CaptureController(
                 backends: [("mock", SyntheticSignalBackend())],
@@ -306,14 +301,11 @@ import Testing
             }
 
             #expect(second.compareMode == .difference)
-            #expect(second.differenceGain == .x16)
 
             // back at the defaults nothing is stored — off is nil, not "off"
             controller.compareMode = .off
-            controller.differenceGain = .x1
             let reloaded = CaptureSettings.loaded(from: controller.defaults)
             #expect(reloaded.review.compareMode == nil)
-            #expect(reloaded.review.compareDifferenceGain == nil)
         }
     }
 }
