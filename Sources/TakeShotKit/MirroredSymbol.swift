@@ -14,7 +14,14 @@ import AppKit
 /// symbol beside it does.
 enum MirroredSymbol {
     /// `line.diagonal` the other way: "\" against the plain symbol's "/".
-    static let diagonal: NSImage = flipped("line.diagonal")
+    ///
+    /// **Main-actor**, because `NSImage` is not `Sendable` and a `static let`
+    /// of one is shared mutable state as far as Swift 6 is concerned. Built
+    /// once, on the actor its only reader — a SwiftUI body — already runs on.
+    /// The development compiler let this through and the CI toolchain did not,
+    /// which is the gap `docs/ARCHITECTURE.md` describes: the runner is a
+    /// second COMPILER, not only an older SDK.
+    @MainActor static let diagonal: NSImage = flipped("line.diagonal")
 
     /// One symbol, mirrored horizontally.
     ///
