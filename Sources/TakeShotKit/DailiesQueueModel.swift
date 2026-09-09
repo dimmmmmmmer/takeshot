@@ -50,8 +50,29 @@ final class DailiesQueueModel: ObservableObject {
     /// way traps — which took a whole battery down once. The controller fills
     /// this in when the sheet opens (`dailiesPreviewStill`).
     @Published var previewStill: CGImage?
-    /// Where the dailies land. Defaults to a Dailies folder beside the takes.
-    @Published var destination: URL?
+    /// **Where the dailies land** — one or more (owner: "и так же несколько
+    /// источников дестинейшна, ну мало ли что").
+    ///
+    /// The FIRST is where the encode is written; the rest are given a copy of
+    /// the finished file. Copied and not re-encoded: a second encode would
+    /// double the cost of the whole batch to produce a byte-identical file,
+    /// and the machine is shared with a capture path that must not be made to
+    /// wait.
+    @Published var destinations: [URL] = []
+
+    /// The destination the encode is written into — the head of the list, and
+    /// what every reader that only cares about "where does this land" asks.
+    var destination: URL? {
+        get { destinations.first }
+        set {
+            guard let newValue else { destinations = []; return }
+            if destinations.isEmpty {
+                destinations = [newValue]
+            } else {
+                destinations[0] = newValue
+            }
+        }
+    }
     /// The folder beside the footage — what `destination` means when the
     /// operator has not pointed it anywhere. Held so the sheet can offer the way
     /// BACK to it and so a run that lands there is not recorded as a choice:
@@ -60,7 +81,20 @@ final class DailiesQueueModel: ObservableObject {
     @Published private(set) var defaultFolder: URL?
     /// What Start will queue, in take order. Seeded by the controller from
     /// the panel selection (or the whole day) when the sheet opens.
+    ///
+    /// Ignored while `sources` is non-empty: a run is either the app's own
+    /// takes or the folders the operator pointed at, never both — two sets of
+    /// files under one Start is a batch nobody can predict the contents of.
     @Published var queuedTakes: [Take] = []
+    /// **Folders to render dailies FROM** (owner: "дейлики нужны из
+    /// исходников… вероятно даже несколько источников, как в оффлоаде").
+    /// Empty — the day's takes, which is what this sheet has always done.
+    @Published private(set) var sources: [URL] = []
+    /// What those folders hold, as of the last scan (`DailiesSourceScan`).
+    @Published private(set) var findings = DailiesSourceScan.Findings()
+    /// A scan is running: the folder may be a shuttle drive with a thousand
+    /// clips on it, so the walk is off the main actor and the sheet says so.
+    @Published private(set) var isScanning = false
     /// Live state of the run; nil when nothing is running.
     @Published var progress: DailiesProgress?
     /// The last finished run — the sheet's result panel.
@@ -70,6 +104,7 @@ final class DailiesQueueModel: ObservableObject {
     @Published var isCancelling = false
 
     private var control: DailiesControl?
+    private var scanTask: Task<Void, Never>?
     private weak var controller: CaptureController?
 
     /// Wired once, in startup, rather than when the sheet opens — a queue
@@ -106,13 +141,103 @@ final class DailiesQueueModel: ObservableObject {
         nameSuffix = settings.dailies.nameSuffixEffective
         ink = settings.dailies.inkEffective
         customInk = settings.dailies.customInkEffective
+        // The folders a run rendered from come back with it: the same card
+        // tree returns every shooting day. Only the ones still THERE — a card
+        // that has been unplugged is not a source, and a list full of dead
+        // paths is a list nobody trusts.
+        sources = settings.dailies.sourceURLs.filter {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+        rescan()
         self.defaultFolder = defaultFolder
-        destination = settings.dailies.destinationPath
-            .map { URL(fileURLWithPath: $0) } ?? defaultFolder
+        destinations = [settings.dailies.destinationPath
+            .map { URL(fileURLWithPath: $0) } ?? defaultFolder]
+            + settings.dailies.extraDestinationURLs
+    }
+
+    /// How many files this Start will produce.
+    var itemCount: Int {
+        sources.isEmpty ? queuedTakes.count : findings.files.count
     }
 
     var canStart: Bool {
-        !isRunning && !queuedTakes.isEmpty && destination != nil
+        !isRunning && !isScanning && itemCount > 0 && destination != nil
+    }
+
+    // MARK: - the folders
+
+    /// **Folders are compared by PATH, never by `URL` equality.**
+    ///
+    /// `URL(fileURLWithPath:)` gives a directory that exists a trailing
+    /// slash and one that does not none, so a folder restored from settings
+    /// and the same folder picked in a panel are two unequal URLs for one
+    /// place — and Remove would have missed the row the operator clicked.
+    /// `comparablePath` is the same rule the offload's destination list and
+    /// the dailies default-folder check already use.
+    private func isSame(_ lhs: URL, _ rhs: URL) -> Bool {
+        CaptureController.comparablePath(lhs)
+            == CaptureController.comparablePath(rhs)
+    }
+
+    func addSource(_ url: URL) {
+        guard !sources.contains(where: { isSame($0, url) }) else { return }
+        sources.append(url)
+        rescan()
+    }
+
+    func removeSource(_ url: URL) {
+        sources.removeAll { isSame($0, url) }
+        rescan()
+    }
+
+    func replaceSource(_ old: URL, with url: URL) {
+        guard let index = sources.firstIndex(where: { isSame($0, old) })
+        else { return }
+        sources[index] = url
+        rescan()
+    }
+
+    func addDestination(_ url: URL) {
+        guard !destinations.contains(where: { isSame($0, url) }) else { return }
+        destinations.append(url)
+    }
+
+    func removeDestination(_ url: URL) {
+        // Never the head: that is where the encode lands, and a run with
+        // nowhere to write is not a run.
+        guard let index = destinations.firstIndex(where: { isSame($0, url) }),
+              index > 0 else { return }
+        destinations.remove(at: index)
+    }
+
+    func replaceDestination(_ old: URL, with url: URL) {
+        guard let index = destinations.firstIndex(where: { isSame($0, old) })
+        else { return }
+        destinations[index] = url
+    }
+
+    /// Walk the folders again, off the main actor.
+    ///
+    /// A shuttle drive with a thousand clips on it is a walk that takes
+    /// seconds, and the sheet has to stay answerable while it runs — the same
+    /// reason `DiskProbe` exists.
+    func rescan() {
+        scanTask?.cancel()
+        guard !sources.isEmpty else {
+            findings = DailiesSourceScan.Findings()
+            isScanning = false
+            return
+        }
+        let folders = sources
+        isScanning = true
+        scanTask = Task { [weak self] in
+            let found = await Task.detached(priority: .userInitiated) {
+                DailiesSourceScan.scan(folders)
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.findings = found
+            self?.isScanning = false
+        }
     }
 
     /// Whether the destination is still the folder beside the footage.
@@ -147,46 +272,11 @@ final class DailiesQueueModel: ObservableObject {
             ink: ink, customInk: customInk)
     }
 
-    /// The name one take's daily will be written under, without the extension
-    /// — what the sheet shows as a live example.
-    func outputName(for takeName: String) -> String {
-        Self.outputName(take: takeName, prefix: namePrefix, suffix: nameSuffix)
-    }
-
-    /// **The whole naming rule, in one place.**
-    ///
-    /// `NameField.prefix.normalized` is what the operator's typing already
-    /// goes through in the fields, but the RESULT is what reaches
-    /// `appendingPathComponent`, and nothing on that path sanitized it before:
-    /// a prefix of "../" or a name that came out empty had a filesystem answer
-    /// and no app answer. So the joined name is normalized again here.
-    ///
-    /// Two things `normalized` alone does not do, both found by the test that
-    /// tried them:
-    ///
-    /// - **Leading dots are dropped.** `normalized` removes the separators, so
-    ///   "../../" cannot climb out of the dailies folder — but it leaves the
-    ///   dots, and a name beginning with one is a file macOS hides. A daily
-    ///   the operator cannot see in Finder is worse than a daily with an odd
-    ///   name.
-    /// - **An empty result falls back to the take's own name.** An empty path
-    ///   component handed to `appendingPathComponent` names the dailies
-    ///   FOLDER, and a daily with no name is not a daily.
-    static func outputName(take: String, prefix: String,
-                           suffix: String) -> String {
-        let joined = NameField.prefix.normalized(prefix + take + suffix)
-        let visible = String(joined.drop(while: { $0 == "." }))
-        return visible.isEmpty ? take : visible
-    }
-
     // MARK: - the run
 
     func start() {
         guard canStart, let destination, let controller else { return }
-        let items = queuedTakes.map {
-            Self.item(for: $0, settings: controller.settings,
-                      prefix: namePrefix, suffix: nameSuffix)
-        }
+        let items = plannedItems(settings: controller.settings)
         let token = DailiesControl()
         // Recording protection from the first frame: a queue started while a
         // take is rolling opens already paused and waits its turn.
@@ -198,6 +288,7 @@ final class DailiesQueueModel: ObservableObject {
         report = nil
         controller.rememberDailiesChoices(from: self)
         controller.dailiesStatus = L("dailies_status", 0, items.count)
+        let extras = Array(destinations.dropFirst())
         let burnins = burnins
         // Captured on this side, like `burnins` and for the reason spelled out
         // below: the detached task is handed values, never this object.
@@ -226,7 +317,8 @@ final class DailiesQueueModel: ObservableObject {
         Task.detached(priority: .utility) {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
-                codec: codec, control: token, progress: publish)
+                alsoInto: extras, codec: codec, control: token,
+                progress: publish)
             complete(result)
         }
     }
@@ -253,32 +345,21 @@ final class DailiesQueueModel: ObservableObject {
         control?.setPaused(recording)
     }
 
-    // MARK: - what the engine is told about one take
-
-    /// A take as a queue item: the file, the `<name>_DAILY` output, and the
-    /// burn-in facts composed from the settings that own them.
-    static func item(for take: Take, settings: CaptureSettings,
-                     prefix: String = "", suffix: String = "_DAILY")
-        -> DailiesItem {
-        // **The project alone.** It used to be "PROJECT · A001" — the camera
-        // and the roll appended — and the roll is already in the file name
-        // this run writes (owner: "из места где проект убери подпись ролла. он
-        // же в названии файла дописывается и так"). A burn-in that repeats
-        // what the name says spends a strip on nothing.
-        let projectLine = settings.naming.projectName
-        // ISO date, POSIX locale: a burn-in is read by post in another
-        // country, and "03/04" means two different days to two of them.
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyyy-MM-dd"
-        stamp.locale = Locale(identifier: "en_US_POSIX")
-        return DailiesItem(
-            source: take.url,
-            outputName: outputName(take: take.displayName, prefix: prefix,
-                                   suffix: suffix),
-            clipName: take.displayName,
-            projectLine: projectLine,
-            dateText: stamp.string(from: take.recordedAt),
-            startTimecode: take.startTimecode)
+    /// The queue Start will run: the app's own takes, or the files the
+    /// folders hold.
+    ///
+    /// One or the other and never both — see `queuedTakes`.
+    func plannedItems(settings: CaptureSettings) -> [DailiesItem] {
+        guard sources.isEmpty else {
+            return findings.files.map {
+                Self.item(for: $0, settings: settings,
+                          prefix: namePrefix, suffix: nameSuffix)
+            }
+        }
+        return queuedTakes.map {
+            Self.item(for: $0, settings: settings,
+                      prefix: namePrefix, suffix: nameSuffix)
+        }
     }
 
     // MARK: - what the run reports back

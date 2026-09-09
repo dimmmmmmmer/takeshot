@@ -138,6 +138,8 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case textOpacity = "dailiesTextOpacity"
         case customPlateOpacity = "dailiesCustomPlateOpacity"
         case customTextOpacity = "dailiesCustomTextOpacity"
+        case sourcePaths = "dailiesSourcePaths"
+        case extraDestinationPaths = "dailiesExtraDestinationPaths"
     }
 
     /// Burn the running timecode into dailies; nil — on.
@@ -188,6 +190,15 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var textOpacity: Double?
     public var customPlateOpacity: Double?
     public var customTextOpacity: Double?
+    /// Folders the last run rendered FROM; nil/empty — the day's takes.
+    ///
+    /// Stored like the offload's destination list and for the same reason: the
+    /// same card tree and the same shuttle drive come back every shooting day,
+    /// and re-picking them through a file panel per batch is the part of the
+    /// old flow that hurt.
+    public var sourcePaths: [String]?
+    /// Destinations beyond the first — the shelves each daily is copied to.
+    public var extraDestinationPaths: [String]?
 
     public init() {}
 
@@ -240,6 +251,16 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var namePrefixEffective: String { namePrefix ?? "" }
 
     public var nameSuffixEffective: String { nameSuffix ?? "_DAILY" }
+
+    /// The folders a run renders from, as URLs. Empty — the day's takes.
+    public var sourceURLs: [URL] {
+        (sourcePaths ?? []).map { URL(fileURLWithPath: $0) }
+    }
+
+    /// The shelves beyond the first.
+    public var extraDestinationURLs: [URL] {
+        (extraDestinationPaths ?? []).map { URL(fileURLWithPath: $0) }
+    }
 
     /// The technical lines' ink, resolved.
     public var inkEffective: DailiesInk {

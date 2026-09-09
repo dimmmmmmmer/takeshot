@@ -35,9 +35,16 @@ public enum DailiesEngine {
     ///
     /// `codec` defaults to H.264, which is what every daily this app has ever
     /// written was — so a caller that does not care is unchanged.
+    /// `alsoInto` gets a COPY of each finished daily.
+    ///
+    /// Copied and not encoded again: a second encode would double the cost of
+    /// the whole batch to produce a byte-identical file, and this runs on a
+    /// machine shared with a capture path that must not be made to wait. A
+    /// copy that fails does not fail the item — the daily exists, and the
+    /// report says which shelf it did not reach.
     public static func run(
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
-        codec: CaptureCodec = .h264,
+        alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -65,13 +72,41 @@ public enum DailiesEngine {
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec,
                 control: control, publish: progress)
-            results.append(await transcode.run())
+            var result = await transcode.run()
+            if let output = result.output, !extras.isEmpty {
+                result.copyFailures = copy(output, into: extras)
+            }
+            results.append(result)
         }
         // Cancel only counts if it cut the run short (the offload's rule):
         // Stop pressed as the last frame lands still means every daily exists.
         let stoppedShort = results.contains { $0.wasCancelled }
         return DailiesReport(items: results,
                              wasCancelled: control.isCancelled && stoppedShort)
+    }
+
+    /// Put a finished daily on every other shelf, and say which ones refused.
+    ///
+    /// Best-effort per destination: a disk that is full or gone costs that
+    /// copy and nothing else. The daily itself already exists, and an item
+    /// failed over a second shelf would be a report that says the footage has
+    /// no daily when it has one.
+    static func copy(_ file: URL, into folders: [URL]) -> [String] {
+        var failures: [String] = []
+        for folder in folders {
+            do {
+                try FileManager.default.createDirectory(
+                    at: folder, withIntermediateDirectories: true)
+                let target = CapturePipeline.uniqueURL(
+                    for: folder.appendingPathComponent(file.lastPathComponent))
+                try FileManager.default.copyItem(at: file, to: target)
+                CapturePipeline.releaseReservation(for: target)
+            } catch {
+                failures.append("\(folder.lastPathComponent): "
+                    + error.localizedDescription)
+            }
+        }
+        return failures
     }
 
     // MARK: - the encode parameters (pure, unit-tested)

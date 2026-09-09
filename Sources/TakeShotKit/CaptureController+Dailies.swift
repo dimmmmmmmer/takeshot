@@ -166,6 +166,11 @@ extension CaptureController {
             == DailiesInk.standard.text ? nil : model.customInk.text
         settings.dailies.destinationPath = model.isDestinationDefault
             ? nil : model.destination?.path
+        settings.dailies.sourcePaths = model.sources.isEmpty
+            ? nil : model.sources.map(\.path)
+        let extras = Array(model.destinations.dropFirst())
+        settings.dailies.extraDestinationPaths = extras.isEmpty
+            ? nil : extras.map(\.path)
     }
 
     /// A finished run, as the rest of the app sees it.

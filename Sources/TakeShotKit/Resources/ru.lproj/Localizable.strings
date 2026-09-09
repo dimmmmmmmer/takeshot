@@ -1143,3 +1143,16 @@
 "dailies_ink_text" = "Насколько плотные буквы";
 "dailies_preview_window" = "Превью надписей";
 "dailies_preview_open_help" = "Как надписи лягут на кадр — нажмите, чтобы увидеть крупно";
+"dailies_tab_burnins" = "Надписи";
+"dailies_tab_files" = "Файлы";
+"dailies_sources_label" = "Рендерить из";
+"dailies_sources_takes" = "Сегодняшние дубли — добавьте папку, чтобы рендерить исходники";
+"dailies_add_source" = "Добавить папку";
+"dailies_remove_source" = "Убрать папку из списка";
+"dailies_pick_source" = "Где лежит материал";
+"dailies_scanning" = "Просматриваю папки…";
+"dailies_found" = "%@ к рендеру";
+"dailies_skipped_raw" = "%@ камерного RAW пропущено — этот транскод читает то, что читает QuickTime";
+"dailies_add_dest" = "Добавить назначение";
+"dailies_remove_dest" = "Убрать назначение из списка";
+"dailies_dest_copies" = "В первое пишется каждый дейлиз, в остальные кладётся его копия.";

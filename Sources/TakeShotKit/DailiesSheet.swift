@@ -28,10 +28,19 @@ struct DailiesSheet: View {
     /// picture next to the controls that change it. Measured after: 457 idle,
     /// and every state inside the budget with the scroll view gone.
     ///
-    /// 670 = 20 + `DailiesBurninSection.columnWidth` + 20 + the preview + 20.
-    /// The column is 320 because the widest Russian burn label is 138pt and
-    /// the place picker is 150 (`aBurnRowFitsTheSheetInBothLanguages`).
-    static let width: CGFloat = 670
+    /// 680 = 20 + `DailiesBurninSection.columnWidth` + 20 + the preview + 20,
+    /// plus the inset a `TabView` puts around its own content (measured at
+    /// 4pt, which is what the last 10 are for). The column is 320 because the
+    /// widest Russian burn label is 138pt and the place picker is 150
+    /// (`aBurnRowFitsTheSheetInBothLanguages`).
+    static let width: CGFloat = 680
+
+    /// What the tabbed area gets. Fixed rather than fitted: the two faces are
+    /// different heights, and a sheet that resized as the operator switched
+    /// tabs would jump under the pointer. Set by the taller face (the
+    /// burn-ins, with the appearance dials open) plus the room the file lists
+    /// need for a few rows before they scroll.
+    static let tabHeight: CGFloat = 330
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,22 +60,39 @@ struct DailiesSheet: View {
             Text(L("dailies_title"))
                 .offloadText(.title)
             Text(L("dailies_batch",
-                   localizedCount(model.queuedTakes.count, .take),
+                   localizedCount(model.itemCount, .take),
                    model.codec.rawValue))
                 .offloadText(.caption)
-            // The switches on the left; on the right, whatever this batch's
-            // state has to say. `.top` so the two columns share a baseline at
-            // the section headers rather than centring against each other.
-            HStack(alignment: .top, spacing: 20) {
-                DailiesBurninSection(model: model)
-                rightColumn
-                    .frame(width: DailiesBurninPreview.size.width,
-                           alignment: .leading)
+            // **Two tabs, and the reason is height.** The burn-ins and the
+            // files are two questions about one batch, and putting both on one
+            // face put the sheet past the window it has to fit — the folder
+            // lists alone are 160pt (owner asked for several sources and
+            // several destinations, "как в оффлоаде"). Tabbed, each face is
+            // measured on its own and neither can push the other out.
+            TabView {
+                burninsTab
+                    .tabItem { Text(L("dailies_tab_burnins")) }
+                DailiesFilesTab(model: model)
+                    .tabItem { Text(L("dailies_tab_files")) }
             }
-            Divider()
-            DailiesOutputSection(model: model)
-            DailiesDestinationRow(model: model)
+            .frame(height: Self.tabHeight)
         }
+    }
+
+    /// The switches on the left; on the right, whatever this batch's state has
+    /// to say. `.top` so the two columns share a baseline at the section
+    /// headers rather than centring against each other.
+    private var burninsTab: some View {
+        HStack(alignment: .top, spacing: 20) {
+            DailiesBurninSection(model: model)
+            rightColumn
+                .frame(width: DailiesBurninPreview.size.width,
+                       alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // No padding of its own: a `TabView` insets its content already, and
+        // a second inset is what pushed the two columns past the sheet's own
+        // width (measured: 658 of 630).
     }
 
     /// **One column, three things to say, never two at once.**
@@ -320,62 +346,6 @@ struct DailiesBurninPreview: View {
     }
 }
 
-/// The one destination, with both of the controls the offload sheet's
-/// destination rows have: Choose, and the minus that puts it back.
-///
-/// The minus is not decoration. Without it the default — a Dailies folder beside
-/// the day's footage — was reachable exactly once, before the first run:
-/// `dailies.destinationPath` had no writer that could produce nil, so one choice
-/// pinned the deliverable to one absolute path for every show after it. Greyed
-/// while the default is already in force, so it also says whether there is an
-/// override at all.
-struct DailiesDestinationRow: View {
-    @ObservedObject var model: DailiesQueueModel
-    @EnvironmentObject private var controller: CaptureController
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(L("dailies_dest_label"))
-                .offloadText(.body)
-                .fixedSize()
-            Text(model.destination?.path ?? "")
-                .offloadText(.body)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(L("choose")) {
-                if let url = OffloadPanels.pickFolder(
-                    message: L("dailies_pick_dest"),
-                    prompt: L("offload_dest_prompt")) {
-                    model.destination = url
-                }
-            }
-            .disabled(controller.isDailiesRunning)
-            // **A labelled way back, and only when there is a way back.**
-            //
-            // This was a bare `minus.circle`, permanently on screen and
-            // greyed. The same glyph in the sibling offload sheet means
-            // "delete this row", there is only one destination here so
-            // removing it means nothing, and what it actually does is revert
-            // to the default folder — three reasons it read as noise (owner:
-            // "значок минуса у дестинейшна тоже неясно зачем"). It says what
-            // it does now, and it is absent unless an override is in force,
-            // so there is nothing to explain in the ordinary case.
-            //
-            // Still `.disabled` rather than hidden while a run is going: a
-            // control that vanishes mid-queue makes the row jump.
-            if controller.hasDailiesDestinationOverride {
-                Button(L("dailies_reset_dest_button")) {
-                    controller.clearDailiesDestination()
-                }
-                .disabled(!controller.canClearDailiesDestination)
-                .help(L("dailies_reset_dest"))
-                .fixedSize()
-            }
-        }
-    }
-}
-
 /// **What the batch will produce**: the codec, and the two ends of the name.
 ///
 /// One row rather than a section of its own — these are two questions about
@@ -545,6 +515,19 @@ struct DailiesResultPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: Self.failureListHeight)
+            }
+            // **A shelf a daily did not reach is not a failed item.** The
+            // daily exists; what is missing is a copy of it, and a report that
+            // called the item failed would be telling the operator the footage
+            // has no daily when it has one.
+            ForEach(report.items.filter { !$0.copyFailures.isEmpty },
+                    id: \.source) { item in
+                ForEach(item.copyFailures, id: \.self) { reason in
+                    Label("\(item.source.lastPathComponent) — \(reason)",
+                          systemImage: "arrow.right.circle")
+                        .offloadText(.caption, tint: .orange)
+                        .lineLimit(2)
+                }
             }
             if report.wasCancelled {
                 Text(L("dailies_result_cancelled"))

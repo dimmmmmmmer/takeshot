@@ -215,6 +215,12 @@ public struct DailiesItemResult: Sendable, Equatable {
     /// marked, skipped, and the next one starts.
     public var failure: String?
     public var wasCancelled: Bool
+    /// Extra destinations this daily could not be copied to, and why.
+    ///
+    /// Not a failure of the ITEM: the daily exists, and a report that called
+    /// it failed would be telling the operator the footage has no daily when
+    /// it has one. It is a line in the result panel about a shelf.
+    public var copyFailures: [String] = []
 
     public init(source: URL, output: URL? = nil, failure: String? = nil,
                 wasCancelled: Bool = false) {
