@@ -73,8 +73,11 @@ struct CapturePipelineTests {
 
         // name by template: scene, take number, and start TC (11:00:00:00 ± pre-roll)
         #expect(take.displayName.hasPrefix("Test_7_T02_11.00.00"))
-        // write straight into the chosen folder — no auto subfolders by date/project
-        #expect(take.url.deletingLastPathComponent().path == root.path)
+        // No subfolders by date or project — the DIT picks their own
+        // structure. The ONE level written through is `Takes/`, and only for a
+        // folder that was empty when the shoot started (`CaptureLayout`).
+        #expect(take.url.deletingLastPathComponent().path
+            == root.appendingPathComponent("Takes").path)
         #expect(take.url.path.hasSuffix(".mov"))
 
         // the file is finished asynchronously after the event — wait for it to appear

@@ -24,9 +24,11 @@ extension CapturePipeline {
             timecode: timecode)
         let root = URL(fileURLWithPath:
             (config.settings.capture.destinationPath as NSString).expandingTildeInPath)
-        // write STRAIGHT into the chosen folder — no auto subfolders by date/project:
-        // the DIT picks the card/roll folder themselves; app nesting surprises them.
-        return root
+        // No subfolders by date or project: the DIT picks the card/roll folder
+        // themselves and app nesting surprises them. The ONE level this writes
+        // through is `Takes/`, and only for a folder that was empty when the
+        // shoot started — `CaptureLayout` states that rule and the reason.
+        return CaptureLayout.takesFolder(in: root)
             .appendingPathComponent(engine.fileName(for: context))
             .appendingPathExtension("mov")
     }

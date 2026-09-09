@@ -201,7 +201,7 @@ import Testing
     /// through any run loop, so the pump has nothing to pump. What the flush
     /// guarantees about the FILE is the same either way.
     @Test func quittingMidTakeFinalizesTheFileAndKeepsItsListEntry() async throws {
-        try await ControllerHarness.run { controller, root in
+        try await ControllerHarness.run { controller, _ in
             controller.pipeline.handleFormat(Self.format)
             #expect(await ControllerWait.until { controller.signalFormat != nil })
 
@@ -215,7 +215,10 @@ import Testing
 
             controller.flushOnTerminate()
 
-            let url = root.appendingPathComponent(name)
+            // The takes folder, not the record root: the harness's folder is
+            // empty when the shoot starts, so it is in the split layout
+            // (`CaptureLayout`).
+            let url = controller.takesFolder.appendingPathComponent(name)
             #expect(FileManager.default.fileExists(atPath: url.path),
                     "quitting mid-take lost the file: \(url.path)")
 

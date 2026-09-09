@@ -15,6 +15,17 @@ extension CaptureController {
         URL(fileURLWithPath: (settings.capture.destinationPath as NSString).expandingTildeInPath)
     }
 
+    /// **Where takes are written and read** — the record folder, or its
+    /// `Takes/` subfolder for a folder that was empty when the shoot started
+    /// (`CaptureLayout`).
+    ///
+    /// The panel's own listing does not go through this: a take is recognised
+    /// by the metadata in its moov, not by where it sits, so the library walk
+    /// finds them in either layout without being told which. What needs the
+    /// answer is anything that builds a PATH — the name-taken warning, and the
+    /// takes panel's way into Finder.
+    var takesFolder: URL { CaptureLayout.takesFolder(in: destinationRoot) }
+
     /// Clip number with the current padding (for the field and name preview).
     var clipDisplay: String {
         String(format: "%0\(settings.naming.clipPadWidthEffective)d", nextTakeNumber)

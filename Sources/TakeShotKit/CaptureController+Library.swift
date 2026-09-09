@@ -24,7 +24,7 @@ extension CaptureController {
     /// Not shown while recording: the file being written naturally exists.
     func refreshNameCollision() {
         guard !isRecording else { nameCollision = nil; return }
-        let url = destinationRoot
+        let url = takesFolder
             .appendingPathComponent(pendingTakeName)
             .appendingPathExtension("mov")
         nameCollision = FileManager.default.fileExists(atPath: url.path)
@@ -51,7 +51,9 @@ extension CaptureController {
         scanDestinationFolder()
     }
     func openDestinationInFinder() {
-        FinderOpen.ownFolder(destinationRoot)
+        // The takes' own folder, which in the split layout is not the record
+        // folder — that is what the Other content button opens.
+        FinderOpen.ownFolder(takesFolder)
     }
 
     /// Where the foreign files are — the record folder itself, which is what

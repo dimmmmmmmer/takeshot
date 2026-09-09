@@ -61,7 +61,12 @@ import Testing
 
             let take = try #require(controller.takes.first)
             #expect(take.url.lastPathComponent == "A001C01.mov")
-            #expect(take.url.deletingLastPathComponent().path == root.path)
+            // Into `Takes/`: the harness's folder is empty when the shoot
+            // starts, which is the case the split layout is for
+            // (`CaptureLayout`). A folder with a day already in it is still
+            // written to at its root, which `CaptureLayoutTests` pins.
+            #expect(take.url.deletingLastPathComponent().path
+                == root.appendingPathComponent("Takes").path)
             #expect(FileManager.default.fileExists(atPath: take.url.path))
             #expect(take.roll == "001")
             #expect(take.takeNumber == 1)

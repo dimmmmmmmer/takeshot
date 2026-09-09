@@ -39,11 +39,22 @@ import Testing
 
     /// The idiom the rest of this follows: the record folder is the app's own,
     /// so it is created if it is missing and then opened.
+    ///
+    /// The takes panel's button opens the TAKES folder, which in the split
+    /// layout is not the record folder — that is what the Other content
+    /// button opens, and the two being different places is the point of the
+    /// split (`CaptureLayout`).
     @Test func theRecordFolderGoesThroughTheHelper() async throws {
         try await recording { recorder in
             try await ControllerHarness.run { controller, root in
                 controller.openDestinationInFinder()
-                #expect(recorder.opened == [root])
+                // By PATH: `appendingPathComponent` consults the filesystem
+                // for the trailing slash, so the same folder is two URLs
+                // before and after it is created (see `CaptureLayout`).
+                #expect(recorder.opened.map(\.path)
+                    == [controller.takesFolder.path])
+                controller.openOtherContentInFinder()
+                #expect(recorder.opened.last?.path == root.path)
             }
         }
     }
