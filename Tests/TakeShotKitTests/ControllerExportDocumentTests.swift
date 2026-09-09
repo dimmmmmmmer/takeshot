@@ -5,7 +5,7 @@ import Testing
 @testable import TakeShotKit
 
 /// The four documents that leave the shift: the selects EDL, the Avid log, the
-/// shift report and the contact sheet.
+/// shift report, the ALE, the EDL and the timeline.
 ///
 /// The save panel is `FilePanel`, so these run all the way through — the panel
 /// is answered with a scratch URL instead of stopping the suite on
@@ -76,10 +76,8 @@ import Testing
                 controller.exportALE()
                 controller.exportFCPXML()
                 controller.exportShiftReport(pdf: false)
-                #expect(controller.exportContactSheet() == nil,
-                        "a cancelled contact sheet started decoding anyway")
 
-                #expect(panel.saveRequests.count == 5,
+                #expect(panel.saveRequests.count == 4,
                         "an export never got as far as the panel")
                 #expect(controller.lastNotice == nil)
                 #expect(controller.lastError == nil)
@@ -192,28 +190,13 @@ import Testing
         }
     }
 
-    /// The contact sheet decodes its own posters and only then reports the file,
-    /// so the toast never names a document that is still being written.
-    @Test func theContactSheetIsWrittenBeforeItIsAnnounced() async throws {
-        try await ControllerHarness.run { controller, root in
-            _ = try self.day(controller, in: root)
-            let destination = root.appendingPathComponent("contacts.pdf")
-
-            try await FakeFilePanel.installed(saving: [destination]) { panel in
-                let export = controller.exportContactSheet()
-                #expect(panel.lastSaveName?.hasSuffix(".pdf") == true)
-                await export?.value
-
-                let data = try Data(contentsOf: destination)
-                #expect(data.starts(with: Array("%PDF".utf8)))
-                #expect(controller.lastNotice == L("contact_saved", "contacts.pdf"))
-            }
-        }
-    }
-
-    /// Both A4 documents are named with a date stamp, and it is numeric in every
+    /// The report is named with a date stamp, and it is numeric in every
     /// language the app runs in: a file whose digits change shape with the UI
     /// language does not sort next to yesterday's.
+    ///
+    /// It used to check two documents. The contact sheet was retired — it was
+    /// the shift report's visual sibling and the report carries the posters
+    /// itself — so what is left is the one that ships.
     @Test func theA4DocumentsCarryANumericDateStamp() async throws {
         // Checked against the calendar rather than against a literal: the same
         // instant is a different day in a different zone, and a literal here
@@ -236,13 +219,9 @@ import Testing
             let today = CaptureController.reportDateStamp()
 
             try await FakeFilePanel.installed(
-                saving: [root.appendingPathComponent("r.csv"),
-                         root.appendingPathComponent("c.pdf")]) { panel in
+                saving: [root.appendingPathComponent("r.csv")]) { panel in
                 controller.exportShiftReport(pdf: false)
                 #expect(panel.lastSaveName == "Show_report_\(today).csv")
-                // awaited so the decode cannot outlive the scratch folder
-                await controller.exportContactSheet()?.value
-                #expect(panel.lastSaveName == "Show_contacts_\(today).pdf")
             }
         }
     }

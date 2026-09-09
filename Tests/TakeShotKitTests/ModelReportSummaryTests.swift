@@ -45,10 +45,17 @@ import Testing
 
     // MARK: - the two documents agree
 
-    /// The acceptance case. Everything but the title is the same sentence, in
-    /// both languages — which is the claim the comment used to make and
-    /// nothing checked.
-    @Test func bothDocumentsCarryTheSameSummaryAndDifferOnlyInTheTitle() {
+    /// **The summary does not depend on the title.**
+    ///
+    /// It used to be written as "both documents carry the same summary" — the
+    /// shift report and the contact sheet, which differed in their title and
+    /// in nothing else. The sheet is retired, and the property it was
+    /// demonstrating is the one `make` actually promises: the title is the
+    /// document's own word and the sentence under it is the day's, so two
+    /// titles produce one summary. Asserted with two real keys, because a
+    /// summary that moved with the title would be a header that lies about
+    /// the day depending on which document asked.
+    @Test func theSummaryIsTheSameWhateverTheTitleIs() {
         for language in [AppLanguage.english, .russian] {
             // spelled out rather than inferred: the CI compiler is two
             // releases behind this one and resolves tuple returns out of a
@@ -56,15 +63,15 @@ import Testing
             let both: [ReportSummary] = ViewRender.withLanguage(language) {
                 [ReportSummary.make(titleKey: "report_title", takes: shift,
                                     project: "Film", camera: "A", date: noon),
-                 ReportSummary.make(titleKey: "contact_title", takes: shift,
+                 ReportSummary.make(titleKey: "dailies_title", takes: shift,
                                     project: "Film", camera: "A", date: noon)]
             }
             let report: ReportSummary = both[0]
-            let contact: ReportSummary = both[1]
-            #expect(report.summary == contact.summary,
-                    "\(language): \(report.summary) / \(contact.summary)")
-            #expect(report.title != contact.title)
-            for title in [report.title, contact.title] {
+            let other: ReportSummary = both[1]
+            #expect(report.summary == other.summary,
+                    "\(language): \(report.summary) / \(other.summary)")
+            #expect(report.title != other.title)
+            for title in [report.title, other.title] {
                 #expect(title.hasPrefix("Film — "), "\(language): \(title)")
             }
         }

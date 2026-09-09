@@ -335,10 +335,8 @@
 "toast_fcpxml_failed" = "Could not save the timeline: %@";
 "export_report_pdf" = "Shift report (PDF)";
 "export_report_csv" = "Shift report (CSV)";
-"export_contact_pdf" = "Contact sheet (PDF)";
 "report_no_takes" = "No takes to report";
 "report_saved" = "Report saved: %@";
-"contact_saved" = "Contact sheet saved: %@";
 "ale_no_takes" = "No takes to export";
 "ale_saved" = "ALE saved: %@";
 
@@ -667,7 +665,6 @@
 /* === owner item 21: the shift report speaks the app language === */
 "report_title" = "shift report";
 /* the contact sheet shares the report's header and vocabulary */
-"contact_title" = "contact sheet";
 "report_camera" = "Cam %@";
 "report_takes_summary" = "%1$@ (%2$d good, %3$d bad)";
 "report_footage" = "footage %@";

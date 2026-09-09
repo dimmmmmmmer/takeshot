@@ -95,15 +95,20 @@ struct PanelUtilityButtons: View {
             // авид и хмл таймлайна"). What goes to the production office and
             // what goes to an edit suite are different errands, and one menu
             // holding both made the operator read five items to find either.
+            // The CONTACT SHEET used to be a third item here. It was the
+            // shift report's visual sibling — the same header, the same
+            // vocabulary, one cell per take — and the owner asked what it was
+            // for twice ("смысла contact sheet так и не увидел когда есть
+            // shift report"). The PDF report carries a poster beside every
+            // take, so the sheet was a second document answering a question
+            // the first one had already answered. Its poster decoder is the
+            // one part that had a second caller and lives on as `TakePosters`.
             menu("doc.text", help: L("export_reports_help")) {
                 Button(L("export_report_pdf")) {
                     controller.exportShiftReport(pdf: true)
                 }
                 Button(L("export_report_csv")) {
                     controller.exportShiftReport(pdf: false)
-                }
-                Button(L("export_contact_pdf")) {
-                    controller.exportContactSheet()
                 }
             }
             .disabled(!controller.hasTakes)

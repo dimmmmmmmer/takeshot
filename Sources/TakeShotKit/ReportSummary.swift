@@ -31,7 +31,11 @@ struct ReportSummary: Equatable {
     /// footage, in that order and separated by wide gaps.
     let summary: String
 
-    /// `titleKey` is the only thing the two documents do not share.
+    /// `titleKey` is a parameter because two documents used this — the shift
+    /// report and the contact sheet, which differed in their title and in
+    /// nothing else. The sheet is retired; the parameter stays because the
+    /// title is still the document's own word and a hard-coded one here would
+    /// be a header that cannot be reused by the next document that wants it.
     ///
     /// The date is the app's language (owner item 21): a Russian shift report
     /// with an English date reads as half-translated. The FILE name's date

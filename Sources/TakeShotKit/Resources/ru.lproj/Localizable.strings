@@ -337,10 +337,8 @@
 "toast_fcpxml_failed" = "Не удалось сохранить таймлайн: %@";
 "export_report_pdf" = "Отчёт смены (PDF)";
 "export_report_csv" = "Отчёт смены (CSV)";
-"export_contact_pdf" = "Контактный лист (PDF)";
 "report_no_takes" = "Нет тейков для отчёта";
 "report_saved" = "Отчёт сохранён: %@";
-"contact_saved" = "Контактный лист сохранён: %@";
 "ale_no_takes" = "Нет тейков для экспорта";
 "ale_saved" = "ALE сохранён: %@";
 
@@ -670,7 +668,6 @@
 /* === owner item 21: the shift report speaks the app language === */
 "report_title" = "отчёт смены";
 /* the contact sheet shares the report's header and vocabulary */
-"contact_title" = "контактный лист";
 "report_camera" = "Камера %@";
 "report_takes_summary" = "%1$@ (годных — %2$d, брак — %3$d)";
 "report_footage" = "материал %@";

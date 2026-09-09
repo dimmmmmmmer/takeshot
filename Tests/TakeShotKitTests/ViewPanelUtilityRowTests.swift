@@ -75,7 +75,7 @@ import Testing
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")
         for gone in ["export_report_pdf", "export_edl", "export_ale",
-                     "export_contact_pdf", "dailies_menu"] {
+                     "dailies_menu"] {
             #expect(!code.contains(gone),
                     Comment(rawValue: "the header still carries \(gone)"))
         }
@@ -90,8 +90,7 @@ import Testing
                 .deletingLastPathComponent()
                 .appendingPathComponent("Sources/TakeShotKit/PanelUtilityButtons.swift"),
             encoding: .utf8)
-        for reports in ["export_report_pdf", "export_report_csv",
-                        "export_contact_pdf"] {
+        for reports in ["export_report_pdf", "export_report_csv"] {
             #expect(code.contains(reports))
         }
         for timeline in ["export_edl", "export_ale"] {

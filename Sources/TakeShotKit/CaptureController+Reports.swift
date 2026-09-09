@@ -160,7 +160,7 @@ extension CaptureController {
         let missing = Self.takesNeedingPosters(takes, cached: cached)
         return Task { [weak self] in
             var pictures = cached
-            for (id, image) in await ContactSheet.exportThumbnails(for: missing) {
+            for (id, image) in await TakePosters.exportThumbnails(for: missing) {
                 pictures[id] = image
             }
             guard let data = ShiftReport.pdfData(
@@ -179,44 +179,4 @@ extension CaptureController {
         }
     }
 
-    /// Contact sheet: the day as an A4 thumbnail grid, one cell per take —
-    /// the shift report's visual sibling (same header, same vocabulary).
-    ///
-    /// Posters are decoded here, per export, from the recorded files
-    /// (`ContactSheet.exportThumbnails`) rather than taken from the panel's
-    /// cache: the cache holds only what the grid scrolled past, and a sheet
-    /// whose cells depend on scroll history is wrong. The decode is awaited,
-    /// so the save panel closes first and the toast reports the finished file.
-    @discardableResult
-    func exportContactSheet() -> Task<Void, Never>? {
-        guard !takes.isEmpty else {
-            lastError = L("report_no_takes")
-            return nil
-        }
-        let name = NamingEngine.sanitize(
-            "\(settings.naming.projectName)_contacts_\(Self.reportDateStamp())")
-            + ".pdf"
-        guard let url = FilePanel.save(named: name, in: destinationRoot)
-        else { return nil }
-        let takes = takes
-        let project = settings.naming.projectName
-        let camera = settings.naming.cameraLabel
-        // Handed back so a test can await the decode instead of polling for a
-        // file that a background decode has not written yet. The app ignores it.
-        return Task { [weak self] in
-            let posters = await ContactSheet.exportThumbnails(for: takes)
-            guard let data = ContactSheet.pdfData(
-                takes: takes, thumbnails: posters,
-                project: project, camera: camera) else {
-                self?.lastError = L("toast_pdf_render_failed")
-                return
-            }
-            do {
-                try data.write(to: url)
-                self?.lastNotice = L("contact_saved", url.lastPathComponent)
-            } catch {
-                self?.lastError = L("toast_report_failed", error.localizedDescription)
-            }
-        }
-    }
 }
