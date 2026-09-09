@@ -43,7 +43,13 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     /// read this, so they cannot drift into a 404 apart from each other.
     var path: String {
         switch self {
-        case .remote: return "/"
+        // **`/remote`, not `/`** (owner: "давай пульт будет не на / а на
+        // /remote"). Four pages, and the one at the bare root was the odd one
+        // out: an address read out on set is easier to say and to remember
+        // when every page is named, and a link written down as ".../remote"
+        // cannot be mistaken for "the address of the app". `/` redirects here
+        // so a bare host still lands somewhere.
+        case .remote: return "/remote"
         case .script: return "/script"
         case .live: return "/live"
         case .slate: return "/slate"
@@ -61,7 +67,7 @@ enum RemoteLink: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// The pages the remote serves: the operator remote at `/`, the script
+/// The pages the remote serves: the operator remote at `/remote`, the script
 /// supervisor's take log at `/script`, the live video at `/live` and the
 /// slate at `/slate`.
 ///
@@ -164,6 +170,9 @@ enum RemotePage {
     /// means the last take that landed, which is what the operator page's card
     /// is about.
     static let posterTakeParameter = "take"
+
+    /// Where the operator page lives.
+    static let remotePath = RemoteLink.remote.path
 
     /// Where the script supervisor's page lives.
     static let scriptPath = RemoteLink.script.path

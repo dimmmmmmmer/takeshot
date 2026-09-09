@@ -87,6 +87,27 @@ extension RemoteClient {
         route(request, body: body)
     }
 
+    /// The markup for one page route, or nil for a path that is not a page.
+    ///
+    /// Four routes that differ only in which page they hand back, lifted out
+    /// of `route` so the router keeps one branch for the family. It is also
+    /// the shape the complexity ceiling asked for when the root redirect made
+    /// this five branches.
+    ///
+    /// Every one of them is as public as the others: the markup shows nothing
+    /// on its own — the timecode, the take log, the video and the slate card
+    /// all arrive over the socket, behind the PIN — so what is served here is
+    /// an empty shell in every case.
+    private func markup(for path: String) -> Data? {
+        switch path {
+        case RemotePage.remotePath: return server?.currentPage ?? Data()
+        case RemotePage.scriptPath: return server?.currentScriptPage ?? Data()
+        case RemotePage.livePath: return server?.currentLivePage ?? Data()
+        case RemotePage.slatePath: return server?.currentSlatePage ?? Data()
+        default: return nil
+        }
+    }
+
     private func route(_ request: RemoteRequest, body: Data) {
         // RFC 6455 §4.1: the handshake is a GET. Upgrading anything else would
         // let a method nothing sends reach the socket path.
@@ -106,23 +127,17 @@ extension RemoteClient {
             writeAndClose(RemoteResponse.badRequest())
             return
         }
+        if let page = markup(for: request.path) {
+            writeAndClose(RemoteResponse.page(page))
+            return
+        }
         switch request.path {
         case "/", "/index.html":
-            writeAndClose(RemoteResponse.page(server?.currentPage ?? Data()))
-        case RemotePage.scriptPath:
-            // The markup is as public as the operator page's — everything it
-            // shows arrives over the socket, behind the same PIN.
-            writeAndClose(RemoteResponse.page(server?.currentScriptPage ?? Data()))
-        case RemotePage.livePath:
-            // Same rule again: the markup is an empty <video> element, and the
-            // offer that fills it goes through the PIN like everything else.
-            writeAndClose(RemoteResponse.page(server?.currentLivePage ?? Data()))
-        case RemotePage.slatePath:
-            // Same rule again: the slate's markup is an empty card, and the
-            // timecode, the scene and the take that fill it arrive over the
-            // socket behind the same PIN. This is also the only page that sends
-            // nothing BACK — see `slate.html`.
-            writeAndClose(RemoteResponse.page(server?.currentSlatePage ?? Data()))
+            // The operator page used to live at the root. A bare host still
+            // has to land somewhere — a 404 for "the address of the app" is
+            // the worst possible answer on a set — so it goes where the page
+            // went, the way `/cameras` goes to the live page.
+            writeAndClose(RemoteResponse.redirect(to: RemotePage.remotePath))
         case RemotePage.posterPath:
             servePoster(request)
         case "/cameras":

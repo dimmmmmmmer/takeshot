@@ -166,6 +166,7 @@ struct LivePicturePoolTests {
             controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(CaptureController.srtPicture == .decorated)
             #expect(Set(controller.mirrors.liveEncoders.keys) == [.decorated])
 
@@ -277,6 +278,7 @@ struct LiveEncoderFailureReportTests {
     @Test func withSRTOnTheRowSaysItInSRTsOwnWords() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.srt.address = "127.0.0.1"
             let started = await ControllerWait.until { controller.mirrors.srt != nil }
             #expect(started, "the SRT mirror never came up")
@@ -302,6 +304,7 @@ struct LiveEncoderFailureReportTests {
     @Test func adifferentPicturesFailureLeavesTheSRTRowAlone() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.srt.address = "127.0.0.1"
             let started = await ControllerWait.until { controller.mirrors.srt != nil }
             #expect(started, "the SRT mirror never came up")

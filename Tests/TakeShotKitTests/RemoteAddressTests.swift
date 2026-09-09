@@ -29,7 +29,7 @@ import Testing
         }
         #expect(RemoteAddress.joined(host: "http://10.0.0.2:8765",
                                      path: RemoteLink.remote.path)
-            == "http://10.0.0.2:8765/")
+            == "http://10.0.0.2:8765/remote")
         #expect(RemoteAddress.joined(host: "http://10.0.0.2:8765",
                                      path: RemoteLink.script.path)
             == "http://10.0.0.2:8765/script")
@@ -56,10 +56,14 @@ import Testing
     /// is a switch that does nothing.
     @Test func theLinkSwitcherExposesEveryTarget() {
         let paths: [String] = RemoteLink.allCases.map(\.path)
-        #expect(paths == ["/", "/script", "/live", "/slate"])
+        // **Every page is named**, the operator remote included: it used to be
+        // the one at the bare root (owner: "давай пульт будет не на / а на
+        // /remote"), which made one of four addresses unspeakable on set.
+        #expect(paths == ["/remote", "/script", "/live", "/slate"])
         #expect(Set(paths).count == RemoteLink.allCases.count)
         #expect(RemoteLink.allCases.map(\.labelKey).allSatisfy { !$0.isEmpty })
         // The routes the server answers are these and not copies of them.
+        #expect(RemotePage.remotePath == RemoteLink.remote.path)
         #expect(RemotePage.scriptPath == RemoteLink.script.path)
         #expect(RemotePage.livePath == RemoteLink.live.path)
         #expect(RemotePage.slatePath == RemoteLink.slate.path)

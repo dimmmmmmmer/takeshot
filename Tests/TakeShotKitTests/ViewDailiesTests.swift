@@ -192,6 +192,39 @@ import Testing
         }
     }
 
+    /// **The sheet still fits with the appearance dials open.**
+    ///
+    /// A `DisclosureGroup` cannot be expanded from a render test — the state is
+    /// its own — so the open height is measured as the closed sheet plus the
+    /// rows it reveals. That is an approximation in one direction only: the
+    /// real thing also loses the collapsed row's own height, so a pass here is
+    /// a pass there.
+    @Test func theSheetFitsWithTheAppearanceDialsOpen() async throws {
+        try await ViewProbe.run { probe in
+            let model = probe.controller.dailies
+            self.seed(model, controller: probe.controller, root: probe.root)
+            let content = probe.sizes(proposedWidth: DailiesSheet.width) {
+                DailiesSheet(model: model).content.padding(20)
+            }
+            let footer = probe.sizes(proposedWidth: DailiesSheet.width - 40) {
+                DailiesSheetFooter(model: model) {}
+            }
+            let dials = probe.sizes(
+                proposedWidth: DailiesBurninSection.columnWidth) {
+                DailiesInkRows(model: model)
+            }
+            for language in ["en", "ru"] {
+                let closed = language == "en"
+                    ? content.en.height + footer.en.height
+                    : content.ru.height + footer.ru.height
+                let open = closed + Self.footerChrome
+                    + (language == "en" ? dials.en.height : dials.ru.height)
+                #expect(open <= ViewBudget.sheetHeight,
+                        Comment(rawValue: "\(language) open needs \(open)pt of \(ViewBudget.sheetHeight)"))
+            }
+        }
+    }
+
     /// The preview is the size it says it is.
     ///
     /// It was `maxWidth: .infinity` with an aspect ratio, so inside the

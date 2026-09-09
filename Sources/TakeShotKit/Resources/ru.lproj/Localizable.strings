@@ -327,9 +327,9 @@
 "reference_pinned" = "Референс закреплён — сравнивайте с живым сигналом";
 "reference_pin_failed" = "Не удалось закрепить референс";
 
-"export_edl" = "EDL селектов (хорошие тейки)";
+"export_edl" = "Отборы (EDL)";
 "export_reports_help" = "Шифт-репорт и контактный лист — PDF или CSV";
-"export_timeline_help" = "EDL селектов и Avid ALE для монтажа";
+"export_timeline_help" = "Хорошие дубли — для монтажной";
 "export_ale" = "Лог для Avid (ALE)";
 "export_fcpxml" = "Таймлайн (FCPXML)…";
 "fcpxml_no_takes" = "Нет тейков для таймлайна.";
@@ -829,7 +829,7 @@
 "dailies_position_bottomRight" = "Справа снизу";
 "dailies_preview_help" = "Как надписи лягут на кадр";
 "dailies_burn_name" = "Имя клипа";
-"dailies_burn_project" = "Проект · камера/ролл";
+"dailies_burn_project" = "Проект";
 "dailies_burn_date" = "Дата съёмки";
 "dailies_custom_placeholder" = "Своя строка";
 "dailies_dest_label" = "Папка:";
@@ -1129,3 +1129,15 @@
 "quit_risk_stay" = "Продолжить работу";
 "quit_risk_quit" = "Всё равно выйти";
 "assist_ratio" = "Соотношение";
+"stream_start" = "Запустить";
+"stream_stop" = "Остановить";
+"stream_running" = "Передаётся";
+"stream_stopped" = "Не передаётся";
+"dailies_position_center" = "По центру";
+"export_group_selects" = "Только хорошие дубли";
+"export_group_all" = "Все дубли";
+"dailies_ink_section" = "Вид";
+"dailies_ink_technical" = "Технические строки";
+"dailies_ink_custom" = "Своя строка";
+"dailies_ink_plate" = "Насколько плотная подложка под текстом";
+"dailies_ink_text" = "Насколько плотные буквы";

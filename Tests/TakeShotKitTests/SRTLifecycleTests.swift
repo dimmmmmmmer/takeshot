@@ -83,6 +83,7 @@ struct SRTLifecycleTests {
     @Test func anEditIntoAnUnstartableStateReleasesWhatTheLinkHeld() async throws {
         try await SRTProbe.run(live: true, configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             for _ in 0..<60 where log.latest == nil {
                 try await Task.sleep(for: .milliseconds(50))
             }
@@ -105,6 +106,7 @@ struct SRTLifecycleTests {
     @Test func anEventFromTheLinkBeforeLastIsNotAppliedToThisOne() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             for _ in 0..<60 where log.latest == nil {
                 try await Task.sleep(for: .milliseconds(50))
             }
@@ -127,6 +129,7 @@ struct SRTLifecycleTests {
             settings.srt.streamID = "publish/cam1"
         }, { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             for _ in 0..<60 where log.latest == nil {
                 try await Task.sleep(for: .milliseconds(50))
             }
@@ -141,6 +144,7 @@ struct SRTLifecycleTests {
             controller.settings.srt.port = 9312
             controller.settings.srt.latencyMs = 240
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
 
             #expect(controller.mirrors.srt != nil)
             #expect(controller.mirrors.srtEndpoint?.url == "srt://10.0.4.21:9312")
@@ -170,6 +174,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(live: true,
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.latest != nil })
             let stream: FakeSRTStream = try #require(log.latest)
             #expect(await ControllerWait.untilWritten { !stream.datagrams.isEmpty },
@@ -194,6 +199,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(live: true,
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.latest != nil })
             let stream: FakeSRTStream = try #require(log.latest)
             #expect(await ControllerWait.untilWritten { !stream.datagrams.isEmpty })
@@ -213,6 +219,7 @@ struct SRTLifecycleTests {
     @Test func aCallerWithNoAddressIsReportedRatherThanDialled() async throws {
         try await SRTProbe.run { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(controller.mirrors.srt == nil)
             #expect(log.all.isEmpty, "a socket was opened with no address")
             guard case .failed(let reason) = controller.mirrors.srtState else {
@@ -232,6 +239,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.passphrase = "short"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(log.all.isEmpty, "a socket was opened with a bad passphrase")
             guard case .failed(let reason) = controller.mirrors.srtState else {
                 Issue.record("state is \(controller.mirrors.srtState)")
@@ -248,6 +256,7 @@ struct SRTLifecycleTests {
     @Test func anEditRebuildsTheLinkOnce() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.all.count == 1 })
             controller.settings.srt.address = "10.0.4."
             controller.settings.srt.address = "10.0.4.2"
@@ -266,6 +275,7 @@ struct SRTLifecycleTests {
     @Test func aBitrateChangeRebuildsTheEncoder() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.all.count == 1 })
             controller.settings.srt.bitrateMbps = 20
             #expect(await ControllerWait.until { log.all.count == 2 },
@@ -281,6 +291,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(live: true, outcomes: [.sent, .broken],
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.untilWritten {
                 if case .reconnecting = controller.mirrors.srtState { return true }
                 return false
@@ -303,6 +314,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(live: true, outcomes: [.broken],
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.untilWritten { log.all.count >= 1 })
 
             controller.toggleManualRecord()
@@ -330,6 +342,7 @@ struct SRTLifecycleTests {
                 ])
             }
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until {
                 controller.mirrors.srtState
                     == SRTOutputState.failed("cannot listen on port 9000")
@@ -346,6 +359,7 @@ struct SRTLifecycleTests {
         try await SRTProbe.run(outcomes: [.noPeer]) { controller, log in
             controller.settings.srt.role = SRTRole.listener.rawValue
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.all.count == 1 })
             #expect(log.endpoints.first?.role == SRTRole.listener)
             #expect(controller.mirrors.srtEndpoint?.url == "srt://:9000")
@@ -374,6 +388,7 @@ struct SRTStubBuildLifecycleTests {
             controller.mirrors.srtStreamFactory = nil
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
 
             #expect(controller.mirrors.srt == nil)
             guard case .unavailable(let reason) = controller.mirrors.srtState else {

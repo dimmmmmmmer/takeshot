@@ -66,6 +66,7 @@ struct NDILifecycleTests {
             controller.settings.naming.projectName = "Dune"
             controller.settings.naming.cameraLabel = "B"
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
 
             #expect(controller.mirrors.ndi != nil)
             // ANNOUNCED, not sending: the source is on the network and
@@ -89,6 +90,7 @@ struct NDILifecycleTests {
     @Test func theDisplayFrameReachesTheSource() async throws {
         try await NDIProbe.run(live: true) { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.frames.isEmpty },
                     "no frame ever reached the NDI source")
@@ -114,6 +116,7 @@ struct NDILifecycleTests {
     @Test func nothingReachesTheSourceOnceTheSwitchIsOff() async throws {
         try await NDIProbe.run(live: true) { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.frames.isEmpty })
 
@@ -126,54 +129,13 @@ struct NDILifecycleTests {
         }
     }
 
-    /// A shoot that left the switch on gets its source back after a relaunch —
-    /// the same promise the web remote and the menu-bar item make, and the
-    /// reason `completeStartup` calls `startNDIIfEnabled`.
-    ///
-    /// Driven by calling the startup step directly rather than by presetting the
-    /// switch through the harness's `configure`. That is not fussiness: the
-    /// harness installs its fake sender AFTER `init`, and `init` runs the real
-    /// startup — so a preset switch would reach the real bridge once, which on a
-    /// machine that has the NDI SDK dropped in is an announcement on the set
-    /// network. Same reason, same shape, as the SRT factory's.
-    @Test func aStoredSwitchAnnouncesTheSourceAtStartup() async throws {
-        try await NDIProbe.run { controller, log in
-            controller.settings.naming.projectName = "Dune"
-            controller.settings.naming.cameraLabel = "C"
-            // What a relaunch reads back, without the settings-change path that
-            // `theSourceIsAnnouncedAndDroppedWithTheSetting` already covers.
-            controller.mirrors.ndiState = .off
-            controller.settings.ndi.enabled = true
-            controller.stopNDIOutput()
-            #expect(log.all.count == 1)
-
-            controller.startNDIIfEnabled()
-            #expect(log.names == ["Dune C", "Dune C"],
-                    "the stored switch did not announce at startup: \(log.names)")
-            // ANNOUNCED, not sending: the source is on the network and
-            // nobody has opened it. "Sending" one line after
-            // `send_create` was the switch wearing the link's
-            // clothes — see `NDIOutputState.announced`.
-            #expect(controller.mirrors.ndiState == NDIOutputState.announced)
-        }
-    }
-
-    /// …and a stored switch that is OFF announces nothing, which is what makes
-    /// the previous test about the switch rather than about startup.
-    @Test func startupAnnouncesNothingWithTheSwitchOff() async throws {
-        try await NDIProbe.run { controller, log in
-            controller.startNDIIfEnabled()
-            #expect(log.all.isEmpty, "startup announced a source: \(log.names)")
-            #expect(controller.mirrors.ndiState == NDIOutputState.off)
-        }
-    }
-
     /// A name change is a re-announce: NDI publishes the name at create time and
     /// cannot rename a live sender. Debounced, so the keystrokes that spell a
     /// name out do not each put a source in every receiver's list.
     @Test func aNameChangeReannouncesTheSourceOnce() async throws {
         try await NDIProbe.run { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             controller.settings.ndi.sourceName = "Cl"
             controller.settings.ndi.sourceName = "Clie"
             controller.settings.ndi.sourceName = "Client feed"
@@ -209,6 +171,7 @@ struct NDILifecycleTests {
             controller.settings.naming.projectName = "Dune"
             controller.settings.naming.cameraLabel = "A"
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(log.names == ["Dune A"])
 
             controller.settings.naming.projectName = "Arrakis"
@@ -226,6 +189,7 @@ struct NDILifecycleTests {
         try await NDIProbe.run { controller, log in
             controller.settings.ndi.sourceName = "Client feed"
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(log.names == ["Client feed"])
 
             controller.settings.naming.projectName = "Arrakis"
@@ -248,6 +212,7 @@ struct NDILifecycleTests {
                 ])
             }
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
 
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiState
@@ -268,6 +233,7 @@ struct NDILifecycleTests {
                 throw NSError(domain: "test", code: 1)
             }
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.ndi == nil)
 
             controller.mirrors.ndiSenderFactory = { log.build($0) }
@@ -299,6 +265,7 @@ struct NDILifecycleTests {
         try await ControllerHarness.run { controller, _ in
             controller.mirrors.ndiSenderFactory = { name in log.build(name) }
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.ndiState == NDIOutputState.announced,
                     "a source nobody opened claimed to be sending")
 
@@ -332,6 +299,7 @@ struct NDILifecycleTests {
         try await ControllerHarness.run { controller, _ in
             controller.mirrors.ndiSenderFactory = { name in log.build(name) }
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender = try #require(log.latest)
             sender.receivers = -1
             controller.refreshNDILink()
@@ -362,7 +330,9 @@ struct NDIBesideSRTTests {
             controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
 
             #expect(controller.mirrors.srt != nil)
             #expect(controller.mirrors.ndi != nil)
@@ -394,7 +364,9 @@ struct NDIBesideSRTTests {
             controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.frames.isEmpty })
 
@@ -424,7 +396,9 @@ struct NDIBesideSRTTests {
             controller.mirrors.srtStreamFactory = { streams.build($0) }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(await ControllerWait.until { streams.all.count == 1 })
             let stream: FakeSRTStream = try #require(streams.latest)
             #expect(await ControllerWait.until { !stream.datagrams.isEmpty },
@@ -461,7 +435,9 @@ struct NDIBesideSRTTests {
             controller.mirrors.ndiSenderFactory = { _ in blocking }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
 
             #expect(await ControllerWait.until { streams.all.count == 1 })
             let stream: FakeSRTStream = try #require(streams.latest)
@@ -529,6 +505,7 @@ struct NDIStubBuildTests {
             // in exactly this build and nowhere else.
             controller.mirrors.ndiSenderFactory = nil
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
 
             #expect(controller.mirrors.ndi == nil)
             guard case .unavailable(let reason) = controller.mirrors.ndiState else {
@@ -553,28 +530,27 @@ struct NDIStubBuildTests {
         }
     }
 
-    /// **`completeStartup` really does run the NDI step**, which is the one
-    /// thing `aStoredSwitchAnnouncesTheSourceAtStartup` cannot say: that test
-    /// calls `startNDIIfEnabled()` itself, so deleting the call from startup
-    /// leaves it green.
+    /// **Startup announces nothing, switch or no switch.**
     ///
-    /// Saying it needs a controller built from a blob that already has the
-    /// switch on, and that is only safe HERE. The harness installs its fake
-    /// sender after `init`, so a preset switch reaches the real bridge once —
-    /// harmless in a build with no NDI SDK, which is exactly what this suite is
-    /// gated on, and an announcement on the set network anywhere else. The
-    /// observable is the state: startup that ran the step leaves `.unavailable`
-    /// (the stub's answer), and startup that skipped it leaves `.off`.
-    @Test func startupRunsTheNDIStepForAStoredSwitch() async throws {
+    /// The inverse of what this used to assert. `completeStartup` ran an NDI
+    /// step that announced a source for a stored switch; there is no such step
+    /// any more, and this is the test that says so — a relaunch comes up with
+    /// NDI shown on the badge and no source on the network.
+    ///
+    /// Built from a blob that already has the switch on, which is only safe
+    /// HERE: the harness installs its fake sender after `init`, so a preset
+    /// switch used to reach the real bridge once. That hazard is gone with the
+    /// step, and the observable is what proves it — `.off` rather than the
+    /// stub's `.unavailable`.
+    @Test func startupAnnouncesNothingForAStoredSwitch() async throws {
         try await ControllerHarness.run(configure: { settings in
             settings.ndi.enabled = true
         }, { controller, _ in
-            guard case .unavailable = controller.mirrors.ndiState else {
-                let state: String = "\(controller.mirrors.ndiState)"
-                Issue.record("startup did not run the NDI step: \(state)")
-                return
-            }
-            #expect(controller.mirrors.ndi == nil)
+            #expect(controller.mirrors.ndiState == NDIOutputState.off,
+                    "startup announced a source: \(controller.mirrors.ndiState)")
+            #expect(!controller.mirrors.ndiRunning)
+            #expect(controller.settings.ndi.enabled == true,
+                    "startup turned the operator's switch off")
         })
     }
 
@@ -586,6 +562,7 @@ struct NDIStubBuildTests {
         try await ControllerHarness.run(live: true) { controller, _ in
             controller.mirrors.ndiSenderFactory = nil
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             try await Task.sleep(for: .milliseconds(300))
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.liveEncoders.isEmpty,

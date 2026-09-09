@@ -45,14 +45,18 @@ import Testing
         #expect(project.minY > size.height / 2)
     }
 
-    /// Every one of the six places puts a line where its name says.
+    /// Every one of the places puts a line where its name says — the six
+    /// edges, and the middle of the frame a watermark wants.
     @Test func eachPositionPutsTheLineWhereItsNameSays() throws {
         for position in DailiesBurninPosition.allCases {
             let placed = layout(DailiesOverlay.Texts(
                 clipName: "A001C001", clipNamePosition: position))
             let rect = try #require(placed.clipName,
                                     Comment(rawValue: "\(position) drew nothing"))
-            if position.isTop {
+            if position.isMiddle {
+                #expect(abs(rect.midY - size.height / 2) < 2,
+                        Comment(rawValue: "\(position) is not in the middle"))
+            } else if position.isTop {
                 #expect(rect.minY < size.height / 2,
                         Comment(rawValue: "\(position) is not along the top"))
             } else {
@@ -63,7 +67,7 @@ import Testing
             case .topLeft, .bottomLeft:
                 #expect(rect.minX < size.width / 3,
                         Comment(rawValue: "\(position) is not on the left"))
-            case .topCenter, .bottomCenter:
+            case .topCenter, .bottomCenter, .center:
                 #expect(abs(rect.midX - size.width / 2) < 2,
                         Comment(rawValue: "\(position) is not centred"))
             case .topRight, .bottomRight:
@@ -71,6 +75,21 @@ import Testing
                         Comment(rawValue: "\(position) is not on the right"))
             }
         }
+    }
+
+    /// **The middle is the one position that is over the picture**, and two
+    /// lines pointed at it still stack rather than sitting on each other.
+    @Test func twoLinesInTheMiddleStackDownward() throws {
+        let placed = layout(DailiesOverlay.Texts(
+            clipName: "A001C001", project: "PROJECT",
+            clipNamePosition: .center, projectPosition: .center))
+        let name = try #require(placed.clipName)
+        let project = try #require(placed.project)
+        #expect(name != project)
+        #expect(project.minY > name.minY,
+                "the second middle line did not step down: \(name) \(project)")
+        #expect(project.minY >= name.maxY,
+                "the two middle lines overlap: \(name) \(project)")
     }
 
     /// **Two lines in one corner stack; they do not overlap.** A line hidden

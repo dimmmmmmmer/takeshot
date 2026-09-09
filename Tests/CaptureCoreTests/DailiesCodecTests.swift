@@ -143,3 +143,131 @@ import Testing
         #expect(DailiesSettings().datePositionEffective == .bottomRight)
     }
 }
+
+/// **How solid a burn-in is** — the plate and the lettering, separately, and
+/// separately again for the custom line (owner: "хотелось бы еще иметь
+/// возможность настроить опасити подложки и опасити самого текста… отдельно
+/// для технических штук и отдельно для кастом тайтла").
+@Suite struct DailiesInkTests {
+    @Test func theStandardInkIsWhatEveryDailyHasCarried() {
+        #expect(DailiesInk.standard.plate == 0.55)
+        #expect(DailiesInk.standard.text == 1)
+        #expect(DailiesSettings().inkEffective == .standard)
+        #expect(DailiesSettings().customInkEffective == .standard)
+    }
+
+    /// A hand-edited blob cannot produce a colour nobody can see through.
+    ///
+    /// Asserted on `clamped` and not on the colours: `CGColor` clamps an
+    /// out-of-range alpha itself, so a test that read `.alpha` passed with the
+    /// clamp deleted — which is how the first version of this went green
+    /// against a mutation.
+    @Test func anOutOfRangeOpacityIsClamped() throws {
+        #expect(DailiesInk(plate: 4, text: -2).clamped
+            == DailiesInk(plate: 1, text: 0))
+        #expect(DailiesInk(plate: 0.3, text: 0.7).clamped
+            == DailiesInk(plate: 0.3, text: 0.7), "a sane ink was moved")
+    }
+
+    /// The two groups are independent: a watermark across the middle can be
+    /// nearly plateless while the timecode on the edge stays readable.
+    @Test func theTwoGroupsResolveIndependently() {
+        var settings = DailiesSettings()
+        settings.customPlateOpacity = 0
+        settings.customTextOpacity = 0.4
+        #expect(settings.customInkEffective == DailiesInk(plate: 0, text: 0.4))
+        #expect(settings.inkEffective == .standard,
+                "the custom line's dials moved the technical lines")
+
+        settings.plateOpacity = 0.9
+        #expect(settings.inkEffective.plate == 0.9)
+        #expect(settings.customInkEffective.plate == 0,
+                "the technical dials moved the custom line")
+    }
+
+    /// **The ink reaches the drawn strips.** A watermark asked for no plate
+    /// has to come out with no plate — the setting existing is not the same as
+    /// the compositor reading it.
+    @Test func theCustomLinesInkIsWhatItsStripIsDrawnWith() throws {
+        var burnins = DailiesBurnins()
+        burnins.customText = "WATERMARK"
+        burnins.customPosition = .center
+        burnins.customInk = DailiesInk(plate: 0, text: 0.35)
+        let texts = burnins.overlayTexts(for: DailiesItem(
+            source: URL(fileURLWithPath: "/x.mov"), outputName: "x",
+            clipName: "A001C001"))
+        #expect(texts.customInk == DailiesInk(plate: 0, text: 0.35))
+        #expect(texts.ink == .standard)
+        // …and the frame it draws is a frame: the strip is placed, so the ink
+        // it carries is the ink that plate is filled with.
+        let overlay = DailiesOverlay(size: CGSize(width: 1920, height: 1080),
+                                     texts: texts)
+        let custom = try #require(overlay.layout.custom)
+        #expect(abs(custom.midY - 540) < 2, "the watermark is not centred")
+    }
+
+    /// **The drawn strip is the proof**, and the data assertion above is not:
+    /// a compositor that handed every strip the technical ink would satisfy
+    /// `texts.customInk` perfectly. So this renders a frame with the two inks
+    /// as far apart as they go — a solid technical plate, none at all for the
+    /// custom line — and reads the pixels back.
+    @Test func theTwoInksProduceTwoDifferentPlates() throws {
+        var burnins = DailiesBurnins()
+        // The timecode is IN: its plate is the one re-filled every frame
+        // rather than pre-rendered, so it is a second reader of the technical
+        // ink and the one a mutation can point at the wrong group unseen.
+        burnins.timecode = true
+        burnins.timecodePosition = .topCenter
+        burnins.project = false
+        burnins.clipName = true
+        burnins.clipNamePosition = .topLeft
+        burnins.customText = "WATERMARK"
+        burnins.customPosition = .bottomLeft
+        burnins.ink = DailiesInk(plate: 1, text: 1)
+        burnins.customInk = DailiesInk(plate: 0, text: 1)
+        let texts = burnins.overlayTexts(for: DailiesItem(
+            source: URL(fileURLWithPath: "/x.mov"), outputName: "x",
+            clipName: "A001C001"))
+
+        let size = CGSize(width: 640, height: 360)
+        let image = try #require(DailiesOverlay.previewImage(
+            size: size, texts: texts,
+            background: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)))
+        let overlay = DailiesOverlay(size: size, texts: texts)
+        let technical = try #require(overlay.layout.clipName)
+        let custom = try #require(overlay.layout.custom)
+
+        // A point inside each plate, clear of the lettering: the strips are
+        // left-aligned with a text inset, so the far right of each is plate.
+        let opaque = try #require(Self.pixel(
+            in: image, x: Int(technical.maxX - 3), y: Int(technical.midY)))
+        let transparent = try #require(Self.pixel(
+            in: image, x: Int(custom.maxX - 3), y: Int(custom.midY)))
+        #expect(opaque.red < 0.2,
+                "the technical plate is not solid: \(opaque)")
+        #expect(transparent.red > 0.8,
+                "the custom line drew a plate it was told not to: \(transparent)")
+
+        // …and the running timecode's plate, which is filled per frame from
+        // its own held colour rather than pre-rendered with the others.
+        let clock = try #require(overlay.layout.timecode)
+        let clockPlate = try #require(Self.pixel(
+            in: image, x: Int(clock.minX + 2), y: Int(clock.midY)))
+        #expect(clockPlate.red < 0.2,
+                "the timecode plate is not the technical ink: \(clockPlate)")
+    }
+
+    /// One pixel of a rendered frame, in image coordinates (origin top-left).
+    private static func pixel(in image: CGImage, x: Int,
+                              y: Int) -> (red: Double, alpha: Double)? {
+        guard x >= 0, y >= 0, x < image.width, y < image.height,
+              let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return nil }
+        let offset = y * image.bytesPerRow + x * 4
+        guard offset + 3 < CFDataGetLength(data) else { return nil }
+        // premultipliedFirst, byteOrder32Little — the layout `previewImage`
+        // asks CoreGraphics for: B G R A in memory.
+        return (red: Double(bytes[offset + 2]) / 255,
+                alpha: Double(bytes[offset + 3]) / 255)
+    }
+}

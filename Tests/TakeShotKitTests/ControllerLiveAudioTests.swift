@@ -36,6 +36,7 @@ struct ControllerLiveAudioTests {
     @Test func theSwitchBuildsTheEncoderAndRegistersTheTap() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, _ in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(controller.mirrors.liveAudioEncoder != nil)
             #expect(controller.pipeline.hasAudioTaps)
             // …with the speakers still off, which is where the harness left them
@@ -48,6 +49,7 @@ struct ControllerLiveAudioTests {
     @Test func theSwitchOffDropsTheEncoderAndTheTap() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, _ in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(controller.pipeline.hasAudioTaps)
 
             controller.settings.srt.enabled = nil
@@ -67,6 +69,7 @@ struct ControllerLiveAudioTests {
     @Test func aRebuildLeavesExactlyOneTapBehind() async throws {
         try await SRTProbe.run(configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             let first = try #require(controller.mirrors.liveAudioEncoder)
             controller.settings.srt.address = "10.0.9.9"
             #expect(await ControllerWait.until { log.all.count == 2 },
@@ -90,6 +93,7 @@ struct ControllerLiveAudioTests {
         try await SRTProbe.run(live: true,
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(!controller.monitorOn)
             #expect(await ControllerWait.until { log.latest != nil })
             let stream: FakeSRTStream = try #require(log.latest)
@@ -133,6 +137,7 @@ struct ControllerLiveAudioTests {
         try await SRTProbe.run(live: true,
                                configure: SRTProbe.caller) { controller, log in
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             #expect(await ControllerWait.until { log.latest != nil })
             let stream: FakeSRTStream = try #require(log.latest)
             #expect(await ControllerWait.untilWritten {

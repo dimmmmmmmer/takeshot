@@ -58,6 +58,20 @@ import Testing
         }
     }
 
+    /// **The field holds digits and nothing else.** `inputmode="numeric"` and
+    /// `pattern` are hints a soft keyboard may honour and a hardware one
+    /// ignores, so a letter typed on a laptop stayed on screen while the code
+    /// being tried silently dropped it (owner: "строчка пина в браузере
+    /// заметил что принимает не только цифры").
+    @Test func everyPageKeepsNonDigitsOutOfTheField() {
+        for page in pages {
+            #expect(page.html.contains("if (field.value !== value)"),
+                    Comment(rawValue: "\(page.name) does not clean the field"))
+            #expect(page.html.contains("slice(0, CFG.pinLength)"),
+                    Comment(rawValue: "\(page.name) does not cap the length"))
+        }
+    }
+
     /// The length reaches the page from the app rather than being typed into
     /// four HTML files — the pages submit on it, so a PIN that changed length
     /// would leave every gate unable to finish.
@@ -79,5 +93,28 @@ import Testing
                     Comment(rawValue: "generated \(pin)"))
             #expect(pin.allSatisfy { $0.isNumber })
         }
+    }
+}
+
+/// **A bare host still lands somewhere.**
+///
+/// The operator page moved off the root to `/remote`, and "the address of the
+/// app" is what somebody types when they have been read it over a walkie. A
+/// 404 there is the worst possible answer on a set, so the root redirects the
+/// way `/cameras` does.
+@Suite struct RemoteRootRedirectTests {
+    @Test func theRootPointsAtTheOperatorPage() throws {
+        let response = RemoteResponse.redirect(to: RemotePage.remotePath)
+        let text = try #require(String(bytes: response, encoding: .utf8))
+        #expect(text.contains("Location: /remote"),
+                "the root does not point at the page: \(text)")
+        #expect(text.contains("30"), "not a redirect status: \(text)")
+    }
+
+    /// …and the page is not at the root any more, which is the half a redirect
+    /// test cannot say on its own.
+    @Test func theOperatorPageIsNamed() {
+        #expect(RemotePage.remotePath == "/remote")
+        #expect(RemoteLink.remote.path == RemotePage.remotePath)
     }
 }

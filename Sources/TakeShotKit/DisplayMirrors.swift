@@ -102,6 +102,24 @@ final class DisplayMirrors: ObservableObject {
 
     /// What the hardware monitor output is doing — the third lamp, and the
     /// one whose absence let a director's monitor freeze in silence.
+    /// **Whether each transport is actually SENDING**, as opposed to being one
+    /// the operator uses.
+    ///
+    /// These used to be the same fact: `settings.srt.enabled` both meant "this
+    /// cart streams over SRT" and dialled the link, so the checkbox in Settings
+    /// was a transmit button and the badge on the main window had to appear for
+    /// a transport nobody uses (owner: "я бы хотел чтобы кнопка включения/
+    /// выключения не запускала стримы а включала возможность и чтоб значки
+    /// появлялись на главном окне… пользователю который не использует ни то ни
+    /// другое на главном окне их значки ни к чему").
+    ///
+    /// Not persisted, and that is deliberate: the app does not put a picture on
+    /// a production's network because it was launched — the same rule the
+    /// settings group states for its own defaults. A relaunch comes up with the
+    /// transports the operator uses shown, and neither of them sending.
+    @Published var srtRunning = false
+    @Published var ndiRunning = false
+
     @Published var playoutState: PlayoutState = .off
     @Published var srtState: SRTOutputState = .off
     /// The delivery buffer the open link is running with, and the round trip it

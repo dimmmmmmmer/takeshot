@@ -134,6 +134,10 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case codec = "dailiesCodec"
         case namePrefix = "dailiesNamePrefix"
         case nameSuffix = "dailiesNameSuffix"
+        case plateOpacity = "dailiesPlateOpacity"
+        case textOpacity = "dailiesTextOpacity"
+        case customPlateOpacity = "dailiesCustomPlateOpacity"
+        case customTextOpacity = "dailiesCustomTextOpacity"
     }
 
     /// Burn the running timecode into dailies; nil — on.
@@ -177,6 +181,13 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// always written.
     public var namePrefix: String?
     public var nameSuffix: String?
+    /// How solid the burn-ins are: the plate and the lettering, for the
+    /// technical lines and for the custom line separately (`DailiesInk`).
+    /// nil — the standard ink, which is what every daily has carried.
+    public var plateOpacity: Double?
+    public var textOpacity: Double?
+    public var customPlateOpacity: Double?
+    public var customTextOpacity: Double?
 
     public init() {}
 
@@ -229,6 +240,18 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var namePrefixEffective: String { namePrefix ?? "" }
 
     public var nameSuffixEffective: String { nameSuffix ?? "_DAILY" }
+
+    /// The technical lines' ink, resolved.
+    public var inkEffective: DailiesInk {
+        DailiesInk(plate: plateOpacity ?? DailiesInk.standard.plate,
+                   text: textOpacity ?? DailiesInk.standard.text)
+    }
+
+    /// …and the custom line's own.
+    public var customInkEffective: DailiesInk {
+        DailiesInk(plate: customPlateOpacity ?? DailiesInk.standard.plate,
+                   text: customTextOpacity ?? DailiesInk.standard.text)
+    }
 }
 
 /// The DIT offload: where it copies to, and whether it offers itself.

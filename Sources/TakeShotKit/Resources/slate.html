@@ -630,7 +630,14 @@ el("face").addEventListener("click", fireSync);
 // пускать"). The PIN is a fixed length the app injects, so the page knows
 // when the operator has finished typing without being told.
 function submitPIN() {
-  var value = el("pin").value.replace(/\D/g, "");
+  var field = el("pin");
+  var value = field.value.replace(/\D/g, "").slice(0, CFG.pinLength);
+  // **The field shows digits only.** `inputmode` and `pattern` are hints a
+  // soft keyboard may honour and a hardware one ignores, so a letter typed on
+  // a laptop stayed on screen while the code being tried silently dropped it
+  // (owner: "строчка пина в браузере заметил что принимает не только цифры").
+  // Rewriting the value is what makes the field and the attempt agree.
+  if (field.value !== value) { field.value = value; }
   if (value.length < CFG.pinLength) { return; }
   // This attempt is the operator's own, so a refusal may say so.
   typedPIN = true;

@@ -165,6 +165,7 @@ struct DailiesBurninSection: View {
                 // switched off. The app-state rule (a run is going) is named
                 // once for the whole section, below.
                 .disabled(!model.burnCustom)
+            DailiesInkRows(model: model)
         }
         .frame(width: Self.columnWidth, alignment: .leading)
         .toggleStyle(.checkbox)
@@ -215,6 +216,7 @@ extension DailiesBurninPosition {
         case .topLeft: return "dailies_position_topLeft"
         case .topCenter: return "dailies_position_topCenter"
         case .topRight: return "dailies_position_topRight"
+        case .center: return "dailies_position_center"
         case .bottomLeft: return "dailies_position_bottomLeft"
         case .bottomCenter: return "dailies_position_bottomCenter"
         case .bottomRight: return "dailies_position_bottomRight"
@@ -397,7 +399,11 @@ struct DailiesOutputSection: View {
                 NameTextField(field: .prefix, text: $model.namePrefix,
                               placeholder: L("dailies_name_prefix"))
                     .frame(width: Self.nameFieldWidth)
-                Text("<" + L("takes").lowercased() + ">")
+                // The take's own name, which is what sits between the two
+                // ends. Named `<FileName>` rather than `<takes>` (owner) — it
+                // is one file's name, and the panel's title is a different
+                // word doing a different job.
+                Text(verbatim: "<FileName>")
                     .offloadText(.caption)
                     .fixedSize()
                 NameTextField(field: .prefix, text: $model.nameSuffix,
@@ -530,5 +536,68 @@ struct DailiesResultPanel: View {
                     .offloadText(.caption)
             }
         }
+    }
+}
+
+/// **How solid the burn-ins are**, folded away until it is wanted (owner:
+/// "хотелось бы еще иметь возможность настроить опасити подложки и опасити
+/// самого текста там отдельно для технических штук и отдельно для кастом
+/// тайтла, как-нибудь ненавязчиво аккуратно").
+///
+/// A disclosure and not four rows on the face of the sheet: the panel is read
+/// on a cart between takes, and these are set once for a show. Collapsed it
+/// costs one row; open it costs two, which is what keeps the sheet inside the
+/// window it has to fit (`ViewDailiesHeightTests`).
+///
+/// Two dials per group rather than one, because they answer different
+/// questions — the plate is how much of the picture the strip hides, the text
+/// is how much of the strip reads — and the two groups are separate because
+/// the custom line is the one that gets pointed at the middle of the frame and
+/// used as a watermark.
+struct DailiesInkRows: View {
+    @ObservedObject var model: DailiesQueueModel
+
+    var body: some View {
+        DisclosureGroup(L("dailies_ink_section")) {
+            VStack(alignment: .leading, spacing: OffloadChrome.tightSpacing) {
+                row(L("dailies_ink_technical"), ink: Binding(
+                    get: { model.ink }, set: { model.ink = $0 }))
+                row(L("dailies_ink_custom"), ink: Binding(
+                    get: { model.customInk }, set: { model.customInk = $0 }))
+            }
+            .padding(.top, 2)
+        }
+        .font(.callout)
+    }
+
+    private func row(_ title: String, ink: Binding<DailiesInk>) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .offloadText(.caption)
+                .fixedSize()
+            Spacer(minLength: 2)
+            dial("rectangle.fill", help: L("dailies_ink_plate"),
+                 value: Binding(get: { ink.wrappedValue.plate },
+                                set: { ink.wrappedValue.plate = $0 }))
+            dial("textformat", help: L("dailies_ink_text"),
+                 value: Binding(get: { ink.wrappedValue.text },
+                                set: { ink.wrappedValue.text = $0 }))
+        }
+    }
+
+    /// One dial: an icon that names what it moves, and a mini slider. The icon
+    /// rather than a word because two words per group in two languages is a
+    /// row that stops fitting the column.
+    private func dial(_ symbol: String, help: String,
+                      value: Binding<Double>) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: symbol)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            Slider(value: value, in: 0...1)
+                .controlSize(.mini)
+                .frame(width: 74)
+        }
+        .help(help)
     }
 }

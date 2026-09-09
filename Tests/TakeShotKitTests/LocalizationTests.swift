@@ -219,7 +219,10 @@ struct LocalizationTests {
     /// run in Russian would have shown `dailies_position_topLeft` in the menu.
     @Test func everyBurninPositionHasWordsInBothLanguages() throws {
         let bundle = Bundle.module
-        try #require(DailiesBurninPosition.allCases.count == 6,
+        // Seven: six edges and the middle of the frame, which is where a
+        // watermark goes. A pinned count so that ADDING a place has to come
+        // here and think about its words rather than shipping a raw key.
+        try #require(DailiesBurninPosition.allCases.count == 7,
                      "the set of places changed; this test walks all of them")
         for language in ["en", "ru"] {
             let folder: String = try #require(

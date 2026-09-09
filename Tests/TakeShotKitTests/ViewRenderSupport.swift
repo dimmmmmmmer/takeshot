@@ -488,14 +488,16 @@ extension CGSize {
 /// actor the view does.
 @MainActor
 enum ViewBudget {
-    /// `TakeShotApp`: the main window cannot be made narrower than this.
-    static let windowMinWidth: CGFloat = 1080
-    /// `ContentView.sidePanel`: the takes panel at its narrowest, plus its own
-    /// 10pt padding on each side.
-    static let panelMinWidth: CGFloat = 310
-    static let panelOuterWidth: CGFloat = panelMinWidth + 20
-    /// What is left for the player column in the narrowest window.
-    static let mainColumnWidth: CGFloat = windowMinWidth - panelOuterWidth
+    /// **Read from the app, not repeated here.** These were four numbers
+    /// typed into the test target beside four numbers typed into the views,
+    /// and they had already drifted: the footer was measured against 750pt
+    /// while the split let the player column shrink to 680.
+    static let windowMinWidth = ContentView.windowMinWidth
+    static let panelMinWidth = ContentView.panelMinWidth
+    static let panelOuterWidth = ContentView.panelOuterMinWidth
+    /// What is left for the player column in the narrowest window — and what
+    /// the column is now guaranteed (`ContentView.mainColumnMinWidth`).
+    static let mainColumnWidth = ContentView.mainColumnMinWidth
     /// `ContentView` pads the footer by 12 on each side.
     static let footerWidth: CGFloat = mainColumnWidth - 24
     /// The footer's outer HStack splits into two equally flexible halves: the

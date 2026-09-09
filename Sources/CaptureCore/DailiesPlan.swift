@@ -26,6 +26,10 @@ public struct DailiesBurnins: Sendable, Equatable {
     public var projectPosition: DailiesBurninPosition = .bottomRight
     public var customPosition: DailiesBurninPosition = .topLeft
     public var datePosition: DailiesBurninPosition = .bottomRight
+    /// How solid the technical lines are, and the custom line separately —
+    /// the plate and the lettering each (`DailiesInk`).
+    public var ink: DailiesInk = .standard
+    public var customInk: DailiesInk = .standard
 
     public init() {}
 
@@ -35,7 +39,9 @@ public struct DailiesBurnins: Sendable, Equatable {
                 clipNamePosition: DailiesBurninPosition = .bottomLeft,
                 projectPosition: DailiesBurninPosition = .bottomRight,
                 customPosition: DailiesBurninPosition = .topLeft,
-                datePosition: DailiesBurninPosition = .bottomRight) {
+                datePosition: DailiesBurninPosition = .bottomRight,
+                ink: DailiesInk = .standard,
+                customInk: DailiesInk = .standard) {
         self.timecode = timecode
         self.clipName = clipName
         self.project = project
@@ -46,6 +52,8 @@ public struct DailiesBurnins: Sendable, Equatable {
         self.projectPosition = projectPosition
         self.customPosition = customPosition
         self.datePosition = datePosition
+        self.ink = ink
+        self.customInk = customInk
     }
 
     /// Nothing is burned in at all — the run is a plain transcode.

@@ -37,7 +37,8 @@ public struct TakeShotApp: App {
             ContentView()
                 .environmentObject(controller)
                 .environmentObject(hotkeys)
-                .frame(minWidth: 1080, minHeight: 620)
+                .frame(minWidth: ContentView.windowMinWidth,
+                       minHeight: ContentView.windowMinHeight)
                 .tint(controller.accentColor)
                 .preferredColorScheme(controller.colorScheme)
                 .registersAppWindow(.main)

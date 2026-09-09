@@ -70,6 +70,7 @@ import Testing
     @Test func theReportPutsTheLampInTrouble() async throws {
         try await ControllerHarness.run { controller, _ in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let up = await ControllerWait.until { controller.mirrors.ndi != nil }
             #expect(up, "the NDI source never came up")
 

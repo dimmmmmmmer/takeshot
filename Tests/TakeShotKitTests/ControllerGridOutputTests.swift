@@ -87,6 +87,7 @@ import Testing
 
             // A second transport on the same picture.
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             try #require(controller.mirrors.ndi != nil, "NDI did not come up")
             for step: Int in 0..<3 {
                 GridOutputProbe.deliver(model, tile: 0, code: UInt8(0x70 + step * 0x10))
@@ -145,6 +146,7 @@ import Testing
             #expect(controller.mirrors.syncGridComposer == nil)
 
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.syncGridComposer != nil,
                     "a transport came up and the grid was still not composed")
             #expect(model.tiles.allSatisfy { $0.tap.displayFrameHandler != nil },
@@ -209,6 +211,7 @@ import Testing
             // one transport (the board), then two
             time("grid to one transport")
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             time("grid to two transports")
             // …and the two that cost nothing at all
             controller.settings.ndi.enabled = false

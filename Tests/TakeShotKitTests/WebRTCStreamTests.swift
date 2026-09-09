@@ -85,6 +85,7 @@ struct WebRTCStreamTests {
             controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             let encoder: LiveVideoEncoder =
                 try #require(controller.mirrors.liveEncoders[.decorated],
                              "the switch built no encoder")
@@ -138,6 +139,7 @@ struct WebRTCStreamTests {
             controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             let served = try await RemoteHarness.serve(controller)
             let stream: FakeSRTStream = try #require(streams.latest)
             // Well past one keyframe interval, so the session is mid-GOP.
@@ -198,6 +200,7 @@ struct WebRTCStreamTests {
             controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
             controller.settings.srt.address = "10.0.0.9"
             controller.settings.srt.enabled = true
+            controller.setSRTRunning(true)
             let served = try await RemoteHarness.serve(controller)
             _ = try await WebRTCHarness.offer(port: served.port, pin: served.pin)
             let encoder: LiveVideoEncoder =

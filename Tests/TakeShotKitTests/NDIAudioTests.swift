@@ -343,6 +343,7 @@ struct NDIAudioWiringTests {
             #expect(!controller.pipeline.hasAudioTaps,
                     "something was already on the tap")
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.ndiAudio != nil)
             #expect(controller.pipeline.hasAudioTaps,
                     "the NDI source announced no sound")
@@ -360,6 +361,7 @@ struct NDIAudioWiringTests {
     @Test func theStereoTapReachesTheSource() async throws {
         try await NDIProbe.run(live: true) { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.audio.isEmpty },
                     "no sound ever reached the NDI source")
@@ -384,6 +386,7 @@ struct NDIAudioWiringTests {
     @Test func theNDILegBuildsNoAACEncoder() async throws {
         try await NDIProbe.run(live: true) { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.audio.isEmpty })
             #expect(controller.mirrors.liveAudioEncoder == nil,
@@ -405,6 +408,7 @@ struct NDIAudioWiringTests {
             settings.audio.audioChannelMask = 1 << 1
         }, { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let sender: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !sender.audio.isEmpty },
                     "no sound reached the source with a one-channel mask")
@@ -431,6 +435,7 @@ struct NDIAudioWiringTests {
     @Test func aReannounceMovesTheSoundToTheNewSender() async throws {
         try await NDIProbe.run(live: true) { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             let first: FakeNDISender = try #require(log.latest)
             #expect(await ControllerWait.until { !first.audio.isEmpty })
 
@@ -467,6 +472,7 @@ struct NDIAudioWiringTests {
                 throw NSError(domain: "test", code: 1)
             }
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.ndi == nil)
             #expect(controller.mirrors.ndiAudio == nil)
             #expect(!controller.pipeline.hasAudioTaps,
@@ -508,6 +514,7 @@ struct NDIAudioWiringTests {
     @Test func failingALiveSourceTakesItsSoundLegOff() async throws {
         try await NDIProbe.run { controller, log in
             controller.settings.ndi.enabled = true
+            controller.setNDIRunning(true)
             #expect(controller.mirrors.ndiAudio != nil)
             #expect(controller.pipeline.hasAudioTaps)
             #expect(log.all.count == 1)

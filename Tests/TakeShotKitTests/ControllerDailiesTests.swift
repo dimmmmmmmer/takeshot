@@ -207,7 +207,10 @@ import Testing
                                               settings: controller.settings)
             #expect(item.outputName == "A001C07_DAILY")
             #expect(item.clipName == "A001C07")
-            #expect(item.projectLine == "UnitFilm · A001")
+            // The project ALONE: the camera and the roll used to be appended,
+            // and the roll is already in the file name this run writes, so a
+            // strip that repeated it spent itself on nothing.
+            #expect(item.projectLine == "UnitFilm")
             #expect(item.dateText.count == 10 && item.dateText.hasPrefix("2025-08-0"))
             #expect(item.startTimecode == take.startTimecode)
         })

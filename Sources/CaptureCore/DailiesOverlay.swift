@@ -48,6 +48,15 @@ public final class DailiesOverlay {
         /// same rule any two strips in one corner follow.
         public var datePosition: DailiesBurninPosition = .bottomRight
 
+        /// How solid the TECHNICAL lines are — the timecode, the clip name,
+        /// the project, the date. One ink for the four of them: they are the
+        /// same kind of thing and four separate dials would be a panel nobody
+        /// finishes reading.
+        public var ink: DailiesInk = .standard
+        /// …and the custom line's own, because it is the one that gets pointed
+        /// at the middle of the frame and used as a watermark.
+        public var customInk: DailiesInk = .standard
+
         public init(custom: String? = nil, clipName: String? = nil,
                     project: String? = nil, timecodeTemplate: String? = nil,
                     date: String? = nil,
@@ -55,7 +64,9 @@ public final class DailiesOverlay {
                     clipNamePosition: DailiesBurninPosition = .bottomLeft,
                     projectPosition: DailiesBurninPosition = .bottomRight,
                     timecodePosition: DailiesBurninPosition = .topCenter,
-                    datePosition: DailiesBurninPosition = .bottomRight) {
+                    datePosition: DailiesBurninPosition = .bottomRight,
+                    ink: DailiesInk = .standard,
+                    customInk: DailiesInk = .standard) {
             self.custom = custom
             self.clipName = clipName
             self.project = project
@@ -66,6 +77,8 @@ public final class DailiesOverlay {
             self.timecodePosition = timecodePosition
             self.date = date
             self.datePosition = datePosition
+            self.ink = ink
+            self.customInk = customInk
         }
     }
 
@@ -94,6 +107,8 @@ public final class DailiesOverlay {
     private let timecodePlate: CGRect?
     private let timecodeFont: CTFont
     private let textAttributes: [NSAttributedString.Key: Any]
+    /// The running timecode's plate, held because it is re-filled every frame.
+    private let plateColor: CGColor
 
     /// Where the five strips land.
     ///
@@ -124,7 +139,10 @@ public final class DailiesOverlay {
             var rect = metrics.strip(for: text, font: font, in: size,
                                      corner: position)
             let step = (metrics.stripHeight + metrics.stripHeight * 0.25).rounded()
-            rect.origin.y += position.isTop
+            // A middle strip steps the way a top one does, so two lines
+            // pointed at the centre read downward in the order below rather
+            // than growing out of the frame's waist in both directions.
+            rect.origin.y += position.isTop || position.isMiddle
                 ? step * CGFloat(index) : -step * CGFloat(index)
             return rect
         }
@@ -160,19 +178,23 @@ public final class DailiesOverlay {
         let layout = Self.arrange(texts, metrics: metrics, in: size)
         self.layout = layout
         self.timecodePlate = layout.timecode.map { Self.flip($0, in: size) }
+        self.plateColor = texts.ink.plateColor
         self.textAttributes = [
             kCTFontAttributeName as NSAttributedString.Key: metrics.timecodeFont,
             kCTForegroundColorAttributeName as NSAttributedString.Key:
-                DailiesStripMetrics.textColor,
+                texts.ink.textColor,
         ]
 
-        for (rect, text) in [(layout.custom, texts.custom),
-                             (layout.clipName, texts.clipName),
-                             (layout.project, texts.project),
-                             (layout.date, texts.date)] {
+        for (rect, text, ink) in [
+            (layout.custom, texts.custom, texts.customInk),
+            (layout.clipName, texts.clipName, texts.ink),
+            (layout.project, texts.project, texts.ink),
+            (layout.date, texts.date, texts.ink),
+        ] {
             guard let rect, let text,
                   let image = renderStrip(text: text, font: bodyFont,
-                                          size: rect.size) else { continue }
+                                          size: rect.size,
+                                          ink: ink) else { continue }
             staticStrips.append(Strip(image: image,
                                       rect: Self.flip(rect, in: size)))
         }
@@ -185,7 +207,7 @@ public final class DailiesOverlay {
             context.draw(strip.image, in: strip.rect)
         }
         guard let plate = timecodePlate, let timecodeText else { return }
-        context.setFillColor(DailiesStripMetrics.plateColor)
+        context.setFillColor(plateColor)
         context.fill(plate)
         let line = CTLineCreateWithAttributedString(NSAttributedString(
             string: timecodeText, attributes: textAttributes))
@@ -236,8 +258,8 @@ public final class DailiesOverlay {
     }
 
     /// One static strip as a bitmap: the plate and its text, rendered once.
-    private func renderStrip(text: String, font: CTFont,
-                             size: CGSize) -> CGImage? {
+    private func renderStrip(text: String, font: CTFont, size: CGSize,
+                             ink: DailiesInk) -> CGImage? {
         let width = Int(size.width.rounded())
         let height = Int(size.height.rounded())
         guard width > 0, height > 0,
@@ -248,13 +270,13 @@ public final class DailiesOverlay {
                       ?? CGColorSpaceCreateDeviceRGB(),
                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
-        context.setFillColor(DailiesStripMetrics.plateColor)
+        context.setFillColor(ink.plateColor)
         context.fill(CGRect(x: 0, y: 0, width: size.width, height: size.height))
         let line = CTLineCreateWithAttributedString(NSAttributedString(
             string: text, attributes: [
                 kCTFontAttributeName as NSAttributedString.Key: font,
                 kCTForegroundColorAttributeName as NSAttributedString.Key:
-                    DailiesStripMetrics.textColor,
+                    ink.textColor,
             ]))
         var ascent: CGFloat = 0
         var descent: CGFloat = 0
@@ -289,8 +311,60 @@ public final class DailiesOverlay {
 ///
 /// A raw-valued enum because these are persisted, and the raw values are the
 /// stored keys — see `DailiesSettings`.
+/// **How solid one burn-in is** — its plate and its lettering, separately.
+///
+/// Two numbers rather than one because they answer different questions: the
+/// plate is how much of the picture the strip hides, and the text is how much
+/// of the strip you can read. A watermark across the middle of the frame wants
+/// almost no plate and half the lettering; a timecode on the top edge wants a
+/// plate dark enough to hold white text over a blown sky (owner: "хотелось бы
+/// еще иметь возможность настроить опасити подложки и опасити самого текста
+/// там отдельно для технических штук и отдельно для кастом тайтла").
+///
+/// The defaults are what every daily this app has burned so far.
+public struct DailiesInk: Sendable, Equatable {
+    /// 0 — no plate at all, the text straight onto the picture.
+    public var plate: Double
+    /// 0 — invisible; 1 — solid white.
+    public var text: Double
+
+    /// Dark enough to hold white text over a blown-out window, transparent
+    /// enough that the picture stays readable behind it.
+    public static let standard = DailiesInk(plate: 0.55, text: 1)
+
+    public init(plate: Double = 0.55, text: Double = 1) {
+        self.plate = plate
+        self.text = text
+    }
+
+    /// **Both dials inside 0…1.**
+    ///
+    /// These arrive from a settings blob a hand can edit. `CGColor` happens to
+    /// clamp an out-of-range alpha itself, which is exactly why this is a
+    /// property and not a `min/max` buried in the two colours below: clamping
+    /// that nothing can observe is clamping no test can hold, and the first
+    /// version of it was removable without a single failure.
+    public var clamped: DailiesInk {
+        DailiesInk(plate: min(1, max(0, plate)), text: min(1, max(0, text)))
+    }
+
+    public var plateColor: CGColor {
+        CGColor(srgbRed: 0, green: 0, blue: 0, alpha: clamped.plate)
+    }
+
+    public var textColor: CGColor {
+        CGColor(srgbRed: 1, green: 1, blue: 1, alpha: clamped.text)
+    }
+}
+
 public enum DailiesBurninPosition: String, CaseIterable, Sendable, Codable {
     case topLeft, topCenter, topRight
+    /// **The middle of the frame**, which is what a watermark wants (owner:
+    /// "давай еще добавим centre прям. ну допустим чтобы кастом тайтл можно
+    /// было использовать как вотермарку"). The only position that is over the
+    /// picture rather than along an edge, and the reason the opacity of the
+    /// plate and the text became settings.
+    case center
     case bottomLeft, bottomCenter, bottomRight
 
     /// Whether this sits along the top edge — the half of the answer that
@@ -298,6 +372,10 @@ public enum DailiesBurninPosition: String, CaseIterable, Sendable, Codable {
     public var isTop: Bool {
         self == .topLeft || self == .topCenter || self == .topRight
     }
+
+    /// The middle of the frame: neither edge, and the x is centred like the
+    /// two other centre positions.
+    public var isMiddle: Bool { self == .center }
 }
 
 public struct DailiesStripMetrics {
@@ -305,8 +383,11 @@ public struct DailiesStripMetrics {
 
     /// Dark enough to hold white text over a blown-out window, transparent
     /// enough that the picture stays readable behind it.
-    static let plateColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.55)
-    static let textColor = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+    /// The standard ink's two colours, kept here because callers outside the
+    /// overlay read them (the preview's background, the tests) — the strips
+    /// themselves take their colours from a `DailiesInk` now, one per group.
+    static let plateColor = DailiesInk.standard.plateColor
+    static let textColor = DailiesInk.standard.textColor
 
     /// Below this a strip is a line nobody can read, whatever the raster —
     /// named because the dailies PREVIEW has to be rendered large enough that
@@ -352,14 +433,19 @@ public struct DailiesStripMetrics {
         switch corner {
         case .topLeft, .bottomLeft:
             x = margin
-        case .topCenter, .bottomCenter:
+        case .topCenter, .bottomCenter, .center:
             x = ((size.width - width) / 2).rounded()
         case .topRight, .bottomRight:
             x = size.width - margin - width
         }
-        let y = corner.isTop
-            ? margin
-            : size.height - margin - stripHeight
+        let y: CGFloat
+        if corner.isMiddle {
+            y = ((size.height - stripHeight) / 2).rounded()
+        } else if corner.isTop {
+            y = margin
+        } else {
+            y = size.height - margin - stripHeight
+        }
         return CGRect(x: x, y: y, width: width, height: stripHeight)
     }
 }
@@ -385,6 +471,7 @@ public extension DailiesBurnins {
             clipNamePosition: clipNamePosition,
             projectPosition: projectPosition,
             timecodePosition: timecodePosition,
-            datePosition: datePosition)
+            datePosition: datePosition,
+            ink: ink, customInk: customInk)
     }
 }

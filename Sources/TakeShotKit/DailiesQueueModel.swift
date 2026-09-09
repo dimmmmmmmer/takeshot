@@ -35,6 +35,10 @@ final class DailiesQueueModel: ObservableObject {
     /// The output name's two ends, around the take's own name.
     @Published var namePrefix = ""
     @Published var nameSuffix = "_DAILY"
+    /// How solid the burn-ins are — the technical lines and the custom line
+    /// each have their own plate and lettering (`DailiesInk`).
+    @Published var ink: DailiesInk = .standard
+    @Published var customInk: DailiesInk = .standard
     /// Where the dailies land. Defaults to a Dailies folder beside the takes.
     @Published var destination: URL?
     /// The folder beside the footage — what `destination` means when the
@@ -89,6 +93,8 @@ final class DailiesQueueModel: ObservableObject {
         codec = settings.dailies.codecEffective
         namePrefix = settings.dailies.namePrefixEffective
         nameSuffix = settings.dailies.nameSuffixEffective
+        ink = settings.dailies.inkEffective
+        customInk = settings.dailies.customInkEffective
         self.defaultFolder = defaultFolder
         destination = settings.dailies.destinationPath
             .map { URL(fileURLWithPath: $0) } ?? defaultFolder
@@ -126,7 +132,8 @@ final class DailiesQueueModel: ObservableObject {
             clipNamePosition: clipNamePosition,
             projectPosition: projectPosition,
             customPosition: customPosition,
-            datePosition: datePosition)
+            datePosition: datePosition,
+            ink: ink, customInk: customInk)
     }
 
     /// The name one take's daily will be written under, without the extension
@@ -242,10 +249,12 @@ final class DailiesQueueModel: ObservableObject {
     static func item(for take: Take, settings: CaptureSettings,
                      prefix: String = "", suffix: String = "_DAILY")
         -> DailiesItem {
-        let cameraRoll = take.roll.isEmpty
-            ? settings.naming.cameraLabel : settings.naming.cameraLabel + take.roll
-        let projectLine = [settings.naming.projectName, cameraRoll]
-            .filter { !$0.isEmpty }.joined(separator: " · ")
+        // **The project alone.** It used to be "PROJECT · A001" — the camera
+        // and the roll appended — and the roll is already in the file name
+        // this run writes (owner: "из места где проект убери подпись ролла. он
+        // же в названии файла дописывается и так"). A burn-in that repeats
+        // what the name says spends a strip on nothing.
+        let projectLine = settings.naming.projectName
         // ISO date, POSIX locale: a burn-in is read by post in another
         // country, and "03/04" means two different days to two of them.
         let stamp = DateFormatter()

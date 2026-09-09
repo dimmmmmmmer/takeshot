@@ -60,11 +60,25 @@ extension CaptureController {
 
     // MARK: - lifecycle
 
-    /// Open the link if the setting says so. Called at startup and from the
-    /// settings change.
-    func startSRTIfEnabled() {
-        guard settings.srt.enabled == true else { return }
-        startSRTOutput()
+    /// **Start or stop sending over SRT.**
+    ///
+    /// The transport being ENABLED is a different question — that says the cart
+    /// uses SRT, which is what puts its badge on the main window and its
+    /// section in Settings. This is the transmit switch, and it is the only
+    /// thing that opens a socket.
+    ///
+    /// Asking to send over a transport that is not enabled does nothing rather
+    /// than enabling it: the two switches mean different things and one must
+    /// not quietly set the other.
+    func setSRTRunning(_ on: Bool) {
+        guard settings.srt.enabled == true || !on else { return }
+        guard mirrors.srtRunning != on else { return }
+        mirrors.srtRunning = on
+        if on {
+            startSRTOutput()
+        } else {
+            stopSRTOutput()
+        }
     }
 
     func startSRTOutput() {
@@ -221,13 +235,15 @@ extension CaptureController {
                 encoder.setBitsPerSecond(settings.srt.bitsPerSecondEffective)
             }
         }
-        let wasOn = oldValue.srt.enabled == true
-        let isOn = settings.srt.enabled == true
-        if isOn, !wasOn {
-            startSRTOutput()
-        } else if !isOn, wasOn {
-            stopSRTOutput()
-        } else if isOn, oldValue.srt != settings.srt {
+        // **Enabling a transport no longer dials it.** What the switch does is
+        // put SRT in play — the badge, this section — and `setSRTRunning` is
+        // what sends. Un-enabling it DOES stop a link that is up: you cannot
+        // be streaming over a transport the cart does not use.
+        if settings.srt.enabled != true, mirrors.srtRunning {
+            setSRTRunning(false)
+        } else if mirrors.srtRunning, oldValue.srt != settings.srt {
+            // A field changed under a live link — the address, the passphrase.
+            // Nothing in the group can be re-pointed, so it is a new link.
             scheduleSRTRestart()
         }
     }
@@ -249,7 +265,8 @@ extension CaptureController {
         mirrors.srtRestartTask = Task { [weak self] in
             try? await Task.sleep(for: CaptureController.srtRestartDebounce)
             guard !Task.isCancelled, let self,
-                  self.settings.srt.enabled == true else { return }
+                  self.settings.srt.enabled == true,
+                  self.mirrors.srtRunning else { return }
             self.mirrors.srt?.stop()
             self.mirrors.srt = nil
             self.startSRTOutput()

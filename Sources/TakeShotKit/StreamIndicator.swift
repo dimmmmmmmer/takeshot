@@ -29,6 +29,16 @@ import SwiftUI
 /// a symbol — a SLASHED antenna, which is the one shape that reads as "not
 /// sending" at a glance and on a bright cart.
 ///
+/// **A transport this cart does not use has no line at all.** Both used to be
+/// drawn always, on the argument that "off is a state and deserves a symbol" —
+/// which is right for a transport the operator streams over and switched off
+/// for this shot, and wrong for one they have never used: a cart with no NDI
+/// receiver anywhere paid for an NDI badge all day (owner: "пользователю
+/// который не использует ни то ни другое на главном окне их значки ни к чему,
+/// и тому кто использует только что-то одно – только это и нужно показывать").
+/// The Settings checkbox is what says "in use"; whether the link is UP is what
+/// the icon then reports.
+///
 /// The hardware output rides beside it as a LAMP and not a third link inside
 /// the button: it answers the same question — is the picture leaving this
 /// machine — and it is the leg a director's monitor actually hangs off, but the
@@ -78,7 +88,9 @@ struct StreamIndicator: View {
     /// is doing, and only its ICON and colour move.
     private var transportRow: some View {
         HStack(spacing: 6) {
-            ForEach(Self.readings(srt: srt, ndi: ndi, paused: isPaused),
+            ForEach(Self.readings(srt: srt, ndi: ndi, paused: isPaused,
+                                  usesSRT: controller.settings.srt.enabled == true,
+                                  usesNDI: controller.settings.ndi.enabled == true),
                     id: \.name) { entry in
                 // **A press acts on THIS transport.** The row draws a reading
                 // each, and one button around both meant a click on the NDI
@@ -113,10 +125,12 @@ struct StreamIndicator: View {
     /// Static and pure so the suite can ask the question a rendered badge
     /// cannot answer: whether a transport that is off still has a line of its
     /// own, or has been dropped out of the row.
-    static func readings(srt: StreamLink, ndi: StreamLink,
-                         paused: Bool) -> [Reading] {
-        [Reading(kind: .srt, link: paused ? .off : srt),
-         Reading(kind: .ndi, link: paused ? .off : ndi)]
+    static func readings(srt: StreamLink, ndi: StreamLink, paused: Bool,
+                         usesSRT: Bool, usesNDI: Bool) -> [Reading] {
+        var rows: [Reading] = []
+        if usesSRT { rows.append(Reading(kind: .srt, link: paused ? .off : srt)) }
+        if usesNDI { rows.append(Reading(kind: .ndi, link: paused ? .off : ndi)) }
+        return rows
     }
 
     /// The hardware monitor output. Absent entirely when no board is selected —

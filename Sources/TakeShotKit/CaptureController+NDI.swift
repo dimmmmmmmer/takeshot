@@ -77,11 +77,17 @@ extension CaptureController {
 
     // MARK: - lifecycle
 
-    /// Announce the source if the setting says so. Called at startup and from
-    /// the settings change.
-    func startNDIIfEnabled() {
-        guard settings.ndi.enabled == true else { return }
-        startNDIOutput()
+    /// Start or stop announcing an NDI source — the transmit switch, as
+    /// distinct from the transport being enabled (see `setSRTRunning`).
+    func setNDIRunning(_ on: Bool) {
+        guard settings.ndi.enabled == true || !on else { return }
+        guard mirrors.ndiRunning != on else { return }
+        mirrors.ndiRunning = on
+        if on {
+            startNDIOutput()
+        } else {
+            stopNDIOutput()
+        }
     }
 
     func startNDIOutput() {
@@ -260,32 +266,30 @@ extension CaptureController {
     /// know which of the two was meant, and this does. Written through the
     /// SETTINGS switch, like the bulk stop, so the Settings row moves with it.
     func toggleStream(_ which: LiveStreamKind) {
-        let on: Bool
-        switch which {
-        case .srt: on = settings.srt.enabled == true
-        case .ndi: on = settings.ndi.enabled == true
-        }
-        // Stopping REMEMBERS, so `resumeStreams` still brings back exactly what
-        // was taken down and no more.
+        // The RUN switch, not the enable switch: the badge is a transmit
+        // control, and the checkbox in Settings says which transports this
+        // cart uses at all.
         switch which {
         case .srt:
+            let on = mirrors.srtRunning
             mirrors.pausedStreams.srt = on
-            settings.srt.enabled = !on
+            setSRTRunning(!on)
         case .ndi:
+            let on = mirrors.ndiRunning
             mirrors.pausedStreams.ndi = on
-            settings.ndi.enabled = !on
+            setNDIRunning(!on)
         }
     }
 
     func stopAllStreams() {
         var paused = PausedStreams()
-        if settings.ndi.enabled == true {
+        if mirrors.ndiRunning {
             paused.ndi = true
-            settings.ndi.enabled = false
+            setNDIRunning(false)
         }
-        if settings.srt.enabled == true {
+        if mirrors.srtRunning {
             paused.srt = true
-            settings.srt.enabled = false
+            setSRTRunning(false)
         }
         // Only when something was actually stopped: a second press on an
         // already-stopped footer must not erase what the first one remembered.
@@ -302,8 +306,8 @@ extension CaptureController {
         let paused = mirrors.pausedStreams
         guard paused.any else { return }
         mirrors.pausedStreams = PausedStreams()
-        if paused.ndi { settings.ndi.enabled = true }
-        if paused.srt { settings.srt.enabled = true }
+        if paused.ndi { setNDIRunning(true) }
+        if paused.srt { setSRTRunning(true) }
     }
 
     func stopNDIOutput() {
@@ -356,14 +360,13 @@ extension CaptureController {
     // MARK: - settings changes (called from applySettingsChange)
 
     func applyNDIChange(from oldValue: CaptureSettings) {
-        let wasOn = oldValue.ndi.enabled == true
-        let isOn = settings.ndi.enabled == true
-        if isOn, !wasOn {
-            startNDIOutput()
-        } else if !isOn, wasOn {
-            stopNDIOutput()
-        } else if isOn, oldValue.ndi.sourceNameEffective(oldValue.naming)
-            != settings.ndi.sourceNameEffective(settings.naming) {
+        // Enabling the transport puts NDI in play; it does not announce a
+        // source. See `applySRTChange` for the same split and the reason.
+        if settings.ndi.enabled != true, mirrors.ndiRunning {
+            setNDIRunning(false)
+        } else if mirrors.ndiRunning,
+                  oldValue.ndi.sourceNameEffective(oldValue.naming)
+                      != settings.ndi.sourceNameEffective(settings.naming) {
             scheduleNDIReannounce()
         }
     }
@@ -384,7 +387,8 @@ extension CaptureController {
         mirrors.ndiRenameTask = Task { [weak self] in
             try? await Task.sleep(for: CaptureController.ndiRenameDebounce)
             guard !Task.isCancelled, let self,
-                  self.settings.ndi.enabled == true else { return }
+                  self.settings.ndi.enabled == true,
+                  self.mirrors.ndiRunning else { return }
             self.stopNDIAudio()
             self.mirrors.ndi?.stop()
             self.mirrors.ndi = nil

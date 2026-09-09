@@ -124,14 +124,17 @@ extension CaptureController {
         // find the laptop after a relaunch. Off by default; nothing binds a port
         // until it is switched on once.
         startRemoteIfEnabled()
-        // …the SRT output, on exactly the same terms: nothing goes out over the
-        // set network until the switch has been thrown once, and a shoot that
-        // left it on gets its link back after a relaunch (see +SRT).
-        startSRTIfEnabled()
-        // …the NDI source, on exactly the same terms: nothing is announced on
-        // the set network until the switch has been thrown once, and a shoot
-        // that left it on gets its source back after a relaunch (see +NDI).
-        startNDIIfEnabled()
+        // **The two streams do NOT come back up.** They used to, on the
+        // remote's terms — the switch was left on, so the link was restored.
+        // Enabling a transport means the cart uses it now, not that it is
+        // transmitting (owner: "кнопка включения/выключения не запускала стримы
+        // а включала возможность"), so a relaunch comes up with SRT and NDI
+        // shown on the badge and neither of them sending. Start is a press,
+        // on the badge or in Settings.
+        //
+        // It is also the rule this app already states for these two groups:
+        // nothing goes out over a production's network until somebody asks for
+        // it. A relaunch is not somebody asking.
         // …and the menu-bar item, on the same terms: off by default, and back
         // where it was left for anyone who switched it on (see +MenuBar).
         updateMenuBarPresence()

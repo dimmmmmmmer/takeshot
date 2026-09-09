@@ -123,6 +123,15 @@ extension CaptureController {
             ? nil : model.namePrefix
         settings.dailies.nameSuffix = model.nameSuffix == "_DAILY"
             ? nil : model.nameSuffix
+        // nil at the standard ink, like every other added field.
+        settings.dailies.plateOpacity = model.ink.plate
+            == DailiesInk.standard.plate ? nil : model.ink.plate
+        settings.dailies.textOpacity = model.ink.text
+            == DailiesInk.standard.text ? nil : model.ink.text
+        settings.dailies.customPlateOpacity = model.customInk.plate
+            == DailiesInk.standard.plate ? nil : model.customInk.plate
+        settings.dailies.customTextOpacity = model.customInk.text
+            == DailiesInk.standard.text ? nil : model.customInk.text
         settings.dailies.destinationPath = model.isDestinationDefault
             ? nil : model.destination?.path
     }

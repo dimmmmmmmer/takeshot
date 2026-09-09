@@ -22,6 +22,12 @@ struct ViewStreamBadgePlaceTests {
         try await ViewProbe.run { probe in
             let mirrors = probe.controller.mirrors
             var widths: [String: CGFloat] = [:]
+            // Both transports in USE — the badge draws a line per transport
+            // the cart uses, and this suite is about what the LINE says. A
+            // cart that uses neither has no badge at all, which is
+            // `aTransportThatIsNotUsedIsNotOnTheRow`.
+            probe.controller.settings.srt.enabled = true
+            probe.controller.settings.ndi.enabled = true
             for (name, srt, ndi) in [
                 ("off", SRTOutputState.off, NDIOutputState.off),
                 ("starting", .starting, .off),
@@ -89,13 +95,34 @@ struct ViewStreamBadgePlaceTests {
                 "the top row does not mount the stream badge")
     }
 
+    /// **A transport this cart does not use has no line at all.**
+    ///
+    /// Both used to be drawn always. That is right for a transport the
+    /// operator streams over and switched off for this shot, and wrong for one
+    /// they have never used — a cart with no NDI receiver anywhere paid for an
+    /// NDI badge all day (owner: "пользователю который не использует ни то ни
+    /// другое на главном окне их значки ни к чему, и тому кто использует
+    /// только что-то одно – только это и нужно показывать").
+    @Test func aTransportThatIsNotUsedIsNotOnTheRow() {
+        #expect(StreamIndicator.readings(srt: .up, ndi: .off, paused: false,
+                                         usesSRT: true, usesNDI: false)
+            .map(\.name) == ["SRT"])
+        #expect(StreamIndicator.readings(srt: .off, ndi: .up, paused: false,
+                                         usesSRT: false, usesNDI: true)
+            .map(\.name) == ["NDI"])
+        #expect(StreamIndicator.readings(srt: .off, ndi: .off, paused: false,
+                                         usesSRT: false, usesNDI: false)
+            .isEmpty, "a cart that streams over neither still pays for a badge")
+    }
+
     /// **A transport that is off keeps its own line.** The all-off case was
     /// fixed first and the one-of-two case was not: with SRT running, NDI's
     /// name simply left the row, which is the same disappearance one state
     /// along (owner: "сделай так чтоб при выключении они меняли значок а не
     /// исчезали").
     @Test func aStreamThatIsOffKeepsItsNameAndChangesItsIcon() {
-        let live = StreamIndicator.readings(srt: .up, ndi: .off, paused: false)
+        let live = StreamIndicator.readings(srt: .up, ndi: .off, paused: false,
+                                            usesSRT: true, usesNDI: true)
         #expect(live.map(\.name) == ["SRT", "NDI"],
                 "a transport was dropped out of the row: \(live.map(\.name))")
         #expect(live[1].link == .off)
@@ -104,13 +131,15 @@ struct ViewStreamBadgePlaceTests {
                 "the off transport wears the live one's icon")
 
         // …and the other way round, so the order is not what is being tested
-        let other = StreamIndicator.readings(srt: .off, ndi: .up, paused: false)
+        let other = StreamIndicator.readings(srt: .off, ndi: .up, paused: false,
+                                            usesSRT: true, usesNDI: true)
         #expect(other.map(\.name) == ["SRT", "NDI"])
         #expect(other[0].link == .off)
 
         // Both off is still both names — this is the case that was already
         // right, and it must not regress into the old single reading.
-        #expect(StreamIndicator.readings(srt: .off, ndi: .off, paused: false)
+        #expect(StreamIndicator.readings(srt: .off, ndi: .off, paused: false,
+                                         usesSRT: true, usesNDI: true)
                     .map(\.name) == ["SRT", "NDI"])
     }
 
@@ -118,7 +147,8 @@ struct ViewStreamBadgePlaceTests {
     /// what makes it different is in the tooltip, where there is room to say
     /// "press to resume" rather than in a shape nobody can tell apart.
     @Test func aPausedStreamReadsAsOffOnTheIcon() {
-        let paused = StreamIndicator.readings(srt: .up, ndi: .up, paused: true)
+        let paused = StreamIndicator.readings(srt: .up, ndi: .up, paused: true,
+                                              usesSRT: true, usesNDI: true)
         #expect(paused.allSatisfy { $0.link == .off })
         #expect(paused.map(\.name) == ["SRT", "NDI"])
     }

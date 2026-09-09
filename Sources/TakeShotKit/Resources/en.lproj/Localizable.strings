@@ -325,9 +325,9 @@
 "reference_pinned" = "Reference pinned — compare it with the live signal";
 "reference_pin_failed" = "Couldn't pin the reference";
 
-"export_edl" = "Selects EDL (good takes)";
+"export_edl" = "Selects (EDL)";
 "export_reports_help" = "Shift report and contact sheet — PDF or CSV";
-"export_timeline_help" = "Selects EDL and Avid ALE for the edit";
+"export_timeline_help" = "Good takes, for an edit suite";
 "export_ale" = "Avid log (ALE)";
 "export_fcpxml" = "Timeline (FCPXML)…";
 "fcpxml_no_takes" = "No takes to put on a timeline.";
@@ -839,7 +839,7 @@
 "dailies_position_bottomRight" = "Bottom right";
 "dailies_preview_help" = "How the burn-ins will sit on the frame";
 "dailies_burn_name" = "Clip name";
-"dailies_burn_project" = "Project · camera/roll";
+"dailies_burn_project" = "Project";
 "dailies_burn_date" = "Recording date";
 "dailies_custom_placeholder" = "Custom line";
 "dailies_dest_label" = "Destination:";
@@ -1160,3 +1160,15 @@
 "quit_risk_stay" = "Keep working";
 "quit_risk_quit" = "Quit anyway";
 "assist_ratio" = "Ratio";
+"stream_start" = "Start";
+"stream_stop" = "Stop";
+"stream_running" = "Sending";
+"stream_stopped" = "Not sending";
+"dailies_position_center" = "Centre";
+"export_group_selects" = "Good takes only";
+"export_group_all" = "Every take";
+"dailies_ink_section" = "Appearance";
+"dailies_ink_technical" = "Technical lines";
+"dailies_ink_custom" = "Custom line";
+"dailies_ink_plate" = "How solid the plate behind the text is";
+"dailies_ink_text" = "How solid the lettering is";
