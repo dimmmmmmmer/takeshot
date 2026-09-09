@@ -211,7 +211,7 @@ import Testing
             }
             let dials = probe.sizes(
                 proposedWidth: DailiesBurninSection.columnWidth) {
-                DailiesInkRows(model: model)
+                probe.hosted(DailiesInkRows(model: model))
             }
             for language in ["en", "ru"] {
                 let closed = language == "en"
@@ -235,8 +235,12 @@ import Testing
         try await ViewProbe.run { probe in
             let model = probe.controller.dailies
             self.seed(model, controller: probe.controller, root: probe.root)
+            // Through `hosted`: the preview reads the controller from the
+            // environment now (it looks for a decoded thumbnail to lay the
+            // strips over), and a missing `@EnvironmentObject` does not
+            // degrade — it traps, and a trap takes the whole run down.
             let size = probe.sizes(proposedWidth: 900) {
-                DailiesBurninPreview(model: model).picture
+                probe.hosted(DailiesBurninPreview(model: model).picture)
             }
             #expect(size.en == DailiesBurninPreview.size,
                     "the preview took \(size.en) of \(DailiesBurninPreview.size)")

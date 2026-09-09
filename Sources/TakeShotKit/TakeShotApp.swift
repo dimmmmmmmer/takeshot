@@ -85,6 +85,19 @@ public struct TakeShotApp: App {
         }
         .defaultSize(width: 980, height: 380)
 
+        // The dailies burn-in arrangement at frame size (see
+        // `DailiesPreviewWindowView`). Dark like the scopes and the slate: it
+        // is a picture, and the chrome around a picture should not light it.
+        Window(L("dailies_preview_window"),
+               id: AppWindowID.dailiesPreview.rawValue) {
+            DailiesPreviewWindowView()
+                .environmentObject(controller)
+                .tint(controller.accentColor)
+                .preferredColorScheme(.dark)
+                .registersAppWindow(.dailiesPreview)
+        }
+        .defaultSize(width: 960, height: 540)
+
         // Digital slate: a fullscreen timecode + take card to point a camera
         // at (see SlateView). Dark by design like the scopes, and the scene
         // carries the localized name for the same reason — the Window menu and

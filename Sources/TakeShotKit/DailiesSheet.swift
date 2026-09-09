@@ -90,7 +90,7 @@ struct DailiesSheet: View {
         } else {
             // **What it will look like**, drawn by the code that burns the
             // frame (owner: "а главное визуализации").
-            DailiesBurninPreview(model: model)
+            DailiesBurninPreview(model: model, still: model.previewStill)
         }
     }
 
@@ -232,6 +232,13 @@ extension DailiesBurninPosition {
 /// whether the real thing will look like this.
 struct DailiesBurninPreview: View {
     @ObservedObject var model: DailiesQueueModel
+    /// A real frame from the footage to lay the strips over, or nil for the
+    /// flat grey. Taken IN rather than read from the environment: `picture`
+    /// below is a computed property, a render test asks for it directly, and
+    /// an `@EnvironmentObject` reached that way traps
+    /// (`CaptureController.dailiesPreviewStill`).
+    var still: CGImage?
+    @Environment(\.openWindow) private var openWindow
 
     /// 16:9 at a size that shows the arrangement without taking the sheet
     /// over.
@@ -279,7 +286,8 @@ struct DailiesBurninPreview: View {
                 size: CGSize(width: Self.size.width * Self.raster,
                              height: Self.size.height * Self.raster),
                 texts: texts,
-                background: CGColor(gray: 0.22, alpha: 1)) {
+                background: CGColor(gray: 0.22, alpha: 1),
+                backgroundImage: still) {
                 Image(decorative: image, scale: Self.raster)
                     .resizable()
                     .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -290,7 +298,14 @@ struct DailiesBurninPreview: View {
         .overlay(RoundedRectangle(cornerRadius: 6)
             .strokeBorder(.white.opacity(0.12)))
         .accessibilityLabel(L("dailies_preview_help"))
-        .help(L("dailies_preview_help"))
+        // …and a way to see it big. A click rather than a button beside it:
+        // the thing you want to enlarge is the picture, and clicking a picture
+        // to enlarge it needs no label (the tooltip says so anyway).
+        .onTapGesture {
+            AppWindows.present(.dailiesPreview, opening: openWindow)
+        }
+        .accessibilityAddTraits(.isButton)
+        .help(L("dailies_preview_open_help"))
     }
 
     /// A sample take's facts, so the preview has something to place. The

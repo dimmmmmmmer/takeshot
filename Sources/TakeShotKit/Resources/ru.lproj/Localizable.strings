@@ -1141,3 +1141,5 @@
 "dailies_ink_custom" = "Своя строка";
 "dailies_ink_plate" = "Насколько плотная подложка под текстом";
 "dailies_ink_text" = "Насколько плотные буквы";
+"dailies_preview_window" = "Превью надписей";
+"dailies_preview_open_help" = "Как надписи лягут на кадр — нажмите, чтобы увидеть крупно";

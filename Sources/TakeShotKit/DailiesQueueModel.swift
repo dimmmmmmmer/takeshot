@@ -1,3 +1,4 @@
+import AppKit
 import CaptureCore
 import Foundation
 
@@ -39,6 +40,16 @@ final class DailiesQueueModel: ObservableObject {
     /// each have their own plate and lettering (`DailiesInk`).
     @Published var ink: DailiesInk = .standard
     @Published var customInk: DailiesInk = .standard
+    /// **A real frame to lay the preview's strips over**, or nil for the flat
+    /// grey (owner: "хотелось бы чтобы картинкой встал как пример какой-то
+    /// один стилл из любого исходника… вместо серого фона").
+    ///
+    /// On the MODEL and not read from the environment by the preview, and
+    /// that is load-bearing: the sheet's `content` is a computed property the
+    /// render tests ask for directly, and an `@EnvironmentObject` reached that
+    /// way traps — which took a whole battery down once. The controller fills
+    /// this in when the sheet opens (`dailiesPreviewStill`).
+    @Published var previewStill: CGImage?
     /// Where the dailies land. Defaults to a Dailies folder beside the takes.
     @Published var destination: URL?
     /// The folder beside the footage — what `destination` means when the

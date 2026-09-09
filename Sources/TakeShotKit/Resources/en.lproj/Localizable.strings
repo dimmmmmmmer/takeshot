@@ -1172,3 +1172,5 @@
 "dailies_ink_custom" = "Custom line";
 "dailies_ink_plate" = "How solid the plate behind the text is";
 "dailies_ink_text" = "How solid the lettering is";
+"dailies_preview_window" = "Burn-in preview";
+"dailies_preview_open_help" = "How the burn-ins will sit on the frame — click to see it big";

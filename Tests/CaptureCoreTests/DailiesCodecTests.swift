@@ -271,3 +271,81 @@ import Testing
                 alpha: Double(bytes[offset + 3]) / 255)
     }
 }
+
+/// **The preview's background frame.**
+///
+/// A plate's opacity and a watermark's lettering cannot be judged against flat
+/// grey (owner: "хотелось бы чтобы картинкой встал как пример какой-то один
+/// стилл из любого исходника… вместо серого фона"), so the preview lays its
+/// strips over a real frame when the app has one.
+@Suite struct DailiesPreviewBackgroundTests {
+    private func solid(width: Int, height: Int) -> CGImage? {
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)
+                ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
+        context.setFillColor(CGColor(srgbRed: 0, green: 0.6, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
+    /// **It COVERS the frame.** Letterbox bars are not part of the picture the
+    /// strips will sit on, so a source of any aspect fills the preview and the
+    /// overflow is cropped — judging a plate against a black bar would be
+    /// judging it against nothing.
+    @Test func aFrameOfAnyAspectCoversThePreview() {
+        let frame = CGRect(x: 0, y: 0, width: 640, height: 360)
+        for (width, height) in [(1920, 1080), (1080, 1920), (640, 360),
+                                (4096, 1716), (100, 3000)] {
+            guard let image = solid(width: width, height: height) else {
+                Issue.record("could not build a \(width)x\(height) fixture")
+                continue
+            }
+            let rect = DailiesOverlay.fill(frame, with: image)
+            #expect(rect.width >= frame.width - 0.01,
+                    Comment(rawValue: "\(width)x\(height) left a gap: \(rect)"))
+            #expect(rect.height >= frame.height - 0.01,
+                    Comment(rawValue: "\(width)x\(height) left a gap: \(rect)"))
+            // …centred, so the crop takes the same off both sides.
+            #expect(abs(rect.midX - frame.midX) < 0.01)
+            #expect(abs(rect.midY - frame.midY) < 0.01)
+            // …and the aspect is kept: a stretched still is a lie about the
+            // framing the burn-ins are being judged against.
+            let sourceAspect = Double(width) / Double(height)
+            #expect(abs(rect.width / rect.height - sourceAspect) < 0.01,
+                    Comment(rawValue: "\(width)x\(height) was stretched: \(rect)"))
+        }
+    }
+
+    /// A degenerate image cannot produce a rect nothing can be drawn into.
+    @Test func aZeroSizedFrameFallsBackToTheWholePreview() throws {
+        let frame = CGRect(x: 0, y: 0, width: 640, height: 360)
+        let image = try #require(solid(width: 8, height: 8))
+        #expect(DailiesOverlay.fill(frame, with: image).width >= frame.width)
+    }
+
+    /// The frame actually reaches the rendered preview — the picture behind
+    /// the strips is the still and not the flat colour.
+    @Test func theStillIsWhatIsBehindTheStrips() throws {
+        let still = try #require(solid(width: 320, height: 180))
+        var burnins = DailiesBurnins()
+        burnins.timecode = false
+        burnins.clipName = false
+        burnins.project = false
+        let texts = burnins.overlayTexts(for: DailiesItem(
+            source: URL(fileURLWithPath: "/x.mov"), outputName: "x",
+            clipName: "A001C001"))
+        let image = try #require(DailiesOverlay.previewImage(
+            size: CGSize(width: 320, height: 180), texts: texts,
+            background: CGColor(gray: 0.22, alpha: 1), backgroundImage: still))
+        let data = try #require(image.dataProvider?.data)
+        let bytes = try #require(CFDataGetBytePtr(data))
+        // Middle of the frame, where nothing is burned in: B G R A little.
+        let offset = 90 * image.bytesPerRow + 160 * 4
+        let green = Double(bytes[offset + 1]) / 255
+        #expect(green > 0.4, "the preview is still flat grey: green=\(green)")
+    }
+}

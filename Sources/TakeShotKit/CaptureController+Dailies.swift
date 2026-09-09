@@ -1,3 +1,4 @@
+import AppKit
 import CaptureCore
 import Foundation
 
@@ -17,6 +18,10 @@ extension CaptureController {
             dailies.prepare(takes: dailiesCandidates, settings: settings,
                             defaultFolder: defaultDailiesFolder)
         }
+        // A frame for the preview to lay its strips over. Taken when the sheet
+        // opens: the queue is fixed from here, and the panel behind it has
+        // already decoded the thumbnails it showed.
+        dailies.previewStill = dailiesPreviewStill
         dailiesSheetPresented = true
     }
 
@@ -60,6 +65,33 @@ extension CaptureController {
     /// it out (see `ViewDisabledRuleTests`).
     var canClearDailiesDestination: Bool {
         !dailies.isRunning && !dailies.isDestinationDefault
+    }
+
+    /// **A real frame to lay the burn-in preview over**, or nil for the flat
+    /// grey: a plate's opacity and a watermark's lettering cannot be judged
+    /// against a blank (owner: "хотелось бы чтобы картинкой встал как пример
+    /// какой-то один стилл из любого исходника… вместо серого фона").
+    ///
+    /// The first queued take that already HAS a thumbnail. Asking for one
+    /// would decode on the main actor; the takes panel behind the sheet has
+    /// already asked for the ones it showed, so on the ordinary path there is
+    /// one in hand.
+    ///
+    /// Named here rather than computed in the preview, and that is not
+    /// tidiness: a view's computed property that reads an
+    /// `@EnvironmentObject` traps when a render test asks for it directly —
+    /// which is exactly what happened, and it took a whole battery down with
+    /// it. The previews take the frame as a value now.
+    var dailiesPreviewStill: CGImage? {
+        for take in dailies.queuedTakes {
+            guard let image = thumbnails[take.id] else { continue }
+            var proposed = CGRect(origin: .zero, size: image.size)
+            if let cg = image.cgImage(forProposedRect: &proposed,
+                                      context: nil, hints: nil) {
+                return cg
+            }
+        }
+        return nil
     }
 
     /// Whether there is an override at all — the question the way-back button

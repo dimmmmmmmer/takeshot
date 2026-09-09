@@ -236,8 +236,15 @@ public final class DailiesOverlay {
     ///
     /// `timecodeText` is a sample: the plate is sized from the template, so
     /// what an operator needs to see is where the digits sit, not which.
+    /// `backgroundImage` is a real frame from the footage when there is one:
+    /// a plate's opacity and a watermark's lettering cannot be judged against
+    /// flat grey (owner: "хотелось бы чтобы картинкой встал как пример какой-то
+    /// один стилл из любого исходника… вместо серого фона"). Drawn to FILL the
+    /// preview, so a source of any aspect covers it rather than leaving bars
+    /// the strips would then be measured against.
     public static func previewImage(size: CGSize, texts: Texts,
                                     background: CGColor,
+                                    backgroundImage: CGImage? = nil,
                                     timecodeText: String = "01:23:45:12")
         -> CGImage? {
         let width = max(1, Int(size.width.rounded()))
@@ -250,11 +257,32 @@ public final class DailiesOverlay {
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                 | CGBitmapInfo.byteOrder32Little.rawValue)
         else { return nil }
+        let frame = CGRect(x: 0, y: 0, width: width, height: height)
         context.setFillColor(background)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.fill(frame)
+        if let backgroundImage {
+            context.draw(backgroundImage, in: Self.fill(frame,
+                                                        with: backgroundImage))
+        }
         DailiesOverlay(size: CGSize(width: width, height: height), texts: texts)
             .draw(in: context, timecodeText: timecodeText)
         return context.makeImage()
+    }
+
+    /// The rect to draw `image` into so it COVERS `frame` — the aspect is
+    /// kept and the overflow is cropped, which is what a preview background
+    /// wants: letterbox bars are not part of the picture the strips will sit
+    /// on, and judging a plate against them would be judging it against grey.
+    static func fill(_ frame: CGRect, with image: CGImage) -> CGRect {
+        let source = CGSize(width: image.width, height: image.height)
+        guard source.width > 0, source.height > 0 else { return frame }
+        let scale = max(frame.width / source.width,
+                        frame.height / source.height)
+        let size = CGSize(width: source.width * scale,
+                          height: source.height * scale)
+        return CGRect(x: frame.midX - size.width / 2,
+                      y: frame.midY - size.height / 2,
+                      width: size.width, height: size.height)
     }
 
     /// One static strip as a bitmap: the plate and its text, rendered once.
