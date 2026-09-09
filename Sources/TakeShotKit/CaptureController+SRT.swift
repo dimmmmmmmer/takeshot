@@ -239,6 +239,12 @@ extension CaptureController {
         // put SRT in play — the badge, this section — and `setSRTRunning` is
         // what sends. Un-enabling it DOES stop a link that is up: you cannot
         // be streaming over a transport the cart does not use.
+        // A dial moved: the five encoder settings are fixed at session
+        // creation, so they reach the wire only through a new session.
+        if SRTVideoEncoder.Dials(oldValue.srt)
+            != SRTVideoEncoder.Dials(settings.srt) {
+            rebuildLiveEncoders()
+        }
         if settings.srt.enabled != true, mirrors.srtRunning {
             setSRTRunning(false)
         } else if mirrors.srtRunning, oldValue.srt != settings.srt {

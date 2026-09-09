@@ -49,6 +49,7 @@ extension CaptureController {
         if let existing = mirrors.liveEncoders[picture] { return existing }
         let encoder = LiveVideoEncoder(
             bitsPerSecond: settings.srt.bitsPerSecondEffective,
+            dials: SRTVideoEncoder.Dials(settings.srt),
             // Shared, so a viewer changing picture is not handed a timestamp
             // from a clock that started later. See `LiveClock`.
             clock: mirrors.liveClock,
@@ -102,6 +103,25 @@ extension CaptureController {
     /// the rest of the day. Asking who is watching cannot drift.
     ///
     /// Called from every side that can be the last one out.
+    /// **Rebuild every live encoder**, because a dial moved.
+    ///
+    /// The five encoder settings are fixed at session creation — profile,
+    /// codec, rate control, keyframe interval and frame reordering are all
+    /// properties VideoToolbox takes once — so a change reaches the wire only
+    /// through a new session. A rebuild is a gap and a keyframe, which is also
+    /// exactly what a receiver needs in order to follow the change; it is the
+    /// same trade `LiveVideoEncoder.session(for:)` already makes when the
+    /// raster or the colour moves.
+    ///
+    /// The pictures themselves are left alone: `ensureLiveEncoder` builds a
+    /// new one for each on the next frame.
+    func rebuildLiveEncoders() {
+        guard !mirrors.liveEncoders.isEmpty else { return }
+        for (_, encoder) in mirrors.liveEncoders { encoder.stop() }
+        mirrors.liveEncoders.removeAll()
+        wireLivePictures()
+    }
+
     func releaseIdleLivePictures() {
         var watched: Set<LivePicture> = []
         if mirrors.srt != nil { watched.insert(Self.srtPicture) }

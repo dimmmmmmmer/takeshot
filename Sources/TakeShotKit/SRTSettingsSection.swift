@@ -43,6 +43,7 @@ struct SRTSettingsSection: View {
                 // above says the cart uses it, this sends.
                 StreamRunRow(mirrors: controller.mirrors,
                              kind: .srt)
+                SRTEncoderRows(controller: controller)
                 // Its own view because the state lives on `mirrors`, a nested
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of the

@@ -108,7 +108,41 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         case bitrateMbps = "srtBitrateMbps"
         case passphrase = "srtPassphrase"
         case streamID = "srtStreamID"
+        case codec = "srtCodec"
+        case profile = "srtProfile"
+        case rateControl = "srtRateControl"
+        case keyframeSeconds = "srtKeyframeSeconds"
+        case bFrames = "srtBFrames"
     }
+
+    /// **The encoder's five dials** (owner: "я бы хотел чтобы… выбирать
+    /// энкодер, кодек и настройку цвета. у энкодера там профиль выбрать типа,
+    /// абр цбр, кейфреймы б фреймы, в общем что посчитаешь нужным для
+    /// кастомизации но чтобы не перегружать пользователя").
+    ///
+    /// Every one of them is nil at the value the encoder has always used, so a
+    /// stream set up before these existed is byte-for-byte the stream it was.
+    /// What is deliberately NOT here is the colour: the tags follow the signal
+    /// (`Configuration.colorPreset`), and a hand-set primary on the wire is a
+    /// picture that is wrong at the far end with nothing on this one to say so.
+    ///
+    /// The video codec (`SRTVideoCodec`); nil — H.264, which every decoder
+    /// opens.
+    public var codec: String?
+    /// H.264/HEVC profile (`SRTEncoderProfile`); nil — High, which is what the
+    /// encoder has always asked for.
+    public var profile: String?
+    /// Average or constant bitrate (`SRTRateControl`); nil — average.
+    public var rateControl: String?
+    /// Seconds between keyframes; nil — 1, which is how long a receiver waits
+    /// to join and how long a frozen picture takes to come back.
+    public var keyframeSeconds: Int?
+    /// Let the encoder reorder frames (B-frames); nil/false — no.
+    ///
+    /// Off by default and worth staying off for a monitoring feed: reordering
+    /// buys bitrate at the cost of a frame of latency, and this link exists so
+    /// somebody can call action off it.
+    public var bFrames: Bool?
 
     /// The viewer is sent out over SRT; nil/false — off, which is the default.
     /// Optional, like every added field, so settings written by an older build
@@ -141,6 +175,30 @@ public struct SRTSettings: Codable, Equatable, Sendable {
     // MARK: - what the app actually opens
 
     public var roleEffective: SRTRole { SRTRole.resolved(role) }
+
+    // MARK: - the encoder's dials, resolved
+
+    public var codecEffective: SRTVideoCodec {
+        codec.flatMap(SRTVideoCodec.init(rawValue:)) ?? .h264
+    }
+
+    public var profileEffective: SRTEncoderProfile {
+        profile.flatMap(SRTEncoderProfile.init(rawValue:)) ?? .high
+    }
+
+    public var rateControlEffective: SRTRateControl {
+        rateControl.flatMap(SRTRateControl.init(rawValue:)) ?? .average
+    }
+
+    /// Seconds between keyframes, held to a range a monitoring feed can live
+    /// with: under one a receiver spends the link on parameter sets, and over
+    /// ten a director watching a frozen frame waits ten seconds for it to come
+    /// back.
+    public var keyframeSecondsEffective: Int {
+        min(10, max(1, keyframeSeconds ?? 1))
+    }
+
+    public var bFramesEffective: Bool { bFrames ?? false }
 
     /// **The whole link as one URL — the only thing the settings pane asks
     /// for.**
@@ -295,5 +353,60 @@ public struct SRTSettings: Codable, Equatable, Sendable {
                            latencyIsExplicit: latencyMs != nil,
                            passphrase: passphraseEffective,
                            streamID: streamIDEffective)
+    }
+}
+
+/// The codec an SRT feed is encoded in.
+///
+/// Two, and no more: H.264 is what every decoder in a venue opens, and HEVC
+/// halves the bitrate for a receiver that can take it. The heavier things this
+/// app can record in are not stream codecs.
+public enum SRTVideoCodec: String, CaseIterable, Identifiable, Sendable {
+    case h264 = "H.264"
+    case hevc = "HEVC"
+
+    public var id: String { rawValue }
+}
+
+/// How much the encoder is allowed to do to the picture.
+///
+/// Baseline exists for the receiver that cannot take anything else — an old
+/// hardware decoder, a browser on a locked-down machine — and costs bitrate
+/// for it. High is what the encoder has always asked for.
+public enum SRTEncoderProfile: String, CaseIterable, Identifiable, Sendable {
+    case baseline
+    case main
+    case high
+
+    public var id: String { rawValue }
+
+    /// `Localizable.strings` key. Written out rather than assembled from the
+    /// raw value, for the reason `CountedNoun` states.
+    public var labelKey: String {
+        switch self {
+        case .baseline: return "srt_profile_baseline"
+        case .main: return "srt_profile_main"
+        case .high: return "srt_profile_high"
+        }
+    }
+}
+
+/// Whether the encoder may spend more on a hard second than an easy one.
+///
+/// Average is the default and the right answer on most links: the picture
+/// keeps its quality and the rate evens out. Constant is for a link that is
+/// rented by the bit — a venue's uplink with a hard ceiling — where a burst
+/// costs more than the quality it buys.
+public enum SRTRateControl: String, CaseIterable, Identifiable, Sendable {
+    case average
+    case constant
+
+    public var id: String { rawValue }
+
+    public var labelKey: String {
+        switch self {
+        case .average: return "srt_rate_average"
+        case .constant: return "srt_rate_constant"
+        }
     }
 }

@@ -106,11 +106,19 @@ final class LiveVideoEncoder: @unchecked Sendable {
     /// changing picture.
     private let clock: LiveClock
 
+    /// The operator's encoder dials, read off settings when the encoder is
+    /// built. Not live: every one of them is fixed at session creation, so a
+    /// change rebuilds the session — which is a keyframe and the parameter
+    /// sets, exactly what a receiver needs in order to follow it.
+    private let dials: SRTVideoEncoder.Dials
+
     init(bitsPerSecond: Int,
+         dials: SRTVideoEncoder.Dials = SRTVideoEncoder.Dials(),
          clock: LiveClock = LiveClock(),
          framesPerSecond: Double = LiveVideoEncoder.framesPerSecond,
          onFailure: @escaping @Sendable (String) -> Void = { _ in }) {
         self.bitsPerSecond = bitsPerSecond
+        self.dials = dials
         self.clock = clock
         self.onFailure = onFailure
         interval = framesPerSecond > 0 ? 1 / framesPerSecond
@@ -271,7 +279,11 @@ final class LiveVideoEncoder: @unchecked Sendable {
             framesPerSecond: max(1, rate), bitsPerSecond: bitsPerSecond,
             // Asked of the BUFFER, which the pipeline has already tagged. See
             // `ColorTags.preset(of:)` for why it is not passed down instead.
-            colorPreset: ColorTags.preset(of: buffer))
+            colorPreset: ColorTags.preset(of: buffer),
+            codec: dials.codec, profile: dials.profile,
+            rateControl: dials.rateControl,
+            keyframeSeconds: dials.keyframeSeconds,
+            allowBFrames: dials.allowBFrames)
         // The RASTER, the rate and the COLOUR, and deliberately not the
         // bitrate: that one moves on a running session (`setBitsPerSecond`), so
         // comparing it here would rebuild for a number VideoToolbox would have

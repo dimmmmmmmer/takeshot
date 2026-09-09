@@ -55,6 +55,29 @@ import VideoToolbox
 final class SRTVideoEncoder {
     /// What the session is built for. A change to any of it is a new session,
     /// which is why the mirror holds this and compares it per frame.
+    /// **The five the operator chose**, apart from the raster and the rate the
+    /// signal decides. Its own type so the settings can be read once, on the
+    /// main actor, and handed to an encoder that is not on it.
+    struct Dials: Equatable, Sendable {
+        var codec: SRTVideoCodec = .h264
+        var profile: SRTEncoderProfile = .high
+        var rateControl: SRTRateControl = .average
+        var keyframeSeconds: Int = 1
+        var allowBFrames = false
+
+        /// What the settings say.
+        init(_ settings: SRTSettings) {
+            codec = settings.codecEffective
+            profile = settings.profileEffective
+            rateControl = settings.rateControlEffective
+            keyframeSeconds = settings.keyframeSecondsEffective
+            allowBFrames = settings.bFramesEffective
+        }
+
+        /// What this encoder has always done.
+        init() {}
+    }
+
     struct Configuration: Equatable, Sendable {
         var width: Int
         var height: Int
@@ -71,14 +94,28 @@ final class SRTVideoEncoder {
         /// A rebuild is a keyframe and the parameter sets, which is exactly
         /// what a receiver needs in order to follow the change.
         var colorPreset: String?
-
-        /// A keyframe a second.
+        /// The five dials the operator can move (`SRTSettings`), each
+        /// defaulted to what this encoder has always done — so a caller that
+        /// does not care gets the stream it had.
+        var codec: SRTVideoCodec = .h264
+        var profile: SRTEncoderProfile = .high
+        var rateControl: SRTRateControl = .average
+        /// Seconds between keyframes.
         ///
-        /// Short, and that is the point on an SRT feed: it is how long a receiver
-        /// waits to join, how long a picture takes to come back after the link
-        /// recovers, and how long a director staring at a frozen frame has to
-        /// wait. A ten-second GOP would save bitrate nobody asked to save.
-        var keyframeInterval: Int { max(1, framesPerSecond) }
+        /// One by default, and that is the point on an SRT feed: it is how
+        /// long a receiver waits to join, how long a picture takes to come
+        /// back after the link recovers, and how long a director staring at a
+        /// frozen frame has to wait. Longer saves bitrate — a trade the
+        /// operator can now make and the app no longer makes for them.
+        var keyframeSeconds: Int = 1
+        /// Let the encoder reorder frames. Off: one frame of latency, and one
+        /// timestamp — see the type comment.
+        var allowBFrames = false
+
+        /// Frames between keyframes, which is what VideoToolbox is told.
+        var keyframeInterval: Int {
+            max(1, framesPerSecond) * max(1, keyframeSeconds)
+        }
     }
 
     /// Whether this machine can encode H.264 **and hand the sample back**.
@@ -243,7 +280,25 @@ final class SRTVideoEncoder {
         return properties.compactMap { key, value in
             VTSessionSetProperty(session, key: key, value: value) == noErr
                 ? nil : key as String
-        } + applyRate(configuration.bitsPerSecond, to: session)
+        } + applyRate(configuration.bitsPerSecond, to: session,
+                      constant: configuration.rateControl == .constant)
+    }
+
+    /// The profile the session is asked for, per codec.
+    ///
+    /// HEVC has no Baseline: its family is Main/Main10, so a stream asked for
+    /// Baseline in HEVC gets Main. Resolved here rather than refused, because
+    /// the two pickers are independent and an operator who moves one has not
+    /// asked to break the other.
+    static func profileLevel(_ configuration: Configuration) -> CFString {
+        guard configuration.codec == .h264 else {
+            return kVTProfileLevel_HEVC_Main_AutoLevel
+        }
+        switch configuration.profile {
+        case .baseline: return kVTProfileLevel_H264_Baseline_AutoLevel
+        case .main: return kVTProfileLevel_H264_Main_AutoLevel
+        case .high: return kVTProfileLevel_H264_High_AutoLevel
+        }
     }
 
     /// The average and its one-second burst ceiling, which are one decision and
@@ -253,9 +308,19 @@ final class SRTVideoEncoder {
     /// Without a ceiling a keyframe is free to burst past whatever the link can
     /// carry, and on an SRT link a burst is exactly what fills the send buffer
     /// and drops the frames behind it.
-    private static func applyRate(_ rate: Int,
-                                  to session: VTCompressionSession) -> [String] {
-        let pairs: [(CFString, CFTypeRef)] = [
+    private static func applyRate(_ rate: Int, to session: VTCompressionSession,
+                                  constant: Bool = false) -> [String] {
+        // **Constant is asked for, never assumed.** Not every encoder on every
+        // machine takes `ConstantBitRate`, and a refusal is collected like any
+        // other rather than failing the stream: the average and the ceiling
+        // are set either way, so a session that refused CBR is still a session
+        // with a rate limit — which is the property this link needs.
+        var pairs: [(CFString, CFTypeRef)] = []
+        if constant {
+            pairs.append((kVTCompressionPropertyKey_ConstantBitRate,
+                          NSNumber(value: rate)))
+        }
+        pairs += [
             (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: rate)),
             (kVTCompressionPropertyKey_DataRateLimits,
              [NSNumber(value: rate / 8 * 3 / 2), NSNumber(value: 1.0)] as CFArray),
