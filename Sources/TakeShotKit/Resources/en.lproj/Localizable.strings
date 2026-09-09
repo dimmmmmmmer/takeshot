@@ -1159,8 +1159,6 @@
 "assist_ratio" = "Ratio";
 "stream_start" = "Start";
 "stream_stop" = "Stop";
-"stream_running" = "Sending";
-"stream_stopped" = "Not sending";
 "dailies_position_center" = "Centre";
 "export_group_selects" = "Good takes only";
 "export_group_all" = "Every take";

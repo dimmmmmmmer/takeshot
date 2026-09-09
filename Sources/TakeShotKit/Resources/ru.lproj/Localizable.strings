@@ -1128,8 +1128,6 @@
 "assist_ratio" = "Соотношение";
 "stream_start" = "Запустить";
 "stream_stop" = "Остановить";
-"stream_running" = "Передаётся";
-"stream_stopped" = "Не передаётся";
 "dailies_position_center" = "По центру";
 "export_group_selects" = "Только хорошие дубли";
 "export_group_all" = "Все дубли";

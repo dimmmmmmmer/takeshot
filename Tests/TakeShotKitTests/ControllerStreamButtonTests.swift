@@ -180,3 +180,63 @@ import Testing
         })
     }
 }
+
+/// **The readout says what is actually happening; the switch says what the
+/// operator asked for.**
+///
+/// `startSRTOutput` returns having opened nothing for three reasons an
+/// operator can hit — a build with no libsrt, an address that is not one, an
+/// address that is empty — and each leaves the reason on the settings row. The
+/// switch deliberately stays ON through those, so a corrected address retries
+/// instead of needing two presses. What must not lie is the READOUT, and the
+/// first version of this fix got that backwards: it turned the switch off,
+/// which broke the retry — `aNewNameRetriesAfterAFailure` caught it.
+@Suite @MainActor struct ControllerStreamRunTruthTests {
+    @Test func aRefusedStartLeavesTheSwitchOnSoItCanRetry() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.srtStreamFactory = { _ in FakeSRTStream() }
+            controller.settings.srt.enabled = true
+            controller.settings.srt.address = ""
+
+            controller.setSRTRunning(true)
+            #expect(controller.mirrors.srtRunning,
+                    "the switch went off, so a corrected address cannot retry")
+            #expect(controller.mirrors.srt == nil)
+            // …and the reason is on the row, which is where it belongs.
+            #expect(controller.mirrors.srtState != SRTOutputState.off,
+                    "nothing said why the link did not open")
+        }
+    }
+
+    /// **The state is reported by the row that reports state.** The Start/Stop
+    /// control is a button and nothing else: a caption reading the switch
+    /// would say "Sending" over a link that never opened, and one reading the
+    /// link would repeat the status row directly below it.
+    @Test func theRunControlSaysOnlyWhatPressingItWillDo() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/StreamRunRow.swift"),
+            encoding: .utf8)
+        #expect(source.contains("stream_stop"))
+        #expect(source.contains("stream_start"))
+        #expect(!source.contains("stream_running"),
+                "the row carries a state caption again")
+        #expect(!source.contains("stream_stopped"))
+    }
+
+    /// …and the section still reports the state, which is what the caption
+    /// would have duplicated.
+    @Test func theSectionStillHasItsStatusRow() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/TakeShotKit/SRTSettingsSection.swift"),
+            encoding: .utf8)
+        #expect(source.contains("SRTStatusRow"),
+                "nothing in the SRT section reports the link any more")
+    }
+}

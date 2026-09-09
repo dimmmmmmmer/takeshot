@@ -74,11 +74,23 @@ extension CaptureController {
         guard settings.srt.enabled == true || !on else { return }
         guard mirrors.srtRunning != on else { return }
         mirrors.srtRunning = on
-        if on {
-            startSRTOutput()
-        } else {
+        guard on else {
             stopSRTOutput()
+            return
         }
+        startSRTOutput()
+        // **The switch stays where the operator put it, even if nothing
+        // opened.** `startSRTOutput` returns having opened nothing for three
+        // reasons an operator can hit — no libsrt, an address that is not one,
+        // an empty address — and each leaves the reason on the settings row.
+        // The switch staying on is what makes a corrected address retry
+        // instead of needing two presses (`aNewNameRetriesAfterAFailure` on
+        // the NDI side pins the same property).
+        //
+        // What must not lie is the READOUT, and it does not: everything that
+        // reports on this stream reads the LINK — `StreamIndicator` and
+        // `StreamRunRow` both — so a switch that is on over a link that is
+        // down says "not sending" and the row below says why.
     }
 
     func startSRTOutput() {

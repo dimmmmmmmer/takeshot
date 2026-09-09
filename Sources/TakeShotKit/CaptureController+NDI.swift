@@ -83,11 +83,14 @@ extension CaptureController {
         guard settings.ndi.enabled == true || !on else { return }
         guard mirrors.ndiRunning != on else { return }
         mirrors.ndiRunning = on
-        if on {
-            startNDIOutput()
-        } else {
+        guard on else {
             stopNDIOutput()
+            return
         }
+        startNDIOutput()
+        // The switch stays where the operator put it even if no sender was
+        // created, so a corrected name retries — see `setSRTRunning` for the
+        // rule and for where the truth is reported instead.
     }
 
     func startNDIOutput() {
