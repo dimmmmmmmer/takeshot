@@ -20,6 +20,7 @@ extension CapturePipeline {
             let copy = buffer.flatMap { self.deepCopy($0) }
             self.previewReference = copy
             self.previewReferencePreLUT = copy
+            self.publishReference()
         }
     }
 
@@ -34,6 +35,55 @@ extension CapturePipeline {
             let preLUT = self.currentPreLUTPreviewBuffer()
             self.previewReferencePreLUT = (preLUT == nil || preLUT === current)
                 ? copy : preLUT.flatMap { self.deepCopy($0) }
+            self.publishReference()
+        }
+    }
+
+    /// Show the pinned reference on a surface of its own.
+    ///
+    /// **The A/B split in record mode is why this exists.** Wipe, blend and
+    /// difference composite the reference INTO the live frame, so the one
+    /// display sink carries both halves and no second surface is needed. A
+    /// split is two pictures, and the operator's half of it — the live signal —
+    /// is already a surface; the reference had no way onto the screen except
+    /// through the compositor, so choosing A/B in record mode drew nothing at
+    /// all (owner: "а/б режим при пине рефа на странице река не работает").
+    ///
+    /// Fed on pin and on attach, and never per frame: a still that has not
+    /// changed does not need repainting sixty times a second.
+    public func addReferenceSink(_ layer: MetalPreviewLayer) {
+        referenceSinks.add(layer)
+        // The frame right away, the way `addDisplaySink` does it — a reference
+        // is never pushed again, so a surface that waited for the next one
+        // would wait for ever.
+        queue.async {
+            if let reference = self.previewReference {
+                layer.present(reference)
+            } else {
+                layer.clearToBlack()
+            }
+        }
+    }
+
+    public func removeReferenceSink(_ layer: MetalPreviewLayer) {
+        referenceSinks.remove(layer)
+    }
+
+    /// Hand whatever is pinned to every surface showing it on its own.
+    ///
+    /// Called from the queue that owns `previewReference`, so the buffer it
+    /// publishes is the one that was just stored rather than one a concurrent
+    /// pin has replaced.
+    func publishReference() {
+        let reference = previewReference
+        let layers = referenceSinks.all()
+        guard !layers.isEmpty else { return }
+        for layer in layers {
+            if let reference {
+                layer.present(reference)
+            } else {
+                layer.clearToBlack()
+            }
         }
     }
 

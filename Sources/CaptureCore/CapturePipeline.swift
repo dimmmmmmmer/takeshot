@@ -148,6 +148,14 @@ public final class CapturePipeline: @unchecked Sendable {
     /// Live preview sinks: every SwiftUI mount registers its OWN layer (a
     /// CALayer can be hosted by only one NSView; see PreviewSinkRegistry).
     public let displaySinks = PreviewSinkRegistry()
+    /// Surfaces showing the PINNED REFERENCE on its own — the B pane of the
+    /// A/B split in record mode (`CaptureController.showsCompareSplit`).
+    ///
+    /// Its own registry and not a second use of `displaySinks`, because it is
+    /// fed on a completely different cadence: the reference is one still frame
+    /// that changes only when the operator pins another, so it is delivered on
+    /// PIN and on ATTACH and at no other time. Nothing here runs per frame.
+    public let referenceSinks = PreviewSinkRegistry()
     /// Every displayed frame, on the display queue — the mirrors of the viewer
     /// (hardware playout, and the live encoders behind SRT and the browsers).
     /// Re-routed from the main actor on every record/playback switch while the

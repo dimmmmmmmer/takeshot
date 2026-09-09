@@ -65,12 +65,24 @@ struct CompareSourceContent: View {
 /// lives in one NSView, so sharing would hand the picture to whichever window
 /// laid out last and black the others out.
 struct ComparePlaybackSplit: View {
+    @EnvironmentObject private var controller: CaptureController
+
     var body: some View {
-        // A is the chosen compare source — the other clip when there is one,
-        // the live signal otherwise; B is the take under review.
         HStack(spacing: 2) {
-            CompareSourceContent()
-            PlaybackContent()
+            if controller.viewerMode == .record {
+                // Record: the live signal against the frame the operator
+                // pinned. Live on the LEFT for the reason the playback split
+                // puts the compare source there — A is what you are comparing
+                // FROM, and in record that is the camera.
+                LivePreviewContent()
+                PreviewMount.reference(controller.pipeline)
+            } else {
+                // Playback: A is the chosen compare source — the other clip
+                // when there is one, the live signal otherwise; B is the take
+                // under review.
+                CompareSourceContent()
+                PlaybackContent()
+            }
         }
     }
 }

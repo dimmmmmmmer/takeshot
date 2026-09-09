@@ -99,8 +99,21 @@ extension CaptureController {
     /// composited into a single frame inside the tap (see `pushCompare`), and a
     /// split of an already-composited picture would show the compare clip twice.
     var showsCompareSplit: Bool {
-        viewerMode == .playback && compareMode == .sideBySide
-            && playbackURL != nil
+        guard compareMode == .sideBySide, syncPlay == nil else { return false }
+        // **Record mode gets it too, against the pinned reference.**
+        //
+        // It used to be playback-only, so choosing A/B with a reference pinned
+        // did nothing at all: the picker offered the mode, the render asked
+        // this, and this said no (owner: "а/б режим при пине рефа на странице
+        // река не работает"). The other three modes composite the reference
+        // INTO the live frame, so they needed no second surface — a split is
+        // two pictures, and the reference had no way onto the screen except
+        // through the compositor. It has one now (`PreviewMount.reference`).
+        //
+        // The condition is `compareHasBSide` in both modes rather than two
+        // spellings of it: a split of a picture against nothing is a picture
+        // beside a black rectangle.
+        return compareHasBSide
     }
 
     /// Whether there is anything to compare the picture AGAINST right now.

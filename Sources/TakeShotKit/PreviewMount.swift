@@ -65,6 +65,14 @@ extension PreviewMount {
                      detach: { tap.removeCompareSink($0) })
     }
 
+    /// The pinned reference on a surface of its own — the B pane of the A/B
+    /// split in record mode. A still frame, delivered on attach and on each
+    /// pin; see `CapturePipeline.addReferenceSink`.
+    static func reference(_ pipeline: CapturePipeline) -> PreviewMount {
+        PreviewMount(attach: { pipeline.addReferenceSink($0) },
+                     detach: { pipeline.removeReferenceSink($0) })
+    }
+
     /// A BRAW/CinemaDNG clip, from its own decoder.
     static func raw(_ model: RawPlayerModel) -> PreviewMount {
         PreviewMount(attach: { model.addSink($0) },
