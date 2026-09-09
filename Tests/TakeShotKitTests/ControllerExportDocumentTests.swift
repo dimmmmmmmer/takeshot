@@ -128,9 +128,12 @@ import Testing
         }
     }
 
-    /// The ALE is the LOG: every take, including the rejected ones. The EDL
-    /// beside it is the cut and carries the circled takes only.
-    @Test func theALECarriesEveryTake() async throws {
+    /// **The Avid log carries the circled takes and nothing else**, like every
+    /// other item in that menu (owner: "экспорт тейков – каждый должен
+    /// экспортить только хорошие"). It used to be the LOG — every take,
+    /// rejected ones included — and this test asserted exactly that. What
+    /// documents the whole day is the shift report, which still does.
+    @Test func theALECarriesTheCircledTakesOnly() async throws {
         try await project("Nightshoot") { controller, root in
             let day = try self.day(controller, in: root)
             let destination = root.appendingPathComponent("log.ale")
@@ -142,8 +145,8 @@ import Testing
                 let text = try String(contentsOf: destination, encoding: .utf8)
                 #expect(text.contains("FIELD_DELIM\tTABS"))
                 #expect(text.contains(day.good.url.lastPathComponent))
-                #expect(text.contains(day.bad.url.lastPathComponent),
-                        "the Avid log hid the rejected take")
+                #expect(!text.contains(day.bad.url.lastPathComponent),
+                        "the Avid log carried a take nobody circled")
                 #expect(controller.lastNotice == L("ale_saved", "log.ale"))
             }
         }
@@ -274,10 +277,11 @@ struct ControllerFCPXMLExportTests {
         return (good, bad)
     }
 
-    /// The timeline is the LOG's shape, not the cut's: every take, rejected
-    /// ones included. An assistant building a bin needs the day, and a take
-    /// marked bad is metadata about it rather than grounds for hiding it.
-    @Test func theTimelineCarriesEveryTakeAndOpensAsXML() async throws {
+    /// The timeline is a CUT, in the third of its three spellings: the circled
+    /// takes and nothing else, like the EDL and the ALE beside it. It carried
+    /// every take until the owner asked for the menu to mean one thing
+    /// ("таймлайн со всеми мне зачем? просто на хорошие").
+    @Test func theTimelineCarriesTheCircledTakesOnlyAndOpensAsXML() async throws {
         try await project("Nightshoot") { controller, root in
             let day = try self.day(controller, in: root)
             let destination = root.appendingPathComponent("cut.fcpxml")
@@ -291,14 +295,16 @@ struct ControllerFCPXMLExportTests {
                 // no NLE will open, and it would pass every `contains` check.
                 let document = try XMLDocument(xmlString: text, options: [])
                 let clips = try document.nodes(forXPath: "//spine/asset-clip")
-                #expect(clips.count == 2, "the timeline holds \(clips.count) clips")
-                let sources = try document.nodes(forXPath: "//media-rep/@src")
+                #expect(clips.count == 1, "the timeline holds \(clips.count) clips")
+                let sources: [String] = try document
+                    .nodes(forXPath: "//media-rep/@src")
                     .compactMap(\.stringValue)
-                for take in [day.good, day.bad] {
-                    #expect(sources.contains { $0.hasSuffix(
-                        take.url.lastPathComponent) },
-                            "\(take.url.lastPathComponent) is not on the timeline")
-                }
+                #expect(sources.contains { $0.hasSuffix(
+                    day.good.url.lastPathComponent) },
+                        "the circled take is not on the timeline")
+                #expect(!sources.contains { $0.hasSuffix(
+                    day.bad.url.lastPathComponent) },
+                        "the timeline carried a take nobody circled")
                 #expect(controller.lastNotice
                     == L("fcpxml_saved", "cut.fcpxml"))
                 #expect(controller.lastError == nil)
@@ -312,7 +318,7 @@ struct ControllerFCPXMLExportTests {
         try await ControllerHarness.run { controller, _ in
             try await FakeFilePanel.installed { panel in
                 controller.exportFCPXML()
-                #expect(controller.lastError == L("fcpxml_no_takes"))
+                #expect(controller.lastError == L("export_no_good_takes"))
                 #expect(panel.saveRequests.isEmpty,
                         "an empty timeline asked where to save")
             }

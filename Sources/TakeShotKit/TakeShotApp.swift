@@ -200,6 +200,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the operator something that cannot work.
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+        // Off unless the variable is set — see `WheelTrace`, which is
+        // scaffolding for one open bug and is meant to be deleted with it.
+        WheelTrace.startIfAsked()
     }
 
     /// The dock icon (or Window menu → TakeShot) with the main window closed

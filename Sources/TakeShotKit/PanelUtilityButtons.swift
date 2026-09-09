@@ -113,26 +113,26 @@ struct PanelUtilityButtons: View {
             }
             .disabled(!controller.hasTakes)
             menu("timeline.selection", help: L("export_timeline_help")) {
-                // **Grouped by WHICH takes, not captioned.**
+                // **One heading over all three, because all three are the
+                // same cut in three spellings** (owner: "экспорт тейков –
+                // каждый должен экспортить только хорошие; таймлайн со всеми
+                // мне зачем? просто на хорошие чтоб разные форматы таймлайна
+                // были").
                 //
-                // The owner asked for one note saying this menu exports good
-                // takes — and it would have been false for two items out of
-                // three: the EDL is the selects, the Avid log and the timeline
-                // carry every take that was shot. Two headed sections say the
-                // same thing truthfully and at a glance, which is what the
-                // note was for.
+                // It was two sections, because the ALE and the FCPXML carried
+                // every take that was shot and the EDL did not — so the one
+                // note the owner had asked for would have been false for two
+                // items out of three. Making it true was the answer, not
+                // splitting the menu: what documents the whole day is the
+                // SHIFT REPORT in the menu beside this one, which lists every
+                // take good or bad.
                 Section(L("export_group_selects")) {
                     Button(L("export_edl")) { controller.exportSelectsEDL() }
-                        .disabled(!controller.canExportSelects)
-                }
-                Section(L("export_group_all")) {
                     Button(L("export_ale")) { controller.exportALE() }
-                        .disabled(!controller.hasTakes)
                     Button(L("export_fcpxml")) { controller.exportFCPXML() }
-                        .disabled(!controller.hasTakes)
                 }
             }
-            .disabled(!controller.hasTakes)
+            .disabled(!controller.canExportSelects)
         }
         .buttonStyle(.borderless)
         // The row hugs its three icons; the CENTRING is the frame around it, and

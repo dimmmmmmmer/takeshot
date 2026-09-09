@@ -235,7 +235,6 @@
 "preset_sony_alpha" = "Sony (Legacy)";
 
 /* Name collision warning */
-"name_taken_short" = "TAKEN";
 "name_taken_help" = "This name already exists in the folder (%@). Change CLIP/ROLL — recording won't overwrite it, a _2 suffix will be added";
 
 "preset_canon" = "Canon";
@@ -316,7 +315,7 @@
 "marker_added" = "Marker %@";
 "marker_needs_clip" = "Markers need a clip from the record folder — a photo has no timeline";
 
-"edl_no_good_takes" = "No good takes to export";
+"export_no_good_takes" = "No good takes to export";
 "edl_saved" = "EDL saved: %@";
 
 "pin_reference" = "Pin as reference";
@@ -330,14 +329,12 @@
 "export_timeline_help" = "Good takes, for an edit suite";
 "export_ale" = "Avid log (ALE)";
 "export_fcpxml" = "Timeline (FCPXML)…";
-"fcpxml_no_takes" = "No takes to put on a timeline.";
 "fcpxml_saved" = "Timeline saved: %@";
 "toast_fcpxml_failed" = "Could not save the timeline: %@";
 "export_report_pdf" = "Shift report (PDF)";
 "export_report_csv" = "Shift report (CSV)";
 "report_no_takes" = "No takes to report";
 "report_saved" = "Report saved: %@";
-"ale_no_takes" = "No takes to export";
 "ale_saved" = "ALE saved: %@";
 
 "r3d_sdk_unavailable" = "R3D playback needs RED’s R3D SDK";
@@ -1161,7 +1158,6 @@
 "stream_stop" = "Stop";
 "dailies_position_center" = "Centre";
 "export_group_selects" = "Good takes only";
-"export_group_all" = "Every take";
 "dailies_ink_section" = "Appearance";
 "dailies_ink_technical" = "Technical lines";
 "dailies_ink_custom" = "Custom line";

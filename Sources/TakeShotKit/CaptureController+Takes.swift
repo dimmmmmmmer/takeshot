@@ -29,10 +29,17 @@ extension CaptureController {
     /// both shift reports, the rating menu and the export menu.
     var hasTakes: Bool { !takes.isEmpty }
 
-    /// Something is circled. The selects EDL is the only export with a narrower
-    /// set than "the day", and an EDL of no takes is a file post cannot use —
-    /// `exportSelectsEDL` refuses it with a toast, so the button says so first.
+    /// Something is circled — the gate on the whole timeline menu, all three
+    /// formats of it. A cut of no takes is a file post cannot use; each
+    /// exporter refuses it with a toast, so the buttons say so first.
     var canExportSelects: Bool { takes.contains { $0.rating == .good } }
+
+    /// The circled takes, in the order they were shot — what every item in the
+    /// timeline menu now exports (see `exportALE` for why all three).
+    ///
+    /// One accessor rather than the same filter written three times: three
+    /// copies of "what counts as a select" is how two of them come to disagree.
+    var goodTakes: [Take] { takes.filter { $0.rating == .good } }
 
     /// Click the circle: none → good → bad → none.
     func cycleRating(_ take: Take) {

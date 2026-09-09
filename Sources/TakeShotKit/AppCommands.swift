@@ -96,10 +96,10 @@ private struct ExportCommands: View {
         Button(L("export_edl")) { controller.exportSelectsEDL() }
             .disabled(!controller.canExportSelects)
         // next to the EDL, and gated the same way: greyed exactly when the set
-        // it exports is empty. That set is every take, not the circled ones —
-        // the ALE is the log an assistant builds a bin from.
+        // it exports is empty. That set is the CIRCLED takes now, the same as
+        // the EDL's and the timeline's — see `exportALE`.
         Button(L("export_ale")) { controller.exportALE() }
-            .disabled(!controller.hasTakes)
+            .disabled(!controller.canExportSelects)
         Button(L("export_report_pdf")) { controller.exportShiftReport(pdf: true) }
             .disabled(!controller.hasTakes)
         Button(L("export_report_csv")) { controller.exportShiftReport(pdf: false) }

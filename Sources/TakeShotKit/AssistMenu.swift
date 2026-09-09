@@ -236,30 +236,14 @@ private struct AssistControlRows: View {
                 }
             }))
         if controller.settings.assist.framelinesOnEffective {
-            Picker(L("assist_ratio"), selection: Binding(
-                get: { controller.settings.assist.framelineRatioChosen },
-                set: { controller.settings.assist.framelineRatio = $0 })) {
-                ForEach(AssistPresets.frameline, id: \.value) { preset in
-                    Text(verbatim: preset.label).tag(preset.value)
-                }
-                // A typed aspect is a tag of its own, or the picker would have
-                // a selection none of its rows carries and would show nothing
-                // at all — the operator's own 2.76 would read as an empty
-                // control.
-                if let custom = AssistPresets.custom(
-                    controller.settings.assist.framelineRatioChosen,
-                    among: AssistPresets.frameline,
-                    off: AssistPresets.framelineOff) {
-                    Text(verbatim: AssistRatioInput.text(custom)).tag(custom)
-                }
-            }
-            // The custom box only while the aid is ON (owner: "пускай поле
-            // кастома появляется когда десквиз/фреймлайнс включены"). A box
-            // for a number that is not being drawn is a row of panel spent on
-            // nothing, and this panel is read on a cart between takes.
-            AssistCustomField(label: L("assist_custom"),
-                              range: AssistRatioInput.framelineRange,
-                              value: controller.settings.assist.framelineRatioChosen) {
+            // The picker, its Custom row and the box that row reveals are one
+            // control (`AssistRatioRow`) — the desqueeze below mounts the same
+            // one. The box used to be here unconditionally, under a picker
+            // that had no way to ASK for it.
+            AssistRatioRow(presets: AssistPresets.frameline,
+                           off: AssistPresets.framelineOff,
+                           range: AssistRatioInput.framelineRange,
+                           value: controller.settings.assist.framelineRatioChosen) {
                 controller.settings.assist.framelineRatio = $0
             }
         }
@@ -310,22 +294,10 @@ private struct AssistControlRows: View {
                 }
             }))
         if controller.settings.assist.desqueezeOnEffective {
-            Picker(L("assist_ratio"), selection: Binding(
-                get: { controller.liveAssist.desqueeze },
-                set: { factor in controller.setAssist { $0.desqueeze = factor } })) {
-                ForEach(AssistPresets.desqueeze, id: \.value) { preset in
-                    Text(verbatim: preset.label).tag(preset.value)
-                }
-                if let custom = AssistPresets.custom(
-                    controller.liveAssist.desqueeze,
-                    among: AssistPresets.desqueeze,
-                    off: AssistPresets.desqueezeOff) {
-                    Text(verbatim: AssistRatioInput.text(custom) + "x").tag(custom)
-                }
-            }
-            AssistCustomField(label: L("assist_custom"),
-                              range: AssistRatioInput.desqueezeRange,
-                              value: controller.liveAssist.desqueeze) { factor in
+            AssistRatioRow(presets: AssistPresets.desqueeze,
+                           off: AssistPresets.desqueezeOff,
+                           range: AssistRatioInput.desqueezeRange,
+                           value: controller.liveAssist.desqueeze) { factor in
                 controller.setAssist { $0.desqueeze = factor }
             }
         }

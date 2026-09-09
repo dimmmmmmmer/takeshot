@@ -44,7 +44,7 @@ struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 6) {
             // A switch ABOVE the rows made the whole footer jump on every
             // press (owner: "высота подвала прыгает при переключении"), back
             // when the two rows were different heights — the file row stacked
@@ -239,22 +239,41 @@ struct NamingFileNameRow: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            // warning: the current name is already taken in the folder
+        // **4pt, and the block's own gap is 6.**
+        //
+        // Not taste: arithmetic. The naming block cannot compress — every
+        // field in it is a fixed width, so its ideal width IS its minimum —
+        // and at the narrowest window it measured 298pt against the 299 there
+        // are between the footer's edge and the record group's own half. The
+        // block reserves the middle now like the shooting controls do
+        // (`BottomBarView.centerReserve`), and this is where the points that
+        // buys came from: whitespace between fields, not the boxes an
+        // operator types into.
+        HStack(alignment: .top, spacing: 4) {
+            // **The warning that the name is already taken — a triangle, and
+            // no word under it.**
+            //
+            // It used to stack "TAKEN" / "ЗАНЯТО" under the glyph, and that
+            // cost the block 38pt in a row that has none to give: the whole
+            // block reserves the middle now, and the warned state was the one
+            // that could not fit. The word was also the ONE localized thing in
+            // a block deliberately kept latin so the two languages measure the
+            // same, and it was wider in Russian.
+            //
+            // Nothing is lost: the tooltip has always carried the whole
+            // sentence AND the name that collides, which is the part an
+            // operator actually acts on. An orange triangle in the naming row
+            // has one meaning.
             if let collision = controller.nameCollision {
-                VStack(spacing: 1) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(L("name_taken_short"))
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.orange)
-                }
-                .padding(.top, 8)
-                .help(L("name_taken_help", collision))
-                .transition(.opacity)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                    .padding(.top, 10)
+                    .help(L("name_taken_help", collision))
+                    .transition(.opacity)
             }
             NamingFieldsView.steppedField(
-                L("cam_label"), field: .camera, width: 40,
+                L("cam_label"), field: .camera, width: 36,
                 text: Binding(get: { controller.settings.naming.cameraLabel },
                               set: { controller.settings.naming.cameraLabel = $0 }),
                 onStep: { controller.stepCamera($0) })
@@ -266,7 +285,7 @@ struct NamingFileNameRow: View {
                 .help(L("clip_help"))
             if uses("{postfix}") {
                 NamingFieldsView.labeledField(
-                    L("postfix_label"), field: .postfix, width: 56,
+                    L("postfix_label"), field: .postfix, width: 48,
                     text: Binding(
                         get: { controller.settings.naming.postfix ?? "" },
                         set: { controller.settings.naming.postfix =

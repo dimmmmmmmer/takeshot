@@ -68,14 +68,24 @@ struct ViewFooterTests {
     /// The naming fields are deliberately locale-independent — the labels are
     /// latin because they end up in file names on other people's systems. This
     /// pins that: localize CAM/ROLL/CLIP and the row grows into the REC button.
-    @Test func namingFieldsAreLocaleIndependentAndFitTheFooterHalf() async throws {
+    ///
+    /// **Measured against the side ZONE, not the half.** The half reaches the
+    /// centre line the record button stands on, so a block that merely fitted
+    /// it was a block touching the button — which is what it was doing, by one
+    /// point, at the narrowest window.
+    @Test func namingFieldsAreLocaleIndependentAndClearTheRecordGroup() async throws {
         try await ViewProbe.run { probe in
             let ideal = probe.fittingSizes { NamingFieldsView() }
             #expect(ideal.ru == ideal.en,
                     "a naming field label became localized: \(ideal)")
-            let half = ViewBudget.footerHalfWidth
-            #expect(ideal.ru.width <= half,
-                    "naming row wants \(ideal.ru.width)pt of \(half)")
+            let zone = ViewBudget.footerSideZoneWidth
+            #expect(ideal.ru.width <= zone,
+                    "naming row wants \(ideal.ru.width)pt of \(zone)")
+            // …and it cannot compress out of trouble: every box in it is a
+            // fixed width, so its ideal IS its minimum. That is why the block
+            // has to fit rather than be squeezed.
+            let squeezed = probe.minimumWidths { NamingFieldsView() }
+            #expect(squeezed.ru == ideal.ru.width)
         }
     }
 
@@ -98,8 +108,18 @@ struct ViewFooterTests {
                     "the collision badge made the naming row taller")
             #expect(warnedRow.ru.width > plainRow.ru.width,
                     "the collision badge did not render at all")
-            #expect(warned.ru.width <= ViewBudget.footerHalfWidth,
-                    "the warned naming row wants \(warned.ru.width)pt")
+            // **The warned state may spend the AIR and no more.** A collision
+            // is exceptional and transient, and a triangle appearing is worth
+            // the 14pt of clearance the bar keeps around the record group —
+            // reaching into the group's own half is not.
+            let ceiling = ViewBudget.footerSideZoneWidth + BottomBarView.centerAir
+            #expect(warned.ru.width <= ceiling,
+                    "the warned naming row wants \(warned.ru.width)pt of \(ceiling)")
+            // …and it no longer measures differently by language: the word
+            // under the triangle was the one localized thing in a block kept
+            // latin so the two languages lay out identically.
+            #expect(warned.ru == warned.en,
+                    "the collision badge is language-dependent again: \(warned)")
         }
     }
 
@@ -164,18 +184,99 @@ struct ViewFooterTests {
         }
     }
 
-    /// The left-hand group and the record button are stacked, not laid out in a
-    /// row: a group that grows just slides underneath the button. What stops it is
-    /// the gap `BottomBarView` reserves, and the reserve has to be at least half
-    /// the centered group — measured here rather than trusted.
-    @Test func theReservedGapCoversHalfTheRecordGroup() async throws {
+    /// The side groups and the record button are stacked, not laid out in a
+    /// row: a group that grows just slides underneath the button. What stops it
+    /// is the gap `BottomBarView` reserves, and the reserve has to cover half
+    /// the centered group AND leave the stated air over it — measured here
+    /// rather than trusted, because the air is what ran out.
+    @Test func theReservedGapCoversHalfTheRecordGroupPlusItsAir() async throws {
         try await ViewProbe.run { probe in
             let center = probe.fittingSizes { FooterCenterControls() }
             #expect(center.ru == center.en)
-            #expect(BottomBarView.centerReserve >= center.ru.width / 2,
-                    "record group \(center.ru.width)pt, reserve \(BottomBarView.centerReserve)pt")
+            #expect(BottomBarView.centerAir > 0)
+            #expect(BottomBarView.centerReserve
+                    >= center.ru.width / 2 + BottomBarView.centerAir, """
+                record group \(center.ru.width)pt leaves \
+                \(BottomBarView.centerReserve - center.ru.width / 2)pt of air, \
+                against the \(BottomBarView.centerAir)pt this bar promises
+                """)
         }
     }
+
+    /// **Both halves reserve it, and the bar says so.**
+    ///
+    /// The left group has had a reserve since it was written; the naming block
+    /// never did, and the asymmetry is invisible from any width — the bar fits
+    /// either way, the block simply sits on top of the button (owner: "вот
+    /// видишь там где вписывать имя камеры липнет к реку"). Asserted on the
+    /// source, because what is wrong is a missing `Spacer`, and a missing
+    /// spacer has no size to measure.
+    @Test func theNamingBlockReservesTheMiddleToo() throws {
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/FooterBar.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.components(
+            separatedBy: "Spacer(minLength: Self.centerReserve)").count == 3,
+                "one of the two side groups has no reserve against the middle")
+        let naming = try #require(code.range(of: "NamingFieldsView()"))
+        let reserve = try #require(
+            code.range(of: "Spacer(minLength: Self.centerReserve)\n"
+                + "                        NamingFieldsView()"))
+        #expect(reserve.lowerBound < naming.lowerBound,
+                "the naming block's reserve is not in front of it")
+    }
+
+    /// **The icon row has one rhythm.**
+    ///
+    /// Measured as INK, because the complaint is about ink: the five controls
+    /// do not agree about their own padding — a menu carries a disclosure and
+    /// several points of trailing space after it, a bare glyph button carries
+    /// almost none — so a single `HStack` spacing produced gaps of 12, 17, 18
+    /// and 8 points between them (owner: "подвинь в нав баре внизу слева
+    /// значки покучнее друг к другу, там отступы чет великоваты", and before
+    /// it "выглядят так как будто между ними всеми разные отступы").
+    ///
+    /// The rule is a CEILING on every gap rather than an equality: a menu's
+    /// glyph and its own chevron are 5pt apart, and a row where the gaps
+    /// BETWEEN controls are no wider than the gap inside one reads as evenly
+    /// spaced whatever each control's padding does.
+    @Test func theShootingIconsShareOneRhythm() async throws {
+        try await ViewProbe.run { probe in
+            let columns = probe.brightColumns(
+                FooterShootingControls(),
+                in: CGSize(width: 320, height: 60))
+            try #require(columns.count > 20,
+                        "this host drew nothing measurable in the icon row")
+            var runs: [(first: Int, last: Int)] = []
+            for column in columns {
+                if let last = runs.last, column == last.last + 1 {
+                    runs[runs.count - 1].last = column
+                } else {
+                    runs.append((column, column))
+                }
+            }
+            let gaps: [Int] = zip(runs, runs.dropFirst())
+                .map { $1.first - $0.last - 1 }
+            #expect(gaps.count >= 4,
+                    "the row drew \(runs.count) shapes — too few to measure")
+            #expect((gaps.max() ?? 0) <= Self.maxIconGap, """
+                the icon row's gaps are \(gaps) — one of them is wider than \
+                the \(Self.maxIconGap)pt ceiling
+                """)
+        }
+    }
+
+    /// What no gap in the footer's icon row may exceed. Held against the ink,
+    /// not against a spacing constant: what an operator sees is the distance
+    /// between two GLYPHS, and every control in that row pads itself
+    /// differently.
+    private static let maxIconGap = 10
 
     /// Everything on the left of the record button — folder, codec, naming style,
     /// volume, DIM and the meters — has to fit the zone beside it when squeezed:

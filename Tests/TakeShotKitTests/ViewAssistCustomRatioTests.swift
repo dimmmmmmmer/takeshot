@@ -1,5 +1,6 @@
 import CaptureCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import TakeShotKit
@@ -145,11 +146,11 @@ import Testing
         }
     }
 
-    /// **Both controls carry both halves.** Asserted on the source: a popover
-    /// never renders while its trigger is measured, so the rows themselves are
-    /// out of reach of a headless render — and a picker that lost its custom
-    /// tag fails silently, by showing an empty control rather than by throwing.
-    @Test func bothPickersOfferATypedValueAndShowIt() throws {
+    /// **Both controls are the same control.** Asserted on the source: a
+    /// popover never renders while its trigger is measured, so the rows
+    /// themselves are out of reach of a headless render — and a picker that
+    /// lost its Custom row fails silently, by simply not offering it.
+    @Test func bothAidsMountTheSameRatioRow() throws {
         let code = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent()
@@ -159,13 +160,69 @@ import Testing
             .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")
-        // one box each, and one custom row each
-        #expect(code.components(separatedBy: "AssistCustomField(").count == 3,
-                "a control lost the box a value is typed into")
-        #expect(code.components(separatedBy: "AssistPresets.custom(").count == 3,
-                "a picker lost the row its typed value is shown on")
+        #expect(code.components(separatedBy: "AssistRatioRow(").count == 3,
+                "an aid stopped mounting the shared ratio row")
+        // …and neither builds a picker or a box of its own beside it, which is
+        // how the two came to disagree about Off the last time.
+        #expect(!code.contains("AssistCustomField("),
+                "an aid mounts a typed box outside the shared row")
+        #expect(!code.contains("AssistPresets.custom("),
+                "an aid decides what counts as a typed value for itself")
         #expect(code.contains("range: AssistRatioInput.framelineRange"))
         #expect(code.contains("range: AssistRatioInput.desqueezeRange"))
+    }
+
+    /// **The box appears with the Custom row and not before it.**
+    ///
+    /// It used to be under every picker whenever the aid was on — a field
+    /// showing a number the picker was already showing, and the only way in to
+    /// typing (owner: "поле для нее есть но оно всегда видно – стоит просто
+    /// пунктом сделать кастом и чтоб тогда поле для него появлялось").
+    @Test func theTypedBoxIsBehindTheCustomRow() {
+        // a preset: the picker says it, and there is no box
+        #expect(!AssistRatioRow.showsBox(
+            chosen: false, value: 1.85, among: AssistPresets.frameline,
+            off: AssistPresets.framelineOff))
+        #expect(!AssistRatioRow.showsBox(
+            chosen: false, value: 2.0, among: AssistPresets.desqueeze,
+            off: AssistPresets.desqueezeOff))
+        // choosing the row opens it over a value that has not changed yet —
+        // without this the box could never be reached from a preset at all
+        #expect(AssistRatioRow.showsBox(
+            chosen: true, value: 1.85, among: AssistPresets.frameline,
+            off: AssistPresets.framelineOff))
+        // …and a typed value opens it with nothing chosen, which is the state
+        // a relaunch restores: 2.76 is on no row of its own any more, so the
+        // control has to know it is Custom from the NUMBER.
+        #expect(AssistRatioRow.showsBox(
+            chosen: false, value: 2.76, among: AssistPresets.frameline,
+            off: AssistPresets.framelineOff))
+        #expect(AssistRatioRow.showsBox(
+            chosen: false, value: 1.25, among: AssistPresets.desqueeze,
+            off: AssistPresets.desqueezeOff))
+        // off is not custom: a desqueeze of exactly 1 is a spherical lens
+        #expect(!AssistRatioRow.showsBox(
+            chosen: false, value: 1.0, among: AssistPresets.desqueeze,
+            off: AssistPresets.desqueezeOff))
+    }
+
+    /// And the box really is what the row grows by, measured: the Custom state
+    /// is taller than the preset state by a field.
+    @Test func theCustomStateIsTallerByABox() async throws {
+        try await ViewProbe.run { probe in
+            @MainActor func height(_ value: Double) -> CGFloat {
+                probe.fittingSize(VStack {
+                    AssistRatioRow(presets: AssistPresets.frameline,
+                                   off: AssistPresets.framelineOff,
+                                   range: AssistRatioInput.framelineRange,
+                                   value: value) { _ in }
+                }).height
+            }
+            let preset = height(1.85)
+            let typed = height(2.76)
+            #expect(typed > preset + 8,
+                    "preset \(preset)pt, typed \(typed)pt — the box did not appear")
+        }
     }
 
     /// Same for the squeeze factor, which takes the other route into the

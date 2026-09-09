@@ -93,7 +93,7 @@ struct ViewNamingRowTests {
     /// one row, and neither row's width depends on the language.
     @Test func theSlateRowSitsUnderTheNamingRowAndFitsTheFooterHalf() async throws {
         try await ViewProbe.run { probe in
-            let half = ViewBudget.footerHalfWidth
+            let half = ViewBudget.footerSideZoneWidth
             let slate = probe.fittingSizes { NamingFieldsView() }
             let slateRow = probe.fittingSizes {
                 SlateFieldsEditor(scene: .constant("112A pickup"),
@@ -121,8 +121,8 @@ struct ViewNamingRowTests {
             let block = probe.fittingSizes { NamingFieldsView() }
             #expect(block.ru.height == block.en.height,
                     "the block took a different number of rows: \(block)")
-            #expect(block.ru.width <= ViewBudget.footerHalfWidth)
-            #expect(block.en.width <= ViewBudget.footerHalfWidth)
+            #expect(block.ru.width <= ViewBudget.footerSideZoneWidth)
+            #expect(block.en.width <= ViewBudget.footerSideZoneWidth)
 
             // and the whole footer still fits its column in both
             let footer = probe.sizes(proposedWidth: ViewBudget.footerWidth) {
@@ -152,7 +152,8 @@ struct ViewNamingRowTests {
                     "the collision badge added a row")
             #expect(warnedRow.ru.width > plainRow.ru.width,
                     "the collision badge did not render at all")
-            #expect(warned.ru.width <= ViewBudget.footerHalfWidth,
+            #expect(warned.ru.width
+                    <= ViewBudget.footerSideZoneWidth + BottomBarView.centerAir,
                     "the warned block wants \(warned.ru.width)pt")
         }
     }

@@ -58,55 +58,46 @@ struct StreamIndicator: View {
     /// where its press STARTS instead of stops.
     private var isPaused: Bool { !combined.isEngaged && mirrors.pausedStreams.any }
 
+    /// **One reading per transport in use, the hardware lamp beside them, and
+    /// the plate they all share — or NOTHING AT ALL.**
+    ///
+    /// The plate used to be the row's: `PlayerTopBadgeRow` wrapped this view in
+    /// `playerOverlayBadge`, which draws a padded, bordered, fixed-height slab
+    /// around whatever it is given. Once a transport nobody uses stopped
+    /// getting a line, a cart that streams over neither was left with the slab
+    /// and nothing inside it (owner: "там где были срт и нди значки там
+    /// теперь при выключенных режимах подложка осталась без всего").
+    ///
+    /// So the plate is APPLIED HERE, by the only type that can answer whether
+    /// there is anything to put on it: the row knows neither which transports
+    /// are in use nor whether a board is feeding. A caller that wrapped this in
+    /// a plate of its own would be back to drawing an empty one, which is what
+    /// `ViewStreamBadgePlaceTests` now watches.
     var body: some View {
-        HStack(spacing: 6) {
-            streamReading
-            if playout.isEngaged { playoutLamp }
-        }
-    }
-
-    /// **A button while there is something to stop or resume; a LAMP when there
-    /// is not.**
-    ///
-    /// Nothing is switched on and nothing was paused: there is no start action
-    /// to offer, because "start" would have to guess SRT or NDI or both, and
-    /// the switches that decide it are in Settings. A button that did nothing
-    /// would be worse than a reading that says so — so the reading says so, and
-    /// its tooltip says where to turn it on.
-    @ViewBuilder private var streamReading: some View {
-        transportRow
-    }
-
-    /// **One reading per transport, always both, always in this order.**
-    ///
-    /// The badge used to be a single combined reading with a "SRT+NDI" label
-    /// built from the ENGAGED transports, so switching NDI off while SRT ran
-    /// took the letters NDI off the row entirely — the disappearance the owner
-    /// asked to be rid of ("сделай так чтоб при выключении они меняли значок а
-    /// не исчезали"), still there for the one-of-two case after the all-off
-    /// case was fixed. A transport now keeps its place and its name whatever it
-    /// is doing, and only its ICON and colour move.
-    private var transportRow: some View {
-        HStack(spacing: 6) {
-            ForEach(Self.readings(srt: srt, ndi: ndi, paused: isPaused,
-                                  usesSRT: controller.settings.srt.enabled == true,
-                                  usesNDI: controller.settings.ndi.enabled == true),
-                    id: \.name) { entry in
+        let rows = Self.readings(srt: srt, ndi: ndi, paused: isPaused,
+                                 usesSRT: controller.settings.srt.enabled == true,
+                                 usesNDI: controller.settings.ndi.enabled == true)
+        if !rows.isEmpty || playout.isEngaged {
+            HStack(spacing: 6) {
                 // **A press acts on THIS transport.** The row draws a reading
                 // each, and one button around both meant a click on the NDI
                 // half took SRT down with it (owner: "клик по srt/ndi в рабочем
                 // окне включает и выключает оба").
-                Button {
-                    controller.toggleStream(entry.kind)
-                } label: {
-                    reading(symbol: Self.symbol(entry.link),
-                            tint: Self.tint(entry.link),
-                            text: entry.name)
-                        .contentShape(Rectangle())
+                ForEach(rows, id: \.name) { entry in
+                    Button {
+                        controller.toggleStream(entry.kind)
+                    } label: {
+                        reading(symbol: Self.symbol(entry.link),
+                                tint: Self.tint(entry.link),
+                                text: entry.name)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .controlHelp(helpText(for: entry))
                 }
-                .buttonStyle(.plain)
-                .controlHelp(helpText(for: entry))
+                if playout.isEngaged { playoutLamp }
             }
+            .playerChromePlate()
         }
     }
 

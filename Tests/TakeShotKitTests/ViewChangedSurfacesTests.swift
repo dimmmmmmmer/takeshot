@@ -35,7 +35,7 @@ struct ViewChangedSurfacesTests {
             probe.controller.offloadStatus = "copying 41 of 128"
 
             let panel = ViewBudget.panelMinWidth
-            let half = ViewBudget.footerHalfWidth
+            let half = ViewBudget.footerSideZoneWidth
             let surfaces = [
                 Surface(name: "utility buttons", width: panel,
                         view: AnyView(PanelUtilityButtons())),

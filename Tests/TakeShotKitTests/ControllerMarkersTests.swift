@@ -256,26 +256,38 @@ import Testing
     /// Every export bails before opening a save panel when there is nothing to
     /// write — the guard is what keeps them headless, and it is also the only
     /// feedback the operator gets.
+    ///
+    /// Inside the panel seam, for the reason `ControllerReportGuardTests`
+    /// states: a guard mutated out here does not fail the test, it opens a real
+    /// modal `NSSavePanel` on whoever is running the suite and hangs.
     @Test func exportsRefuseAnEmptyDay() async throws {
         try await ControllerHarness.run { controller, _ in
-            controller.exportSelectsEDL()
-            #expect(controller.lastError == L("edl_no_good_takes"))
+            try await FakeFilePanel.installed { panel in
+                controller.exportSelectsEDL()
+                #expect(controller.lastError == L("export_no_good_takes"))
 
-            controller.lastError = nil
-            controller.exportALE()
-            #expect(controller.lastError == L("ale_no_takes"))
+                controller.lastError = nil
+                controller.exportALE()
+                #expect(controller.lastError == L("export_no_good_takes"))
 
-            controller.lastError = nil
-            controller.exportShiftReport(pdf: true)
-            #expect(controller.lastError == L("report_no_takes"))
+                controller.lastError = nil
+                controller.exportShiftReport(pdf: true)
+                #expect(controller.lastError == L("report_no_takes"))
+
+                #expect(panel.saveRequests.isEmpty,
+                        "an empty day asked where to save")
+            }
         }
     }
 
-    /// The ALE is the LOG, not the cut: it carries every take, including the
-    /// ones nobody circled and the ones marked bad. An assistant building a bin
-    /// needs the rejected takes in it — that a take was rejected is metadata
-    /// about the day, not a reason to hide it from the Avid.
-    @Test func theALECarriesEveryTakeNotOnlyTheSelects() async throws {
+    /// **`goodTakes` is what all three timeline exports are handed**, and it is
+    /// one accessor rather than the same filter written three times — which is
+    /// how two copies of "what counts as a select" come to disagree.
+    ///
+    /// A take with no rating at all is NOT a select. That is the case worth
+    /// pinning: `!= .bad` and `== .good` differ only on the takes nobody has
+    /// touched yet, which on a running day is most of them.
+    @Test func goodTakesIsTheCircledOnesAndNothingElse() async throws {
         try await ControllerHarness.run { controller, root in
             var good = ControllerFixtures.take(named: "A", in: root, clip: 1)
             good.rating = .good
@@ -284,16 +296,14 @@ import Testing
             let unrated = ControllerFixtures.take(named: "C", in: root, clip: 3)
             controller.takes = [good, bad, unrated]
 
+            #expect(controller.goodTakes.map(\.url) == [good.url])
             let ale = try #require(
-                ALEExporter.ale(takes: controller.takes,
+                ALEExporter.ale(takes: controller.goodTakes,
                                 format: controller.signalFormat))
             #expect(ale.contains("A.mov"))
-            #expect(ale.contains("B.mov"))
-            #expect(ale.contains("C.mov"))
-            // and the EDL beside it still carries the circled take only
-            #expect(EDLExporter.selectsEDL(
-                takes: controller.takes.filter { $0.rating == .good },
-                title: "t")?.contains("B.mov") == false)
+            #expect(!ale.contains("B.mov"))
+            #expect(!ale.contains("C.mov"),
+                    "an unrated take counted as a select")
         }
     }
 }

@@ -95,6 +95,67 @@ struct ViewStreamBadgePlaceTests {
                 "the top row does not mount the stream badge")
     }
 
+    /// **A cart that uses neither transport gets no PLATE either.**
+    ///
+    /// The plate was the row's — `playerOverlayBadge` around this view — so it
+    /// was drawn whether or not anything was inside it. Once a transport nobody
+    /// uses stopped getting a line, that left a padded, bordered, fixed-height
+    /// slab holding nothing (owner: "там где были срт и нди значки там теперь
+    /// при выключенных режимах подложка осталась без всего").
+    @Test func aCartThatUsesNeitherTransportDrawsNothingAtAll() async throws {
+        try await ViewProbe.run { probe in
+            let mirrors = probe.controller.mirrors
+            probe.controller.settings.srt.enabled = false
+            probe.controller.settings.ndi.enabled = false
+            mirrors.playoutState = .off
+
+            let empty = probe.fittingSize(StreamIndicator(mirrors: mirrors))
+            #expect(empty == .zero,
+                    "the badge still occupies \(empty) with nothing to say")
+
+            // …and the hardware lamp alone is enough to bring the plate back:
+            // the emptiness rule is not "no transports", it is "nothing at
+            // all", and only this view knows about the board.
+            mirrors.playoutState = .feeding
+            let lamp = probe.fittingSize(StreamIndicator(mirrors: mirrors))
+            #expect(lamp.width > 0 && lamp.height > 0,
+                    "a board feeding a monitor lost its lamp")
+        }
+    }
+
+    /// …and the row does not wrap it in a plate of its own, which would put the
+    /// slab straight back. The decision needs both the switches and the board,
+    /// and `PlayerTopBadgeRow` knows neither — so the plate belongs to the
+    /// badge. Asserted on the source: an empty plate has a size, but a plate
+    /// applied TWICE looks like one.
+    @Test func theRowDoesNotWrapTheBadgeInASecondPlate() throws {
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/PlayerBadges.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let lines = code.components(separatedBy: "\n")
+        let mount = try #require(
+            lines.firstIndex { $0.contains("StreamIndicator(") },
+            Comment(rawValue: "the row lost the badge"))
+        // the line that opens the wrapper, if the mount has one, is the one
+        // directly above it — anything further up belongs to another badge
+        #expect(!lines[mount - 1].contains("playerOverlayBadge {"),
+                "the row wraps the stream badge in a plate again")
+        let badge = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/StreamIndicator.swift"),
+            encoding: .utf8)
+        #expect(badge.contains(".playerChromePlate()"),
+                "the badge wears no plate at all now")
+    }
+
     /// **A transport this cart does not use has no line at all.**
     ///
     /// Both used to be drawn always. That is right for a transport the

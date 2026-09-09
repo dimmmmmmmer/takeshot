@@ -46,6 +46,91 @@ enum AssistPresets {
     }
 }
 
+/// What a ratio picker is set to: one of its preset rows, or **Custom** — the
+/// row that reveals the typed box under it.
+///
+/// A type rather than a sentinel `Double`, because there is no number that
+/// means "custom": every value in the range is one an operator may legitimately
+/// have typed, so a magic one would be a ratio they could never choose.
+enum AssistRatioChoice: Hashable {
+    case preset(Double)
+    case custom
+}
+
+/// A preset picker, a **Custom** row on the end of it, and the typed box that
+/// appears only while that row is chosen.
+///
+/// The box used to be there whenever the aid was on — a labelled field under
+/// every picker, showing a number the picker was already showing (owner: "тут
+/// пропала опция кастом… точнее поле для нее есть но оно всегда видно – стоит
+/// просто пунктом сделать кастом и чтоб тогда поле для него появлялось"). The
+/// typed value also had no row of its own until it existed, so the way IN to
+/// typing was to notice a box nobody had asked for.
+///
+/// One view for both aids, because they are the same control twice — the same
+/// mistake as writing the picker out twice, which is how the frameline and the
+/// desqueeze came to disagree about what Off meant.
+struct AssistRatioRow: View {
+    let presets: [(label: String, value: Double)]
+    /// The value at which this aid is off — `AssistPresets` states both.
+    let off: Double
+    let range: ClosedRange<Double>
+    let value: Double
+    let apply: (Double) -> Void
+
+    /// The operator CHOSE Custom while the value was still a preset.
+    ///
+    /// Without it the box could never be reached from a preset: picking Custom
+    /// over 1.85 changes no value, so the picker would re-render on 1.85 and
+    /// the row would close behind them.
+    @State private var chose = false
+
+    /// Whether the box is on screen.
+    ///
+    /// **Two ways into Custom, one rule.** The operator can CHOOSE the row, and
+    /// they can arrive already on it — a typed 2.76 restored at launch carries
+    /// no memory of having been chosen, and must still open with its own row
+    /// selected and its own box showing. Static and pure so the suite can ask;
+    /// a `@State` flag is not reachable from a headless render.
+    static func showsBox(chosen: Bool, value: Double,
+                         among presets: [(label: String, value: Double)],
+                         off: Double) -> Bool {
+        chosen || AssistPresets.custom(value, among: presets, off: off) != nil
+    }
+
+    var showsBox: Bool {
+        Self.showsBox(chosen: chose, value: value, among: presets, off: off)
+    }
+
+    private var choice: AssistRatioChoice {
+        showsBox ? .custom : .preset(value)
+    }
+
+    var body: some View {
+        Picker(L("assist_ratio"), selection: Binding(
+            get: { choice },
+            set: { picked in
+                switch picked {
+                case .custom:
+                    chose = true
+                case .preset(let preset):
+                    chose = false
+                    apply(preset)
+                }
+            })) {
+            ForEach(presets, id: \.value) { preset in
+                Text(verbatim: preset.label)
+                    .tag(AssistRatioChoice.preset(preset.value))
+            }
+            Text(L("assist_custom")).tag(AssistRatioChoice.custom)
+        }
+        if showsBox {
+            AssistCustomField(label: L("assist_custom"), range: range,
+                              value: value, apply: apply)
+        }
+    }
+}
+
 /// The "and anything else" half of a preset picker.
 ///
 /// The frameline and the desqueeze both got one, for the same reason and in the

@@ -29,12 +29,11 @@ extension CaptureController {
     /// CDL. `currentCDL` is nil for a .cube look, which is the point — the EDL
     /// carries nine numbers or nothing, never an invented identity.
     func exportSelectsEDL() {
-        let good = takes.filter { $0.rating == .good }
         guard let edl = EDLExporter.selectsEDL(
-            takes: good, title: "\(settings.naming.projectName) selects",
+            takes: goodTakes, title: "\(settings.naming.projectName) selects",
             fps: Int(max(1, playbackFPS).rounded()), cdl: currentCDL)
         else {
-            lastError = L("edl_no_good_takes")
+            lastError = L("export_no_good_takes")
             return
         }
         let name = NamingEngine.sanitize(
@@ -48,17 +47,25 @@ extension CaptureController {
             lastError = L("toast_edl_failed", error.localizedDescription)
         }
     }
-    /// Avid log (ALE): every take, not just the selects.
+    /// Avid log (ALE): the circled takes, like every other item in that menu.
     ///
-    /// The EDL next to it is a cut and carries the circled takes only; this is
-    /// the LOG, and an assistant building a bin needs the rejected takes in it
-    /// too — that a take was marked bad is metadata about the day, not a reason
-    /// to hide it from the Avid. `signalFormat` is the only source of a frame size,
-    /// since a take carries timing but no raster; with no device attached the
-    /// heading says CUSTOM rather than guessing.
+    /// **It used to carry every take that was shot**, on the argument that an
+    /// assistant building a bin wants the rejected ones too — that a take was
+    /// marked bad is metadata about the day rather than grounds for hiding it
+    /// from the Avid. The owner overruled it for all three timeline formats
+    /// ("экспорт тейков – каждый должен экспортить только хорошие; таймлайн со
+    /// всеми мне зачем? просто на хорошие чтоб разные форматы таймлайна
+    /// были"), and the argument survives where it belongs: the SHIFT REPORT is
+    /// the document of the whole day, lists every take good or bad, and is in
+    /// the menu next door. The timeline menu is three spellings of one cut.
+    ///
+    /// `signalFormat` is the only source of a frame size, since a take carries
+    /// timing but no raster; with no device attached the heading says CUSTOM
+    /// rather than guessing.
     func exportALE() {
-        guard let ale = ALEExporter.ale(takes: takes, format: signalFormat) else {
-            lastError = L("ale_no_takes")
+        guard let ale = ALEExporter.ale(takes: goodTakes, format: signalFormat)
+        else {
+            lastError = L("export_no_good_takes")
             return
         }
         let name = NamingEngine.sanitize("\(settings.naming.projectName)_log") + ".ale"
@@ -80,14 +87,12 @@ extension CaptureController {
     /// names that were never on a camera original. This opens with the picture
     /// already on the timeline, in Resolve and in Premiere alike.
     ///
-    /// Every take rather than the selects, for the ALE's reason: this is the
-    /// day, and a take marked bad is metadata about it rather than grounds for
-    /// leaving it out of the assistant's bin.
+    /// The circled takes, for the ALE's reason — see there.
     func exportFCPXML() {
         guard let xml = FCPXMLExporter.timeline(
-            takes: takes, project: settings.naming.projectName,
+            takes: goodTakes, project: settings.naming.projectName,
             format: signalFormat) else {
-            lastError = L("fcpxml_no_takes")
+            lastError = L("export_no_good_takes")
             return
         }
         let name = NamingEngine.sanitize(

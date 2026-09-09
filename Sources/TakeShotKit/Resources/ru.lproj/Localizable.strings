@@ -237,7 +237,6 @@
 "preset_sony_alpha" = "Sony (Legacy)";
 
 /* Name collision warning */
-"name_taken_short" = "ЗАНЯТО";
 "name_taken_help" = "Такое имя уже есть в папке (%@). Смените CLIP/ROLL — перезаписи не будет, добавится суффикс _2";
 
 "preset_canon" = "Canon";
@@ -318,7 +317,7 @@
 "marker_added" = "Маркер %@";
 "marker_needs_clip" = "Маркер ставится на клип из папки записи — у фото нет таймлайна";
 
-"edl_no_good_takes" = "Нет хороших тейков для экспорта";
+"export_no_good_takes" = "Нет хороших тейков для экспорта";
 "edl_saved" = "EDL сохранён: %@";
 
 "pin_reference" = "Закрепить как референс";
@@ -332,14 +331,12 @@
 "export_timeline_help" = "Хорошие дубли — для монтажной";
 "export_ale" = "Лог для Avid (ALE)";
 "export_fcpxml" = "Таймлайн (FCPXML)…";
-"fcpxml_no_takes" = "Нет тейков для таймлайна.";
 "fcpxml_saved" = "Таймлайн сохранён: %@";
 "toast_fcpxml_failed" = "Не удалось сохранить таймлайн: %@";
 "export_report_pdf" = "Отчёт смены (PDF)";
 "export_report_csv" = "Отчёт смены (CSV)";
 "report_no_takes" = "Нет тейков для отчёта";
 "report_saved" = "Отчёт сохранён: %@";
-"ale_no_takes" = "Нет тейков для экспорта";
 "ale_saved" = "ALE сохранён: %@";
 
 "r3d_sdk_unavailable" = "Для воспроизведения R3D нужен R3D SDK от RED";
@@ -1130,7 +1127,6 @@
 "stream_stop" = "Остановить";
 "dailies_position_center" = "По центру";
 "export_group_selects" = "Только хорошие дубли";
-"export_group_all" = "Все дубли";
 "dailies_ink_section" = "Вид";
 "dailies_ink_technical" = "Технические строки";
 "dailies_ink_custom" = "Своя строка";

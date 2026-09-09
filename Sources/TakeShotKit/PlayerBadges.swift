@@ -291,12 +291,16 @@ struct PlayerTopBadgeRow: View {
     /// перенесем вверх правее от таймкода"). One plate for both readings — the
     /// network streams and the hardware output — because they answer one
     /// question between them and the row has no width for two more plates.
+    ///
+    /// **That plate is the badge's own**, not `playerOverlayBadge`'s here: it
+    /// has to disappear with its contents, and whether there ARE contents
+    /// depends on which transports the cart uses and whether a board is
+    /// feeding — two facts this row does not have. Wrapped from here it was
+    /// drawn over nothing (`ViewStreamBadgePlaceTests`).
     private var leftBadges: some View {
         HStack(spacing: 6) {
             PlayerTimecodeBadge()
-            playerOverlayBadge {
-                StreamIndicator(mirrors: controller.mirrors)
-            }
+            StreamIndicator(mirrors: controller.mirrors)
         }
     }
 

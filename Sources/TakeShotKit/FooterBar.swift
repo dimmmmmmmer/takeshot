@@ -13,24 +13,48 @@ import SwiftUI
 struct BottomBarView: View {
     @EnvironmentObject private var controller: CaptureController
 
-    /// Half of the centered REC group, plus a little air. The left-hand group is
-    /// in the same ZStack as the record button and knows nothing about it, so
-    /// without a reserved gap a wide left group slides UNDER the button instead
-    /// of compressing. Pinned against the real group width in ViewFooterTests.
-    static let centerReserve: CGFloat = 60
+    /// Half of the centered REC group, plus the air either side of it.
+    ///
+    /// The groups are in the same ZStack as the record button and know nothing
+    /// about it, so without a reserved gap a group that grows slides UNDER the
+    /// button instead of stopping short of it. Pinned against the real group
+    /// width — plus `centerAir` — in `ViewFooterTests`.
+    static let centerReserve: CGFloat = 64
+    /// What the reserve has to leave over the record group's own half.
+    ///
+    /// It used to be whatever was left of a round 60, and the arithmetic had
+    /// run out: the REC group measures 100pt, so the reserve bought 10pt of
+    /// air — and only the LEFT group ever saw it, because the naming block had
+    /// no reserve at all. Measured at the narrowest window the naming block's
+    /// first caption landed ONE POINT from the grab button (owner: "вот
+    /// видишь там где вписывать имя камеры липнет к реку точнее к кнопкам
+    /// рядом с ним"). Both sides reserve it now, and the number is stated
+    /// rather than left over.
+    static let centerAir: CGFloat = 14
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                HStack(spacing: 8) {
+                // **Both halves reserve the middle, and the halves touch.**
+                //
+                // The 8pt that used to sit between them straddled the centre
+                // line, so it was air the record button was already standing
+                // in — while the naming block, which has no reserve of its
+                // own, spent it reaching further in. Zero here and the reserve
+                // on each side is one statement of the same gap, measured from
+                // the centre where the button actually is.
+                HStack(spacing: 0) {
                     HStack(spacing: 0) {
                         FooterShootingControls()
                         Spacer(minLength: Self.centerReserve)
                     }
                     .frame(maxWidth: .infinity)
 
-                    NamingFieldsView()
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    HStack(spacing: 0) {
+                        Spacer(minLength: Self.centerReserve)
+                        NamingFieldsView()
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 FooterCenterControls()
             }
@@ -46,8 +70,23 @@ struct BottomBarView: View {
 struct FooterShootingControls: View {
     @EnvironmentObject private var controller: CaptureController
 
+    /// **The gap between two icons, and the slack a MENU adds to it.**
+    ///
+    /// The five controls do not agree about their own padding — a menu carries
+    /// a disclosure and about 5pt of trailing space after it that a bare glyph
+    /// button does not — so one spacing produced four different gaps. Measured
+    /// as ink at 12, 17, 18 and 8 points (owner: "подвинь в нав баре внизу
+    /// слева значки покучнее друг к другу, там отступы чет великоваты").
+    ///
+    /// The menus give their slack back and the spacing carries the rhythm, so
+    /// every gap in the row is the same 8-9pt and the row is 26pt narrower
+    /// than it was. `theShootingIconsShareOneRhythm` measures the ink, not
+    /// these numbers: what an operator sees is the distance between glyphs.
+    static let iconSpacing: CGFloat = 2
+    static let menuTrailingSlack: CGFloat = 5
+
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Self.iconSpacing) {
             // The stream badges used to be here. They are beside the timecode
             // now (owner: "в нижнем баре уже и так места нет") — see
             // `PlayerTopBadgeRow`.
@@ -56,7 +95,9 @@ struct FooterShootingControls: View {
             // names live in the tooltips — so the meters are the one thing left
             // that gives up width when the window is narrow (5pt → 3pt bars).
             FooterCodecMenu()
+                .padding(.trailing, -Self.menuTrailingSlack)
             NamingPresetMenu()
+                .padding(.trailing, -Self.menuTrailingSlack)
             FooterMonitorButton(live: controller.live)
             FooterDimButton(live: controller.live)
             if controller.isCapturing {

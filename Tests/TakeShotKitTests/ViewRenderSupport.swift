@@ -501,13 +501,19 @@ enum ViewBudget {
     /// `ContentView` pads the footer by 12 on each side.
     static let footerWidth: CGFloat = mainColumnWidth - 24
     /// The footer's outer HStack splits into two equally flexible halves: the
-    /// utilities on the left, the naming fields on the right.
-    static let footerHalfWidth: CGFloat = footerWidth / 2
-    /// What the footer's left-hand shooting controls actually get: the half,
-    /// minus the bar's own 14pt padding a side and the 8pt between the halves,
-    /// minus the gap `BottomBarView` reserves for the centered record group.
+    /// utilities on the left, the naming fields on the right. Inside the bar's
+    /// own 14pt padding a side, and the halves TOUCH — the 8pt that used to sit
+    /// between them straddled the centre line the record button stands on.
+    static var footerHalfWidth: CGFloat { (footerWidth - 28) / 2 }
+    /// What each side group actually gets: its half, minus the gap
+    /// `BottomBarView` reserves around the centered record group.
+    ///
+    /// **Both** sides now. The naming block used to be measured against the
+    /// bare half, which is the whole distance to the centre line — so the
+    /// budget said it fitted while it was laid out one point from the grab
+    /// button.
     static var footerSideZoneWidth: CGFloat {
-        (footerWidth - 28 - 8) / 2 - BottomBarView.centerReserve
+        footerHalfWidth - BottomBarView.centerReserve
     }
     /// **What a sheet may be tall.**
     ///
