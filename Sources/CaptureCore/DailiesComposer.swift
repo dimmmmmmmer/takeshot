@@ -51,9 +51,12 @@ final class DailiesFrameComposer {
         // Rec.709 curve — and a writer-bound buffer that still claims PQ is
         // the tag mismatch this project has already been bitten by: the
         // encoder colour-converts on it, and the file inherits the claim.
-        if colorimetry.isHDR {
-            ColorTags.tag(frame, preset: colorimetry.displayPreset)
-        }
+        // Always, and the same preset the encode settings state — the two
+        // halves of one claim. A buffer tagged differently from the settings
+        // is the mismatch VideoToolbox colour-converts on, and an untagged one
+        // hands the encoder whatever the decoder attached (or, out of the
+        // scaling pool, nothing at all). See `DailiesEngine.videoSettings`.
+        ColorTags.tag(frame, preset: colorimetry.displayPreset)
         return frame
     }
 

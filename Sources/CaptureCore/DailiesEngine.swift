@@ -174,9 +174,41 @@ public enum DailiesEngine {
                     Int(max(1, frameRate.rounded())),
             ]
         }
-        if colorimetry.isHDR {
-            settings[AVVideoColorPropertiesKey] = ColorTags
-                .videoColorProperties(for: colorimetry.displayPreset)
+        // **Always, not only for an HDR source** (owner: "ток теги 1-1-1
+        // полюбас должны быть").
+        //
+        // Left unwritten, the file took its colour from whatever the decoded
+        // buffer happened to carry — the source's own tags for a frame handed
+        // straight through, and NOTHING for the same footage over 1080p,
+        // because a scaled frame comes out of a pool that carries no colour
+        // attachments. So one take could produce a proxy tagged 709, the same
+        // take in UHD one tagged with nothing at all, and a 601 or Rec.2020
+        // SDR source one tagged with a gamut its codes are no longer on. A
+        // file that does not state its colour is a file every tool guesses
+        // about differently.
+        //
+        // What it states is `displayPreset`: 1-1-1 for everything on Rec.709
+        // primaries, which is every SDR take this app writes and every 709
+        // camera original. A wide-gamut source still says 2020 primaries with
+        // a 709 curve, because that is what its codes ARE — the tone map moves
+        // the curve and cannot move a primary. Saying 709 over Rec.2020 codes
+        // would be the mis-declaration that put a desaturated picture next to
+        // a correct one on the cart once already (`ColorTags.preset(of:)`).
+        // Making that answer honestly 1-1-1 means converting the gamut, which
+        // is a cube and a measurement suite of its own.
+        settings[AVVideoColorPropertiesKey] = ColorTags
+            .videoColorProperties(for: colorimetry.displayPreset)
+        // The sampling aspect, when the raster has one. Reused from the take
+        // writer rather than restated: only the two SD rasters carry one, and
+        // SD is never scaled (`outputSize`), so the source's own aspect is
+        // still the proxy's. Without it a 720×576 daily claims square pixels
+        // and every player draws it 1.25:1 wrong.
+        if let aspect = TakeWriter.pixelAspect(width: Int(size.width),
+                                               height: Int(size.height)) {
+            settings[AVVideoPixelAspectRatioKey] = [
+                AVVideoPixelAspectRatioHorizontalSpacingKey: aspect.horizontal,
+                AVVideoPixelAspectRatioVerticalSpacingKey: aspect.vertical,
+            ]
         }
         return settings
     }

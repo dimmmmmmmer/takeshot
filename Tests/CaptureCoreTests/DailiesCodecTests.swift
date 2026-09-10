@@ -86,10 +86,23 @@ import Testing
             #expect(settings[AVVideoColorPropertiesKey] != nil,
                     "an HDR \(codec.rawValue) daily says nothing about its codes")
         }
+        // …and an SDR source states its colour too, which it did not use to
+        // (owner: "ток теги 1-1-1 полюбас должны быть"). Left unwritten, the
+        // file took whatever the decoded buffer carried — the source's own
+        // tags when a frame passed straight through, and NOTHING when it came
+        // out of the scaling pool.
         let sdr = DailiesEngine.videoSettings(
             size: CGSize(width: 1920, height: 1080), frameRate: 25,
             colorimetry: .sdr, codec: .proResLT)
-        #expect(sdr[AVVideoColorPropertiesKey] == nil)
+        let stated: [String: Any] = try #require(
+            sdr[AVVideoColorPropertiesKey] as? [String: Any],
+            "an SDR daily says nothing about its codes")
+        #expect(stated[AVVideoColorPrimariesKey] as? String
+            == AVVideoColorPrimaries_ITU_R_709_2)
+        #expect(stated[AVVideoTransferFunctionKey] as? String
+            == AVVideoTransferFunction_ITU_R_709_2)
+        #expect(stated[AVVideoYCbCrMatrixKey] as? String
+            == AVVideoYCbCrMatrix_ITU_R_709_2)
     }
 }
 

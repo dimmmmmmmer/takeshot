@@ -198,8 +198,14 @@ struct DailiesToneMapTests {
         let settings: [String: Any] = DailiesEngine.videoSettings(
             size: facts.outputSize, frameRate: 25,
             colorimetry: facts.colorimetry)
-        #expect(settings[AVVideoColorPropertiesKey] == nil,
-                "an SDR daily gained colour properties it never had")
+        // The daily STATES 709 rather than saying nothing — the pixels are
+        // what is untouched here, not the file's claim about them. It used to
+        // carry no colour key at all, which left the answer to whatever the
+        // decoder attached to the buffer (see `videoSettings`).
+        let stated: [String: Any] = try #require(
+            settings[AVVideoColorPropertiesKey] as? [String: Any])
+        #expect(stated[AVVideoColorPrimariesKey] as? String
+            == AVVideoColorPrimaries_ITU_R_709_2)
 
         let composer = DailiesFrameComposer(item: fixture,
                                             burnins: DailiesRig.noBurnins,

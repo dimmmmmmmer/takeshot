@@ -31,14 +31,18 @@ enum DailiesRig {
     static func writeTake(at url: URL, width: Int = 320, height: Int = 180,
                           frames: Int = 25, audioChannels: Int = 0,
                           level: UInt8 = 128,
-                          wireCodes: Bool = false) async throws -> URL {
+                          wireCodes: Bool = false,
+                          slate: SlateMetadata = .empty,
+                          metadata: [String: String] = [:]) async throws -> URL {
         let format = CaptureFormat(width: width, height: height, frameRate: 25,
                                    timecodeFPS: 25, name: "test")
         let writer = try TakeWriter(
             url: url, format: format, codec: .proResProxy,
             startTimecode: startTC,
-            markerMetadata: wireCodes
-                ? [TakeWriter.levelsKey: TakeWriter.wireValue] : [:],
+            markerMetadata: metadata.merging(
+                wireCodes ? [TakeWriter.levelsKey: TakeWriter.wireValue] : [:],
+                uniquingKeysWith: { _, wire in wire }),
+            slate: slate,
             audioChannelCount: audioChannels)
         let picture = TestMedia.grayBuffer(level, width: width, height: height)
         var audioCache: CMAudioFormatDescription?

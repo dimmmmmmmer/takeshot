@@ -56,6 +56,16 @@ already caught four sites there that this command called clean — a
 always the same one the app uses: reduce to Sendable values inside the
 nonisolated scope, or state the isolation the closure was really running in.
 
+**And it does not catch everything in `Sources` either — measured.** A
+`nonisolated static func` returning a struct that holds an `NSImage`, awaited
+from a `Task` on the main actor, compiles clean under this command and is an
+error on CI ("non-sendable result type 'OtherPreview' cannot be sent from
+nonisolated context"). The fix is the one the paragraph below names and the one
+the code beside it was already using: decode in `Task.detached`, reduce to a
+`Sendable` value there, and hop back with `MainActor.run`. When a file already
+has that pattern in it, follow it — this cost a red CI for a case the local
+check calls green.
+
 **It is evidence, not proof.** The SDK is only half of what CI differs by: the
 runner is also on an older Swift, and the compiler is what enforces
 concurrency. Measured on the commit this paragraph was written for — CI (Swift

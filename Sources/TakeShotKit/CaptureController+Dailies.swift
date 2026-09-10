@@ -121,14 +121,28 @@ extension CaptureController {
         }
         dailies.previewStill = nil
         guard let first = urls.first else { return }
-        Task { [weak self] in
+        // **Detached, and the frame comes back in a box.** The shape the
+        // takes panel's own decodes already use (`generateOtherThumbnails`),
+        // and not a decoration: `OtherPreview` holds an `NSImage`, which
+        // predates `Sendable`, so awaiting the decode from the main actor
+        // hands a non-Sendable value across an isolation boundary. THIS
+        // compiler allows it and the CI one refuses — the runner is a second
+        // compiler, and this is what that costs when the pattern beside you is
+        // ignored.
+        Task.detached(priority: .userInitiated) { [weak self] in
             let preview: OtherPreview =
                 await CaptureController.otherThumbnail(for: first)
-            guard let self, generation == self.dailiesPreviewGeneration,
-                  let image = preview.image else { return }
+            guard let image = preview.image else { return }
             var proposed = CGRect(origin: .zero, size: image.size)
-            self.dailies.previewStill = image.cgImage(
-                forProposedRect: &proposed, context: nil, hints: nil)
+            guard let frame = image.cgImage(forProposedRect: &proposed,
+                                            context: nil, hints: nil)
+            else { return }
+            let boxed = UncheckedSendable(frame)
+            await MainActor.run { [weak self] in
+                guard let self,
+                      generation == self.dailiesPreviewGeneration else { return }
+                self.dailies.previewStill = boxed.value
+            }
         }
     }
 

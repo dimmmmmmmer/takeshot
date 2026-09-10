@@ -40,6 +40,15 @@ struct DailiesSourceFacts {
     /// levels key, every foreign clip, and every take from before either tag
     /// existed.
     let levels: [UInt8]?
+    /// The source file's OWN metadata, filtered into the proxy by
+    /// `carriedMetadata`.
+    ///
+    /// The array was already being loaded here to answer the levels question
+    /// and was then thrown away, so every key the take carried — the roll, the
+    /// clip, the scene/shot/take, the description an NLE shows — was lost in
+    /// the proxy (owner: "ну и конечно важно чтоб мета вся возможная из
+    /// исходника сохранялась").
+    let metadata: [AVMetadataItem]
 
     static func probe(item: DailiesItem,
                       burnins: DailiesBurnins) async throws -> DailiesSourceFacts {
@@ -59,6 +68,7 @@ struct DailiesSourceFacts {
         // what curve they are on, and the two compose into one table.
         let metadata: [AVMetadataItem] = (try? await asset.load(.metadata)) ?? []
         let wireCodes = await TakeWriter.carriesWireCodes(metadata)
+
         return DailiesSourceFacts(
             asset: asset, videoTrack: track,
             audioTracks: (try? await asset.tracks(ofType: .audio)) ?? [],
@@ -70,7 +80,8 @@ struct DailiesSourceFacts {
                                                frameRate: frameRate) : nil,
             colorimetry: colorimetry,
             levels: StudioSwing.playbackTable(wireCodes: wireCodes,
-                                              transfer: colorimetry.transfer))
+                                              transfer: colorimetry.transfer),
+            metadata: metadata)
     }
 }
 
@@ -108,6 +119,9 @@ struct DailiesSession {
         let (videoInput, adaptor) = try addVideoInput(facts: facts,
                                                       codec: codec, to: writer)
         let audioInput = audioOutput != nil ? addAudioInput(to: writer) : nil
+        // **The source's own metadata, minus three keys that would be lies.**
+        // Before `startWriting`, which is the only time a writer accepts it.
+        writer.metadata = Self.carriedMetadata(facts.metadata)
         // moov up front: a daily gets dropped into review players and file
         // shares, where a streamable file starts playing before it finishes
         // copying.
@@ -196,6 +210,51 @@ struct DailiesSession {
         input.expectsMediaDataInRealTime = false
         writer.add(input)
         return input
+    }
+
+    /// **What of the source's own metadata travels into the proxy.**
+    ///
+    /// Everything, minus three keys that would be untrue of the file being
+    /// written — a copy is not the same thing as a carry-over:
+    ///
+    /// - `com.takeshot.origin` marks a file as one of THIS app's takes, and
+    ///   the library scan adopts anything carrying it. A daily written into
+    ///   the record folder would join the day's takes and be offered for
+    ///   review, export and another round of dailies.
+    /// - `com.takeshot.levels` says the codes are studio swing and need
+    ///   expanding on playback. The proxy's codes have already been expanded,
+    ///   by `StudioSwing.map` on the way in — copying the key would have every
+    ///   player expand them a second time, which is exactly the double
+    ///   expansion that key exists to prevent.
+    /// - `com.takeshot.lut` says a look is already baked into the pixels, and
+    ///   the player refuses to apply one over it. It has to state what THIS
+    ///   run did, so it is written by the run rather than copied.
+    ///
+    /// Everything else is the take's identity and the camera's own facts —
+    /// roll, clip, scene/shot/take, the frame rate, both description atoms,
+    /// make/model/creation date — and all of it is what an assistant looks for
+    /// when a proxy is the only file in front of them.
+    ///
+    /// **The container decides how much of it arrives, and the writer sorts
+    /// that out itself — measured, not assumed.** A ProRes daily is a `.mov`
+    /// and keeps all of it, QuickTime metadata and user data alike. An
+    /// H.264/HEVC daily is an `.mp4`, which has no QuickTime metadata atom at
+    /// all: every reverse-DNS key is dropped and what survives is the
+    /// description, mapped to ISO user data (`uiso/dscp`) — the scene, shot
+    /// and take as a sentence, which is why a take is written with a pair of
+    /// description atoms in the first place. Nothing here filters by key
+    /// space: handed items it cannot store, the writer drops them and writes
+    /// the file (`theProxysMetadataFollowsItsContainer`), and a filter
+    /// guessing at the same rule would only be a second, worse copy of it.
+    static func carriedMetadata(_ source: [AVMetadataItem]) -> [AVMetadataItem] {
+        let dropped: Set<String> = [TakeWriter.markerKey, TakeWriter.levelsKey,
+                                    TakeWriter.lutKey]
+        return source.filter { item in
+            if let key = item.key as? String, dropped.contains(key) {
+                return false
+            }
+            return true
+        }
     }
 
     static func failure(of writer: AVAssetWriter) -> String {
