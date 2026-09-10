@@ -40,6 +40,29 @@ struct SlateFieldsEditor: View {
     /// The take number as typed. Text rather than Int so an emptied field can
     /// mean "not logged" — a numeric binding has no way to say that.
     @Binding var takeText: String
+    /// The reel, WHEN the file name does not carry it.
+    ///
+    /// The roll is edited in exactly one place, and which place depends on
+    /// what the template does with it: on the file-name row when the name is
+    /// built out of it, here when it is not. A preset like Sony's legacy
+    /// scheme names files `C0001` and takes no roll, so a ROLL box under the
+    /// file name is a box that has nothing to do with the name beside it
+    /// (owner: "в интерфейсе остается текстовый бокс под название ролла").
+    ///
+    /// It cannot simply be dropped: the reel is written into the take's own
+    /// metadata, into the Reel Name column of `takeshot-log.csv` and the ALE,
+    /// into the EDL's reel and onto the slate — and the clip counter RESTARTS
+    /// on it, which under `C{clip}` is the only thing that decides whether the
+    /// next take is C0001 or C0042. The footer field is the only editor of it
+    /// in the whole app, so hiding it without a home would make all of that
+    /// uneditable while every consumer went on writing it.
+    var roll: Binding<String>?
+    /// The roll's arrows, which are NOT the slate's own paging: stepping a
+    /// reel is `CaptureController.stepRoll`, and it restarts the clip counter
+    /// on the way. Passing the same closure the file-name row passes is what
+    /// keeps the two homes of one field the same CONTROL rather than two
+    /// controls that look alike.
+    var onStepRoll: (Int) -> Void = { _ in }
 
     /// The widths, and why they are these. Every field's group is
     /// caption + ‹ + box + ›, and the three of them plus the gaps have to fit
@@ -52,6 +75,9 @@ struct SlateFieldsEditor: View {
     static let shotWidth: CGFloat = 32
     /// Four digits of monospaced text plus the box's own insets.
     static let takeWidth: CGFloat = 36
+    /// Same box the file-name row gives the reel, so the two homes of one
+    /// value are the same size.
+    static let rollWidth: CGFloat = 46
 
     /// What the takes panel's popover sizes its other rows to, so the whole
     /// editor reads as one block rather than a wide slate row over narrow
@@ -67,6 +93,11 @@ struct SlateFieldsEditor: View {
             pagedField(L("slate_take"), field: .take, width: Self.takeWidth,
                        seed: "1", text: $takeText)
                 .help(L("slate_take_help"))
+            if let roll {
+                NamingFieldsView.steppedField(
+                    L("roll_label"), field: .roll, width: Self.rollWidth,
+                    text: roll, onStep: onStepRoll)
+            }
         }
     }
 

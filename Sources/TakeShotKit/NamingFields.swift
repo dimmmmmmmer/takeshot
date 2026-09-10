@@ -126,14 +126,37 @@ struct NamingFieldsView: View {
     /// of the two and sets it.
     static let rowHeight: CGFloat = 38
 
+    /// Whether the file NAME is built out of the reel — which is the whole of
+    /// the question "where is the roll edited".
+    ///
+    /// Stated once, and read by both rows, because the two answers have to be
+    /// exact complements: asked twice it becomes two spellings of one rule,
+    /// and the failure is silent in both directions — a reel with no editor
+    /// anywhere (and a clip counter that restarts on a value nobody can type),
+    /// or two boxes for one value on one screen.
+    static func templateCarriesRoll(_ template: String) -> Bool {
+        template.contains("{roll}") || template.contains("{reel}")
+    }
+
     /// What was shot. NOT gated on the template like the row above: scene, shot
     /// and take describe the work, not the file name, so they are here whether
     /// or not a placeholder uses them.
+    ///
+    /// The ROLL is the exception in both directions, and it is the reason this
+    /// row takes an optional binding at all: it describes the work AND names
+    /// the file, so it lives on whichever row is actually using it — here when
+    /// the template does not (owner: "режим сони легаси для нейминга должен
+    /// быть типа C0001 / а у меня остается поле ролла почему-то"), on the file
+    /// row when it does. Never on both, and never on neither.
     private var slateRow: some View {
-        SlateFieldsEditor(scene: $controller.scene, shot: $controller.shot,
-                          takeText: Binding(
-                            get: { controller.slateTakeFieldText },
-                            set: { controller.commitSlateTakeText($0) }))
+        SlateFieldsEditor(
+            scene: $controller.scene, shot: $controller.shot,
+            takeText: Binding(get: { controller.slateTakeFieldText },
+                              set: { controller.commitSlateTakeText($0) }),
+            roll: Self.templateCarriesRoll(
+                controller.settings.naming.namingTemplate)
+                ? nil : $controller.roll,
+            onStepRoll: { controller.stepRoll($0) })
     }
 
     // MARK: - the two field shapes
@@ -214,12 +237,21 @@ struct NamingFieldsView: View {
 /// and this row used to decide the opposite way for three fields that are not
 /// file-name decoration at all:
 ///
-/// - **ROLL** is the reel. It is written into the take's own metadata
+/// - **ROLL** is the reel, and it is the one field that MOVES rather than
+///   staying or going. It is written into the take's own metadata
 ///   (`TakeWriter.rollKey`), into the Reel Name column of `takeshot-log.csv` and
 ///   the ALE, into the EDL's reel, onto the slate, and it is the key the clip
-///   counter restarts on (`resetClipForRoll`). It had exactly one editor in the
-///   whole app, so choosing the Sony α preset (`C{clip}`) made all of that
-///   uneditable while every one of those consumers went on writing it.
+///   counter restarts on (`resetClipForRoll`) — so it must always have an
+///   editor. It also has nothing to do with a name built without it: under the
+///   Sony α preset (`C{clip}`) the box sat under a file name that could not
+///   contain it, which is what was reported (owner: "режим сони легаси для
+///   нейминга должен быть типа C0001 / а у меня остается поле ролла почему-то"
+///   — and then, when it was read as "drop the reel entirely": "префикс проекта
+///   в сони легаси должен оставаться я имел ввиду что в интерфейсе остается
+///   текстовый бокс под название ролла"). So it is here when the template
+///   names it and on the META row when it does not, through the one rule both
+///   rows read — `NamingFieldsView.templateCarriesRoll`. Exactly one editor,
+///   always, which is what `ViewNamingRowTests` counts.
 /// - **CAM** is the camera letter: the shift report, the still's file name, the
 ///   multicam channel labels, the slate and the remote's camera list all read it.
 /// - **CLIP** is the take number: it goes into the Take column and onto the
@@ -277,10 +309,22 @@ struct NamingFileNameRow: View {
                 text: Binding(get: { controller.settings.naming.cameraLabel },
                               set: { controller.settings.naming.cameraLabel = $0 }),
                 onStep: { controller.stepCamera($0) })
-            NamingFieldsView.steppedField(
-                L("roll_label"), field: .roll, width: 50,
-                text: $controller.roll,
-                onStep: { controller.stepRoll($0) })
+            // **Only when the NAME is built out of it** — the same rule the
+            // postfix follows, and for the same reason. A preset like Sony's
+            // legacy scheme names files `C0001`, so a ROLL box under the file
+            // name is a box with nothing to do with the name beside it (owner:
+            // "в интерфейсе остается текстовый бокс под название ролла").
+            //
+            // It does not vanish from the app: the reel moves to the SLATE
+            // row, which is where "what was shot" lives — see
+            // `SlateFieldsEditor.roll` for everything that still reads it.
+            if NamingFieldsView.templateCarriesRoll(
+                controller.settings.naming.namingTemplate) {
+                NamingFieldsView.steppedField(
+                    L("roll_label"), field: .roll, width: 46,
+                    text: $controller.roll,
+                    onStep: { controller.stepRoll($0) })
+            }
             ClipField()
                 .help(L("clip_help"))
             if uses("{postfix}") {

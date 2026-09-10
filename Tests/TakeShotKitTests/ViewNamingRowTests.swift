@@ -99,6 +99,22 @@ struct ViewNamingRowTests {
                 SlateFieldsEditor(scene: .constant("112A pickup"),
                                   shot: .constant("3B"), takeText: .constant("12"))
             }
+            // The row's WIDEST state, which is not the one above: under a
+            // template that does not name the reel, the roll moves onto this
+            // row (`NamingFieldsView.templateCarriesRoll`) and it has to fit
+            // there too — a fourth field on the row the footer's halves are
+            // balanced against is exactly how the centred REC button stops
+            // being centred.
+            let withRoll = probe.fittingSizes {
+                SlateFieldsEditor(scene: .constant("112A pickup"),
+                                  shot: .constant("3B"), takeText: .constant("12"),
+                                  roll: .constant("A001"))
+            }
+            #expect(withRoll.ru.width <= half,
+                    "the slate row carrying the roll wants \(withRoll.ru.width)pt of \(half)")
+            #expect(withRoll.en.width <= half)
+            #expect(withRoll.en.width > slateRow.en.width,
+                    "the roll binding drew nothing — the row is the same width without it")
 
             #expect(slate.ru.width <= half,
                     "the naming block wants \(slate.ru.width)pt of \(half)")
@@ -183,17 +199,28 @@ struct ViewNamingRowTests {
 
     /// The Sony α preset is `C{clip}` — no `{cam}`, no `{roll}`, no `{postfix}` —
     /// and picking it used to take CAM and ROLL off the screen. `controller.roll`
-    /// has exactly ONE editor in the whole app, so the reel name became
-    /// uneditable while every consumer of it went on working: the take's own
-    /// `com.takeshot.roll` metadata, the Reel Name column of `takeshot-log.csv`
-    /// and the ALE, the EDL's reel, the slate, and the clip counter, which
-    /// RESTARTS on the roll. The same for CAM (the shift report, the still's
-    /// name, the multicam labels) and for CLIP (the Take column).
+    /// has exactly ONE editor on screen, so the reel name became uneditable while
+    /// every consumer of it went on working: the take's own `com.takeshot.roll`
+    /// metadata, the Reel Name column of `takeshot-log.csv` and the ALE, the
+    /// EDL's reel, the slate, and the clip counter, which RESTARTS on the roll.
+    /// The same for CAM (the shift report, the still's name, the multicam
+    /// labels) and for CLIP (the Take column).
     ///
     /// The rule is now the one the slate row below already followed: the template
     /// hides a field only when the file name is the only thing that consumes it.
     /// POSTFIX is the only such field, and it is still hidden — which is what
     /// makes this a rule rather than "show everything".
+    ///
+    /// **ROLL is the exception, and it MOVES rather than being hidden.** It is
+    /// not file-name decoration and it is not only about the file name either,
+    /// so under a template that does not name it, a box under the file name is
+    /// a box with nothing to do with the name beside it (owner: "режим сони
+    /// легаси для нейминга должен быть типа C0001 / а у меня остается поле
+    /// ролла почему-то" — and, when that was first read as "drop the reel":
+    /// "префикс проекта в сони легаси должен оставаться я имел ввиду что в
+    /// интерфейсе остается текстовый бокс под название ролла"). It goes to the
+    /// META row instead, which `theReelHasExactlyOneEditorUnderEveryTemplate`
+    /// is the other half of: what this test sees leave has to arrive there.
     ///
     /// Counted as real AppKit text fields, the way `theFieldInstallsItsFormatter`
     /// does: a field that is not in the tree cannot be typed into, and that is
@@ -220,15 +247,18 @@ struct ViewNamingRowTests {
             let alpha: NamingPreset = try #require(
                 NamingPreset.all.first { $0.key == "preset_sony_alpha" },
                 "the Sony α preset is gone")
-            #expect(alpha.template == "{bare}C{clip}",
-                    "the legacy Sony preset stopped declining the project prefix")
+            #expect(alpha.template == "C{clip}")
             probe.controller.applyNamingPreset(alpha)
 
             let kept: Int = Self.textFieldCount(
                 probe.hosted(NamingFileNameRow()), width: ViewBudget.footerHalfWidth)
             #expect(
-                kept == 3,
-                "the Sony α preset renders \(kept) fields — CAM, ROLL and CLIP are consumed outside the file name")
+                kept == 2,
+                """
+                the Sony α preset renders \(kept) file-name fields — CAM and \
+                CLIP are consumed outside the file name, and ROLL has moved \
+                to the META row
+                """)
 
             // …and the reel really is still consumed under that template, which
             // is why it has to stay editable: the counter restarts on it.
@@ -350,6 +380,95 @@ struct ViewNamingRowTests {
             if let found = firstTextField(in: child) { return found }
         }
         return nil
+    }
+}
+
+/// **Where the reel is edited — a different question from what the file is
+/// called.**
+///
+/// Its own suite rather than another case in `ViewNamingRowTests`, because the
+/// claim spans BOTH of that block's rows and is measured over the block as a
+/// whole.
+@MainActor
+struct ViewReelEditorTests {
+    /// **The reel is editable under every template, and never twice.**
+    ///
+    /// This is the invariant the ROLL field's move is FOR, and it is the one
+    /// that has been broken in both directions inside a week: hidden with the
+    /// Sony α preset (uneditable reel, and a clip counter restarting on a value
+    /// nobody can type), then — reading the report as "drop the reel" — dropped
+    /// from the template's vocabulary altogether. So it is stated as a count
+    /// over the WHOLE naming block rather than as "the file row shows it":
+    /// switch the block to each pane in turn and count the boxes actually
+    /// holding the reel.
+    ///
+    /// A sentinel value rather than a position, because the claim is about the
+    /// editor rather than about the layout — a box holding the reel is one an
+    /// operator can type the reel into, wherever the row puts it.
+    @Test func theReelHasExactlyOneEditorUnderEveryTemplate() async throws {
+        try await ViewProbe.run { probe in
+            let sentinel = "R0T7"
+            probe.controller.roll = sentinel
+            try #require(probe.controller.roll == sentinel,
+                         "the reel did not take the sentinel, so nothing below counts")
+
+            /// Which panes of the block hold an editor with the reel in it.
+            @MainActor func panesEditingTheReel() -> [NamingPane] {
+                NamingPane.allCases.filter { pane in
+                    probe.controller.namingPane = pane
+                    let host = NSHostingView(rootView: AnyView(
+                        probe.hosted(NamingFieldsView())))
+                    host.frame = CGRect(x: 0, y: 0,
+                                        width: ViewBudget.footerHalfWidth,
+                                        height: 200)
+                    host.layoutSubtreeIfNeeded()
+                    return Self.countTextFields(in: host, holding: sentinel) > 0
+                }
+            }
+
+            probe.controller.settings.naming.namingTemplate =
+                "{prefix}_{cam}{roll}C{clip}_{postfix}"
+            #expect(panesEditingTheReel() == [.file],
+                    "a template built out of the reel edits it somewhere other than the file row")
+
+            let alpha: NamingPreset = try #require(
+                NamingPreset.all.first { $0.key == "preset_sony_alpha" },
+                "the Sony α preset is gone")
+            probe.controller.applyNamingPreset(alpha)
+            #expect(panesEditingTheReel() == [.meta],
+                    """
+                    under \(alpha.template) the reel is edited in \
+                    \(panesEditingTheReel()) — it must be on the META row \
+                    and only there
+                    """)
+
+            // …and the two rows really do read ONE rule, so they cannot both
+            // answer yes or both answer no for some third template.
+            for template in ["{prefix}_{cam}{reel}C{clip}", "C{clip}_{tc}",
+                             "{roll}", "{prefix}_{date}"] {
+                probe.controller.settings.naming.namingTemplate = template
+                let panes: [NamingPane] = panesEditingTheReel()
+                let expected: [NamingPane] =
+                    NamingFieldsView.templateCarriesRoll(template)
+                    ? [NamingPane.file] : [NamingPane.meta]
+                #expect(panes.count == 1,
+                        "\(template) puts the reel's editor in \(panes)")
+                #expect(panes == expected,
+                        "\(template) edits the reel in \(panes), against its own rule")
+            }
+        }
+    }
+
+    /// How many of the view's text fields are holding `value` — the way to ask
+    /// "is THIS value editable on screen" without naming a position.
+    private static func countTextFields(in view: NSView,
+                                        holding value: String) -> Int {
+        if let field = view as? NSTextField {
+            return field.stringValue == value ? 1 : 0
+        }
+        return view.subviews.reduce(0) {
+            $0 + countTextFields(in: $1, holding: value)
+        }
     }
 }
 

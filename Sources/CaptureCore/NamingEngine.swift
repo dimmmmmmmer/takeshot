@@ -45,13 +45,7 @@ public struct NamingEngine: Sendable {
     /// names ({project}/{reel}/{take}/{scene}) still work as aliases.
     public static let placeholders = ["{prefix}", "{cam}", "{roll}", "{clip}",
                                       "{postfix}", "{tc}", "{date}", "{yymmdd}",
-                                      "{mmdd}", "{hhmm}", "{hhmmss}",
-                                      // Renders as NOTHING, and says the
-                                      // project name is deliberately not on
-                                      // this name — see `fileName(for:)`. It
-                                      // is in this list so a preset carrying
-                                      // it is not read as a typo.
-                                      "{bare}"]
+                                      "{mmdd}", "{hhmm}", "{hhmmss}"]
 
     private static func formatted(_ date: Date, _ format: String) -> String {
         let formatter = DateFormatter()
@@ -107,19 +101,9 @@ public struct NamingEngine: Sendable {
             "{postfix}": context.postfix,
             "{tc}": context.timecode?.fileNameSafe ?? "",
         ]
-        // **The project name prefixes the file, unless the template says not
-        // to.**
-        //
-        // Placing `{prefix}`/`{project}` yourself is one way to say it. The
-        // other is `{bare}`, and it exists for the presets whose whole job is
-        // to reproduce a camera's OWN file name: Sony's legacy scheme is
-        // `C0001` and nothing else, and an operator who picks it to match
-        // camera originals got `Project_C0001` the moment the project had a
-        // name (owner: "режим сони легаси для нейминга должен быть типа
-        // C0001"). The marker renders as nothing — it is stripped with every
-        // other unknown placeholder below — so it costs the name no
-        // characters and needs no new settings field.
-        if !context.project.isEmpty, !template.contains("{bare}"),
+        // the project name always prefixes the file, for any vendor preset —
+        // unless the template already places {prefix}/{project} itself
+        if !context.project.isEmpty,
            !template.contains("{prefix}"), !template.contains("{project}") {
             result = "{prefix}_" + result
         }

@@ -29,13 +29,8 @@ struct NamingPreset: Identifiable {
         NamingPreset(key: "preset_sony_venice",
                      template: "{cam}{roll}C{clip}_{yymmdd}{postfix}",
                      clipDigits: 3, rollDigits: 3),
-        // `{bare}` and not just `C{clip}`: the engine prefixes the project
-        // name to any template that does not place it, and this preset exists
-        // to reproduce the camera's OWN file name — `Project_C0001` is not one
-        // (owner: "режим сони легаси для нейминга должен быть типа C0001").
-        // The marker renders as nothing; see `NamingEngine.name`.
         NamingPreset(key: "preset_sony_alpha",
-                     template: "{bare}C{clip}",
+                     template: "C{clip}",
                      clipDigits: 4, rollDigits: nil),
         NamingPreset(key: "preset_bmd",
                      template: "{cam}{roll}_{mmdd}{hhmm}_C{clip}",
