@@ -74,6 +74,21 @@ public struct RecDetectorConfig: Equatable, Sendable {
     }
 }
 
+extension RecDetectorConfig {
+    /// **The detector's switches, out of the operator's settings.**
+    ///
+    /// One factory, because the two sites that build a detector — the
+    /// pipeline's `init` and its `update(config:)` rebuild — were
+    /// byte-identical constructions of the same three fields, and that is how
+    /// the timecode switch came to be wrong in both at once (see
+    /// `RecDetectionMode.timecodeRunModes`).
+    public init(capture: CaptureSignalSettings) {
+        self.init(startDebounceFrames: capture.startDebounceFrames,
+                  stopDebounceFrames: capture.stopDebounceFrames,
+                  vancOnly: !capture.detectionMode.runsTimecodeMachine)
+    }
+}
+
 /// Detects the camera's REC state from running timecode (universal, camera in
 /// Rec Run), from VANC triggers (take priority when recognized), and from a
 /// record indicator the operator taught on the picture (`+Visual`).

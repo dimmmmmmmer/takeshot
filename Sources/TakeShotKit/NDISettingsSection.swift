@@ -36,10 +36,9 @@ struct NDISettingsSection: View {
                 set: { controller.settings.ndi.enabled = $0 ? true : nil }))
             if isOn {
                 nameRow
-                // Start/Stop for this transport — the checkbox
-                // above says the cart uses it, this sends.
-                StreamRunRow(mirrors: controller.mirrors,
-                             kind: .ndi)
+                // Start/Stop is ON the status row — see `SRTStatusRow` for
+                // why, and `StreamRunRow` for what the button is.
+                //
                 // Its own view because the state lives on `mirrors`, a nested
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of
@@ -99,7 +98,15 @@ struct NDIStatusRow: View {
 
     var body: some View {
         LabeledContent(L("ndi_status")) {
-            VStack(alignment: .trailing, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                reading
+                StreamRunRow(mirrors: mirrors, kind: .ndi)
+            }
+        }
+    }
+
+    private var reading: some View {
+        VStack(alignment: .trailing, spacing: 4) {
                 switch mirrors.ndiState {
                 case .sending:
                     // With the count, which the poll has always known: "one
@@ -154,7 +161,6 @@ struct NDIStatusRow: View {
                         .foregroundStyle(.orange)
                         .help(L("ndi_picture_only_help"))
                 }
-            }
         }
     }
 

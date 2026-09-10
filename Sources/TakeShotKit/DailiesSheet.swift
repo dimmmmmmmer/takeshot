@@ -223,40 +223,68 @@ struct DailiesBurninSection: View {
                             at: $model.clipNamePosition)
                     burnRow(L("dailies_burn_project"), on: $model.burnProject,
                             at: $model.projectPosition)
-                }
-                .frame(width: Self.columnWidth)
-                VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
-                    // The date has a place of its own. It used to be joined
-                    // onto the project line — four corners could not hold five
-                    // facts — and that stopped being true when every line got
-                    // a picker, leaving the date as the only fact that could
-                    // not be moved and no way to say why (owner: "не оч
-                    // понятно почему у рекординг дейт нельзя выбрать
+                    // **The date is the app's own line too**, so it belongs on
+                    // this side (owner: "перенесем рекординг дейт в левый
+                    // столбик, чтоб аппеаренс не скрывался а лежал прям под
+                    // кастом тайтлом – уравновесим столбики"). Four rows here
+                    // against the custom line plus the appearance dials there
+                    // is what makes the two columns the same height.
+                    //
+                    // It has a place of its own at all because it used to be
+                    // joined onto the project line — four corners could not
+                    // hold five facts — and that stopped being true when every
+                    // line got a picker, leaving the date as the only fact
+                    // that could not be moved and no way to say why (owner:
+                    // "не оч понятно почему у рекординг дейт нельзя выбрать
                     // положение").
                     burnRow(L("dailies_burn_date"), on: $model.burnDate,
                             at: $model.datePosition)
-                    // The custom line's own checkbox, so switching it off does
-                    // not mean deleting what was written (owner: "не хватает
-                    // как будто галочки у кастом тайтла").
-                    burnRow(L("dailies_custom_placeholder"),
-                            on: $model.burnCustom, at: $model.customPosition)
-                    // …and its text under it. Filtered rather than plain: it
-                    // is burned into a frame, not into a file name, but a
-                    // control that silently rewrites what was typed is the
-                    // thing `NameTextField` exists to prevent — here it is
-                    // only the placeholder and the alignment that differ.
-                    TextField(L("dailies_custom_hint"), text: $model.customText)
-                        .textFieldStyle(.roundedBorder)
-                        // disabled(exception): about THIS row's own checkbox
-                        // rather than about app state, exactly like the place
-                        // pickers in `burnRow` — there is nothing to type into
-                        // a line that is switched off. The app-state rule (a
-                        // run is going) is named once for the whole section.
-                        .disabled(!model.burnCustom)
+                }
+                .frame(width: Self.columnWidth)
+                VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
+                    // **The box IS the label** (owner: "тут вместо
+                    // кастомлайна давай сразу бокс для подписи и поставим").
+                    // The row used to read "Custom line" beside a checkbox
+                    // with the field on a line of its own underneath — two
+                    // rows to say one thing, and the words "Custom line" said
+                    // nothing the empty box did not. The checkbox arms it, the
+                    // box is what goes on the frame, and the place picker sits
+                    // where every other line's does.
+                    HStack(spacing: OffloadChrome.rowSpacing) {
+                        Toggle("", isOn: $model.burnCustom)
+                            .labelsHidden()
+                            .accessibilityLabel(L("dailies_custom_placeholder"))
+                        // Filtered rather than plain: it is burned into a
+                        // frame, not into a file name, but a control that
+                        // silently rewrites what was typed is the thing
+                        // `NameTextField` exists to prevent — here it is only
+                        // the placeholder and the alignment that differ.
+                        TextField(L("dailies_custom_hint"), text: $model.customText)
+                            .textFieldStyle(.roundedBorder)
+                            // disabled(exception): about THIS row's own
+                            // checkbox rather than about app state, exactly
+                            // like the place pickers in `burnRow` — there is
+                            // nothing to type into a line that is switched
+                            // off. The app-state rule (a run is going) is
+                            // named once for the whole section.
+                            .disabled(!model.burnCustom)
+                        positionPicker(at: $model.customPosition)
+                            // disabled(exception): per-ROW, about this row's
+                            // own checkbox — see `burnRow`, which states the
+                            // same rule for the four lines above.
+                            .disabled(!model.burnCustom)
+                    }
+                    // **Open, not folded away.** It was a `DisclosureGroup`,
+                    // which is a second dropdown in a face that already has
+                    // five, and it hid the two dials most likely to be wanted
+                    // after a place is chosen. The date moving left is what
+                    // made room for it (owner: "чтоб аппеаренс не скрывался а
+                    // лежал прям под кастом тайтлом… избавимся от лишнего
+                    // выпадающего списка, будет аккуратнее").
+                    DailiesInkRows(model: model)
                 }
                 .frame(width: Self.columnWidth)
             }
-            DailiesInkRows(model: model)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .toggleStyle(.checkbox)
@@ -404,7 +432,13 @@ struct DailiesBurninPreview: View {
     private var texts: DailiesOverlay.Texts {
         model.burnins.overlayTexts(for: DailiesItem(
             source: URL(fileURLWithPath: "/"), outputName: "",
-            clipName: "A001C001", projectLine: "PROJECT · A001",
+            // The project line is the project NAME and nothing else — the
+            // roll is in the file's own name and was taken off this line
+            // (owner: "из места где проект убери подпись ролла"). The sample
+            // still carried it, so the preview promised a format the burn
+            // does not produce (owner: "проджект все еще почему то у себя
+            // ролл пишет через точку").
+            clipName: "A001C001", projectLine: "PROJECT",
             dateText: "12.07.26"))
     }
 }
@@ -629,16 +663,15 @@ struct DailiesInkRows: View {
     @ObservedObject var model: DailiesQueueModel
 
     var body: some View {
-        DisclosureGroup(L("dailies_ink_section")) {
-            VStack(alignment: .leading, spacing: OffloadChrome.tightSpacing) {
-                row(L("dailies_ink_technical"), ink: Binding(
-                    get: { model.ink }, set: { model.ink = $0 }))
-                row(L("dailies_ink_custom"), ink: Binding(
-                    get: { model.customInk }, set: { model.customInk = $0 }))
-            }
-            .padding(.top, 2)
+        VStack(alignment: .leading, spacing: OffloadChrome.tightSpacing) {
+            Text(L("dailies_ink_section"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            row(L("dailies_ink_technical"), ink: Binding(
+                get: { model.ink }, set: { model.ink = $0 }))
+            row(L("dailies_ink_custom"), ink: Binding(
+                get: { model.customInk }, set: { model.customInk = $0 }))
         }
-        .font(.callout)
     }
 
     private func row(_ title: String, ink: Binding<DailiesInk>) -> some View {

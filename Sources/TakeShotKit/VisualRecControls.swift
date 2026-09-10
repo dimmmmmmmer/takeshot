@@ -57,17 +57,6 @@ struct VisualRecRows: View {
         // No switch of its own: the mode picker above IS the switch
         // (see `RecDetectionMode.visual`).
         if isExpanded {
-            // **What the mode DOES, said once, where it is chosen.** The
-            // sentence was written and then stranded: it belonged to a
-            // standalone switch that became an option in the mode picker, and
-            // a picker with five options cannot carry a tooltip per option. It
-            // matters more than most hints because this mode has to be TAUGHT
-            // before it can do anything, and an operator who does not know
-            // that reads the disabled state as the feature being broken.
-            Text(L("visual_rec_hint"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             VisualRecTeachRow()
             VisualRecSliderRow(
                 label: L("visual_rec_width"),
@@ -97,15 +86,12 @@ struct VisualRecRows: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+            // Red when the teaching will not work — see
+            // `visualRecStatusIsWarning`.
             Text(controller.visualRecStatus)
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // The one thing nobody may be left guessing about: this box is
-            // measured and never drawn into anything that is kept.
-            Text(L("visual_rec_analysis_only"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(controller.visualRecStatusIsWarning
+                                 ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -179,11 +165,21 @@ struct VisualRecSliderRow: View {
     let range: ClosedRange<Double>
     let readout: String
 
+    /// **The label's own column.**
+    ///
+    /// Without it the slider starts wherever the words end, so two rows whose
+    /// labels are different lengths — "Width" and "Height" — put their tracks
+    /// at different places and the pair reads as crooked (owner: "почему эти
+    /// полоски не на одном уровне по вертикали?"). Held against the longest
+    /// label in both languages by `theSliderRowsLineUpInBothLanguages`.
+    static let labelWidth: CGFloat = 58
+
     var body: some View {
         HStack(spacing: 6) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .frame(width: Self.labelWidth, alignment: .leading)
             Slider(value: $value, in: range)
                 .controlSize(.mini)
             Text(verbatim: readout)

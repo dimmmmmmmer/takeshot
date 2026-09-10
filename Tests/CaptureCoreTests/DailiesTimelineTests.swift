@@ -116,6 +116,12 @@ struct DailiesTimelineTests {
     @Test func theDateIsItsOwnStripStackedUnderTheProjectLine() throws {
         var burnins = DailiesBurnins()
         burnins.date = true
+        // Pointed at the same corner ON PURPOSE: the defaults no longer put
+        // them together (the project line is across the top now — see
+        // `DailiesBurnins.projectPosition`), and what this test is about is
+        // what happens when two strips ARE aimed at one corner.
+        burnins.projectPosition = .bottomRight
+        burnins.datePosition = .bottomRight
         let texts = burnins.overlayTexts(for: item)
         #expect(texts.project == "UnitFilm · A001")
         #expect(texts.date == "2026-08-02")
@@ -142,6 +148,7 @@ struct DailiesTimelineTests {
         var burnins = DailiesBurnins()
         burnins.date = true
         burnins.datePosition = .topRight
+        burnins.projectPosition = .bottomRight
         let texts = burnins.overlayTexts(for: item)
         let overlay = DailiesOverlay(size: CGSize(width: 1920, height: 1080),
                                      texts: texts)
@@ -172,8 +179,11 @@ struct DailiesTimelineTests {
         #expect(texts.custom == "FOR REVIEW")
     }
 
-    /// The layout puts each enabled strip in its own corner, inside the frame.
-    @Test func theOverlayLayoutIsTheClassicDailiesArrangement() throws {
+    /// **The arrangement a daily opens with**, which is the owner's own: the
+    /// clock bottom-left, the clip name bottom-right, the project across the
+    /// top, a custom line top-left when there is one. Every strip in its own
+    /// place and every one of them fully inside the frame.
+    @Test func theOverlayLayoutIsTheArrangementItOpensWith() throws {
         var burnins = DailiesBurnins()
         burnins.customText = "FOR REVIEW"
         let size = CGSize(width: 1920, height: 1080)
@@ -183,14 +193,16 @@ struct DailiesTimelineTests {
         let name = try #require(overlay.layout.clipName)
         let project = try #require(overlay.layout.project)
         let custom = try #require(overlay.layout.custom)
-        // TC top-center, custom top-left, name bottom-left, project
-        // bottom-right — and every strip fully inside the frame.
-        #expect(abs(tc.midX - size.width / 2) < 2)
-        #expect(tc.minY < size.height / 4)
-        #expect(custom.minX < size.width / 4 && custom.minY < size.height / 4)
-        #expect(name.minX < size.width / 4 && name.maxY > size.height * 3 / 4)
-        #expect(project.maxX > size.width * 3 / 4
-            && project.maxY > size.height * 3 / 4)
+        #expect(tc.minX < size.width / 4 && tc.maxY > size.height * 3 / 4,
+                "the clock is not bottom-left: \(tc)")
+        #expect(name.maxX > size.width * 3 / 4
+            && name.maxY > size.height * 3 / 4,
+                "the clip name is not bottom-right: \(name)")
+        #expect(abs(project.midX - size.width / 2) < 2
+            && project.minY < size.height / 4,
+                "the project line is not across the top: \(project)")
+        #expect(custom.minX < size.width / 4 && custom.minY < size.height / 4,
+                "the custom line is not top-left: \(custom)")
         for rect in [tc, name, project, custom] {
             #expect(CGRect(origin: .zero, size: size).contains(rect))
         }

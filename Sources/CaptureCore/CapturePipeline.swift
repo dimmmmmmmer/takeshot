@@ -407,9 +407,7 @@ public final class CapturePipeline: @unchecked Sendable {
     public init(config: Config) {
         self.config = config
         self.detector = RecDetector(config: RecDetectorConfig(
-            startDebounceFrames: config.settings.capture.startDebounceFrames,
-            stopDebounceFrames: config.settings.capture.stopDebounceFrames,
-            vancOnly: config.settings.capture.detectionMode == .vanc))
+            capture: config.settings.capture))
     }
 
     // MARK: - ingress backpressure (see +Input)

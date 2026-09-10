@@ -197,34 +197,28 @@ struct ComparePinControls: View {
         // The UNPIN stays unconditional, one line down: a reference pinned in
         // playback outlives the mode switch that pinning performs, so the way
         // out has to exist in the mode the pin drops you into.
-        // **The pin says whether there is already one.**
+        // **One pin at a time.**
         //
-        // It drew the same hollow glyph whatever the state, so on the playback
-        // page a reference that was already pinned offered an identical press
-        // that looked like it did nothing — and that press also throws the
-        // viewer back to record, so it read as a control with a mind of its
-        // own (owner: "запиненый реф на странице плейбека снова можно
-        // запинить. путает это").
+        // The button used to stay whatever the state, on the argument that
+        // scrubbing to a better frame and pinning THAT is the ordinary way to
+        // change a reference. Drawing it differently over an existing pin was
+        // not enough — the owner read a lit pin beside a lit unpin as the app
+        // not knowing its own mind, twice ("запиненый реф на странице плейбека
+        // снова можно запинить. путает это"; "вот у меня уже запинен референс
+        // и все равно белая кнопка пина горит").
         //
-        // The press is still worth having: scrubbing to a better frame and
-        // pinning THAT is the ordinary way to change a reference. What was
-        // missing is that the button never said which of the two things it was
-        // about to do, so now it does — filled and accented over a reference
-        // that exists, and its tooltip says "replace" rather than "pin".
-        if controller.isReviewingSingleClip {
-            let reading = ComparePinReading.reading(
-                pinned: controller.referencePinned)
+        // So the pair is a state, not two offers: pin while there is none,
+        // unpin while there is. Replacing one costs a second press, which is
+        // the price of a control that says what it is.
+        if controller.isReviewingSingleClip, !controller.referencePinned {
             Button {
                 controller.pinReferenceFromCurrentFrame()
             } label: {
-                Image(systemName: reading.symbol)
+                Image(systemName: ComparePinReading.reading(pinned: false).symbol)
                     .font(.system(size: 11))
-                    .foregroundStyle(controller.referencePinned
-                                     ? AnyShapeStyle(controller.accentColor)
-                                     : AnyShapeStyle(.primary))
             }
             .buttonStyle(.plain)
-            .controlHelp(L(reading.helpKey))
+            .controlHelp(L(ComparePinReading.reading(pinned: false).helpKey))
         }
         if controller.referencePinned {
             Button {

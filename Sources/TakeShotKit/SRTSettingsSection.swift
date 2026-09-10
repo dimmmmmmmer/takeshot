@@ -39,11 +39,14 @@ struct SRTSettingsSection: View {
                 addressRow
                 bitrateRow
                 passphraseRow
-                // Start/Stop for this transport — the checkbox
-                // above says the cart uses it, this sends.
-                StreamRunRow(mirrors: controller.mirrors,
-                             kind: .srt)
                 SRTEncoderRows(controller: controller)
+                // **Start sits ON the status row**, which is the row that
+                // says whether anything is going out. It was a row of its own
+                // holding one button against the right margin, and read as a
+                // stray (owner: "не нравится что у обоих источников кнопка
+                // старт как-то несуразно выглядит сбоку отдельной строчкой").
+                // A control belongs beside the reading it changes.
+                //
                 // Its own view because the state lives on `mirrors`, a nested
                 // observable — this is the `live` pattern: the row that shows a
                 // value observes the object that publishes it, so the rest of the
@@ -128,6 +131,7 @@ struct SRTSettingsSection: View {
                 format: .number.precision(.fractionLength(0...1)))
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
+                .controlSize(.small)
                 .frame(width: Self.numberWidth)
         }
     }
@@ -141,6 +145,9 @@ struct SRTSettingsSection: View {
                 set: { controller.settings.srt.passphrase =
                     $0.isEmpty ? nil : $0 }))
                 .textFieldStyle(.roundedBorder)
+                // the same height as the address above it and the bitrate
+                // between them — see `SRTAddressField.fontSize`
+                .controlSize(.small)
                 .frame(width: 180)
         }
     }
@@ -163,26 +170,34 @@ struct SRTStatusRow: View {
 
     var body: some View {
         LabeledContent(L("srt_status")) {
-            VStack(alignment: .trailing, spacing: 4) {
-                switch mirrors.srtState {
-                case .sending:
-                    Text(L("srt_sending"))
-                    endpointText
-                case .starting:
-                    Text(L("srt_starting")).foregroundStyle(.secondary)
-                    endpointText
-                case .off:
-                    Text(L("srt_not_sending")).foregroundStyle(.secondary)
-                case .reconnecting(let reason):
-                    Text(L("srt_reconnecting")).foregroundStyle(.secondary)
-                    detail(reason)
-                case .unavailable(let reason):
-                    Text(L("srt_unavailable")).foregroundStyle(.secondary)
-                    detail(reason.localizedText)
-                case .failed(let reason):
-                    Text(L("srt_failed_short")).foregroundStyle(.secondary)
-                    detail(reason)
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                reading
+                // The control beside the reading it changes — see `StreamRunRow`.
+                StreamRunRow(mirrors: mirrors, kind: .srt)
+            }
+        }
+    }
+
+    private var reading: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            switch mirrors.srtState {
+            case .sending:
+                Text(L("srt_sending"))
+                endpointText
+            case .starting:
+                Text(L("srt_starting")).foregroundStyle(.secondary)
+                endpointText
+            case .off:
+                Text(L("srt_not_sending")).foregroundStyle(.secondary)
+            case .reconnecting(let reason):
+                Text(L("srt_reconnecting")).foregroundStyle(.secondary)
+                detail(reason)
+            case .unavailable(let reason):
+                Text(L("srt_unavailable")).foregroundStyle(.secondary)
+                detail(reason.localizedText)
+            case .failed(let reason):
+                Text(L("srt_failed_short")).foregroundStyle(.secondary)
+                detail(reason)
             }
         }
     }

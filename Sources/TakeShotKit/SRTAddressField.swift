@@ -29,7 +29,15 @@ struct SRTAddressField: View {
     var body: some View {
         TextField("", text: $text)
             .textFieldStyle(.roundedBorder)
-            .font(.system(.body, design: .monospaced))
+            // **The row's own height, not the font's.** A monospaced `.body`
+            // is taller than the control font every other row in this pane
+            // uses, so the address and the passphrase stood a third taller
+            // than the bitrate beside them and the section read as if it had
+            // gaps in it (owner: "смотри сколько высоты занимает строчка
+            // адреса и пустая пассфрейза, почему так?"). A stated size and a
+            // small control put all three rows on one height.
+            .font(.system(size: Self.fontSize, design: .monospaced))
+            .controlSize(.small)
             .frame(width: Self.width)
             .focused($editing)
             .onSubmit(commit)
@@ -46,6 +54,9 @@ struct SRTAddressField: View {
     /// Wide enough for `srt://192.168.1.119:8890` and no wider: a stream ID is
     /// forty characters of hex and no field on this pane could hold one.
     static let width: CGFloat = 220
+    /// Small enough to sit on the same row height as the numeric fields above
+    /// and below it — see the field's own note.
+    static let fontSize: CGFloat = 11
 
     private func sync() {
         text = settings.srt.addressURL
@@ -56,6 +67,22 @@ struct SRTAddressField: View {
         guard text != written else { return }
         defer { sync() }
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // **Emptying the field really empties it.**
+        //
+        // Clearing the text used to clear the HOST alone, and `addressURL`
+        // rebuilt a line out of everything left behind it — the port, the
+        // mode, the stream id — so the box refilled itself the moment focus
+        // left and the address could not be cleared at all (owner: "кстати
+        // очистить строчку фактически не удается"). The field holds the whole
+        // link, so emptying it is emptying the link.
+        guard !typed.isEmpty else {
+            settings.srt.address = nil
+            settings.srt.port = nil
+            settings.srt.role = nil
+            settings.srt.latencyMs = nil
+            settings.srt.streamID = nil
+            return
+        }
         guard let parsed = SRTAddress.parse(typed) else {
             // Nothing usable in it: the address is cleared rather than left
             // holding the last good one, so the status row says "no address"

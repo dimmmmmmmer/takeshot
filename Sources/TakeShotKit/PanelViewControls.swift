@@ -30,8 +30,17 @@ enum PanelChrome {
     /// control to the operator's eye, the same reason `PanelViewControls`
     /// exists at all. `theFolderButtonClearsTheHeaderBand` measures the box
     /// against the row it sits in.
-    static let folderIconSize: CGFloat = 10
-    static let folderButtonSide: CGFloat = 12
+    static let folderIconSize: CGFloat = 11
+    /// **The plate, drawn rather than inherited.**
+    ///
+    /// A bordered button was the obvious way to get a plate and the wrong one:
+    /// AppKit adds far more chrome across than down — measured at `.mini`, 16
+    /// points wide against 2 tall — so a square label came out a 28×18
+    /// lozenge, and the only way to square it was a plate too big for the
+    /// header band (owner: "вот эти иконки папочек по высоте можно по подложке
+    /// чуть больше сделать чтоб квадратными смотрелись"). Drawn here, the
+    /// number IS the plate.
+    static let folderButtonSide: CGFloat = 20
     /// What the header row is padded by, top and bottom — the band the button
     /// has to fit inside with air to spare.
     static let headerVerticalPadding: CGFloat = 6
@@ -55,15 +64,17 @@ struct PanelFolderButton: View {
     let open: () -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 5)
         Button(action: open) {
             Image(systemName: "folder")
                 .font(.system(size: PanelChrome.folderIconSize))
                 .frame(width: PanelChrome.folderButtonSide,
                        height: PanelChrome.folderButtonSide)
+                .background(.quaternary, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(0.12)))
+                .contentShape(shape)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.mini)
-        .fixedSize()
+        .buttonStyle(.plain)
         .help(L("open_folder"))
     }
 }

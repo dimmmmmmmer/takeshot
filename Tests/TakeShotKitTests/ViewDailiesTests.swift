@@ -192,14 +192,14 @@ import Testing
         }
     }
 
-    /// **The sheet still fits with the appearance dials open.**
+    /// **The sheet fits the window, every row on it.**
     ///
-    /// A `DisclosureGroup` cannot be expanded from a render test — the state is
-    /// its own — so the open height is measured as the closed sheet plus the
-    /// rows it reveals. That is an approximation in one direction only: the
-    /// real thing also loses the collapsed row's own height, so a pass here is
-    /// a pass there.
-    @Test func theSheetFitsWithTheAppearanceDialsOpen() async throws {
+    /// It used to be measured as "the closed sheet plus the rows the
+    /// disclosure would reveal", because a `DisclosureGroup` cannot be opened
+    /// from a render test. There is no disclosure any more — the appearance
+    /// dials are on the face (owner: "избавимся от лишнего выпадающего
+    /// списка") — so this measures the thing itself.
+    @Test func theSheetFitsTheWindowWithEveryRowOnIt() async throws {
         try await ViewProbe.run { probe in
             let model = probe.controller.dailies
             self.seed(model, controller: probe.controller, root: probe.root)
@@ -209,18 +209,12 @@ import Testing
             let footer = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
                 DailiesSheetFooter(model: model) {}
             }
-            let dials = probe.sizes(
-                proposedWidth: DailiesBurninSection.columnWidth) {
-                probe.hosted(DailiesInkRows(model: model))
-            }
-            for language in ["en", "ru"] {
-                let closed = language == "en"
-                    ? content.en.height + footer.en.height
-                    : content.ru.height + footer.ru.height
-                let open = closed + Self.footerChrome
-                    + (language == "en" ? dials.en.height : dials.ru.height)
-                #expect(open <= ViewBudget.sheetHeight,
-                        Comment(rawValue: "\(language) open needs \(open)pt of \(ViewBudget.sheetHeight)"))
+            for (language, height) in [
+                ("en", content.en.height + footer.en.height + Self.footerChrome),
+                ("ru", content.ru.height + footer.ru.height + Self.footerChrome),
+            ] {
+                #expect(height <= ViewBudget.sheetHeight, Comment(rawValue:
+                    "\(language) needs \(height)pt of \(ViewBudget.sheetHeight)"))
             }
         }
     }
@@ -243,17 +237,13 @@ import Testing
             let face = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
                 DailiesSheet(model: model).burninsFace(stretched: false)
             }
-            let dials = probe.sizes(proposedWidth: DailiesSheet.width - 2 * DailiesSheet.margin) {
-                probe.hosted(DailiesInkRows(model: model))
-            }
-            for (language, closed, open) in [
-                ("en", face.en.height, face.en.height + dials.en.height),
-                ("ru", face.ru.height, face.ru.height + dials.ru.height),
-            ] {
-                #expect(closed <= DailiesSheet.tabHeight, Comment(rawValue:
-                    "\(language) closed face is \(closed)pt of \(DailiesSheet.tabHeight)"))
-                #expect(open <= DailiesSheet.tabHeight, Comment(rawValue:
-                    "\(language) open face is \(open)pt of \(DailiesSheet.tabHeight)"))
+            // No closed-versus-open any more: the appearance dials are on the
+            // face rather than behind a disclosure, so this measures the thing
+            // itself instead of approximating it.
+            for (language, height) in [("en", face.en.height),
+                                       ("ru", face.ru.height)] {
+                #expect(height <= DailiesSheet.tabHeight, Comment(rawValue:
+                    "\(language) face is \(height)pt of \(DailiesSheet.tabHeight)"))
             }
         }
     }

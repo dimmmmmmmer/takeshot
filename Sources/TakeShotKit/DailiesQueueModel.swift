@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CaptureCore
 import Foundation
 
@@ -106,6 +107,8 @@ final class DailiesQueueModel: ObservableObject {
     private var control: DailiesControl?
     private var scanTask: Task<Void, Never>?
     private weak var controller: CaptureController?
+    /// The subscription that writes the arrangement down — see `attach`.
+    private var changes: AnyCancellable?
 
     /// Wired once, in startup, rather than when the sheet opens — a queue
     /// reports through the controller (status line, toast) and must not run
@@ -113,7 +116,38 @@ final class DailiesQueueModel: ObservableObject {
     /// offload model's `attach`.
     func attach(to controller: CaptureController) {
         self.controller = controller
+        // **Every change is remembered, not just the ones that were RUN.**
+        //
+        // The arrangement used to be written on Start alone, on the argument
+        // that "a half-set sheet that was never run is not a convention". It
+        // is: an operator sets the folders and the switches for the day, shuts
+        // the sheet, and comes back to find none of it (owner: "дейлики не
+        // сохраняют настройки! ни папку которую я выбирал ни галки, ниче").
+        //
+        // `objectWillChange` fires BEFORE the value lands, which is exactly
+        // why the write is debounced rather than immediate — by the time the
+        // slot fires, the new value is the one being read. It also collapses
+        // a slider drag into one settings write, which is what the whole
+        // `DebouncedSettings` exists for.
+        changes = objectWillChange.sink { [weak self] _ in
+            self?.rememberSoon()
+        }
     }
+
+    /// Write the sheet's arrangement down, shortly.
+    private func rememberSoon() {
+        guard let controller, !isRunning else { return }
+        controller.debounced.schedule(
+            .dailies, after: Self.rememberDelay) { [weak self, weak controller] in
+            guard let self, let controller else { return }
+            controller.rememberDailiesChoices(from: self)
+        }
+    }
+
+    /// Long enough to collapse a slider drag, short enough that closing the
+    /// sheet and quitting cannot outrun it — the quit guard flushes every slot
+    /// anyway (`DebouncedSettings.flushAll`).
+    static let rememberDelay: Duration = .milliseconds(400)
 
     /// Seed the sheet from the operator's saved convention and clear the
     /// previous run's result — a stale "done" card over a fresh batch reads

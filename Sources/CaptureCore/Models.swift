@@ -289,7 +289,27 @@ public enum RecDetectionMode: String, CaseIterable, Codable, Sendable {
     /// there is. An untaught box simply contributes nothing.
     public static let visualModes: Set<RecDetectionMode> = [.visual, .auto]
 
+    /// **The modes in which running timecode may open or close a take.**
+    ///
+    /// `.visual` is deliberately absent, and its absence is the whole point:
+    /// the camera's own indicator is the trigger in that mode, and a playout
+    /// feeding the board must never start a take — the rule CLAUDE.md states
+    /// outright. It WAS absent from the set and present in the behaviour: both
+    /// sites that built the detector spelled the switch as
+    /// `detectionMode == .vanc`, so every mode but `.vanc` ran the timecode
+    /// machine, and in `.visual` a Resolve operator scrubbing produced a churn
+    /// of one-frame takes — each finalized, named and published — under a
+    /// panel saying "teach the REC indicator first, until then nothing starts
+    /// a take" (owner: "рек по индикатору почему-то рекает и бегущий
+    /// таймкод").
+    ///
+    /// Stated as data beside the two sets above it, for the reason they are:
+    /// a condition written out at a call site is one more place to forget when
+    /// a mode is added — and this one was written out at TWO.
+    public static let timecodeRunModes: Set<RecDetectionMode> = [.auto, .timecodeRun]
+
     public var actsOnVancTrigger: Bool { Self.vancTriggerModes.contains(self) }
+    public var runsTimecodeMachine: Bool { Self.timecodeRunModes.contains(self) }
 }
 
 /// Increment/decrement naming fields (roll "001" → "002", camera A → B).

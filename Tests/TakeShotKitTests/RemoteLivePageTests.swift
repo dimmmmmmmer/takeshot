@@ -116,7 +116,19 @@ struct RemoteLivePageTests {
     @Test func thePageStillFetchesNothing() throws {
         let html = try utf8(RemotePage.liveHTML())
         #expect(!html.contains("src=\"http"))
-        #expect(!html.contains("<link "))
+        // **Every `<link>` carries its own bytes.**
+        //
+        // The rule used to be "no `<link>` at all", which was a proxy for
+        // the thing that matters: a set network need not have any internet
+        // behind it, so a page that fetched anything would be a page that
+        // renders wrong exactly when it matters. A `data:` href fetches
+        // nothing, and the pages' own icon is one — so the assertion is
+        // now the intent rather than the proxy.
+        for link in RemotePageLinks.hrefs(in: html) {
+            #expect(link.hasPrefix("data:"), Comment(rawValue: """
+                a <link> fetches \(link.prefix(60))
+                """))
+        }
         #expect(!html.contains(RemotePage.configToken))
     }
 }

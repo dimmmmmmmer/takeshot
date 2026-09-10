@@ -124,3 +124,45 @@ import Testing
         #expect(secret.url.hasPrefix(plain.url))
     }
 }
+
+/// **An empty link is an empty line.**
+///
+/// `addressURL` composed `srt://:9000` out of the effective port whatever else
+/// was nil, so a field the operator had just emptied refilled itself the moment
+/// focus left it and the address could not be cleared at all (owner: "кстати
+/// очистить строчку фактически не удается"). A LISTENER legitimately has no
+/// host — `srt://:8890?mode=listener` — so an empty host is not the test; an
+/// empty link is.
+@Suite struct SRTEmptyAddressTests {
+    @Test func nothingStatedComposesNothing() {
+        let srt = SRTSettings()
+        #expect(!srt.hasAddress)
+        #expect(srt.addressURL.isEmpty,
+                "a fresh install composes \(srt.addressURL)")
+    }
+
+    @Test func clearingEveryPartClearsTheLine() {
+        var srt = SRTSettings()
+        srt.address = "10.0.0.4"
+        srt.port = 8890
+        #expect(!srt.addressURL.isEmpty)
+
+        srt.address = nil
+        srt.port = nil
+        srt.role = nil
+        srt.latencyMs = nil
+        srt.streamID = nil
+        #expect(srt.addressURL.isEmpty,
+                "the emptied field refills with \(srt.addressURL)")
+    }
+
+    /// …and a listener with no host still composes a line, which is the case
+    /// an "empty host" test would have got wrong.
+    @Test func aListenerWithNoHostIsStillAnAddress() {
+        var srt = SRTSettings()
+        srt.port = 8890
+        srt.role = SRTRole.listener.rawValue
+        #expect(srt.hasAddress)
+        #expect(srt.addressURL == "srt://:8890?mode=listener")
+    }
+}

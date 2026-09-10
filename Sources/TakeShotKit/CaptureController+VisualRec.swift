@@ -349,6 +349,18 @@ extension CaptureController {
     /// One line saying exactly where the teaching stands. Three states, because
     /// there are three: nothing taught, taught but the pair does not separate,
     /// and ready.
+    /// **Whether the status is a complaint.**
+    ///
+    /// The weak-teaching sentence — "the two references are only N code values
+    /// apart" — was grey like every other line in the panel, so the one state
+    /// an operator has to ACT on read like a note (owner: "это сообщение
+    /// вообще красным должно быть чтоб пользователь понимал что хреново
+    /// научил"). Untaught and half-taught are not complaints: nothing is
+    /// wrong, the work is simply not finished.
+    var visualRecStatusIsWarning: Bool {
+        visualRecSeparationText != nil && !visualRecTeaching.isTaught
+    }
+
     var visualRecStatus: String {
         guard let separation = visualRecSeparationText else {
             return visualRecTeaching.rolling == nil && visualRecTeaching.idle == nil

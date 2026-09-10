@@ -316,7 +316,19 @@ import Testing
             #expect(html.contains("lang:\"\(language.rawValue)\""))
             // Self-contained: a slate on a set network fetches nothing.
             #expect(!html.contains("src=\"http"))
-            #expect(!html.contains("<link "))
+            // **Every `<link>` carries its own bytes.**
+            //
+            // The rule used to be "no `<link>` at all", which was a proxy for
+            // the thing that matters: a set network need not have any internet
+            // behind it, so a page that fetched anything would be a page that
+            // renders wrong exactly when it matters. A `data:` href fetches
+            // nothing, and the pages' own icon is one — so the assertion is
+            // now the intent rather than the proxy.
+            for link in RemotePageLinks.hrefs(in: html) {
+                #expect(link.hasPrefix("data:"), Comment(rawValue: """
+                    a <link> fetches \(link.prefix(60))
+                    """))
+            }
         }
     }
 

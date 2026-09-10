@@ -258,11 +258,29 @@ final class SRTVideoEncoder {
         // is free to burst past whatever the link can carry, and on an SRT link a
         // burst is exactly what fills the send buffer and drops the frames behind
         // it.
-        let properties: [CFString: CFTypeRef] = [
+        let properties: [CFString: CFTypeRef] = Self.properties(configuration)
+        return properties.compactMap { key, value in
+            VTSessionSetProperty(session, key: key, value: value) == noErr
+                ? nil : key as String
+        } + applyRate(configuration.bitsPerSecond, to: session,
+                      constant: configuration.rateControl == .constant)
+    }
+
+    /// **Everything the session is told, as a value.**
+    ///
+    /// A dictionary rather than a sequence of `VTSessionSetProperty` calls, for
+    /// one reason: the profile the operator picks was HARD-CODED here for the
+    /// life of the feature. `profileLevel(_:)` was written, and tested, and
+    /// never called — the suite exercised the helper and nothing exercised the
+    /// call site, so a picker with five rows moved nothing at all and every
+    /// HEVC session was asked for an H.264 level. Read back as a value, the
+    /// properties are what a test can hold the dials against.
+    static func properties(_ configuration: Configuration) -> [CFString: CFTypeRef] {
+        let colour = ColorTags.values(for: configuration.colorPreset)
+        return [
             // Drop quality rather than take longer. The frame path cannot wait.
             kVTCompressionPropertyKey_RealTime: kCFBooleanTrue,
-            kVTCompressionPropertyKey_ProfileLevel:
-                kVTProfileLevel_H264_High_AutoLevel,
+            kVTCompressionPropertyKey_ProfileLevel: profileLevel(configuration),
             // See the type comment: one frame of latency, and one timestamp.
             kVTCompressionPropertyKey_AllowFrameReordering: kCFBooleanFalse,
             kVTCompressionPropertyKey_MaxKeyFrameInterval:
@@ -277,27 +295,28 @@ final class SRTVideoEncoder {
             kVTCompressionPropertyKey_TransferFunction: colour.cvTransfer,
             kVTCompressionPropertyKey_YCbCrMatrix: colour.cvMatrix,
         ]
-        return properties.compactMap { key, value in
-            VTSessionSetProperty(session, key: key, value: value) == noErr
-                ? nil : key as String
-        } + applyRate(configuration.bitsPerSecond, to: session,
-                      constant: configuration.rateControl == .constant)
     }
 
     /// The profile the session is asked for, per codec.
     ///
-    /// HEVC has no Baseline: its family is Main/Main10, so a stream asked for
-    /// Baseline in HEVC gets Main. Resolved here rather than refused, because
-    /// the two pickers are independent and an operator who moves one has not
-    /// asked to break the other.
+    /// The two are different families — H.264 is Baseline/Main/High, HEVC is
+    /// Main/Main 10/Main 4:2:2 10 — so a profile from the wrong family is
+    /// resolved to that codec's own default rather than refused
+    /// (`SRTEncoderProfile.resolved(for:)`): the pickers are independent, and
+    /// an operator who changes the codec has not asked to break the profile.
     static func profileLevel(_ configuration: Configuration) -> CFString {
+        let profile = configuration.profile.resolved(for: configuration.codec)
         guard configuration.codec == .h264 else {
-            return kVTProfileLevel_HEVC_Main_AutoLevel
+            switch profile {
+            case .main10: return kVTProfileLevel_HEVC_Main10_AutoLevel
+            case .main422Ten: return kVTProfileLevel_HEVC_Main42210_AutoLevel
+            default: return kVTProfileLevel_HEVC_Main_AutoLevel
+            }
         }
-        switch configuration.profile {
+        switch profile {
         case .baseline: return kVTProfileLevel_H264_Baseline_AutoLevel
         case .main: return kVTProfileLevel_H264_Main_AutoLevel
-        case .high: return kVTProfileLevel_H264_High_AutoLevel
+        default: return kVTProfileLevel_H264_High_AutoLevel
         }
     }
 

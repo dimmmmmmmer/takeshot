@@ -24,24 +24,45 @@ import Testing
             .fixedSize()
     }
 
-    @Test func theFolderButtonDoesNotSetTheHeaderHeight() async throws {
+    /// **The plate is square, and it fits the header band.**
+    ///
+    /// Two asks, one measurement. It was a 14pt glyph in a `.small` bordered
+    /// button, half again as tall as the title beside it, and its border ran
+    /// into the panel's plate above and below ("кнопки открытия папки целевой
+    /// сделай поменьше"). Made smaller it came out a wide flat lozenge,
+    /// because a `.mini` bordered button adds more chrome across than down
+    /// ("вот эти иконки папочек по высоте можно по подложке чуть больше
+    /// сделать чтоб квадратными смотрелись").
+    ///
+    /// So the rule is about the PLATE, not the glyph: square to within a
+    /// point, and short enough that the header's own padding still leaves air
+    /// between it and the panel's edge.
+    @Test func theFolderButtonLooksSquareAndFitsTheBand() async throws {
         try await ViewProbe.run { probe in
             let button = probe.fittingSizes { PanelFolderButton {} }
-            let words = probe.fittingSizes { self.title() }
 
             #expect(button.en == button.ru,
                     "the folder button is language-dependent: \(button)")
-            #expect(button.en.height <= words.ru.height, """
-                the folder button is \(button.en.height)pt against a \
-                \(words.ru.height)pt title — it sets the header's height, and \
-                its border lands on the panel's plate
+            #expect(abs(button.en.width - button.en.height) <= 1, """
+                the folder button's plate is \(button.en.width)x\
+                \(button.en.height) — it reads as a lozenge, not a square
                 """)
-            // …and it is still a real, pressable control rather than a glyph
-            // squeezed to nothing: a 12pt box inside a mini bordered button.
-            #expect(button.en.width >= PanelChrome.folderButtonSide,
-                    "the folder button collapsed to \(button.en.width)pt")
+            // …and the band still has air: the header pads itself top and
+            // bottom, and what the owner saw was a border landing ON the
+            // panel's own plate.
+            #expect(button.en.height + 2 * PanelChrome.headerVerticalPadding
+                    <= Self.headerCeiling, """
+                the header band comes to \
+                \(button.en.height + 2 * PanelChrome.headerVerticalPadding)pt
+                """)
         }
     }
+
+    /// What the panel's header row may come to, button included. Not a
+    /// measurement of anything else — a ceiling, so a future control in that
+    /// row cannot quietly make the panel's title band taller than the content
+    /// it introduces.
+    private static let headerCeiling: CGFloat = 34
 
     /// **One definition, mounted twice.** The two headers each had their own
     /// copy of the button, and a copy is what let them drift — this asserts

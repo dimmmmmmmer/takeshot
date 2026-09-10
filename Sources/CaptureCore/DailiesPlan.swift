@@ -10,20 +10,24 @@ public struct DailiesBurnins: Sendable, Equatable {
     /// sample, so a mid-take Rec Run re-anchor stays frame-accurate), or from
     /// the start TC plus frame math when the file has no track.
     public var timecode = true
-    /// Clip/take name, bottom-left.
+    /// Clip/take name.
     public var clipName = true
-    /// Project plus camera/roll, bottom-right.
+    /// The project name.
     public var project = true
     /// Recording date, bottom-right — its own strip, stacked under the project
     /// line when both are on and both are pointed there.
     public var date = false
     /// Free text, top-left. Empty — no strip.
     public var customText = ""
-    /// Where each line sits. The defaults are the classic arrangement; the
-    /// operator can move any of them (see `DailiesBurninPosition`).
-    public var timecodePosition: DailiesBurninPosition = .topCenter
-    public var clipNamePosition: DailiesBurninPosition = .bottomLeft
-    public var projectPosition: DailiesBurninPosition = .bottomRight
+    /// **Where each line sits, and these five are the owner's own
+    /// arrangement** — they set them on the sheet and said "вот какие
+    /// дефолтные настройки должны быть": the clock bottom-left, the clip name
+    /// bottom-right, the project across the top, and neither the date nor a
+    /// custom line switched on. The operator can move any of them (see
+    /// `DailiesBurninPosition`).
+    public var timecodePosition: DailiesBurninPosition = .bottomLeft
+    public var clipNamePosition: DailiesBurninPosition = .bottomRight
+    public var projectPosition: DailiesBurninPosition = .topCenter
     public var customPosition: DailiesBurninPosition = .topLeft
     public var datePosition: DailiesBurninPosition = .bottomRight
     /// How solid the technical lines are, and the custom line separately —
@@ -35,9 +39,9 @@ public struct DailiesBurnins: Sendable, Equatable {
 
     public init(timecode: Bool, clipName: Bool, project: Bool, date: Bool,
                 customText: String,
-                timecodePosition: DailiesBurninPosition = .topCenter,
-                clipNamePosition: DailiesBurninPosition = .bottomLeft,
-                projectPosition: DailiesBurninPosition = .bottomRight,
+                timecodePosition: DailiesBurninPosition = .bottomLeft,
+                clipNamePosition: DailiesBurninPosition = .bottomRight,
+                projectPosition: DailiesBurninPosition = .topCenter,
                 customPosition: DailiesBurninPosition = .topLeft,
                 datePosition: DailiesBurninPosition = .bottomRight,
                 ink: DailiesInk = .standard,

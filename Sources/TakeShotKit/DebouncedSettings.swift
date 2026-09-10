@@ -27,6 +27,9 @@ final class DebouncedSettings {
         case assist
         case lutIntensity
         case visualRec
+        /// The dailies sheet's whole arrangement — see
+        /// `DailiesQueueModel.rememberSoon`.
+        case dailies
     }
 
     private var tasks: [Slot: Task<Void, Never>] = [:]

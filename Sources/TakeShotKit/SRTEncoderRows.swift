@@ -21,8 +21,16 @@ import SwiftUI
 struct SRTEncoderRows: View {
     @ObservedObject var controller: CaptureController
 
+    /// **Open, not behind a disclosure** (owner: "настройки энкодера можно
+    /// нормально повесить без выпадающего списка… просто чтоб сразу они были
+    /// видны"). They were folded away because the section was long; the Start
+    /// control that used to sit above them has moved onto the status row, and
+    /// the height it gave back is what pays for these being visible.
     var body: some View {
-        DisclosureGroup(L("srt_encoder_section")) {
+        Group {
+            Text(L("srt_encoder_section"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
                 Picker(L("codec"), selection: Binding(
                     get: { controller.settings.srt.codecEffective },
@@ -33,11 +41,19 @@ struct SRTEncoderRows: View {
                     }
                 }
                 .help(L("srt_codec_help"))
+                // **The chosen CODEC's own family**, not all five: H.264 is
+                // Baseline/Main/High and HEVC is Main/Main 10/Main 4:2:2 10.
+                // One list for both offered "High" over an HEVC stream, which
+                // is not a profile HEVC has (owner: "в энкодере для hevc что
+                // значит profile high вообще?").
                 Picker(L("srt_profile"), selection: Binding(
-                    get: { controller.settings.srt.profileEffective },
-                    set: { controller.settings.srt.profile =
-                        $0 == .high ? nil : $0.rawValue })) {
-                    ForEach(SRTEncoderProfile.allCases) { profile in
+                    get: {
+                        controller.settings.srt.profileEffective
+                            .resolved(for: controller.settings.srt.codecEffective)
+                    },
+                    set: { controller.settings.srt.profile = $0.rawValue })) {
+                    ForEach(SRTEncoderProfile.offered(
+                        for: controller.settings.srt.codecEffective)) { profile in
                         Text(L(profile.labelKey)).tag(profile)
                     }
                 }
@@ -58,7 +74,6 @@ struct SRTEncoderRows: View {
                     .toggleStyle(.checkbox)
                     .help(L("srt_b_frames_help"))
             }
-            .padding(.top, 2)
         }
     }
 

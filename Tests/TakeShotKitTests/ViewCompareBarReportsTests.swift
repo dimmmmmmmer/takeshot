@@ -61,19 +61,38 @@ import Testing
     /// way, so on the playback page it read as a control that could be pressed
     /// twice to no effect (owner: "запиненый реф на странице плейбека снова
     /// можно запинить. путает это").
-    @Test func thePinReadsDifferentlyOverAReferenceThatExists() {
+    /// **One pin at a time.**
+    ///
+    /// The pin and the unpin used to be offered together, with the pin drawn
+    /// differently over an existing reference. Drawing it differently was not
+    /// enough: a lit pin beside a lit unpin read as the app not knowing its own
+    /// mind (owner: "запиненый реф на странице плейбека снова можно запинить.
+    /// путает это"; "вот у меня уже запинен референс и все равно белая кнопка
+    /// пина горит"). They are a STATE now, not two offers.
+    ///
+    /// Asserted on the source: a popover never renders while its trigger is
+    /// measured, so the row itself is out of reach of a headless render, and a
+    /// button offered in the wrong state has a size like any other.
+    @Test func onlyOnePinIsOfferedAtATime() throws {
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/CompareControls.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.contains(
+            "if controller.isReviewingSingleClip, !controller.referencePinned {"),
+                "the pin is offered over a reference that already exists")
+        #expect(code.contains("if controller.referencePinned {"),
+                "the unpin is not gated on there being one")
+        // and the reading it draws is the unpinned one, with words in both
+        // languages — a tooltip that renders its own key is worse than none
         let fresh = ComparePinReading.reading(pinned: false)
-        let over = ComparePinReading.reading(pinned: true)
-        #expect(fresh.symbol != over.symbol,
-                "the pin draws the same glyph whether or not one is pinned")
-        #expect(fresh.helpKey != over.helpKey,
-                "the pin promises the same thing in both states")
-        #expect(over.symbol == "pin.fill")
-        // both sentences exist in both languages — a tooltip that renders its
-        // own key is worse than none
-        for key in [fresh.helpKey, over.helpKey] {
-            #expect(L(key) != key, "\(key) has no words")
-        }
+        #expect(fresh.symbol == "pin")
+        #expect(L(fresh.helpKey) != fresh.helpKey)
     }
 
     /// **A still under review can be put fullscreen.**
@@ -111,6 +130,45 @@ import Testing
             controller.cleanFeed = true
             #expect(!controller.showsCornerFullscreenButton,
                     "a clean feed grew a button")
+        }
+    }
+}
+
+/// **A teaching that will not work says so in red.**
+///
+/// The weak-separation sentence was grey like every other line in the panel, so
+/// the one state an operator has to act on read as a note (owner: "это
+/// сообщение вообще красным должно быть чтоб пользователь понимал что хреново
+/// научил"). Untaught and half-taught are NOT complaints — nothing is wrong,
+/// the work is simply not finished — and that distinction is the whole rule.
+@Suite @MainActor struct ViewVisualRecStatusTests {
+    @Test func onlyAWeakTeachingReadsAsAComplaint() async throws {
+        try await ControllerHarness.run { controller, _ in
+            // nothing taught at all: not a complaint
+            #expect(!controller.visualRecStatusIsWarning)
+
+            @Sendable func signature(_ level: Double) -> VisualRecSignature? {
+                VisualRecSignature(codes: Array(
+                    repeating: level, count: VisualRecSignature.componentCount))
+            }
+
+            // one reference only: still not a complaint
+            controller.visualRecTeaching.rolling = signature(200)
+            #expect(!controller.visualRecStatusIsWarning,
+                    "a half-finished teaching read as an error")
+
+            // both, and identical — too alike to tell apart, which is the one
+            // state an operator has to act on
+            controller.visualRecTeaching.idle = signature(200)
+            #expect(!controller.visualRecTeaching.isTaught,
+                    "the fixture is not the weak case this test is about")
+            #expect(controller.visualRecStatusIsWarning,
+                    "a teaching that cannot work reads as a note")
+
+            // far enough apart: back to a reading, not a complaint
+            controller.visualRecTeaching.idle = signature(20)
+            #expect(controller.visualRecTeaching.isTaught)
+            #expect(!controller.visualRecStatusIsWarning)
         }
     }
 }

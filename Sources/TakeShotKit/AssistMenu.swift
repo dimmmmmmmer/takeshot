@@ -269,6 +269,9 @@ private struct AssistControlRows: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                // its own column, so the two rows' tracks line up — the same
+                // defect `VisualRecSliderRow.labelWidth` was written for
+                .frame(width: VisualRecSliderRow.labelWidth, alignment: .leading)
             Slider(value: value, in: 70...100, step: 1)
                 .controlSize(.mini)
             Text("\(Int(value.wrappedValue))%")

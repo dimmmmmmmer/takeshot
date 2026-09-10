@@ -217,6 +217,15 @@ public struct SRTSettings: Codable, Equatable, Sendable {
     /// passphrase is never composed in: it is a secret with a field of its own,
     /// and this string is on screen.
     public var addressURL: String {
+        // **Nothing stated is an empty line, not a default one.**
+        //
+        // It used to compose `srt://:9000` out of the effective port whatever
+        // else was nil, so a field the operator had just emptied refilled
+        // itself the moment focus left it and the address could not be cleared
+        // (owner: "кстати очистить строчку фактически не удается"). A listener
+        // legitimately has no host — `srt://:8890?mode=listener` — so an empty
+        // HOST is not the test; an empty link is.
+        guard hasAddress else { return "" }
         let host = address ?? ""
         var text = "srt://" + host + ":\(portEffective)"
         var query: [String] = []
@@ -225,6 +234,17 @@ public struct SRTSettings: Codable, Equatable, Sendable {
         if latencyMs != nil { query.append("latency=\(latencyEffective)") }
         if !query.isEmpty { text += "?" + query.joined(separator: "&") }
         return text
+    }
+
+    /// Whether the operator has stated a link at all.
+    ///
+    /// Every part of it is optional and every part has an effective default,
+    /// so "is there an address" cannot be read off any single field — a
+    /// listener has no host, a caller may take the default port. Nothing set
+    /// anywhere is the only honest answer to no.
+    public var hasAddress: Bool {
+        address != nil || port != nil || role != nil
+            || streamID != nil || latencyMs != nil
     }
 
     /// 9000 is the port every SRT example and every receiver's placeholder uses,
@@ -377,6 +397,12 @@ public enum SRTEncoderProfile: String, CaseIterable, Identifiable, Sendable {
     case baseline
     case main
     case high
+    /// HEVC's ten-bit profile.
+    case main10
+    /// HEVC's ten-bit 4:2:2 profile — the one that keeps the chroma this app's
+    /// display buffer actually carries, instead of throwing half of it away in
+    /// 4:2:0.
+    case main422Ten = "main422-10"
 
     public var id: String { rawValue }
 
@@ -387,7 +413,33 @@ public enum SRTEncoderProfile: String, CaseIterable, Identifiable, Sendable {
         case .baseline: return "srt_profile_baseline"
         case .main: return "srt_profile_main"
         case .high: return "srt_profile_high"
+        case .main10: return "srt_profile_main10"
+        case .main422Ten: return "srt_profile_main422_10"
         }
+    }
+
+    /// **The profiles a codec actually has.**
+    ///
+    /// They are different families and always were: H.264 is
+    /// Baseline/Main/High, HEVC is Main/Main 10/Main 4:2:2 10. One list for
+    /// both offered "High" over an HEVC stream, which is not a thing (owner: "в
+    /// энкодере для hevc что значит profile high вообще? там есть такое
+    /// понятие?"), and asked VideoToolbox for an H.264 level on an HEVC
+    /// session — a property it refuses, silently, into the collected list.
+    public static func offered(for codec: SRTVideoCodec) -> [SRTEncoderProfile] {
+        codec == .h264 ? [.baseline, .main, .high] : [.main, .main10, .main422Ten]
+    }
+
+    /// This profile if the codec has it, otherwise that codec's own default.
+    ///
+    /// Resolved rather than refused: the two pickers are independent, and an
+    /// operator who changes the codec has not asked to break the profile. The
+    /// default is the RICHEST profile of the family, which is what each was
+    /// before — High for H.264, and for HEVC the one that keeps the chroma.
+    public func resolved(for codec: SRTVideoCodec) -> SRTEncoderProfile {
+        let family = Self.offered(for: codec)
+        guard !family.contains(self) else { return self }
+        return codec == .h264 ? .high : .main
     }
 }
 

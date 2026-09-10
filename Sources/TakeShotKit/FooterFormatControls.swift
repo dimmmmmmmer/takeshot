@@ -91,23 +91,26 @@ struct FooterCodecMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "film.stack")
-                .font(.system(size: 15))
+            // One image, glyph and mark together — a composed LABEL is taken
+            // apart by `.borderlessButton` and only its first element draws
+            // (see `FooterMarkedSymbol`).
+            Image(nsImage: FooterMarkedSymbol.image("film.stack", size: 15))
                 // colour only: a disabled picker that also changed size would
                 // reflow the whole footer the moment a take starts
                 .opacity(controller.canChangeRecordingFormat ? 1 : 0.5)
                 .foregroundStyle(.primary)
         }
         .menuStyle(.borderlessButton)
-        // **The system's indicator, like the naming menu beside it.**
+        .menuIndicator(.hidden)
+        // **One mark for every control in the row that opens something.**
         //
-        // This used to hide it and draw a 7pt `chevron.up.chevron.down` by
-        // hand. Measured, that made the control 24pt wide against the naming
-        // menu's 38 — and at 7pt the mark reads as nothing at all, so the
-        // codec looked like a readout while its neighbour looked like a menu
-        // (owner: "у кнопки кодека нет рядом с иконкой стрелочки вниз как у
-        // иконки наименований, не читается что там будет выпадающее окно").
-        // Two menus side by side in one bar wear one disclosure.
+        // This drew a 7pt `chevron.up.chevron.down` by hand once, which read
+        // as nothing at all and made the codec look like a readout beside a
+        // menu (owner: "у кнопки кодека нет рядом с иконкой стрелочки вниз как
+        // у иконки наименований"), so it took AppKit's own indicator. That
+        // pointed DOWN while the volume popover beside it pointed UP, which is
+        // the next thing the owner saw — so all three wear `FooterDisclosure`
+        // now, at a size that reads, pointing the way they actually open.
         .fixedSize()
     }
 }

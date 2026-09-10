@@ -36,13 +36,20 @@ struct StreamRunRow: View {
         }
     }
 
+    /// **The button alone**, for whoever puts it somewhere.
+    ///
+    /// It used to be a ROW — an `HStack` with a `Spacer` shoving one button
+    /// against the right margin — and read as a stray control floating beside
+    /// the settings rather than belonging to any of them (owner: "не нравится
+    /// что у обоих источников кнопка старт как-то несуразно выглядит сбоку
+    /// отдельной строчкой"). It sits on the STATUS row now, beside the reading
+    /// it changes, so the layout is the caller's business and this is only the
+    /// button.
     var body: some View {
-        HStack {
-            Spacer(minLength: 4)
-            Button(isSwitchedOn ? L("stream_stop") : L("stream_start")) {
-                controller.toggleStream(kind)
-            }
-            .fixedSize()
+        Button(isSwitchedOn ? L("stream_stop") : L("stream_start")) {
+            controller.toggleStream(kind)
         }
+        .fixedSize()
+        .controlSize(.small)
     }
 }

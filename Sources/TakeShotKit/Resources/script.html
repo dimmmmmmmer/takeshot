@@ -6,6 +6,13 @@
      because a scripty scrolling the log must not pinch-zoom the page instead. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0d">
+<!-- The tab and home-screen mark. Inline rather than a route: these
+     pages are opened on a phone over a set Wi-Fi network that need
+     not have any internet behind it, and a second request for 400
+     bytes is a second thing that can fail on the one page a director
+     is trying to open. Same reason the font is embedded below. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0d'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%23f5432f'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0d'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%23f5432f'/%3E%3C/svg%3E">
 <title>TakeShot</title>
 <style>
 /* The app's own face, embedded at serve time — see remote.html for why, and

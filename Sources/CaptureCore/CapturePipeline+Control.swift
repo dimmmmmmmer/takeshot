@@ -133,9 +133,7 @@ extension CapturePipeline {
             self.config = config
             if detectorChanged {
                 self.detector = RecDetector(config: RecDetectorConfig(
-                    startDebounceFrames: config.settings.capture.startDebounceFrames,
-                    stopDebounceFrames: config.settings.capture.stopDebounceFrames,
-                    vancOnly: config.settings.capture.detectionMode == .vanc))
+                    capture: config.settings.capture))
             }
         }
     }

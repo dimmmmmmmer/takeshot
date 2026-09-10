@@ -207,8 +207,7 @@ private struct FooterMonitorButton: View {
             Button {
                 showPopover.toggle()
             } label: {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 7, weight: .semibold))
+                FooterDisclosure()
                     .frame(width: 11, height: 20)
             }
             .disabled(!controller.canMonitorAudio)
@@ -233,6 +232,29 @@ private struct FooterMonitorButton: View {
     }
 }
 
+/// **The mark every footer control that opens something wears.**
+///
+/// Three controls in that row open something — the codec menu, the naming
+/// menu and the volume popover — and each drew its own mark: the two menus
+/// took AppKit's own indicator, a chevron pointing DOWN, while the volume
+/// drew a 7pt chevron pointing UP because its popover rises. Side by side
+/// that reads as three different kinds of control (owner: "стрелочка вверх у
+/// звука отличается от стрелочек вниз у соседних иконок; давай у всех
+/// стрелочки вверх сделаем и пусть они будут одинаковые").
+///
+/// UP for all three, and it is the honest direction: the footer is at the
+/// bottom of the window, so everything these open opens upward.
+struct FooterDisclosure: View {
+    var body: some View {
+        // The glyph and its size are stated once, in `FooterMarkedSymbol` —
+        // the menus beside this one bake the same two into their images,
+        // because a composed label does not survive `.borderlessButton`.
+        Image(systemName: FooterMarkedSymbol.mark)
+            .font(.system(size: FooterMarkedSymbol.markSize, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+}
+
 /// Naming-style picker right from the footer (same presets as in Settings).
 struct NamingPresetMenu: View {
     @EnvironmentObject private var controller: CaptureController
@@ -251,10 +273,10 @@ struct NamingPresetMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "textformat")
-                .font(.system(size: 15))
+            Image(nsImage: FooterMarkedSymbol.image("textformat", size: 15))
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .controlHelp(L("naming_preset"))
     }
