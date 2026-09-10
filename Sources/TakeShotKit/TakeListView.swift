@@ -38,6 +38,11 @@ struct TakeListView: View {
             // A clear background is focusable in exactly the same way, takes
             // the same Delete command, and is underneath the scroll views
             // instead of on top of them.
+            // …and the panel's own rectangle, reported to the relay that
+            // delivers this panel's wheel by hand (see `PanelWheelRelay` for
+            // the measurements that made that necessary). In the background
+            // for the same reason the focus target is.
+            .background { PanelWheelZone() }
             .background {
                 Color.clear
                     .focusable()
