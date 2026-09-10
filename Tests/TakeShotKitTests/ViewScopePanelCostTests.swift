@@ -52,16 +52,33 @@ struct ViewScopePanelCostTests {
     /// owner's "скопы страшно лагают", and it was never the analyzer: that
     /// half is 7.0 ms in an 80 ms stride and delivers every pass it is offered
     /// (`ScopePerformanceTests`).
+    /// **Found by NAME, not by a list.**
+    ///
+    /// The rule used to enumerate four file names, and a fifth scope was added
+    /// after that list was written: `CIEGraticule` was the one graticule in
+    /// the app still drawn as a view tree — four stroked paths and seven
+    /// individually shadowed `Text`s, every one of them an offscreen pass, laid
+    /// out again on every publish — and neither this rule nor the bench below
+    /// could see it, because the bench's box table had no row for it either.
+    /// A list of files is a thing that goes stale; "every file whose name says
+    /// it is a graticule" is not.
     @Test func everyScopeSurfaceDrawsThroughACanvas() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/TakeShotKit")
-        for name in ["ScopeGraticule", "ScopeCodeAxis", "ScopeTraces",
-                     "VectorscopeGraticule"] {
+        let names: [String] = try FileManager.default
+            .contentsOfDirectory(atPath: root.path)
+            .filter { $0.hasSuffix("Graticule.swift") || $0 == "ScopeTraces.swift"
+                || $0 == "ScopeCodeAxis.swift" }
+            .sorted()
+        // The walk itself has to be seen working: an empty list would make the
+        // loop below vacuously true, which is the failure this rule already
+        // had once in a different shape.
+        try #require(names.count >= 5, "the walk found \(names): \(names.count)")
+        for name in names {
             let code = try String(
-                contentsOf: root.appendingPathComponent("\(name).swift"),
-                encoding: .utf8)
+                contentsOf: root.appendingPathComponent(name), encoding: .utf8)
             #expect(code.contains("Canvas(opaque: false"),
                     Comment(rawValue: "\(name) draws with a view tree again — "
                         + "see the measurements on this test"))
@@ -245,5 +262,8 @@ struct ViewScopePanelCostTests {
         ("parade", { AnyView(ParadeView(data: $0)) }),
         ("histogram", { AnyView(HistogramView(data: $0, channel: "rgb")) }),
         ("vector", { AnyView(VectorscopeView(data: $0)) }),
+        // The fifth, added long after this table was written — which is why
+        // the instrument could not see the one box that broke the rule above.
+        ("cie", { AnyView(CIEChartView(data: $0)) }),
     ]
 }

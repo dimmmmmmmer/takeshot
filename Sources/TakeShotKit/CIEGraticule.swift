@@ -55,20 +55,94 @@ struct CIEGraticule: View {
         primaries == .rec2020 ? .rec709 : .rec2020
     }
 
+    /// **One `Canvas`, like every other scope graticule.**
+    ///
+    /// This was the last one still drawn as a view TREE, and it was the
+    /// heaviest of them: a stroked `Path` rebuilt from all 65 spectral-locus
+    /// points, two gamut triangles each a `Path` plus its own `.shadow`ed
+    /// `Text`, a white-point cross, and a `ForEach` over five more shadowed,
+    /// `.position`ed `Text`s — about seven separate shadows, each forcing its
+    /// own offscreen pass, laid out and rasterized on the main thread on every
+    /// scope publish. Twelve and a half of those a second, on the thread that
+    /// also lays out the window.
+    ///
+    /// The other four graticules were converted for exactly this, and measured
+    /// — a box went from 8.49 ms to 3.85, a four-up grid from 20.3 to 10.7
+    /// against a 16.7 ms frame (`ViewScopePanelCostTests`). This one slipped
+    /// past because the rule's test enumerates FILE NAMES and the chart was
+    /// added after the list was written, and the bench's box table has no row
+    /// for it either — so neither the rule nor the instrument could see the
+    /// one scope that broke it. Both are fixed with this.
+    ///
+    /// The chart is realistically a WINDOW scope: the in-player overlay draws
+    /// exactly one kind, and the grid is where several get switched on. That
+    /// is why the cost showed up as "the scopes window lags" rather than as
+    /// the overlay lagging (owner: "все что я писал лечится если выключить
+    /// отдельное окно скопов").
     var body: some View {
-        ZStack {
-            locus
+        Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
+            draw(in: context)
+        }
+    }
+
+    private func draw(in context: GraphicsContext) {
+        var context = context
+        context.stroke(locusPath, with: .color(.white.opacity(0.5 * brightness)),
+                       lineWidth: 0.8)
+        if showsOtherGamut {
+            context.stroke(trianglePath(otherPrimaries.colorPrimaries),
+                           with: .color(.white.opacity(0.3 * brightness)),
+                           lineWidth: 0.7)
+        }
+        context.stroke(trianglePath(primaries.colorPrimaries),
+                       with: .color(.white.opacity(0.62 * brightness)),
+                       lineWidth: 1)
+        context.stroke(whitePointPath,
+                       with: .color(.white.opacity(0.75 * brightness)),
+                       lineWidth: 0.9)
+        // The shadow ONCE, around every label on the chart, instead of once
+        // per label — a per-`Text` shadow is an offscreen pass apiece, and
+        // there are seven of them here.
+        context.drawLayer { layer in
+            layer.addFilter(.shadow(color: .black.opacity(0.9), radius: 1))
             if showsOtherGamut {
-                triangle(otherPrimaries.colorPrimaries, opacity: 0.3,
-                         width: 0.7, label: Self.name(of: otherPrimaries))
+                drawGamutLabel(otherPrimaries, opacity: 0.3, in: &layer)
             }
-            triangle(primaries.colorPrimaries, opacity: 0.62, width: 1,
-                     label: Self.name(of: primaries))
-            whitePoint
-            ForEach(Self.labelledWavelengths, id: \.self) { nanometres in
-                wavelengthLabel(nanometres)
+            drawGamutLabel(primaries, opacity: 0.62, in: &layer)
+            for nanometres in Self.labelledWavelengths {
+                drawWavelength(nanometres, in: &layer)
             }
         }
+    }
+
+    /// A gamut's short name, inside its own triangle at the red corner and
+    /// pushed toward the white point. Outside it collided with the locus's own
+    /// wavelength numbers, which are pushed the other way along the same
+    /// radius — measured on a render: "2020" landed on top of "620".
+    private func drawGamutLabel(_ gamut: SignalPrimaries, opacity: Double,
+                                in layer: inout GraphicsContext) {
+        let corners = gamut.colorPrimaries.triangle.map(point)
+        let text = Text(Self.name(of: gamut))
+            .font(.system(size: 7, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.3 + opacity * 0.5 * brightness))
+        layer.draw(text, at: inward(from: corners.first ?? center, by: 15))
+    }
+
+    /// A wavelength number just outside the locus, pushed away from the white
+    /// point along its own radius so it never sits on the curve it names.
+    private func drawWavelength(_ nanometres: Int,
+                                in layer: inout GraphicsContext) {
+        guard let locusPoint = CIE1931.locusPoint(atWavelength: nanometres)
+        else { return }
+        let at = point(locusPoint)
+        let white = point(ColorPrimaries.d65)
+        let dx = at.x - white.x, dy = at.y - white.y
+        let length = max(1, (dx * dx + dy * dy).squareRoot())
+        let text = Text(String(nanometres))
+            .font(.system(size: 6, weight: .medium))
+            .foregroundStyle(.white.opacity(0.25 + 0.35 * brightness))
+        layer.draw(text, at: CGPoint(x: at.x + dx / length * 9,
+                                     y: at.y + dy / length * 9))
     }
 
     /// Short names, not localized on purpose — "709" and "2020" are what the
@@ -86,38 +160,24 @@ struct CIEGraticule: View {
     }
 
     /// The horseshoe plus the line of purples, as one closed path.
-    private var locus: some View {
-        Path { path in
-            let points = CIE1931.spectralLocus.map(point)
-            guard let first = points.first else { return }
-            path.move(to: first)
-            for next in points.dropFirst() { path.addLine(to: next) }
-            path.closeSubpath()
-        }
-        .stroke(.white.opacity(0.5 * brightness), lineWidth: 0.8)
+    private var locusPath: Path {
+        var path = Path()
+        let points = CIE1931.spectralLocus.map(point)
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        for next in points.dropFirst() { path.addLine(to: next) }
+        path.closeSubpath()
+        return path
     }
 
-    private func triangle(_ gamut: ColorPrimaries, opacity: Double,
-                          width: CGFloat, label: String) -> some View {
+    private func trianglePath(_ gamut: ColorPrimaries) -> Path {
+        var path = Path()
         let corners = gamut.triangle.map(point)
-        return ZStack {
-            Path { path in
-                guard let first = corners.first else { return }
-                path.move(to: first)
-                for next in corners.dropFirst() { path.addLine(to: next) }
-                path.closeSubpath()
-            }
-            .stroke(.white.opacity(opacity * brightness), lineWidth: width)
-            // INSIDE the triangle at its red corner, pushed toward the white
-            // point. Outside it collided with the locus's own wavelength
-            // numbers, which are pushed the other way along the same radius —
-            // measured on a render: "2020" landed on top of "620".
-            Text(label)
-                .font(.system(size: 7, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.3 + opacity * 0.5 * brightness))
-                .shadow(color: .black.opacity(0.9), radius: 1)
-                .position(inward(from: corners.first ?? center, by: 15))
-        }
+        guard let first = corners.first else { return path }
+        path.move(to: first)
+        for next in corners.dropFirst() { path.addLine(to: next) }
+        path.closeSubpath()
+        return path
     }
 
     /// A point moved `distance` from `at` toward the white point — where a
@@ -132,32 +192,14 @@ struct CIEGraticule: View {
 
     /// D65, as a small cross rather than a dot: a dot on a chart this dense
     /// disappears under the trace it is there to be compared with.
-    private var whitePoint: some View {
+    private var whitePointPath: Path {
         let at = point(ColorPrimaries.d65)
         let arm: CGFloat = 4
-        return Path { path in
-            path.move(to: CGPoint(x: at.x - arm, y: at.y))
-            path.addLine(to: CGPoint(x: at.x + arm, y: at.y))
-            path.move(to: CGPoint(x: at.x, y: at.y - arm))
-            path.addLine(to: CGPoint(x: at.x, y: at.y + arm))
-        }
-        .stroke(.white.opacity(0.75 * brightness), lineWidth: 0.9)
-    }
-
-    /// A wavelength number just outside the locus, pushed away from the white
-    /// point along its own radius so it never sits on the curve it names.
-    @ViewBuilder
-    private func wavelengthLabel(_ nanometres: Int) -> some View {
-        if let locusPoint = CIE1931.locusPoint(atWavelength: nanometres) {
-            let at = point(locusPoint)
-            let white = point(ColorPrimaries.d65)
-            let dx = at.x - white.x, dy = at.y - white.y
-            let length = max(1, (dx * dx + dy * dy).squareRoot())
-            Text(String(nanometres))
-                .font(.system(size: 6, weight: .medium))
-                .foregroundStyle(.white.opacity(0.25 + 0.35 * brightness))
-                .shadow(color: .black.opacity(0.9), radius: 1)
-                .position(x: at.x + dx / length * 9, y: at.y + dy / length * 9)
-        }
+        var path = Path()
+        path.move(to: CGPoint(x: at.x - arm, y: at.y))
+        path.addLine(to: CGPoint(x: at.x + arm, y: at.y))
+        path.move(to: CGPoint(x: at.x, y: at.y - arm))
+        path.addLine(to: CGPoint(x: at.x, y: at.y + arm))
+        return path
     }
 }
