@@ -129,6 +129,72 @@ struct ControllerVisualRecBoxTests {
     /// centre went on following the pointer after the size had saturated, so
     /// the draw became a drag exactly when the sliders hit their end, which is
     /// where the owner placed it ("потому что ползунки добегают до максимума").
+    /// **The smallest box a hand can draw is the smallest box the sliders
+    /// offer** — on both axes, and it starts drawing at once.
+    ///
+    /// One constant used to do two jobs: the size FLOOR was spent as the
+    /// gesture THRESHOLD, and they are in different units. The floor is a
+    /// fraction of the signal; the band is measured on a placed picture, where
+    /// a point is `displayAspect` times more percent vertically than
+    /// horizontally. On this 16:9 fixture the old gate wanted 2 % of the width
+    /// AND 2 % of the height before it drew anything — 32 pt across, 18 pt
+    /// down — so a small box showed nothing until the hand had gone a long
+    /// way (owner: "рисовка маркера при маленьком размере не сразу начинает
+    /// рисоваться"), and what appeared was the band at the moment the gate
+    /// opened: on a stroke of about forty degrees, 2 % wide and 3 % tall
+    /// ("минималка от руки 2 горизонталь 3 вертикаль").
+    ///
+    /// Six points is past the click threshold and far under the old gate on
+    /// either axis, which is what makes this fail before the fix and what
+    /// makes the two numbers' independence visible.
+    @Test func theSmallestHandDrawnBoxIsTheSlidersOwnMinimum() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await VisualRecControllerProbe.push(controller, dot: true)
+            let viewport = VisualRecControllerProbe.viewport
+            let start = CGPoint(x: 400, y: 300)
+
+            controller.drawVisualRecRegion(
+                from: start, to: CGPoint(x: start.x + 6, y: start.y + 6),
+                viewport: viewport)
+
+            let region = controller.liveVisualRec.region
+            #expect(region.width == VisualRecRegion.minSize, """
+                a hand-drawn box bottoms out at \(region.width) across against \
+                the sliders' \(VisualRecRegion.minSize)
+                """)
+            #expect(region.height == VisualRecRegion.minSize, """
+                …and at \(region.height) down — the two axes do not even agree \
+                with each other
+                """)
+            // …and it is anchored on the press, like every other drawn band
+            #expect(region.centerX > 400 / 1600.0)
+            #expect(region.centerY > 300 / 900.0)
+        }
+    }
+
+    /// A press that has not really moved is still a click, which is the whole
+    /// job of the threshold that used to be the floor: without one, the first
+    /// event of every draw teleports the box to the pointer (owner: "при клике
+    /// на пустом пространстве в режиме рисования области он сразу туда
+    /// телепортит эту область").
+    @Test func aPressThatBarelyMovedDoesNotDrawAnything() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            await VisualRecControllerProbe.push(controller, dot: true)
+            controller.visualRecTeaching.region = VisualRecRegion(
+                centerX: 0.5, centerY: 0.5)
+            let before = controller.liveVisualRec.region
+
+            controller.drawVisualRecRegion(
+                from: CGPoint(x: 400, y: 300), to: CGPoint(x: 401, y: 301),
+                viewport: VisualRecControllerProbe.viewport)
+
+            #expect(controller.liveVisualRec.region == before,
+                    "a one-point wobble drew a box")
+        }
+    }
+
     @Test func aBandDrawnPastTheCeilingStopsInsteadOfSliding() async throws {
         try await ViewProbe.run { probe in
             let controller = probe.controller

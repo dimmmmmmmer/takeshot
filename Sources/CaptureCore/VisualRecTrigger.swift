@@ -67,12 +67,23 @@ public struct VisualRecRegion: Equatable, Sendable {
         self.height = height
     }
 
+    /// One axis of the box, held between the floor and the ceiling.
+    ///
+    /// Stated once because it is asked from three places — the sliders' range,
+    /// `clamp()` and `normalizedBox` — and a fourth, the band drawn by hand,
+    /// used to reach for `minSize` as a GESTURE threshold instead of applying
+    /// it as a size. That is how the smallest box a hand could draw came to
+    /// disagree with the smallest one the sliders offer.
+    public static func clamped(_ axis: Double) -> Double {
+        min(maxSize, max(minSize, axis))
+    }
+
     /// Clamp everything the UI (or a hand-edited settings blob) can drive.
     public mutating func clamp() {
         centerX = min(1, max(0, centerX))
         centerY = min(1, max(0, centerY))
-        width = min(Self.maxSize, max(Self.minSize, width))
-        height = min(Self.maxSize, max(Self.minSize, height))
+        width = Self.clamped(width)
+        height = Self.clamped(height)
     }
 
     /// The watched box as a rectangle. A named struct and not four loose
@@ -96,8 +107,8 @@ public struct VisualRecRegion: Equatable, Sendable {
     /// and the operator's on-screen guide draws it, so the box that is watched is
     /// by construction the box that is shown.
     public var normalizedBox: Box<Double> {
-        let w = min(Self.maxSize, max(Self.minSize, width))
-        let h = min(Self.maxSize, max(Self.minSize, height))
+        let w = Self.clamped(width)
+        let h = Self.clamped(height)
         return Box(x: min(1 - w, max(0, centerX - w / 2)),
                    y: min(1 - h, max(0, centerY - h / 2)),
                    width: w, height: h)

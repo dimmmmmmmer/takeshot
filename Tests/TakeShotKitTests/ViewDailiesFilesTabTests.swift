@@ -36,6 +36,40 @@ import Testing
         }
     }
 
+    /// **The two tab faces ask the `TabView` for the same width.**
+    ///
+    /// A macOS `TabView` takes the size of the face on show, and this one sits
+    /// in a left-aligned stack with nothing pinning its width — so the box was
+    /// as wide as whichever face was up and its right edge moved by a quarter
+    /// of the sheet on every switch (owner: "burn-ins на files если
+    /// переключаешь прыгает размер внутреннего окошка"). Measured before:
+    /// 413pt for the files face, 423 in Russian, against 678 for the burn-ins.
+    ///
+    /// Asked with `fittingSizes` and not with a proposal, because a proposal is
+    /// exactly what the tab does NOT give: handed a definite size both faces
+    /// fill it, which is why this could not be seen from the sheet's own
+    /// measurements.
+    @Test func bothTabFacesAskForTheSameWidth() async throws {
+        try await ViewProbe.run { probe in
+            self.seed(probe)
+            let model = probe.controller.dailies
+            let files = probe.fittingSizes { DailiesFilesTab(model: model) }
+            let burnins = probe.fittingSizes {
+                DailiesSheet(model: model).burninsFace(stretched: false)
+            }
+            #expect(files.en.width == burnins.en.width, """
+                the files face wants \(files.en.width)pt and the burn-ins face \
+                \(burnins.en.width) — the box changes size on the switch
+                """)
+            #expect(files.ru.width == burnins.ru.width, """
+                …and in Russian, \(files.ru.width) against \(burnins.ru.width)
+                """)
+            // …and the shared number is the sheet's own arithmetic, not a
+            // width one of them happens to have today.
+            #expect(files.en.width == DailiesSheet.tabContentWidth)
+        }
+    }
+
     /// **A day on eight cards does not grow the sheet.** The folder lists are
     /// the one part of this face with no bound, so each is a bounded scroll —
     /// the same rule the failure list follows.

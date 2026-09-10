@@ -40,6 +40,28 @@ struct DailiesSheet: View {
     /// extra 80 pays for.
     static let width: CGFloat = 760
 
+    /// **What both tab faces ask the `TabView` for.**
+    ///
+    /// A macOS `TabView` takes the size of the face on show, and this one is
+    /// inside a left-aligned stack with nothing pinning its width — so the box
+    /// was as wide as whichever face was up: measured, 678pt for the burn-ins
+    /// and 413 for the files (423 in Russian, which is its own problem). The
+    /// box's right edge moved by a quarter of the sheet as the operator
+    /// switched (owner: "burn-ins на files если переключаешь прыгает размер
+    /// внутреннего окошка").
+    ///
+    /// Derived from the parts the sheet is already built out of rather than
+    /// typed: two burn columns, the gap between them and the inset each face
+    /// applies. That is exactly the 678 the burn-ins face measures, so nothing
+    /// about that face changes — the files face simply stops being narrower
+    /// than the box it shares.
+    ///
+    /// The height needs no such number: the `TabView` is pinned to
+    /// `tabHeight`, and both faces fill a definite height (the files face is a
+    /// `ScrollView`, which takes whatever it is given).
+    static let tabContentWidth: CGFloat = DailiesBurninSection.columnWidth * 2
+        + OffloadChrome.sectionSpacing + 2 * tabInset
+
     /// What each tab face keeps between itself and the `TabView`'s own border.
     ///
     /// A `TabView` insets its content by about 4pt, which is enough not to
@@ -139,7 +161,7 @@ struct DailiesSheet: View {
             stateColumn
         }
         .padding(Self.tabInset)
-        .frame(maxWidth: .infinity,
+        .frame(minWidth: Self.tabContentWidth, maxWidth: .infinity,
                maxHeight: stretched ? .infinity : nil, alignment: .top)
     }
 

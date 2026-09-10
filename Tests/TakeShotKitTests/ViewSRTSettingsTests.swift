@@ -53,7 +53,19 @@ struct ViewSRTSettingsTests {
             let listener = probe.fittingSizes {
                 Form { SRTSettingsSection() }.formStyle(.grouped)
             }
-            #expect(listener.en.height == caller.en.height, """
+            // **Rows, not points.** The claim is that nothing appears or
+            // disappears with the role, and a row here is 28pt — so the
+            // tolerance is far below anything that could hide one.
+            //
+            // It was an exact equality, and it failed once inside a full
+            // battery by 2pt in English only (463 against 461) having never
+            // failed alone. The cause was NOT established: the latency
+            // sentence, which is the one text here that can change under a
+            // render, measures 461 either way (checked both branches), and
+            // four caller/listener pairs measured in one process came back
+            // identical. So this is a tolerance against an unexplained 2pt,
+            // written as such rather than dressed as a fix.
+            #expect(abs(listener.en.height - caller.en.height) <= 2, """
                 the section changed shape with the role: \(listener) vs \(caller)
                 """)
             #expect(abs(listener.ru.height - listener.en.height) <= 8,

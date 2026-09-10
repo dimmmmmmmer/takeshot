@@ -237,6 +237,7 @@
 
 /* Name collision warning */
 "name_taken_help" = "Такое имя уже есть в папке (%@). Смените CLIP/ROLL — перезаписи не будет, добавится суффикс _2";
+"next_name_help" = "Как будет называться следующий тейк.";
 
 "preset_canon" = "Canon";
 

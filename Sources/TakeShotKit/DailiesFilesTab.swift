@@ -33,6 +33,19 @@ struct DailiesFilesTab: View {
             // against the `TabView`'s own border — see `DailiesSheet.tabInset`.
             .padding(DailiesSheet.tabInset)
         }
+        // **The same width the other face asks for, whatever is in it.**
+        //
+        // A `TabView` takes the size of the face on show, and this one asked
+        // for its own rows: measured at 413pt against the burn-ins face's 678,
+        // and 804 once a card with a real path had been added — so the box
+        // changed size when the operator switched tabs AND again when they
+        // added a source. `idealWidth` and not `minWidth`, because the number
+        // has to be what this face ANSWERS with, not a floor under an answer
+        // that grows with the longest path on set. The rows already truncate
+        // in the middle, so 678 costs a path nothing it was not already
+        // spending. See `DailiesSheet.tabContentWidth`.
+        .frame(idealWidth: DailiesSheet.tabContentWidth, maxWidth: .infinity,
+               alignment: .leading)
     }
 
     // MARK: - sources

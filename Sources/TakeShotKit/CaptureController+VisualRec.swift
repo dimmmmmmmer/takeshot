@@ -243,16 +243,19 @@ extension CaptureController {
     /// the letterbox is refused rather than clamped to a shape the operator did
     /// not draw — the same rule a click outside the picture already follows.
     ///
-    /// A band smaller than the floor is a CLICK, and a click outside the box
-    /// puts the box where it was clicked: that is what a tap has always done.
-    /// Draw the box between two points on the picture.
+    /// **A gesture THRESHOLD and a size FLOOR are two numbers.** This doc used
+    /// to appear twice over this function, which is the smaller of the two
+    /// things that were duplicated here.
+    /// How far the pointer has to travel before a stroke is a DRAW rather
+    /// than a click, in viewport points.
     ///
-    /// The crosshair over this overlay promised exactly this and delivered a
-    /// move (owner: "курсор превращается в крестик, подразумевая что можно
-    /// нарисовать область нужную, но это невозможно"). Both corners go through
-    /// `imageFraction`, so a rubber band that starts on the picture and ends on
-    /// the letterbox is refused rather than clamped to a shape the operator did
-    /// not draw — the same rule a click outside the picture already follows.
+    /// Small on purpose: its whole job is to tell a press that never moved
+    /// from one that did, so that a bare click cannot teleport the box. Three
+    /// points is under the slop of a click on a trackpad and far under any
+    /// deliberate stroke. It is not, and must not become, a statement about
+    /// how big the box may be — see the guard that uses it.
+    static let visualRecDrawThreshold: Double = 3
+
     func drawVisualRecRegion(from start: CGPoint, to end: CGPoint,
                              viewport: CGSize) {
         let source = displaySourceSize()
@@ -262,12 +265,33 @@ extension CaptureController {
                                                in: viewport) else { return }
         let drawnWidth = abs(Double(b.x - a.x))
         let drawnHeight = abs(Double(b.y - a.y))
-        // A band under the floor does NOTHING. It used to place the box at the
-        // pointer, which put a teleport at the start of every draw and moved
-        // the box on a bare click (owner: "при клике на пустом пространстве в
-        // режиме рисования области он сразу туда телепортит эту область").
-        guard drawnWidth >= VisualRecRegion.minSize,
-              drawnHeight >= VisualRecRegion.minSize else { return }
+        // **Has the HAND moved**, in viewport points — not "is the band
+        // already as big as the smallest box", which is what this asked
+        // before and is a different question in different units.
+        //
+        // The guard exists because a band under the floor used to place the
+        // box at the pointer, which put a teleport at the start of every draw
+        // and moved the box on a bare click (owner: "при клике на пустом
+        // пространстве в режиме рисования области он сразу туда телепортит
+        // эту область"). A few points of travel answers that, and only that.
+        //
+        // Spending the SIZE FLOOR as the threshold cost the operator both of
+        // the things they then reported. The floor is a fraction of the
+        // SIGNAL and the band is measured on a placed picture, so one point is
+        // worth `displayAspect` times more percent vertically than
+        // horizontally: on a 16:9 picture the gate demanded 2 % of the width
+        // AND 2 % of the height — 32 pt across but 18 pt down at 1600×900 —
+        // ANDed, with nothing drawn at all until both were cleared. So a small
+        // box did not start drawing until the hand had travelled a long way
+        // ("рисовка маркера при маленьком размере не сразу начинает
+        // рисоваться"), and the box that then appeared was the band AT THAT
+        // MOMENT: for a stroke at about forty degrees, 2 % wide and 3 % tall —
+        // exactly what was measured against the sliders ("минималка от руки 2
+        // горизонталь 3 вертикаль"). The floor is applied to the SIZE below
+        // instead, where the sliders apply it, so the smallest box a hand can
+        // draw is the smallest box the sliders offer, on both axes.
+        let travelled = hypot(Double(end.x - start.x), Double(end.y - start.y))
+        guard travelled >= Self.visualRecDrawThreshold else { return }
         // Capped HERE and anchored on the press, not clamped after centring on
         // the band: the box has a ceiling a quarter of the frame wide and a
         // mouse crosses it easily, and a centre computed from the band's middle
@@ -275,8 +299,8 @@ extension CaptureController {
         // that turned into a drag exactly when the sliders hit their end, which
         // is where the owner placed it ("потому что ползунки добегают до
         // максимума"). Anchored, the box grows away from the press and stops.
-        let width = min(VisualRecRegion.maxSize, drawnWidth)
-        let height = min(VisualRecRegion.maxSize, drawnHeight)
+        let width = VisualRecRegion.clamped(drawnWidth)
+        let height = VisualRecRegion.clamped(drawnHeight)
         applyVisualRecPreview {
             $0.region.centerX = Double(a.x) + (b.x >= a.x ? width : -width) / 2
             $0.region.centerY = Double(a.y) + (b.y >= a.y ? height : -height) / 2

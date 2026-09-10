@@ -44,6 +44,58 @@ struct NamingFieldsView: View {
     @EnvironmentObject private var controller: CaptureController
 
     var body: some View {
+        VStack(alignment: .trailing, spacing: Self.previewGap) {
+            rows
+            namePreview
+        }
+        // **The block keeps its own width.** `Color.clear` under the rows is
+        // FLEXIBLE, and the block sits in a half beside a flexible spacer — so
+        // without this the two would share the space and the fields would
+        // drift off the right edge toward the record button as soon as the
+        // preview existed. Horizontal only: the height is the row plus the
+        // preview line and is what it is.
+        .fixedSize(horizontal: true, vertical: false)
+        .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
+        .animation(.easeOut(duration: 0.15),
+                   value: controller.settings.naming.namingTemplate)
+    }
+
+    /// **What the next take will be called**, under the boxes that decide it
+    /// (owner: "в навбаре кстати добавить бы еще превью имени которое будет у
+    /// след тейка" — "ну вот чтоб под боксами было подписано оно аккуратно").
+    ///
+    /// `pendingTakeName` and not a second composition: it is the same string
+    /// the collision warning is about and the same one the phone shows, built
+    /// from the values the pipeline is configured with. A preview composed
+    /// here would be a second answer to "what is this file called".
+    ///
+    /// **Drawn in an overlay over a flexible spacer, which is the whole trick.**
+    /// A `Text` as a plain row of this stack would report its own ideal width,
+    /// and a long project name would then set the block's width — the block
+    /// the footer's two halves are balanced against, so the centred REC button
+    /// would move as the operator typed. `Color.clear` is flexible, so it takes
+    /// the row's width and adds none, and the text inside is proposed exactly
+    /// that width and truncates in the middle rather than overflowing toward
+    /// the button.
+    private var namePreview: some View {
+        Color.clear
+            .frame(height: Self.previewHeight)
+            .overlay(alignment: .trailing) {
+                Text(controller.pendingTakeName)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(L("next_name_help"))
+            }
+    }
+
+    /// The preview's line, and the gap over it. One text line at 9pt, which is
+    /// the caption size the rows above already use.
+    static let previewHeight: CGFloat = 12
+    static let previewGap: CGFloat = 2
+
+    private var rows: some View {
         HStack(alignment: .center, spacing: 6) {
             // A switch ABOVE the rows made the whole footer jump on every
             // press (owner: "высота подвала прыгает при переключении"), back
@@ -67,8 +119,6 @@ struct NamingFieldsView: View {
             .frame(height: Self.rowHeight, alignment: .bottom)
             paneSwitch
         }
-        .animation(.easeOut(duration: 0.15), value: controller.nameCollision)
-        .animation(.easeOut(duration: 0.15), value: controller.settings.naming.namingTemplate)
     }
 
     /// FILE or META, on its side beside the fields.

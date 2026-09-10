@@ -235,6 +235,7 @@
 
 /* Name collision warning */
 "name_taken_help" = "This name already exists in the folder (%@). Change CLIP/ROLL — recording won't overwrite it, a _2 suffix will be added";
+"next_name_help" = "What the next take will be called.";
 
 "preset_canon" = "Canon";
 
