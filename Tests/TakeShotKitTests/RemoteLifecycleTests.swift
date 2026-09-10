@@ -185,15 +185,20 @@ import Testing
 
     /// The page calls the socket dead when nothing has arrived for a while, which
     /// is the only way it can tell a network that vanished from a still frame —
-    /// mobile Safari reports neither. That deadline has to outlast the heartbeat
-    /// it is watching for, with room for a missed one, or the page reconnects
-    /// through a shoot on a socket that was fine.
-    @Test func thePageOutwaitsTwoHeartbeats() {
-        let beat = CaptureController.remoteTick
-            * CaptureController.remoteHeartbeatTicks
+    /// mobile Safari reports neither. That deadline has to outlast a RUN of
+    /// missed pushes, or the page reconnects through a shoot on a socket that
+    /// was fine.
+    ///
+    /// It used to be held against `remoteHeartbeatTicks`, a forced push every
+    /// twentieth tick that let an unchanged status wait five seconds. That
+    /// silence is gone — the status goes out every tick — so the deadline is
+    /// held against the tick itself, with room for a couple of dozen misses on
+    /// a hiccuping network.
+    @Test func thePageOutwaitsManyMissedPushes() {
+        let tick: Duration = CaptureController.remoteTick
         let watchdog = Duration.milliseconds(RemotePage.watchdogMilliseconds)
-        #expect(watchdog > beat * 2,
-                "the page gives up inside two heartbeats: \(watchdog) vs \(beat)")
+        #expect(watchdog > tick * 24,
+                "the page gives up inside two dozen pushes: \(watchdog) vs \(tick)")
     }
 
     /// And the page is told what that deadline is, rather than carrying its own

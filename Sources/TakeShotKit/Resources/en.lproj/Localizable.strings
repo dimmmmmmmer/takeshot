@@ -759,8 +759,8 @@
 "slate_sync_tag" = "SYNC";
 "slate_sync_hint" = "Click or press Space — sync flash";
 "slate_page_title" = "TakeShot Slate";
-"slate_page_standby" = "TC STOPPED";
-"slate_page_hold" = "TC STALE";
+"slate_page_standby" = "TC NOT RUNNING";
+"slate_page_hold" = "TC UNCONFIRMED";
 "slate_page_offline" = "NO LINK";
 "slate_page_hint" = "Tap for the sync flash. Set the phone's Auto-Lock to Never.";
 /* === the cameras page: the boards' LIVE signal as a grid on a phone.

@@ -129,13 +129,18 @@ enum RemotePage {
     /// How long the page waits for anything from the server before it calls the
     /// socket dead and reconnects.
     ///
-    /// This is what the heartbeat is for. A mobile browser that loses the network
-    /// is not told: the socket delivers nothing further, with no close event and
-    /// no error, so a page that trusts its own connection state shows a timecode
-    /// that stopped minutes ago as if it were live — and a REC press against it
-    /// goes nowhere. Two of the server's five-second beats plus a margin; the
-    /// test `thePageOutwaitsTwoHeartbeats` holds this to
-    /// `CaptureController.remoteHeartbeatTicks` so the two cannot drift.
+    /// This is what the steady push rate is for. A mobile browser that loses
+    /// the network is not told: the socket delivers nothing further, with no
+    /// close event and no error, so a page that trusts its own connection
+    /// state shows a timecode that stopped minutes ago as if it were live —
+    /// and a REC press against it goes nowhere.
+    ///
+    /// Held against `CaptureController.remoteTick` rather than against a
+    /// number of "heartbeats" (`thePageOutwaitsManyMissedPushes`). There used
+    /// to be a five-second forced beat between suppressed pushes and this was
+    /// two of those plus a margin; the suppression is gone — a status goes out
+    /// every tick — so what this has to outlast is a RUN of missed pushes on a
+    /// hiccuping network, not one long silence the app itself produced.
     static let watchdogMilliseconds = 12_000
 
     /// Page label → `Localizable.strings` key. The JavaScript reads the left

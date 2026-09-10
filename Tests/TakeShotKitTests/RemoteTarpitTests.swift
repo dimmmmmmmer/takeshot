@@ -315,8 +315,18 @@ import Testing
             // Bounded, and reading past whatever the pump had already queued:
             // the assertion is that the stream kept moving, not that this was
             // the very next frame on it.
+            // Bounded by a DEADLINE and not by a count, which is this file's
+            // own lesson one function down: a count of intervening messages is
+            // a wall-clock budget wearing a count, and the number of them is
+            // not the test's to know. This phone has been sitting on the
+            // socket, undrained, through the whole tarpit setup — the app
+            // pushes a status every tick (`remoteTick`) whether or not
+            // anything changed, so the backlog it has to read past is however
+            // long that setup took, and eight was the length of it only while
+            // an unchanged status was suppressed.
             var rating = ""
-            for _ in 0..<8 where rating != "good" {
+            let deadline = ContinuousClock.now + .seconds(20)
+            while rating != "good", ContinuousClock.now < deadline {
                 rating = try await phone.next(type: "status")["rating"]
                     as? String ?? ""
             }

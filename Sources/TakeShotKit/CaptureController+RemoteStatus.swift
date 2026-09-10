@@ -173,18 +173,36 @@ extension CaptureController {
         remoteStatusTask?.cancel()
         remoteStatusTask = Task { [weak self] in
             var ticks = 0
-            var lastSent: RemoteStatus?
             var lastTakeLog: RemoteTakeLog?
             while !Task.isCancelled {
                 guard let self else { return }
                 if ticks % Self.remoteDiskTicks == 0 {
                     await self.sampleRemoteDisk()
                 }
-                let status = self.remoteStatus()
-                if status != lastSent || ticks % Self.remoteHeartbeatTicks == 0 {
-                    self.remoteServer?.broadcast(status)
-                    lastSent = status
-                }
+                // **Every tick, changed or not.** An unchanged status used to
+                // be suppressed and forced out only every twentieth tick —
+                // five seconds of silence — on the argument that a phone
+                // cannot tell a still frame from a dead socket for longer
+                // than that.
+                //
+                // The slate reads silence as DOUBT, and much sooner than
+                // that: past `RemotePage.slateHoldMilliseconds` (750 ms) it
+                // marks the readout stale and — the part nobody would guess —
+                // REFUSES THE CLAP, because `fireSync` carries the same
+                // window. And the one state in which nothing on the status
+                // changes is a camera holding its timecode in standby, which
+                // is precisely the state an operator slates in. So the tag
+                // flapped TC STOPPED → TC STALE and back every five seconds
+                // with the number standing still (owner: "tc stale tc stopped
+                // прыгает друг на друга по статусу раз от раза" — "таймкод на
+                // месте стоит, че происходит"), and for four of those five
+                // seconds tapping the slate did nothing at all, silently.
+                //
+                // The saving was never real either: while the timecode runs,
+                // the status changes every tick and goes out at this rate
+                // anyway. `remoteTick`'s own doc — "how often the status goes
+                // out (4/s)" — is simply true again.
+                self.remoteServer?.broadcast(self.remoteStatus())
                 // The take log goes out only when it changed: it can be a whole
                 // day of takes, and the status heartbeat already proves the
                 // socket alive. A finalize, a rating, an edit — from either

@@ -104,7 +104,7 @@ body.rec #rec::before {
    characters, so ~6.6 em wide, and a phone in portrait is width-limited while
    the same phone in landscape is height-limited. min() of the two is what makes
    one rule fill both without a media query. */
-#tcRow { position: relative; text-align: center; }
+#tcRow { text-align: center; }
 #tc {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
@@ -122,10 +122,24 @@ body.standby #tc { color: inherit; }
    different colour can be read as a live one on footage; a number with a line
    through it cannot be read as anything but "do not use this". */
 body.off #tc { color: var(--rec); text-decoration: line-through; }
-/* SYNC / HOLD / OFFLINE, in the corner of the readout the desktop slate puts
-   its own tag in. */
+/* SYNC / the two TC states / NO LINK — at the HEAD of the face, on its own
+   line, rather than tucked into the readout's corner (owner: "подпись sync как
+   будто над хлопушкой должна быть а не в уголке у таймкода").
+   It is a statement about the whole face — whether this slate may be trusted —
+   and a corner is where a footnote goes. It was also measurably in the way:
+   absolutely positioned at the readout's top right it sat ON the last digits,
+   and the readout is ~6.6em of monospace across a face that is width-limited
+   in portrait.
+   `visibility` and a constant height rather than `display: none`, so a tag
+   appearing mid-take cannot reflow the face under a lens — and the height is
+   stated as line-height plus the padding rather than as a round number,
+   because an empty box is a min-height and a filled one is a LINE BOX: at
+   1.2em they came out 16 and 25 px, and the card under them stepped 4 px
+   every time the state changed. Measured on a 375-wide phone: 23 px in every
+   state, card at the same y. The longest tag either language has is 193 px of
+   the 375. */
 #tag {
-  position: absolute; top: 0; right: 0;
+  align-self: center; line-height: 1.2; min-height: 1.7em; white-space: nowrap;
   font-size: min(3.6vw, 2.6vh); font-weight: 800; letter-spacing: 0.1em;
   padding: 0.25em 0.7em; border-radius: 999px;
   background: var(--hold); color: var(--face);
@@ -133,6 +147,15 @@ body.off #tc { color: var(--rec); text-decoration: line-through; }
 }
 body.hold #tag, body.sync #tag, body.standby #tag { visibility: visible; }
 body.off #tag { visibility: visible; background: var(--rec); }
+/* Standby is not a fault, said twice for one state: the readout keeps its
+   ordinary colour (two rules up) and the tag drops the amber a real warning
+   wears. A camera holding its timecode between takes is the normal state of
+   every Rec Run shoot, and dressing it as an alarm is how an operator learns
+   to ignore the tag that matters. */
+body.standby #tag {
+  background: transparent; color: var(--dim);
+  box-shadow: inset 0 0 0 max(1px, 0.15vh) var(--line);
+}
 
 /* SCENE / SHOT / TAKE — the three fields a camera is pointed at a slate FOR.
    Above the roll, like the desktop card, and for the same reason: an editor
@@ -142,9 +165,17 @@ body.off #tag { visibility: visible; background: var(--rec); }
    ролл нужно тоже в бокс поставить а не мелкой подписью как все остальные").
    It was a dim caption in the footer, which is where the connection lamp
    lives — and a lamp is chrome while the roll is one of the things a camera
-   is pointed at this face FOR. Narrower than the rest, because a roll is
-   three or four characters against a scene that can be "SC 114A pt 2". */
-#rollCell { flex: 0 1 auto; min-width: 4.5em; }
+   is pointed at this face FOR.
+   **The same share of the row as the other three** (owner: "почему
+   неравновесно roll был добавлен?"). It used to be sized by its own CONTENT
+   with a 4.5em floor — the only length on this face not stated in vw/vh — so
+   it came out 80% of a sibling in portrait and under a third of one in
+   landscape, which is how a phone is held up to a 16:9 lens, and the gap
+   WIDENED as the face got wider. The argument for narrowing it (a roll is
+   three or four characters against a scene that can be "SC 114A pt 2") does
+   not survive the arithmetic: that scene already clips at a quarter of the
+   row, so the 38pt taken off the roll bought its neighbours nothing. */
+#rollCell { flex: 1 1 0; }
 .cell {
   flex: 1 1 0; min-width: 0; text-align: center;
   border: max(1px, 0.15vh) solid var(--line); border-radius: 0.4em;
@@ -215,12 +246,10 @@ body.flash #flash { display: block; }
 </head>
 <body>
 <div id="face">
+  <div id="tag"></div>
   <div id="top"><span id="project"></span><span id="cam"></span></div>
   <div id="head"><span id="rec"></span><span id="takeName"></span></div>
-  <div id="tcRow">
-    <div id="tc">--:--:--:--</div>
-    <div id="tag"></div>
-  </div>
+  <div id="tcRow"><div id="tc">--:--:--:--</div></div>
   <div id="card">
     <div class="cell"><div class="k" id="kScene"></div><div class="v" id="vScene">—</div></div>
     <div class="cell"><div class="k" id="kShot"></div><div class="v" id="vShot">—</div></div>
@@ -388,12 +417,12 @@ var flashUntil = 0;
 // first word of the take.
 var BEEP_S = 0.08;
 var connected = false;
-// What the readout and its tag currently say. The loop runs at display rate and
-// the number changes at the signal's, so most passes have nothing to write: a
-// DOM mutation per frame for an unchanged string is battery on a device whose
-// battery is the whole reason this page is not a laptop.
-var shownTC = "";
-var shownTag = "";
+// What each element of the face currently says, by id. The loop runs at
+// display rate and the number changes at the signal's, so most passes have
+// nothing to write: a DOM mutation per frame for an unchanged string is
+// battery on a device whose battery is the whole reason this page is not a
+// laptop. Keyed by element — see `write`.
+var shown = {};
 
 // About two frames at 25p — long enough to land on at least one frame of
 // whatever camera is pointed at the slate, short enough to read as a clap
@@ -446,7 +475,7 @@ function render(next) {
   el("vScene").textContent = shown(next.scene);
   el("vShot").textContent = shown(next.shot);
   el("vTake").textContent = shown(next.slateTake);
-  write("vRoll", next.roll || "—", "v");
+  write("vRoll", next.roll || "—");
   document.body.classList.toggle("rec", !!next.recording);
 
   tcRunning = !!next.tcRunning;
@@ -493,9 +522,8 @@ function paint() {
   // by the CSS, but written, and the next person to make the tag visible
   // would have shipped it. A state with nothing to say says nothing.
   write("tag", offline ? S.offline
-    : (syncing ? S.sync : (held ? S.hold : (standby ? S.standby : ""))),
-    "tag");
-  write("tc", readout(moment, syncing), "tc");
+    : (syncing ? S.sync : (held ? S.hold : (standby ? S.standby : ""))));
+  write("tc", readout(moment, syncing));
 }
 
 // The number, or the dashes that stand for not having one.
@@ -510,15 +538,17 @@ function readout(moment, syncing) {
   return TAKESHOT_TC.label(seed + advanced(moment), seedFps, seedDrop);
 }
 
-// One text write, skipped when nothing changed. See `shownTC` above.
-function write(id, text, slot) {
-  if (slot === "tc") {
-    if (text === shownTC) { return; }
-    shownTC = text;
-  } else {
-    if (text === shownTag) { return; }
-    shownTag = text;
-  }
+// One text write, skipped when nothing changed. See `shown` above.
+//
+// Keyed by ELEMENT. There used to be two memos — one for the readout and one
+// for everything else — and "everything else" was the state tag AND the roll
+// cell sharing a single remembered string: each `render` put the roll in it
+// and the `paint` after that put the tag back, so neither was ever skipped
+// (the whole point of the function) and a roll whose value happened to equal
+// the tag's would silently have stopped repainting.
+function write(id, text) {
+  if (shown[id] === text) { return; }
+  shown[id] = text;
   el(id).textContent = text;
 }
 

@@ -393,3 +393,61 @@ import Testing
         }
     }
 }
+
+/// **What the app owes the pages: a status on every tick.**
+///
+/// Its own suite rather than another case in `RemoteSlateTests`, which is
+/// about the served page — this is about the pump behind it, and it is driven
+/// through a socket rather than read off the markup.
+@Suite @MainActor struct RemoteStatusCadenceTests {
+    /// **The app cannot go quiet for longer than the slate is willing to
+    /// wait**, and the state that used to break this is the ordinary one.
+    ///
+    /// The page seeds its clock on an arriving status and nothing else. Past
+    /// `slateHoldMilliseconds` with no status it calls the readout stale — and
+    /// `fireSync` carries the same window, so it also REFUSES THE CLAP, in
+    /// silence. The pump used to suppress an unchanged status and force one
+    /// out only every twentieth tick, and the one state in which nothing on a
+    /// status changes is a camera holding its timecode in standby: five
+    /// seconds of silence out of every five, in the state an operator slates
+    /// in (owner: "tc stale tc stopped прыгает друг на друга по статусу раз от
+    /// раза").
+    ///
+    /// Driven through a real socket, because the claim is about what ARRIVES.
+    /// The bound is the hold window times the number of pushes rather than
+    /// per-gap: the per-gap statement is the true one, but wall-clock on a
+    /// loaded runner is only fair over several — and the failure it is
+    /// separating from is twenty times the bound, not one point over it.
+    @Test func theAppKeepsTalkingWhileTheTimecodeStandsStill() async throws {
+        try await ControllerHarness.run { controller, _ in
+            // A camera in standby on Rec Run: a timecode that is present and
+            // does not move, and nothing else on the status changing either.
+            controller.live.currentTimecode = Timecode(
+                hours: 10, minutes: 0, seconds: 0, frames: 0, fps: 25)
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let client = try await RemoteHarness.connect(
+                port: port, pin: pin, session: RemoteHarness.session())
+            defer { client.close() }
+            _ = try await client.next(type: "auth")
+            _ = try await client.next(type: "status")
+
+            let pushes = 6
+            let hold: Duration = .milliseconds(RemotePage.slateHoldMilliseconds)
+            let started = ContinuousClock.now
+            for _ in 0..<pushes {
+                let status = try await client.next(type: "status")
+                // …and the premise: a fixture whose clock is running would
+                // change the status every tick and prove nothing at all.
+                #expect(status["tcRunning"] as? Bool == false,
+                        "the fixture's timecode moved — this proves nothing")
+            }
+            let elapsed = ContinuousClock.now - started
+            #expect(elapsed < hold * pushes,
+                    """
+                    \(pushes) statuses took \(elapsed) — past \(hold) of \
+                    silence the slate calls the readout stale and refuses the \
+                    sync flash
+                    """)
+        }
+    }
+}

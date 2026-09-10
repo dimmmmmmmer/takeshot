@@ -12,11 +12,14 @@ import Foundation
 extension CaptureController {
     /// How often the status goes out (4/s — smooth enough for a timecode
     /// readout at arm's length, and a fraction of the frame rate).
+    ///
+    /// **Every tick carries one, whether or not anything changed**, and that
+    /// is load-bearing rather than lazy: the slate page treats a gap longer
+    /// than `RemotePage.slateHoldMilliseconds` as doubt about the number and
+    /// refuses to clap. There used to be a `remoteHeartbeatTicks` that let an
+    /// unchanged status wait five seconds — see the pump in `+RemoteStatus`
+    /// for what that did to a camera sitting in standby.
     static let remoteTick = Duration.milliseconds(250)
-    /// Ticks between forced pushes. A status that has not changed still has to
-    /// arrive, or a phone that missed one has no way to tell a still frame from
-    /// a dead socket.
-    static let remoteHeartbeatTicks = 20
     /// Ticks between free-space samples (every 5 s).
     static let remoteDiskTicks = 20
 
