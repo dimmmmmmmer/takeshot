@@ -208,6 +208,13 @@ final class CaptureController: ObservableObject {
     /// strip reads its status — and the RECORDING state has to reach it
     /// whether the sheet is on screen or not (see `handleRecState`).
     let dailies = DailiesQueueModel()
+    /// Which request for the dailies preview's frame is the current one.
+    ///
+    /// A decode of a card's first clip lands after the operator may have
+    /// pointed somewhere else; without this the older, slower answer overwrites
+    /// the newer one and the preview shows the card before last. The same
+    /// shape as `libraryGeneration` and `remoteGeneration`.
+    var dailiesPreviewGeneration = 0
     // MARK: - cards that mount while the app is running (see +CardWatch)
 
     /// The card the operator is being ASKED about. Never a card being copied:

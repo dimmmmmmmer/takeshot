@@ -447,12 +447,27 @@ struct DailiesBurninPreview: View {
         .help(L("dailies_preview_help"))
     }
 
-    /// A sample take's facts, so the preview has something to place. The
-    /// operator's own custom line and toggles are real; the clip name and the
-    /// project line are examples, because a queue may be empty when the
-    /// arrangement is being set up.
-    private var texts: DailiesOverlay.Texts {
-        model.burnins.overlayTexts(for: DailiesItem(
+    /// **The first item of the queue, when there is one.**
+    ///
+    /// The strips used to describe a made-up take whatever was queued —
+    /// `A001C001` of `PROJECT` on 12.07.26 — so pointing the sheet at a card
+    /// changed the picture underneath and nothing written over it (owner: "при
+    /// обновлении папки сорсов превью не обновляется и не подгоняется вся
+    /// новая инфа под новое превью"). The frame and the strips come from one
+    /// item now, through `DailiesQueueModel.queueContents`, so they cannot
+    /// describe different footage.
+    ///
+    /// The sample survives for the case it was written for: a sheet being set
+    /// up with nothing queued has to place something, or the arrangement
+    /// cannot be judged at all.
+    /// Internal, not private: `thePreviewsStripsDescribeTheQueuedItem` reads
+    /// them. Rendering the picture and comparing sizes says that something
+    /// changed and not WHAT — and what changed is the whole claim.
+    var texts: DailiesOverlay.Texts {
+        if let item = model.previewItem {
+            return model.burnins.overlayTexts(for: item)
+        }
+        return model.burnins.overlayTexts(for: DailiesItem(
             source: URL(fileURLWithPath: "/"), outputName: "",
             // The project line is the project NAME and nothing else — the
             // roll is in the file's own name and was taken off this line

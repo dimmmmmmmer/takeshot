@@ -19,6 +19,90 @@ import Testing
                     durationSeconds: Double(frames) / 25, recordedAt: Date())
     }
 
+    /// **The preview describes the queue the run will actually make.**
+    ///
+    /// Both halves of one report (owner: "при обновлении папки сорсов превью
+    /// не обновляется и не подгоняется вся новая инфа под новое превью"): the
+    /// frame the strips are laid over, and the strips themselves.
+    ///
+    /// The frame used to be taken once, when the sheet opened, from the day's
+    /// TAKES — footage a run made from a card does not touch — and the strips
+    /// described a made-up take whatever was queued. This asks for both with
+    /// no thumbnails cached at all, so a frame that arrives can ONLY have come
+    /// from the card: the take path answers nil by construction here.
+    @Test func thePreviewFollowsTheSourceFolder() async throws {
+        try await ControllerHarness.run { controller, root in
+            let card = try MediaFixtures.makeDirectory("dailies-card")
+            defer { try? FileManager.default.removeItem(at: card) }
+            _ = try await MediaFixtures.writeClip(
+                at: card.appendingPathComponent("C0007.mov"), frames: 8)
+
+            let take = try await self.recordedTake(named: "A001C001", in: root)
+            // In the LIST, not just handed to `prepare`: opening the sheet
+            // re-seeds the queue from `dailiesCandidates`, which is the panel's
+            // selection or the day's takes.
+            controller.takes = [take]
+            let model = controller.dailies
+            controller.showDailiesSheet()
+            try #require(controller.thumbnails.isEmpty,
+                         "a cached thumbnail would make the frame ambiguous")
+            try #require(model.previewStill == nil,
+                         "there is a frame already, so nothing below is proof")
+            #expect(model.previewItem?.clipName == "A001C001",
+                    "the preview does not describe the day's own take")
+
+            model.addSource(card)
+            #expect(await ControllerWait.until { !model.isScanning })
+            #expect(model.previewItem?.clipName == "C0007",
+                    "the strips still describe a take the run will not touch")
+            #expect(await ControllerWait.until { model.previewStill != nil }, """
+                the preview's frame never came from the card — it is still \
+                whatever the sheet was opened with
+                """)
+
+            // …and taking the card off puts the queue, and the strips, back.
+            model.removeSource(card)
+            #expect(await ControllerWait.until { !model.isScanning })
+            #expect(model.previewItem?.clipName == "A001C001")
+        }
+    }
+
+    /// A rescan clears what it is about to replace, so nothing reads the
+    /// PREVIOUS card's answer while the walk runs. Asserted synchronously
+    /// right after the call, which is the only moment the old value could
+    /// still be there.
+    @Test func pointingAtAnotherCardDoesNotLeaveTheOldCount() async throws {
+        try await ControllerHarness.run { controller, root in
+            let first = try MediaFixtures.makeDirectory("dailies-card-1")
+            let second = try MediaFixtures.makeDirectory("dailies-card-2")
+            defer {
+                try? FileManager.default.removeItem(at: first)
+                try? FileManager.default.removeItem(at: second)
+            }
+            for name in ["C0001.mov", "C0002.mov"] {
+                try Data([0]).write(to: first.appendingPathComponent(name))
+            }
+            try Data([0]).write(to: second.appendingPathComponent("C0009.mov"))
+
+            let model = controller.dailies
+            model.prepare(takes: [], settings: controller.settings,
+                          defaultFolder: root)
+            model.addSource(first)
+            #expect(await ControllerWait.until { !model.isScanning })
+            try #require(model.itemCount == 2, "the first card never landed")
+
+            // A card ADDED to the list, not one swapped for it: emptying the
+            // list has always cleared the findings, so a removal proves
+            // nothing about the walk.
+            model.addSource(second)
+            #expect(model.itemCount == 0, """
+                the sheet still says \(model.itemCount) — that is the previous \
+                card's count, standing while the new walk runs
+                """)
+            #expect(await ControllerWait.until { model.itemCount == 3 })
+        }
+    }
+
     /// Recording protection, end to end through the mock backend: a queue
     /// started while a take rolls holds at zero frames, and REC stop is what
     /// releases it — no operator action, no sheet on screen.

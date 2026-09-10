@@ -106,9 +106,15 @@ final class DailiesQueueModel: ObservableObject {
 
     private var control: DailiesControl?
     private var scanTask: Task<Void, Never>?
-    private weak var controller: CaptureController?
+    /// Internal rather than private since the queue-contents extension moved
+    /// into its own file: `previewItem` asks it for the settings an item is
+    /// composed against.
+    weak var controller: CaptureController?
     /// The subscription that writes the arrangement down — see `attach`.
     private var changes: AnyCancellable?
+    /// Fires the preview's frame when the queue's first item changes — see
+    /// `attach(to:)`.
+    private var firstItemChanges: AnyCancellable?
 
     /// Wired once, in startup, rather than when the sheet opens — a queue
     /// reports through the controller (status line, toast) and must not run
@@ -132,6 +138,27 @@ final class DailiesQueueModel: ObservableObject {
         changes = objectWillChange.sink { [weak self] _ in
             self?.rememberSoon()
         }
+        // **The preview's frame follows what the run is made of.** Subscribed
+        // to the two published values `queueContents` is a function of rather
+        // than to `objectWillChange`, which fires for a slider drag as well —
+        // and the answer to this one is a decode. `removeDuplicates` on the
+        // first item is what makes a rescan that finds the same card cost
+        // nothing.
+        firstItemChanges = Publishers
+            .CombineLatest3($sources, $findings, $queuedTakes)
+            .map { Self.contents(sources: $0, findings: $1, takes: $2).firstURL }
+            .removeDuplicates()
+            // **A turn later, and that is the second half of the willSet
+            // trap.** The values above are the ones being SET, so the compare
+            // is right — but the work below reads the model and the panel's
+            // thumbnail cache, and at `willSet` time those still hold what the
+            // change is replacing. Without this hop the refresh ran against the
+            // previous card and left the preview on the frame it was already
+            // showing.
+            .receive(on: DispatchQueue.main)
+            .sink { [weak controller] _ in
+                controller?.refreshDailiesPreviewStill()
+            }
     }
 
     /// Write the sheet's arrangement down, shortly.
@@ -263,6 +290,17 @@ final class DailiesQueueModel: ObservableObject {
             return
         }
         let folders = sources
+        // **Cleared before the walk, not after it.** `findings` was replaced
+        // only when it landed, so between pointing at a new card and the walk
+        // finishing, every reading taken from it — the batch count in the
+        // header, the file count on the files tab, the frame the preview lays
+        // its strips over — was the PREVIOUS card's, beside a folder list
+        // already showing the new one (owner: "при обновлении папки сорсов
+        // превью не обновляется и не подгоняется вся новая инфа под новое
+        // превью"). Empty is the honest answer while `isScanning` is true, and
+        // it is the answer every one of those readings already knows how to
+        // draw.
+        findings = DailiesSourceScan.Findings()
         isScanning = true
         scanTask = Task { [weak self] in
             let found = await Task.detached(priority: .userInitiated) {
@@ -377,23 +415,6 @@ final class DailiesQueueModel: ObservableObject {
     /// holds while a take rolls and resumes when it ends.
     func recordingStateChanged(_ recording: Bool) {
         control?.setPaused(recording)
-    }
-
-    /// The queue Start will run: the app's own takes, or the files the
-    /// folders hold.
-    ///
-    /// One or the other and never both — see `queuedTakes`.
-    func plannedItems(settings: CaptureSettings) -> [DailiesItem] {
-        guard sources.isEmpty else {
-            return findings.files.map {
-                Self.item(for: $0, settings: settings,
-                          prefix: namePrefix, suffix: nameSuffix)
-            }
-        }
-        return queuedTakes.map {
-            Self.item(for: $0, settings: settings,
-                      prefix: namePrefix, suffix: nameSuffix)
-        }
     }
 
     // MARK: - what the run reports back

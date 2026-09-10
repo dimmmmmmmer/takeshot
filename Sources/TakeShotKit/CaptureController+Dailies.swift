@@ -18,10 +18,7 @@ extension CaptureController {
             dailies.prepare(takes: dailiesCandidates, settings: settings,
                             defaultFolder: defaultDailiesFolder)
         }
-        // A frame for the preview to lay its strips over. Taken when the sheet
-        // opens: the queue is fixed from here, and the panel behind it has
-        // already decoded the thumbnails it showed.
-        dailies.previewStill = dailiesPreviewStill
+        refreshDailiesPreviewStill()
         dailiesSheetPresented = true
     }
 
@@ -92,6 +89,47 @@ extension CaptureController {
             }
         }
         return nil
+    }
+
+    /// **The preview's frame follows the QUEUE.**
+    ///
+    /// It was assigned once, when the sheet opened, off the day's TAKES — the
+    /// whole truth back when takes were the only thing a run could be made of.
+    /// With source folders the queue is a card's clips, so that frame is
+    /// footage this run will not touch, and pointing at another card moved
+    /// nothing at all: closing and reopening the sheet did not help either,
+    /// because the same take-only walk ran again (owner: "при обновлении папки
+    /// сорсов превью не обновляется и не подгоняется вся новая инфа под новое
+    /// превью").
+    ///
+    /// `queueContents` decides which it is, so the frame and the strips over
+    /// it cannot come from different queues. A file is decoded through
+    /// `otherThumbnail` — the same decoder the takes panel's Other content
+    /// uses, which already knows about BRAW, R3D, CinemaDNG folders and
+    /// stills — and a take keeps the panel's own cached thumbnail, which is
+    /// already in memory and costs nothing.
+    ///
+    /// Cleared while a decode is in flight rather than left showing the last
+    /// card's frame: a stale picture that looks right is worse than a plate
+    /// that plainly has nothing on it yet.
+    func refreshDailiesPreviewStill() {
+        dailiesPreviewGeneration &+= 1
+        let generation = dailiesPreviewGeneration
+        guard case .files(let urls) = dailies.queueContents else {
+            dailies.previewStill = dailiesPreviewStill
+            return
+        }
+        dailies.previewStill = nil
+        guard let first = urls.first else { return }
+        Task { [weak self] in
+            let preview: OtherPreview =
+                await CaptureController.otherThumbnail(for: first)
+            guard let self, generation == self.dailiesPreviewGeneration,
+                  let image = preview.image else { return }
+            var proposed = CGRect(origin: .zero, size: image.size)
+            self.dailies.previewStill = image.cgImage(
+                forProposedRect: &proposed, context: nil, hints: nil)
+        }
     }
 
     /// Whether there is an override at all — the question the way-back button

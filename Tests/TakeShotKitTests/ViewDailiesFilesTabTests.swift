@@ -95,6 +95,44 @@ import Testing
     }
 }
 
+/// **What the burn-in preview says**, as opposed to how big it is.
+@Suite @MainActor struct ViewDailiesPreviewTextsTests {
+    /// The strips describe the first item the run would produce — not a
+    /// made-up take.
+    ///
+    /// They were `A001C001` of `PROJECT` on 12.07.26 whatever was queued, so
+    /// pointing the sheet at a card changed the picture underneath and nothing
+    /// written over it (owner: "при обновлении папки сорсов превью не
+    /// обновляется и не подгоняется вся новая инфа под новое превью"). The
+    /// sample survives for a sheet with nothing queued, which is what it was
+    /// written for.
+    @Test func thePreviewsStripsDescribeTheQueuedItem() async throws {
+        try await ViewProbe.run { probe in
+            let controller = probe.controller
+            controller.settings.naming.projectName = "SUNSET"
+            let model = controller.dailies
+            model.prepare(takes: [], settings: controller.settings,
+                          defaultFolder: probe.root)
+            let empty = DailiesBurninPreview(model: model, still: nil).texts
+            #expect(empty.clipName == "A001C001",
+                    "an empty queue lost the sample it needs to place")
+
+            let take = ControllerFixtures.take(named: "B002C014",
+                                               in: probe.root)
+            try ControllerFixtures.placeholder(for: take)
+            model.prepare(takes: [take], settings: controller.settings,
+                          defaultFolder: probe.root)
+            let queued = DailiesBurninPreview(model: model, still: nil).texts
+            #expect(queued.clipName == "B002C014", """
+                the strips say \(String(describing: queued.clipName)) over a \
+                queue of B002C014
+                """)
+            #expect(queued.project == "SUNSET",
+                    "the project line is still the sample's")
+        }
+    }
+}
+
 /// The queue the sheet will run: the app's own takes, or the folders.
 @Suite @MainActor struct ModelDailiesSourceTests {
     private func scratch(_ name: String) throws -> URL {
