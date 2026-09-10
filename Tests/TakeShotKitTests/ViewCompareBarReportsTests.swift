@@ -172,3 +172,56 @@ import Testing
         }
     }
 }
+
+/// **The fullscreen player's transport bar reads the same rule the main
+/// window does.**
+///
+/// It guarded the sync-play GRID arm alone and handed everything else the
+/// AVPlayer transport — so over a BRAW/CinemaDNG clip, or a still, that window
+/// drew the RAW picture under a bar belonging to a player with no item at all:
+/// `play(url:)` replaces the item with nil for those, so no periodic tick ever
+/// runs and the model keeps the LAST AVPlayer take's duration for ever. Knob
+/// dead at zero, the readout stating the previous take's length, the play
+/// button inert — while the timecode over the picture ran correctly, because
+/// it routes to the RAW engine (owner: "при переключении тейков плейбэка
+/// ощущение что транспортная линия с предыдущего тейка сохраняется").
+///
+/// Asserted on the source: the defect is a branch that was never taken, and a
+/// branch has no size to measure.
+@Suite @MainActor struct ViewFullscreenTransportTests {
+    @Test func theFullscreenBarSwitchesOnTheSharedRule() throws {
+        let code = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/TakeShotKit/AudioChannelPanel.swift"),
+            encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.contains("switch controller.transportBarKind"),
+                "the fullscreen player decides its bar for itself again")
+        #expect(code.contains("RawTransportBar(model: model)"), """
+            the fullscreen player has no RAW bar, so a RAW clip gets the \
+            AVPlayer's
+            """)
+    }
+
+    /// …and the rule really does separate the two engines, which is what the
+    /// branch above leans on.
+    @Test func theRuleNamesTheEngineTheClipBelongsTo() async throws {
+        try await ControllerHarness.run { controller, root in
+            let raw = root.appendingPathComponent("A001C001.braw")
+            try Data([0x00]).write(to: raw)
+            controller.viewerMode = .playback
+            controller.playbackURL = raw
+            #expect(controller.transportBarKind != .video,
+                    "a RAW clip is offered the AVPlayer transport")
+
+            let clip = root.appendingPathComponent("A001C002.mov")
+            try Data([0x00]).write(to: clip)
+            controller.playbackURL = clip
+            #expect(controller.transportBarKind == .video)
+        }
+    }
+}

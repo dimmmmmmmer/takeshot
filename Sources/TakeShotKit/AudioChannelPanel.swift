@@ -365,17 +365,39 @@ struct PlaybackFullscreenView: View {
             .playerTopBadges(showsModeSwitch: false, autoHide: true)
         }
         .modifier(BottomHoverReveal(height: ChromeReveal.transportBand, shown: $transportHover) {
-            // The bar has to drive the picture that is on screen. Over a grid
-            // the single player's transport moves a take nobody can see — the
-            // same parked-engine mistake `transportBarKind` names for the main
-            // window, which this window does not read because its bar is
-            // hover-revealed rather than laid out.
-            if let sync = controller.syncPlay {
-                SyncPlayTransportBar(model: sync)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
+            // **The bar has to drive the picture that is on screen**, and it
+            // reads the same rule the main window does.
+            //
+            // It used to guard the GRID arm alone and hand everything else the
+            // AVPlayer transport — so over a BRAW/CinemaDNG clip, or a still,
+            // this window drew the RAW picture under a bar belonging to a
+            // player that has no item: `play(url:)` calls
+            // `replaceCurrentItem(with: nil)` for those, so no periodic tick
+            // ever runs and `TransportModel.duration` keeps the LAST AVPlayer
+            // take's value for ever. Knob dead at zero, the right-hand readout
+            // stating the previous take's length, the play button inert —
+            // while the timecode over the picture ran correctly, because it
+            // routes to the RAW engine (owner: "при переключении тейков
+            // плейбэка ощущение что транспортная линия с предыдущего тейка
+            // сохраняется").
+            //
+            // That is the "a fix excludes a state from one arm of a rule and
+            // not the other" shape CLAUDE.md describes, in its third form: the
+            // grid was excluded here and the RAW engine was not.
+            switch controller.transportBarKind {
+            case .video:
                 TransportBar(player: controller.player, model: controller.transport)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+            case .raw:
+                if let model = controller.rawPlayer {
+                    RawTransportBar(model: model)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            case .none:
+                if let sync = controller.syncPlay {
+                    SyncPlayTransportBar(model: sync)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
             }
         })
     }
