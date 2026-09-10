@@ -123,16 +123,7 @@ private struct TakesSection: View {
                 Text(L("takes"))
                     .font(.subheadline.weight(.semibold))
                     .fixedSize()
-                Button {
-                    controller.openDestinationInFinder()
-                } label: {
-                    Image(systemName: "folder")
-                        .frame(width: 14, height: 14)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-                .help(L("open_folder"))
+                PanelFolderButton { controller.openDestinationInFinder() }
                 // The export control USED to be here — a bordered button
                 // with an invisible menu stretched over it. It is two menus in
                 // the utility row under this panel now, beside the offload and
@@ -146,7 +137,7 @@ private struct TakesSection: View {
                 // a bar, a file name and a Stop button now, and it reads out at
                 // the bottom of this panel (see `PanelRunStatus`).
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, PanelChrome.headerVerticalPadding)
             Divider()
             if controller.takes.isEmpty {
                 Spacer()

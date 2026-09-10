@@ -23,18 +23,9 @@ struct OtherContentSection: View {
                 // у другого контента тоже сделаем кнопку открытия папки"). It
                 // opens the record folder itself — which is where foreign
                 // files land, and what this section is a listing OF.
-                Button {
-                    controller.openOtherContentInFinder()
-                } label: {
-                    Image(systemName: "folder")
-                        .frame(width: 14, height: 14)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-                .help(L("open_folder"))
+                PanelFolderButton { controller.openOtherContentInFinder() }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, PanelChrome.headerVerticalPadding)
             Divider()
             if viewMode == "grid" {
                 ScrollView {

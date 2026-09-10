@@ -22,14 +22,18 @@ struct WheelTraceTests {
     @Test func theLineNamesTheScrollerAndHowDeepItIs() {
         let found = WheelTrace.line(
             WheelTrace.Reading(window: "TakeShot",
-                               point: CGPoint(x: 900, y: 300), deltaY: -3,
-                               phase: "notch", precise: false),
+                               point: CGPoint(x: 900, y: 300), deltaY: -3, deltaX: 0,
+                               phase: "notch", precise: false,
+                               scroller: WheelTrace.Scroller(
+                                   document: 2000, clip: 500, offset: 0)),
             chain: ["CellHostingView", "ListTableCellView", "ListCoreClipView",
                     "ListCoreScrollView", "NSHostingView"])
         #expect(found.contains("scroller at depth 3"),
                 "the line did not find the scroll view: \(found)")
         #expect(found.contains("(900,300)"))
         #expect(found.contains("notch"))
+        #expect(found.contains("SCROLLABLE"),
+                "the line did not say whether there was anything to scroll")
     }
 
     /// The case the trace exists for: the pointer is over something with no
@@ -38,7 +42,8 @@ struct WheelTraceTests {
     @Test func aPointerWithNoScrollerAboveItSaysSoInWords() {
         let found = WheelTrace.line(
             WheelTrace.Reading(window: "TakeShot", point: .zero, deltaY: 0,
-                               phase: "began", precise: true),
+                               deltaX: 0,
+                               phase: "began", precise: true, scroller: nil),
             chain: ["DragZoneView", "NSHostingView"])
         #expect(found.contains("NO SCROLLER above the pointer"),
                 "a pointer with no scroller read as fine: \(found)")
