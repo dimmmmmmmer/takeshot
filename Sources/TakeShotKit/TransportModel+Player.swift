@@ -18,6 +18,7 @@ extension TransportModel {
     func attach(_ player: AVPlayer) {
         detach()
         self.player = player
+        applyPlaybackEnd()
         // The periodic observer below only fires while time advances, so when
         // playback stopped, `isPlaying` stayed true and the transport kept
         // showing a pause button over a stopped clip. The player's own status
@@ -52,13 +53,19 @@ extension TransportModel {
                 case .wrap(let start):
                     self.seek(to: start)
                 case .stop(let mark):
+                    // **A safety net, not the trigger.** The player is told
+                    // where the range ends (`applyPlaybackEnd`) and stops
+                    // there itself, frame-exact; this arm only runs if that
+                    // end time was missed — after a seek, or on an item that
+                    // refused it. It still lands on the mark, and the seek
+                    // that does so is the visible backwards jump the owner
+                    // reported ("в конце прыгает на 1 фрейм") — which is why
+                    // it must not be the ordinary path.
                     player.pause()
                     self.isPlaying = false
-                    // Land ON the mark rather than wherever the 10 Hz tick
-                    // caught it: the operator set that frame, and stopping two
-                    // frames past it is the same overshoot in a place they can
-                    // see.
-                    self.seek(to: mark)
+                    if abs(player.currentTime().seconds - mark) > 0.001 {
+                        self.seek(to: mark)
+                    }
                 }
             }
         }
@@ -81,6 +88,41 @@ extension TransportModel {
                 player.rate = Float(self.desiredRate)
             }
         }
+    }
+
+    /// **Tell the PLAYER where the range ends.**
+    ///
+    /// The out point used to be enforced by sampling the playhead at 10 Hz and
+    /// then seeking BACKWARDS onto the mark. 100 ms is two to three frames, so
+    /// playback always ran past the mark — those frames genuinely reach the
+    /// screen, the tap pulls the picture every 16 ms — and then froze and
+    /// snapped back. That snap is the report (owner: "если в плейбэке
+    /// поставить точки ин и аут у клипа и запустить плейбэк без лупа в конце
+    /// прыгает на 1 фрейм"). With the loop ON the same late detection is
+    /// swallowed by the wrap, which is a jump the operator expects — and that
+    /// asymmetry is the whole reason the report is loop-off only.
+    ///
+    /// `forwardPlaybackEndTime` is AVFoundation's own answer: the player stops
+    /// AT that time and posts `didPlayToEndTime`, so there is nothing to
+    /// correct afterwards. Playing past a mark is then impossible, which is
+    /// what an out point means; SEEKING past it still is, and the next press
+    /// of play restarts the range (`rangeStart(forPlayheadAt:)`).
+    ///
+    /// The RAW engine has always been frame-accurate here for the same reason
+    /// — its out point is a FRAME NUMBER inside the decode loop, with no seek
+    /// afterwards (`RawPlayback+PlayLoop`).
+    func applyPlaybackEnd() {
+        guard let item = player?.currentItem else { return }
+        guard let out = outPoint else {
+            item.forwardPlaybackEndTime = .invalid
+            return
+        }
+        // The item's own timescale, not 600: 600 cannot represent an NTSC
+        // frame boundary, and this is the one number the picture comes to rest
+        // on.
+        let scale = item.duration.isNumeric ? item.duration.timescale : 600
+        item.forwardPlaybackEndTime = CMTime(seconds: out,
+                                             preferredTimescale: scale)
     }
 
     func detach() {

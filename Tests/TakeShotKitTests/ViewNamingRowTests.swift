@@ -220,7 +220,8 @@ struct ViewNamingRowTests {
             let alpha: NamingPreset = try #require(
                 NamingPreset.all.first { $0.key == "preset_sony_alpha" },
                 "the Sony α preset is gone")
-            #expect(alpha.template == "C{clip}")
+            #expect(alpha.template == "{bare}C{clip}",
+                    "the legacy Sony preset stopped declining the project prefix")
             probe.controller.applyNamingPreset(alpha)
 
             let kept: Int = Self.textFieldCount(

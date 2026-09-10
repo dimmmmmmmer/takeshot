@@ -15,7 +15,12 @@ final class TransportModel: ObservableObject {
     @Published var duration: Double = 0
     /// Loop range (stuntmen watch one beat ten times in a row).
     @Published var inPoint: Double?
-    @Published var outPoint: Double?
+    @Published var outPoint: Double? {
+        // The PLAYER is told where the range ends, so it stops there itself —
+        // see `applyPlaybackEnd`, which is the whole of the frame-accuracy
+        // fix.
+        didSet { applyPlaybackEnd() }
+    }
     @Published var isPlaying = false
     @Published var desiredRate: Double = 1.0
     @Published var isLooping = true
@@ -148,7 +153,23 @@ final class TransportModel: ObservableObject {
     /// point clears it).
     func toggleRangePoint(out: Bool) {
         let before = currentRange
-        let now = position.currentTime
+        // **The player's own clock, not the 10 Hz readout.**
+        //
+        // `position.currentTime` is written by the periodic observer alone, so
+        // a mark set WHILE PLAYING was up to 100 ms — two or three frames —
+        // behind the frame the operator was looking at when they pressed. A
+        // mark set while paused was always exact, which is what made this hard
+        // to see. Asking the player costs nothing and is the frame on screen.
+        //
+        // Only WHILE PLAYING, which is the only case the readout is stale in:
+        // paused, the operator stepped to that frame and the readout is what
+        // put them there. `isNumeric` and not `??` besides — a player with no
+        // item hands back an INVALID time, whose `.seconds` is NaN, and a NaN
+        // mark poisons every comparison downstream in silence.
+        let clock = player?.rate != 0 ? player?.currentTime() : nil
+        let now = clock?.isNumeric == true
+            ? (clock?.seconds ?? position.currentTime)
+            : position.currentTime
         if out {
             if let existing = outPoint, abs(existing - now) < 0.1 {
                 outPoint = nil

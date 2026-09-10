@@ -181,3 +181,46 @@ struct ModelCameraLabelTests {
         #expect(sanitized("  ") == "")
     }
 }
+
+/// **A preset can decline the project prefix, and one does.**
+///
+/// The engine prefixes the project name to any template that does not place it
+/// itself — "the project name always prefixes the file, for any vendor preset".
+/// That is right for six of the seven, and wrong for the one whose whole job is
+/// to reproduce a camera's OWN file name: Sony's legacy scheme is `C0001` and
+/// nothing else, and with a project named the operator got `Project_C0001`
+/// (owner: "режим сони легаси для нейминга должен быть типа C0001").
+///
+/// The suite could not see it: every preset case but one passed an EMPTY
+/// project, so the prepend the shipping app applies was never exercised.
+@Suite struct NamingBareTemplateTests {
+    private func name(_ template: String, project: String,
+                      clipDigits: Int = 4) -> String {
+        NamingEngine(template: template, clipPadding: clipDigits)
+            .fileName(for: NamingContext(
+                project: project, date: Date(timeIntervalSince1970: 0),
+                take: 1, reel: "001", camera: "A", postfix: ""))
+    }
+
+    @Test func theLegacySonyPresetKeepsTheCamerasOwnName() throws {
+        let preset = try #require(
+            NamingPreset.all.first { $0.key == "preset_sony_alpha" })
+        #expect(name(preset.template, project: "Nightshoot",
+                     clipDigits: preset.clipDigits) == "C0001",
+                "a named project still reaches the camera-original name")
+        // …and with no project it was already right, which is why this was
+        // green for the life of the feature.
+        #expect(name(preset.template, project: "",
+                     clipDigits: preset.clipDigits) == "C0001")
+    }
+
+    /// The rule it leans on, stated on its own: a template without the marker
+    /// still takes the project, and one with it never does.
+    @Test func onlyTheMarkerDeclinesTheProject() {
+        #expect(name("C{clip}", project: "Nightshoot") == "Nightshoot_C0001")
+        #expect(name("{bare}C{clip}", project: "Nightshoot") == "C0001")
+        // and the marker leaves no trace of itself in the name
+        #expect(!name("{bare}C{clip}", project: "Nightshoot").contains("bare"))
+        #expect(!name("{bare}C{clip}", project: "").contains("_"))
+    }
+}

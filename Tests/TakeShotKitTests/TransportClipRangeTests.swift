@@ -156,6 +156,12 @@ import Testing
             let transport = controller.transport
 
             controller.play(url: clipA)
+            // Paused first: a mark set WHILE PLAYING now comes off the
+            // player's own clock rather than the 10 Hz readout (see
+            // `toggleRangePoint`), so a fixture that drives the readout by
+            // hand has to be in the state where the readout is the truth —
+            // which is also the state an operator marks a frame in.
+            controller.player.pause()
             // set the range synchronously: the 10 Hz position observer can only
             // run at a suspension point, and there is none between these lines
             transport.position.currentTime = 0.2
@@ -450,5 +456,73 @@ struct TransportOutPointTests {
             #expect(transport.rangeAction(atTime: 5, playing: true)
                     == .wrap(to: 0))
         }
+    }
+}
+
+/// **The picture comes to rest ON the out point, not one frame past it and
+/// back.**
+///
+/// The out point used to be enforced by sampling the playhead at 10 Hz and
+/// then seeking BACKWARDS onto the mark. 100 ms is two to three frames, so
+/// playback always ran past the mark — those frames genuinely reach the screen
+/// — and then froze and snapped back (owner: "если в плейбэке поставить точки
+/// ин и аут у клипа и запустить плейбэк без лупа в конце прыгает на 1 фрейм").
+/// With the loop ON the same late detection is swallowed by the wrap, which is
+/// the asymmetry that made the report loop-off-only.
+///
+/// What is measured here is that the PLAYER is told where the range ends, so it
+/// stops there itself. The picture coming to rest is the one thing a headless
+/// run cannot see — there is no player with real media in the suite — so the
+/// assertion is on the item's `forwardPlaybackEndTime`, which is the mechanism
+/// that removes the correction.
+@Suite @MainActor struct TransportPlaybackEndTests {
+    /// A transport on a real player and item, and the item it is on.
+    ///
+    /// The player is held by the transport, so returning the item alone is
+    /// enough — a tuple of three was the whole cast and one member of it was
+    /// never read.
+    private func attached() -> (transport: TransportModel, item: AVPlayerItem) {
+        // A real item, from a URL that need not exist: nothing is decoded here
+        // and the property under test is item state, not playback.
+        let item = AVPlayerItem(url: URL(fileURLWithPath: "/tmp/takeshot-range.mov"))
+        let transport = TransportModel()
+        transport.attach(AVPlayer(playerItem: item))
+        return (transport, item)
+    }
+
+    @Test func anOutPointReachesThePlayerAsItsEndTime() {
+        let (transport, item) = attached()
+        #expect(!item.forwardPlaybackEndTime.isValid,
+                "a clip with no out point is capped before one is set")
+
+        transport.outPoint = 8
+        #expect(item.forwardPlaybackEndTime.isValid,
+                "the out point never reached the player")
+        #expect(abs(item.forwardPlaybackEndTime.seconds - 8) < 0.001,
+                "the player stops at \(item.forwardPlaybackEndTime.seconds)")
+    }
+
+    /// …and clearing the mark uncaps it again, or the clip could never be
+    /// played to its end afterwards.
+    @Test func clearingTheOutPointUncapsThePlayer() {
+        let (transport, item) = attached()
+        transport.outPoint = 8
+        transport.outPoint = nil
+        #expect(!item.forwardPlaybackEndTime.isValid,
+                "the clip is still capped at \(item.forwardPlaybackEndTime.seconds)")
+    }
+
+    /// The safety net stays: an end time can be missed after a seek, and the
+    /// rule that decides what to do then is unchanged.
+    @Test func theRangeRuleIsStillTheSafetyNet() {
+        let transport = TransportModel()
+        transport.outPoint = 8
+        transport.isLooping = false
+        #expect(transport.rangeAction(atTime: 8.04, playing: true)
+            == .stop(at: 8))
+        transport.isLooping = true
+        transport.inPoint = 2
+        #expect(transport.rangeAction(atTime: 8.04, playing: true)
+            == .wrap(to: 2))
     }
 }

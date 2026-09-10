@@ -85,6 +85,11 @@ extension CaptureController {
             // starts at zero, and the loop is only enforced at the out point
             // (owner item 38 — see TransportModel.rangeStart)
             transport.beginInsideRange()
+            // …and the ITEM is told where the range ends, now that there is
+            // one to tell: `outPoint` was restored before this item existed,
+            // so its own setter had nothing to apply to (see
+            // `TransportModel.applyPlaybackEnd`).
+            transport.applyPlaybackEnd()
             player.play()
             loadPlaybackInfo(for: item, at: url)
         }
