@@ -244,6 +244,55 @@ import Testing
         }
     }
 
+    /// **A rotated PAGE code cuts that page's sockets, and only those.**
+    ///
+    /// The operator's code has done this since it was written; the three page
+    /// codes did nothing at all. `setPagePINs` was called from ONE place — the
+    /// branch that rebuilds the pages after a language switch — so rotating
+    /// the slate's code wrote the setting and left the running server letting
+    /// the retired one in until the app was restarted. That is the whole
+    /// content of "rotate": the phone that walked off set keeps receiving.
+    ///
+    /// Two sockets, because "only those" is half the claim: a runner leaving
+    /// with the slate phone must not take the script supervisor — or the
+    /// operator's own page — down with it.
+    @Test func rotatingAPageCodeDropsThatPagesSocketAndNoOther() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.ensureRemotePIN()
+            let (port, pin) = try await RemoteHarness.serve(controller)
+            let slatePIN: String = try #require(controller.settings.remote.slatePIN)
+            let session = RemoteHarness.session()
+
+            let operatorPhone = try await RemoteHarness.connect(port: port, pin: pin,
+                                                         session: session)
+            defer { operatorPhone.close() }
+            _ = try await operatorPhone.next(type: "auth")
+
+            let url: URL = try #require(URL(string: "ws://127.0.0.1:\(port)/ws"))
+            let slate = RemoteTestClient(task: session.webSocketTask(with: url))
+            slate.task.resume()
+            defer { slate.close() }
+            try await slate.send(["action": "hello", "pin": slatePIN,
+                                  "page": "slate"])
+            try #require(await ControllerWait.until {
+                controller.remoteServer?.clientCount == 2
+            }, "the slate never seated on its own code")
+
+            controller.regenerateRemotePIN(for: .slate)
+
+            #expect(await ControllerWait.until {
+                controller.remoteServer?.clientCount == 1
+            }, """
+                a phone holding the retired slate code is still connected — \
+                which is the one thing rotating a code is meant to stop
+                """)
+            // …and the one still up is the operator's, still being fed.
+            let status = try await operatorPhone.next(type: "status")
+            #expect(status["type"] as? String == "status",
+                    "the operator's socket went down with the slate's")
+        }
+    }
+
     /// And the rotation does not take the listener with it: the operator reads
     /// the new code out and the same unit comes straight back in on it.
     @Test func theNewPINWorksOnTheSameListener() async throws {

@@ -184,17 +184,50 @@ extension CaptureController {
     }
 
     /// A new code, for when the old one has been read out to a unit that has
-    /// wrapped. Sockets already open stay up until their next command.
+    /// wrapped. **The sockets that were holding it are turned away** — see
+    /// `RemoteServer.setPIN` and `setPagePINs` for why refusing their next
+    /// command is not enough (the slate and the live page send none).
     ///
     /// One page at a time: rotating the slate's code because a runner walked
     /// off with the phone must not lock out the script supervisor.
     func regenerateRemotePIN(for link: RemoteLink = .remote) {
-        let fresh = RemotePIN.generate()
+        store(RemotePIN.generate(), for: link)
+    }
+
+    /// A code the operator TYPED, for a unit that already has one written on a
+    /// piece of tape (owner: "пин кстати все еще руками не могу сделать для
+    /// ремоутов").
+    ///
+    /// Vetted by `usablePIN` — the rule that already decides whether a STORED
+    /// code is still a code — so a typed one and a generated one are the same
+    /// kind of thing, and nothing downstream can tell them apart. Refused
+    /// rather than repaired: a field that padded "12" into "1200" would hand
+    /// out a code the operator did not choose and would read out the wrong one
+    /// to the set.
+    ///
+    /// **Nothing here refuses 1234 or 0000, on purpose.** This is a code for a
+    /// page on a set network, written on tape and read out across a cart; the
+    /// thing that stops guessing is the tarpit (`RemotePINTarpit`), which is
+    /// deaf to how memorable the number is. A settings field that argued with
+    /// an operator about their own code would be answered with a Post-it.
+    ///
+    /// Answers whether it was taken, so the field can snap back to the stored
+    /// code rather than showing an edit that was not kept.
+    @discardableResult
+    func setRemotePIN(_ typed: String, for link: RemoteLink = .remote) -> Bool {
+        guard let pin = Self.usablePIN(typed) else { return false }
+        store(pin, for: link)
+        return true
+    }
+
+    /// Where a code lands. One switch, so a generated code and a typed one
+    /// cannot come to be stored in different places.
+    private func store(_ pin: String, for link: RemoteLink) {
         switch link {
-        case .remote: settings.remote.pin = fresh
-        case .slate: settings.remote.slatePIN = fresh
-        case .live: settings.remote.livePIN = fresh
-        case .script: settings.remote.scriptPIN = fresh
+        case .remote: settings.remote.pin = pin
+        case .slate: settings.remote.slatePIN = pin
+        case .live: settings.remote.livePIN = pin
+        case .script: settings.remote.scriptPIN = pin
         }
     }
 
@@ -232,11 +265,18 @@ extension CaptureController {
         if oldValue.remote.pin != settings.remote.pin, let pin = settings.remote.pin {
             remoteServer?.setPIN(pin)
         }
+        // **Every settings change, not only a language switch.** The page
+        // codes used to be handed over inside the branch below, so rotating
+        // the slate's code wrote the setting and changed nothing on a running
+        // server — the phone went on being let in with the retired one until
+        // the app was restarted. The server does the diff and retires only
+        // what moved, so handing it the whole set every time costs a lock and
+        // cannot forget a field.
+        remoteServer?.setPagePINs(remotePagePINs)
         if oldValue.theme.appLanguage != settings.theme.appLanguage {
             // The labels on the phone follow the app's language switch; the
             // pages are bytes behind the server's lock, so this needs no
             // restart.
-            remoteServer?.setPagePINs(remotePagePINs)
             remoteServer?.setPage(RemotePage.html())
             remoteServer?.setScriptPage(RemotePage.scriptHTML())
             remoteServer?.setLivePage(RemotePage.liveHTML())

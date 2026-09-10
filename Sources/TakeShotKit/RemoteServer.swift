@@ -270,10 +270,42 @@ final class RemoteServer: @unchecked Sendable {
     ///
     /// 1008 (policy violation) rather than 1001: the page is being turned away,
     /// not told the server is going down, and its reconnect asks for a code.
+
     /// The codes for the three auxiliary pages, keyed by `RemoteLink` raw
-    /// value. Set beside `setPIN` and from the same place.
+    /// value — and, for every code that CHANGED, the sockets it opened.
+    ///
+    /// The doc block above this one used to run straight into these two lines,
+    /// so a reader of this function was told it drops sockets. It did not: it
+    /// swapped a dictionary and left every phone on the retired code receiving.
+    /// Worse, it was called from ONE place — the branch that rebuilds the pages
+    /// after a LANGUAGE switch — so rotating the slate's code changed nothing at
+    /// all on a running server until the app was restarted.
+    ///
+    /// Only the pages whose code moved are turned away. A phone that came in on
+    /// the operator's master code keeps its socket: its code did not change, and
+    /// rotating the slate's because a runner walked off with a phone must not
+    /// take the script supervisor's page down with it.
+    ///
+    /// The diff is HERE rather than at the caller, so a caller cannot forget a
+    /// field: `applyRemoteChange` hands over the whole set on every settings
+    /// change and this decides what moved.
     func setPagePINs(_ pins: [String: String]) {
-        shared.withLock { $0.pagePINs = pins }
+        let retired: Set<String> = shared.withLock { state in
+            let moved = Set(pins.filter { state.pagePINs[$0.key] != $0.value }
+                .keys)
+            // a code that was REMOVED retires its sockets too
+            let dropped = Set(state.pagePINs.keys).subtracting(pins.keys)
+            state.pagePINs = pins
+            return moved.union(dropped)
+        }
+        guard !retired.isEmpty else { return }
+        queue.async { [self] in
+            for client in clients.values {
+                guard case .page(let link) = client.role,
+                      retired.contains(link.rawValue) else { continue }
+                client.close(code: 1008)
+            }
+        }
     }
 
     func setPIN(_ pin: String) {

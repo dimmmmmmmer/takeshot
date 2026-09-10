@@ -388,3 +388,45 @@ struct ViewSettingsTests {
         }
     }
 }
+
+/// **The remote code, as a control rather than a label.**
+///
+/// Its own suite: `ViewSettingsTests` is at the file's type-length ceiling,
+/// and this asks a different question from the rest of it — not "does the row
+/// fit in both languages" but "can the operator put their own code in it".
+@MainActor
+struct ViewRemotePINFieldTests {
+    /// **The code is in a box the operator can type into** (owner: "пин кстати
+    /// все еще руками не могу сделать для ремоутов"). It was a `Text` with a
+    /// New PIN button beside it, so the only code an operator could have was
+    /// one the app invented.
+    ///
+    /// Counted as an EDITABLE `NSTextField` holding the stored code. Editable
+    /// is the whole assertion and it was learned by mutation: SwiftUI draws a
+    /// plain `Text` in a Form as an `NSTextField` too, so a count of text
+    /// fields is green over a label — the first version of this test passed
+    /// with the box replaced by the `Text` it was written to replace.
+    @Test func theRemoteCodeIsEditable() async throws {
+        try await ViewProbe.run { probe in
+            probe.controller.settings.remote.enabled = true
+            probe.controller.settings.remote.pin = "4821"
+            let host = NSHostingView(rootView: AnyView(probe.hosted(
+                Form { RemoteSettingsSection() }.formStyle(.grouped))))
+            host.frame = CGRect(x: 0, y: 0, width: ViewBudget.settingsFormWidth,
+                                height: 700)
+            host.layoutSubtreeIfNeeded()
+            #expect(Self.fieldsHolding("4821", in: host) == 1, """
+                the remote code is not in an editable box — an operator cannot \
+                enter a code a unit already has written on it
+                """)
+        }
+    }
+
+    /// How many of the view's text fields hold `value`.
+    private static func fieldsHolding(_ value: String, in view: NSView) -> Int {
+        if let field = view as? NSTextField {
+            return field.isEditable && field.stringValue == value ? 1 : 0
+        }
+        return view.subviews.reduce(0) { $0 + fieldsHolding(value, in: $1) }
+    }
+}

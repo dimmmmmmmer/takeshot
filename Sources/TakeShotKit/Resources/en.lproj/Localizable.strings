@@ -582,6 +582,7 @@
 "remote_port" = "Port";
 "remote_pin" = "PIN";
 "remote_pin_new" = "New PIN";
+"remote_pin_help" = "Type a code of your own, or press New PIN. Four digits.";
 "remote_address" = "Address";
 /* clicking an address puts it on the clipboard; the secondary click adds this
    and the one below. The phone is the device that needs the address, so the

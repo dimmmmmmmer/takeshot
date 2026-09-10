@@ -1,3 +1,4 @@
+import CaptureCore
 import SwiftUI
 
 /// The Remote section of the settings window: the switch, the port, the code,
@@ -37,6 +38,9 @@ struct RemoteSettingsSection: View {
     /// after a network change falls back to the first, which is the address a
     /// phone on the set network would use.
     @State private var chosen = 0
+    /// Whether the code field has the keyboard. Committing on focus LEAVING is
+    /// what makes clicking somewhere else the same as pressing Enter.
+    @FocusState private var pinFocused: Bool
 
     private var isOn: Bool { controller.settings.remote.enabled == true }
 
@@ -75,17 +79,60 @@ struct RemoteSettingsSection: View {
         }
     }
 
+    /// The code as it is being TYPED (owner: "пин кстати все еще руками не могу
+    /// сделать для ремоутов"). A draft, committed on Enter or on leaving the
+    /// field, rather than a binding that writes straight into settings: every
+    /// settings write runs `applyRemoteChange`, so a write-through field would
+    /// retire the code on each keystroke — turning away every phone four times
+    /// and leaving "1", then "12", then "123" standing as the code in between.
+    @State private var typed = ""
+    @State private var editing = false
+
     private var pinRow: some View {
         LabeledContent(L("remote_pin")) {
             HStack(spacing: 10) {
-                Text(controller.remotePIN(for: link) ?? "----")
+                TextField("", text: $typed)
                     .font(.system(.title3, design: .monospaced))
-                    .textSelection(.enabled)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 76)
+                    .help(L("remote_pin_help"))
+                    // Digits, and no more of them than a code has. Filtered as
+                    // it is typed rather than refused at the end: a field that
+                    // takes a letter and then throws the whole entry away is a
+                    // field an operator has to type twice.
+                    .onChange(of: typed) { _, edited in
+                        let digits = String(edited.filter(\.isNumber)
+                            .prefix(RemoteSettings.pinLength))
+                        if digits != edited { typed = digits }
+                    }
+                    .onSubmit { commitPIN() }
+                    .onExitCommand { showStoredPIN() }
+                    .focused($pinFocused)
+                    .onChange(of: pinFocused) { _, focused in
+                        if !focused { commitPIN() }
+                    }
                 Button(L("remote_pin_new")) {
                     controller.regenerateRemotePIN(for: link)
+                    showStoredPIN()
                 }
             }
         }
+        .onAppear { showStoredPIN() }
+        // the segmented switch above changes WHICH code this row is showing
+        .onChange(of: link) { _, _ in showStoredPIN() }
+    }
+
+    /// Take the edit, or put back what is stored. A half-typed code is not a
+    /// code, and leaving it in the box would read as the one the set is being
+    /// given.
+    private func commitPIN() {
+        guard !controller.setRemotePIN(typed, for: link) else { return }
+        showStoredPIN()
+    }
+
+    private func showStoredPIN() {
+        typed = controller.remotePIN(for: link) ?? ""
     }
 
     /// **The code shown is the SELECTED page's** (owner: "пины на все страницы

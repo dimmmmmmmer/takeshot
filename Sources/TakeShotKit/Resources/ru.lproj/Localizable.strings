@@ -585,6 +585,7 @@
 "remote_port" = "Порт";
 "remote_pin" = "PIN";
 "remote_pin_new" = "Новый PIN";
+"remote_pin_help" = "Можно ввести свой код или нажать «Новый PIN». Четыре цифры.";
 "remote_address" = "Адрес";
 /* clicking an address puts it on the clipboard; the secondary click adds this
    and the one below. The phone is the device that needs the address, so the

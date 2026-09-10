@@ -69,6 +69,35 @@ import Testing
         }
     }
 
+    /// **A code the operator TYPED** (owner: "пин кстати все еще руками не могу
+    /// сделать для ремоутов"). It is stored exactly as typed, and anything
+    /// that is not a code is refused rather than repaired: a field that padded
+    /// "12" into "1200" would hand out a code nobody chose and read the wrong
+    /// one out to the set.
+    @Test func aTypedCodeIsTakenAndRubbishIsRefused() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.ensureRemotePIN()
+            #expect(controller.setRemotePIN("4821", for: .slate))
+            #expect(controller.settings.remote.slatePIN == "4821")
+
+            for rubbish in ["", "12", "48210", "48a1", " 482", "48 1"] {
+                #expect(!controller.setRemotePIN(rubbish, for: .slate),
+                        Comment(rawValue: "\(rubbish) was taken as a code"))
+            }
+            #expect(controller.settings.remote.slatePIN == "4821",
+                    "a refused entry moved the stored code anyway")
+
+            // …and a code being easy to remember is not this app's business to
+            // refuse: it is written on tape and read out across a cart, and
+            // what stops guessing is the tarpit.
+            #expect(controller.setRemotePIN("0000"))
+            #expect(controller.settings.remote.pin == "0000")
+
+            // one page at a time, the way `regenerateRemotePIN` is
+            #expect(controller.settings.remote.slatePIN == "4821")
+        }
+    }
+
     /// A hand-edited blob with a three-digit code gets a real one rather than
     /// a page nobody can open.
     @Test func aBrokenStoredCodeIsReplaced() async throws {
