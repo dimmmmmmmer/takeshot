@@ -79,7 +79,7 @@ import Testing
         PanelWheelRelay.adopt(nil)
         try await ViewProbe.run { probe in
             try ViewFixtures.seedTakes(probe.controller, in: probe.root)
-            try await probe.mounted(TakeListView(),
+            await probe.mounted(TakeListView(),
                                     in: CGSize(width: 330, height: 600)) {
                 #expect(PanelWheelRelay.hasZone,
                         "the panel never told the relay where it is")

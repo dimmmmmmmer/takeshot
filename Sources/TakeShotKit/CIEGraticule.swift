@@ -86,7 +86,11 @@ struct CIEGraticule: View {
     }
 
     private func draw(in context: GraphicsContext) {
-        var context = context
+        // Taken as a value and never rebound: every call here is non-mutating,
+        // and `var context = context` is a warning on the CI toolchain and
+        // silence on this one (the vectorscope's copy really is mutated — it
+        // hands `&context` to its ring helper). The runner is a second
+        // COMPILER, and a warning is a build failure there.
         context.stroke(locusPath, with: .color(.white.opacity(0.5 * brightness)),
                        lineWidth: 0.8)
         if showsOtherGamut {

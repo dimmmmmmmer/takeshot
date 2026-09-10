@@ -68,7 +68,7 @@ import Testing
             try #require(controller.pipeline.referenceSinks.all().isEmpty,
                          "something had already mounted a reference surface")
 
-            try await probe.mounted(ComparePlaybackSplit(),
+            await probe.mounted(ComparePlaybackSplit(),
                                     in: CGSize(width: 800, height: 450)) {
                 #expect(controller.pipeline.referenceSinks.all().count == 1, """
                     the record split mounted \
@@ -91,7 +91,7 @@ import Testing
             controller.playbackURL = clip
             controller.compareMode = .sideBySide
 
-            try await probe.mounted(ComparePlaybackSplit(),
+            await probe.mounted(ComparePlaybackSplit(),
                                     in: CGSize(width: 800, height: 450)) {
                 #expect(controller.pipeline.referenceSinks.all().isEmpty,
                         "the playback split mounted a reference surface")

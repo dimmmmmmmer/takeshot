@@ -44,6 +44,11 @@ import Testing
 //   * whether an AppKit CONTROL draws to the edges of its bounds. It does not
 //     on every release — see `controlInkFillsItsBounds`. An ink margin read off
 //     a segmented picker is a fact about that release, not about the layout.
+//   * the APPEARANCE, which is no longer one of these: see `raster`. It used to
+//     be inherited from whatever the machine was set to, and a template symbol
+//     takes its control's tint — white in the dark, black in the light. So a
+//     glyph measured as BRIGHTNESS was ink on this Mac and nothing at all on a
+//     runner whose default is Aqua.
 //
 // Ink that SwiftUI draws ITSELF — a filled Color, a Path, a scope trace — is
 // subject to neither and needs no gate.
@@ -206,15 +211,40 @@ enum ViewRender {
     /// bottom, badges along the top — and every one of those is bright too, so
     /// a scan of the whole frame answers "something is lit somewhere", which is
     /// not a question worth asking.
-    static func brightColumns(_ view: some View, in size: CGSize,
-                              rows: ClosedRange<Double> = 0...1,
-                              threshold: Int = 200) -> [Int] {
+    /// **The appearance every ink measurement draws in.**
+    ///
+    /// Stated here rather than inherited from the machine, because ink is a
+    /// function of it. A template symbol takes its control's tint — white on a
+    /// dark appearance and black on a light one — so a glyph measured as
+    /// brightness is ink on a Mac in Dark Mode and nothing at all on a runner
+    /// whose default is Aqua. Two tests that measure a footer glyph's shape
+    /// were green here and red on CI for the life of the feature, reporting
+    /// zero shapes for a menu that draws perfectly well.
+    ///
+    /// Dark, because the app's own chrome is: the footer, the panels and the
+    /// player background are dark whatever the system is set to, so this is
+    /// also what the operator is looking at.
+    static let renderAppearance = NSAppearance(named: .darkAqua)
+
+    /// One rendered view, as pixels — what every ink measurement below starts
+    /// from. Four copies of these five lines were four places for the
+    /// appearance, the layout pass or the backing store to be set up
+    /// differently from each other.
+    static func raster(_ view: some View, in size: CGSize) -> NSBitmapImageRep? {
         let host = NSHostingView(rootView: AnyView(view))
+        host.appearance = renderAppearance
         host.frame = CGRect(origin: .zero, size: size)
         host.layoutSubtreeIfNeeded()
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
-        else { return [] }
+        else { return nil }
         host.cacheDisplay(in: host.bounds, to: rep)
+        return rep
+    }
+
+    static func brightColumns(_ view: some View, in size: CGSize,
+                              rows: ClosedRange<Double> = 0...1,
+                              threshold: Int = 200) -> [Int] {
+        guard let rep = raster(view, in: size) else { return [] }
         // The backing store is 2x on a Retina machine and 1x on a headless CI
         // runner; the assertions are in points either way.
         let scale = max(1, rep.pixelsWide / max(1, Int(size.width)))
@@ -247,12 +277,7 @@ enum ViewRender {
     /// doing. Nil when the view drew nothing.
     static func drawnBounds(_ view: some View, in size: CGSize,
                             floor: Double = 0.06) -> CGRect? {
-        let host = NSHostingView(rootView: AnyView(view))
-        host.frame = CGRect(origin: .zero, size: size)
-        host.layoutSubtreeIfNeeded()
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
-        else { return nil }
-        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let rep = raster(view, in: size) else { return nil }
         let scale = Double(max(1, rep.pixelsWide / max(1, Int(size.width))))
         var minX = Int.max, maxX = -1, minY = Int.max, maxY = -1
         for x in 0..<rep.pixelsWide {
@@ -282,12 +307,7 @@ enum ViewRender {
     /// waveform spreads it over all of it — so this is the only way from a test
     /// to see the difference the operator was reporting.
     static func horizontalDetail(_ view: some View, in size: CGSize) -> Double {
-        let host = NSHostingView(rootView: AnyView(view))
-        host.frame = CGRect(origin: .zero, size: size)
-        host.layoutSubtreeIfNeeded()
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
-        else { return 0 }
-        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let rep = raster(view, in: size) else { return 0 }
         var steps = 0.0
         var total = 0.0
         // every third row: this is an average over a few hundred thousand
@@ -318,12 +338,7 @@ enum ViewRender {
     /// the histogram ended up deaf to a control the operator expected to work
     /// on all four.
     static func meanBrightness(_ view: some View, in size: CGSize) -> Double {
-        let host = NSHostingView(rootView: AnyView(view))
-        host.frame = CGRect(origin: .zero, size: size)
-        host.layoutSubtreeIfNeeded()
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)
-        else { return 0 }
-        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let rep = raster(view, in: size) else { return 0 }
         var total = 0.0
         var counted = 0
         // every fourth pixel each way: this is a comparison between two

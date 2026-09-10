@@ -253,7 +253,6 @@ final class SRTVideoEncoder {
     @discardableResult
     private static func apply(_ configuration: Configuration,
                               to session: VTCompressionSession) -> [String] {
-        let colour = ColorTags.values(for: configuration.colorPreset)
         // A ceiling on top of the average, over one second. Without it a keyframe
         // is free to burst past whatever the link can carry, and on an SRT link a
         // burst is exactly what fills the send buffer and drops the frames behind
