@@ -25,11 +25,7 @@ struct WaveformView: View {
                 channelImage(.blue, tint: ScopeTint.blue)
                     .blendMode(.screen)
             default: // "y" — luma trace carrying the image's color
-                if let image = ScopeImageCache.image(.lumaColor, from: data) {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .interpolation(.medium)
-                }
+                channelImage(.lumaColor, tint: nil)
             }
             ScopeLevelGraticule(nominal: data.nominal,
                                 transfer: data.transfer)
@@ -38,7 +34,7 @@ struct WaveformView: View {
 
     @ViewBuilder
     private func channelImage(_ map: ScopeImageCache.Map,
-                              tint: Color) -> some View {
+                              tint: Color?) -> some View {
         ScopeChannelImage(map: map, data: data, tint: tint)
     }
 }
@@ -57,14 +53,21 @@ struct WaveformView: View {
 private struct ScopeChannelImage: View {
     let map: ScopeImageCache.Map
     let data: ScopeData
-    let tint: Color
+    /// nil for the luma map, which already carries the image's own colours —
+    /// multiplying those by anything is a second opinion about a trace that
+    /// is deliberately the picture's.
+    let tint: Color?
 
     var body: some View {
         if let image = ScopeImageCache.image(map, from: data) {
-            Image(decorative: image, scale: 1)
+            let drawn = Image(decorative: image, scale: 1)
                 .resizable()
                 .interpolation(.medium)
-                .colorMultiply(tint)
+            if let tint {
+                drawn.colorMultiply(tint)
+            } else {
+                drawn
+            }
         }
     }
 }
@@ -77,28 +80,48 @@ enum ScopeTint {
     static let blue = Color(red: 0.35, green: 0.55, blue: 1)
 }
 
-/// RGB parade: three channel waveforms side by side.
+/// **YRGB parade**: the luma trace and the three channel waveforms side by
+/// side (owner: "сделай парады yrgb").
+///
+/// The Y column is the SAME map the waveform's default view draws — the luma
+/// trace carrying the image's own colours — so it costs nothing to add: the
+/// analyzer has always produced it, and the cache hands the two scopes one
+/// image. What it adds to the parade is the column a colourist reads first:
+/// the three channels say where the balance is, and Y says what the picture's
+/// exposure is doing while they do.
 struct ParadeView: View {
     let data: ScopeData
+
+    /// One column of the parade.
+    struct Column: Equatable {
+        let map: ScopeImageCache.Map
+        /// nil for Y — see `ScopeChannelImage.tint`.
+        let tint: Color?
+    }
+
+    /// **Left to right: Y, R, G, B.** Named here rather than spelled inline in
+    /// the body so the order is a value a test can hold: "the parade lost its
+    /// luma column" is otherwise a change nothing in the suite can see.
+    static let columns: [Column] = [
+        Column(map: .lumaColor, tint: nil),
+        Column(map: .red, tint: ScopeTint.red),
+        Column(map: .green, tint: ScopeTint.green),
+        Column(map: .blue, tint: ScopeTint.blue),
+    ]
 
     var body: some View {
         ZStack {
             HStack(spacing: 1) {
-                paradeChannel(.red, tint: ScopeTint.red)
-                paradeChannel(.green, tint: ScopeTint.green)
-                paradeChannel(.blue, tint: ScopeTint.blue)
+                ForEach(Array(Self.columns.enumerated()), id: \.offset) { pair in
+                    ScopeChannelImage(map: pair.element.map, data: data,
+                                      tint: pair.element.tint)
+                }
             }
-            // one set of numbers across all three columns: the axis is shared,
-            // and three copies of it is three chances to read the wrong one
+            // one set of numbers across all the columns: the axis is shared,
+            // and a copy per column is a copy per chance to read the wrong one
             ScopeLevelGraticule(nominal: data.nominal,
                                 transfer: data.transfer)
         }
-    }
-
-    @ViewBuilder
-    private func paradeChannel(_ map: ScopeImageCache.Map,
-                               tint: Color) -> some View {
-        ScopeChannelImage(map: map, data: data, tint: tint)
     }
 }
 

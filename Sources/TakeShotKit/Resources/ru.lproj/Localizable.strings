@@ -297,7 +297,7 @@
 "bit_depth_fallback" = "Сигнал %d бит — плата отдаёт %d бит";
 "bit_depth_twelve" = "Сигнал 12 бит — захват 12 бит R12B";
 "bit_depth_twelve_subsampled" = "Сигнал 12 бит — захват 12 бит R12B, но %@ пишет 4:2:2. ProRes 4444 сохранит.";
-"scope_parade" = "Парад";
+"scope_parade" = "Парад YRGB";
 "scope_vector" = "Вектор";
 "scope_none_hint" = "Все скопы выключены";
 "grab_saved" = "Стилл сохранён: %@";

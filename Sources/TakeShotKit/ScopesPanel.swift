@@ -56,7 +56,7 @@ enum ScopeKind: String, CaseIterable, Identifiable {
     }
 }
 
-/// Scopes: waveform (image-colored luma or per-channel), RGB parade, histogram
+/// Scopes: waveform (image-colored luma or per-channel), YRGB parade, histogram
 /// and vectorscope.
 ///
 /// Two surfaces, one panel: the separate window holds a grid that wraps to its

@@ -409,10 +409,25 @@ extension ScopeAnalyzer {
                 // brightness: hue and saturation stay true to the image
                 let avgY = max(1, 0.2126 * avgR + 0.7152 * avgG + 0.0722 * avgB)
                 let scale = brightness / avgY
-                colored[i * 4] = UInt8(min(255, avgR * scale))
-                colored[i * 4 + 1] = UInt8(min(255, avgG * scale))
-                colored[i * 4 + 2] = UInt8(min(255, avgB * scale))
-                colored[i * 4 + 3] = 255
+                // **Opacity follows the cell's own saturation** — the emphasis
+                // the owner asked for ("то что насыщеннее видно явнее"), and
+                // the reason it is the ALPHA rather than the brightness: a
+                // brighter trace clips toward white and loses the hue that
+                // made it interesting, while an opacity scales all three
+                // channels together and leaves the colour exactly where it
+                // was. See `ScopeSaturation` for the floor and the curve.
+                //
+                // The bytes are PREMULTIPLIED (`rgbaImage` builds the CGImage
+                // as `premultipliedLast`), so the colour is scaled by the same
+                // opacity it declares — an unpremultiplied RGB over a smaller
+                // alpha is an undefined pixel, not a brighter one.
+                let opacity = ScopeSaturation.opacity(
+                    forSaturation: ScopeSaturation.of(r: avgR, g: avgG, b: avgB))
+                let lit = scale * opacity
+                colored[i * 4] = UInt8(min(255, avgR * lit))
+                colored[i * 4 + 1] = UInt8(min(255, avgG * lit))
+                colored[i * 4 + 2] = UInt8(min(255, avgB * lit))
+                colored[i * 4 + 3] = UInt8(min(255, (255 * opacity).rounded()))
             }
             return colored
         }

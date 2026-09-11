@@ -295,7 +295,7 @@
 "bit_depth_fallback" = "The signal is %d-bit — the board is delivering %d-bit";
 "bit_depth_twelve" = "12-bit signal — capturing 12-bit R12B";
 "bit_depth_twelve_subsampled" = "12-bit signal — capturing 12-bit R12B, but %@ records 4:2:2. ProRes 4444 keeps it.";
-"scope_parade" = "Parade";
+"scope_parade" = "YRGB parade";
 "scope_vector" = "Vector";
 "scope_none_hint" = "All scopes are off";
 "grab_saved" = "Still saved: %@";
