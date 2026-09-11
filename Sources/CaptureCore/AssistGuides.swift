@@ -23,14 +23,34 @@ public struct AssistGuides: Equatable, Sendable {
     /// and title safe is the INNER box.
     public var actionPercent: Double = 93
     public var titlePercent: Double = 90
+    /// **How bright the safe-area lines are drawn**, 0…1 (owner: "добавь в
+    /// сейфзоны ползунок настройки их яркости").
+    ///
+    /// The two boxes ship at 0.45 and 0.30 of white — right over a mid-grey
+    /// scene and either invisible or distracting over the ends of the scale: a
+    /// night exterior swallows them, a white cyc makes them the loudest thing
+    /// in the frame. This scales BOTH, so the inner box stays the fainter of
+    /// the two at every setting and the pair keeps reading as one aid.
+    ///
+    /// The frameline is deliberately not scaled with it. It is a statement
+    /// about the DELIVERABLE's crop, it has the matte outside it doing most of
+    /// the work, and an operator dimming the safe areas is asking for less of
+    /// the busiest marks, not for a fainter frame.
+    public var safeBrightness: Double = 1
 
     public init(ratio: Double? = nil, safeAreas: Bool = false,
-                actionPercent: Double = 93, titlePercent: Double = 90) {
+                actionPercent: Double = 93, titlePercent: Double = 90,
+                safeBrightness: Double = 1) {
         self.ratio = ratio
         self.safeAreas = safeAreas
         self.actionPercent = actionPercent
         self.titlePercent = titlePercent
+        self.safeBrightness = safeBrightness
     }
+
+    /// The brightness the lines are actually drawn at — clamped here so no
+    /// caller can hand the compositor an alpha outside the scale.
+    public var safeAlphaScale: Double { min(1, max(0.05, safeBrightness)) }
 
     /// The guides as the operator's settings describe them. One conversion, so
     /// the value the renderer draws and the value the popover edits cannot
@@ -39,7 +59,8 @@ public struct AssistGuides: Equatable, Sendable {
         self.init(ratio: settings.framelineRatioDrawn,
                   safeAreas: settings.safeAreasOn == true,
                   actionPercent: settings.safeActionPercentEffective,
-                  titlePercent: settings.safeTitlePercentEffective)
+                  titlePercent: settings.safeTitlePercentEffective,
+                  safeBrightness: settings.safeBrightnessEffective)
     }
 
     /// Nothing to draw — the display stage skips the whole pass on this.
@@ -100,9 +121,9 @@ public struct AssistGuides: Equatable, Sendable {
         if safeAreas {
             let thin = max(1, Self.lineWidth(in: size) * 0.6)
             out = stroke(safeRect(box, percent: actionPercent), width: thin,
-                         alpha: 0.45, over: out, in: extent)
+                         alpha: 0.45 * safeAlphaScale, over: out, in: extent)
             out = stroke(safeRect(box, percent: titlePercent), width: thin,
-                         alpha: 0.3, over: out, in: extent)
+                         alpha: 0.3 * safeAlphaScale, over: out, in: extent)
         }
         return out.cropped(to: extent)
     }

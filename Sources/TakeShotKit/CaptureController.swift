@@ -278,6 +278,18 @@ final class CaptureController: ObservableObject {
     @Published var assist = ViewAssist() {
         didSet { applyAssistChange(from: oldValue) }
     }
+    /// **The aids are switched off the picture without being forgotten** —
+    /// the bypass key (owner: "нам нужен хоткей типа … включить/отключить её
+    /// видимость").
+    ///
+    /// Not a value of its own on the surfaces: what they are pushed is
+    /// `assist.withoutAids` while this is true, so the stored set-up is
+    /// untouched and one press brings every tool back exactly as it was.
+    /// Session state rather than a setting — an operator who quits with the
+    /// aids bypassed means "not right now", not "never again".
+    @Published var assistsHidden = false {
+        didSet { applyAssistChange(from: assist) }
+    }
     /// The chroma-key eyedropper is waiting for a click on the picture (see
     /// `+ChromaKey`). Published because it changes the pointer and puts a
     /// pick surface over the player.

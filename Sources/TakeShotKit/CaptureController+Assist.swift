@@ -48,9 +48,13 @@ extension CaptureController {
     /// had this shape (`applySettingsChange`), and this is the file the aids
     /// belong to.
     func applyAssistChange(from oldValue: ViewAssist) {
-        pipeline.setViewAssist(assist)
-        playbackTap.setViewAssist(assist)
-        rawPlayer?.setViewAssist(assist)
+        // **What the surfaces get is not always what is stored**: with the
+        // bypass on they get the same value with nothing drawn on it, so the
+        // operator's whole set-up survives a press (see `assistsHidden`).
+        let shown = assistsHidden ? assist.withoutAids : assist
+        pipeline.setViewAssist(shown)
+        playbackTap.setViewAssist(shown)
+        rawPlayer?.setViewAssist(shown)
         // a write from anywhere else supersedes a draft the debounce has not
         // folded in yet: the pending timer must not put the old slider value
         // back over the change that just arrived
@@ -194,6 +198,24 @@ extension CaptureController {
     /// A trackpad pinch: `factor` is relative (1 = no change).
     func magnifyPunchIn(by factor: Double) {
         applyAssistPreview { $0.magnify(by: factor) }
+    }
+
+    /// **Everything in the assist popover, back to how it ships** — the reset
+    /// key (owner: "сбросить все по опер помощи"). The chroma key's dial-in
+    /// survives, because that is set-up rather than an aid; see
+    /// `ViewAssist.reset`.
+    ///
+    /// It also lifts the bypass: a reset that left the aids hidden would put
+    /// the operator in a state where nothing is on and nothing shows, and the
+    /// next press of either key would look broken.
+    func resetAssists() {
+        assistsHidden = false
+        assist = assist.reset
+    }
+
+    /// The bypass: the aids off the picture and back, with nothing lost.
+    func toggleAssistsHidden() {
+        assistsHidden.toggle()
     }
 
     /// A pinch or a wheel tick anchored at the pointer: the image point under

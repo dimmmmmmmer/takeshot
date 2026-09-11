@@ -214,6 +214,8 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     // J-K-L with a modifier is not J-K-L. They are editable like everything
     // else here — a Russian layout puts О-Л-Д under those fingers, and the
     // binding follows the physical key (`sharesKey`).
+    case resetAssists
+    case toggleAssistsHidden
     case shuttleReverse
     case shuttleStop
     case shuttleForward
@@ -244,6 +246,8 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .toggleViewerMode: return "hotkey_viewer_mode"
         case .toggleAudioChannelBank: return "hotkey_audio_bank"
         case .toggleCleanFeed: return "hotkey_clean_feed"
+        case .resetAssists: return "hotkey_assists_reset"
+        case .toggleAssistsHidden: return "hotkey_assists_hidden"
         case .shuttleReverse: return "hotkey_shuttle_reverse"
         case .shuttleStop: return "hotkey_shuttle_stop"
         case .shuttleForward: return "hotkey_shuttle_forward"
@@ -335,6 +339,20 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "u",
                             modifiers: NSEvent.ModifierFlags.control.rawValue,
                             keyCode: 32)
+
+        case .resetAssists:
+            // ⌃0 — zero the aids. Not ⌃R: R is the record key one modifier
+            // away, and "reset" is not a word to put next to it in a hurry.
+            return KeyCombo(key: "0",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 29)
+        case .toggleAssistsHidden:
+            // ⌃H — Hide them, and bring them back. It joins the ⌃ family for
+            // the reason stated there, and sits beside ⌃U: one takes the app's
+            // chrome off the picture, the other the operator's marks.
+            return KeyCombo(key: "h",
+                            modifiers: NSEvent.ModifierFlags.control.rawValue,
+                            keyCode: 4)
 
         // J-K-L and the arrows, bare — see the enum case for why.
         case .shuttleReverse:

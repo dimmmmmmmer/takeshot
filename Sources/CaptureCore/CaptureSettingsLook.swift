@@ -74,6 +74,9 @@ public struct AssistSettings: Codable, Equatable, Sendable {
     public var safeActionPercent: Double?
     /// Title-safe area as a percentage of the frame; nil — 90 (see above).
     public var safeTitlePercent: Double?
+    /// Safe-area line brightness, 0.05…1; nil — full. See
+    /// `safeBrightnessEffective`.
+    public var safeBrightness: Double?
     /// Exposure-legend size: "s" / "m" / "l"; nil — medium. The legend is read
     /// from behind the camera, so its size is the operator's call, not ours.
     public var legendSize: String?
@@ -154,6 +157,14 @@ public struct AssistSettings: Codable, Equatable, Sendable {
 
     public var safeTitlePercentEffective: Double {
         min(100, max(50, safeTitlePercent ?? 90))
+    }
+
+    /// **How bright the safe-area lines are** (owner: "добавь в сейфзоны
+    /// ползунок настройки их яркости"). nil — full, which is what they have
+    /// always been drawn at; the floor is 5 % rather than 0 because a switched
+    /// ON aid that draws nothing is a switch that looks broken.
+    public var safeBrightnessEffective: Double {
+        min(1, max(0.05, safeBrightness ?? 1))
     }
 }
 

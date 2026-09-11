@@ -109,6 +109,42 @@ public struct ViewAssist: Equatable, Sendable {
 
     public init() {}
 
+    /// **The same set-up with nothing DRAWN on the picture** — what the
+    /// bypass key shows (owner: "нам нужен хоткей типа … включить/отключить её
+    /// видимость").
+    ///
+    /// The tools and the guides go; the GEOMETRY stays. A desqueeze and a
+    /// punch-in are how the operator is framing the shot, not marks over it,
+    /// and a key that unzoomed the picture on its way to hiding a zebra would
+    /// be the opposite of a bypass. The chroma key goes with the drawing half:
+    /// it replaces the background, which is the most drawn-on a picture gets,
+    /// and its dial-in is kept because this value is a COPY — nothing is
+    /// forgotten, and pressing the key again brings all of it back.
+    public var withoutAids: ViewAssist {
+        var bare = self
+        bare.colorTool = .off
+        bare.zebraOn = false
+        bare.peakingOn = false
+        bare.guides = AssistGuides()
+        bare.chroma.isOn = false
+        return bare
+    }
+
+    /// **Everything the assist popover holds, back to how it ships** — what
+    /// the reset key does (owner: "сбросить все по опер помощи").
+    ///
+    /// The chroma key's dial-in survives: a colour picked off the green screen
+    /// and a tolerance dialled in over ten minutes is set-up, and the switch
+    /// beside it is what "reset" is about. Everything else — the exposure
+    /// tools, the guides, the legend, the desqueeze and the punch-in — is the
+    /// value this type ships with.
+    public var reset: ViewAssist {
+        var fresh = ViewAssist()
+        fresh.chroma = chroma
+        fresh.chroma.isOn = false
+        return fresh
+    }
+
     // MARK: - focus peaking
 
     /// Edge gain at 100 %. The old slider's ceiling, kept: 30 is where every

@@ -31,9 +31,24 @@ struct AssistMenu: View {
                 // `isShowingAid` covers them (see AssistGuides)
                 .foregroundStyle(controller.liveAssist.isShowingAid
                                  ? controller.accentColor : .white)
+                // **A dot when an aid is on**, on the icon's corner, exactly
+                // as the LUT badge marks a live look (owner: "давай когда у
+                // нас какая-то операторская помощь включена будем точку
+                // рисовать рядом с этой кнопкой как когда лут включен"). The
+                // tint alone said it and said it quietly: accent-on-white is
+                // the difference between two shades of a 13pt glyph, across a
+                // room, over a picture.
+                .overlay(alignment: .topTrailing) {
+                    if controller.liveAssist.isShowingAid {
+                        Circle()
+                            .fill(controller.accentColor)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 3, y: -2)
+                    }
+                }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .popover(isPresented: isOpen, arrowEdge: .bottom) {
             AssistControlsPanel()
                 .padding(AssistControlsPanel.padding)
@@ -171,7 +186,7 @@ private struct AssistControlRows: View {
                             lineWidth: selected ? 2 : 1))
                         .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .help(L(color.labelKey))
             }
         }
@@ -257,6 +272,39 @@ private struct AssistControlRows: View {
             safePercentRow(L("safe_title"), value: Binding(
                 get: { controller.settings.assist.safeTitlePercentEffective },
                 set: { controller.settings.assist.safeTitlePercent = $0 }))
+            // **How loud the two boxes are** (owner: "добавь в сейфзоны
+            // ползунок настройки их яркости"). Stepped like the margins above
+            // it and for the same reason: the value is persisted, and a
+            // stepped slider writes settings once per step crossed rather than
+            // once per pointer move.
+            safeBrightnessRow
+        }
+    }
+
+    /// The percentage beside the slider. Its own property because a
+    /// multi-line expression inside a string interpolation is a parse error
+    /// waiting to be re-introduced.
+    private var safeBrightnessText: String {
+        let percent = controller.settings.assist.safeBrightnessEffective * 100
+        return "\(Int(percent.rounded()))%"
+    }
+
+    /// The safe areas' own brightness, as a percentage of what they ship at.
+    @ViewBuilder private var safeBrightnessRow: some View {
+        HStack(spacing: 6) {
+            Text(L("safe_brightness"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: VisualRecSliderRow.labelWidth, alignment: .leading)
+            Slider(value: Binding(
+                get: { controller.settings.assist.safeBrightnessEffective },
+                set: { controller.settings.assist.safeBrightness = $0 }),
+                in: 0.05...1, step: 0.05)
+                .controlSize(.mini)
+            Text(safeBrightnessText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .trailing)
         }
     }
 

@@ -385,6 +385,11 @@ refuses a chord another action already holds, and names the one that has it.
 - `⌃A` — mute/unmute monitoring
 - `⌃D` — DIM: monitoring at half level
 - `⌃U` — clean feed: every overlay off, the picture and nothing else
+- `⌃0` — reset the operator aids: every tool, guide, desqueeze and punch-in
+  back to how it ships. The chroma key's colour and tolerance survive — that is
+  set-up, not an aid.
+- `⌃H` — hide the aids and bring them back, with nothing forgotten: the tools
+  and the guides come off the picture, the framing stays where it is.
 - `⌃V` — switch record/playback
 - `J` / `K` / `L` — play backwards, stop, play forwards. Pressed again, J and
   L go faster: 1×, 2×, 4×, 8×, the same ladder the speed picker offers. The

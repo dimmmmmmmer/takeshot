@@ -25,6 +25,8 @@ extension HotkeyManager {
              .toggleScopesOverlay, .toggleLUTPreview, .toggleViewerMode,
              .toggleCleanFeed:
             performViewer(action, controller: controller)
+        case .resetAssists, .toggleAssistsHidden:
+            performAssists(action, controller: controller)
         case .toggleMonitorMute, .toggleMonitorDim, .toggleAudioChannelBank:
             performMonitoring(action, controller: controller)
         case .shuttleReverse, .shuttleStop, .shuttleForward,
@@ -56,6 +58,21 @@ extension HotkeyManager {
             controller.stepPlayback(byFrames: CaptureController.frameJump)
         case .goToClipStart: controller.goToPlaybackEdge(end: false)
         case .goToClipEnd: controller.goToPlaybackEdge(end: true)
+        default: break
+        }
+    }
+
+    /// **The two keys the assist popover owns**: everything back to how it
+    /// ships, and the aids off the picture without being forgotten.
+    ///
+    /// Their own arm rather than two more cases in the viewer's fan-out, which
+    /// is at the complexity ceiling — and they are a pair with one subject
+    /// between them, which is what an arm is for.
+    private func performAssists(_ action: HotkeyAction,
+                                controller: CaptureController) {
+        switch action {
+        case .resetAssists: controller.resetAssists()
+        case .toggleAssistsHidden: controller.toggleAssistsHidden()
         default: break
         }
     }

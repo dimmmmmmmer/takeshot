@@ -224,6 +224,7 @@ struct ModelHotkeyTests {
             "toggleScopesOverlay", "toggleLUTPreview", "toggleMonitorMute",
             "toggleMonitorDim", "toggleViewerMode", "toggleAudioChannelBank",
             "toggleCleanFeed",
+            "resetAssists", "toggleAssistsHidden",
             // The transport family, bare keys: J-K-L and the arrows.
             "shuttleReverse", "shuttleStop", "shuttleForward",
             "stepBackOneFrame", "stepForwardOneFrame",
