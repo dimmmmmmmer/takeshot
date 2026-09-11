@@ -18,8 +18,11 @@ import Testing
     /// The take the fixtures write starts at 10:00:00:00.
     private var takeStart: Double { 10 * 3600 }
 
+    /// Through the app's own reader and not `loadTracks(withMediaType:)`:
+    /// that one faults in `swift_retain` on macOS 15, which is the runner
+    /// (`AVAssetTracks.swift`).
     private func tracks(of url: URL) async throws -> [AVAssetTrack] {
-        try await AVURLAsset(url: url).loadTracks(withMediaType: .audio)
+        try await AVURLAsset(url: url).tracks(ofType: .audio)
     }
 
     /// A matched file becomes a second audio track.

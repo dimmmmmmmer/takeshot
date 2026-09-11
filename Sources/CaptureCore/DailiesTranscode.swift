@@ -121,9 +121,9 @@ final class DailiesTranscode {
                 of: item, frameRate: facts.frameRate),
             pictureDuration: Double(facts.framesTotal) / max(1, facts.frameRate),
             in: sounds)
-        let session = try DailiesSession.open(at: url, facts: facts,
-                                              codec: codec, bakedLook: baked,
-                                              sounds: matched)
+        let session = try await DailiesSession.open(
+            at: url, facts: facts, codec: codec, bakedLook: baked,
+            sounds: matched)
         self.session = session
         publishProgress(force: true)
         try await pump(session, composer: DailiesFrameComposer(

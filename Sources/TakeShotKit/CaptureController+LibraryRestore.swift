@@ -140,8 +140,13 @@ extension CaptureController {
         let duration = (try? await asset.load(.duration))?.seconds ?? 0
         let startTC = await TimecodeReader.startTimecode(of: asset)
         var frameRate = Double(await value(TakeWriter.frameRateKey) ?? "")
+        // The app's own reader, like every other track read in the app:
+        // `loadTracks(withMediaType:)` bridges an Objective-C completion
+        // handler that faults in `swift_retain` on macOS 15 — the deployment
+        // floor — and this was the last call to it left in the sources
+        // (`AVAssetTracks.swift` carries the stack).
         if frameRate == nil,
-           let track = try? await asset.loadTracks(withMediaType: .video).first {
+           let track = try? await asset.tracks(ofType: .video).first {
             let nominal = try? await track.load(.nominalFrameRate)
             if let nominal, nominal > 0 { frameRate = Double(nominal) }
         }

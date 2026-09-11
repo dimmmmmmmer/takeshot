@@ -162,8 +162,10 @@ struct DailiesEngineTests {
         #expect(report.isFullySucceeded, "items failed: \(report.failed)")
         let daily: URL = try #require(report.items.first?.output)
         let asset = AVURLAsset(url: daily)
-        let video = try await asset.loadTracks(withMediaType: .video)
-        let audio = try await asset.loadTracks(withMediaType: .audio)
+        // The app's own reader — see `AVAssetTracks.swift` for what
+        // `loadTracks(withMediaType:)` does on the runner's macOS.
+        let video: [AVAssetTrack] = try await asset.tracks(ofType: .video)
+        let audio: [AVAssetTrack] = try await asset.tracks(ofType: .audio)
         #expect(video.count == 1)
         #expect(audio.count == 1, "the sound did not reach the daily")
         let seconds = try await asset.load(.duration).seconds

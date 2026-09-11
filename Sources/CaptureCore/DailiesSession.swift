@@ -134,7 +134,7 @@ struct DailiesSession {
     static func open(at url: URL, facts: DailiesSourceFacts,
                      codec: CaptureCodec = .h264,
                      bakedLook: String? = nil,
-                     sounds: [SoundSync.Match] = []) throws
+                     sounds: [SoundSync.Match] = []) async throws
         -> DailiesSession {
         let reader: AVAssetReader
         let writer: AVAssetWriter
@@ -158,7 +158,7 @@ struct DailiesSession {
                                  input: addAudioInput(to: writer),
                                  offsetIntoSound: 0))
         }
-        legs += soundLegs(for: sounds, in: writer)
+        legs += await soundLegs(for: sounds, in: writer)
         // **The source's own metadata, minus three keys that would be lies.**
         // Before `startWriting`, which is the only time a writer accepts it.
         // **What this run baked, stated by this run.** `com.takeshot.lut` is
@@ -272,33 +272,52 @@ struct DailiesSession {
     static let soundLegLimit = 4
 
     private static func soundLegs(for matches: [SoundSync.Match],
-                                  in writer: AVAssetWriter) -> [AudioLeg] {
-        matches.prefix(soundLegLimit).compactMap { match in
-            let asset = AVURLAsset(url: match.sound.url)
-            guard let reader = try? AVAssetReader(asset: asset) else { return nil }
-            let tracks = asset.tracks(withMediaType: .audio)
-            guard !tracks.isEmpty else { return nil }
-            let output = AVAssetReaderAudioMixOutput(
-                audioTracks: tracks,
-                audioSettings: DailiesEngine.audioReadSettings())
-            guard reader.canAdd(output) else { return nil }
-            reader.add(output)
-            // **Start the read where the picture does.** A recordist who
-            // rolled ten seconds early has ten seconds this daily has no
-            // picture for, and reading them would put the take's sound ten
-            // seconds late under it.
-            if match.offsetIntoSound > 0 {
-                reader.timeRange = CMTimeRange(
-                    start: CMTime(seconds: match.offsetIntoSound,
-                                  preferredTimescale: 48_000),
-                    duration: .positiveInfinity)
+                                  in writer: AVAssetWriter) async -> [AudioLeg] {
+        var legs: [AudioLeg] = []
+        for match in matches.prefix(soundLegLimit) {
+            if let leg = await soundLeg(for: match, in: writer) {
+                legs.append(leg)
             }
-            guard reader.startReading() else { return nil }
-            let input = addAudioInput(to: writer)
-            input.metadata = [trackNameItem(for: match.sound)]
-            return AudioLeg(reader: reader, output: output, input: input,
-                            offsetIntoSound: match.offsetIntoSound)
         }
+        return legs
+    }
+
+    /// One leg, or nil when the file will not open — a sound file that cannot
+    /// be read costs its own track and nothing else, the same rule the take's
+    /// own audio follows.
+    ///
+    /// The tracks come through the app's own `tracks(ofType:)` and NOT
+    /// `loadTracks(withMediaType:)`: that one bridges an Objective-C
+    /// completion handler which faults in `swift_retain` on macOS 15, which is
+    /// the deployment floor and the runner (see `AVAssetTracks.swift`). The
+    /// synchronous property it replaced is deprecated, and CI's build gate is
+    /// warning-free — so the ONE spelling that is both safe and quiet is this
+    /// one.
+    private static func soundLeg(for match: SoundSync.Match,
+                                 in writer: AVAssetWriter) async -> AudioLeg? {
+        let asset = AVURLAsset(url: match.sound.url)
+        guard let reader = try? AVAssetReader(asset: asset),
+              let tracks = try? await asset.tracks(ofType: .audio),
+              !tracks.isEmpty else { return nil }
+        let output = AVAssetReaderAudioMixOutput(
+            audioTracks: tracks,
+            audioSettings: DailiesEngine.audioReadSettings())
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        // **Start the read where the picture does.** A recordist who rolled
+        // ten seconds early has ten seconds this daily has no picture for, and
+        // reading them would put the take's sound ten seconds late under it.
+        if match.offsetIntoSound > 0 {
+            reader.timeRange = CMTimeRange(
+                start: CMTime(seconds: match.offsetIntoSound,
+                              preferredTimescale: 48_000),
+                duration: .positiveInfinity)
+        }
+        guard reader.startReading() else { return nil }
+        let input = addAudioInput(to: writer)
+        input.metadata = [trackNameItem(for: match.sound)]
+        return AudioLeg(reader: reader, output: output, input: input,
+                        offsetIntoSound: match.offsetIntoSound)
     }
 
     /// What the track is CALLED, out of the file's own metadata (owner: "ну и
