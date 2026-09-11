@@ -39,6 +39,9 @@ extension CaptureController {
         }
         updateAudioMonitorRouting()
         updateTapRunning()
+        // The reference decodes only while it is on screen, which is a
+        // question about the viewer mode as much as about the compare mode.
+        applyReferenceRunning()
         updateScopesRunning()
         wireDisplayMirrors()
     }

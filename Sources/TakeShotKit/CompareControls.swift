@@ -231,6 +231,26 @@ struct ComparePinControls: View {
             .buttonStyle(.plain)
             .controlHelp(L("unpin_reference_help"))
         }
+        // **Freeze the reference, when it is a clip.**
+        //
+        // A reference pinned from a take PLAYS now (`ReferenceClipPlayer`),
+        // which is what was asked for — and the moment you want to line the
+        // next setup up against one particular frame of it, a moving picture
+        // is the wrong tool. One control, both directions, and only where
+        // there is a clip to freeze: over a still pin there is nothing to
+        // stop, and a button that does nothing is worse than no button.
+        if controller.showsReferenceTransport {
+            Button {
+                controller.toggleReferencePlaying()
+            } label: {
+                Image(systemName: controller.referenceIsRolling
+                      ? "pause.fill" : "play.fill")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .controlHelp(L(controller.referenceIsRolling
+                           ? "reference_freeze_help" : "reference_play_help"))
+        }
     }
 }
 

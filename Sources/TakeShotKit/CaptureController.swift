@@ -168,6 +168,9 @@ final class CaptureController: ObservableObject {
         didSet {
             pushCompare()
             persistCompareSettings()
+            // Compare off is the reference off screen, and a reference off
+            // screen must not be decoding beside a camera.
+            applyReferenceRunning()
         }
     }
     @Published var wipeOrientation: WipeOrientation = .vertical {
@@ -493,6 +496,15 @@ final class CaptureController: ObservableObject {
 
     /// The engine for a loaded RAW clip (nil — AVPlayer/photo content).
     @Published var rawPlayer: RawPlayerModel?
+    /// **The pinned reference as a clip that PLAYS**, when one is; nil when the
+    /// reference is a still — a pin off a photo, off a RAW clip, or off the
+    /// live signal itself.
+    ///
+    /// A separate answer from `referencePinned`, which stays what it has always
+    /// been: whether there is a B side at all. Four rules and eight test sites
+    /// read that one, and `referencePlayer != nil` is a different question —
+    /// what KIND of reference it is (`ReferenceClipPlayer`).
+    @Published var referencePlayer: ReferenceClipPlayer?
     /// Sync-play of 2–4 takes side by side (nil — normal playback). Owned here
     /// like the RAW engine: the mode outlives any render of the grid, and
     /// entry/exit live in `+SyncPlay`.

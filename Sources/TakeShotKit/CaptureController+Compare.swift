@@ -234,6 +234,72 @@ extension CaptureController {
             }
         }
     }
+    // MARK: - a reference that moves
+
+    /// Whether the pinned reference is a CLIP rather than a still.
+    var referenceIsMoving: Bool { referencePlayer != nil }
+
+    /// Whether pinning right now would produce a moving reference.
+    ///
+    /// `playbackClipIsAVPlayerVideo` and NOT `transportBarKind`: that property
+    /// opens by hiding itself for a clean feed, which is a statement about the
+    /// CHROME and has nothing to say about what a pin can be — asking it here
+    /// would freeze the reference for anyone working with the overlays off.
+    var referenceCanPlay: Bool {
+        isReviewingSingleClip && rawPlayer == nil
+            && playbackClipIsAVPlayerVideo
+            && settings.review.referencePlaysEffective
+    }
+
+    /// Whether the reference is ON SCREEN — the only reason to decode it.
+    ///
+    /// `.sideBySide` counts, and that is the trap: `compareComposite()` hands
+    /// the pipeline `.off` for it because a split composites nothing, so a rule
+    /// written against the pipeline's own mode would stop decoding exactly
+    /// where the reference has a whole surface to itself.
+    var referenceShouldDecode: Bool {
+        referenceIsMoving && viewerMode == .record && compareMode != .off
+    }
+
+    /// Whether the freeze control belongs on the compare bar.
+    var showsReferenceTransport: Bool { referenceIsMoving && showsCompareBar }
+
+    /// Whether the reference clip is rolling right now — what the freeze
+    /// control draws itself from.
+    var referenceIsRolling: Bool { referencePlayer?.isPlaying ?? false }
+
+    /// Start or stop the reference's decode to match what is on screen.
+    ///
+    /// Called from the three places that can change the answer: the viewer
+    /// mode, the compare mode, and pinning or unpinning. A decode running for
+    /// a reference nobody is looking at is the "decode for nothing" this app
+    /// refuses everywhere else — and it would be running beside a camera.
+    func applyReferenceRunning() {
+        referencePlayer?.setRunning(referenceShouldDecode)
+    }
+
+    /// Freeze the reference where it is, or let it run again.
+    func toggleReferencePlaying() {
+        referencePlayer?.togglePlaying()
+    }
+
+    /// Build the reference clip for the take under review, if this pin can be
+    /// one. The still is pinned either way: a player that has not produced its
+    /// first frame yet falls back to it rather than to black.
+    private func adoptReferenceClip() {
+        referencePlayer?.shutDown()
+        referencePlayer = nil
+        pipeline.setReferenceFrameProvider(nil)
+        guard referenceCanPlay, let url = playbackURL else { return }
+        let player = ReferenceClipPlayer(
+            url: url, range: transport.currentRange,
+            startAt: transport.position.currentTime, pipeline: pipeline)
+        referencePlayer = player
+        pipeline.setReferenceFrameProvider { [weak player] in
+            player?.latestFrame()
+        }
+    }
+
     /// Pin the current frame (live preview or the paused player frame).
     func pinReferenceFromCurrentFrame() {
         if viewerMode == .playback {
@@ -242,6 +308,10 @@ extension CaptureController {
                 return
             }
             pipeline.setPreviewReference(buffer: buffer)
+            // …and the clip behind that frame, when it is one. Built BEFORE
+            // the mode switch below, which is what still knows which clip was
+            // under review and where its playhead was.
+            adoptReferenceClip()
         } else {
             pipeline.pinReferenceFromCurrentFrame()
         }
@@ -250,6 +320,7 @@ extension CaptureController {
         if compareMode == .off { compareMode = .wipe }
         if viewerMode == .playback { viewerMode = .record }
         pushCompare()
+        applyReferenceRunning()
         lastNotice = L("reference_pinned")
     }
     /// Pin a still/photo from the record folder.
@@ -298,6 +369,12 @@ extension CaptureController {
         lastError = L("reference_pin_failed")
     }
     func unpinReference() {
+        // The clip first: a provider left installed over a torn-down player
+        // would hold that player's last frame for ever, which is a still
+        // nobody pinned.
+        referencePlayer?.shutDown()
+        referencePlayer = nil
+        pipeline.setReferenceFrameProvider(nil)
         pipeline.setPreviewReference(buffer: nil)
         referencePinned = false
         pushCompare()

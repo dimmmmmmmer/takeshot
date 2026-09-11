@@ -85,6 +85,35 @@ import Testing
     /// keys and drops the ones whose NAME marks them secret, which is how
     /// `remotePIN` stays out of a bundle that gets emailed to someone. A key
     /// nested one level down is a key that filter no longer sees.
+    /// **An older blob, with no opinion about the reference, gets the new
+    /// behaviour.**
+    ///
+    /// `referencePlays` is one of the few added fields whose nil is not "off":
+    /// a reference that holds as a still is the thing the owner reported ("реф
+    /// видео из плейбека при пине … не играет как видео а остается стиллом"),
+    /// so a settings file written before this build must come back PLAYING.
+    /// The general Optional rule is pinned elsewhere; what this adds is the
+    /// direction of the default.
+    @Test func anOldBlobWithoutReferencePlaysStillPlays() throws {
+        let object = SettingsFormatFixture.object(
+            from: SettingsFormatFixture.populatedData)
+        var older = object
+        older.removeValue(forKey: "referencePlays")
+        let data = try JSONSerialization.data(withJSONObject: older)
+        let settings = try JSONDecoder().decode(CaptureSettings.self, from: data)
+        #expect(settings.review.referencePlays == nil)
+        #expect(settings.review.referencePlaysEffective, """
+            a settings file from before this build opens with the reference \
+            frozen, which is the report this feature is answering
+            """)
+        // …and the fixture's own value is the non-default, so the round trip
+        // above is measuring something.
+        #expect(try JSONDecoder().decode(
+            CaptureSettings.self,
+            from: SettingsFormatFixture.populatedData).review.referencePlays
+            == false)
+    }
+
     @Test func theEncodedBlobIsFlat() throws {
         let nested = try reencodeFixture().filter { _, value in
             if value is NSDictionary { return true }

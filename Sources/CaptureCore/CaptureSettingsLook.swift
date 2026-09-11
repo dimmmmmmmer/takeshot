@@ -176,6 +176,16 @@ public struct ReviewSettings: Codable, Equatable, Sendable {
     /// decodes and a build that downgrades finds its value — the tombstone
     /// contract `RetiredSettingTests` states.
     public var compareDifferenceGain: Int?
+    /// Whether a reference pinned from a video take PLAYS or holds as a still.
+    ///
+    /// nil is PLAYS, which is what the owner asked for ("реф видео из плейбека
+    /// при пине на странице река не играет как видео а остается стиллом") —
+    /// one of the few added fields whose nil is not "off", because the
+    /// behaviour it turns on is the one that was reported missing. Persisted
+    /// on the argument `compareMode` makes two fields up: it is a working
+    /// method, not a moment.
+    public var referencePlays: Bool?
+    public var referencePlaysEffective: Bool { referencePlays ?? true }
     /// Color new markers are born with (one of `TakeMarker.colors`); nil — the
     /// palette's first entry.
     ///

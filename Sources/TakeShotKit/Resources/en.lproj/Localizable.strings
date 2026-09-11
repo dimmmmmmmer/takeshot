@@ -322,6 +322,8 @@
 "pin_reference_help" = "Pin the current frame as a reference for live compare";
 "repin_reference_help" = "Replace the pinned reference with this frame";
 "unpin_reference_help" = "Unpin the reference";
+"reference_freeze_help" = "Freeze the reference on this frame";
+"reference_play_help" = "Let the reference play again";
 "reference_pinned" = "Reference pinned — compare it with the live signal";
 "reference_pin_failed" = "Couldn't pin the reference";
 

@@ -87,6 +87,46 @@ extension CapturePipeline {
         }
     }
 
+    /// Install (or clear) the source of a MOVING reference.
+    ///
+    /// Called from the main actor when a reference clip starts or stops
+    /// playing; read on the capture queue, once per live frame. Behind a lock
+    /// rather than hopped onto the queue for the same reason
+    /// `displayFrameHandler` is: the reader is the frame path and the writer
+    /// is an operator's action, and a `queue.async` write would leave one frame
+    /// composited against the reference the operator has just unpinned.
+    ///
+    /// Nil restores the still pin, which is never thrown away while a clip
+    /// plays — see `referenceFrameProvider`.
+    public func setReferenceFrameProvider(
+        _ provider: (@Sendable () -> CVPixelBuffer?)?) {
+        referenceFrameLock.lock()
+        referenceFrameProvider = provider
+        referenceFrameLock.unlock()
+    }
+
+    /// The reference frame to composite right now: the moving one if a clip is
+    /// playing and has produced a frame, the pinned still otherwise.
+    func currentReferenceFrame(fallback: CVPixelBuffer?) -> CVPixelBuffer? {
+        referenceFrameLock.lock()
+        let provider = referenceFrameProvider
+        referenceFrameLock.unlock()
+        return provider?() ?? fallback
+    }
+
+    /// Show a frame on every surface carrying the reference on its own, from
+    /// the CALLER's queue.
+    ///
+    /// **Never call this from `queue`.** It exists so a reference clip's own
+    /// decode queue can paint the A/B pane at the clip's frame rate without
+    /// the capture queue being involved at all: that queue appends to the
+    /// writer, and a slow pass on it is not a late picture but a hole in the
+    /// file. `publishReference` is the other entry — the pin's — and it is the
+    /// one that runs on `queue`.
+    public func presentReference(_ buffer: CVPixelBuffer) {
+        for layer in referenceSinks.all() { layer.present(buffer) }
+    }
+
     public func setPreviewCompare(_ mode: CompareCompositor.Mode) {
         queue.async {
             self.previewCompare = mode
@@ -121,12 +161,19 @@ extension CapturePipeline {
         case .off:
             break
         case .difference:
-            if let reference = previewReferencePreLUT {
+            // A moving reference feeds BOTH stages from one frame, on the
+            // argument `setPreviewReference` already makes about a pin: a
+            // decoded clip carries no preview LUT either, so the frame the
+            // operator sees and the frame the difference measures are the
+            // same one.
+            if let reference = currentReferenceFrame(
+                fallback: previewReferencePreLUT) {
                 screenBuffer = compositeReference(reference, over: preLUT)
                     ?? displayBuffer
             }
         case .blend, .wipe:
-            if let reference = previewReference {
+            if let reference = currentReferenceFrame(
+                fallback: previewReference) {
                 screenBuffer = compositeReference(reference, over: displayBuffer)
                     ?? displayBuffer
             }
@@ -163,8 +210,20 @@ extension CapturePipeline {
                                     over live: CVPixelBuffer) -> CVPixelBuffer? {
         let back = CIImage(cvPixelBuffer: live, options: [.colorSpace: NSNull()])
         let front: CIImage
-        if let cache = fittedReferenceCache, cache.source === reference,
-           cache.extent == back.extent {
+        // **The cache survives a MOVING reference — measured, not assumed.**
+        // It keys on the buffer's identity, and a playing clip's frames come
+        // out of a pool, so the same object arrives with different pixels in
+        // it: the case `===` cannot see. It does not need to. What is cached
+        // is the FIT — a transform and a letterbox around a `CIImage` that
+        // reads the buffer lazily — so the next render pulls the bytes that
+        // are in it now. A bypass was written for this on the assumption that
+        // a cached image is a snapshot; the test that was supposed to prove it
+        // passed with the bypass mutated out, which is what says the
+        // assumption was wrong (`aMovingReferenceIsNotServedFromTheFitted-
+        // Cache`, which now pins the real property: a recycled buffer's new
+        // pixels reach the composite).
+        if let cache = fittedReferenceCache,
+           cache.source === reference, cache.extent == back.extent {
             front = cache.image
         } else {
             front = CompareCompositor.fitted(

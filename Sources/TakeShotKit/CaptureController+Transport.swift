@@ -67,10 +67,24 @@ extension CaptureController {
         guard viewerMode == .playback, syncPlay == nil, let url = playbackURL
         else { return .none }
         if rawPlayer?.url == url { return .raw }
+        return playbackClipIsAVPlayerVideo ? .video : .none
+    }
+
+    /// **Whether the clip under review is AVPlayer video** — not a RAW clip,
+    /// not a still.
+    ///
+    /// Extracted out of `transportBarKind` because a second reader arrived
+    /// that must NOT inherit that property's first guard: the clean feed hides
+    /// the transport bar, and it has nothing to say about whether a reference
+    /// pinned from this clip can play (`referenceCanPlay`). Asking
+    /// `transportBarKind` there would have frozen the reference for anyone
+    /// working with the chrome hidden. One rule, two readers, each with its
+    /// own guards.
+    var playbackClipIsAVPlayerVideo: Bool {
+        guard let url = playbackURL, rawPlayer?.url != url else { return false }
         let ext = url.pathExtension.lowercased()
-        guard !Self.rawExtensions.contains(ext),
-              !Self.imageExtensions.contains(ext) else { return .none }
-        return .video
+        return !Self.rawExtensions.contains(ext)
+            && !Self.imageExtensions.contains(ext)
     }
 
     func togglePlayPause() {

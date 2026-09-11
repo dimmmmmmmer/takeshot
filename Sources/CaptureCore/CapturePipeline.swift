@@ -280,6 +280,21 @@ public final class CapturePipeline: @unchecked Sendable {
     }
 
     var fittedReferenceCache: FittedReference?
+    /// **Where a MOVING reference comes from**, when one is playing.
+    ///
+    /// A pin is a still: one deep copy, stored above, composited until it is
+    /// replaced. A reference that plays produces a new frame sixty times a
+    /// second on another engine's queue, and the capture queue has to be able
+    /// to read the latest one without waiting for that engine — so it pulls
+    /// through a closure behind a LOCK, and never through
+    /// `PlaybackFrameTap.currentBuffer()`, which is a `queue.sync` and would
+    /// park the queue that appends to the writer behind a decode.
+    ///
+    /// The still stays pinned underneath it: a provider that has no frame yet
+    /// (a player still reaching `.readyToPlay`) falls back to it rather than
+    /// to black.
+    let referenceFrameLock = NSLock()
+    var referenceFrameProvider: (@Sendable () -> CVPixelBuffer?)?
 
     // Chroma key (see `+ChromaKey`): a display-stage tool, one stage after the
     // viewing LUT and one before the sinks. The keyer is confined to

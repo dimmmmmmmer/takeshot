@@ -68,6 +68,14 @@ enum PreviewProbe {
     /// every value read back.
     static func frame(_ level: UInt8) -> CVPixelBuffer {
         let buffer = TestMedia.pixelBuffer(width: 64, height: 32)
+        fill(buffer, level: level)
+        return buffer
+    }
+
+    /// Rewrite a frame's pixels in place — what a POOL does between two
+    /// frames of a playing clip, and the case an identity-keyed cache cannot
+    /// see (`PreviewReferenceProviderTests`).
+    static func fill(_ buffer: CVPixelBuffer, level: UInt8) {
         CVPixelBufferLockBaseAddress(buffer, [])
         if let base = CVPixelBufferGetBaseAddress(buffer) {
             let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
@@ -83,7 +91,6 @@ enum PreviewProbe {
             }
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
-        return buffer
     }
 
     /// One BGRA channel (0 = blue, 1 = green, 2 = red) of the pixel at
