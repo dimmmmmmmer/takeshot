@@ -24,6 +24,8 @@ struct DailiesFilesTab: View {
             VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
                 sources
                 Divider()
+                sound
+                Divider()
                 destinations
                 Divider()
                 DailiesOutputSection(model: model)
@@ -46,6 +48,68 @@ struct DailiesFilesTab: View {
         // spending. See `DailiesSheet.tabContentWidth`.
         .frame(idealWidth: DailiesSheet.tabContentWidth, maxWidth: .infinity,
                alignment: .leading)
+    }
+
+    // MARK: - sound
+
+    /// **The recordist's folders**, beside the footage's (owner: "было бы
+    /// классно иметь возможность выбрать папку со звуком").
+    ///
+    /// Its own block rather than a row on the sources list, because it answers
+    /// a different question: the sources say WHAT is rendered, and this says
+    /// what goes UNDER it. A run with no sound folder is the run this app has
+    /// always made — the camera's own track and nothing else — which is what
+    /// the empty line says rather than leaving a blank.
+    @ViewBuilder private var sound: some View {
+        VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
+            HStack {
+                Text(L("dailies_sound_label"))
+                    .offloadText(.section)
+                Spacer(minLength: 4)
+                Button {
+                    if let url = OffloadPanels.pickFolder(
+                        message: L("dailies_pick_sound"),
+                        prompt: L("offload_source_prompt")) {
+                        model.addSoundFolder(url)
+                    }
+                } label: {
+                    Label(L("dailies_add_sound"), systemImage: "plus")
+                }
+                .disabled(controller.isDailiesRunning)
+            }
+            if model.soundFolders.isEmpty {
+                Text(L("dailies_sound_camera_only"))
+                    .offloadText(.caption)
+            } else {
+                folderList(model.soundFolders) { url in
+                    HStack(spacing: OffloadChrome.rowSpacing) {
+                        folderRow(url) {}
+                        removeButton(L("dailies_remove_sound")) {
+                            model.removeSoundFolder(url)
+                        }
+                    }
+                }
+                soundSummary
+            }
+        }
+    }
+
+    /// What the sound folders hold, and what could not be used.
+    ///
+    /// The second line is the load-bearing one: a file with no `bext` chunk
+    /// carries no timecode, so nothing can line it up with a take. An operator
+    /// who pointed at a folder of files their recorder wrote without timecode
+    /// has to find that out here rather than from a day of silent dailies.
+    @ViewBuilder private var soundSummary: some View {
+        Text(L("dailies_sound_found",
+               localizedCount(model.soundFindings.files.count, .file)))
+            .offloadText(.caption)
+        if !model.soundFindings.withoutTimecode.isEmpty {
+            Label(L("dailies_sound_no_timecode",
+                    model.soundFindings.withoutTimecode.count),
+                  systemImage: "exclamationmark.triangle")
+                .offloadText(.caption)
+        }
     }
 
     // MARK: - sources

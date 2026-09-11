@@ -46,6 +46,7 @@ public enum DailiesEngine {
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
         look: DailiesLook? = nil, desqueeze: Double = 1,
+        sounds: [BroadcastWaveFacts] = [],
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -72,7 +73,8 @@ public enum DailiesEngine {
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec, look: look,
-                desqueeze: desqueeze, control: control, publish: progress)
+                desqueeze: desqueeze, sounds: sounds, control: control,
+                publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)
@@ -235,6 +237,26 @@ public enum DailiesEngine {
             ]
         }
         return settings
+    }
+
+    /// **When a take started, in seconds since midnight** — the picture's half
+    /// of the sound match.
+    ///
+    /// From the take's own start timecode at its REAL rate, never the nominal
+    /// one: a drop-frame camera delivers `fps × 1000/1001` frames a second, so
+    /// dividing a 29.97 clock by 30 is 3.6 seconds of error an hour — which is
+    /// several takes' worth of sound landing under the wrong picture. The rule
+    /// is `TakeLogExporter`'s, which solved it for markers first.
+    ///
+    /// A clip with no timecode answers 0, and the caller's overlap rule then
+    /// matches it against sound recorded in the first minutes of the day —
+    /// which is why a take with no timecode is reported as UNMATCHABLE rather
+    /// than silently matched.
+    public static func startSecondsSinceMidnight(of item: DailiesItem,
+                                                 frameRate: Double) -> Double {
+        guard let timecode = item.startTimecode else { return 0 }
+        let rate = frameRate > 0 ? frameRate : Double(max(1, timecode.fps))
+        return Double(timecode.frameNumber) / rate
     }
 
     /// AAC stereo for every daily, whatever the take recorded: editorial

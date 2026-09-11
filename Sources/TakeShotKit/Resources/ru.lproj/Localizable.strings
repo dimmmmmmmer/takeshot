@@ -1142,6 +1142,13 @@
 "dailies_tab_files" = "Файлы";
 "dailies_sources_label" = "Рендерить из";
 "dailies_sources_takes" = "Сегодняшние дубли — добавьте папку, чтобы рендерить исходники";
+"dailies_sound_label" = "Звук";
+"dailies_add_sound" = "Добавить папку";
+"dailies_pick_sound" = "Выберите папку с файлами звукорежиссёра";
+"dailies_remove_sound" = "Убрать эту папку со звуком";
+"dailies_sound_camera_only" = "Только звук с камеры.";
+"dailies_sound_found" = "%@ — сопоставляются по таймкоду. В ProRes-дейлике имена дорожек сохранятся, в MP4 — нет.";
+"dailies_sound_no_timecode" = "%d файл(ов) без таймкода — сопоставить не с чем";
 "dailies_add_source" = "Добавить папку";
 "dailies_remove_source" = "Убрать папку из списка";
 "dailies_pick_source" = "Где лежит материал";

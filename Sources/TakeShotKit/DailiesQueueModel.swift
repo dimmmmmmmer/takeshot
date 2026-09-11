@@ -101,6 +101,14 @@ final class DailiesQueueModel: ObservableObject {
     @Published private(set) var sources: [URL] = []
     /// What those folders hold, as of the last scan (`DailiesSourceScan`).
     @Published private(set) var findings = DailiesSourceScan.Findings()
+    /// **Folders of the sound recordist's files** (owner: "было бы классно
+    /// иметь возможность выбрать папку со звуком"). Empty — the daily carries
+    /// the camera's own sound and nothing else.
+    @Published private(set) var soundFolders: [URL] = []
+    /// What those hold, and what could not be used: a file with no `bext`
+    /// timecode can be matched to nothing, and an operator who pointed at the
+    /// wrong folder has to find that out before the run, not after it.
+    @Published private(set) var soundFindings = DailiesSoundScan.Findings()
     /// A scan is running: the folder may be a shuttle drive with a thousand
     /// clips on it, so the walk is off the main actor and the sheet says so.
     @Published private(set) var isScanning = false
@@ -114,6 +122,7 @@ final class DailiesQueueModel: ObservableObject {
 
     private var control: DailiesControl?
     private var scanTask: Task<Void, Never>?
+    private var soundScanTask: Task<Void, Never>?
     /// Internal rather than private since the queue-contents extension moved
     /// into its own file: `previewItem` asks it for the settings an item is
     /// composed against.
@@ -184,48 +193,6 @@ final class DailiesQueueModel: ObservableObject {
     /// anyway (`DebouncedSettings.flushAll`).
     static let rememberDelay: Duration = .milliseconds(400)
 
-    /// Seed the sheet from the operator's saved convention and clear the
-    /// previous run's result — a stale "done" card over a fresh batch reads
-    /// as that batch being finished.
-    func prepare(takes: [Take], settings: CaptureSettings, defaultFolder: URL) {
-        if !isRunning {
-            progress = nil
-            report = nil
-            isCancelling = false
-            queuedTakes = takes
-        }
-        timecodePosition = settings.dailies.timecodePositionEffective
-        clipNamePosition = settings.dailies.clipNamePositionEffective
-        projectPosition = settings.dailies.projectPositionEffective
-        customPosition = settings.dailies.customPositionEffective
-        datePosition = settings.dailies.datePositionEffective
-        burnTimecode = settings.dailies.burnTimecode ?? true
-        burnClipName = settings.dailies.burnClipName ?? true
-        burnProject = settings.dailies.burnProject ?? true
-        burnDate = settings.dailies.burnDate ?? false
-        burnCustom = settings.dailies.burnCustomEffective
-        customText = settings.dailies.customText ?? ""
-        codec = settings.dailies.codecEffective
-        bakeLook = settings.dailies.bakeLook == true
-        bakeDesqueeze = settings.dailies.bakeDesqueeze == true
-        namePrefix = settings.dailies.namePrefixEffective
-        nameSuffix = settings.dailies.nameSuffixEffective
-        ink = settings.dailies.inkEffective
-        customInk = settings.dailies.customInkEffective
-        // The folders a run rendered from come back with it: the same card
-        // tree returns every shooting day. Only the ones still THERE — a card
-        // that has been unplugged is not a source, and a list full of dead
-        // paths is a list nobody trusts.
-        sources = settings.dailies.sourceURLs.filter {
-            FileManager.default.fileExists(atPath: $0.path)
-        }
-        rescan()
-        self.defaultFolder = defaultFolder
-        destinations = [settings.dailies.destinationPath
-            .map { URL(fileURLWithPath: $0) } ?? defaultFolder]
-            + settings.dailies.extraDestinationURLs
-    }
-
     /// How many files this Start will produce.
     var itemCount: Int {
         sources.isEmpty ? queuedTakes.count : findings.files.count
@@ -245,9 +212,66 @@ final class DailiesQueueModel: ObservableObject {
     /// place — and Remove would have missed the row the operator clicked.
     /// `comparablePath` is the same rule the offload's destination list and
     /// the dailies default-folder check already use.
-    private func isSame(_ lhs: URL, _ rhs: URL) -> Bool {
+    /// Internal since the sound folders moved into `+Queue`: two lists of
+    /// folders, one rule for "the same one".
+    func isSame(_ lhs: URL, _ rhs: URL) -> Bool {
         CaptureController.comparablePath(lhs)
             == CaptureController.comparablePath(rhs)
+    }
+
+    /// The folder beside the footage, which is where a daily goes unless the
+    /// operator said otherwise. Written here for the reason `restoreFolders`
+    /// is: this file is the only writer of it.
+    func adoptDefaultFolder(_ folder: URL) {
+        defaultFolder = folder
+    }
+
+    /// **The folder lists a relaunch brings back**, and only the folders that
+    /// are still THERE: a card that has been unplugged is not a source, and a
+    /// list full of dead paths is a list nobody trusts.
+    ///
+    /// Here rather than in `+Prepare` because these two are `private(set)` and
+    /// this file is the only writer — the point of the annotation is that a
+    /// folder list changes through `addSource`/`addSoundFolder` and their
+    /// rescans, never by assignment from somewhere else.
+    func restoreFolders(sources restored: [URL], sound: [URL]) {
+        let exists = { FileManager.default.fileExists(atPath: $0) }
+        sources = restored.filter { exists($0.path) }
+        rescan()
+        soundFolders = sound.filter { exists($0.path) }
+        rescanSound()
+    }
+
+    func addSoundFolder(_ url: URL) {
+        guard !soundFolders.contains(where: { isSame($0, url) }) else { return }
+        soundFolders.append(url)
+        rescanSound()
+    }
+
+    func removeSoundFolder(_ url: URL) {
+        soundFolders.removeAll { isSame($0, url) }
+        rescanSound()
+    }
+
+    /// Read the sound folders again, off the main actor.
+    ///
+    /// Its own walk rather than a branch of `rescan`: it reads a different
+    /// kind of file with a different reader, and a day's sound is tens of
+    /// gigabytes the picture scan has no reason to wait for.
+    func rescanSound() {
+        soundScanTask?.cancel()
+        guard !soundFolders.isEmpty else {
+            soundFindings = DailiesSoundScan.Findings()
+            return
+        }
+        let folders = soundFolders
+        soundScanTask = Task { [weak self] in
+            let found = await Task.detached(priority: .userInitiated) {
+                DailiesSoundScan.scan(folders)
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.soundFindings = found
+        }
     }
 
     func addSource(_ url: URL) {
@@ -336,24 +360,6 @@ final class DailiesQueueModel: ObservableObject {
             == CaptureController.comparablePath(defaultFolder)
     }
 
-    var burnins: DailiesBurnins {
-        DailiesBurnins(
-            timecode: burnTimecode, clipName: burnClipName,
-            project: burnProject, date: burnDate,
-            // The switch decides, and the words are left alone: the engine's
-            // rule is still "empty text, no strip", so switching the line off
-            // is expressed by handing it nothing while the operator's sentence
-            // stays in the field and in settings.
-            customText: burnCustom
-                ? customText.trimmingCharacters(in: .whitespaces) : "",
-            timecodePosition: timecodePosition,
-            clipNamePosition: clipNamePosition,
-            projectPosition: projectPosition,
-            customPosition: customPosition,
-            datePosition: datePosition,
-            ink: ink, customInk: customInk)
-    }
-
     // MARK: - the run
 
     func start() {
@@ -394,6 +400,10 @@ final class DailiesQueueModel: ObservableObject {
         // dialled in gets the camera's raster — which is what they are looking
         // at.
         let squeeze = bakeDesqueeze ? controller.settings.assist.desqueezeApplied : 1
+        // Every sound file the scan could read, handed over as values with
+        // everything else: the matching per item happens inside the run,
+        // because it is a fact about each take's timecode.
+        let sounds = soundFindings.files
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -419,7 +429,8 @@ final class DailiesQueueModel: ObservableObject {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
                 alsoInto: extras, codec: codec, look: look,
-                desqueeze: squeeze, control: token, progress: publish)
+                desqueeze: squeeze, sounds: sounds, control: token,
+                progress: publish)
             complete(result)
         }
     }

@@ -141,6 +141,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case customPlateOpacity = "dailiesCustomPlateOpacity"
         case customTextOpacity = "dailiesCustomTextOpacity"
         case sourcePaths = "dailiesSourcePaths"
+        case soundPaths = "dailiesSoundPaths"
         case extraDestinationPaths = "dailiesExtraDestinationPaths"
     }
 
@@ -218,6 +219,10 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// and re-picking them through a file panel per batch is the part of the
     /// old flow that hurt.
     public var sourcePaths: [String]?
+    /// **Folders of the sound recordist's files** (owner: "было бы классно
+    /// иметь возможность выбрать папку со звуком"). Empty — the daily carries
+    /// the camera's own sound and nothing else, which is what it always did.
+    public var soundPaths: [String]?
     /// Destinations beyond the first — the shelves each daily is copied to.
     public var extraDestinationPaths: [String]?
 
@@ -276,6 +281,11 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// The folders a run renders from, as URLs. Empty — the day's takes.
     public var sourceURLs: [URL] {
         (sourcePaths ?? []).map { URL(fileURLWithPath: $0) }
+    }
+
+    /// The sound folders, as URLs. Empty — camera sound only.
+    public var soundURLs: [URL] {
+        (soundPaths ?? []).map { URL(fileURLWithPath: $0) }
     }
 
     /// The shelves beyond the first.

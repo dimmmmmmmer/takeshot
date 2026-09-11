@@ -98,4 +98,24 @@ extension DailiesQueueModel {
             }
         }
     }
+
+    // MARK: - what the burn-ins are, as a value
+
+    var burnins: DailiesBurnins {
+        DailiesBurnins(
+            timecode: burnTimecode, clipName: burnClipName,
+            project: burnProject, date: burnDate,
+            // The switch decides, and the words are left alone: the engine's
+            // rule is still "empty text, no strip", so switching the line off
+            // is expressed by handing it nothing while the operator's sentence
+            // stays in the field and in settings.
+            customText: burnCustom
+                ? customText.trimmingCharacters(in: .whitespaces) : "",
+            timecodePosition: timecodePosition,
+            clipNamePosition: clipNamePosition,
+            projectPosition: projectPosition,
+            customPosition: customPosition,
+            datePosition: datePosition,
+            ink: ink, customInk: customInk)
+    }
 }

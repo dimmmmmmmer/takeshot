@@ -1173,6 +1173,13 @@
 "dailies_tab_files" = "Files";
 "dailies_sources_label" = "Render from";
 "dailies_sources_takes" = "Today's takes — add a folder to render camera originals instead";
+"dailies_sound_label" = "Sound";
+"dailies_add_sound" = "Add folder";
+"dailies_pick_sound" = "Pick the folder of the sound recordist's files";
+"dailies_remove_sound" = "Remove this sound folder";
+"dailies_sound_camera_only" = "The camera's own sound only.";
+"dailies_sound_found" = "%@ matched by timecode. A ProRes daily carries the track names; an MP4 one cannot.";
+"dailies_sound_no_timecode" = "%d file(s) carry no timecode and cannot be matched";
 "dailies_add_source" = "Add folder";
 "dailies_remove_source" = "Take this folder off the list";
 "dailies_pick_source" = "Where the footage is";

@@ -101,16 +101,40 @@ struct DailiesSession {
     let reader: AVAssetReader
     let writer: AVAssetWriter
     let videoOutput: AVAssetReaderTrackOutput
-    let audioOutput: AVAssetReaderOutput?
     let videoInput: AVAssetWriterInput
-    let audioInput: AVAssetWriterInput?
     let adaptor: AVAssetWriterInputPixelBufferAdaptor
+    /// **Every sound track the daily is being written with.**
+    ///
+    /// Leg 0 is the camera's own audio, exactly as it always was. The rest are
+    /// the sound recordist's files, matched to this take on timecode (owner:
+    /// "чтоб он автоматически подружил нужные тейки и записывал в дейлик и
+    /// дорожки с камеры и со звука"). A list rather than the old pair because
+    /// a take is legitimately covered by more than one file — a per-take file
+    /// and a running safety — and because one of them is not more the daily's
+    /// sound than the other.
+    let audio: [AudioLeg]
+
+    /// One sound track: where its samples come from, where they go, and how
+    /// far its clock is from the picture's.
+    struct AudioLeg {
+        /// nil for the camera's leg, which shares the item's own reader. A
+        /// sound file brings its own, because it is a different asset with a
+        /// different clock and its own `timeRange`.
+        let reader: AVAssetReader?
+        let output: AVAssetReaderOutput
+        let input: AVAssetWriterInput
+        /// Seconds into the SOUND at the picture's first frame — negative when
+        /// the recordist rolled after the camera. Zero for the camera's leg,
+        /// which is already on the picture's clock.
+        let offsetIntoSound: Double
+    }
 
     /// Open the whole rig against an already-reserved output URL (the caller
     /// holds the reservation so it can clean up whatever happens here).
     static func open(at url: URL, facts: DailiesSourceFacts,
                      codec: CaptureCodec = .h264,
-                     bakedLook: String? = nil) throws
+                     bakedLook: String? = nil,
+                     sounds: [SoundSync.Match] = []) throws
         -> DailiesSession {
         let reader: AVAssetReader
         let writer: AVAssetWriter
@@ -128,7 +152,13 @@ struct DailiesSession {
                                                         to: reader)
         let (videoInput, adaptor) = try addVideoInput(facts: facts,
                                                       codec: codec, to: writer)
-        let audioInput = audioOutput != nil ? addAudioInput(to: writer) : nil
+        var legs: [AudioLeg] = []
+        if let audioOutput {
+            legs.append(AudioLeg(reader: nil, output: audioOutput,
+                                 input: addAudioInput(to: writer),
+                                 offsetIntoSound: 0))
+        }
+        legs += soundLegs(for: sounds, in: writer)
         // **The source's own metadata, minus three keys that would be lies.**
         // Before `startWriting`, which is the only time a writer accepts it.
         // **What this run baked, stated by this run.** `com.takeshot.lut` is
@@ -161,9 +191,8 @@ struct DailiesSession {
         }
         return DailiesSession(reader: reader, writer: writer,
                               videoOutput: videoOutput,
-                              audioOutput: audioOutput,
-                              videoInput: videoInput, audioInput: audioInput,
-                              adaptor: adaptor)
+                              videoInput: videoInput, adaptor: adaptor,
+                              audio: legs)
     }
 
     /// The reader's two ends: video decoded to BGRA (so CoreGraphics can
@@ -223,6 +252,73 @@ struct DailiesSession {
             assetWriterInput: video, sourcePixelBufferAttributes: nil)
         writer.add(video)
         return (video, adaptor)
+    }
+
+    /// **One leg per matched sound file**, each with its own reader over its
+    /// own asset.
+    ///
+    /// Stereo, and that is a decision with a cost worth stating: a poly WAV's
+    /// channels are taken as AVFoundation hands them (the recordist's mix is
+    /// what channels 1-2 of such a file are for), so a daily carries the
+    /// recordist's SOUND rather than their individual microphones. Splitting a
+    /// poly file into per-channel tracks means de-interleaving PCM by hand —
+    /// AVFoundation's mix output downmixes and cannot select — and that is a
+    /// feature of its own, not a line here.
+    ///
+    /// Capped, because every leg is another AAC encoder on a machine that may
+    /// be capturing at the same time, and a run that quietly opened eleven of
+    /// them would be discovering the limit rather than stating it. The report
+    /// says what was left off.
+    static let soundLegLimit = 4
+
+    private static func soundLegs(for matches: [SoundSync.Match],
+                                  in writer: AVAssetWriter) -> [AudioLeg] {
+        matches.prefix(soundLegLimit).compactMap { match in
+            let asset = AVURLAsset(url: match.sound.url)
+            guard let reader = try? AVAssetReader(asset: asset) else { return nil }
+            let tracks = asset.tracks(withMediaType: .audio)
+            guard !tracks.isEmpty else { return nil }
+            let output = AVAssetReaderAudioMixOutput(
+                audioTracks: tracks,
+                audioSettings: DailiesEngine.audioReadSettings())
+            guard reader.canAdd(output) else { return nil }
+            reader.add(output)
+            // **Start the read where the picture does.** A recordist who
+            // rolled ten seconds early has ten seconds this daily has no
+            // picture for, and reading them would put the take's sound ten
+            // seconds late under it.
+            if match.offsetIntoSound > 0 {
+                reader.timeRange = CMTimeRange(
+                    start: CMTime(seconds: match.offsetIntoSound,
+                                  preferredTimescale: 48_000),
+                    duration: .positiveInfinity)
+            }
+            guard reader.startReading() else { return nil }
+            let input = addAudioInput(to: writer)
+            input.metadata = [trackNameItem(for: match.sound)]
+            return AudioLeg(reader: reader, output: output, input: input,
+                            offsetIntoSound: match.offsetIntoSound)
+        }
+    }
+
+    /// What the track is CALLED, out of the file's own metadata (owner: "ну и
+    /// дорожки чтоб были подписаны так как по метам").
+    ///
+    /// iXML's scene and take when the recordist wrote them, the file's own
+    /// name otherwise — which is what a recordist names a file after anyway.
+    /// A QuickTime track name, so it rides in a `.mov` daily and not in an
+    /// `.mp4` one: the same measured container limit as every other key here.
+    static func trackNameItem(for sound: BroadcastWaveFacts) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.identifier = .quickTimeUserDataTrackName
+        let stem = sound.url.deletingPathExtension().lastPathComponent
+        if let scene = sound.scene, let take = sound.take,
+           !scene.isEmpty, !take.isEmpty {
+            item.value = "\(stem) — \(scene)/\(take)" as NSString
+        } else {
+            item.value = stem as NSString
+        }
+        return item
     }
 
     /// The writer's sound end: AAC stereo, only when the reader has audio to

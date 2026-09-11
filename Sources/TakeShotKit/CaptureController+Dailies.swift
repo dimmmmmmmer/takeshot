@@ -229,6 +229,8 @@ extension CaptureController {
             ? nil : model.destination?.path
         settings.dailies.sourcePaths = model.sources.isEmpty
             ? nil : model.sources.map(\.path)
+        settings.dailies.soundPaths = model.soundFolders.isEmpty
+            ? nil : model.soundFolders.map(\.path)
         let extras = Array(model.destinations.dropFirst())
         settings.dailies.extraDestinationPaths = extras.isEmpty
             ? nil : extras.map(\.path)

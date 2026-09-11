@@ -131,6 +131,45 @@ struct DailiesEngineTests {
         #expect(stream.pointee.mChannelsPerFrame == 2)
     }
 
+    /// **A take with more than a second of sound in it finishes.**
+    ///
+    /// It did not. `AVAssetWriter` holds an input back while another one lags,
+    /// and the audio was pumped only up to the picture's current time — never
+    /// ahead of it. Past about a second, which is what the writer buffers
+    /// before it starts holding back, the video input stopped being granted,
+    /// the loop stopped asking for audio, and the run stopped: no error, no
+    /// failure, a queue that says "rendering" for ever.
+    ///
+    /// Nothing caught it because every dailies fixture until now was a second
+    /// long or had no sound. Four seconds here, which is four times the wrong
+    /// side of the boundary, and the assertion is simply that the run ENDS —
+    /// with the picture and the sound both in the file.
+    /// **A time limit, because the failure is a HANG.** Without it a
+    /// regression parks the whole battery instead of failing one test, which
+    /// is how this bug survived: a run that never ends looks like a slow
+    /// machine. A minute against the 0.6 s it takes.
+    @Test(.timeLimit(.minutes(1)))
+    func aTakeWithSecondsOfSoundFinishes() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("long.mov"), frames: 100,
+            audioChannels: 2)
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: source)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("Dailies"))
+        #expect(report.isFullySucceeded, "items failed: \(report.failed)")
+        let daily: URL = try #require(report.items.first?.output)
+        let asset = AVURLAsset(url: daily)
+        let video = try await asset.loadTracks(withMediaType: .video)
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        #expect(video.count == 1)
+        #expect(audio.count == 1, "the sound did not reach the daily")
+        let seconds = try await asset.load(.duration).seconds
+        #expect(seconds > 3, "the daily is \(seconds)s of a 4s take")
+    }
+
     /// The app's no-silent-overwrite idiom (`CapturePipeline.uniqueURL`): a
     /// name that exists gets `_2`, and the existing file is left alone.
     @Test func anExistingDailyIsNeverOverwritten() async throws {
