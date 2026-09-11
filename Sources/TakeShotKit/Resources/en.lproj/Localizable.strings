@@ -856,6 +856,7 @@
 "dailies_status_reopen" = "Open the dailies queue";
 "dailies_cancelling" = "Dailies: stopping…";
 "dailies_done" = "Dailies done: %@";
+"dailies_done_with_skips" = "%@ rendered, %d already there.";
 "dailies_failed" = "Dailies: %d failed (%@)";
 "dailies_cancelled" = "Dailies stopped: %d of %d done";
 "dailies_result_done" = "Done: %d of %d";
@@ -1176,6 +1177,7 @@
 "dailies_sources_label" = "Render from";
 "dailies_sources_takes" = "Today's takes — add a folder to render camera originals instead";
 "dailies_good_only" = "Circled takes only";
+"dailies_skip_finished" = "Skip what is already rendered";
 "dailies_export_timeline" = "Export timeline…";
 "dailies_export_timeline_hint" = "Circled takes, back to back, as an EDL.";
 "dailies_sound_label" = "Sound";

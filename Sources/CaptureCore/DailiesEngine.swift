@@ -47,6 +47,7 @@ public enum DailiesEngine {
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
         look: DailiesLook? = nil, desqueeze: Double = 1,
         sounds: [BroadcastWaveFacts] = [],
+        skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -60,6 +61,15 @@ public enum DailiesEngine {
                                   failure: error.localizedDescription)
             }, wasCancelled: false)
         }
+        // **The folder's own note about itself.** Read once, written after
+        // every item: a run that is killed mid-day leaves the dailies it
+        // finished AND the record of them, so the next one starts where this
+        // one stopped instead of re-rendering the morning (`DailiesJournal`).
+        var journal = DailiesProgressJournal.read(in: folder)
+        let destination = Destination(
+            folder: folder,
+            recipe: DailiesRecipe.fingerprint(burnins: burnins, codec: codec,
+                                              look: look, desqueeze: desqueeze))
         var results: [DailiesItemResult] = []
         for (index, item) in items.enumerated() {
             guard !control.isCancelled else {
@@ -70,6 +80,13 @@ public enum DailiesEngine {
                 })
                 break
             }
+            if skipFinished,
+               let done = skipped(item, at: (index, items.count),
+                                  journal: journal, into: destination,
+                                  progress: progress) {
+                results.append(done)
+                continue
+            }
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec, look: look,
@@ -79,6 +96,7 @@ public enum DailiesEngine {
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)
             }
+            note(result, of: item, into: destination, journal: &journal)
             results.append(result)
         }
         // Cancel only counts if it cut the run short (the offload's rule):
@@ -86,6 +104,58 @@ public enum DailiesEngine {
         let stoppedShort = results.contains { $0.wasCancelled }
         return DailiesReport(items: results,
                              wasCancelled: control.isCancelled && stoppedShort)
+    }
+
+    /// **The item this folder already holds**, or nil to render it.
+    ///
+    /// A skip is still an item in the report and still a tick on the progress
+    /// bar: a queue that jumps from 3 to 40 with no rows in between reads as
+    /// a queue that lost thirty-seven takes.
+    /// **Where a run is writing and by what recipe** — the pair every journal
+    /// question needs, carried as one value so neither helper grows a
+    /// parameter list nobody can read.
+    struct Destination {
+        let folder: URL
+        let recipe: String
+    }
+
+    private static func skipped(
+        _ item: DailiesItem, at place: (index: Int, count: Int),
+        journal: DailiesJournal, into destination: Destination,
+        progress: @Sendable (DailiesProgress) -> Void) -> DailiesItemResult? {
+        guard let existing = journal.finished(source: item.source,
+                                              recipe: destination.recipe,
+                                              named: item.outputName,
+                                              in: destination.folder)
+        else { return nil }
+        progress(DailiesProgress(
+            itemIndex: place.index, itemCount: place.count,
+            currentFile: item.source.lastPathComponent,
+            framesDone: 1, framesTotal: 1, isPaused: false,
+            isCancelling: false))
+        return DailiesItemResult(source: item.source, output: existing,
+                                 wasSkipped: true)
+    }
+
+    /// **The note, after the item and not at the end of the run** — see
+    /// `DailiesJournal` for why that is the whole point of it.
+    ///
+    /// A note that cannot be written costs this run nothing: the daily exists
+    /// either way, and the next run re-renders it rather than skipping
+    /// something it has no record of.
+    private static func note(_ result: DailiesItemResult, of item: DailiesItem,
+                             into destination: Destination,
+                             journal: inout DailiesJournal) {
+        guard let output = result.output, !result.wasSkipped,
+              let source = DailiesJournal.facts(of: item.source),
+              let made = DailiesJournal.facts(of: output) else { return }
+        journal.record(DailiesJournal.Entry(
+            source: item.source.lastPathComponent,
+            sourceSize: source.size, sourceModified: source.modified,
+            recipe: destination.recipe, output: output.lastPathComponent,
+            outputSize: made.size, outputName: item.outputName,
+            finishedAt: Date()))
+        _ = try? DailiesProgressJournal.write(journal, into: destination.folder)
     }
 
     /// Put a finished daily on every other shelf, and say which ones refused.

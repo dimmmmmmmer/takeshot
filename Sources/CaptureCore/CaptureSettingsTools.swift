@@ -143,6 +143,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case sourcePaths = "dailiesSourcePaths"
         case soundPaths = "dailiesSoundPaths"
         case goodTakesOnly = "dailiesGoodTakesOnly"
+        case skipFinished = "dailiesSkipFinished"
         case extraDestinationPaths = "dailiesExtraDestinationPaths"
     }
 
@@ -288,6 +289,15 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// где-нибудь типа рендерить только удачные тейки"). nil/false — the whole
     /// day, which is what a dailies run has always been.
     public var goodTakesOnly: Bool?
+
+    /// **Leave alone what the destination already holds** (owner: "не
+    /// рендерить уже отрендеренное — точно да"). nil — ON, which is the
+    /// default a second run over the same day needs: without it every daily
+    /// gets a `_2` beside it.
+    public var skipFinished: Bool?
+
+    /// What the switch reads, nil included.
+    public var skipFinishedEffective: Bool { skipFinished ?? true }
 
     /// The sound folders, as URLs. Empty — camera sound only.
     public var soundURLs: [URL] {

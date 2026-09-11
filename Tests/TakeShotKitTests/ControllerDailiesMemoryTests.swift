@@ -25,6 +25,7 @@ import Testing
             model.customText = "FOR REVIEW"
             model.datePosition = .topRight
             model.goodTakesOnly = true
+            model.skipFinished = false
             // the write is debounced: it lands on its own, and the quit guard
             // flushes it — either way it must be there before the sheet is
             // asked to come back
@@ -43,6 +44,12 @@ import Testing
             #expect(second.datePosition == .topRight)
             #expect(second.goodTakesOnly, """
                 the circled-takes filter did not come back with the sheet
+                """)
+            // This one is ON by default, so it is the OFF state that has to
+            // survive — a flag whose nil means true is the easy one to store
+            // backwards.
+            #expect(!second.skipFinished, """
+                the skip switch came back on after being turned off
                 """)
         }
     }

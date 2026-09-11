@@ -248,6 +248,11 @@ extension CaptureController {
         settings.dailies.soundPaths = model.soundFolders.isEmpty
             ? nil : model.soundFolders.map(\.path)
         settings.dailies.goodTakesOnly = model.goodTakesOnly ? true : nil
+        // nil is ON here, so it is the OFF state that has to be written —
+        // the mirror of every other flag on this sheet, and the reason
+        // `skipFinishedEffective` exists rather than a bare `?? true` at each
+        // reader.
+        settings.dailies.skipFinished = model.skipFinished ? nil : false
         let extras = Array(model.destinations.dropFirst())
         settings.dailies.extraDestinationPaths = extras.isEmpty
             ? nil : extras.map(\.path)
@@ -265,8 +270,16 @@ extension CaptureController {
             lastNotice = L("dailies_cancelled", report.completed.count,
                            report.items.count)
         } else if report.isFullySucceeded {
-            lastNotice = L("dailies_done",
-                           localizedCount(report.completed.count, .file))
+            // **What the run DID, not what the folder holds.** With the skip
+            // switch on, a second pass over a finished day succeeds without
+            // encoding anything, and a toast saying "40 files" would be
+            // claiming a day's work that did not happen.
+            lastNotice = report.skipped.isEmpty
+                ? L("dailies_done",
+                    localizedCount(report.completed.count, .file))
+                : L("dailies_done_with_skips",
+                    localizedCount(report.rendered.count, .file),
+                    report.skipped.count)
         } else {
             lastError = L("dailies_failed", report.failed.count,
                           report.failed.first?.failure ?? "")

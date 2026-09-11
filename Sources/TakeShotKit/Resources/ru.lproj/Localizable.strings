@@ -846,6 +846,7 @@
 "dailies_status_reopen" = "Открыть очередь дейлизов";
 "dailies_cancelling" = "Дейлизы: остановка…";
 "dailies_done" = "Дейлизы готовы: %@";
+"dailies_done_with_skips" = "%@ отрендерено, %d уже были.";
 "dailies_failed" = "Дейлизы: %d с ошибкой (%@)";
 "dailies_cancelled" = "Дейлизы остановлены: готово %d из %d";
 "dailies_result_done" = "Готово: %d из %d";
@@ -1145,6 +1146,7 @@
 "dailies_sources_label" = "Рендерить из";
 "dailies_sources_takes" = "Сегодняшние дубли — добавьте папку, чтобы рендерить исходники";
 "dailies_good_only" = "Только удачные дубли";
+"dailies_skip_finished" = "Не рендерить уже отрендеренное";
 "dailies_export_timeline" = "Экспорт таймлайна…";
 "dailies_export_timeline_hint" = "Удачные дубли подряд, в EDL.";
 "dailies_sound_label" = "Звук";

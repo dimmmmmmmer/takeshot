@@ -514,6 +514,15 @@ struct DailiesOutputSection: View {
             // the three things an MPEG-4 file refuses — the take's metadata
             // keys, the timecode track, the sound tracks' names. Keeping it
             // would be a warning about a state the app can no longer be in.
+            // **What the destination already holds** (owner: "не рендерить
+            // уже отрендеренное — точно да'). Beside the codec and the name
+            // because those three together are what decides whether a file in
+            // that folder IS the file this run would make — the journal
+            // compares exactly them (`DailiesRecipe`).
+            Toggle(L("dailies_skip_finished"), isOn: $model.skipFinished)
+                .toggleStyle(.checkbox)
+                .offloadText(.body)
+                .disabled(controller.isDailiesRunning)
             HStack(spacing: OffloadChrome.rowSpacing) {
                 Text(L("dailies_name_label")).offloadText(.body).fixedSize()
                 // Filtered fields: what is typed here reaches

@@ -251,6 +251,14 @@ public struct DailiesItemResult: Sendable, Equatable {
     /// marked, skipped, and the next one starts.
     public var failure: String?
     public var wasCancelled: Bool
+    /// **The daily was already there and this run left it alone** (owner: "не
+    /// рендерить уже отрендеренное — точно да").
+    ///
+    /// `output` is set, because the file exists and the operator asked for it
+    /// — an item that is skipped is a succeeded item, not an absent one. The
+    /// flag is what lets the report say "30 already rendered, 12 made" instead
+    /// of claiming a day's work it did not do.
+    public var wasSkipped: Bool = false
     /// Extra destinations this daily could not be copied to, and why.
     ///
     /// Not a failure of the ITEM: the daily exists, and a report that called
@@ -259,11 +267,12 @@ public struct DailiesItemResult: Sendable, Equatable {
     public var copyFailures: [String] = []
 
     public init(source: URL, output: URL? = nil, failure: String? = nil,
-                wasCancelled: Bool = false) {
+                wasCancelled: Bool = false, wasSkipped: Bool = false) {
         self.source = source
         self.output = output
         self.failure = failure
         self.wasCancelled = wasCancelled
+        self.wasSkipped = wasSkipped
     }
 }
 
@@ -286,6 +295,17 @@ public struct DailiesReport: Sendable, Equatable {
 
     public var failed: [DailiesItemResult] {
         items.filter { $0.failure != nil }
+    }
+
+    /// The ones that were already in the folder — see
+    /// `DailiesItemResult.wasSkipped`.
+    public var skipped: [DailiesItemResult] {
+        items.filter { $0.wasSkipped }
+    }
+
+    /// The ones this run actually encoded.
+    public var rendered: [DailiesItemResult] {
+        items.filter { $0.output != nil && !$0.wasSkipped }
     }
 
     /// Every queued take came out as a daily.

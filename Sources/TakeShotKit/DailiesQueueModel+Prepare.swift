@@ -34,6 +34,7 @@ extension DailiesQueueModel {
         bakeLook = settings.dailies.bakeLook == true
         bakeDesqueeze = settings.dailies.bakeDesqueeze == true
         goodTakesOnly = settings.dailies.goodTakesOnly == true
+        skipFinished = settings.dailies.skipFinishedEffective
         namePrefix = settings.dailies.namePrefixEffective
         nameSuffix = settings.dailies.nameSuffixEffective
         ink = settings.dailies.inkEffective
