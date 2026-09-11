@@ -114,6 +114,16 @@ final class DailiesQueueModel: ObservableObject {
     /// folder's own journal plus the disk (`DailiesJournal`), so a changed
     /// arrangement, a changed source or a missing file all render again.
     @Published var skipFinished = true
+    /// **What the last check of the destination found** (owner: "ну и чтобы
+    /// какая-то у нас проверка типа как после копий была что все файлы точно
+    /// отрендерены как надо") — empty until one is run.
+    /// Written by `verifyDestination` in `+Run` and nowhere else — the
+    /// `private(set)` this would otherwise carry cannot reach across the file
+    /// the check moved into, and the sheet only ever reads them.
+    @Published var verifyFindings: [DailiesVerify.Finding] = []
+    /// A check is going. It opens every daily in the folder, which is fast and
+    /// is not instant on forty of them over a network.
+    @Published var isVerifying = false
     /// **Folders to render dailies FROM** (owner: "дейлики нужны из
     /// исходников… вероятно даже несколько источников, как в оффлоаде").
     /// Empty — the day's takes, which is what this sheet has always done.

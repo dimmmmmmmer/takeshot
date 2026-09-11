@@ -96,7 +96,7 @@ public enum DailiesEngine {
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)
             }
-            note(result, of: item, into: destination, journal: &journal)
+            await note(result, of: item, into: destination, journal: &journal)
             results.append(result)
         }
         // Cancel only counts if it cut the run short (the offload's rule):
@@ -145,15 +145,24 @@ public enum DailiesEngine {
     /// something it has no record of.
     private static func note(_ result: DailiesItemResult, of item: DailiesItem,
                              into destination: Destination,
-                             journal: inout DailiesJournal) {
+                             journal: inout DailiesJournal) async {
         guard let output = result.output, !result.wasSkipped,
               let source = DailiesJournal.facts(of: item.source),
               let made = DailiesJournal.facts(of: output) else { return }
+        // **Read back off the FILE**, not computed from the frames that went
+        // in: what the verify pass will measure later is the file, so what it
+        // is measured against has to be the file as it was written. One asset
+        // open against a transcode that took seconds.
+        let asset = AVURLAsset(url: output)
+        let seconds = (try? await asset.load(.duration).seconds)
+            .flatMap { $0.isFinite ? $0 : nil }
+        let audio = (try? await asset.tracks(ofType: .audio))?.count
         journal.record(DailiesJournal.Entry(
             source: item.source.lastPathComponent,
             sourceSize: source.size, sourceModified: source.modified,
             recipe: destination.recipe, output: output.lastPathComponent,
             outputSize: made.size, outputName: item.outputName,
+            outputSeconds: seconds, outputAudio: audio,
             finishedAt: Date()))
         _ = try? DailiesProgressJournal.write(journal, into: destination.folder)
     }

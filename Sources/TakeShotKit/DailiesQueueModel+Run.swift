@@ -89,6 +89,27 @@ extension DailiesQueueModel {
 
     /// Stop the whole queue. The frame in hand finishes and the partial
     /// output is deleted; items not reached are reported as cancelled.
+    /// **Check what the destination holds against the journal it wrote.**
+    ///
+    /// Off the main actor, like every other pass that opens files: forty
+    /// dailies over a network share is not an instant answer, and the sheet
+    /// stays alive while it runs. The findings are published for the sheet and
+    /// summarised as a toast, because the two readers want different things —
+    /// "is the day all right" and "which file is not".
+    func verifyDestination() {
+        guard let folder = destination, !isVerifying, !isRunning else { return }
+        isVerifying = true
+        verifyFindings = []
+        Task { [weak self] in
+            let journal = DailiesProgressJournal.read(in: folder)
+            let findings = await DailiesVerify.check(journal, in: folder)
+            guard let self else { return }
+            verifyFindings = findings
+            isVerifying = false
+            controller?.dailiesDidVerify(findings)
+        }
+    }
+
     func cancel() {
         guard isRunning else { return }
         control?.cancel()

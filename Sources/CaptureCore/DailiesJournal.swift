@@ -52,11 +52,24 @@ public struct DailiesJournal: Codable, Sendable, Equatable {
         /// entry it had, skip every item, and produce nothing at all under the
         /// name that was asked for.
         public var outputName: String?
+        /// **What the daily WAS when it was written** — how long, and how many
+        /// sound tracks. The verify pass has nothing else to hold a file
+        /// against: a daily is generated rather than copied, so there is no
+        /// source checksum to re-hash the way an offload does. What can be
+        /// checked is that the file is still the file that was made — there,
+        /// the size it was, as long as it was, with the tracks it had.
+        ///
+        /// Optional because a journal written before they existed is still a
+        /// journal, and an entry that cannot answer is reported as unchecked
+        /// rather than as a fault.
+        public var outputSeconds: Double?
+        public var outputAudio: Int?
         public var finishedAt: Date
 
         public init(source: String, sourceSize: Int64, sourceModified: Date,
                     recipe: String, output: String, outputSize: Int64,
-                    outputName: String? = nil, finishedAt: Date) {
+                    outputName: String? = nil, outputSeconds: Double? = nil,
+                    outputAudio: Int? = nil, finishedAt: Date) {
             self.source = source
             self.sourceSize = sourceSize
             self.sourceModified = sourceModified
@@ -64,6 +77,8 @@ public struct DailiesJournal: Codable, Sendable, Equatable {
             self.output = output
             self.outputSize = outputSize
             self.outputName = outputName
+            self.outputSeconds = outputSeconds
+            self.outputAudio = outputAudio
             self.finishedAt = finishedAt
         }
     }

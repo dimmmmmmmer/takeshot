@@ -13,7 +13,10 @@ import SwiftUI
 /// 160pt, and the sheet has to fit a window that may be 620 tall.
 struct DailiesFilesTab: View {
     @ObservedObject var model: DailiesQueueModel
-    @EnvironmentObject private var controller: CaptureController
+    /// Internal rather than private since the folder CHECK moved into its own
+    /// file: the button it draws greys on a controller rule, like every other
+    /// `.disabled(` in this app.
+    @EnvironmentObject var controller: CaptureController
 
     /// About four rows before a list scrolls. The lists are the one part of
     /// this face with no bound — a day can be shot on eight cards.
@@ -272,6 +275,7 @@ struct DailiesFilesTab: View {
                     .offloadText(.caption)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            check
         }
     }
 

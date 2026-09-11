@@ -41,6 +41,31 @@ extension CaptureController {
         !dailies.isRunning && dailies.sources.isEmpty
     }
 
+    /// Whether the destination can be checked: there is one, nothing is
+    /// running, and no check is already going.
+    var canVerifyDailies: Bool {
+        dailies.destination != nil && !dailies.isRunning && !dailies.isVerifying
+    }
+
+    /// **What a check of the destination found**, as the operator's one line.
+    ///
+    /// A clean folder is a notice; a fault is an error toast and NOT the
+    /// sticky alarm — the alarm means footage is at risk, and a daily that did
+    /// not survive is a file this app can make again from footage that is
+    /// still there. The detail stays on the sheet, which lists every file.
+    func dailiesDidVerify(_ findings: [DailiesVerify.Finding]) {
+        let faults = findings.filter(\.isFault)
+        if findings.isEmpty {
+            lastNotice = L("dailies_verify_empty")
+        } else if faults.isEmpty {
+            lastNotice = L("dailies_verify_clean",
+                           localizedCount(findings.count, .file))
+        } else {
+            lastError = L("dailies_verify_faults", faults.count,
+                          findings.count, faults.first?.output ?? "")
+        }
+    }
+
     /// Whether there is a timeline to export from the sheet at all — the same
     /// question the menu's own Selects EDL asks, named here because the sheet
     /// has a button for it now.

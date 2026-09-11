@@ -191,4 +191,41 @@ import Testing
             #expect(controller.canExportDailiesTimeline)
         }
     }
+
+    /// **The sheet can check its own destination** (owner: "ну и чтобы
+    /// какая-то у нас проверка типа как после копий была что все файлы точно
+    /// отрендерены как надо") — and it answers about the FOLDER, which
+    /// includes runs from other days.
+    @Test func theSheetChecksWhatTheFolderHolds() async throws {
+        try await ControllerHarness.run { controller, root in
+            let model = controller.dailies
+            model.prepare(takes: [], settings: controller.settings,
+                          defaultFolder: root)
+            #expect(controller.canVerifyDailies)
+            #expect(model.verifyFindings.isEmpty)
+
+            model.verifyDestination()
+            try await ControllerWait.until { !model.isVerifying }
+            // An empty folder has nothing to report and is not a fault: the
+            // journal is the list, and there is no journal yet.
+            #expect(model.verifyFindings.isEmpty)
+            #expect(controller.lastNotice == L("dailies_verify_empty"))
+
+            // A journal naming a file that is not there is exactly the case
+            // an operator runs this for.
+            var journal = DailiesJournal()
+            journal.record(DailiesJournal.Entry(
+                source: "A001C01.mov", sourceSize: 1, sourceModified: Date(),
+                recipe: "r", output: "A001C01_DAILY.mov", outputSize: 2,
+                finishedAt: Date()))
+            try DailiesProgressJournal.write(journal, into: root)
+
+            model.verifyDestination()
+            try await ControllerWait.until { !model.isVerifying }
+            #expect(model.verifyFindings.map(\.verdict) == [.missing])
+            #expect(controller.lastError?.isEmpty == false, """
+                a missing daily did not reach the operator
+                """)
+        }
+    }
 }
