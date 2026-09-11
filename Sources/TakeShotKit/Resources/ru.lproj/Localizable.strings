@@ -686,6 +686,9 @@
 "report_camera" = "Камера %@";
 "report_takes_summary" = "%1$@ (годных — %2$d, брак — %3$d)";
 "report_footage" = "материал %@";
+"report_selects" = "годные: %1$@   хрон %2$@";
+"report_selects_inout" = "годные: %1$@   хрон %2$@ с in/out на %3$@ (%4$@ целиком)";
+"report_row_inout_fmt" = "IN/OUT %1$@ → %2$@   %3$@";
 "report_col_clip" = "КЛИП";
 "report_col_tc_in" = "TC НАЧ";
 "report_col_tc_out" = "TC КОН";
@@ -706,6 +709,9 @@
 "report_csv_start" = "TC начала";
 "report_csv_end" = "TC конца";
 "report_csv_duration" = "Длительность";
+"report_csv_in" = "Вход";
+"report_csv_out" = "Выход";
+"report_csv_selected" = "Отобрано";
 "report_csv_rating" = "Оценка";
 "report_csv_comments" = "Комментарии";
 "report_csv_markers" = "Маркеры";

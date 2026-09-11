@@ -5,7 +5,8 @@ import Foundation
 /// Shift report as a paginated A4 PDF: header with the day's totals, then a
 /// take table with thumbnails, TC in/out, ratings, comments and markers.
 enum ShiftReport {
-    static func pdfData(takes: [Take], thumbnails: [UUID: NSImage],
+    static func pdfData(_ material: TakeRuntime.ReportMaterial,
+                        thumbnails: [UUID: NSImage],
                         project: String, camera: String) -> Data? {
         let data = NSMutableData()
         var mediaBox = CGRect(origin: .zero, size: ReportPage.pageSize)
@@ -16,13 +17,14 @@ enum ShiftReport {
 
         let page = ReportPage(context: context)
         page.open()
-        page.drawHeader(takes: takes, project: project, camera: camera)
+        page.drawHeader(material, project: project, camera: camera)
         page.drawTableHead()
 
-        for take in takes {
+        for take in material.takes {
             // The row is measured before it is placed: a note wraps, so height
             // is a property of the take and pagination is arithmetic on it.
-            let layout = page.layout(of: take)
+            let layout = page.layout(of: take,
+                                     range: material.ranges[TakeRuntime.key(take)])
             if page.rowOverflows(layout) {
                 page.close()
                 page.open()
@@ -130,6 +132,12 @@ private final class ReportPage {
     static let stackWidth = pageSize.width - margin - xClip
     /// One 7pt line, which is the step the slate and the markers already sat on.
     static let stackStep: CGFloat = 13
+    /// The in/out line's ink. A colour of its own, because the row already has
+    /// two meanings in colour — orange for what was flagged during the take,
+    /// green and red for the rating — and a third line in either of those
+    /// would read as more of that. Blue is nothing else on the page.
+    static let rangeColor = NSColor(calibratedRed: 0.15, green: 0.35,
+                                    blue: 0.65, alpha: 1)
     /// Air under the last line of a row, so the rule that closes the row does
     /// not sit on the descenders of the note above it.
     static let rowPadding: CGFloat = 10
@@ -161,16 +169,18 @@ private final class ReportPage {
     /// the constant it used to be.
     struct RowLayout {
         var slate = ""
+        var range = ""
         var markers = ""
         var note = ""
         var slateOffset: CGFloat = 0
+        var rangeOffset: CGFloat = 0
         var markerOffset: CGFloat = 0
         var noteOffset: CGFloat = 0
         var height = ReportPage.rowHeight
     }
 
     /// Measures a row without drawing anything.
-    func layout(of take: Take) -> RowLayout {
+    func layout(of take: Take, range: ClipRange?) -> RowLayout {
         var layout = RowLayout()
         // The stack under the clip name, in the order the office reads it: which
         // scene this is, what was flagged during the take, and what the operator
@@ -181,6 +191,20 @@ private final class ReportPage {
         layout.slate = take.slate.compact
         layout.slateOffset = next
         if !layout.slate.isEmpty { next += Self.stackStep }
+        // The marked part of the take, under the slate and above the markers:
+        // it is what the header's runtime was counted from, and a total on the
+        // top of the sheet with nothing in the rows to account for it is a
+        // number the office cannot check against the takes it covers. Absent —
+        // not blank — for a take nothing narrows, which is most of them.
+        if let window = TakeRuntime.window(of: take, range: range) {
+            layout.range = L(
+                "report_row_inout_fmt",
+                TakeRuntime.markTimecode(of: take, atSecond: window.start),
+                TakeRuntime.markTimecode(of: take, atSecond: window.end),
+                TakeRuntime.lengthTimecode(window.end - window.start, of: take))
+        }
+        layout.rangeOffset = next
+        if !layout.range.isEmpty { next += Self.stackStep }
         if !take.markers.isEmpty {
             layout.markers = "⚑ " + take.markers.map {
                 $0.note.isEmpty ? $0.timecodeText
@@ -243,14 +267,28 @@ private final class ReportPage {
 
     /// The words are `ReportSummary`, shared with the contact sheet; what is
     /// left here is where they go on the page and which font they take.
-    func drawHeader(takes: [Take], project: String, camera: String) {
-        let header = ReportSummary.make(titleKey: "report_title", takes: takes,
+    ///
+    /// The selects line is a SECOND line under the summary rather than more
+    /// text on it — see `ReportSummary.selects` for why that is not a style
+    /// choice — and it is absent, not blank, on a day nobody has rated: the
+    /// table head simply moves up to where it always was.
+    func drawHeader(_ material: TakeRuntime.ReportMaterial, project: String,
+                    camera: String) {
+        let header = ReportSummary.make(titleKey: "report_title",
+                                        material: material,
                                         project: project, camera: camera)
         let width = Self.pageSize.width - 2 * Self.margin
         draw(header.title, x: Self.margin, width: width, font: titleFont,
              offset: 4)
         y += 24
         draw(header.summary, x: Self.margin, width: width, font: bodyFont,
+             color: .darkGray)
+        guard !header.selects.isEmpty else {
+            y += 24
+            return
+        }
+        y += Self.stackStep + 1
+        draw(header.selects, x: Self.margin, width: width, font: bodyFont,
              color: .darkGray)
         y += 24
     }
@@ -300,6 +338,11 @@ private final class ReportPage {
         if !layout.slate.isEmpty {
             draw(layout.slate, x: Self.xClip, width: Self.clipWidth,
                  font: slateFont, color: .darkGray, offset: layout.slateOffset)
+        }
+        if !layout.range.isEmpty {
+            draw(layout.range, x: Self.xClip, width: Self.stackWidth,
+                 font: markerFont, color: Self.rangeColor,
+                 offset: layout.rangeOffset)
         }
         if !layout.markers.isEmpty {
             draw(layout.markers, x: Self.xClip, width: Self.stackWidth,

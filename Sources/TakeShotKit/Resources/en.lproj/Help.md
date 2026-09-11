@@ -257,7 +257,12 @@ On demand, from the export menu in the takes panel or the File menu:
   duration, rate, take, scene, the Good Take flag and the comments. The reel is
   the same one the EDL writes, so the two join up.
 - **Shift report** — the full table for production paperwork, as a PDF with
-  thumbnails or as a CSV.
+  thumbnails or as a CSV. The header carries two totals: the day's footage —
+  everything that was rolled — and the runtime of the circled takes, which is
+  what goes forward. Where an in/out was marked during review the runtime
+  honours it, says how many takes were trimmed and quotes the untrimmed figure
+  beside it, and each of those takes prints its own IN/OUT under the file name
+  (the CSV has `In`, `Out` and `Selected` columns for the same thing).
 
 Takes moved out of the folder leave the panel but stay in the log: the normal end
 of a day is the DIT moving footage into the archive, and that must not erase the

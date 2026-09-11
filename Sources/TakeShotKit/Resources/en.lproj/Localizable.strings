@@ -683,6 +683,9 @@
 "report_camera" = "Cam %@";
 "report_takes_summary" = "%1$@ (%2$d good, %3$d bad)";
 "report_footage" = "footage %@";
+"report_selects" = "good: %1$@   runtime %2$@";
+"report_selects_inout" = "good: %1$@   runtime %2$@ with in/out on %3$@ (%4$@ whole)";
+"report_row_inout_fmt" = "IN/OUT %1$@ → %2$@   %3$@";
 "report_col_clip" = "CLIP";
 "report_col_tc_in" = "TC IN";
 "report_col_tc_out" = "TC OUT";
@@ -703,6 +706,9 @@
 "report_csv_start" = "Start TC";
 "report_csv_end" = "End TC";
 "report_csv_duration" = "Duration";
+"report_csv_in" = "In";
+"report_csv_out" = "Out";
+"report_csv_selected" = "Selected";
 "report_csv_rating" = "Rating";
 "report_csv_comments" = "Comments";
 "report_csv_markers" = "Markers";

@@ -32,7 +32,7 @@ struct ReportLocalizationTests {
     @Test func theShiftReportPDFSpeaksTheAppLanguage() throws {
         let takes = [take(1, rating: .good), take(2, rating: .bad)]
         let data = try #require(ViewRender.withLanguage(.russian) {
-            ShiftReport.pdfData(takes: takes, thumbnails: [:],
+            ShiftReport.pdfData(TakeRuntime.ReportMaterial(takes), thumbnails: [:],
                                 project: "Ночь", camera: "A")
         })
         let document = try #require(PDFDocument(data: data))
@@ -59,16 +59,17 @@ struct ReportLocalizationTests {
 
     @Test func theShiftReportCSVSpeaksTheAppLanguage() {
         let csv = ViewRender.withLanguage(.russian) {
-            TakeLogExporter.reportCSV(takes: [take(1, rating: .good)],
+            TakeLogExporter.reportCSV(TakeRuntime.ReportMaterial([take(1, rating: .good)]),
                                       labels: .current())
         }
         let lines = csv.components(separatedBy: "\n")
         #expect(lines[0] == "Имя файла,Ролл,Клип,Сцена,Кадр,Дубль,"
-            + "TC начала,TC конца,Длительность,Оценка,Комментарии,Описание,"
-            + "Маркеры,Записан")
+            + "TC начала,TC конца,Длительность,Вход,Выход,Отобрано,"
+            + "Оценка,Комментарии,Описание,Маркеры,Записан")
         #expect(lines[1].contains("ГОДЕН"))
         // …and the English default is untouched by the labels seam existing
-        #expect(TakeLogExporter.reportCSV(takes: []).hasPrefix("File Name,Roll,"))
+        #expect(TakeLogExporter.reportCSV(TakeRuntime.ReportMaterial([]))
+            .hasPrefix("File Name,Roll,"))
     }
 
     /// The Resolve sidecar's schema is frozen and machine-read: the language

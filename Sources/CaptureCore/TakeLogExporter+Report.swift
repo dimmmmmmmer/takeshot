@@ -22,21 +22,13 @@ extension TakeLogExporter {
     }
 
     /// Take length as timecode at the take's own rate ("00:00:12:07").
+    ///
+    /// `TakeRuntime.lengthTimecode` does the counting, on the take's OWN rate
+    /// — a 23.976 take counted at 24 came out a frame long every 41 s — and
+    /// the same function answers for the MARKED length in the columns below,
+    /// so two lengths in one row cannot be counted two ways.
     public static func durationTimecode(of take: Take) -> String {
-        // no start TC (manual take on a source without one): count at 25 fps,
-        // which is what the field showed before the take could carry a rate
-        let rate = take.startTimecode ?? fallbackRate
-        return Timecode(frameNumber: durationFrames(of: take, at: rate),
-                        fps: max(1, rate.fps),
-                        isDropFrame: rate.isDropFrame).description
-    }
-
-    /// The recorded length in frames, counted on `rate`'s own timebase (see
-    /// `realRate(of:)` — a drop-frame rate is not its nominal value).
-    private static func durationFrames(of take: Take, at rate: Timecode) -> Int {
-        // The take's OWN rate — `rate` only numbers the frames. A 23.976 take
-        // counted at 24 came out a frame long every 41 s.
-        frameOffset(seconds: take.durationSeconds, for: take)
+        TakeRuntime.lengthTimecode(take.durationSeconds, of: take)
     }
 
     /// The report table, labelled in `labels`' language.
@@ -47,7 +39,7 @@ extension TakeLogExporter {
     /// opposite — a frozen machine schema — and is deliberately not touched.
     /// The labels are injected because CaptureCore is localization-free; the
     /// default keeps every existing caller's output English.
-    public static func reportCSV(takes: [Take],
+    public static func reportCSV(_ material: TakeRuntime.ReportMaterial,
                                  labels: ShiftReportCSVLabels = .english)
         -> String {
         var lines = [labels.header.map(escape).joined(separator: ",")]
@@ -56,7 +48,7 @@ extension TakeLogExporter {
         // with the language is not comparable across two days' reports
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        for take in takes {
+        for take in material.takes {
             // spelled out rather than looked up in a table: a rating added
             // later must break this switch, not silently export blank
             let rating: String
@@ -65,7 +57,10 @@ extension TakeLogExporter {
             case .bad: rating = labels.bad
             case .none: rating = ""
             }
-            lines.append([
+            // Appended in three pieces rather than concatenated with `+`:
+            // one expression spanning three array literals is the shape the
+            // older compiler on CI times out type-checking (docs/ARCHITECTURE.md).
+            var cells: [String] = [
                 escape(take.url.lastPathComponent),
                 escape(take.roll),
                 String(take.takeNumber),
@@ -77,14 +72,45 @@ extension TakeLogExporter {
                 take.startTimecode?.description ?? "",
                 endTimecode(of: take)?.description ?? "",
                 durationTimecode(of: take),
+            ]
+            cells.append(contentsOf: markCells(
+                of: take, range: material.ranges[TakeRuntime.key(take)]))
+            cells.append(contentsOf: [
                 escape(rating),
                 escape(flattened(take.comment)),
                 escape(flattened(take.logDescription)),
                 escape(take.markers.map(\.timecodeText).joined(separator: "; ")),
                 formatter.string(from: take.recordedAt),
-            ].joined(separator: ","))
+            ])
+            lines.append(cells.joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The three in/out cells of one row: where the marked part starts, where
+    /// it ends, and how long it is.
+    ///
+    /// All three empty for a take nothing narrows, which is most of them —
+    /// `TakeRuntime.window` decides that, so a row's cells and the runtime on
+    /// the header are the same judgement. The two positions are printed
+    /// CLAMPED, i.e. as the window that was actually counted: a mark left
+    /// past the end of a take it was made against (a clip re-recorded under
+    /// the same name, a sidecar edited by hand) would otherwise print an out
+    /// point beyond the take's own End TC on the row above it.
+    ///
+    /// `Duration` next door stays the RECORDED length. Two columns that
+    /// disagree is the point — one says what was rolled and the other what
+    /// was kept, and a report that quietly overwrote the first with the second
+    /// would lose the only record of how long the camera ran.
+    private static func markCells(of take: Take, range: ClipRange?) -> [String] {
+        guard let window = TakeRuntime.window(of: take, range: range) else {
+            return ["", "", ""]
+        }
+        return [
+            TakeRuntime.markTimecode(of: take, atSecond: window.start),
+            TakeRuntime.markTimecode(of: take, atSecond: window.end),
+            TakeRuntime.lengthTimecode(window.end - window.start, of: take),
+        ]
     }
 }
 
@@ -93,8 +119,12 @@ extension TakeLogExporter {
 /// the English default is what the file says with no app around it.
 public struct ShiftReportCSVLabels: Sendable, Equatable {
     /// One label per column — the writer above defines the order.
+    /// The three in/out columns sit with the other timings rather than at the
+    /// end: a reader checking a take's marked part against what was rolled
+    /// reads five cells side by side instead of across the row.
     public var header = ["File Name", "Roll", "Clip", "Scene", "Shot", "Take",
-                         "Start TC", "End TC", "Duration", "Rating",
+                         "Start TC", "End TC", "Duration",
+                         "In", "Out", "Selected", "Rating",
                          "Comments", "Description", "Markers", "Recorded At"]
     public var good = "GOOD"
     public var bad = "BAD"

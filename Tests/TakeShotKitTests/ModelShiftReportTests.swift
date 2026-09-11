@@ -28,11 +28,13 @@ struct ModelShiftReportTests {
     }
 
     private func document(_ takes: [Take],
+                          ranges: [String: ClipRange] = [:],
                           thumbnails: [UUID: NSImage] = [:],
                           project: String = "Film",
                           camera: String = "A") throws -> PDFDocument {
         let data = try #require(ShiftReport.pdfData(
-            takes: takes, thumbnails: thumbnails, project: project,
+            TakeRuntime.ReportMaterial(takes, ranges: ranges),
+            thumbnails: thumbnails, project: project,
             camera: camera))
         return try #require(PDFDocument(data: data), "not a readable PDF")
     }
@@ -75,6 +77,38 @@ struct ModelShiftReportTests {
         #expect(body.contains("1 bad"))
         // 30 + 30 + 5 seconds of footage
         #expect(body.contains("0:01:05"))
+    }
+
+    /// Owner: "в шифт репорте пиши еще плис по хорошим тейкам сколько хрона
+    /// вышло и чтоб если был выбран ин/аут тоже писало это". The header's
+    /// second line, on the paper rather than only in `ReportSummary`.
+    @Test func theSelectsRuntimeReachesThePaper() throws {
+        let takes = [take(1, rating: .good, duration: 30),
+                     take(2, rating: .good, duration: 30),
+                     take(3, rating: .bad, duration: 30)]
+        let plain = text(of: try document(takes))
+        #expect(plain.contains("runtime 0:01:00"), "\(plain)")
+        // …and with a mark on one of them, both numbers and the count
+        let marked = text(of: try document(
+            takes, ranges: ["CLIP001.mov": ClipRange(inPoint: 0, outPoint: 10)]))
+        #expect(marked.contains("runtime 0:00:40"), "\(marked)")
+        #expect(marked.contains("in/out on 1 take"), "\(marked)")
+        #expect(marked.contains("(0:01:00 whole)"), "\(marked)")
+    }
+
+    /// The row the header's runtime was counted from. Absent — not blank — on
+    /// a take nothing narrows, which is most of them.
+    @Test func aMarkedTakePrintsItsWindowInItsOwnRow() throws {
+        let subject = take(1, rating: .good, duration: 30)
+        let plain = text(of: try document([subject]))
+        #expect(!plain.contains("IN/OUT"), "\(plain)")
+        let marked = text(of: try document(
+            [subject],
+            ranges: ["CLIP001.mov": ClipRange(inPoint: 2, outPoint: 12)]))
+        // the take starts at 10:00:01:00 — the marks are on its own clock,
+        // like the markers line above them
+        #expect(marked.contains("IN/OUT 10:00:03:00 → 10:00:13:00"), "\(marked)")
+        #expect(marked.contains("00:00:10:00"), "\(marked)")
     }
 
     @Test func fallsBackToTheAppNameWhenNoProjectIsSet() throws {
@@ -154,7 +188,7 @@ struct ModelShiftReportTests {
     @Test func aRussianNoteReachesThePaperWhole() throws {
         let note = "мягкий фокус на общем плане, тень микрофона на панораме"
         let data = try #require(ViewRender.withLanguage(.russian) {
-            ShiftReport.pdfData(takes: [take(1, comment: note)],
+            ShiftReport.pdfData(TakeRuntime.ReportMaterial([take(1, comment: note)]),
                                 thumbnails: [:], project: "Ночь", camera: "A")
         })
         let body = flowed(text(of: try #require(PDFDocument(data: data))))

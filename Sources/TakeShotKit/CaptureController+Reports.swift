@@ -136,7 +136,7 @@ extension CaptureController {
         do {
             // labelled in the app language, like the PDF beside it — the
             // frozen Resolve sidecar is a different writer and stays as is
-            try TakeLogExporter.reportCSV(takes: takes, labels: .current())
+            try TakeLogExporter.reportCSV(reportMaterial, labels: .current())
                 .write(to: url, atomically: true, encoding: .utf8)
             lastNotice = L("report_saved", url.lastPathComponent)
         } catch {
@@ -156,8 +156,21 @@ extension CaptureController {
         takes.filter { cached[$0.id] == nil }
     }
 
+    /// **The day's takes together with the in/out marks filed against them.**
+    ///
+    /// The marks live on the transport, keyed by file name, and the report
+    /// writers want both — so the pairing is made ONCE, here, where the two
+    /// halves are known to belong to the same session. `storedRanges` rather
+    /// than the table alone: the clip in the player has not been filed yet,
+    /// and a report exported with a take still loaded would otherwise quote a
+    /// runtime that ignores the mark the operator just made.
+    var reportMaterial: TakeRuntime.ReportMaterial {
+        TakeRuntime.ReportMaterial(takes, ranges: transport.storedRanges)
+    }
+
     /// The PDF half: fill in the pictures the panel never loaded, then render.
     private func writeShiftReportPDF(to url: URL) -> Task<Void, Never> {
+        let material = reportMaterial
         let takes = takes
         let cached = thumbnails
         let project = settings.naming.projectName
@@ -169,7 +182,7 @@ extension CaptureController {
                 pictures[id] = image
             }
             guard let data = ShiftReport.pdfData(
-                takes: takes, thumbnails: pictures,
+                material, thumbnails: pictures,
                 project: project, camera: camera) else {
                 self?.lastError = L("toast_pdf_render_failed")
                 return

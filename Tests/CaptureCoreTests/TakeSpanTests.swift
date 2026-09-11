@@ -110,7 +110,7 @@ import Testing
             .description == end)
 
         // the report CSV's End TC column
-        let csv: String = TakeLogExporter.reportCSV(takes: [subject])
+        let csv: String = TakeLogExporter.reportCSV(TakeRuntime.ReportMaterial([subject]))
         let row: [String] = try #require(csv.split(separator: "\n").last)
             .split(separator: ",", omittingEmptySubsequences: false)
             .map { String($0) }

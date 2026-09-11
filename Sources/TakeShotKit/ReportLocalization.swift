@@ -18,7 +18,9 @@ extension ShiftReportCSVLabels {
                          L("report_csv_clip"), L("report_csv_scene"),
                          L("report_csv_shot"), L("report_csv_take"),
                          L("report_csv_start"), L("report_csv_end"),
-                         L("report_csv_duration"), L("report_csv_rating"),
+                         L("report_csv_duration"), L("report_csv_in"),
+                         L("report_csv_out"), L("report_csv_selected"),
+                         L("report_csv_rating"),
                          L("report_csv_comments"),
                          L("report_csv_description"),
                          L("report_csv_markers"), L("report_csv_recorded")]
