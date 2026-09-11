@@ -205,7 +205,11 @@ import Testing
             #expect(model.verifyFindings.isEmpty)
 
             model.verifyDestination()
-            try await ControllerWait.until { !model.isVerifying }
+            // The wait ANSWERS, and the answer is the assertion — `try` on a
+            // call that cannot throw is a warning, and CI's build gate is
+            // warning-free.
+            #expect(await ControllerWait.until { !model.isVerifying },
+                    "the check never finished")
             // An empty folder has nothing to report and is not a fault: the
             // journal is the list, and there is no journal yet.
             #expect(model.verifyFindings.isEmpty)
@@ -221,7 +225,8 @@ import Testing
             try DailiesProgressJournal.write(journal, into: root)
 
             model.verifyDestination()
-            try await ControllerWait.until { !model.isVerifying }
+            #expect(await ControllerWait.until { !model.isVerifying },
+                    "the check never finished")
             #expect(model.verifyFindings.map(\.verdict) == [.missing])
             #expect(controller.lastError?.isEmpty == false, """
                 a missing daily did not reach the operator
