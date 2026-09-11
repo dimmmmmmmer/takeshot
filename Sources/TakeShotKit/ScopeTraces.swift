@@ -228,15 +228,12 @@ struct HistogramView: View {
     }
 
     private func channelPath(_ bins: [Int], peak: Int, in size: CGSize) -> Path {
-        // log heights, like the traces: a linear scale turns a histogram with
-        // one dominant tone into a lone spike over a flat line
-        let logPeak = Foundation.log(Double(peak) + 1)
-        return Path { p in
+        Path { p in
             let step = size.width / CGFloat(bins.count - 1)
             p.move(to: CGPoint(x: 0, y: size.height))
             for (i, count) in bins.enumerated() {
-                let h = count == 0 ? 0
-                    : size.height * Foundation.log(Double(count) + 1) / logPeak
+                let h = ScopeHistogramScale.height(count: count, peak: peak,
+                                                   rowHeight: size.height)
                 p.addLine(to: CGPoint(x: CGFloat(i) * step,
                                       y: size.height - CGFloat(h)))
             }
