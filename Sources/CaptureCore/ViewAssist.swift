@@ -224,6 +224,23 @@ public struct ViewAssist: Equatable, Sendable {
         clampPan()
     }
 
+    /// **The geometry, as the one value that knows how to place a picture.**
+    ///
+    /// The four numbers above are this app's older spelling of four of
+    /// `PictureSizing`'s nine, and the renderer goes through the new type: two
+    /// transforms doing the same arithmetic is exactly how the overlays and
+    /// the picture came apart the first time. Until the three independent sets
+    /// exist (live, playback, record), this is where a surface gets its
+    /// sizing from.
+    var sizing: PictureSizing {
+        var value = PictureSizing()
+        value.width = desqueeze
+        value.zoom = punchIn
+        value.panX = panX
+        value.panY = panY
+        return value
+    }
+
     // MARK: - where the picture lands
 
     /// Result of the aspect-fit + punch-in transform.

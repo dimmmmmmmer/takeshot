@@ -24,6 +24,7 @@ import Testing
             model.burnDate = true
             model.customText = "FOR REVIEW"
             model.datePosition = .topRight
+            model.goodTakesOnly = true
             // the write is debounced: it lands on its own, and the quit guard
             // flushes it — either way it must be there before the sheet is
             // asked to come back
@@ -40,6 +41,9 @@ import Testing
             #expect(second.burnDate == true)
             #expect(second.customText == "FOR REVIEW")
             #expect(second.datePosition == .topRight)
+            #expect(second.goodTakesOnly, """
+                the circled-takes filter did not come back with the sheet
+                """)
         }
     }
 
@@ -110,6 +114,74 @@ import Testing
             #expect(second.soundFolders.map(CaptureController.comparablePath)
                 == [CaptureController.comparablePath(moved)],
                 "the sound folder did not come back with the sheet")
+        }
+    }
+
+    // MARK: - the circled-takes filter
+
+    /// **"Only the circled takes" narrows the run itself**, not just a label
+    /// (owner: "давай еще сделаем галку где-нибудь типа рендерить только
+    /// удачные тейки").
+    ///
+    /// The count on the button, the preview's frame and what Start renders all
+    /// come from `queueContents`, so this asks the funnel rather than the flag:
+    /// a filter applied at two of the three is how a sheet promises a different
+    /// run from the one it makes.
+    @Test func theCircledFilterNarrowsWhatTheRunIsMadeOf() async throws {
+        try await ControllerHarness.run { controller, root in
+            var takes = ["A001C01", "A001C02", "A001C03"].map {
+                ControllerFixtures.take(named: $0, in: root)
+            }
+            takes[1].rating = .good
+            controller.takes = takes
+            controller.showDailiesSheet()
+            let model = controller.dailies
+            #expect(model.itemCount == 3, "the whole day is the default")
+
+            model.goodTakesOnly = true
+            #expect(model.itemCount == 1, """
+                the filter left \(model.itemCount) items — one take is circled
+                """)
+            guard case .takes(let queued) = model.queueContents else {
+                Issue.record("the queue is not made of takes")
+                return
+            }
+            #expect(queued.map(\.url) == [takes[1].url], """
+                the queue holds \(queued.map(\.url.lastPathComponent))
+                """)
+            #expect(model.plannedItems(settings: controller.settings).count == 1)
+        }
+    }
+
+    /// …and the switch greys for a run from SOURCE FOLDERS, because a clip on
+    /// a card has no rating to be circled — the ratings are this app's own
+    /// takes'. A switch that narrows nothing is worse than one that is off.
+    @Test func theCircledFilterIsGreyedForACardRun() async throws {
+        try await ControllerHarness.run { controller, root in
+            controller.showDailiesSheet()
+            #expect(controller.canFilterDailiesToGoodTakes)
+            let card = root.appendingPathComponent("CARD_A", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: card, withIntermediateDirectories: true)
+            controller.dailies.addSource(card)
+            #expect(!controller.canFilterDailiesToGoodTakes, """
+                the circled filter is offered for a run made of card clips
+                """)
+        }
+    }
+
+    /// The sheet can export the day's timeline, and says so only when there is
+    /// one (owner: "чтоб можно было сразу с этой странички дейликов
+    /// экспортнуть таймлайн с удачными тейками").
+    @Test func theTimelineExportIsOfferedOnlyWithCircledTakes() async throws {
+        try await ControllerHarness.run { controller, root in
+            var takes = [ControllerFixtures.take(named: "A001C01", in: root)]
+            controller.takes = takes
+            #expect(!controller.canExportDailiesTimeline,
+                    "a timeline was offered with nothing circled in the day")
+            takes[0].rating = .good
+            controller.takes = takes
+            #expect(controller.canExportDailiesTimeline)
         }
     }
 }

@@ -26,7 +26,7 @@ struct DailiesEngineTests {
             into: root.appendingPathComponent("Clean"))
         let burnedURL = try #require(burned.items.first?.output)
         let cleanURL = try #require(clean.items.first?.output)
-        #expect(burnedURL.lastPathComponent == "clip_DAILY.mp4")
+        #expect(burnedURL.lastPathComponent == "clip_DAILY.mov")
 
         // playable H.264 at the source raster, ~1 s
         let asset = AVURLAsset(url: burnedURL)
@@ -182,7 +182,7 @@ struct DailiesEngineTests {
         let folder = root.appendingPathComponent("Dailies")
         try FileManager.default.createDirectory(
             at: folder, withIntermediateDirectories: true)
-        let existing = folder.appendingPathComponent("clip_DAILY.mp4")
+        let existing = folder.appendingPathComponent("clip_DAILY.mov")
         let marker = Data("yesterday's daily".utf8)
         try marker.write(to: existing)
 
@@ -190,7 +190,7 @@ struct DailiesEngineTests {
             items: [DailiesRig.item(for: source)],
             burnins: DailiesRig.noBurnins, into: folder)
         let output = try #require(report.items.first?.output)
-        #expect(output.lastPathComponent == "clip_DAILY_2.mp4")
+        #expect(output.lastPathComponent == "clip_DAILY_2.mov")
         #expect(try Data(contentsOf: existing) == marker,
                 "the existing daily was touched")
     }

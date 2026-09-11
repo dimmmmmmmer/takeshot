@@ -38,6 +38,8 @@ final class MenuBarModel: ObservableObject {
         case toggleMute
         case toggleDim
         case openMain
+        case openDailies
+        case openOffload
         case quit
     }
 
@@ -173,6 +175,21 @@ final class MenuBarModel: ObservableObject {
                  enabled: true, checked: controller.live.dimmed),
             .separator,
             Item(command: .openMain, title: L("menubar_open_main"), enabled: true),
+            // **The two jobs an operator starts with the window shut** (owner:
+            // "в статус бар думаю стоит добавить – открыть окно дейликов,
+            // открыть окно переноса файлов"): a card has just come off the
+            // camera, or the day's dailies want starting, and neither is a
+            // reason to go hunting for the main window first.
+            //
+            // Ungated, like the two monitor rows above and unlike the footer's
+            // own buttons: both controller methods already answer for a job
+            // that is going — the offload brings the running one back rather
+            // than refusing, and the dailies sheet reopens over a running
+            // queue because that IS how an operator looks at it.
+            Item(command: .openDailies, title: L("menubar_open_dailies"),
+                 enabled: true),
+            Item(command: .openOffload, title: L("menubar_open_offload"),
+                 enabled: true),
             .separator,
             Item(command: .quit, title: L("menubar_quit"), enabled: true),
         ]
@@ -200,6 +217,17 @@ final class MenuBarModel: ObservableObject {
         case .toggleMute: controller.toggleMonitorMute()
         case .toggleDim: controller.toggleMonitorDim()
         case .openMain: AppWindows.present(.main)
+        // **The window FIRST, then the sheet.** Both of these are sheets on
+        // the main window, and a sheet presented while that window is closed
+        // is a sheet nobody sees — the flag goes true, the operator is looking
+        // at a menu bar, and the next time they open the window the panel is
+        // already up with no idea where it came from.
+        case .openDailies:
+            AppWindows.present(.main)
+            controller.showDailiesSheet()
+        case .openOffload:
+            AppWindows.present(.main)
+            controller.showOffloadSheet()
         // Through the normal terminate path, never a bespoke shutdown: that is
         // what runs `flushOnTerminate`, and quitting from the menu bar with no
         // window open is exactly the case where a take is still being written.

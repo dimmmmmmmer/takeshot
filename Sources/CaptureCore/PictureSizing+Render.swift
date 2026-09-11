@@ -21,19 +21,38 @@ extension PictureSizing {
     /// resample is what costs a take its wire codes.
     public func applied(to image: CIImage, in frame: CGRect,
                         letterbox: CIColor) -> CIImage {
+        let sized = placed(image, in: frame)
+        guard sized !== image else { return image }
+        let background = CIImage(color: letterbox).cropped(to: frame)
+        return sized.cropped(to: frame).composited(over: background)
+    }
+
+    /// The picture sized into `frame` and NOT letterboxed — for a caller that
+    /// paints its own bars, which the preview layer does (`letterboxed(in:with:)`
+    /// exists because an extent alone does not keep a picture's edge column out
+    /// of the bar beside it).
+    public func placed(_ image: CIImage, in frame: CGRect) -> CIImage {
         let source = image.extent
         guard !isIdentity || source != frame,
               source.width > 0, source.height > 0,
               frame.width > 0, frame.height > 0 else { return image }
         let centred = image.transformed(by: CGAffineTransform(
             translationX: -source.midX, y: -source.midY))
-        var placed = centred.transformed(
+        var sized = centred.transformed(
             by: renderTransform(sourceSize: source.size, in: frame.size))
-        placed = placed.transformed(by: CGAffineTransform(
-            translationX: frame.midX, y: frame.midY))
-        if !isAffine { placed = perspectiveApplied(to: placed, in: frame) }
-        let background = CIImage(color: letterbox).cropped(to: frame)
-        return placed.cropped(to: frame).composited(over: background)
+        // **Integral-pixel placement**, carried over from the layer this
+        // replaced: a fractional offset shifts live against playback by a
+        // visible pixel in the compare modes, where the two pictures are meant
+        // to lie on top of each other. Rounding the whole picture's position
+        // is not the same as rounding inside it — a rotation still samples
+        // between pixels, and should.
+        sized = sized.transformed(by: CGAffineTransform(
+            translationX: (frame.midX + sized.extent.minX).rounded(.down)
+                - sized.extent.minX,
+            y: (frame.midY + sized.extent.minY).rounded(.down)
+                - sized.extent.minY))
+        if !isAffine { sized = perspectiveApplied(to: sized, in: frame) }
+        return sized
     }
 
     /// Steps 1-5 about the ORIGIN, in y-up space: the caller centres the image

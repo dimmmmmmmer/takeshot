@@ -31,7 +31,24 @@ extension DailiesQueueModel {
     }
 
     var queueContents: QueueContents {
-        Self.contents(sources: sources, findings: findings, takes: queuedTakes)
+        Self.contents(sources: sources, findings: findings, takes: queuedTakes,
+                      goodOnly: goodTakesOnly)
+    }
+
+    /// **The takes a run would actually render**: all of them, or the circled
+    /// ones alone.
+    ///
+    /// One place, because four things ask what the queue holds — the button's
+    /// count, the preview's frame, the strips over it and Start itself — and a
+    /// filter applied at three of them is how a sheet comes to promise a
+    /// different run from the one it makes.
+    ///
+    /// A run from SOURCE FOLDERS is unaffected by construction: a clip on a
+    /// card has no rating to be circled, the ratings are this app's own takes'
+    /// (see `CaptureController.canFilterDailiesToGoodTakes`, which greys the
+    /// switch rather than letting it lie).
+    var takesToRender: [Take] {
+        goodTakesOnly ? queuedTakes.filter { $0.rating == .good } : queuedTakes
     }
 
     /// The rule over VALUES, so a subscriber can ask it about the values it was
@@ -45,8 +62,10 @@ extension DailiesQueueModel {
     /// refreshed.
     static func contents(sources: [URL],
                          findings: DailiesSourceScan.Findings,
-                         takes: [Take]) -> QueueContents {
-        sources.isEmpty ? .takes(takes) : .files(findings.files)
+                         takes: [Take],
+                         goodOnly: Bool = false) -> QueueContents {
+        guard sources.isEmpty else { return .files(findings.files) }
+        return .takes(goodOnly ? takes.filter { $0.rating == .good } : takes)
     }
 
     /// The queue Start will run.

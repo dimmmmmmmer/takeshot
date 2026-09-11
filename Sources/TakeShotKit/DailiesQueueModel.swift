@@ -95,6 +95,15 @@ final class DailiesQueueModel: ObservableObject {
     /// takes or the folders the operator pointed at, never both — two sets of
     /// files under one Start is a batch nobody can predict the contents of.
     @Published var queuedTakes: [Take] = []
+    /// **Render only the circled takes** (owner: "давай еще сделаем галку
+    /// где-нибудь типа рендерить только удачные тейки").
+    ///
+    /// Off by default, because a day's dailies are the day: the filter is for
+    /// the second pass an assistant sends to the director. It reaches the
+    /// queue through `takesToRender`, which is the one place the list is
+    /// narrowed, so the count on the button, the preview's frame and what
+    /// Start actually renders cannot come to disagree.
+    @Published var goodTakesOnly = false
     /// **Folders to render dailies FROM** (owner: "дейлики нужны из
     /// исходников… вероятно даже несколько источников, как в оффлоаде").
     /// Empty — the day's takes, which is what this sheet has always done.
@@ -162,8 +171,11 @@ final class DailiesQueueModel: ObservableObject {
         // first item is what makes a rescan that finds the same card cost
         // nothing.
         firstItemChanges = Publishers
-            .CombineLatest3($sources, $findings, $queuedTakes)
-            .map { Self.contents(sources: $0, findings: $1, takes: $2).firstURL }
+            .CombineLatest4($sources, $findings, $queuedTakes, $goodTakesOnly)
+            .map {
+                Self.contents(sources: $0, findings: $1, takes: $2,
+                              goodOnly: $3).firstURL
+            }
             .removeDuplicates()
             // **A turn later, and that is the second half of the willSet
             // trap.** The values above are the ones being SET, so the compare
@@ -195,7 +207,7 @@ final class DailiesQueueModel: ObservableObject {
 
     /// How many files this Start will produce.
     var itemCount: Int {
-        sources.isEmpty ? queuedTakes.count : findings.files.count
+        sources.isEmpty ? takesToRender.count : findings.files.count
     }
 
     var canStart: Bool {

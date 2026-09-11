@@ -913,6 +913,8 @@
 "menubar_mute_monitor" = "Заглушить мониторинг";
 "menubar_dim_monitor" = "DIM мониторинга";
 "menubar_open_main" = "Открыть TakeShot";
+"menubar_open_dailies" = "Дейлики…";
+"menubar_open_offload" = "Перенос файлов…";
 "menubar_quit" = "Завершить TakeShot";
 "menubar_status_idle" = "TakeShot — нет сигнала";
 "menubar_status_ready" = "TakeShot — готов";
@@ -1142,13 +1144,15 @@
 "dailies_tab_files" = "Файлы";
 "dailies_sources_label" = "Рендерить из";
 "dailies_sources_takes" = "Сегодняшние дубли — добавьте папку, чтобы рендерить исходники";
-"dailies_mp4_limit" = "MP4 несёт картинку и звук. В ProRes-дейлике сохраняются ещё метаданные дубля, таймкод-дорожка и имена звуковых дорожек.";
+"dailies_good_only" = "Только удачные дубли";
+"dailies_export_timeline" = "Экспорт таймлайна…";
+"dailies_export_timeline_hint" = "Удачные дубли подряд, в EDL.";
 "dailies_sound_label" = "Звук";
 "dailies_add_sound" = "Добавить папку";
 "dailies_pick_sound" = "Выберите папку с файлами звукорежиссёра";
 "dailies_remove_sound" = "Убрать эту папку со звуком";
 "dailies_sound_camera_only" = "Только звук с камеры.";
-"dailies_sound_found" = "%@ — сопоставляются по таймкоду. В ProRes-дейлике имена дорожек сохранятся, в MP4 — нет.";
+"dailies_sound_found" = "%@ — сопоставляются по таймкоду, имена дорожек берутся из метаданных.";
 "dailies_sound_no_timecode" = "%d файл(ов) без таймкода — сопоставить не с чем";
 "dailies_add_source" = "Добавить папку";
 "dailies_remove_source" = "Убрать папку из списка";

@@ -85,40 +85,37 @@ public struct CubeLUT: Sendable {
         return CubeLUT(size: size, data: data, name: name)
     }
 
-    /// A CIFilter that applies the LUT to the CODE values, with no colour
-    /// space in the loop at all.
+    /// **A CIFilter that applies the LUT to the CODE values** — one filter for
+    /// every consumer there is, and a fresh instance per consumer.
     ///
-    /// **Measured, and the difference is not subtle.**
-    /// `CIColorCubeWithColorSpace` given a space converts the source INTO it
-    /// before indexing and back afterwards — which is right for a
-    /// colour-managed image and a shift for one whose pixels already are the
-    /// codes the cube is indexed by. Through the gamut cube, Rec.2020
-    /// (204, 102, 76) is Rec.709 (0.958, 0.292, 0.260) by arithmetic; it comes
-    /// out (1.000, 0.353, 0.278) through the 709-spaced filter — red clipped
-    /// and everything lifted — and (0.957, 0.294, 0.259) through this one,
-    /// which is the arithmetic to within the lattice and eight bits.
+    /// A `.cube` is a table indexed by the picture's own codes: you hand it
+    /// R'G'B' exactly as the file holds them and it hands back R'G'B'. That is
+    /// what Resolve does with one, and what whoever authored it intended.
     ///
-    /// Used by the gamut conversion, where "the codes are what the file will
-    /// hold" is the whole contract. `makeFilter` below is the look's and is
-    /// deliberately left alone: the live preview, the player and the dailies
-    /// bake all build it, so whatever it does they do together — and changing
-    /// the look everyone has been grading against is a decision with an owner,
-    /// not a side effect of adding a gamut stage.
-    func makeCodeFilter() -> CIFilter? {
+    /// **This used to go through `CIColorCubeWithColorSpace` with Rec.709 in
+    /// it, and that is not the same transform.** Given a space, that filter
+    /// converts the source INTO it before indexing and back afterwards —
+    /// correct for a colour-managed image, and a second encode for one whose
+    /// pixels already ARE the codes: this app's images are built unmanaged
+    /// (`.colorSpace: NSNull()`), so CoreImage read raw codes as working-space
+    /// values, applied the 709 OETF to them, and looked THAT up.
+    ///
+    /// Measured through the gamut cube, Rec.2020 (204, 102, 76):
+    ///
+    /// | | R | G | B |
+    /// | --- | --- | --- | --- |
+    /// | the arithmetic | 0.958 | 0.292 | 0.260 |
+    /// | spaced filter (what this was) | **1.000** | 0.353 | 0.278 |
+    /// | this filter | 0.957 | 0.294 | 0.259 |
+    ///
+    /// Red clipped and every channel lifted — not a rounding, a different
+    /// picture. Every surface did it together (preview, player, bake), so the
+    /// app agreed with itself and with nothing else; owner: "давай сделаем так
+    /// как в профессиональной среде правильно".
+    public func makeFilter() -> CIFilter? {
         guard let filter = CIFilter(name: "CIColorCube") else { return nil }
         filter.setValue(size, forKey: "inputCubeDimension")
         filter.setValue(data, forKey: "inputCubeData")
-        return filter
-    }
-
-    /// A CIFilter that applies the LUT (a fresh instance per consumer).
-    public func makeFilter() -> CIFilter? {
-        guard let filter = CIFilter(name: "CIColorCubeWithColorSpace") else { return nil }
-        filter.setValue(size, forKey: "inputCubeDimension")
-        filter.setValue(data, forKey: "inputCubeData")
-        if let space = CGColorSpace(name: CGColorSpace.itur_709) {
-            filter.setValue(space, forKey: "inputColorSpace")
-        }
         return filter
     }
 }

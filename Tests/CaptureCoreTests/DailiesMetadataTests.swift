@@ -34,11 +34,10 @@ import Testing
             slate: SlateMetadata(scene: "12A", shot: 3, take: 4),
             metadata: [TakeWriter.rollKey: "A007",
                        TakeWriter.clipKey: "0012"])
-        // ProRes, because the container decides how much of this can arrive:
-        // a `.mov` keeps every item, and the `.mp4` an H.264 daily is written
-        // into has no QuickTime metadata atom at all — there the take's
-        // identity survives as the description sentence and nothing else.
-        // Both are measured in `theProxysMetadataFollowsItsContainer`.
+        // ProRes here and H.264 in `theEveryCodecDailyCarriesTheTakesKeys`,
+        // which is the same assertion for the codec that used to lose it: the
+        // container decided how much of this could arrive, and every daily is
+        // a `.mov` now.
         let report = await DailiesEngine.run(
             items: [DailiesRig.item(for: source)],
             burnins: DailiesRig.noBurnins,
@@ -328,15 +327,18 @@ import Testing
                         red: totals[2] / counted)
     }
 
-    /// **What an `.mp4` daily can carry**, which is not what a `.mov` one can.
+    /// **An H.264 daily carries the take's own keys**, because it is a `.mov`
+    /// like every other daily now (owner: "давай и не рендерить в мп4. только
+    /// в мовы все").
     ///
-    /// The QuickTime metadata key space does not exist in an MPEG-4 file, so
-    /// every reverse-DNS key is dropped by the writer whatever is handed to
-    /// it. What survives is the description — the scene, shot and take as a
-    /// sentence — mapped to ISO user data. Written down as a measurement
-    /// because the alternative is a filter in this app guessing at the same
-    /// rule and getting it differently.
-    @Test func theProxysMetadataFollowsItsContainer() async throws {
+    /// This test used to measure the opposite and was right to: the QuickTime
+    /// metadata key space does not exist in an MPEG-4 file, so every
+    /// reverse-DNS key was dropped by the writer whatever was handed to it,
+    /// and the take's identity survived as the description sentence alone.
+    /// That is what the container change was made to stop, and this is the
+    /// assertion that says it stopped — the same run, the same codec, the keys
+    /// now present.
+    @Test func theEveryCodecDailyCarriesTheTakesKeys() async throws {
         let root = try DailiesRig.scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let source = try await DailiesRig.writeTake(
@@ -349,10 +351,17 @@ import Testing
             into: root.appendingPathComponent("Dailies"), codec: .h264)
         let daily: URL = try #require(report.items.first?.output,
                                       "the take produced no daily")
+        #expect(daily.pathExtension == "mov", """
+            an H.264 daily came out as .\(daily.pathExtension) — the container \
+            is what this test is about
+            """)
         let carried: [String: String] = await Self.values(of: daily)
+        #expect(carried[TakeWriter.rollKey] == "A007", """
+            the H.264 daily carries \(carried.count) items and not the reel — \
+            the keys are the reason every daily is a QuickTime file
+            """)
         #expect(carried.values.contains { $0.contains("12A") }, """
-            the mp4 daily carries \(carried.count) items and none of them \
-            names the take — the description did not survive either
+            nothing in the H.264 daily names the take
             """)
         // …and the run produced a playable file rather than refusing the items
         // it cannot store.

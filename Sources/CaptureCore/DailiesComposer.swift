@@ -80,7 +80,7 @@ final class DailiesFrameComposer {
             gamut = nil
         case .rec2020:
             guard let cube = CubeLUT.rec2020ToRec709,
-                  let filter = cube.makeCodeFilter() else {
+                  let filter = cube.makeFilter() else {
                 throw DailiesAbort.failed(
                     "cannot build the Rec.709 gamut conversion")
             }

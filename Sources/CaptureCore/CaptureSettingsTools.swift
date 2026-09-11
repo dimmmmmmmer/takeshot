@@ -142,6 +142,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case customTextOpacity = "dailiesCustomTextOpacity"
         case sourcePaths = "dailiesSourcePaths"
         case soundPaths = "dailiesSoundPaths"
+        case goodTakesOnly = "dailiesGoodTakesOnly"
         case extraDestinationPaths = "dailiesExtraDestinationPaths"
     }
 
@@ -282,6 +283,11 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     public var sourceURLs: [URL] {
         (sourcePaths ?? []).map { URL(fileURLWithPath: $0) }
     }
+
+    /// **Render only the circled takes** (owner: "давай еще сделаем галку
+    /// где-нибудь типа рендерить только удачные тейки"). nil/false — the whole
+    /// day, which is what a dailies run has always been.
+    public var goodTakesOnly: Bool?
 
     /// The sound folders, as URLs. Empty — camera sound only.
     public var soundURLs: [URL] {

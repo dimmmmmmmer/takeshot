@@ -23,6 +23,7 @@ struct DailiesFilesTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: OffloadChrome.sectionSpacing) {
                 sources
+                timeline
                 Divider()
                 sound
                 Divider()
@@ -48,6 +49,26 @@ struct DailiesFilesTab: View {
         // spending. See `DailiesSheet.tabContentWidth`.
         .frame(idealWidth: DailiesSheet.tabContentWidth, maxWidth: .infinity,
                alignment: .leading)
+    }
+
+    /// **The day's timeline, from the page the day is rendered on** (owner:
+    /// "чтоб можно было сразу с этой странички дейликов экспортнуть таймлайн с
+    /// удачными тейками").
+    ///
+    /// The same EDL the takes panel's export menu writes — circled takes back
+    /// to back, markers as Resolve locators, the CDL when the look is one —
+    /// and deliberately the same call rather than a second one: two spellings
+    /// of "the day's selects" is two answers to it.
+    @ViewBuilder private var timeline: some View {
+        HStack(spacing: OffloadChrome.rowSpacing) {
+            Button(L("dailies_export_timeline")) {
+                controller.exportSelectsEDL()
+            }
+            .disabled(!controller.canExportDailiesTimeline)
+            Text(L("dailies_export_timeline_hint"))
+                .offloadText(.caption)
+            Spacer(minLength: 4)
+        }
     }
 
     // MARK: - sound
@@ -143,6 +164,16 @@ struct DailiesFilesTab: View {
                 // tell from a list that lost its rows.
                 Text(L("dailies_sources_takes"))
                     .offloadText(.caption)
+                // **Only the circled takes** (owner: "давай еще сделаем галку
+                // где-нибудь типа рендерить только удачные тейки"). Here and
+                // not in the burn-in tab because it is a statement about WHAT
+                // is rendered, which is this tab's whole subject — and right
+                // under the line that says the day's takes are what a run is
+                // made of, because it narrows exactly that.
+                Toggle(L("dailies_good_only"), isOn: $model.goodTakesOnly)
+                    .toggleStyle(.checkbox)
+                    .offloadText(.body)
+                    .disabled(!controller.canFilterDailiesToGoodTakes)
             } else {
                 folderList(model.sources) { url in
                     HStack(spacing: OffloadChrome.rowSpacing) {

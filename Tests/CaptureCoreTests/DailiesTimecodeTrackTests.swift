@@ -14,11 +14,11 @@ import Testing
 /// in time — and what an assistant otherwise types in by hand off the strip,
 /// once per take, all day.
 ///
-/// **These runs are ProRes on purpose.** A `tmcd` track is a QuickTime affair
+/// **The container used to decide this.** A `tmcd` track is a QuickTime affair
 /// and an MPEG-4 writer refuses one outright — measured, as an aborted process
-/// before `canAdd` was asked. So an H.264 daily, which is an `.mp4`, has no
-/// timecode track and cannot have one; that is pinned below too, beside the
-/// sheet's own line about it.
+/// before `canAdd` was asked — so an H.264 daily had no timecode track and
+/// could not have one. Every daily is a `.mov` now, and the H.264 case is
+/// pinned below beside the ProRes ones.
 /// **A time limit on the whole suite, because the failure mode is a HANG.**
 /// An `AVAssetWriter` that is not real time holds every input back until the
 /// laggard catches up, and an input with no samples lags for ever — writing
@@ -108,13 +108,15 @@ import Testing
             """)
     }
 
-    /// **An MP4 daily has no timecode track, and that is the CONTAINER.**
+    /// **An H.264 daily carries the track too**, because every daily is a
+    /// `.mov` now (owner: "давай и не рендерить в мп4. только в мовы все").
     ///
-    /// Pinned rather than left as a surprise: the same take rendered ProRes
-    /// carries its timecode and rendered H.264 does not, so an assistant who
-    /// has to conform has a codec to choose — and the sheet says so under the
-    /// picker (`dailies_mp4_limit`).
-    @Test func anMP4DailyHasNoTimecodeTrack() async throws {
+    /// This was the opposite assertion a commit ago, and it was a measurement
+    /// rather than a preference: an MPEG-4 writer refuses a `tmcd` track
+    /// outright — an Objective-C exception no Swift `try` catches, which
+    /// aborted the test process before `canAdd` was asked. The codec is
+    /// unchanged; the box around it is, and this is what that bought.
+    @Test func anH264DailyCarriesTheTimecodeTrack() async throws {
         let root = try DailiesRig.scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let source = try await DailiesRig.writeTake(
@@ -125,13 +127,14 @@ import Testing
             into: root.appendingPathComponent("Dailies"), codec: .h264)
         #expect(report.isFullySucceeded, "items failed: \(report.failed)")
         let daily: URL = try #require(report.items.first?.output)
-        #expect(daily.pathExtension == "mp4")
-        #expect(!CaptureCodec.h264.dailyCarriesQuickTimeExtras)
-        let track = try await timecodeTrack(of: daily)
-        #expect(track == nil, """
-            an MP4 came out WITH a timecode track — then the container takes \
-            one after all and the line under the codec picker is wrong
+        #expect(daily.pathExtension == "mov")
+        #expect(CaptureCodec.h264.dailyCarriesQuickTimeExtras)
+        let read = await TimecodeReader.startTimecode(of: AVURLAsset(url: daily))
+        let start: Timecode = try #require(read, """
+            an H.264 daily came back with no timecode track — the container is \
+            what this test is about
             """)
+        #expect(start.frameNumber == DailiesRig.startTC.frameNumber)
     }
 
     /// …and the take's REMEMBERED start is enough on its own: a camera

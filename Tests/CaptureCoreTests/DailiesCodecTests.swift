@@ -13,11 +13,21 @@ import Testing
 /// MPEG-4 sample entry, so any pair that moves without the others produces a
 /// file the writer refuses or a player cannot open.
 @Suite struct DailiesCodecTests {
-    @Test func proResGoesInAQuickTimeContainerAndH264InAnMP4() {
-        #expect(CaptureCodec.h264.dailiesFileExtension == "mp4")
-        #expect(CaptureCodec.hevc.dailiesFileExtension == "mp4")
-        #expect(CaptureCodec.proResProxy.dailiesFileExtension == "mov")
-        #expect(CaptureCodec.proResLT.dailiesFileExtension == "mov")
+    /// **Every daily is a QuickTime file** (owner: "давай и не рендерить в
+    /// мп4. только в мовы все").
+    ///
+    /// H.264 and HEVC used to go into an `.mp4`, which cannot carry the take's
+    /// metadata keys, a timecode track or a name on a sound track — three
+    /// measured refusals of the MPEG-4 writer, and three of the things that
+    /// make a daily worth conforming from. The codec is unchanged; only the
+    /// box around it is.
+    @Test func everyDailyGoesInAQuickTimeContainer() {
+        for codec in CaptureCodec.dailiesChoices {
+            #expect(codec.dailiesFileExtension == "mov",
+                    "\(codec.rawValue) writes .\(codec.dailiesFileExtension)")
+            #expect(codec.dailyCarriesQuickTimeExtras,
+                    "\(codec.rawValue) cannot carry the take's own metadata")
+        }
     }
 
     /// The extension on disk and the container inside the file are derived
@@ -26,6 +36,7 @@ import Testing
         for codec in CaptureCodec.dailiesChoices {
             let expected: AVFileType =
                 codec.dailiesFileExtension == "mp4" ? .mp4 : .mov
+            #expect(expected == .mov, "a daily in a container that is not .mov")
             #expect(codec.dailiesContainer == expected,
                     "\(codec.rawValue) writes .\(codec.dailiesFileExtension) into \(codec.dailiesContainer.rawValue)")
         }

@@ -219,4 +219,50 @@ import Testing
         #expect(sizing.imageFraction(of: corner, sourceSize: source,
                                      in: viewport) == nil)
     }
+
+    /// **The old geometry and the new place the picture identically**, which
+    /// is what makes swapping the renderer onto `PictureSizing` a change of
+    /// spelling rather than of behaviour.
+    ///
+    /// Both exist for as long as the three independent sets are being built,
+    /// and while both exist they have to agree: the renderer goes through the
+    /// sizing and the overlays still ask the assist, so a disagreement here is
+    /// a frameline that no longer marks the pixels it names — the defect this
+    /// whole file was written for, arriving from the other side.
+    ///
+    /// Note the two are called differently on purpose: the ASSIST is handed an
+    /// already-desqueezed source (that is how the renderer used it — it scaled
+    /// the image first and fitted what came out), and the SIZING carries the
+    /// desqueeze as its `width` and is handed the raw raster.
+    @Test func theAssistsSizingPlacesWhereTheAssistDid() throws {
+        let raw = CGSize(width: 1920, height: 1080)
+        let viewport = CGSize(width: 800, height: 500)
+        for desqueeze in [1.0, 1.33, 2.0, 0.75] {
+            for punchIn in [1.0, 2.0, 4.5] {
+                for pan in [0.0, 0.1, -0.2] {
+                    var assist = ViewAssist()
+                    assist.desqueeze = desqueeze
+                    assist.setPunchIn(punchIn)
+                    assist.panX = pan
+                    assist.panY = -pan
+                    assist.clampPan()
+                    let stretched = CGSize(width: raw.width * desqueeze,
+                                           height: raw.height)
+                    let old = try #require(assist.placement(sourceSize: stretched,
+                                                            in: viewport))
+                    let new = try #require(
+                        assist.sizing.pictureRect(sourceSize: raw, in: viewport))
+                    let label = "desqueeze \(desqueeze) punch \(punchIn) pan \(pan)"
+                    #expect(abs(old.rect.minX - new.minX) < 0.001,
+                            "\(label): x \(old.rect.minX) against \(new.minX)")
+                    #expect(abs(old.rect.minY - new.minY) < 0.001,
+                            "\(label): y \(old.rect.minY) against \(new.minY)")
+                    #expect(abs(old.rect.width - new.width) < 0.001,
+                            "\(label): width \(old.rect.width) against \(new.width)")
+                    #expect(abs(old.rect.height - new.height) < 0.001,
+                            "\(label): height \(old.rect.height) against \(new.height)")
+                }
+            }
+        }
+    }
 }

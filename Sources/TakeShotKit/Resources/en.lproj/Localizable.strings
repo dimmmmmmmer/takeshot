@@ -923,6 +923,8 @@
 "menubar_mute_monitor" = "Mute monitoring";
 "menubar_dim_monitor" = "DIM monitoring";
 "menubar_open_main" = "Open TakeShot";
+"menubar_open_dailies" = "Dailies…";
+"menubar_open_offload" = "Offload files…";
 "menubar_quit" = "Quit TakeShot";
 "menubar_status_idle" = "TakeShot — no signal";
 "menubar_status_ready" = "TakeShot — ready";
@@ -1173,13 +1175,15 @@
 "dailies_tab_files" = "Files";
 "dailies_sources_label" = "Render from";
 "dailies_sources_takes" = "Today's takes — add a folder to render camera originals instead";
-"dailies_mp4_limit" = "MP4 carries the picture and the sound. A ProRes daily also carries the take's metadata, a timecode track, and named sound tracks.";
+"dailies_good_only" = "Circled takes only";
+"dailies_export_timeline" = "Export timeline…";
+"dailies_export_timeline_hint" = "Circled takes, back to back, as an EDL.";
 "dailies_sound_label" = "Sound";
 "dailies_add_sound" = "Add folder";
 "dailies_pick_sound" = "Pick the folder of the sound recordist's files";
 "dailies_remove_sound" = "Remove this sound folder";
 "dailies_sound_camera_only" = "The camera's own sound only.";
-"dailies_sound_found" = "%@ matched by timecode. A ProRes daily carries the track names; an MP4 one cannot.";
+"dailies_sound_found" = "%@ matched by timecode, with the track names from their metadata.";
 "dailies_sound_no_timecode" = "%d file(s) carry no timecode and cannot be matched";
 "dailies_add_source" = "Add folder";
 "dailies_remove_source" = "Take this folder off the list";

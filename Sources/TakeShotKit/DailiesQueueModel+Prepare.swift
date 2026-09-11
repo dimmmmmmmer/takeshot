@@ -33,6 +33,7 @@ extension DailiesQueueModel {
         codec = settings.dailies.codecEffective
         bakeLook = settings.dailies.bakeLook == true
         bakeDesqueeze = settings.dailies.bakeDesqueeze == true
+        goodTakesOnly = settings.dailies.goodTakesOnly == true
         namePrefix = settings.dailies.namePrefixEffective
         nameSuffix = settings.dailies.nameSuffixEffective
         ink = settings.dailies.inkEffective

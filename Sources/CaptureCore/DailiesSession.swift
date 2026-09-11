@@ -197,13 +197,12 @@ struct DailiesSession {
         // from a proxy that really was graded, every player would grade it a
         // second time.
         //
-        // **It rides in the QuickTime metadata key space, so an `.mp4` daily
-        // cannot carry it** — measured, and the same limit the take's identity
-        // runs into above. An H.264 proxy is baked all the same; what it
-        // cannot do is TELL a player so, which means this app reviewing one as
-        // Other content would show the viewing look over a look already in the
-        // picture. A ProRes daily says it properly. Worth knowing before
-        // anyone reads a clean `.mp4` and concludes the bake did not run.
+        // It rides in the QuickTime metadata key space, which an `.mp4` has
+        // no atom for at all — measured, and for months that meant an H.264
+        // daily was baked without being able to TELL a player so, so this app
+        // reviewing one as Other content showed the viewing look over a look
+        // already in the picture. Every daily is a `.mov` now
+        // (`dailiesFileExtension`) and every daily says it properly.
         writer.metadata = Self.carriedMetadata(facts.metadata)
             + (bakedLook.map { [TakeWriter.lookItem(named: $0)] } ?? [])
         // moov up front: a daily gets dropped into review players and file
@@ -377,8 +376,9 @@ struct DailiesSession {
     ///
     /// iXML's scene and take when the recordist wrote them, the file's own
     /// name otherwise — which is what a recordist names a file after anyway.
-    /// A QuickTime track name, so it rides in a `.mov` daily and not in an
-    /// `.mp4` one: the same measured container limit as every other key here.
+    /// A QuickTime track name — which every daily can carry, now that every
+    /// daily is a `.mov`; it was the ProRes ones alone until the container
+    /// stopped following the codec.
     static func trackNameItem(for sound: BroadcastWaveFacts) -> AVMetadataItem {
         let item = AVMutableMetadataItem()
         item.identifier = .quickTimeUserDataTrackName
@@ -427,16 +427,17 @@ struct DailiesSession {
     /// make/model/creation date — and all of it is what an assistant looks for
     /// when a proxy is the only file in front of them.
     ///
-    /// **The container decides how much of it arrives, and the writer sorts
-    /// that out itself — measured, not assumed.** A ProRes daily is a `.mov`
-    /// and keeps all of it, QuickTime metadata and user data alike. An
-    /// H.264/HEVC daily is an `.mp4`, which has no QuickTime metadata atom at
-    /// all: every reverse-DNS key is dropped and what survives is the
-    /// description, mapped to ISO user data (`uiso/dscp`) — the scene, shot
-    /// and take as a sentence, which is why a take is written with a pair of
-    /// description atoms in the first place. Nothing here filters by key
-    /// space: handed items it cannot store, the writer drops them and writes
-    /// the file (`theProxysMetadataFollowsItsContainer`), and a filter
+    /// **The container used to decide how much of it arrived, and the writer
+    /// sorted that out itself — measured, not assumed.** A `.mov` keeps all of
+    /// it, QuickTime metadata and user data alike; the `.mp4` an H.264 daily
+    /// used to be written into has no QuickTime metadata atom at all, so every
+    /// reverse-DNS key was dropped and what survived was the description,
+    /// mapped to ISO user data (`uiso/dscp`). That is one of the three
+    /// refusals every daily became a `.mov` to stop
+    /// (`dailiesFileExtension`), and it is written down here because the
+    /// arrangement it argues for — nothing in this app filtering by key space
+    /// — is what makes the container's own rule the only rule. Handed items it
+    /// cannot store, the writer drops them and writes the file; a filter
     /// guessing at the same rule would only be a second, worse copy of it.
     static func carriedMetadata(_ source: [AVMetadataItem]) -> [AVMetadataItem] {
         let dropped: Set<String> = [TakeWriter.markerKey, TakeWriter.levelsKey,
@@ -464,15 +465,15 @@ extension CaptureCodec {
         dailiesFileExtension == "mp4" ? .mp4 : .mov
     }
 
-    /// **Whether a daily in this codec can carry what only QuickTime carries.**
+    /// **Whether a daily in this codec can carry what only QuickTime carries** —
+    /// the take's reverse-DNS metadata keys, a `tmcd` timecode track and a NAME
+    /// on a sound track, which are one fact about the container and three
+    /// measured refusals of the MPEG-4 writer.
     ///
-    /// Three things travel together because they are one fact about the
-    /// container, and all three are measured refusals of the MPEG-4 writer
-    /// rather than a policy of this app's: the take's reverse-DNS metadata
-    /// keys (its roll, clip, scene/shot/take and the look this run baked), a
-    /// `tmcd` timecode track, and a NAME on a sound track. Asked by the sheet,
-    /// so an assistant chooses the codec knowing what the other one costs
-    /// rather than finding out in the NLE.
+    /// True for everything now that every daily is a `.mov`
+    /// (`dailiesFileExtension`), and kept rather than deleted: it is what the
+    /// three sites that depend on it ASK, and a container decision that is
+    /// currently unanimous is not the same as one that cannot change.
     public var dailyCarriesQuickTimeExtras: Bool {
         dailiesContainer == .mov
     }

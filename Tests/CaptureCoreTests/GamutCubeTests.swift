@@ -279,7 +279,7 @@ import Testing
     /// indexing, the rendered frame would be nowhere near this.
     @Test func theRenderedFrameMatchesTheArithmetic() throws {
         let cube = try #require(CubeLUT.gamut(from: .rec2020, to: .rec709))
-        let filter = try #require(cube.makeCodeFilter())
+        let filter = try #require(cube.makeFilter())
         let source = Codes(r: 204 / 255, g: 102 / 255, b: 76 / 255)
         let frame = PreviewProbe.frame(0)
         fill(frame, with: source)

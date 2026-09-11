@@ -30,6 +30,22 @@ extension CaptureController {
         return selected.isEmpty ? takes : selected
     }
 
+    /// **Whether the circled-takes filter can do anything.**
+    ///
+    /// A run from SOURCE FOLDERS is a card's clips, and a clip on a card has
+    /// no rating — the ratings are this app's own takes', kept in the sidecar
+    /// beside the footage. So the switch greys with a source folder on the
+    /// list rather than quietly narrowing nothing, which is the difference
+    /// between a control that is off and a control that is lying.
+    var canFilterDailiesToGoodTakes: Bool {
+        !dailies.isRunning && dailies.sources.isEmpty
+    }
+
+    /// Whether there is a timeline to export from the sheet at all — the same
+    /// question the menu's own Selects EDL asks, named here because the sheet
+    /// has a button for it now.
+    var canExportDailiesTimeline: Bool { !goodTakes.isEmpty }
+
     /// A Dailies folder beside the takes: the deliverable stays with the
     /// day's footage unless the operator points it elsewhere.
     var defaultDailiesFolder: URL {
@@ -231,6 +247,7 @@ extension CaptureController {
             ? nil : model.sources.map(\.path)
         settings.dailies.soundPaths = model.soundFolders.isEmpty
             ? nil : model.soundFolders.map(\.path)
+        settings.dailies.goodTakesOnly = model.goodTakesOnly ? true : nil
         let extras = Array(model.destinations.dropFirst())
         settings.dailies.extraDestinationPaths = extras.isEmpty
             ? nil : extras.map(\.path)

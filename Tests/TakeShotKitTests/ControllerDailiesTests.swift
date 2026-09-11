@@ -150,7 +150,7 @@ import Testing
             let report = try #require(controller.dailies.report)
             #expect(report.isFullySucceeded,
                     "items failed: \(report.failed)")
-            for name in ["one_DAILY.mp4", "two_DAILY.mp4"] {
+            for name in ["one_DAILY.mov", "two_DAILY.mov"] {
                 #expect(FileManager.default.fileExists(
                     atPath: dailiesFolder.appendingPathComponent(name).path),
                     "\(name) is missing")

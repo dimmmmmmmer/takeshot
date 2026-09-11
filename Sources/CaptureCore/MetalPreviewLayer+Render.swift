@@ -203,25 +203,17 @@ extension MetalPreviewLayer {
     /// parked `nextDrawable()`.
     private func placedImage(from pixelBuffer: CVPixelBuffer,
                              in size: CGSize) -> CIImage? {
-        var image = CIImage(cvPixelBuffer: pixelBuffer,
+        let image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
-        let currentAssist = self.currentAssist
-        if currentAssist.desqueeze != 1 {
-            image = image.transformed(by: CGAffineTransform(
-                scaleX: currentAssist.desqueeze, y: 1))
-        }
-        // aspect-fit, punch-in and pan in one place (ViewAssist.placement): the
-        // framelines/safe-area overlays transform through the same call, which
-        // is what keeps them on the signal's geometry instead of the window's
-        guard let placed = currentAssist.placement(sourceSize: image.extent.size,
-                                                   in: size) else { return nil }
-        // integral-pixel placement: fractional offsets shift live vs playback
-        // by a visible pixel in the compare modes (wipe/blend/side-by-side)
-        let tx = placed.rect.minX.rounded(.down)
-        // the placement is stated in view coordinates (y down); CI's y grows up
-        let ty = (size.height - placed.rect.maxY).rounded(.down)
-        return image
-            .transformed(by: CGAffineTransform(scaleX: placed.scale, y: placed.scale)
-                .concatenating(CGAffineTransform(translationX: tx, y: ty)))
+        guard image.extent.width > 0, image.extent.height > 0 else { return nil }
+        // **One transform, in `PictureSizing`** — the width (which is the
+        // desqueeze), the zoom and the pan, plus the six controls this layer
+        // did not have. The overlays ride the same value's `transform`, which
+        // is what keeps the framelines on the signal's geometry instead of on
+        // the window's; two spellings of it is how they came apart before.
+        // Integral-pixel placement and the identity fast path are both inside
+        // it, stated once for every surface rather than here for one.
+        return currentAssist.sizing.placed(
+            image, in: CGRect(origin: .zero, size: size))
     }
 }

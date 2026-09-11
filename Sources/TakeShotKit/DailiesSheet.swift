@@ -508,19 +508,12 @@ struct DailiesOutputSection: View {
                 .fixedSize()
                 Spacer(minLength: 4)
             }
-            // **What an MP4 cannot carry, said where the choice is made.**
-            //
-            // All three are measured and all three are the same fact: the
-            // take's identity keys are reverse-DNS QuickTime metadata, a
-            // timecode track is `tmcd`, and a named audio track is a
-            // QuickTime track name — an MPEG-4 writer refuses every one of
-            // them (`TimecodeTrack.input`, `DailiesSession.open`). An
-            // assistant who finds that out in the NLE has already cut with
-            // the wrong proxies.
-            if !model.codec.dailyCarriesQuickTimeExtras {
-                Text(L("dailies_mp4_limit"))
-                    .offloadText(.caption)
-            }
+            // **No line about what the container cannot carry**, because
+            // every daily is a `.mov` now (owner: "давай и не рендерить в мп4.
+            // только в мовы все"). There was one here, under the picker, for
+            // the three things an MPEG-4 file refuses — the take's metadata
+            // keys, the timecode track, the sound tracks' names. Keeping it
+            // would be a warning about a state the app can no longer be in.
             HStack(spacing: OffloadChrome.rowSpacing) {
                 Text(L("dailies_name_label")).offloadText(.body).fixedSize()
                 // Filtered fields: what is typed here reaches

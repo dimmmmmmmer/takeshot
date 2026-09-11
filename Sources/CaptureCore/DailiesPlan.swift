@@ -84,16 +84,25 @@ public extension CaptureCodec {
         [.h264, .hevc, .proResProxy, .proResLT]
     }
 
-    /// The container this codec's daily has to go in.
+    /// **Every daily is a `.mov`, whatever the codec** (owner: "давай и не
+    /// рендерить в мп4. только в мовы все").
     ///
-    /// Not a preference: MPEG-4 Part 14 has no registered sample entry for
-    /// ProRes, so a ProRes daily in .mp4 is a file the writer refuses or a
-    /// player cannot open. `DailiesSession` asks the writer itself as well
-    /// (`canApply(outputSettings:forMediaType:)`), because this table being
+    /// It used to follow the codec — H.264 and HEVC into `.mp4`, ProRes into
+    /// `.mov`, because MPEG-4 Part 14 has no registered sample entry for
+    /// ProRes. That half is still true and is now moot: QuickTime carries
+    /// every codec offered here, and an MPEG-4 file cannot carry three things
+    /// this app puts in a daily — the take's reverse-DNS metadata keys, a
+    /// `tmcd` timecode track, and a NAME on a sound track. All three are
+    /// measured refusals of the MPEG-4 writer, and all three are exactly what
+    /// makes a daily worth conforming from.
+    ///
+    /// What it costs: a `.mov` is a less familiar extension to a web upload
+    /// form than an `.mp4`, and the BYTES are identical — an H.264 elementary
+    /// stream in a QuickTime container is what every NLE, QuickTime, VLC and
+    /// every browser this decade opens. `DailiesSession` still asks the writer
+    /// itself (`canApply(outputSettings:forMediaType:)`), because this being
     /// right is not the same as it staying right.
-    var dailiesFileExtension: String {
-        needsBitrate ? "mp4" : "mov"
-    }
+    var dailiesFileExtension: String { "mov" }
 }
 
 /// One take in the dailies queue: the recorded file, the output name, and the
