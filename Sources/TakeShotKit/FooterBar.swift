@@ -84,6 +84,8 @@ struct FooterShootingControls: View {
     /// these numbers: what an operator sees is the distance between glyphs.
     static let iconSpacing: CGFloat = 2
     static let menuTrailingSlack: CGFloat = 5
+    /// The seam between the DIM box and the channel meters — see the row.
+    static let meterGap: CGFloat = 6
 
     var body: some View {
         HStack(spacing: Self.iconSpacing) {
@@ -101,7 +103,13 @@ struct FooterShootingControls: View {
             FooterMonitorButton(live: controller.live)
             FooterDimButton(live: controller.live)
             if controller.isCapturing {
+                // **Air between DIM and the meters** (owner: "у нас
+                // аудиоканалы в нав баре почти приклеены к кнопке дим, чуть
+                // воздуха там дай"). The row's own 2pt is right for icon
+                // against icon; DIM is a bordered box, and a bar chart 2
+                // points from its edge reads as part of it.
                 FooterAudioMeters(live: controller.live)
+                    .padding(.leading, Self.meterGap)
                     .layoutPriority(1)
             }
         }

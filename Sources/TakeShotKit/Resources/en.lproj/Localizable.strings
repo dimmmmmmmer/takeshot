@@ -146,6 +146,8 @@
 "compare_difference" = "Diff";
 "compare_side" = "A|B";
 "playback_speed" = "Playback speed";
+"transport_back_frames" = "Five frames back (⇧←)";
+"transport_forward_frames" = "Five frames forward (⇧→)";
 "playback_loop" = "Loop";
 "fullscreen" = "Fullscreen";
 "settings_output" = "Video output";
@@ -328,7 +330,7 @@
 "reference_pin_failed" = "Couldn't pin the reference";
 
 "export_edl" = "Selects (EDL)";
-"export_reports_help" = "Shift report and contact sheet — PDF or CSV";
+"export_reports_help" = "Shift report — PDF or CSV";
 "export_timeline_help" = "Good takes, for an edit suite";
 "export_ale" = "Avid log (ALE)";
 "export_fcpxml" = "Timeline (FCPXML)…";
@@ -579,6 +581,15 @@
 "clean_feed_hide" = "Hide the controls — clean picture";
 "clean_feed_show" = "Show the controls again";
 "hotkey_clean_feed" = "Hide the controls (clean picture)";
+"hotkey_shuttle_reverse" = "Play backwards (J)";
+"hotkey_shuttle_stop" = "Stop (K)";
+"hotkey_shuttle_forward" = "Play forwards (L)";
+"hotkey_step_back" = "Back one frame";
+"hotkey_step_forward" = "Forward one frame";
+"hotkey_step_back_five" = "Back five frames";
+"hotkey_step_forward_five" = "Forward five frames";
+"hotkey_clip_start" = "To the start of the clip";
+"hotkey_clip_end" = "To the end of the clip";
 /* web remote: the browser page phones on the set network control the app from */
 "settings_remote" = "Remote control";
 "remote_enable" = "Web remote";
@@ -665,7 +676,7 @@
 
 /* === owner item 21: the shift report speaks the app language === */
 "report_title" = "shift report";
-/* the contact sheet shares the report's header and vocabulary */
+/* the report's header and vocabulary */
 "report_camera" = "Cam %@";
 "report_takes_summary" = "%1$@ (%2$d good, %3$d bad)";
 "report_footage" = "footage %@";

@@ -85,7 +85,7 @@ struct SlateFieldsEditor: View {
     static let popoverContentWidth: CGFloat = 330
 
     var body: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: NamingFieldsView.fieldGap) {
             pagedField(L("scene"), field: .scene, width: Self.sceneWidth,
                        seed: "1", text: $scene)
             pagedField(L("slate_shot"), field: .shot, width: Self.shotWidth,

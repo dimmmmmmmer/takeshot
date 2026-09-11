@@ -148,6 +148,8 @@
 "compare_difference" = "Дифф";
 "compare_side" = "A|B";
 "playback_speed" = "Скорость воспроизведения";
+"transport_back_frames" = "На пять кадров назад (⇧←)";
+"transport_forward_frames" = "На пять кадров вперёд (⇧→)";
 "playback_loop" = "Зациклить";
 "fullscreen" = "Во весь экран";
 "settings_output" = "Вывод видео";
@@ -330,7 +332,7 @@
 "reference_pin_failed" = "Не удалось закрепить референс";
 
 "export_edl" = "Отборы (EDL)";
-"export_reports_help" = "Шифт-репорт и контактный лист — PDF или CSV";
+"export_reports_help" = "Шифт-репорт — PDF или CSV";
 "export_timeline_help" = "Хорошие дубли — для монтажной";
 "export_ale" = "Лог для Avid (ALE)";
 "export_fcpxml" = "Таймлайн (FCPXML)…";
@@ -582,6 +584,15 @@
 "clean_feed_hide" = "Скрыть элементы — чистая картинка";
 "clean_feed_show" = "Вернуть элементы";
 "hotkey_clean_feed" = "Скрыть элементы (чистая картинка)";
+"hotkey_shuttle_reverse" = "Играть назад (J)";
+"hotkey_shuttle_stop" = "Стоп (K)";
+"hotkey_shuttle_forward" = "Играть вперёд (L)";
+"hotkey_step_back" = "На кадр назад";
+"hotkey_step_forward" = "На кадр вперёд";
+"hotkey_step_back_five" = "На пять кадров назад";
+"hotkey_step_forward_five" = "На пять кадров вперёд";
+"hotkey_clip_start" = "В начало клипа";
+"hotkey_clip_end" = "В конец клипа";
 /* web remote: the browser page phones on the set network control the app from */
 "settings_remote" = "Пульт в браузере";
 "remote_enable" = "Веб-пульт";
@@ -668,7 +679,7 @@
 
 /* === owner item 21: the shift report speaks the app language === */
 "report_title" = "отчёт смены";
-/* the contact sheet shares the report's header and vocabulary */
+/* the report's header and vocabulary */
 "report_camera" = "Камера %@";
 "report_takes_summary" = "%1$@ (годных — %2$d, брак — %3$d)";
 "report_footage" = "материал %@";

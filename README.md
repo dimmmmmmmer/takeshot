@@ -206,7 +206,7 @@ network with no route out. Settings shows a QR code for each.
 
 Everything downstream of the picture: playback of existing takes and foreign
 clips, compare, scopes, LUTs and CDLs, false colour and the other assists,
-markers, stills, the reports and exports, dailies, the contact sheet, the DIT
+markers, stills, the reports and exports, dailies, the DIT
 card offload, and the whole web remote. The device list carries a built-in demo
 camera generating a 1080p25 signal, so recording a take and everything you
 would do with it afterwards can be exercised end to end without a board.

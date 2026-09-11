@@ -96,7 +96,7 @@ struct NamingFieldsView: View {
     static let previewGap: CGFloat = 2
 
     private var rows: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: NamingFieldsView.fieldGap) {
             // A switch ABOVE the rows made the whole footer jump on every
             // press (owner: "высота подвала прыгает при переключении"), back
             // when the two rows were different heights — the file row stacked
@@ -247,6 +247,24 @@ struct NamingFieldsView: View {
     /// NEITHER direction can do anything, which is the case that actually reads
     /// as a hang; a half-usable stepper keeps both arrows, and the one that
     /// cannot move returns the value unchanged.
+    /// **Where the row's air goes**, and the two numbers are one decision.
+    ///
+    /// The block has a width budget it is already at — `ViewBudget
+    /// .footerSideZoneWidth`, which is half a footer at the narrowest window
+    /// the app allows — so a gap widened between a field and its arrows has to
+    /// come from somewhere, and the row gap is where it was: at 6 points
+    /// between fields and 1 inside a field, the arrows read as part of the
+    /// box's own border (owner: "тут все стрелки прям вплотную к текст боксам
+    /// чуть тоже дай воздуха"). Four and four puts the seam where the eye
+    /// needs it — between the control and its stepper — and keeps the block
+    /// inside the budget the tests hold it to. Three and four rather than four
+    /// and four because the widest state of the row, the one with the
+    /// name-taken triangle in it, came out one point over otherwise: that is
+    /// how little slack there is, and it is why both numbers are named here
+    /// instead of being literals in two files.
+    static let fieldGap: CGFloat = 3
+    static let stepperGap: CGFloat = 4
+
     static func steppedField(_ label: String, field: NameField, width: CGFloat,
                              text: Binding<String>,
                              onStep: @escaping (Int) -> Void,
@@ -256,7 +274,11 @@ struct NamingFieldsView: View {
         -> some View {
         VStack(alignment: .leading, spacing: 3) {
             fieldLabel(label)
-            HStack(spacing: 1) {
+            // **Air between the box and its arrows** (owner: "тут все стрелки
+            // прям вплотную к текст боксам чуть тоже дай воздуха"). At 1 point
+            // the stepper read as part of the field's own border — two
+            // controls with no seam between them.
+            HStack(spacing: Self.stepperGap) {
                 NameTextField(field: field, text: text, monospacedDigit: true,
                               onCommit: onCommit,
                               onEditingChanged: onEditingChanged)

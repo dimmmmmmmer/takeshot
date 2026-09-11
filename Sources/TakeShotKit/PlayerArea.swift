@@ -80,7 +80,19 @@ struct PlayerArea: View {
             // opacity: a mode with no visible way back is a mode an operator
             // has to know a key for, and the key (⌃U) is the answer for the
             // person who set it up rather than for the one who finds it on.
-            .overlay(alignment: .bottomLeading) { bottomLeftCorner }
+            // **Clear of the transport bar** (owner: "оп в режиме плейбэка
+            // глазик наложился на транспорт"). The bar is an overlay over the
+            // bottom of the picture and this corner is another one, so in
+            // playback they were drawn on top of each other — the eye sat on
+            // the bar's left end. The toast opposite has had the same problem
+            // and the same answer since it was written; the LIFT is stated
+            // once, beside the toast's, so a bar that changes height moves
+            // both (`PlayerToastPlan.bottomCornerLift`).
+            .overlay(alignment: .bottomLeading) {
+                bottomLeftCorner
+                    .padding(.bottom, PlayerToastPlan.bottomCornerLift(
+                        transport: controller.transportBarKind))
+            }
             .overlay {
                 if controller.showsAudioPanel {
                     AudioChannelPanel(live: controller.live)
@@ -144,6 +156,20 @@ struct PlayerToastPlan: Equatable {
     /// Clear of a transport bar, and near the edge without one.
     static let insetOverTransport: CGFloat = 52
     static let insetOverPicture: CGFloat = 10
+    /// The padding a bottom CORNER control already carries — the eye and the
+    /// REC badge sit in an 8-point box of their own.
+    static let cornerPadding: CGFloat = 8
+
+    /// **How far a bottom-corner control lifts to clear the bar**, which is
+    /// the toast's own clearance minus the padding that control already has.
+    ///
+    /// Here rather than in the view because it is the same fact as the inset
+    /// above — how tall the transport is — and this file's header is a
+    /// post-mortem of what a second copy of that number costs.
+    static func bottomCornerLift(
+        transport: CaptureController.TransportBarKind) -> CGFloat {
+        transport == .none ? 0 : insetOverTransport - cornerPadding
+    }
 
     /// nil when the player has nothing to say.
     static func current(
