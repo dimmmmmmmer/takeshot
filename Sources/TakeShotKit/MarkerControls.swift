@@ -159,9 +159,7 @@ struct MarkerListEditor: View {
                     Button {
                         controller.seekPlayback(to: marker.seconds)
                     } label: {
-                        Text(marker.timecodeText.isEmpty
-                             ? ClipTimeText.minutesSeconds.text(marker.seconds)
-                             : marker.timecodeText)
+                        Text(controller.markerDisplayTimecode(marker))
                             .font(.caption.monospacedDigit())
                     }
                     .buttonStyle(.plain)

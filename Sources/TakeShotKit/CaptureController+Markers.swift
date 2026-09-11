@@ -83,7 +83,14 @@ extension CaptureController {
                            color: newMarkerColor),
                 frameStep: 1.0 / max(1, playbackFPS))
             else { return }
-            noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
+            // The toast says what the LIST will say — the clip's own clock
+            // when it has one, which for a non-take is not the stored text.
+            noticeAboutMarker(
+                L("marker_added", MarkerDisplayTime.text(
+                    for: TakeMarker(seconds: seconds, timecodeText: tcText),
+                    clipStart: playbackStartTC,
+                    isTake: takes.contains { $0.url == url })),
+                color: newMarkerColor)
         } else if isRecording {
             let seconds = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
             let fps = Double(max(1, live.currentTimecode?.fps ?? 25))
@@ -95,6 +102,16 @@ extension CaptureController {
                            color: newMarkerColor))
             noticeAboutMarker(L("marker_added", tcText), color: newMarkerColor)
         }
+    }
+
+    /// **What a marker's time reads as on screen** — see `MarkerDisplayTime`
+    /// for why that is not always the text the marker carries.
+    func markerDisplayTimecode(_ marker: TakeMarker) -> String {
+        let isTake = playbackURL.map { url in
+            takes.contains { $0.url == url }
+        } ?? true
+        return MarkerDisplayTime.text(for: marker, clipStart: playbackStartTC,
+                                      isTake: isTake)
     }
 
     /// The timecode text a marker placed at `seconds` is born with.
