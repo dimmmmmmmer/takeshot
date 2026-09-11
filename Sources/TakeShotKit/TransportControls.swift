@@ -35,7 +35,14 @@ protocol TransportRangeEngine: ObservableObject {
 extension TransportModel: TransportRangeEngine {}
 extension RawPlayerModel: TransportRangeEngine {}
 
-/// Skip back 5 s, play/pause, skip forward 5 s.
+/// Five frames back, play/pause, five frames forward.
+///
+/// **The glyphs used to say `gobackward.5`, and that glyph means five
+/// SECONDS** — which is what the buttons did (owner: "значки перемотки вообще
+/// как будто не на 5 сек должны мотать а на 5 фреймов"). A take on set is ten
+/// seconds long and half of it is not a jump anyone wants from a transport;
+/// five frames is the step either side of the bare arrows' one. The frame
+/// glyphs carry no number, so the tooltip says how many.
 ///
 /// The glyph metrics used to be parameters, because the two bars carried
 /// visibly different ones — 14pt bold in a 20pt slot for the AVPlayer bar,
@@ -60,9 +67,10 @@ struct TransportPlayGroup: View {
         Button {
             skipBack()
         } label: {
-            Image(systemName: "gobackward.5")
+            Image(systemName: "backward.frame")
         }
         .buttonStyle(.plain)
+        .help(L("transport_back_frames"))
 
         Button {
             togglePlay()
@@ -77,9 +85,10 @@ struct TransportPlayGroup: View {
         Button {
             skipForward()
         } label: {
-            Image(systemName: "goforward.5")
+            Image(systemName: "forward.frame")
         }
         .buttonStyle(.plain)
+        .help(L("transport_forward_frames"))
     }
 }
 

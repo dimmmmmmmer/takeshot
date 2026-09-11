@@ -17,7 +17,8 @@ struct KeyCombo: Codable, Equatable {
         if flags.contains(.option) { parts += "⌥" }
         if flags.contains(.shift) { parts += "⇧" }
         if flags.contains(.command) { parts += "⌘" }
-        let names = ["space": "Space", "return": "↩", "escape": "⎋"]
+        let names = ["space": "Space", "return": "↩", "escape": "⎋",
+                     "left": "←", "right": "→", "up": "↑", "down": "↓"]
         return parts + (names[key] ?? key.uppercased())
     }
 
@@ -30,6 +31,15 @@ struct KeyCombo: Codable, Equatable {
         case 49: key = "space"
         case 36: key = "return"
         case 53: key = "escape"
+        // **The arrows, by keyCode.** Their
+        // `charactersIgnoringModifiers` is a private-use glyph
+        // (U+F702 and friends) that no font an operator has draws
+        // and no `uppercased()` improves, so a binding stored that
+        // way reads as a blank box in the editor.
+        case 123: key = "left"
+        case 124: key = "right"
+        case 125: key = "down"
+        case 126: key = "up"
         default:
             guard let chars = event.charactersIgnoringModifiers?.lowercased(),
                   let first = chars.first, !first.isWhitespace else { return nil }
@@ -193,6 +203,26 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
     case toggleViewerMode
     case toggleAudioChannelBank
     case toggleCleanFeed
+    // **The transport, the way an editor's hands already know it** (owner:
+    // "как в давинчи для транспорта по плейбеку хочу клавиши J K L и
+    // стрелочками влево вправо чтобы по фрейму можно было двигаться, а через
+    // шифт и стрелочки на 5 фреймов к примеру, а стрелки вверх вниз к началу
+    // или к концу тейка меня двигали").
+    //
+    // Bare keys, unlike the ⌃ family above, and that is the point of them: a
+    // transport is worked with one hand while the other is on the mouse, and
+    // J-K-L with a modifier is not J-K-L. They are editable like everything
+    // else here — a Russian layout puts О-Л-Д under those fingers, and the
+    // binding follows the physical key (`sharesKey`).
+    case shuttleReverse
+    case shuttleStop
+    case shuttleForward
+    case stepBackOneFrame
+    case stepForwardOneFrame
+    case stepBackFiveFrames
+    case stepForwardFiveFrames
+    case goToClipStart
+    case goToClipEnd
 
     var id: String { rawValue }
 
@@ -214,6 +244,15 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
         case .toggleViewerMode: return "hotkey_viewer_mode"
         case .toggleAudioChannelBank: return "hotkey_audio_bank"
         case .toggleCleanFeed: return "hotkey_clean_feed"
+        case .shuttleReverse: return "hotkey_shuttle_reverse"
+        case .shuttleStop: return "hotkey_shuttle_stop"
+        case .shuttleForward: return "hotkey_shuttle_forward"
+        case .stepBackOneFrame: return "hotkey_step_back"
+        case .stepForwardOneFrame: return "hotkey_step_forward"
+        case .stepBackFiveFrames: return "hotkey_step_back_five"
+        case .stepForwardFiveFrames: return "hotkey_step_forward_five"
+        case .goToClipStart: return "hotkey_clip_start"
+        case .goToClipEnd: return "hotkey_clip_end"
         }
     }
 
@@ -296,6 +335,30 @@ enum HotkeyAction: String, CaseIterable, Codable, Identifiable {
             return KeyCombo(key: "u",
                             modifiers: NSEvent.ModifierFlags.control.rawValue,
                             keyCode: 32)
+
+        // J-K-L and the arrows, bare — see the enum case for why.
+        case .shuttleReverse:
+            return KeyCombo(key: "j", modifiers: 0, keyCode: 38)
+        case .shuttleStop:
+            return KeyCombo(key: "k", modifiers: 0, keyCode: 40)
+        case .shuttleForward:
+            return KeyCombo(key: "l", modifiers: 0, keyCode: 37)
+        case .stepBackOneFrame:
+            return KeyCombo(key: "left", modifiers: 0, keyCode: 123)
+        case .stepForwardOneFrame:
+            return KeyCombo(key: "right", modifiers: 0, keyCode: 124)
+        case .stepBackFiveFrames:
+            return KeyCombo(key: "left",
+                            modifiers: NSEvent.ModifierFlags.shift.rawValue,
+                            keyCode: 123)
+        case .stepForwardFiveFrames:
+            return KeyCombo(key: "right",
+                            modifiers: NSEvent.ModifierFlags.shift.rawValue,
+                            keyCode: 124)
+        case .goToClipStart:
+            return KeyCombo(key: "up", modifiers: 0, keyCode: 126)
+        case .goToClipEnd:
+            return KeyCombo(key: "down", modifiers: 0, keyCode: 125)
         }
     }
 }

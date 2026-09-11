@@ -27,6 +27,36 @@ extension HotkeyManager {
             performViewer(action, controller: controller)
         case .toggleMonitorMute, .toggleMonitorDim, .toggleAudioChannelBank:
             performMonitoring(action, controller: controller)
+        case .shuttleReverse, .shuttleStop, .shuttleForward,
+             .stepBackOneFrame, .stepForwardOneFrame,
+             .stepBackFiveFrames, .stepForwardFiveFrames,
+             .goToClipStart, .goToClipEnd:
+            performTransport(action, controller: controller)
+        }
+    }
+
+    /// **The transport keys** — J-K-L, the arrows, and the two edges.
+    ///
+    /// Every arm calls the same controller method the bar's own buttons call,
+    /// which is this file's rule and is what keeps a key and a button from
+    /// drifting apart. The controller is where each engine's answer lives:
+    /// only the single player can shuttle, and the other two say so by
+    /// stepping instead of pretending.
+    private func performTransport(_ action: HotkeyAction,
+                                  controller: CaptureController) {
+        switch action {
+        case .shuttleReverse: controller.shuttlePlayback(forward: false)
+        case .shuttleStop: controller.stopShuttle()
+        case .shuttleForward: controller.shuttlePlayback(forward: true)
+        case .stepBackOneFrame: controller.stepPlayback(byFrames: -1)
+        case .stepForwardOneFrame: controller.stepPlayback(byFrames: 1)
+        case .stepBackFiveFrames:
+            controller.stepPlayback(byFrames: -CaptureController.frameJump)
+        case .stepForwardFiveFrames:
+            controller.stepPlayback(byFrames: CaptureController.frameJump)
+        case .goToClipStart: controller.goToPlaybackEdge(end: false)
+        case .goToClipEnd: controller.goToPlaybackEdge(end: true)
+        default: break
         }
     }
 

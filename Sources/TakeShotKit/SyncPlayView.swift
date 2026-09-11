@@ -202,9 +202,15 @@ struct SyncPlayTransportBar: View {
         HStack(spacing: 10) {
             TransportPlayGroup(
                 isPlaying: model.isPlaying,
-                skipBack: { model.skip(bySeconds: -5) },
+                skipBack: {
+                    controller.stepPlayback(
+                        byFrames: -CaptureController.frameJump)
+                },
                 togglePlay: { model.togglePlay() },
-                skipForward: { model.skip(bySeconds: 5) })
+                skipForward: {
+                    controller.stepPlayback(
+                        byFrames: CaptureController.frameJump)
+                })
 
             stepButton(forward: false)
             stepButton(forward: true)

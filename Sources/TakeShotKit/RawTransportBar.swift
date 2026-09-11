@@ -14,9 +14,15 @@ struct RawTransportBar: View {
         HStack(spacing: 10) {
             TransportPlayGroup(
                 isPlaying: model.isPlaying,
-                skipBack: { model.skip(seconds: -5) },
+                skipBack: {
+                    controller.stepPlayback(
+                        byFrames: -CaptureController.frameJump)
+                },
                 togglePlay: { model.togglePlay() },
-                skipForward: { model.skip(seconds: 5) })
+                skipForward: {
+                    controller.stepPlayback(
+                        byFrames: CaptureController.frameJump)
+                })
 
             TransportTimeText(model.timecodeText)
 

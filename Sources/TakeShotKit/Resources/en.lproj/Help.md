@@ -128,8 +128,8 @@ adopted into the list.
   hands numbering back to the clip counter.
 - Scene, shot and take are written INSIDE the recorded .mov, so a file copied
   without its sidecars still knows which scene it is. They also go into the
-  ALE, the shift report, the contact sheet and the `takeshot-slate.csv` sidecar
-  beside the footage.
+  ALE, the shift report and the `takeshot-slate.csv` sidecar beside the
+  footage.
 - To fix a take that has already been recorded, open the speech-bubble button
   on its row — scene, shot, take, description and comment are all editable
   there, and so are they on the script supervisor's remote page. **A recorded
@@ -386,6 +386,14 @@ refuses a chord another action already holds, and names the one that has it.
 - `⌃D` — DIM: monitoring at half level
 - `⌃U` — clean feed: every overlay off, the picture and nothing else
 - `⌃V` — switch record/playback
+- `J` / `K` / `L` — play backwards, stop, play forwards. Pressed again, J and
+  L go faster: 1×, 2×, 4×, 8×, the same ladder the speed picker offers. The
+  RAW engine and the comparison grid decode frame by frame and have no reverse
+  — there J steps back a frame and L is play/pause.
+- `←` / `→` — one frame back or forward
+- `⇧←` / `⇧→` — five frames, which is what the two skip buttons on the bar do
+- `↑` / `↓` — to the start or the end of the clip; to the IN and OUT points
+  when a range is marked, because that is what "the take" means once it is
 - `⌃I` — record the mix on 1-2 only, or every selected channel (not while a
   take is recording)
 

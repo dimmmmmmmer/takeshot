@@ -111,14 +111,122 @@ extension CaptureController {
 
     /// One frame either way — how a focus or an eyeline is checked.
     func stepPlayback(forward: Bool) {
-        let step = forward ? 1 : -1
+        stepPlayback(byFrames: forward ? 1 : -1)
+    }
+
+    /// **Frames, not seconds** (owner: "значки перемотки вообще как будто не
+    /// на 5 сек должны мотать а на 5 фреймов", and the arrow keys beside
+    /// them). One place for every jump that is counted in frames: the buttons
+    /// on the bar, ← →, and ⇧← ⇧→.
+    ///
+    /// The grid steps one frame at a time on purpose: its own `step` is a
+    /// synchronized move of every tile, and asking it for five is five of
+    /// those — which is what it costs and what it is for.
+    func stepPlayback(byFrames frames: Int) {
+        guard frames != 0 else { return }
         if let sync = syncPlay {
-            sync.step(forward: forward)
+            for _ in 0..<abs(frames) { sync.step(forward: frames > 0) }
         } else if let raw = rawPlayer {
-            raw.seek(to: raw.currentFrame + step)
+            raw.seek(to: raw.currentFrame + frames)
         } else {
-            transport.skip(Double(step) / max(1, playbackFPS))
+            transport.skip(Double(frames) / max(1, playbackFPS))
         }
+    }
+
+    /// **J-K-L**, the way an editor's hands already know it (owner: "как в
+    /// давинчи для транспорта по плейбеку хочу клавиши J K L").
+    ///
+    /// L pressed again goes faster, J the same backwards, K stops — and the
+    /// ladder is the one this app's own speed picker offers, so the readout in
+    /// the bar and the key agree about what "×4" means.
+    ///
+    /// **What each engine can do with it differs, and saying so is better than
+    /// pretending.** The single player has a rate, so it shuttles. The RAW
+    /// engine and the sync-play grid decode frame by frame and have no reverse
+    /// at all: forward is play/pause, and a backwards press steps back a frame
+    /// — the same thing the key does when a clip cannot be played in reverse.
+    static let shuttleRates: [Double] = [1, 2, 4, 8]
+
+    /// **How far the bar's two skip buttons and ⇧← ⇧→ move** (owner: "значки
+    /// перемотки вообще как будто не на 5 сек должны мотать а на 5 фреймов").
+    ///
+    /// They were five SECONDS, which is the glyph Apple draws on
+    /// `gobackward.5` and is not what an operator checking a moment wants: a
+    /// take on set is ten seconds long and a five-second jump is half of it.
+    /// Five frames is the step either side of "one frame", which is what the
+    /// bare arrows do.
+    static let frameJump = 5
+
+    func shuttlePlayback(forward: Bool) {
+        guard isReviewingClip else { return }
+        if syncPlay != nil || rawPlayer != nil {
+            if forward {
+                togglePlayPause()
+            } else {
+                stepPlayback(byFrames: -1)
+            }
+            return
+        }
+        let current = transport.isPlaying ? transport.desiredRate : 0
+        transport.setRate(Float(Self.nextShuttleRate(from: current,
+                                                     forward: forward)))
+        if !transport.isPlaying { transport.togglePlay() }
+    }
+
+    /// **The next rung of the ladder**, signed.
+    ///
+    /// Pressed again in the same direction it goes faster and stops at the
+    /// top; pressed the other way it starts over at 1×, which is what every
+    /// editor's hands expect — J after L is "now go back", not "go back eight
+    /// times as fast". A stopped player is `current` 0 and starts at 1× either
+    /// way.
+    static func nextShuttleRate(from current: Double, forward: Bool) -> Double {
+        let rates = shuttleRates
+        let sameWay = forward ? current > 0 : current < 0
+        let step = sameWay
+            ? (rates.first { $0 > abs(current) } ?? rates.last ?? 1)
+            : (rates.first ?? 1)
+        return forward ? step : -step
+    }
+
+    /// K: stop where you are, and put the ladder back to 1×.
+    func stopShuttle() {
+        guard isReviewingClip else { return }
+        if syncPlay != nil || rawPlayer != nil {
+            if playbackIsRunning { togglePlayPause() }
+            return
+        }
+        if transport.isPlaying { transport.togglePlay() }
+        transport.setRate(1)
+    }
+
+    /// ↑ / ↓ — the head and the tail of what is under review (owner: "а стрелки
+    /// вверх вниз к началу или к концу тейка меня двигали").
+    ///
+    /// The IN and OUT points when the operator has marked a range, because
+    /// that is what "the take" means once they have: a clip trimmed to the
+    /// good part has its own head, and jumping past it to the slate is not
+    /// what the key is for.
+    func goToPlaybackEdge(end: Bool) {
+        guard isReviewingClip else { return }
+        if let sync = syncPlay {
+            // The grid's own clamp answers for the end: `seek` takes the
+            // master timeline's length as its ceiling, so asking for more than
+            // there is lands exactly on it.
+            sync.seek(to: end ? .greatestFiniteMagnitude : 0)
+            return
+        }
+        if let raw = rawPlayer {
+            let last = max(0, raw.frameCount - 1)
+            let inFrame = raw.inPoint.map { Int(($0 * raw.frameRate).rounded()) }
+            let outFrame = raw.outPoint.map { Int(($0 * raw.frameRate).rounded()) }
+            raw.seek(to: end ? (outFrame ?? last) : (inFrame ?? 0))
+            return
+        }
+        let target = end
+            ? (transport.outPoint ?? transport.duration)
+            : (transport.inPoint ?? 0)
+        transport.seek(to: target)
     }
 
     /// Set or clear the loop in/out point at the playhead. Sync-play has no
