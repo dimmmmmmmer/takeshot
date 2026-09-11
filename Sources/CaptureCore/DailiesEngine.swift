@@ -299,7 +299,16 @@ public enum DailiesEngine {
     /// counter beats one with an empty strip.
     static func timeline(for asset: AVAsset, item: DailiesItem,
                          frameRate: Double) async -> DailiesTimeline {
-        let anchors = await TimecodeReader.timelineAnchors(of: asset)
+        timeline(anchors: await TimecodeReader.timelineAnchors(of: asset),
+                 item: item, frameRate: frameRate)
+    }
+
+    /// The same, from anchors already read. The probe reads them ONCE and
+    /// builds two things out of them — this clock for the strip, and the
+    /// proxy's own timecode track — and reading the file twice is how those
+    /// two would come to disagree about a take.
+    static func timeline(anchors: [DailiesTimeline.Anchor], item: DailiesItem,
+                         frameRate: Double) -> DailiesTimeline {
         if !anchors.isEmpty {
             return DailiesTimeline(anchors: anchors, frameRate: frameRate)
         }
@@ -308,5 +317,22 @@ public enum DailiesEngine {
         return DailiesTimeline(
             anchors: [DailiesTimeline.Anchor(seconds: 0, timecode: start)],
             frameRate: frameRate)
+    }
+
+    /// **What goes into the PROXY's timecode track**, which is not the same
+    /// question as what the strip counts.
+    ///
+    /// The strip falls back to a zero clock when the file says nothing,
+    /// because a daily with a running counter beats one with an empty strip.
+    /// A TRACK cannot do that: an NLE reads a timecode track as the take's
+    /// identity in time, and a file claiming 00:00:00:00 would conform
+    /// alongside every other untimecoded proxy at the same place on the
+    /// timeline. Empty here means the proxy gets no track at all, which is
+    /// exactly what its source has.
+    static func timecodeTrack(anchors: [DailiesTimeline.Anchor],
+                              item: DailiesItem) -> [DailiesTimeline.Anchor] {
+        if !anchors.isEmpty { return anchors }
+        guard let start = item.startTimecode else { return [] }
+        return [DailiesTimeline.Anchor(seconds: 0, timecode: start)]
     }
 }

@@ -508,6 +508,19 @@ struct DailiesOutputSection: View {
                 .fixedSize()
                 Spacer(minLength: 4)
             }
+            // **What an MP4 cannot carry, said where the choice is made.**
+            //
+            // All three are measured and all three are the same fact: the
+            // take's identity keys are reverse-DNS QuickTime metadata, a
+            // timecode track is `tmcd`, and a named audio track is a
+            // QuickTime track name — an MPEG-4 writer refuses every one of
+            // them (`TimecodeTrack.input`, `DailiesSession.open`). An
+            // assistant who finds that out in the NLE has already cut with
+            // the wrong proxies.
+            if !model.codec.dailyCarriesQuickTimeExtras {
+                Text(L("dailies_mp4_limit"))
+                    .offloadText(.caption)
+            }
             HStack(spacing: OffloadChrome.rowSpacing) {
                 Text(L("dailies_name_label")).offloadText(.body).fixedSize()
                 // Filtered fields: what is typed here reaches

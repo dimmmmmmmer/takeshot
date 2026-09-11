@@ -27,11 +27,9 @@ extension TakeWriter {
         formatDescription: CMTimeCodeFormatDescription?,
         to writer: AVAssetWriter) -> AVAssetWriterInput? {
         guard let formatDescription else { return nil }
-        let input = AVAssetWriterInput(mediaType: .timecode, outputSettings: nil,
-                                       sourceFormatHint: formatDescription)
-        input.expectsMediaDataInRealTime = false
-        writer.add(input)
-        return input
+        // A take is a `.mov`, which takes a `tmcd` track — nil here would be a
+        // container that cannot, and there is no such take.
+        return TimecodeTrack.input(for: formatDescription, in: writer)
     }
 
     /// The tc32 format description for the take's timecode track, or nil when
@@ -40,17 +38,9 @@ extension TakeWriter {
         startTimecode: Timecode?,
         format: CaptureFormat) throws -> CMTimeCodeFormatDescription? {
         guard let tc = startTimecode else { return nil }
-        var fdesc: CMTimeCodeFormatDescription?
-        let status = CMTimeCodeFormatDescriptionCreate(
-            allocator: kCFAllocatorDefault,
-            timeCodeFormatType: kCMTimeCodeFormatType_TimeCode32,
-            frameDuration: Self.frameDuration(at: format.frameRate),
-            frameQuanta: UInt32(tc.fps),
-            flags: tc.isDropFrame ? kCMTimeCodeFlag_DropFrame | kCMTimeCodeFlag_24HourMax
-                                  : kCMTimeCodeFlag_24HourMax,
-            extensions: nil,
-            formatDescriptionOut: &fdesc)
-        guard status == noErr, let fdesc else { throw WriterError.timecodeTrackFailed }
+        guard let fdesc = TimecodeTrack.formatDescription(
+            for: tc, frameDuration: Self.frameDuration(at: format.frameRate))
+        else { throw WriterError.timecodeTrackFailed }
         return fdesc
     }
 
@@ -173,36 +163,13 @@ extension TakeWriter {
         return input.append(sampleBuffer)
     }
 
-    /// The four bytes and their timing, as a sample buffer.
+    /// The four bytes and their timing, as a sample buffer — `TimecodeTrack`'s,
+    /// which the dailies write their own track with.
     private static func timecodeSample(
         timecode: Timecode, formatDescription: CMTimeCodeFormatDescription,
         from: CMTime, until: CMTime) -> CMSampleBuffer? {
-        // tc32: one big-endian UInt32 with the start frame number
-        var frameNumber = UInt32(clamping: timecode.frameNumber).bigEndian
-        var blockBuffer: CMBlockBuffer?
-        guard CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: 4,
-            blockAllocator: kCFAllocatorDefault, customBlockSource: nil, offsetToData: 0,
-            dataLength: 4, flags: 0, blockBufferOut: &blockBuffer) == noErr,
-            let blockBuffer else { return nil }
-        withUnsafeBytes(of: &frameNumber) { bytes in
-            _ = CMBlockBufferReplaceDataBytes(
-                with: bytes.baseAddress!, blockBuffer: blockBuffer,
-                offsetIntoDestination: 0, dataLength: 4)
-        }
-
-        var timing = CMSampleTimingInfo(
-            duration: CMTimeSubtract(until, from),
-            presentationTimeStamp: from,
-            decodeTimeStamp: .invalid)
-        var sampleSize = 4
-        var sampleBuffer: CMSampleBuffer?
-        guard CMSampleBufferCreate(
-            allocator: kCFAllocatorDefault, dataBuffer: blockBuffer, dataReady: true,
-            makeDataReadyCallback: nil, refcon: nil, formatDescription: formatDescription,
-            sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
-            sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sampleBuffer) == noErr else { return nil }
-        return sampleBuffer
+        TimecodeTrack.sample(timecode: timecode,
+                             formatDescription: formatDescription,
+                             from: from, until: until)
     }
 }

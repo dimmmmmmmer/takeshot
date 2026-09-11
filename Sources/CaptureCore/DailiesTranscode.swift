@@ -30,7 +30,9 @@ final class DailiesTranscode {
     private var session: DailiesSession?
     private var outputURL: URL?
     private var framesDone = 0
-    private var framesTotal = 0
+    /// Internal for `+Timecode`, which places the last span at the end of
+    /// the picture and learns where that is from the probe.
+    var framesTotal = 0
     private var lastPublished = Date.distantPast
     private var lastPausedState = false
     /// Audio sample read but not yet written (its turn on the timeline has
@@ -46,6 +48,14 @@ final class DailiesTranscode {
     /// Legs already marked finished, so the end does not mark them twice — a
     /// second `markAsFinished` is a writer error, not a no-op.
     private var finishedAudio: Set<Int> = []
+    /// Internal rather than private, these two: the timecode track's writer
+    /// moved into `+Timecode` when this type reached its length ceiling, and
+    /// a frame's duration and "has the track been closed" are the only state
+    /// it needs from here.
+    var frameDuration = CMTime(value: 1, timescale: 25)
+    /// The timecode track has had its samples and been closed — see
+    /// `writeTimecode`, which does both at the FIRST frame.
+    var timecodeWritten = false
 
     /// How far AHEAD of the picture the sound is kept.
     ///
@@ -104,6 +114,7 @@ final class DailiesTranscode {
                                                        burnins: burnins,
                                                        desqueeze: desqueeze)
         framesTotal = facts.framesTotal
+        frameDuration = TakeWriter.frameDuration(at: facts.frameRate)
         // Claimed through the same process-wide reservation every writing
         // path uses, so a daily can never land on a name a take (or another
         // daily) is about to take. Collisions get the app's `_2` suffix.
@@ -151,6 +162,7 @@ final class DailiesTranscode {
                 session.writer.startSession(atSourceTime: pts)
                 sessionStarted = true
                 startAudio(session: session, at: pts)
+                writeTimecode(session, from: pts)
             }
             // **Sound first, then the picture.** With one audio input the
             // order did not matter; with several it is the whole difference
@@ -180,6 +192,9 @@ final class DailiesTranscode {
 
     private func finish(_ session: DailiesSession) async throws {
         session.videoInput.markAsFinished()
+        // Only when the first frame never came: `writeTimecode` closes the
+        // track itself, and a second `markAsFinished` is a writer error.
+        if !timecodeWritten { session.timecode?.input.markAsFinished() }
         for (index, leg) in session.audio.enumerated()
         where !finishedAudio.contains(index) {
             leg.input.markAsFinished()

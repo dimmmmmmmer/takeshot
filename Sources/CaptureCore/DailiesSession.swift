@@ -25,6 +25,13 @@ struct DailiesSourceFacts {
     let outputSize: CGSize
     /// nil — the timecode burn-in is off and no clock is computed at all.
     let timeline: DailiesTimeline?
+    /// **The proxy's own timecode track**, as anchors on the source's
+    /// timeline: the file's timecode track when it has one, else the take's
+    /// remembered start, else EMPTY — and empty means no track at all (see
+    /// `DailiesEngine.timecodeTrack`). Independent of the burn-in switch,
+    /// because an editor conforming a proxy is a different job from an
+    /// operator reading a strip.
+    let timecodeTrack: [DailiesTimeline.Anchor]
     /// What the SOURCE FILE says its codes mean, read from its own format
     /// description and never from live state. A daily is made from a finished
     /// file that may have been shot in an earlier session, on another machine,
@@ -74,6 +81,9 @@ struct DailiesSourceFacts {
         // key says whether the codes are studio swing, the transfer tag says
         // what curve they are on, and the two compose into one table.
         let metadata: [AVMetadataItem] = (try? await asset.load(.metadata)) ?? []
+        // Read ONCE, for the strip and for the track both — see
+        // `DailiesEngine.timeline(anchors:item:frameRate:)`.
+        let anchors = await TimecodeReader.timelineAnchors(of: asset)
         let wireCodes = await TakeWriter.carriesWireCodes(metadata)
         let baked = await TakeWriter.bakedLookName(metadata)
 
@@ -85,8 +95,10 @@ struct DailiesSourceFacts {
             outputSize: DailiesEngine.outputSize(for: naturalSize,
                                                  desqueeze: desqueeze),
             timeline: burnins.timecode
-                ? await DailiesEngine.timeline(for: asset, item: item,
-                                               frameRate: frameRate) : nil,
+                ? DailiesEngine.timeline(anchors: anchors, item: item,
+                                         frameRate: frameRate) : nil,
+            timecodeTrack: DailiesEngine.timecodeTrack(anchors: anchors,
+                                                       item: item),
             colorimetry: colorimetry,
             levels: StudioSwing.playbackTable(wireCodes: wireCodes,
                                               transfer: colorimetry.transfer),
@@ -113,6 +125,22 @@ struct DailiesSession {
     /// and a running safety — and because one of them is not more the daily's
     /// sound than the other.
     let audio: [AudioLeg]
+    /// **The proxy's timecode track**, when the source had one to carry over.
+    ///
+    /// The input and the description it was opened with, because a sample
+    /// needs both — and nil when the source has no timecode at all, which is
+    /// a proxy with no timecode track rather than one claiming midnight.
+    let timecode: TimecodeLeg?
+
+    /// The timecode track's two ends. A struct rather than two optionals on
+    /// the session: they are only ever present together, and an input without
+    /// its format description cannot produce a sample.
+    struct TimecodeLeg {
+        let input: AVAssetWriterInput
+        let formatDescription: CMTimeCodeFormatDescription
+        /// Where the anchors are, on the source's timeline.
+        let anchors: [DailiesTimeline.Anchor]
+    }
 
     /// One sound track: where its samples come from, where they go, and how
     /// far its clock is from the picture's.
@@ -159,6 +187,7 @@ struct DailiesSession {
                                  offsetIntoSound: 0))
         }
         legs += await soundLegs(for: sounds, in: writer)
+        let timecode = timecodeLeg(for: facts, in: writer)
         // **The source's own metadata, minus three keys that would be lies.**
         // Before `startWriting`, which is the only time a writer accepts it.
         // **What this run baked, stated by this run.** `com.takeshot.lut` is
@@ -192,7 +221,7 @@ struct DailiesSession {
         return DailiesSession(reader: reader, writer: writer,
                               videoOutput: videoOutput,
                               videoInput: videoInput, adaptor: adaptor,
-                              audio: legs)
+                              audio: legs, timecode: timecode)
     }
 
     /// The reader's two ends: video decoded to BGRA (so CoreGraphics can
@@ -320,6 +349,29 @@ struct DailiesSession {
                         offsetIntoSound: match.offsetIntoSound)
     }
 
+    /// **The proxy's timecode track** (owner: "таймкод дорожку в прокси"), or
+    /// nil when the source carries no timecode and the app remembered none.
+    ///
+    /// Opened here with every other input — `AVAssetWriter` takes inputs only
+    /// before `startWriting` — and fed once, at the end of the transcode,
+    /// where the clip's real length is finally known
+    /// (`DailiesTranscode.writeTimecode`). Four bytes per anchor is not worth
+    /// a second pass over the picture to place, and the take writer's own
+    /// reason for committing them as it goes — a crash mid-recording must not
+    /// cost the file — does not apply to a proxy that can simply be made
+    /// again.
+    private static func timecodeLeg(for facts: DailiesSourceFacts,
+                                    in writer: AVAssetWriter) -> TimecodeLeg? {
+        guard let first = facts.timecodeTrack.first,
+              let description = TimecodeTrack.formatDescription(
+                for: first.timecode,
+                frameDuration: TakeWriter.frameDuration(at: facts.frameRate)),
+              let input = TimecodeTrack.input(for: description, in: writer)
+        else { return nil }
+        return TimecodeLeg(input: input, formatDescription: description,
+                           anchors: facts.timecodeTrack)
+    }
+
     /// What the track is CALLED, out of the file's own metadata (owner: "ну и
     /// дорожки чтоб были подписаны так как по метам").
     ///
@@ -410,5 +462,18 @@ extension CaptureCodec {
     /// disk and the container inside it cannot disagree.
     var dailiesContainer: AVFileType {
         dailiesFileExtension == "mp4" ? .mp4 : .mov
+    }
+
+    /// **Whether a daily in this codec can carry what only QuickTime carries.**
+    ///
+    /// Three things travel together because they are one fact about the
+    /// container, and all three are measured refusals of the MPEG-4 writer
+    /// rather than a policy of this app's: the take's reverse-DNS metadata
+    /// keys (its roll, clip, scene/shot/take and the look this run baked), a
+    /// `tmcd` timecode track, and a NAME on a sound track. Asked by the sheet,
+    /// so an assistant chooses the codec knowing what the other one costs
+    /// rather than finding out in the NLE.
+    public var dailyCarriesQuickTimeExtras: Bool {
+        dailiesContainer == .mov
     }
 }

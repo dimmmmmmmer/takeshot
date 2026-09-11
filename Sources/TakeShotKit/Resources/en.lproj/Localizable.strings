@@ -1173,6 +1173,7 @@
 "dailies_tab_files" = "Files";
 "dailies_sources_label" = "Render from";
 "dailies_sources_takes" = "Today's takes — add a folder to render camera originals instead";
+"dailies_mp4_limit" = "MP4 carries the picture and the sound. A ProRes daily also carries the take's metadata, a timecode track, and named sound tracks.";
 "dailies_sound_label" = "Sound";
 "dailies_add_sound" = "Add folder";
 "dailies_pick_sound" = "Pick the folder of the sound recordist's files";
