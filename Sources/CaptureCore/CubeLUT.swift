@@ -85,6 +85,32 @@ public struct CubeLUT: Sendable {
         return CubeLUT(size: size, data: data, name: name)
     }
 
+    /// A CIFilter that applies the LUT to the CODE values, with no colour
+    /// space in the loop at all.
+    ///
+    /// **Measured, and the difference is not subtle.**
+    /// `CIColorCubeWithColorSpace` given a space converts the source INTO it
+    /// before indexing and back afterwards — which is right for a
+    /// colour-managed image and a shift for one whose pixels already are the
+    /// codes the cube is indexed by. Through the gamut cube, Rec.2020
+    /// (204, 102, 76) is Rec.709 (0.958, 0.292, 0.260) by arithmetic; it comes
+    /// out (1.000, 0.353, 0.278) through the 709-spaced filter — red clipped
+    /// and everything lifted — and (0.957, 0.294, 0.259) through this one,
+    /// which is the arithmetic to within the lattice and eight bits.
+    ///
+    /// Used by the gamut conversion, where "the codes are what the file will
+    /// hold" is the whole contract. `makeFilter` below is the look's and is
+    /// deliberately left alone: the live preview, the player and the dailies
+    /// bake all build it, so whatever it does they do together — and changing
+    /// the look everyone has been grading against is a decision with an owner,
+    /// not a side effect of adding a gamut stage.
+    func makeCodeFilter() -> CIFilter? {
+        guard let filter = CIFilter(name: "CIColorCube") else { return nil }
+        filter.setValue(size, forKey: "inputCubeDimension")
+        filter.setValue(data, forKey: "inputCubeData")
+        return filter
+    }
+
     /// A CIFilter that applies the LUT (a fresh instance per consumer).
     public func makeFilter() -> CIFilter? {
         guard let filter = CIFilter(name: "CIColorCubeWithColorSpace") else { return nil }

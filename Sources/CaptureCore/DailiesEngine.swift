@@ -213,17 +213,9 @@ public enum DailiesEngine {
         // file that does not state its colour is a file every tool guesses
         // about differently.
         //
-        // What it states is `displayPreset`: 1-1-1 for everything on Rec.709
-        // primaries, which is every SDR take this app writes and every 709
-        // camera original. A wide-gamut source still says 2020 primaries with
-        // a 709 curve, because that is what its codes ARE — the tone map moves
-        // the curve and cannot move a primary. Saying 709 over Rec.2020 codes
-        // would be the mis-declaration that put a desaturated picture next to
-        // a correct one on the cart once already (`ColorTags.preset(of:)`).
-        // Making that answer honestly 1-1-1 means converting the gamut, which
-        // is a cube and a measurement suite of its own.
+        // What it states is `proxyPreset` — 1-1-1, for every source there is.
         settings[AVVideoColorPropertiesKey] = ColorTags
-            .videoColorProperties(for: colorimetry.displayPreset)
+            .videoColorProperties(for: proxyPreset)
         // The sampling aspect, when the raster has one. Reused from the take
         // writer rather than restated: only the two SD rasters carry one, and
         // SD is never scaled (`outputSize`), so the source's own aspect is
@@ -238,6 +230,23 @@ public enum DailiesEngine {
         }
         return settings
     }
+
+    /// **What a daily says about its colour: Rec.709, always** (owner: "ток
+    /// теги 1-1-1 полюбас должны быть").
+    ///
+    /// True rather than merely declared. It used to be `displayPreset`, which
+    /// answers 2020 for a wide-gamut source because that is what the codes
+    /// were: a tone map moves the curve and cannot move a primary, and saying
+    /// 709 over Rec.2020 codes is the mis-declaration that put a desaturated
+    /// picture next to a correct one on the cart once already. The proxy is
+    /// CONVERTED into Rec.709 now — `CubeLUT.gamut`, on the composer's cube
+    /// stage — so the honest answer and the wanted one are the same answer.
+    ///
+    /// One expression, read by the encode settings here and by the tag on
+    /// every buffer handed to the writer (`DailiesFrameComposer.compose`): a
+    /// buffer tagged differently from the settings is the mismatch
+    /// VideoToolbox colour-converts on.
+    public static let proxyPreset: String? = nil
 
     /// **When a take started, in seconds since midnight** — the picture's half
     /// of the sound match.

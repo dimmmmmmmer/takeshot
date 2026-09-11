@@ -27,6 +27,20 @@ public struct RGBToXYZ: Sendable, Equatable {
         return Chromaticity(x: x / sum, y: y / sum)
     }
 
+    /// The tristimulus values of a linear RGB triple — the same three sums
+    /// `chromaticity` takes, before it normalizes them away.
+    ///
+    /// A separate method rather than a shared one: that one runs per sample of
+    /// the scope grid and is written as nine multiplies and a guard for
+    /// exactly that reason, and this one runs 35 937 times when a gamut cube
+    /// is built and never again. What they must not become is two statements
+    /// of the matrix, which is why the multiplies are the only thing repeated.
+    public func tristimulus(_ rgb: LinearRGB) -> XYZColor {
+        XYZColor(x: xr * rgb.r + xg * rgb.g + xb * rgb.b,
+                 y: yr * rgb.r + yg * rgb.g + yb * rgb.b,
+                 z: zr * rgb.r + zg * rgb.g + zb * rgb.b)
+    }
+
     /// The luminance weights this matrix gives R, G and B — its middle row.
     /// Rec.709's are the 0.2126 / 0.7152 / 0.0722 the waveform's luma is
     /// computed with, which is not a coincidence and is pinned as one.

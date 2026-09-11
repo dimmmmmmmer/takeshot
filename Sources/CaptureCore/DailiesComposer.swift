@@ -32,6 +32,12 @@ final class DailiesFrameComposer {
     /// byte (`anSDRTakeIsUntouchedByAllOfThis`).
     private let look: CIFilter?
     private let lookIntensity: Double
+    /// **The source's gamut, converted into Rec.709**, as one more cube on the
+    /// same stage as the look (`CubeLUT.gamut`). nil for a source that is
+    /// already on Rec.709 primaries, which is every 709 camera original and
+    /// every take this app records off an SDR wire — by far the ordinary case,
+    /// and it pays nothing.
+    private let gamut: CIFilter?
     /// Its own pool, not the scaling one: a graded frame is still in use as
     /// the SOURCE of the scaled blit, so the two must never be handed the same
     /// buffer.
@@ -43,7 +49,7 @@ final class DailiesFrameComposer {
 
     init(item: DailiesItem, burnins: DailiesBurnins,
          facts: DailiesSourceFacts, look: CubeLUT? = nil,
-         lookIntensity: Double = 1) {
+         lookIntensity: Double = 1) throws {
         overlay = DailiesOverlay(size: facts.outputSize,
                                  texts: burnins.overlayTexts(for: item))
         timeline = facts.timeline
@@ -57,6 +63,29 @@ final class DailiesFrameComposer {
         // as `PlaybackLook.baked` outranking everything.
         self.look = facts.bakedLook == nil ? look?.makeFilter() : nil
         self.lookIntensity = lookIntensity
+        // **Built here, and a failure to build it fails the ITEM.**
+        //
+        // The proxy declares Rec.709 unconditionally (`DailiesEngine
+        // .videoSettings`), so a frame that did not go through this cube would
+        // be Rec.2020 codes in a file that says 709 — a picture every player
+        // draws too saturated, with nothing on screen to say why. That is the
+        // one outcome worth failing an item over, and it is the same argument
+        // the baked look already makes about its own render.
+        //
+        // A SWITCH and not `exceedsRec709`, so that a third set of primaries
+        // ever added to `SignalPrimaries` is a compile error here rather than
+        // a silent Rec.2020 conversion applied to something else.
+        switch facts.colorimetry.primaries {
+        case .rec709:
+            gamut = nil
+        case .rec2020:
+            guard let cube = CubeLUT.rec2020ToRec709,
+                  let filter = cube.makeCodeFilter() else {
+                throw DailiesAbort.failed(
+                    "cannot build the Rec.709 gamut conversion")
+            }
+            gamut = filter
+        }
     }
 
     /// One decoded frame as the proxy should hold it: levelled, burned in, and
@@ -76,7 +105,7 @@ final class DailiesFrameComposer {
         // **The look, then the strips.** The same order and the same reason
         // as the levels lookup above: a grade is the PICTURE's, and applied
         // over the burn-ins it would take the plates and their white with it.
-        let frame = try burnedIn(try looked(source), pts: pts)
+        let frame = try burnedIn(try graded(source), pts: pts)
         // The codes MEAN something else now — an HDR take reaches here on a
         // Rec.709 curve — and a writer-bound buffer that still claims PQ is
         // the tag mismatch this project has already been bitten by: the
@@ -86,7 +115,7 @@ final class DailiesFrameComposer {
         // is the mismatch VideoToolbox colour-converts on, and an untagged one
         // hands the encoder whatever the decoder attached (or, out of the
         // scaling pool, nothing at all). See `DailiesEngine.videoSettings`.
-        ColorTags.tag(frame, preset: colorimetry.displayPreset)
+        ColorTags.tag(frame, preset: DailiesEngine.proxyPreset)
         return frame
     }
 
@@ -102,22 +131,35 @@ final class DailiesFrameComposer {
     /// proxy that says it carries the look and does not is the one outcome
     /// nobody can see and everybody would trust. The item fails, the report
     /// names it, and the rest of the queue runs.
-    private func looked(_ source: CVPixelBuffer) throws -> CVPixelBuffer {
-        guard let look else { return source }
+    private func graded(_ source: CVPixelBuffer) throws -> CVPixelBuffer {
+        guard look != nil || gamut != nil else { return source }
         let width = CVPixelBufferGetWidth(source)
         let height = CVPixelBufferGetHeight(source)
         guard let destination = lookPool.buffer(width: width, height: height)
         else { throw DailiesAbort.failed("cannot allocate a frame for the look") }
         let input = CIImage(cvPixelBuffer: source, options: [.colorSpace: NSNull()])
-        look.setValue(input, forKey: kCIInputImageKey)
-        guard let graded = look.outputImage else {
-            throw DailiesAbort.failed("the look produced no picture")
-        }
-        let mixed = CapturePipeline.mix(source: input, filtered: graded,
+        var image = input
+        if let look {
+            look.setValue(image, forKey: kCIInputImageKey)
+            guard let output = look.outputImage else {
+                throw DailiesAbort.failed("the look produced no picture")
+            }
+            // The intensity mixes the LOOK against the frame it was applied
+            // to, so it is spent here — before the gamut stage, which is not
+            // a look and has no intensity to be at.
+            image = CapturePipeline.mix(source: image, filtered: output,
                                         intensity: lookIntensity)
+        }
+        if let gamut {
+            gamut.setValue(image, forKey: kCIInputImageKey)
+            guard let output = gamut.outputImage else {
+                throw DailiesAbort.failed("the gamut conversion produced no picture")
+            }
+            image = output
+        }
         let target = CIRenderDestination(pixelBuffer: destination)
         target.colorSpace = nil
-        guard let task = try? ciContext.startTask(toRender: mixed, to: target),
+        guard let task = try? ciContext.startTask(toRender: image, to: target),
               (try? task.waitUntilCompleted()) != nil else {
             throw DailiesAbort.failed("the look could not be rendered")
         }

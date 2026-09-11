@@ -102,12 +102,17 @@ struct DailiesToneMapTests {
                 "HLG diffuse white is still near the untone-mapped \(untouched): \(white)")
     }
 
-    /// What the proxy now SAYS about itself. Its codes went through a Rec.709
-    /// curve on the way in, so it states one — a file that still claimed PQ
-    /// would be crushed a second time by every player that believed it. The
-    /// primaries are deliberately NOT converted and it states Rec.2020,
-    /// because that is literally what the codes are: a per-channel tone map
-    /// cannot move a primary.
+    /// **What the proxy says about itself: 1-1-1** (owner: "ток теги 1-1-1
+    /// полюбас должны быть").
+    ///
+    /// Its codes went through a Rec.709 curve on the way in, so it states one
+    /// — a file that still claimed PQ would be crushed a second time by every
+    /// player that believed it. And its PRIMARIES are Rec.709 now because the
+    /// picture was put there: the composer's cube stage converts the gamut
+    /// (`CubeLUT.gamut`), which is what makes the tag true rather than merely
+    /// convenient. It used to state Rec.2020 — honest, since a per-channel
+    /// tone map cannot move a primary, and useless to everything that opens a
+    /// proxy without reading its tags.
     @Test func theProxyStatesTheCurveItsCodesAreNowOn() async throws {
         let root = try DailiesRig.scratch()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -130,8 +135,11 @@ struct DailiesToneMapTests {
         let colorimetry = ColorTags.colorimetry(of: description)
         #expect(colorimetry.transfer == .sdr,
                 "the proxy still claims \(colorimetry.transfer) after tone mapping")
-        #expect(colorimetry.primaries == .rec2020,
-                "the proxy claims \(colorimetry.primaries), not the camera's")
+        #expect(colorimetry.primaries == .rec709, """
+            the proxy claims \(colorimetry.primaries) — the picture is \
+            converted into Rec.709 now, so anything else is a file lying about \
+            codes it does hold
+            """)
     }
 
     /// The order trap, made a measurement. The lookup is the PICTURE's, so a
@@ -207,9 +215,9 @@ struct DailiesToneMapTests {
         #expect(stated[AVVideoColorPrimariesKey] as? String
             == AVVideoColorPrimaries_ITU_R_709_2)
 
-        let composer = DailiesFrameComposer(item: fixture,
-                                            burnins: DailiesRig.noBurnins,
-                                            facts: facts)
+        let composer = try DailiesFrameComposer(item: fixture,
+                                                burnins: DailiesRig.noBurnins,
+                                                facts: facts)
         let frame = Self.rampBuffer(width: 320, height: 180)
         let before: [UInt8] = Self.bytes(of: frame)
         let composed: CVPixelBuffer = try composer.compose(frame, pts: .zero)

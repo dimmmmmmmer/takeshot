@@ -126,7 +126,7 @@ final class DailiesTranscode {
             sounds: matched)
         self.session = session
         publishProgress(force: true)
-        try await pump(session, composer: DailiesFrameComposer(
+        try await pump(session, composer: try DailiesFrameComposer(
             item: item, burnins: burnins, facts: facts, look: look?.cube,
             lookIntensity: look?.intensity ?? 1))
         try await finish(session)
