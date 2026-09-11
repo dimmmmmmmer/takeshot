@@ -150,7 +150,14 @@ extension ScopesPanel {
             Image(systemName: "grid")
                 .font(.system(size: 8))
                 .foregroundStyle(.white.opacity(0.45))
-            Slider(value: $gridBrightness, in: 0.15...1)
+            Slider(value: Binding(get: { gridBrightnessNow },
+                                  set: { gridDraft = $0 }),
+                   in: 0.15...1) { editing in
+                if !editing, let value = gridDraft {
+                    gridBrightness = value
+                    gridDraft = nil
+                }
+            }
                 .frame(width: 56)
                 .controlSize(.mini)
         }
@@ -159,7 +166,14 @@ extension ScopesPanel {
             Image(systemName: "waveform")
                 .font(.system(size: 8))
                 .foregroundStyle(.white.opacity(0.45))
-            Slider(value: $traceBrightness, in: 0.3...1)
+            Slider(value: Binding(get: { traceBrightnessNow },
+                                  set: { traceDraft = $0 }),
+                   in: 0.3...1) { editing in
+                if !editing, let value = traceDraft {
+                    traceBrightness = value
+                    traceDraft = nil
+                }
+            }
                 .frame(width: 56)
                 .controlSize(.mini)
         }
@@ -211,7 +225,7 @@ extension ScopesPanel {
                 .font(.system(size: 10))
                 .foregroundStyle(.white.opacity(0.6))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .controlHelp(L("scope_open_window"))
     }
 
@@ -223,7 +237,7 @@ extension ScopesPanel {
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.5))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .controlHelp(L("close"))
     }
 
@@ -246,6 +260,6 @@ extension ScopesPanel {
                         in: Capsule())
             .foregroundStyle(isOn.wrappedValue ? .white : .white.opacity(0.55))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
     }
 }

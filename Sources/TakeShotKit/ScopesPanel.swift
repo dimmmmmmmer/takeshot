@@ -124,6 +124,27 @@ struct ScopesPanel: View {
     /// Graticule and trace brightness (0.2…1).
     @AppStorage("scopeGridBrightness") var gridBrightness = 0.5
     @AppStorage("scopeTraceBrightness") var traceBrightness = 1.0
+    /// **What a brightness slider is showing while it is being dragged**, and
+    /// nil when it is not.
+    ///
+    /// Bound straight to `@AppStorage`, those two sliders lagged (owner:
+    /// "ползунки настроек сетки и яркости скопов лагают"): every tick of a
+    /// drag wrote `UserDefaults` AND invalidated every view in the app that
+    /// reads the key — this panel, the in-player overlay's own copy of it, and
+    /// five scope boxes whose redraws are measured in milliseconds each
+    /// (`ViewScopePanelCostTests`). The draft is state on ONE view, so a tick
+    /// re-renders the traces and nothing else, and the setting is written once
+    /// when the gesture ends. Same shape as the LUT intensity and the volume
+    /// slider, for the same reason.
+    @State var gridDraft: Double?
+    @State var traceDraft: Double?
+
+    /// What the boxes are drawn with: the drag if there is one, the stored
+    /// value otherwise. Named because both the chrome's slider and the box
+    /// have to read the SAME one, and two readings of that is a slider that
+    /// moves nothing until it is let go.
+    var gridBrightnessNow: Double { gridDraft ?? gridBrightness }
+    var traceBrightnessNow: Double { traceDraft ?? traceBrightness }
     /// Skin-tone line on the vectorscope. On by default — it is why most
     /// operators look at a vectorscope at all — but a chart or a colour-bar
     /// check does not want a line across it.
@@ -278,8 +299,8 @@ struct ScopesPanel: View {
             boxHeader(for: kind)
         } content: {
             trace(kind, data: data)
-                .opacity(max(kind.minimumTraceOpacity, traceBrightness))
-                .environment(\.scopeGridBrightness, gridBrightness)
+                .opacity(max(kind.minimumTraceOpacity, traceBrightnessNow))
+                .environment(\.scopeGridBrightness, gridBrightnessNow)
                 .environment(\.scopeScaleMode, ScopeScaleMode(setting: scaleMode))
         }
         .modifier(ScopeReorderDrag(kind: kind, enabled: reorderable,
