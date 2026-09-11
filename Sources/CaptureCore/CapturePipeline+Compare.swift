@@ -57,7 +57,15 @@ extension CapturePipeline {
         // is never pushed again, so a surface that waited for the next one
         // would wait for ever.
         queue.async {
-            if let reference = self.previewReference {
+            // **The reference as it IS, not merely as it was pinned.** A clip
+            // frozen on a frame is not the still underneath it, so a surface
+            // joining late was handed the pin — and with the clip standing
+            // still nothing ever came along to correct it. This is the
+            // expression `presentProcessedFrame` reads per frame, so the pane
+            // and the composite cannot come to disagree about what the
+            // reference is.
+            if let reference = self.currentReferenceFrame(
+                fallback: self.previewReference) {
                 layer.present(reference)
             } else {
                 layer.clearToBlack()
