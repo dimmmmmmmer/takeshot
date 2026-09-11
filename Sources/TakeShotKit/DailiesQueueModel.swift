@@ -253,6 +253,19 @@ final class DailiesQueueModel: ObservableObject {
         rescanSound()
     }
 
+    /// Re-point a sound folder in PLACE, the way a source folder is re-pointed.
+    ///
+    /// The recordist's card comes back under a different mount point every
+    /// day, and the row's own Choose button is how it is followed — it was
+    /// drawn with nothing behind it, which is a button that looks like the
+    /// sources' and does nothing at all.
+    func replaceSoundFolder(_ old: URL, with url: URL) {
+        guard let index = soundFolders.firstIndex(where: { isSame($0, old) })
+        else { return }
+        soundFolders[index] = url
+        rescanSound()
+    }
+
     /// Read the sound folders again, off the main actor.
     ///
     /// Its own walk rather than a branch of `rescan`: it reads a different

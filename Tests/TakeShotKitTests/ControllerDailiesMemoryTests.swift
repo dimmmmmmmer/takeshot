@@ -72,4 +72,44 @@ import Testing
                     "the extra destination was not remembered")
         }
     }
+
+    /// **The sound folders too**, and re-pointing one keeps its place.
+    ///
+    /// The recordist's card is set up for the day like the camera's, and the
+    /// row's Choose button is how it is followed when it comes back under
+    /// another mount point — that button was drawn with an empty action behind
+    /// it, so it looked exactly like the sources' one and did nothing at all.
+    @Test func theSoundFoldersSurviveTheSheetClosing() async throws {
+        try await ControllerHarness.run { controller, root in
+            let model = controller.dailies
+            model.prepare(takes: [], settings: controller.settings,
+                          defaultFolder: root)
+            let day = root.appendingPathComponent("SOUND_DAY01", isDirectory: true)
+            let moved = root.appendingPathComponent("SOUND_DAY01_2",
+                                                    isDirectory: true)
+            for folder in [day, moved] {
+                try FileManager.default.createDirectory(
+                    at: folder, withIntermediateDirectories: true)
+            }
+
+            model.addSoundFolder(day)
+            controller.debounced.flush(.dailies)
+            #expect(controller.settings.dailies.soundPaths?.count == 1,
+                    "the sound folder was not remembered")
+
+            // …and the row's Choose button re-points that row in place
+            model.replaceSoundFolder(day, with: moved)
+            controller.debounced.flush(.dailies)
+            #expect(model.soundFolders.map(CaptureController.comparablePath)
+                == [CaptureController.comparablePath(moved)],
+                "Choose left the row pointing at the folder it replaced")
+
+            let second = DailiesQueueModel()
+            second.prepare(takes: [], settings: controller.settings,
+                           defaultFolder: root)
+            #expect(second.soundFolders.map(CaptureController.comparablePath)
+                == [CaptureController.comparablePath(moved)],
+                "the sound folder did not come back with the sheet")
+        }
+    }
 }

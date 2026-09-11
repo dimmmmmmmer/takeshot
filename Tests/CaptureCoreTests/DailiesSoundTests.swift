@@ -68,7 +68,11 @@ import Testing
         let daily: URL = try #require(report.items.first?.output)
         var names: [String] = []
         for track in try await tracks(of: daily) {
-            let items = (try? await track.load(.commonMetadata)) ?? []
+            // The type spelled out: `[AVMetadataItem]` in an inferred
+            // test expression is one of the shapes the runner's older
+            // compiler refuses and this one resolves (CLAUDE.md).
+            let items: [AVMetadataItem] =
+                (try? await track.load(.commonMetadata)) ?? []
             for item in items {
                 if let value = try? await item.load(.stringValue) {
                     names.append(value)

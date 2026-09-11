@@ -83,7 +83,13 @@ struct DailiesFilesTab: View {
             } else {
                 folderList(model.soundFolders) { url in
                     HStack(spacing: OffloadChrome.rowSpacing) {
-                        folderRow(url) {}
+                        folderRow(url) {
+                            if let picked = OffloadPanels.pickFolder(
+                                message: L("dailies_pick_sound"),
+                                prompt: L("offload_source_prompt"), near: url) {
+                                model.replaceSoundFolder(url, with: picked)
+                            }
+                        }
                         removeButton(L("dailies_remove_sound")) {
                             model.removeSoundFolder(url)
                         }
