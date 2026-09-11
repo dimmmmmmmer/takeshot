@@ -13,9 +13,11 @@ import Testing
 @MainActor
 struct MirroredSymbolTests {
     @Test func theMirrorIsNotTheOriginal() throws {
-        let plain = try #require(
-            NSImage(systemSymbolName: "line.diagonal", accessibilityDescription: nil),
-            "this host has no line.diagonal to mirror")
+        // Both rows of the picker, through the one pipeline they both use now
+        // — which is the other half of what the owner saw ("а че у нас иконки
+        // диагональных палок разных размеров"): one row drawn by SwiftUI and
+        // one by AppKit was the same glyph at two sizes.
+        let plain = MirroredSymbol.diagonalPlain
         let mirror = MirroredSymbol.diagonal
 
         let plainCentre = try #require(MirroredSymbol.topHalfInkCentre(plain),
@@ -31,8 +33,16 @@ struct MirroredSymbolTests {
             """)
         #expect(mirror.isTemplate,
                 "the mirrored glyph will not take the control's tint")
-        #expect(mirror.size == plain.size,
-                "the mirrored glyph is a different size: \(mirror.size)")
+        #expect(mirror.size == plain.size, """
+            the two diagonal rows are \(plain.size) and \(mirror.size) — one \
+            picker, two sizes of one glyph
+            """)
+        #expect(plain.isTemplate,
+                "the plain glyph will not take the control's tint")
+        #expect(mirror.size.height <= MirroredSymbol.pointSize + 2, """
+            the diagonals are drawn at \(mirror.size.height)pt in a mini \
+            picker — a glyph that overflows its row is the same complaint
+            """)
     }
 
     /// A symbol this build does not have comes back as an empty image with a

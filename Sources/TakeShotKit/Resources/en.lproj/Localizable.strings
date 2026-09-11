@@ -443,6 +443,7 @@
 "legend_right" = "Right";
 "safe_action" = "Action safe";
 "safe_title" = "Title safe";
+"safe_brightness" = "Brightness";
 
 /* scopes group: skin-tone line */
 "scope_skin_tone_short" = "Skin";
@@ -581,6 +582,8 @@
 "clean_feed_hide" = "Hide the controls — clean picture";
 "clean_feed_show" = "Show the controls again";
 "hotkey_clean_feed" = "Hide the controls (clean picture)";
+"hotkey_assists_reset" = "Reset the operator aids";
+"hotkey_assists_hidden" = "Hide the operator aids";
 "hotkey_shuttle_reverse" = "Play backwards (J)";
 "hotkey_shuttle_stop" = "Stop (K)";
 "hotkey_shuttle_forward" = "Play forwards (L)";

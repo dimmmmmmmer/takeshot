@@ -69,7 +69,7 @@ struct TransportPlayGroup: View {
         } label: {
             Image(systemName: "backward.frame")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("transport_back_frames"))
 
         Button {
@@ -79,7 +79,7 @@ struct TransportPlayGroup: View {
                 .font(Self.glyph)
                 .frame(width: Self.glyphWidth)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .keyboardShortcut(.space, modifiers: [])
 
         Button {
@@ -87,7 +87,7 @@ struct TransportPlayGroup: View {
         } label: {
             Image(systemName: "forward.frame")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("transport_forward_frames"))
     }
 }
@@ -122,7 +122,7 @@ struct TransportRangeControls<Engine: TransportRangeEngine>: View {
             Image(systemName: "repeat")
                 .foregroundStyle(tint(engine.isLooping))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("playback_loop"))
 
         rangeButton(out: true)
@@ -138,7 +138,7 @@ struct TransportRangeControls<Engine: TransportRangeEngine>: View {
                 .foregroundStyle(tint((out ? engine.outPoint : engine.inPoint)
                                       != nil))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L(out ? "loop_out_help" : "loop_in_help"))
     }
 
@@ -161,7 +161,7 @@ struct TransportFullscreenButton: View {
                   ? "arrow.down.right.and.arrow.up.left"
                   : "arrow.up.left.and.arrow.down.right")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("fullscreen_playback"))
     }
 }

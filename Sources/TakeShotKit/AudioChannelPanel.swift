@@ -28,7 +28,7 @@ struct AudioChannelPanel: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .keyboardShortcut(.escape, modifiers: [])
             }
             HStack(alignment: .bottom, spacing: 8) {
@@ -66,7 +66,7 @@ struct AudioChannelPanel: View {
                                          : AnyShapeStyle(controller.accentColor))
                         .frame(width: 24, height: 20)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .help(L("monitor_mute_help"))
                 // never disabled: dragging the volume up wakes the monitor
                 Slider(value: Binding(
@@ -117,7 +117,7 @@ struct AudioChannelPanel: View {
                     .font(.caption)
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .disabled(!controller.canChangeAudioChannels)
             Text(controller.audioChannelDecisionText)
                 .font(.caption)
@@ -322,7 +322,7 @@ struct LiveFullscreenView: View {
                         .background(.black.opacity(0.5),
                                     in: RoundedRectangle(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .padding(14)
             }
         }

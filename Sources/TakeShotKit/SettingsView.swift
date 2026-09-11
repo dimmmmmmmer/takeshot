@@ -103,7 +103,7 @@ struct SettingsView: View {
                 Button(L("reset_interface"), role: .destructive) {
                     controller.resetInterface()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.red)
             }
             Section(L("settings_recording")) {
@@ -250,7 +250,7 @@ struct SettingsView: View {
                     controller.resetAllSettings()
                     hotkeys.resetToDefaults()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.red)
             }
         }

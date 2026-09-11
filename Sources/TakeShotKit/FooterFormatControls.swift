@@ -145,7 +145,7 @@ struct FooterDimButton: View {
                                   : AnyShapeStyle(Color.secondary.opacity(0.45)),
                                   lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .disabled(!controller.canDimMonitoring)
         .help(live.dimmed ? L("monitor_dim_on_help") : L("monitor_dim_help"))
     }

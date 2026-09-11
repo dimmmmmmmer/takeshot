@@ -71,7 +71,7 @@ struct SlateView: View {
     private var spaceKey: some View {
         Button(action: model.fireSync) { EmptyView() }
             .keyboardShortcut(.space, modifiers: [])
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .opacity(0)
             .accessibilityHidden(true)
     }

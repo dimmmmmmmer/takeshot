@@ -84,7 +84,12 @@ struct CompareControls: View {
             Image(systemName: "rectangle.split.1x2")
                 .tag(CaptureController.WipeOrientation.horizontal)
                 .help(L("wipe_horizontal"))
-            Image(systemName: "line.diagonal")
+            // Both diagonals through `MirroredSymbol`, at one stated size:
+            // one of them HAS to be an image (there is no mirrored
+            // `line.diagonal` in the symbol set), and a row drawn by SwiftUI
+            // beside a row drawn by AppKit is the same glyph at two sizes —
+            // which is what the owner saw.
+            Image(nsImage: MirroredSymbol.diagonalPlain)
                 .tag(CaptureController.WipeOrientation.diagonal)
                 .help(L("wipe_diagonal"))
             // **The flip is in the IMAGE, not on the view.**
@@ -217,7 +222,7 @@ struct ComparePinControls: View {
                 Image(systemName: ComparePinReading.reading(pinned: false).symbol)
                     .font(.system(size: 11))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L(ComparePinReading.reading(pinned: false).helpKey))
         }
         if controller.referencePinned {
@@ -228,7 +233,7 @@ struct ComparePinControls: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L("unpin_reference_help"))
         }
         // **Freeze the reference, when it is a clip.**
@@ -247,7 +252,7 @@ struct ComparePinControls: View {
                       ? "pause.fill" : "play.fill")
                     .font(.system(size: 11))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L(controller.referenceIsRolling
                            ? "reference_freeze_help" : "reference_play_help"))
         }

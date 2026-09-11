@@ -67,6 +67,12 @@ struct EscapeKeyCatcher: View {
 
     var body: some View {
         Button(action: action) { EmptyView() }
+            // **`.plain` and deliberately not the hover style.** This button
+            // is invisible, zero-sized and exists only to carry a key
+            // equivalent; wrapping its empty label in a hover plate cost it
+            // the key entirely — `performKeyEquivalent` stopped finding it,
+            // measured as `escapeClosesTheOverlay` going red. Nothing can
+            // hover a button with no size, so there is nothing to gain either.
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
             .opacity(0)

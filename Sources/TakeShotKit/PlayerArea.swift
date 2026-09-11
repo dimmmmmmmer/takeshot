@@ -66,7 +66,7 @@ struct PlayerArea: View {
                             .background(.black.opacity(0.45),
                                         in: RoundedRectangle(cornerRadius: 7))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .controlHelp(L("fullscreen"))
                     .padding(8)
                 }
@@ -111,7 +111,7 @@ struct PlayerArea: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.white.opacity(0.7))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.hoverPlain)
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -236,7 +236,7 @@ struct CleanFeedButton: View {
                 .background(.black.opacity(0.45),
                             in: RoundedRectangle(cornerRadius: 7))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .opacity(controller.cleanFeed ? 0.25 : 1)
         .controlHelp(controller.cleanFeed
                      ? L("clean_feed_show") : L("clean_feed_hide"))

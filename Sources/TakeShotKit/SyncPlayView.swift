@@ -101,7 +101,7 @@ struct SyncPlayHeader: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("sync_close"))
         }
         .playerChromePlate()
@@ -160,7 +160,7 @@ private struct SyncPlayTile: View {
                 .background(.black.opacity(0.5),
                             in: RoundedRectangle(cornerRadius: 4))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("sync_audio_help"))
         .padding(6)
     }
@@ -232,7 +232,7 @@ struct SyncPlayTransportBar: View {
             Image(systemName: forward ? "forward.frame" : "backward.frame")
                 .font(.system(size: 11))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L(forward ? "menu_step_forward" : "menu_step_back"))
     }
 }

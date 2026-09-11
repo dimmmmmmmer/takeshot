@@ -25,7 +25,7 @@ struct LUTMenu: View {
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
             LUTControlsPanel()
                 .padding(LUTControlsPanel.padding)

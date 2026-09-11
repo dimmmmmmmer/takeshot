@@ -74,7 +74,7 @@ struct PanelFolderButton: View {
                 .overlay(shape.strokeBorder(.white.opacity(0.12)))
                 .contentShape(shape)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("open_folder"))
     }
 }

@@ -316,7 +316,7 @@ struct RecordButton: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .disabled(!controller.isCapturing)
         // **The name, not only the tooltip.** A disc and a square announce
         // themselves to VoiceOver as "button" — see `controlHelp`.
@@ -351,7 +351,7 @@ private struct FooterAudioMeters: View {
                         .map { controller.isChannelEnabled($0) })
                     .frame(height: 44)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("meters_click_help"))
         }
     }

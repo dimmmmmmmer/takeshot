@@ -79,7 +79,7 @@ struct OffloadHistoryList: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("offload_history_reveal"))
     }
 

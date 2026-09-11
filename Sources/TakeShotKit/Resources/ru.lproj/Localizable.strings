@@ -448,6 +448,7 @@
 "legend_right" = "Справа";
 "safe_action" = "Зона действия";
 "safe_title" = "Зона титров";
+"safe_brightness" = "Яркость";
 
 /* scopes group: skin-tone line */
 "scope_skin_tone_short" = "Кожа";
@@ -584,6 +585,8 @@
 "clean_feed_hide" = "Скрыть элементы — чистая картинка";
 "clean_feed_show" = "Вернуть элементы";
 "hotkey_clean_feed" = "Скрыть элементы (чистая картинка)";
+"hotkey_assists_reset" = "Сбросить операторскую помощь";
+"hotkey_assists_hidden" = "Скрыть операторскую помощь";
 "hotkey_shuttle_reverse" = "Играть назад (J)";
 "hotkey_shuttle_stop" = "Стоп (K)";
 "hotkey_shuttle_forward" = "Играть вперёд (L)";

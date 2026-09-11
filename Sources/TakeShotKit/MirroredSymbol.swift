@@ -23,6 +23,23 @@ enum MirroredSymbol {
     /// second COMPILER, not only an older SDK.
     @MainActor static let diagonal: NSImage = flipped("line.diagonal")
 
+    /// The SAME symbol the other way up, drawn through the SAME pipeline.
+    ///
+    /// **The two diagonals were different sizes** (owner: "а че у нас иконки
+    /// диагональных палок разных размеров"), and that is what a mixed pipeline
+    /// costs: one row was `Image(systemName:)`, which SwiftUI scales to the
+    /// control's own font, and the other was an `NSImage` at the symbol's
+    /// natural size. Nothing was wrong with either — they were simply not the
+    /// same picture of the same glyph. Both come from here now, at one stated
+    /// size, so they can only ever match.
+    @MainActor static let diagonalPlain: NSImage = rendered("line.diagonal",
+                                                            mirrored: false)
+
+    /// What both diagonal rows are drawn at. Small, because the picker they
+    /// sit in is `.mini` and a glyph that overflows its row is the other half
+    /// of the same complaint.
+    static let pointSize: CGFloat = 11
+
     /// One symbol, mirrored horizontally.
     ///
     /// A symbol this build has no glyph for comes back as an empty image of a
@@ -30,9 +47,21 @@ enum MirroredSymbol {
     /// collapses, and a collapsed row is a wipe direction the operator cannot
     /// click. `theMirrorIsNotTheOriginal` is what says the flip really happened.
     static func flipped(_ name: String) -> NSImage {
-        guard let base = NSImage(systemSymbolName: name,
-                                 accessibilityDescription: name) else {
+        rendered(name, mirrored: true)
+    }
+
+    /// One symbol at `pointSize`, optionally mirrored.
+    static func rendered(_ name: String, mirrored: Bool) -> NSImage {
+        guard let symbol = NSImage(systemSymbolName: name,
+                                   accessibilityDescription: name) else {
             return NSImage(size: CGSize(width: 14, height: 14))
+        }
+        let base = symbol.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: pointSize,
+                                        weight: .regular)) ?? symbol
+        guard mirrored else {
+            base.isTemplate = true
+            return base
         }
         let size = base.size
         let mirror = NSImage(size: size)

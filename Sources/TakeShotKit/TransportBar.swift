@@ -111,7 +111,7 @@ struct PlaybackLookButton: View {
                      ? AnyShapeStyle(controller.accentColor)
                      : AnyShapeStyle(.secondary))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(look == .bypassed
                   ? L("lut_bypassed_help") : L("lut_playback_toggle"))
         }
@@ -215,7 +215,7 @@ struct TransportVolume: View {
                                      : AnyShapeStyle(.secondary))
                     .frame(width: Self.iconWidth, height: Self.iconHeight)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("monitor_mute_help"))
             Slider(value: Binding(
                 get: { controller.playbackVolume },

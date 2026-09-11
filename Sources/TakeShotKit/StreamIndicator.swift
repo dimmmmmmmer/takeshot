@@ -92,7 +92,7 @@ struct StreamIndicator: View {
                                 text: entry.name)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .controlHelp(helpText(for: entry))
                 }
                 if playout.isEngaged { playoutLamp }

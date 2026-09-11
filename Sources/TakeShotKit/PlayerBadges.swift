@@ -331,7 +331,7 @@ struct PlayerTopBadgeRow: View {
                     .foregroundStyle(controller.showScopes
                                      ? controller.accentColor : .white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("scopes_toggle"))
         }
     }
@@ -350,7 +350,7 @@ struct PlayerTopBadgeRow: View {
                                          ? controller.accentColor
                                          : .white)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .help(L("multicam_toggle"))
             }
         }

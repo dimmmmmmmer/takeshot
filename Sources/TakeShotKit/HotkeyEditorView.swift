@@ -76,7 +76,7 @@ struct HotkeyEditorView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel(L("cancel"))
                 }
@@ -140,7 +140,7 @@ struct HotkeyEditorView: View {
             Button(L("reset_hotkeys"), role: .destructive) {
                 confirmResetAll = true
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .foregroundStyle(.red)
             Spacer()
             Button(L("close")) { dismiss() }

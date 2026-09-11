@@ -90,7 +90,7 @@ struct ChromaKeyRows: View {
                         ? controller.accentColor : Color.primary)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L("chroma_pick_help"))
             preset(ChromaKey.greenScreen, help: L("chroma_preset_green"))
             preset(ChromaKey.blueScreen, help: L("chroma_preset_blue"))
@@ -115,7 +115,7 @@ struct ChromaKeyRows: View {
                     lineWidth: selected ? 2 : 1))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(help)
     }
 
@@ -284,7 +284,7 @@ struct ChromaPlateControls: View {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.system(size: 11))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .disabled(!controller.chromaPlateIsAdjusted)
             .controlHelp(L("chroma_plate_reset"))
         }

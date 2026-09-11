@@ -31,7 +31,7 @@ struct OffloadStatusStrip: View {
             } label: {
                 readout(status)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("offload_status_reopen"))
             Button {
                 controller.cancelRunningDiskJob()

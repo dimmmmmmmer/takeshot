@@ -48,7 +48,7 @@ struct MarkerButton: View {
                 .font(.system(size: 11))
                 .foregroundStyle(markerColor(controller.newMarkerColor))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .controlHelp("\(L("marker_add_help")) — \(hotkeys.combo(for: .addMarker).display)")
 
         // Choose the color BEFORE placing a marker. Click-to-cycle rather than a
@@ -63,7 +63,7 @@ struct MarkerButton: View {
                 .overlay(Circle().strokeBorder(.white.opacity(0.5), lineWidth: 0.5))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("marker_new_color_help"))
 
         if !controller.playbackMarkers.isEmpty {
@@ -74,7 +74,7 @@ struct MarkerButton: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Self.navigationTint(controller))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L("marker_prev_help"))
 
             Button {
@@ -84,7 +84,7 @@ struct MarkerButton: View {
                     .font(.caption2.monospacedDigit().bold())
                     .foregroundStyle(Self.navigationTint(controller))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("marker_list_help"))
             .popover(isPresented: $showList, arrowEdge: .top) {
                 MarkerListEditor()
@@ -97,7 +97,7 @@ struct MarkerButton: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Self.navigationTint(controller))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .controlHelp(L("marker_next_help"))
         }
     }
@@ -119,7 +119,7 @@ struct MarkerListEditor: View {
                 Button(L("markers_clear_all"), role: .destructive) {
                     controller.clearPlaybackMarkers()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .font(.caption)
                 .foregroundStyle(.red)
             }
@@ -153,7 +153,7 @@ struct MarkerListEditor: View {
                             .frame(width: 12, height: 12)
                             .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .help(L("marker_color_help"))
 
                     Button {
@@ -162,7 +162,7 @@ struct MarkerListEditor: View {
                         Text(controller.markerDisplayTimecode(marker))
                             .font(.caption.monospacedDigit())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .help(L("marker_jump_help"))
 
                     TextField(L("marker_note_placeholder"), text: Binding(
@@ -183,7 +183,7 @@ struct MarkerListEditor: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .controlHelp(L("marker_delete_help"))
                 }
             }

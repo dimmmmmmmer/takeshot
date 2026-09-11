@@ -158,7 +158,7 @@ struct NamingFieldsView: View {
                                     in: RoundedRectangle(cornerRadius: 4))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .accessibilityLabel(L(pane.titleKey))
                 .help(L(pane.titleKey))
             }

@@ -98,7 +98,7 @@ struct ChannelPicker: View {
                         .foregroundStyle(selection == option
                                          ? .white : .white.opacity(0.5))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
             }
         }
     }
@@ -124,7 +124,7 @@ struct ScopeChipToggle: View {
                             in: RoundedRectangle(cornerRadius: 3))
                 .foregroundStyle(isOn ? .white : .white.opacity(0.5))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
     }
 }
 

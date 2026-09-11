@@ -37,7 +37,7 @@ struct TakeLogButton: View {
                 .foregroundStyle(isLogged ? controller.accentColor : Color.secondary)
                 .frame(width: 18, height: 18)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .controlHelp(L("comment_help"))
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
             editor
@@ -126,7 +126,7 @@ struct RatingToggle: View {
             .font(.system(size: 13))
             .frame(width: 18, height: 18)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .help(L("rating_help"))
     }
 }

@@ -22,7 +22,7 @@ struct DailiesStatusStrip: View {
             } label: {
                 readout
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .help(L("dailies_status_reopen"))
             Button {
                 controller.dailies.cancel()
