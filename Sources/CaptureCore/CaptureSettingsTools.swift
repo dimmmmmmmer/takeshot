@@ -133,6 +133,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case burnCustom = "dailiesBurnCustom"
         case codec = "dailiesCodec"
         case bakeLook = "dailiesBakeLook"
+        case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
         case nameSuffix = "dailiesNameSuffix"
         case plateOpacity = "dailiesPlateOpacity"
@@ -186,6 +187,18 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// every daily this app has written was clean, and a look silently baked
     /// into a proxy cannot be taken out of it again.
     public var bakeLook: Bool?
+    /// **Take the anamorphic squeeze out of the proxies** (owner: "и думаю еще
+    /// можно настройку сделать чтоб десквиз запекать").
+    ///
+    /// nil is OFF, like `bakeLook` and for the same reason: every daily this
+    /// app has written carries the camera's own raster, and a proxy silently
+    /// stretched is one an editor cuts with at the wrong shape.
+    ///
+    /// The factor is not stored here — it is the operator's own
+    /// `AssistSettings.desqueezeApplied`, the one the viewer is already using,
+    /// because a daily made at a different squeeze from the picture it was
+    /// approved on is two answers to one question.
+    public var bakeDesqueeze: Bool?
     /// Put in front of / after the take's name in the output file name;
     /// nil — nothing in front and "_DAILY" after, the name this app has
     /// always written.

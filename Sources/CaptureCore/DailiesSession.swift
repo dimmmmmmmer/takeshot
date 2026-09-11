@@ -57,8 +57,8 @@ struct DailiesSourceFacts {
     /// stake: a second grade is permanent in the proxy.
     let bakedLook: String?
 
-    static func probe(item: DailiesItem,
-                      burnins: DailiesBurnins) async throws -> DailiesSourceFacts {
+    static func probe(item: DailiesItem, burnins: DailiesBurnins,
+                      desqueeze: Double = 1) async throws -> DailiesSourceFacts {
         let asset = AVURLAsset(url: item.source)
         guard let track = try? await asset.tracks(ofType: .video).first else {
             throw DailiesAbort.failed(
@@ -82,7 +82,8 @@ struct DailiesSourceFacts {
             audioTracks: (try? await asset.tracks(ofType: .audio)) ?? [],
             frameRate: frameRate,
             framesTotal: max(1, Int((duration * frameRate).rounded())),
-            outputSize: DailiesEngine.outputSize(for: naturalSize),
+            outputSize: DailiesEngine.outputSize(for: naturalSize,
+                                                 desqueeze: desqueeze),
             timeline: burnins.timecode
                 ? await DailiesEngine.timeline(for: asset, item: item,
                                                frameRate: frameRate) : nil,

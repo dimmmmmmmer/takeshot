@@ -119,7 +119,17 @@ import Testing
         // over all channels and passed with the look moved after the
         // overlay.)
         let strips = Self.channelPeaks(frame, in: strip)
-        #expect(strips.green >= 250 && strips.blue >= 250, """
+        // **200, not 250, and the number is a measurement.** The claim is that
+        // the strips are not the look's red — white against red is 245-255 in
+        // every channel and the graded alternative is ~0 in two of them, so
+        // the margin is enormous either way. The tight version was red on CI
+        // and green here: this machine's encoder returned 255 and the macOS 15
+        // runner's returned B246 G245 R255 for the same white text, which is
+        // chroma rounding at the edge of a one-pixel glyph and a fact about
+        // that encoder rather than about the picture. CLAUDE.md says it
+        // plainly for the codec family next door — measure it on the OS it
+        // will ship to.
+        #expect(strips.green >= 200 && strips.blue >= 200, """
             the burn-in came out \(strips) — the grade took the strips with \
             the picture
             """)
@@ -130,6 +140,66 @@ import Testing
             (try? await AVURLAsset(url: daily).load(.metadata)) ?? []
         #expect(await TakeWriter.bakedLookName(carried) == "Show LUT",
                 "the proxy does not say the look is already in it")
+    }
+
+    /// **A baked desqueeze changes the proxy's own raster** (owner: "и думаю
+    /// еще можно настройку сделать чтоб десквиз запекать").
+    ///
+    /// Width times the factor, height untouched — the one convention the whole
+    /// app uses for a desqueeze. Folded into the output size rather than added
+    /// as a stage, which is what makes the burn-ins come out right for free:
+    /// the overlay is laid out against the raster, so on a desqueezed proxy it
+    /// is laid out against the desqueezed one and the strips are never
+    /// stretched with the picture.
+    @Test func aBakedDesqueezeWidensTheProxyAndNotItsStrips() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("squeezed.mov"),
+            width: 320, height: 180, frames: 6)
+        let item = DailiesRig.item(for: source)
+
+        let clean = await DailiesEngine.run(
+            items: [item], burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("Clean"), codec: .proResProxy)
+        let baked = await DailiesEngine.run(
+            items: [item], burnins: DailiesRig.allBurnins,
+            into: root.appendingPathComponent("Baked"), codec: .proResProxy,
+            desqueeze: 2)
+
+        let cleanSize = try await Self.raster(of: try #require(
+            clean.items.first?.output, "the clean run produced no daily"))
+        let bakedSize = try await Self.raster(of: try #require(
+            baked.items.first?.output, "the baked run produced no daily"))
+        #expect(cleanSize == CGSize(width: 320, height: 180),
+                "the untouched proxy is \(cleanSize), not the source's raster")
+        #expect(bakedSize == CGSize(width: 640, height: 180), """
+            the desqueezed proxy is \(bakedSize) — a 2x squeeze doubles the \
+            width and leaves the height alone
+            """)
+
+        // …and the strips were laid out on THAT raster: the overlay's own
+        // metrics are a fraction of the height, so a strip drawn against the
+        // source's shape and then stretched would be the give-away.
+        let overlay = DailiesOverlay(
+            size: bakedSize,
+            texts: DailiesRig.allBurnins.overlayTexts(for: item))
+        let strip: CGRect = try #require(overlay.layout.timecode)
+        let frame = try await DailiesRig.decodeFrame(0, of: try #require(
+            baked.items.first?.output))
+        #expect(DailiesRig.peakLevel(frame, in: strip) >= 200, """
+            nothing bright is where the strips should be on a \(bakedSize) \
+            picture — they were laid out against another raster
+            """)
+    }
+
+    /// The raster a finished file actually has.
+    private static func raster(of url: URL) async throws -> CGSize {
+        let track = try #require(
+            try await AVURLAsset(url: url).loadTracks(withMediaType: .video)
+                .first)
+        let size = try await track.load(.naturalSize)
+        return CGSize(width: size.width.rounded(), height: size.height.rounded())
     }
 
     /// **A take that already carries its look is not graded again.**

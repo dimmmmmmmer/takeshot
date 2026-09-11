@@ -19,6 +19,8 @@ final class DailiesTranscode {
     private let codec: CaptureCodec
     /// The look to bake, or nil for a clean proxy — see `DailiesLook`.
     private let look: DailiesLook?
+    /// The anamorphic squeeze to take out of the picture; 1 leaves it alone.
+    private let desqueeze: Double
     private let control: DailiesControl
     private let publish: @Sendable (DailiesProgress) -> Void
 
@@ -34,7 +36,7 @@ final class DailiesTranscode {
 
     init(item: DailiesItem, index: Int, count: Int, burnins: DailiesBurnins,
          folder: URL, codec: CaptureCodec = .h264, look: DailiesLook? = nil,
-         control: DailiesControl,
+         desqueeze: Double = 1, control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
         self.item = item
         self.index = index
@@ -43,6 +45,7 @@ final class DailiesTranscode {
         self.folder = folder
         self.codec = codec
         self.look = look
+        self.desqueeze = desqueeze
         self.control = control
         self.publish = publish
     }
@@ -73,7 +76,8 @@ final class DailiesTranscode {
 
     private func transcode() async throws -> URL {
         let facts = try await DailiesSourceFacts.probe(item: item,
-                                                       burnins: burnins)
+                                                       burnins: burnins,
+                                                       desqueeze: desqueeze)
         framesTotal = facts.framesTotal
         // Claimed through the same process-wide reservation every writing
         // path uses, so a daily can never land on a name a take (or another

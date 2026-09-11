@@ -45,7 +45,7 @@ public enum DailiesEngine {
     public static func run(
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
-        look: DailiesLook? = nil,
+        look: DailiesLook? = nil, desqueeze: Double = 1,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -72,7 +72,7 @@ public enum DailiesEngine {
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec, look: look,
-                control: control, publish: progress)
+                desqueeze: desqueeze, control: control, publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)
@@ -115,6 +115,29 @@ public enum DailiesEngine {
     /// Output raster: fit into 1080p preserving aspect, never upscale, and
     /// keep dimensions even — H.264 4:2:0 subsampling needs them, and an odd
     /// edge makes some encoders refuse the session outright.
+    /// The proxy's raster, with an anamorphic squeeze taken OUT of it when the
+    /// operator asked for that (owner: "и думаю еще можно настройку сделать
+    /// чтоб десквиз запекать").
+    ///
+    /// Width times the factor, height untouched — the one convention the whole
+    /// app uses for a desqueeze (`MetalPreviewLayer+Render`, `displayAspect`).
+    /// Folding it in HERE rather than adding a stage is what makes the rest
+    /// free: the composer already resamples whenever the source and the output
+    /// differ, and the burn-in overlay is built at the output size, so the
+    /// strips are laid out on the final raster and are never stretched with
+    /// the picture.
+    ///
+    /// It also takes the `pasp` off the file by construction, which is right:
+    /// `TakeWriter.pixelAspect` answers for the two SD rasters and a
+    /// desqueezed one is not either of them, so a baked proxy states square
+    /// pixels — which is what it now has.
+    public static func outputSize(for natural: CGSize,
+                                  desqueeze: Double) -> CGSize {
+        guard desqueeze > 0, desqueeze != 1 else { return outputSize(for: natural) }
+        return outputSize(for: CGSize(width: natural.width * desqueeze,
+                                      height: natural.height))
+    }
+
     public static func outputSize(for natural: CGSize) -> CGSize {
         let width = abs(natural.width)
         let height = abs(natural.height)

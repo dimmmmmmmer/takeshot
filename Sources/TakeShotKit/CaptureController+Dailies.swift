@@ -64,6 +64,13 @@ extension CaptureController {
         !dailies.isRunning && !dailies.isDestinationDefault
     }
 
+    /// Whether there is an anamorphic squeeze to take out of a proxy.
+    ///
+    /// The viewer's own answer (`desqueezeOnEffective`): with the desqueeze
+    /// switched off the operator is watching the camera's raster, and a daily
+    /// "with the squeeze removed" would be a picture nobody has approved.
+    var canBakeDesqueeze: Bool { settings.assist.desqueezeOnEffective }
+
     /// **A real frame to lay the burn-in preview over**, or nil for the flat
     /// grey: a plate's opacity and a watermark's lettering cannot be judged
     /// against a blank (owner: "хотелось бы чтобы картинкой встал как пример
@@ -204,6 +211,7 @@ extension CaptureController {
             ? nil : model.datePosition.rawValue
         settings.dailies.codec = model.codec == .h264 ? nil : model.codec.rawValue
         settings.dailies.bakeLook = model.bakeLook ? true : nil
+        settings.dailies.bakeDesqueeze = model.bakeDesqueeze ? true : nil
         settings.dailies.namePrefix = model.namePrefix.isEmpty
             ? nil : model.namePrefix
         settings.dailies.nameSuffix = model.nameSuffix == "_DAILY"

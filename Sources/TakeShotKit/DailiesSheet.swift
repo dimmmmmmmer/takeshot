@@ -552,6 +552,14 @@ struct DailiesOutputSection: View {
             Toggle(L("dailies_bake_look"), isOn: $model.bakeLook)
                 .disabled(!controller.canApplyLUT)
                 .help(L("dailies_bake_look_help"))
+            // **The squeeze, taken out** (owner: "и думаю еще можно настройку
+            // сделать чтоб десквиз запекать"). Beside the look because it is
+            // the same kind of question — what the batch will PRODUCE — and
+            // greyed on the same rule the viewer uses to decide whether there
+            // is a squeeze at all.
+            Toggle(L("dailies_bake_desqueeze"), isOn: $model.bakeDesqueeze)
+                .disabled(!controller.canBakeDesqueeze)
+                .help(L("dailies_bake_desqueeze_help"))
         }
         .disabled(controller.isDailiesRunning)
     }

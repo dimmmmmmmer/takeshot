@@ -39,6 +39,9 @@ final class DailiesQueueModel: ObservableObject {
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not
     /// "whatever the old blob meant".
     @Published var bakeLook = false
+    /// **Bake the anamorphic desqueeze into the proxies.** Off unless the
+    /// operator says so — see `DailiesSettings.bakeDesqueeze`.
+    @Published var bakeDesqueeze = false
     /// The output name's two ends, around the take's own name.
     @Published var namePrefix = ""
     @Published var nameSuffix = "_DAILY"
@@ -204,6 +207,7 @@ final class DailiesQueueModel: ObservableObject {
         customText = settings.dailies.customText ?? ""
         codec = settings.dailies.codecEffective
         bakeLook = settings.dailies.bakeLook == true
+        bakeDesqueeze = settings.dailies.bakeDesqueeze == true
         namePrefix = settings.dailies.namePrefixEffective
         nameSuffix = settings.dailies.nameSuffixEffective
         ink = settings.dailies.inkEffective
@@ -384,6 +388,12 @@ final class DailiesQueueModel: ObservableObject {
                             intensity: controller.live.lutIntensity)
             }
             : nil
+        // The operator's own factor, read on this side with everything else
+        // the task is handed. `desqueezeApplied` is 1 when the desqueeze is
+        // switched off, so an operator who asked for the bake with no squeeze
+        // dialled in gets the camera's raster — which is what they are looking
+        // at.
+        let squeeze = bakeDesqueeze ? controller.settings.assist.desqueezeApplied : 1
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -408,8 +418,8 @@ final class DailiesQueueModel: ObservableObject {
         Task.detached(priority: .utility) {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
-                alsoInto: extras, codec: codec, look: look, control: token,
-                progress: publish)
+                alsoInto: extras, codec: codec, look: look,
+                desqueeze: squeeze, control: token, progress: publish)
             complete(result)
         }
     }
