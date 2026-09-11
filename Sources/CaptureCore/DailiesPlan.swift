@@ -211,6 +211,29 @@ public struct DailiesProgress: Sendable, Equatable {
 }
 
 /// How one item ended: exactly one of `output` / `failure` / plain cancel.
+/// **A look to bake into the proxies**, with the name that goes on the file.
+///
+/// The cube and its name travel together because the file has to say WHICH
+/// look is in its pixels: `com.takeshot.lut` is what stops a player — or a
+/// second run of dailies — from grading the same picture twice, and a key with
+/// no name in it would say a look is baked without saying which one, which is
+/// the same as saying nothing to anybody reading the file next year.
+///
+/// The intensity is the operator's own mix, the same number the viewing look
+/// is applied at: a daily baked at full strength from a look the operator is
+/// watching at 60 % would not be the picture they approved.
+public struct DailiesLook: Sendable {
+    public var cube: CubeLUT
+    public var name: String
+    public var intensity: Double
+
+    public init(cube: CubeLUT, name: String, intensity: Double = 1) {
+        self.cube = cube
+        self.name = name
+        self.intensity = intensity
+    }
+}
+
 public struct DailiesItemResult: Sendable, Equatable {
     public var source: URL
     /// The finished .mp4; nil when the item failed or was cancelled.

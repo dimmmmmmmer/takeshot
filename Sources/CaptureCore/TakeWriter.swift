@@ -189,6 +189,33 @@ public final class TakeWriter {
     /// started carrying wire codes are still on the operator's disk, and
     /// expanding those a second time would crush the very shadows this exists
     /// to protect.
+    /// The name of the look already BAKED into a file's pixels, or nil.
+    ///
+    /// Beside `carriesWireCodes` because it is the same kind of question — what
+    /// has already been done to these codes — and asked by the same two kinds
+    /// of reader: the player, which refuses to apply a viewing look over one
+    /// that is already in the picture, and the dailies transcode, which must
+    /// not grade a second time (`PlaybackLook.baked`). It lived privately in
+    /// the app layer, so the transcode could not ask it at all.
+    public static func bakedLookName(_ metadata: [AVMetadataItem]) async
+        -> String? {
+        for item in metadata where (item.key as? String) == lutKey {
+            if let name = try? await item.load(.stringValue) { return name }
+        }
+        return nil
+    }
+
+    /// One item in the modern QuickTime metadata key space. Public because a
+    /// daily states what its own run baked, and must state it in the same key
+    /// space a take does or the player will not find it.
+    public static func lookItem(named name: String) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.keySpace = .quickTimeMetadata
+        item.key = lutKey as NSString
+        item.value = name as NSString
+        return item
+    }
+
     public static let levelsKey = "com.takeshot.levels"
     /// The one value `levelsKey` is ever written with.
     public static let wireValue = "wire"

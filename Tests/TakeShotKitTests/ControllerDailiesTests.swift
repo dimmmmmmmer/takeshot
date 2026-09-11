@@ -1,3 +1,4 @@
+import AVFoundation
 import CaptureCore
 import Foundation
 import Testing
@@ -103,6 +104,64 @@ import Testing
         }
     }
 
+    /// The look a finished file says is in its pixels.
+    ///
+    /// `nonisolated`, and the metadata never leaves it: this suite is on the
+    /// main actor and an `[AVMetadataItem]` crossing back into it is the
+    /// "sending risks causing data races" the older toolchain rejects — the
+    /// case docs/ARCHITECTURE.md names. Only the answer, a `String?`, comes
+    /// out.
+    nonisolated private static func bakedLook(of url: URL) async -> String? {
+        let metadata = (try? await AVURLAsset(url: url).load(.metadata)) ?? []
+        return await TakeWriter.bakedLookName(metadata)
+    }
+
+    /// **The whole path from the switch to the file** (owner: "о в дейликах
+    /// хочу еще возможность чтоб лут в них запекался").
+    ///
+    /// `DailiesMetadataTests` measures what the engine does with a look; this
+    /// is the app's half — the switch, the cube the operator has loaded, the
+    /// name that goes on the file, and the fact that the run is handed a look
+    /// at all. It is worth its own end-to-end run because the look is built on
+    /// the main actor and carried into a detached task, which is exactly the
+    /// crossing this file has been bitten by before.
+    @Test func theQueueBakesTheViewingLookWhenAskedTo() async throws {
+        try await ControllerHarness.run { controller, _ in
+            let media = try MediaFixtures.makeDirectory("dailies-look")
+            defer { try? FileManager.default.removeItem(at: media) }
+            let take = try await self.recordedTake(named: "A001C001",
+                                                   in: media, frames: 8)
+            let folder = media.appendingPathComponent("Dailies")
+
+            controller.currentCube = try CubeLUT.parse("""
+                LUT_3D_SIZE 2
+                \(Array(repeating: "1.0 0.0 0.0", count: 8)
+                    .joined(separator: "\n"))
+                """)
+            controller.settings.lut.fileName = "Show.cube"
+            let model = controller.dailies
+            model.prepare(takes: [take], settings: controller.settings,
+                          defaultFolder: folder)
+            model.bakeLook = true
+            // ProRes, because the marker rides in the QuickTime metadata key
+            // space and an `.mp4` has none — the same measured limit the
+            // take's identity runs into (`theProxysMetadataFollowsItsContainer`).
+            // An H.264 daily is still baked; it just cannot say so in a key,
+            // which is written up at `DailiesSession.open`.
+            model.codec = .proResProxy
+            model.start()
+
+            await ControllerWait.untilWritten { model.report != nil }
+            let report = try #require(model.report)
+            #expect(report.isFullySucceeded, "items failed: \(report.failed)")
+            let daily: URL = try #require(report.items.first?.output)
+            #expect(await Self.bakedLook(of: daily) == "Show.cube", """
+                the daily does not name the look in its pixels — the player \
+                will grade it a second time
+                """)
+        }
+    }
+
     /// Recording protection, end to end through the mock backend: a queue
     /// started while a take rolls holds at zero frames, and REC stop is what
     /// releases it — no operator action, no sheet on screen.
@@ -201,6 +260,7 @@ import Testing
 
             model.burnTimecode = false
             model.burnDate = true
+            model.bakeLook = true
             model.customText = "  FOR REVIEW  "
             let elsewhere = root.appendingPathComponent("Elsewhere")
             model.destination = elsewhere
@@ -211,6 +271,11 @@ import Testing
             #expect(reloaded.dailies.burnTimecode == false)
             #expect(reloaded.dailies.burnDate == true)
             #expect(reloaded.dailies.customText == "FOR REVIEW")
+            // …and OFF is written as nothing at all, so an older build's blob
+            // still decodes and a daily is never silently graded.
+            #expect(reloaded.dailies.bakeLook == true)
+            #expect(DailiesSettings().bakeLook == nil,
+                    "baking a look is on by default")
             #expect(reloaded.dailies.destinationPath == elsewhere.path)
 
             // …and the next sheet opens on the saved convention
@@ -219,6 +284,7 @@ import Testing
             #expect(!model.burnTimecode)
             #expect(model.burnDate)
             #expect(model.customText == "FOR REVIEW")
+            #expect(model.bakeLook, "the look switch did not survive the blob")
             #expect(model.destination?.path == elsewhere.path)
         }
     }

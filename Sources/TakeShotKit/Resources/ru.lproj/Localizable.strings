@@ -815,6 +815,8 @@
 "dailies_name_prefix" = "префикс";
 "dailies_name_suffix" = "суффикс";
 "dailies_name_example" = "Каждый файл: %@";
+"dailies_bake_look" = "Запечь лут в прокси";
+"dailies_bake_look_help" = "Просмотровый лут будет вшит в дейлик. Из файла его потом не убрать.";
 "dailies_reset_dest_button" = "Папка по умолчанию";
 "dailies_burn_tc" = "Бегущий таймкод";
 "dailies_position_topLeft" = "Слева сверху";

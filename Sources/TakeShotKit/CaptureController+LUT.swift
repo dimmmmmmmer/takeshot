@@ -143,9 +143,14 @@ extension CaptureController {
     /// Whether the file was written with a look already in the picture.
     /// Nonisolated: the metadata items are read and answered here, and only
     /// the answer leaves (see `detectBakedLUT`).
+    ///
+    /// Asks `TakeWriter.bakedLookName`, which is where the question lives now:
+    /// the dailies transcode has to refuse a second grade for the same reason
+    /// the player refuses a second look, and a private copy here meant the two
+    /// could answer differently.
     nonisolated private static func fileCarriesBakedLUT(
         at url: URL) async -> Bool {
         let metadata = (try? await AVURLAsset(url: url).load(.metadata)) ?? []
-        return metadata.contains { ($0.key as? String) == TakeWriter.lutKey }
+        return await TakeWriter.bakedLookName(metadata) != nil
     }
 }

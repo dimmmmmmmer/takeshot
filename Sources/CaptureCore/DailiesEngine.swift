@@ -45,6 +45,7 @@ public enum DailiesEngine {
     public static func run(
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
+        look: DailiesLook? = nil,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
@@ -70,7 +71,7 @@ public enum DailiesEngine {
             }
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
-                burnins: burnins, folder: folder, codec: codec,
+                burnins: burnins, folder: folder, codec: codec, look: look,
                 control: control, publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {

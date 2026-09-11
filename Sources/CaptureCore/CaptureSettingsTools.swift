@@ -132,6 +132,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case datePosition = "dailiesDatePosition"
         case burnCustom = "dailiesBurnCustom"
         case codec = "dailiesCodec"
+        case bakeLook = "dailiesBakeLook"
         case namePrefix = "dailiesNamePrefix"
         case nameSuffix = "dailiesNameSuffix"
         case plateOpacity = "dailiesPlateOpacity"
@@ -178,6 +179,13 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// Codec for the dailies (`CaptureCodec` raw values); nil — H.264, which
     /// is what every daily was before the choice existed.
     public var codec: String?
+    /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
+    /// еще возможность чтоб лут в них запекался").
+    ///
+    /// nil is OFF, and deliberately not "ask an older blob what it meant":
+    /// every daily this app has written was clean, and a look silently baked
+    /// into a proxy cannot be taken out of it again.
+    public var bakeLook: Bool?
     /// Put in front of / after the take's name in the output file name;
     /// nil — nothing in front and "_DAILY" after, the name this app has
     /// always written.

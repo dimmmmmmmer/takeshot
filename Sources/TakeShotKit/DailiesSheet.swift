@@ -540,6 +540,18 @@ struct DailiesOutputSection: View {
                 .offloadText(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            // **The look, baked** (owner: "о в дейликах хочу еще возможность
+            // чтоб лут в них запекался"). Here rather than with the burn-ins,
+            // because this is what the batch will PRODUCE — the same question
+            // the codec and the name answer — and not something drawn over it.
+            //
+            // Greyed with no look loaded, on the one rule that already decides
+            // whether a look can be applied anywhere in the app. The warning
+            // that it cannot be taken out again is in the tooltip: a caption
+            // under the row would cost the sheet a line it does not have.
+            Toggle(L("dailies_bake_look"), isOn: $model.bakeLook)
+                .disabled(!controller.canApplyLUT)
+                .help(L("dailies_bake_look_help"))
         }
         .disabled(controller.isDailiesRunning)
     }

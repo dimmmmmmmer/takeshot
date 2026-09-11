@@ -17,6 +17,8 @@ final class DailiesTranscode {
     private let burnins: DailiesBurnins
     private let folder: URL
     private let codec: CaptureCodec
+    /// The look to bake, or nil for a clean proxy — see `DailiesLook`.
+    private let look: DailiesLook?
     private let control: DailiesControl
     private let publish: @Sendable (DailiesProgress) -> Void
 
@@ -31,7 +33,8 @@ final class DailiesTranscode {
     private var pendingAudio: CMSampleBuffer?
 
     init(item: DailiesItem, index: Int, count: Int, burnins: DailiesBurnins,
-         folder: URL, codec: CaptureCodec = .h264, control: DailiesControl,
+         folder: URL, codec: CaptureCodec = .h264, look: DailiesLook? = nil,
+         control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
         self.item = item
         self.index = index
@@ -39,6 +42,7 @@ final class DailiesTranscode {
         self.burnins = burnins
         self.folder = folder
         self.codec = codec
+        self.look = look
         self.control = control
         self.publish = publish
     }
@@ -78,12 +82,18 @@ final class DailiesTranscode {
             for: folder.appendingPathComponent(item.outputName)
                 .appendingPathExtension(codec.dailiesFileExtension))
         outputURL = url
+        // The look's NAME goes on the file only when this run really baked
+        // one: `DailiesFrameComposer` declines over a source that already
+        // carries a look, and a proxy claiming a grade it does not have is
+        // worse than one claiming nothing.
+        let baked = facts.bakedLook == nil ? look?.name : nil
         let session = try DailiesSession.open(at: url, facts: facts,
-                                              codec: codec)
+                                              codec: codec, bakedLook: baked)
         self.session = session
         publishProgress(force: true)
         try await pump(session, composer: DailiesFrameComposer(
-            item: item, burnins: burnins, facts: facts))
+            item: item, burnins: burnins, facts: facts, look: look?.cube,
+            lookIntensity: look?.intensity ?? 1))
         try await finish(session)
         return url
     }

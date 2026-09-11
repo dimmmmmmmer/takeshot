@@ -1,3 +1,4 @@
+import CoreImage
 @preconcurrency import CoreMedia
 @preconcurrency import CoreVideo
 import CoreGraphics
@@ -21,15 +22,41 @@ final class DailiesFrameComposer {
     private let colorimetry: WireColorimetry
     /// Scaled-path frames come from here rather than fresh allocations.
     private let pool = PixelBufferPool()
+    /// **The look being baked into the proxy**, as the same `CIColorCube`
+    /// filter the live path and the player build from a `.cube`
+    /// (`CubeLUT.makeFilter`) — one look, one implementation, so a daily
+    /// cannot come out graded differently from the review it was made from.
+    ///
+    /// nil is every daily this app made before the option existed, and every
+    /// run with the switch off: the frame is handed on untouched, byte for
+    /// byte (`anSDRTakeIsUntouchedByAllOfThis`).
+    private let look: CIFilter?
+    private let lookIntensity: Double
+    /// Its own pool, not the scaling one: a graded frame is still in use as
+    /// the SOURCE of the scaled blit, so the two must never be handed the same
+    /// buffer.
+    private let lookPool = PixelBufferPool()
+    /// Built once per item rather than per frame, and told not to cache: this
+    /// runs over every frame of a clip at `.utility` while a shoot may be
+    /// going on, and the intermediates are a frame-sized allocation each.
+    private lazy var ciContext = CIContext(options: [.cacheIntermediates: false])
 
     init(item: DailiesItem, burnins: DailiesBurnins,
-         facts: DailiesSourceFacts) {
+         facts: DailiesSourceFacts, look: CubeLUT? = nil,
+         lookIntensity: Double = 1) {
         overlay = DailiesOverlay(size: facts.outputSize,
                                  texts: burnins.overlayTexts(for: item))
         timeline = facts.timeline
         outputSize = facts.outputSize
         levels = facts.levels
         colorimetry = facts.colorimetry
+        // **A source that already carries a look is not graded again.** The
+        // take was recorded with it burned in, says so in its own metadata,
+        // and a second pass would put two grades in one file — permanently,
+        // in a proxy an editor will cut with. The same rule the player states
+        // as `PlaybackLook.baked` outranking everything.
+        self.look = facts.bakedLook == nil ? look?.makeFilter() : nil
+        self.lookIntensity = lookIntensity
     }
 
     /// One decoded frame as the proxy should hold it: levelled, burned in, and
@@ -46,7 +73,10 @@ final class DailiesFrameComposer {
             // buffer per frame and this path is the only thing looking at it.
             StudioSwing.map(source, into: source, table: levels)
         }
-        let frame = try burnedIn(source, pts: pts)
+        // **The look, then the strips.** The same order and the same reason
+        // as the levels lookup above: a grade is the PICTURE's, and applied
+        // over the burn-ins it would take the plates and their white with it.
+        let frame = try burnedIn(try looked(source), pts: pts)
         // The codes MEAN something else now — an HDR take reaches here on a
         // Rec.709 curve — and a writer-bound buffer that still claims PQ is
         // the tag mismatch this project has already been bitten by: the
@@ -58,6 +88,40 @@ final class DailiesFrameComposer {
         // scaling pool, nothing at all). See `DailiesEngine.videoSettings`.
         ColorTags.tag(frame, preset: colorimetry.displayPreset)
         return frame
+    }
+
+    /// The frame with the look baked in, or the frame.
+    ///
+    /// Raw code values on both ends — `.colorSpace: NSNull()` going in and
+    /// `destination.colorSpace = nil` coming out — because a `.cube` is
+    /// defined on gamma-encoded codes and every other path in this app renders
+    /// it the same way. A colour-managed render here would make the daily
+    /// disagree with the picture the operator approved.
+    ///
+    /// A failed render THROWS rather than handing back the clean frame: a
+    /// proxy that says it carries the look and does not is the one outcome
+    /// nobody can see and everybody would trust. The item fails, the report
+    /// names it, and the rest of the queue runs.
+    private func looked(_ source: CVPixelBuffer) throws -> CVPixelBuffer {
+        guard let look else { return source }
+        let width = CVPixelBufferGetWidth(source)
+        let height = CVPixelBufferGetHeight(source)
+        guard let destination = lookPool.buffer(width: width, height: height)
+        else { throw DailiesAbort.failed("cannot allocate a frame for the look") }
+        let input = CIImage(cvPixelBuffer: source, options: [.colorSpace: NSNull()])
+        look.setValue(input, forKey: kCIInputImageKey)
+        guard let graded = look.outputImage else {
+            throw DailiesAbort.failed("the look produced no picture")
+        }
+        let mixed = CapturePipeline.mix(source: input, filtered: graded,
+                                        intensity: lookIntensity)
+        let target = CIRenderDestination(pixelBuffer: destination)
+        target.colorSpace = nil
+        guard let task = try? ciContext.startTask(toRender: mixed, to: target),
+              (try? task.waitUntilCompleted()) != nil else {
+            throw DailiesAbort.failed("the look could not be rendered")
+        }
+        return destination
     }
 
     /// The frame with its burn-ins: drawn straight onto the decoded buffer

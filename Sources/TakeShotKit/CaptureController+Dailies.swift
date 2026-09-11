@@ -203,6 +203,7 @@ extension CaptureController {
         settings.dailies.datePosition = model.datePosition == .bottomRight
             ? nil : model.datePosition.rawValue
         settings.dailies.codec = model.codec == .h264 ? nil : model.codec.rawValue
+        settings.dailies.bakeLook = model.bakeLook ? true : nil
         settings.dailies.namePrefix = model.namePrefix.isEmpty
             ? nil : model.namePrefix
         settings.dailies.nameSuffix = model.nameSuffix == "_DAILY"

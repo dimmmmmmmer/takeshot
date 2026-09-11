@@ -825,6 +825,8 @@
 "dailies_name_prefix" = "prefix";
 "dailies_name_suffix" = "suffix";
 "dailies_name_example" = "Each file: %@";
+"dailies_bake_look" = "Bake the look into the proxies";
+"dailies_bake_look_help" = "The viewing LUT is rendered into the daily. It cannot be removed from the file afterwards.";
 "dailies_reset_dest_button" = "Default folder";
 "dailies_burn_tc" = "Running timecode";
 "dailies_position_topLeft" = "Top left";

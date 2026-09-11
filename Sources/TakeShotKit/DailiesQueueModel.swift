@@ -34,6 +34,11 @@ final class DailiesQueueModel: ObservableObject {
     /// What the dailies are written in, and therefore also which container
     /// and extension they get (`CaptureCodec.dailiesChoices`).
     @Published var codec: CaptureCodec = .h264
+    /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
+    /// еще возможность чтоб лут в них запекался"). Off unless the operator
+    /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not
+    /// "whatever the old blob meant".
+    @Published var bakeLook = false
     /// The output name's two ends, around the take's own name.
     @Published var namePrefix = ""
     @Published var nameSuffix = "_DAILY"
@@ -198,6 +203,7 @@ final class DailiesQueueModel: ObservableObject {
         burnCustom = settings.dailies.burnCustomEffective
         customText = settings.dailies.customText ?? ""
         codec = settings.dailies.codecEffective
+        bakeLook = settings.dailies.bakeLook == true
         namePrefix = settings.dailies.namePrefixEffective
         nameSuffix = settings.dailies.nameSuffixEffective
         ink = settings.dailies.inkEffective
@@ -365,6 +371,19 @@ final class DailiesQueueModel: ObservableObject {
         // Captured on this side, like `burnins` and for the reason spelled out
         // below: the detached task is handed values, never this object.
         let codec = codec
+        // **Built on this side, like everything else the task is handed.** The
+        // cube and its name live on the controller and the task is a detached
+        // one: a look read from over there would be this object crossing into
+        // the task's region, which is the toolchain difference the paragraph
+        // below is about. Nil unless the operator asked AND there is a look to
+        // bake — `canApplyLUT` is the rule the row is disabled on.
+        let look: DailiesLook? = bakeLook
+            ? controller.currentCube.map {
+                DailiesLook(cube: $0,
+                            name: controller.settings.lut.fileName ?? $0.name,
+                            intensity: controller.live.lutIntensity)
+            }
+            : nil
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -389,7 +408,7 @@ final class DailiesQueueModel: ObservableObject {
         Task.detached(priority: .utility) {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
-                alsoInto: extras, codec: codec, control: token,
+                alsoInto: extras, codec: codec, look: look, control: token,
                 progress: publish)
             complete(result)
         }

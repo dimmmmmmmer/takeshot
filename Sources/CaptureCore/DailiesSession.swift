@@ -49,6 +49,13 @@ struct DailiesSourceFacts {
     /// the proxy (owner: "ну и конечно важно чтоб мета вся возможная из
     /// исходника сохранялась").
     let metadata: [AVMetadataItem]
+    /// The look already baked into the SOURCE's pixels, or nil.
+    ///
+    /// A take recorded with the look burned in carries the name of it, and the
+    /// player refuses to apply a viewing look over one that is already in the
+    /// picture. A daily has to refuse for the same reason and with more at
+    /// stake: a second grade is permanent in the proxy.
+    let bakedLook: String?
 
     static func probe(item: DailiesItem,
                       burnins: DailiesBurnins) async throws -> DailiesSourceFacts {
@@ -68,6 +75,7 @@ struct DailiesSourceFacts {
         // what curve they are on, and the two compose into one table.
         let metadata: [AVMetadataItem] = (try? await asset.load(.metadata)) ?? []
         let wireCodes = await TakeWriter.carriesWireCodes(metadata)
+        let baked = await TakeWriter.bakedLookName(metadata)
 
         return DailiesSourceFacts(
             asset: asset, videoTrack: track,
@@ -81,7 +89,7 @@ struct DailiesSourceFacts {
             colorimetry: colorimetry,
             levels: StudioSwing.playbackTable(wireCodes: wireCodes,
                                               transfer: colorimetry.transfer),
-            metadata: metadata)
+            metadata: metadata, bakedLook: baked)
     }
 }
 
@@ -100,7 +108,8 @@ struct DailiesSession {
     /// Open the whole rig against an already-reserved output URL (the caller
     /// holds the reservation so it can clean up whatever happens here).
     static func open(at url: URL, facts: DailiesSourceFacts,
-                     codec: CaptureCodec = .h264) throws
+                     codec: CaptureCodec = .h264,
+                     bakedLook: String? = nil) throws
         -> DailiesSession {
         let reader: AVAssetReader
         let writer: AVAssetWriter
@@ -121,7 +130,22 @@ struct DailiesSession {
         let audioInput = audioOutput != nil ? addAudioInput(to: writer) : nil
         // **The source's own metadata, minus three keys that would be lies.**
         // Before `startWriting`, which is the only time a writer accepts it.
+        // **What this run baked, stated by this run.** `com.takeshot.lut` is
+        // the one key that is written rather than carried: it says a look is
+        // already in the pixels, and the player refuses to apply one over it.
+        // Copied from the source it would be a claim about the source; absent
+        // from a proxy that really was graded, every player would grade it a
+        // second time.
+        //
+        // **It rides in the QuickTime metadata key space, so an `.mp4` daily
+        // cannot carry it** — measured, and the same limit the take's identity
+        // runs into above. An H.264 proxy is baked all the same; what it
+        // cannot do is TELL a player so, which means this app reviewing one as
+        // Other content would show the viewing look over a look already in the
+        // picture. A ProRes daily says it properly. Worth knowing before
+        // anyone reads a clean `.mp4` and concludes the bake did not run.
         writer.metadata = Self.carriedMetadata(facts.metadata)
+            + (bakedLook.map { [TakeWriter.lookItem(named: $0)] } ?? [])
         // moov up front: a daily gets dropped into review players and file
         // shares, where a streamable file starts playing before it finishes
         // copying.
