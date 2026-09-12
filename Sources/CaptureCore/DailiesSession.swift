@@ -56,6 +56,13 @@ struct DailiesSourceFacts {
     /// the proxy (owner: "ну и конечно важно чтоб мета вся возможная из
     /// исходника сохранялась").
     let metadata: [AVMetadataItem]
+    /// **The moments somebody flagged during the take**, straight off the
+    /// item — they become the proxy's chapter track.
+    ///
+    /// Carried on the facts for `timecodeTrack`'s reason: the session opener
+    /// is synchronous over settled facts, and the item is a thing only the
+    /// probe sees. Empty for a clip off a card.
+    let markers: [TakeMarker]
     /// The look already baked into the SOURCE's pixels, or nil.
     ///
     /// A take recorded with the look burned in carries the name of it, and the
@@ -102,7 +109,7 @@ struct DailiesSourceFacts {
             colorimetry: colorimetry,
             levels: StudioSwing.playbackTable(wireCodes: wireCodes,
                                               transfer: colorimetry.transfer),
-            metadata: metadata, bakedLook: baked)
+            metadata: metadata, markers: item.markers, bakedLook: baked)
     }
 }
 
@@ -131,6 +138,22 @@ struct DailiesSession {
     /// needs both — and nil when the source has no timecode at all, which is
     /// a proxy with no timecode track rather than one claiming midnight.
     let timecode: TimecodeLeg?
+    /// **The proxy's chapter track**, when the take had markers on it.
+    ///
+    /// nil for a clip off a card and for a take nobody flagged — a file with
+    /// an empty chapter list is a file whose scrub bar grows a menu with
+    /// nothing in it.
+    let chapters: ChapterLeg?
+
+    /// The chapter track's two ends plus what goes in it. Shaped like
+    /// `TimecodeLeg` and for its reason: an input without its format
+    /// description cannot produce a sample.
+    struct ChapterLeg {
+        let input: AVAssetWriterInput
+        let formatDescription: CMFormatDescription
+        /// In the order they will be written, earliest first.
+        let markers: [TakeMarker]
+    }
 
     /// The timecode track's two ends. A struct rather than two optionals on
     /// the session: they are only ever present together, and an input without
@@ -188,6 +211,10 @@ struct DailiesSession {
         }
         legs += await soundLegs(for: sounds, in: writer)
         let timecode = timecodeLeg(for: facts, in: writer)
+        // Before `startWriting`, like every other structural decision about a
+        // writer — the association that makes a text track a CHAPTER track is
+        // written into the file's header.
+        let chapters = chapterLeg(for: facts, video: videoInput, in: writer)
         // **The source's own metadata, minus three keys that would be lies.**
         // Before `startWriting`, which is the only time a writer accepts it.
         // **What this run baked, stated by this run.** `com.takeshot.lut` is
@@ -220,7 +247,8 @@ struct DailiesSession {
         return DailiesSession(reader: reader, writer: writer,
                               videoOutput: videoOutput,
                               videoInput: videoInput, adaptor: adaptor,
-                              audio: legs, timecode: timecode)
+                              audio: legs, timecode: timecode,
+                              chapters: chapters)
     }
 
     /// The reader's two ends: video decoded to BGRA (so CoreGraphics can
@@ -369,6 +397,34 @@ struct DailiesSession {
         else { return nil }
         return TimecodeLeg(input: input, formatDescription: description,
                            anchors: facts.timecodeTrack)
+    }
+
+    /// **The markers, as the proxy's chapters.**
+    ///
+    /// Nothing to say, no track: an empty list opens no input at all. That is
+    /// hygiene rather than a fact about the FILE — measured, an input that
+    /// produces no samples yields no track either way — so what it saves is a
+    /// format description, an input and a track association built for a take
+    /// nobody flagged, on every item of every run.
+    ///
+    /// Sorted and de-duplicated by POSITION before anything opens: two
+    /// chapters on one frame is a list a player renders as one entry or as
+    /// two, depending on the player, and neither is what the operator flagged.
+    /// Later wins, which is the same rule the marker list itself applies when
+    /// a flag is dropped twice on one moment.
+    private static func chapterLeg(for facts: DailiesSourceFacts,
+                                   video: AVAssetWriterInput,
+                                   in writer: AVAssetWriter) -> ChapterLeg? {
+        let markers = facts.markers
+            .filter { $0.seconds.isFinite && $0.seconds >= 0 }
+            .sorted { $0.seconds < $1.seconds }
+        guard !markers.isEmpty,
+              let description = ChapterTrack.formatDescription(),
+              let input = ChapterTrack.input(for: description, in: writer,
+                                             chapterOf: video)
+        else { return nil }
+        return ChapterLeg(input: input, formatDescription: description,
+                          markers: markers)
     }
 
     /// What the track is CALLED, out of the file's own metadata (owner: "ну и

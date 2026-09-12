@@ -283,6 +283,13 @@ On demand, from the export menu in the takes panel or the File menu:
   shift's rows with that day's own date, tally and footage, and stamps every
   CSV row with its shift.
 
+**Dailies** carry more than the picture: the source's own timecode goes into
+the proxy as a track, and every marker flagged during the take becomes a
+CHAPTER in it — the scrub bar grows a menu, and an editor lands on the frame
+somebody called out instead of typing times in off a sidecar. A marker with no
+note is named by its own timecode; a take nobody flagged gets no chapter track
+at all.
+
 **Work reports** are the cart's own paperwork rather than the camera
 department's, so they live where the work does: one under the dailies
 destination (what that folder has had rendered into it, totalled) and one in

@@ -145,13 +145,14 @@ enum DailiesRig {
     /// The engine-facing description of a fixture take — built here exactly
     /// as it is built for the engine, so the overlay layout the assertions
     /// sample is the one that was drawn.
-    static func item(for url: URL) -> DailiesItem {
+    static func item(for url: URL,
+                     markers: [TakeMarker] = []) -> DailiesItem {
         DailiesItem(source: url,
                     outputName: url.deletingPathExtension()
                         .lastPathComponent + "_DAILY",
                     clipName: url.deletingPathExtension().lastPathComponent,
                     projectLine: "UnitFilm · A001", dateText: "2026-08-02",
-                    startTimecode: startTC)
+                    startTimecode: startTC, markers: markers)
     }
 
     /// Everything the sheet can switch on, plus the custom line.

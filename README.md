@@ -173,8 +173,11 @@ network with no route out. Settings shows a QR code for each.
   written into the file and into the sidecars — a correction typed after the
   fact still reaches post.
 - Contact sheet: the day as one PDF of poster frames, a cell per take.
-- Dailies: the day's takes batch-transcoded to H.264 with timecode, clip name,
-  project and camera burned in. The queue pauses itself while a take rolls.
+- Dailies: the day's takes batch-transcoded with timecode, clip name, project
+  and camera burned in, the source's own timecode carried over as a track, and
+  the markers flagged on set written in as CHAPTERS — so an editor scrubbing a
+  proxy lands on the moment somebody called out instead of reading the times
+  off a sidecar. The queue pauses itself while a take rolls.
 - DIT offload of several camera cards to several SSDs at once: each card is
   read once and written to every destination in the same pass, each copy is verified by
   re-reading it off the disk, and every destination gets a report — a picture

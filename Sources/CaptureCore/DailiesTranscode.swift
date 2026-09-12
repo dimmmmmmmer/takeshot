@@ -56,6 +56,9 @@ final class DailiesTranscode {
     /// The timecode track has had its samples and been closed — see
     /// `writeTimecode`, which does both at the FIRST frame.
     var timecodeWritten = false
+    /// The same for the chapter track, for the same reason and by the same
+    /// rule — see `writeChapters`.
+    var chaptersWritten = false
 
     /// How far AHEAD of the picture the sound is kept.
     ///
@@ -163,6 +166,7 @@ final class DailiesTranscode {
                 sessionStarted = true
                 startAudio(session: session, at: pts)
                 writeTimecode(session, from: pts)
+                writeChapters(session, from: pts)
             }
             // **Sound first, then the picture.** With one audio input the
             // order did not matter; with several it is the whole difference
@@ -195,6 +199,7 @@ final class DailiesTranscode {
         // Only when the first frame never came: `writeTimecode` closes the
         // track itself, and a second `markAsFinished` is a writer error.
         if !timecodeWritten { session.timecode?.input.markAsFinished() }
+        if !chaptersWritten { session.chapters?.input.markAsFinished() }
         for (index, leg) in session.audio.enumerated()
         where !finishedAudio.contains(index) {
             leg.input.markAsFinished()

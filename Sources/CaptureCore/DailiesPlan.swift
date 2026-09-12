@@ -122,16 +122,28 @@ public struct DailiesItem: Sendable, Equatable {
     public var dateText: String
     /// Fallback for the timecode burn-in when the file has no timecode track.
     public var startTimecode: Timecode?
+    /// **The moments somebody flagged during the take**, which become the
+    /// proxy's chapter track (owner: "ого я не знал что так можно, конечно
+    /// давай прокинем").
+    ///
+    /// Offsets into the SOURCE, which is what a `TakeMarker` already is, so
+    /// nothing has to be resolved against a clock to place them. Empty for a
+    /// clip off a card — a camera original carries no flags this app wrote —
+    /// and empty means no chapter track at all rather than one chapter named
+    /// after the file.
+    public var markers: [TakeMarker] = []
 
     public init(source: URL, outputName: String, clipName: String,
                 projectLine: String = "", dateText: String = "",
-                startTimecode: Timecode? = nil) {
+                startTimecode: Timecode? = nil,
+                markers: [TakeMarker] = []) {
         self.source = source
         self.outputName = outputName
         self.clipName = clipName
         self.projectLine = projectLine
         self.dateText = dateText
         self.startTimecode = startTimecode
+        self.markers = markers
     }
 }
 

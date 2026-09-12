@@ -89,6 +89,9 @@ extension DailiesQueueModel {
             clipName: take.displayName,
             projectLine: projectLine,
             dateText: stamp.string(from: take.recordedAt),
-            startTimecode: take.startTimecode)
+            startTimecode: take.startTimecode,
+            // The flags become the proxy's chapters. Straight off the take —
+            // they are already offsets into this very file.
+            markers: take.markers)
     }
 }
