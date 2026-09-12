@@ -138,7 +138,7 @@ struct SizingControlsPanel: View {
         note(controller.sizingRecordOn
              ? L("sizing_record_warning") : L("sizing_preview_only"),
              tint: controller.sizingRecordOn ? .orange : .secondary)
-        if controller.sizingRecordOn, controller.currentAssist.sizing.isCropping {
+        if controller.sizingBakeWillCrop {
             note(L("sizing_record_cropping"), tint: .orange)
         }
     }

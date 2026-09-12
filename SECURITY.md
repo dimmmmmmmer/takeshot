@@ -22,12 +22,14 @@ accounts.
 services are off by default and switched on per shoot:
 
 - the **remote** — an HTTP listener (port 8765 by default) serving four pages
-  and a WebSocket, gated by a four-digit PIN behind a tarpit. This is the one
-  genuinely remote-reachable surface, and reports about it are welcome.
-- **SRT** — a UDP socket, sending only, optionally AES-encrypted by a
-  passphrase you set.
-- **NDI** — announces a source on the local network and sends to whoever opens
-  it. There is no authentication in the protocol; it is meant for a set LAN.
+  and a WebSocket, gated by a four-digit personal identification number (PIN)
+  behind a tarpit. This is the one genuinely remote-reachable surface, and
+  reports about it are welcome.
+- **SRT** (Secure Reliable Transport) — a UDP socket, sending only, optionally
+  AES-encrypted by a passphrase you set.
+- **NDI** (Network Device Interface) — announces a source on the local network
+  and sends to whoever opens it. There is no authentication in the protocol; it
+  is meant for a set local area network (LAN).
 
 What is in scope:
 

@@ -44,7 +44,27 @@ extension CaptureController {
     /// On the controller because every `.disabled(` in this app names a rule
     /// here rather than spelling one in a view, and this one is about the
     /// session's own state: whether the picture has been moved at all.
-    var canResetSizing: Bool { !currentAssist.sizing.isIdentity }
+    /// Enabled exactly when pressing it would change something, which is not
+    /// the same as "the picture has been moved": the reset keeps the
+    /// desqueeze, so a unit shooting anamorphic and nothing else had a lit
+    /// link that did nothing and stayed lit.
+    var canResetSizing: Bool {
+        var bare = PictureSizing()
+        bare.width = currentAssist.sizing.width
+        return currentAssist.sizing != bare
+    }
+
+    /// **Whether the next take would throw footage away permanently.**
+    ///
+    /// On the controller because the rule is not about a view: the bake
+    /// latches the LIVE set (`push` sends `forLive` to the pipeline), so a
+    /// panel asking the picture on screen would stay silent about a live
+    /// punch-in while a take rolled under it, and raise a false alarm about
+    /// one that exists only on a review picture. `isCropping` was written for
+    /// exactly this notice.
+    var sizingBakeWillCrop: Bool {
+        sizingRecordOn && liveAssist.sizing.isCropping
+    }
 
     /// **The nine controls back to neutral**, and nothing else with them.
     ///
@@ -58,7 +78,20 @@ extension CaptureController {
         // reset pressed while reviewing must not straighten the camera's own
         // picture on the SDI output.
         guard viewerMode != .playback else {
-            assist.playbackSizing = PictureSizing()
+            // **The desqueeze survives here too.** The live branch below keeps
+            // it deliberately — it is the lens rather than a framing choice,
+            // and an anamorphic day is shot on one all day — and a reset that
+            // threw it away on the review surface would squeeze every clip
+            // opened afterwards, on the operator's screen, the director's
+            // monitor and the crew's phones alike, with no control that could
+            // put it back.
+            //
+            // Read off the picture ON SCREEN rather than the live field: over
+            // a take whose framing is already baked in, that is identity, and
+            // a reset must not stretch it a second time.
+            var bare = PictureSizing()
+            bare.width = currentAssist.sizing.width
+            assist.playbackSizing = bare
             return
         }
         var fresh = assist
@@ -75,8 +108,6 @@ extension CaptureController {
         assist = fresh
     }
 
-    /// Every write to `assist` lands here (from its didSet): the value goes out
-    /// to the three frame sources, the draft state is settled, the scopes follow
     /// **The five sizing controls, mirrored into the settings** — its own
     /// function because the observer above had grown past the complexity this
     /// project holds itself to, and because these five are one decision: a
@@ -106,7 +137,10 @@ extension CaptureController {
         }
     }
 
-    /// the punch-in, and the members that outlive a session are persisted.
+    /// Every write to `assist` lands here (from its didSet): the value goes out
+    /// to the three frame sources, the draft state is settled, the scopes
+    /// follow the punch-in, and the members that outlive a session are
+    /// persisted.
     ///
     /// Lifted out of the property's own observer, where it was twenty lines of
     /// behaviour inside the type's stored-state inventory. `settings` already
@@ -126,13 +160,6 @@ extension CaptureController {
         // the scopes measure what the viewer SHOWS, so a punch-in or a pan
         // moves the region they sample (see updateScopeRegion)
         updateScopeRegion()
-        // **A live factor other than 1 IS the aid being on**, so it stores
-        // both — and a live 1 stores nothing at all.
-        //
-        // This line used to write `nil` for a factor of 1, which was the same
-        // statement while emptiness was the off switch. With a checkbox beside
-        // it, that spelling threw away the 2x the operator had chosen every
-        // time they unticked the box; off is the flag's job now.
         // **A live factor of 1 IS the aid being off, and anything else is it
         // being on** — so the switch follows the live value and the FACTOR is
         // never cleared.
@@ -140,7 +167,8 @@ extension CaptureController {
         // This line used to write nil for a factor of 1, which was the same
         // statement while emptiness was the off switch. With a checkbox beside
         // it (`AssistSettings.desqueezeOn`) that spelling threw away the 2x
-        // the operator had chosen every time they unticked the box.
+        // the operator had chosen every time they unticked the box; off is the
+        // flag's job now.
         if oldValue.desqueeze != assist.desqueeze {
             if assist.desqueeze != 1 {
                 settings.assist.desqueezeFactor = assist.desqueeze
@@ -263,7 +291,15 @@ extension CaptureController {
             guard self.viewerMode == .playback else { return change(&value) }
             // Edited as a whole assist so the mutators keep working on the
             // nine fields they were written for, then folded back as a set.
-            var editing = value.forPlayback
+            //
+            // **Through the controller's `forPlayback` and not the value's**:
+            // over a take whose framing is already in its pixels the surfaces
+            // are showing identity, and seeding the edit from the LIVE nine
+            // would flip such a take a second time the moment the operator
+            // touched a control — which is the one action the panel's own
+            // notice invites ("Move a control to reframe it anyway"). The
+            // first nudge has to start from the picture on screen.
+            var editing = forPlayback(value)
             change(&editing)
             value.playbackSizing = editing.sizing
         }

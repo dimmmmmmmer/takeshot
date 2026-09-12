@@ -169,16 +169,17 @@ wire. That ordering is why a keyed or false-coloured monitor cannot end up in a
 take, and `ChromaKeyIntegrityTests` and `AssistIntegrityTests` are what keep it
 that way.
 
-**Two display decisions can be asked INTO the file, and they are the same
-mechanism asked twice.** The viewing LUT's "bake into recording" was the first;
-the chroma key's `ChromaKey.record` is the second, and it deliberately did not
-invent a path of its own. Both work by handing the writer the DISPLAY buffer for
-that take instead of the wire codes, and by tagging the file with what was done
-to it (`TakeWriter.lutKey`, `TakeWriter.chromaKeyKey`) — so
+**Three display decisions can be asked INTO the file, and they are the same
+mechanism asked three times.** The viewing LUT's "bake into recording" was the
+first; the chroma key's `ChromaKey.record` is the second; the reframe's
+`ViewAssist.sizingRecord` is the third (`CapturePipeline+Sizing`). None of them
+invented a path of its own. All three work by handing the writer the DISPLAY
+buffer for that take instead of the wire codes, and by tagging the file with
+what was done to it (`TakeWriter.lutKey`, `.chromaKeyKey`, `.sizingKey`) — so
 `CapturePipeline.recordBakesDisplayBuffer` is the one predicate that decides
 which buffer the pre-roll ring holds, which buffer the still grab matches, and
-whether `TakeWriter.levelsKey` may be written at all. A third bake would add
-itself there and inherit all four answers.
+whether `TakeWriter.levelsKey` may be written at all. A fourth would add itself
+there and inherit all four answers.
 
 The key needs one thing the LUT did not: a **second keyer, on the capture
 queue**. The display keyer cannot be reused, because its queue is latest-wins and
@@ -712,9 +713,9 @@ through a real encode/decode round trip.
 
 **Unless a bake was asked for**, in which case the deliverable IS the display
 buffer and the clipping goes into the file with it: 8-bit, expanded on the
-nominal pair, sub-blacks and super-whites gone. That is true of a LUT-baked take
-and equally of a chroma-key-baked one, and it is exactly why neither is written
-with `com.takeshot.levels` — the codes in such a file already fill the scale, and
+nominal pair, sub-blacks and super-whites gone. That is true of a LUT-baked take,
+of a chroma-key-baked one and of a reframed one alike, and it is exactly why
+none of the three is written with `com.takeshot.levels` — the codes in such a file already fill the scale, and
 expanding them again on the way back out would crush them. The scopes are
 unaffected either way, because they read the wire; what changes with a baked key
 is that the scopes and the file have parted company, since the plate the file

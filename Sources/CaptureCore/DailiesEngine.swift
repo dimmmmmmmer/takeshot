@@ -232,7 +232,7 @@ public enum DailiesEngine {
     /// чтоб десквиз запекать").
     ///
     /// Width times the factor, height untouched — the one convention the whole
-    /// app uses for a desqueeze (`MetalPreviewLayer+Render`, `displayAspect`).
+    /// app uses for a desqueeze (`PictureSizing.width`, `displayAspect`).
     /// Folding it in HERE rather than adding a stage is what makes the rest
     /// free: the composer already resamples whenever the source and the output
     /// differ, and the burn-in overlay is built at the output size, so the

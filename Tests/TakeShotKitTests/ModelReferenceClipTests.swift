@@ -189,7 +189,23 @@ import Testing
                 the reference dropped to \(lowest)s, below its 0.2s in point — \
                 it loops to the head of the take rather than to the mark
                 """)
-            #expect(highest <= 0.6, "the reference ran to \(highest)s, past its out point")
+            // **Half the take, not a hundred milliseconds past the mark.**
+            //
+            // The claim is that the reference turns round at the OPERATOR's
+            // out point rather than at the end of the file, and this clip is
+            // two seconds long — so a player honouring the 0.5s mark turns
+            // round early and one ignoring it runs to 2.0.
+            //
+            // It read `<= 0.6` and that was a bet on scheduler latency, not a
+            // statement about the app: the boundary observer fires on the main
+            // queue and hops through a `Task` before the seek, and under the
+            // ThreadSanitizer build CI runs, those two hops took 226 ms on a
+            // loaded runner and the take rolled on through them. A margin that
+            // small fails on the machine and not on the code.
+            #expect(highest < 1, """
+                the reference ran to \(highest)s of a 2s take — it loops at \
+                the end of the file rather than at the mark
+                """)
             #expect(player.isPlaying, "the reference froze at the end")
         }
     }

@@ -5,10 +5,12 @@ import Foundation
 /// «синковать информацию с тейками», чтоб у нас ин/аут сработал таким
 /// образом?").
 ///
-/// An in/out is marked during review and has, until now, reached nothing but
-/// the shift report. Applied to a daily it is the difference between sending
-/// the unit a nine-minute roll and sending them the forty seconds somebody
-/// circled.
+/// An in/out is marked during review. It reaches the shift report, and — since
+/// the timelines learned to place a clip by it — the EDL and both XML exports
+/// as well, where the media stays whole and only the CLIP is cut.
+///
+/// Applied to a daily it is the difference between sending the unit a
+/// nine-minute roll and sending them the forty seconds somebody circled.
 ///
 /// # Everything here is about one thing: the clip's own timeline is kept
 ///

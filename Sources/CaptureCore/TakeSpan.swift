@@ -55,6 +55,18 @@ public struct TakeSpan: Equatable, Sendable {
     public let end: Timecode
     /// The recorded length in real frames on `start`'s timebase.
     public let frames: Int
+    /// **The real frames per second `frames` was counted at** — the TAKE's own
+    /// rate, which is not always the timecode's.
+    ///
+    /// Stored rather than derived from `start`, and that is the whole reason
+    /// it exists: `TakeLogExporter.realRate(for:)` prefers the rate the take
+    /// was CAPTURED at and falls back to the timecode's only when there is
+    /// none, so a 23.976 take numbered at 24 non-drop counts 23.976 frames a
+    /// second while its timecode reads 24. A record side converting `frames`
+    /// back to seconds through the timecode's rate is short by one frame in a
+    /// thousand — the same 1000/1001 this whole type was extracted to stop
+    /// four surfaces getting wrong, arriving from the other side.
+    public let rate: Double
     /// True when the take carried NO start timecode and `start` is the
     /// zero-based fallback rather than something a camera sent.
     ///
@@ -78,6 +90,7 @@ public struct TakeSpan: Equatable, Sendable {
             end: Timecode(frameNumber: start.frameNumber + frames,
                           fps: start.fps, isDropFrame: start.isDropFrame),
             frames: frames,
+            rate: TakeLogExporter.realRate(for: take),
             isZeroBased: take.startTimecode == nil)
     }
 
@@ -117,13 +130,8 @@ public struct TakeSpan: Equatable, Sendable {
             start: start,
             end: Timecode(frameNumber: start.frameNumber + frames,
                           fps: start.fps, isDropFrame: start.isDropFrame),
-            frames: frames, isZeroBased: whole.isZeroBased)
+            frames: frames, rate: whole.rate, isZeroBased: whole.isZeroBased)
     }
-
-    /// The real frames per second this span is counted in — the take's own
-    /// rate, with drop-frame's 1000/1001 already in it. What a RECORD side at
-    /// another rate has to convert through.
-    public var rate: Double { TakeLogExporter.realRate(of: start) }
 
     /// How far INTO the take this span starts, in the take's own frames — 0
     /// for a span nothing narrowed.

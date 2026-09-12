@@ -53,6 +53,85 @@ import Testing
         }
     }
 
+    /// **The crop warning answers for the set the BAKE latches.**
+    ///
+    /// A take latches the live nine, so the notice has to read those. Asking
+    /// the picture on screen instead would stay silent about a live punch-in
+    /// while a take rolled under it — footage going permanently — and would
+    /// raise a false alarm about a punch-in that exists only on a review
+    /// picture and reaches no file at all.
+    @Test func theCropWarningReadsTheSetTheBakeLatches() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.sizingRecordOn = true
+            #expect(!controller.sizingBakeWillCrop, "nothing is cropping yet")
+
+            // a live punch-in, seen from the review surface
+            controller.assist.punchIn = 2
+            controller.viewerMode = .playback
+            controller.assist.playbackSizing = PictureSizing()
+            #expect(controller.currentAssist.sizing.isCropping == false,
+                    "the review picture is not cropped, so this proves nothing")
+            #expect(controller.sizingBakeWillCrop,
+                    "the notice went quiet about a live crop the take will make")
+
+            // …and a punch-in that only exists under review raises nothing
+            controller.assist.punchIn = 1
+            var zoomed = PictureSizing()
+            zoomed.zoom = 3
+            controller.assist.playbackSizing = zoomed
+            #expect(controller.currentAssist.sizing.isCropping)
+            #expect(!controller.sizingBakeWillCrop,
+                    "the notice warned about a crop no take will make")
+
+            // …and with the bake off there is nothing to warn about at all
+            controller.assist.punchIn = 2
+            controller.assist.playbackSizing = nil
+            controller.viewerMode = .record
+            controller.sizingRecordOn = false
+            #expect(!controller.sizingBakeWillCrop)
+        }
+    }
+
+    /// **A reset under review keeps the lens.** The live reset keeps the
+    /// desqueeze deliberately — it is the lens rather than a framing choice,
+    /// and an anamorphic day is shot on one all day — and a reset that threw
+    /// it away on the review surface would squeeze every clip opened
+    /// afterwards, on the operator's screen, the director's monitor and the
+    /// crew's phones alike, with no control that could put it back.
+    @Test func aResetUnderReviewKeepsTheDesqueeze() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.assist.desqueeze = 2
+            controller.viewerMode = .playback
+            controller.punchInLevel = 3
+            #expect(controller.currentAssist.sizing.zoom == 3)
+
+            controller.resetSizing()
+
+            #expect(controller.currentAssist.sizing.zoom == 1,
+                    "the reset did not put the punch-in back")
+            #expect(controller.currentAssist.sizing.width == 2,
+                    "the reset threw the anamorphic desqueeze away")
+        }
+    }
+
+    /// …and the reset LINK is lit only when pressing it would change
+    /// something. It asked whether the picture had been moved at all, so a
+    /// unit shooting anamorphic and nothing else had a lit link that did
+    /// nothing, and went on being lit after they pressed it.
+    @Test func theResetLinkIsLitOnlyWhenItWouldChangeSomething() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(!controller.canResetSizing, "lit over a neutral picture")
+            controller.assist.desqueeze = 2
+            #expect(!controller.canResetSizing,
+                    "lit over a desqueeze the reset cannot clear")
+            controller.assist.rotation = 12
+            #expect(controller.canResetSizing)
+            controller.resetSizing()
+            #expect(!controller.canResetSizing,
+                    "still lit after a reset that did everything it can")
+        }
+    }
+
     /// Resetting the geometry leaves the switch where the operator put it.
     ///
     /// Not tidiness: an operator resets a frame in order to set another one,

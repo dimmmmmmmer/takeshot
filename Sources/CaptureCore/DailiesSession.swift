@@ -116,6 +116,17 @@ struct DailiesSourceFacts {
         }
         let wireCodes = await TakeWriter.carriesWireCodes(metadata)
         let baked = await TakeWriter.bakedLookName(metadata)
+        // **A take whose framing is already in its pixels is not stretched a
+        // second time.** The same refusal the look gets, for the same reason
+        // and with the same stake: the squeeze is permanent in the proxy, and
+        // the app's own player shows such a take correctly, so nobody on set
+        // would see it — only the editor cutting with it.
+        //
+        // The whole factor rather than the reframe's own `width`: the source
+        // says what was baked, and a run that asked for a desqueeze over a
+        // file that carries one has already had its answer.
+        let applied = await TakeWriter.bakedSizing(metadata) == nil
+            ? desqueeze : 1
 
         return DailiesSourceFacts(
             asset: asset, videoTrack: track,
@@ -123,7 +134,7 @@ struct DailiesSourceFacts {
             frameRate: frameRate,
             framesTotal: max(1, Int((length * frameRate).rounded())),
             outputSize: DailiesEngine.outputSize(for: naturalSize,
-                                                 desqueeze: desqueeze,
+                                                 desqueeze: applied,
                                                  resolution: resolution),
             timeline: burnins.timecode
                 ? DailiesEngine.timeline(anchors: anchors, item: item,

@@ -152,6 +152,41 @@ import Testing
         #expect(!edl.contains("on the out point"))
     }
 
+    /// **A hundred seconds of 23.976 is 2500 frames of a 25 fps timeline, not
+    /// 2498.**
+    ///
+    /// The record side converts the take's own frames back to seconds and then
+    /// into the sequence's, and which rate it divides by is the whole
+    /// question: a 23.976 take numbered at 24 NON-DROP counts 23.976 frames a
+    /// second while its timecode reads 24, and dividing by the timecode's
+    /// loses one frame in a thousand. It ACCUMULATES down the event list, so
+    /// the last reel of a day is further out than the first, and it is the
+    /// same 1000/1001 `TakeSpan` was extracted to stop four surfaces getting
+    /// wrong — arriving from the other side.
+    ///
+    /// A hundred seconds and not four, deliberately: at four seconds both
+    /// answers round to 100 frames and the test below passes either way. This
+    /// is the length where the two part company.
+    @Test func aLongTakeAtAnNTSCRateAdvancesTheTimelineByRealSeconds() throws {
+        var slow = take("A.mov", seconds: 100,
+                        tc: Timecode(hours: 10, minutes: 0, seconds: 0,
+                                     frames: 0, fps: 24))
+        slow.frameRate = 23.976
+        let span = TakeSpan.of(slow)
+        #expect(span.frames == 2398, "the take is \(span.frames) of its own frames")
+        #expect(abs(span.rate - 23.976) < 0.0001,
+                "the span counts at \(span.rate), not the take's own rate")
+
+        let edl = try #require(EDLExporter.selectsEDL(
+            takes: [slow, take("B.mov", seconds: 4)], title: "t", fps: 25))
+        // 100 s at 25 is 2500 frames — 01:00:00:00 + 00:01:40:00
+        #expect(edl.contains("01:00:00:00 01:01:40:00"),
+                "the first event is not a hundred seconds long")
+        #expect(edl.contains("002  001      V     C        10:00:00:00 "
+            + "10:00:04:00 01:01:40:00 01:01:44:00"),
+                "the second event does not butt against the first")
+    }
+
     /// **A mixed-rate day.** The source side counts in the TAKE's frames and
     /// the record side in the sequence's, and a trim has to convert between
     /// them — a 23.976 take marked to four seconds advances a 25 fps timeline

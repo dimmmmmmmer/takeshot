@@ -54,6 +54,21 @@ extension CaptureController {
         playbackStartTC = nil
         playbackAspect = nil
         playbackFPS = 25
+        // **And so does the review geometry**, which is about "the clip
+        // somebody is looking at right now" and was surviving into the next
+        // one — the same defect `TransportModel+ClipRanges` documents for the
+        // in/out marks, one value along. It also un-sticks the refusal that
+        // keeps a take whose framing is already baked in from being reframed
+        // twice: that guard reads "nothing has been set for this clip", so a
+        // single nudge on one take used to disable it for the rest of the
+        // session.
+        //
+        // Here rather than in the three branches below: a still, a RAW clip
+        // and a video item are all a new clip, and the branch that forgot was
+        // how the two baked-picture flags came to outlive their file.
+        assist.playbackSizing = nil
+        playbackFileHasBakedLUT = false
+        playbackFileHasBakedSizing = false
         rawPlayer?.pause()
         rawPlayer = nil
         rawPlayerError = nil
@@ -133,6 +148,10 @@ extension CaptureController {
                 for: url)
         }
         rawPlayer = model
+        // The live nine, which is what `forPlayback` would answer anyway here:
+        // `play(url:)` has just cleared the review geometry a few lines up, so
+        // there is no second set to choose between yet. The ongoing pushes go
+        // through `push`, which does choose (`CaptureController+Assist`).
         model.setViewAssist(assist)
         playbackFormatText = Self.shortFormat(height: model.height,
                                               fps: model.frameRate)

@@ -658,7 +658,7 @@ public final class CapturePipeline: @unchecked Sendable {
     /// the path free and both claimed it. The reservation closes that window.
     static let reservationLock = NSLock()
     /// Guarded by reservationLock — the annotation states that contract, the
-    /// same way the zebra cube cache does in MetalPreviewLayer.
+    /// same way the zebra cube cache does in `AssistFilters`.
     nonisolated(unsafe) static var reservedPaths: Set<String> = []
 
     /// How many frames a take must lose before the sticky alarm fires. One

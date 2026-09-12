@@ -133,7 +133,8 @@ extension CapturePipeline {
                 // the take exactly as the monitor expanded the wire. A baked
                 // LUT is rendered on the display buffer, so that take carries
                 // display values whatever the wire was doing — and so is a
-                // baked key, which is why one predicate answers for both.
+                // baked key, and so is a baked reframe, which is why one
+                // predicate answers for all three.
                 //
                 // The answer comes from the levels stage, i.e. from frames that
                 // have already been through it. A take opened before the first

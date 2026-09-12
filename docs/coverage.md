@@ -405,7 +405,7 @@ each TILE carries its own. So the badge shows `timecodeFallbackText` — the sam
 A readout that says it has no number is worth more than one that states another
 clip's.
 
-### Mutations
+### Mutations — the forgotten engine
 
 Eighteen, of which seventeen turned a test red — each by the test that
 describes it. Three are worth writing down for what they showed rather than for
@@ -560,7 +560,7 @@ It was also only reachable by rendering a PDF and reading the text back out of
 it, so what could be asserted about it was whatever survived PDFKit. Two
 mutations below say what that cost.
 
-### Mutations
+### Mutations — the out point
 
 Fifteen, of which fifteen turned a test red — each by the test that describes
 it. Five are worth writing down for what they showed rather than for what they

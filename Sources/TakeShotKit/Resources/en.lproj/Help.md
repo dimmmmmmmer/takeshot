@@ -179,8 +179,11 @@ never bends it.
   every one of them MOVES the picture, where an aid is drawn over it. They
   persist like a crew convention: a camera mounted upside down is flipped
   once, not once a day. The live picture and the one under review keep
-  SEPARATE geometry: punching into a take to check focus does not move what
-  the SDI output and the director's monitor are showing. They start out
+  SEPARATE geometry, so reframing a take leaves the camera's own picture
+  alone — but the outputs follow whichever surface you are watching, so while
+  you are reviewing, a punch-in moves the director's monitor too. The crew's
+  phones are the exception and take the settled framing only: the desqueeze,
+  the flips and the rotation reach them, a punch-in does not. They start out
   sharing — a unit that never touches this sees what the app has always shown
   — and go their own way the first time one of them is changed. The aids
   stay one set for both: false colour is a way of looking, not a property of
@@ -229,7 +232,10 @@ never bends it.
   bake on finishes that way whatever you touch mid-take, and one opened without it
   stays clean; the file itself says which it is.
 - Assists and LUTs are a display layer. Nothing they show reaches the recorded
-  file unless "bake into recording" is on — for the LUT, or for the chroma key.
+  file unless "bake into recording" is on — for the LUT, for the chroma key,
+  or for the reframe. The reframe's is in the Sizing popover, and above 1x it
+  says so out loud: a punch-in throws the footage outside the frame away
+  permanently, and the file then says it is not camera original.
 
 ## LUT and looks
 

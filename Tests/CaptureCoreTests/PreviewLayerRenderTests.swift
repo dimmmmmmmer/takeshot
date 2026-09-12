@@ -222,7 +222,7 @@ struct PreviewLayerRenderTests {
     /// и ползунки высоты и ширины".
     ///
     /// Dropping the passes in between cannot show a stale frame: a redraw takes
-    /// `lastBuffer` and `currentAssist` when it RUNS.
+    /// `lastBuffer` and the letterbox colour when it RUNS.
     @Test func aDragCoalescesIntoFewerRendersThanItAsksFor() throws {
         let layer = makeLayer()
         layer.debugTag = "drag"

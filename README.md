@@ -6,9 +6,6 @@ automatically as the camera rolls, names the files from your metadata, and
 gives the operator the review tools a video assist needs — playback, compare,
 scopes, exposure aids, markers and reports.
 
-Built for DITs and video-assist operators who want the take-collecting of
-Resolve Capture with the review layer of a proper assist station.
-
 [![CI](https://github.com/dimmmmmmmer/takeshot/actions/workflows/ci.yml/badge.svg)](https://github.com/dimmmmmmmer/takeshot/actions/workflows/ci.yml)
 [![Code quality](https://app.codacy.com/project/badge/Grade/5223b50b77af47e3a35f9d49b9b9c9e9)](https://app.codacy.com/gh/dimmmmmmmer/takeshot/dashboard)
 [![Coverage](https://app.codacy.com/project/badge/Coverage/5223b50b77af47e3a35f9d49b9b9c9e9)](https://app.codacy.com/gh/dimmmmmmmer/takeshot/coverage/dashboard)
@@ -20,28 +17,19 @@ Grab the latest DMG from [Releases](https://github.com/dimmmmmmmer/takeshot/rele
 and drag TakeShot to Applications. [`CHANGELOG.md`](CHANGELOG.md) says what
 changed in each one.
 
-Three things to know before you download, because they decide whether the
-build is any use to you:
+Three things about the published build:
 
-- **It cannot record from a capture board.** The published builds are made on a
-  machine with none of the vendor SDKs on it — Blackmagic's, RED's and
-  Vizrt's licences all forbid redistributing them — so the DeckLink bridge is
-  compiled as a stub and no capture device is visible to it at all. It opens, plays back
-  and exports footage you already have, and it runs its built-in demo camera,
-  which is enough to see whether you like the tool. To capture, build from
-  source with Blackmagic's SDK: [`CONTRIBUTING.md`](CONTRIBUTING.md) says where
-  it goes and it is a five-minute job. Every release page lists which bridges
-  that particular build has, and so does the app's own **Collect diagnostics**
-  report.
+- **It cannot record from a capture board.** The vendor SDKs cannot be
+  redistributed, so the DeckLink bridge ships as a stub and no capture device
+  is visible. Everything downstream of the picture works, and a built-in demo
+  camera stands in for a board. To capture, build with Blackmagic's SDK —
+  [`CONTRIBUTING.md`](CONTRIBUTING.md) says where it goes.
 - **Ad-hoc signed, not notarized.** Gatekeeper blocks the first launch:
-  System Settings → Privacy & Security → **Open Anyway** (or `xattr -d
-  com.apple.quarantine TakeShot.app`); macOS then remembers the choice. A
-  Developer ID signature is on the list, not done.
-- **Apple Silicon.** The DMG is an `arm64` build — a plain SwiftPM build of
-  the machine it was made on, and that machine is an Apple Silicon runner. An
-  Intel Mac has to build from source. Every release page states the
-  architectures of that particular build, read off the binary rather than
-  assumed.
+  System Settings → Privacy & Security → **Open Anyway**, or `xattr -d
+  com.apple.quarantine TakeShot.app`.
+- **Apple Silicon.** The DMG is `arm64`; an Intel Mac builds from source. Each
+  release page lists that build's architectures and bridges, and so does the
+  app's **Collect diagnostics**.
 
 ## Features
 
@@ -50,37 +38,32 @@ build is any use to you:
 - Auto-takes from the camera's REC state — VANC trigger by default, running
   timecode or manual as alternatives.
 - …and from the camera's own **record indicator on the monitoring output**, for
-  a camera that sends no VANC at all: mark a small box on the live picture,
-  capture it once rolling and once idle, and the take follows the dot. A switch
-  beside the modes rather than one of them, opt-in only, and the REC mark over
-  the player says which of the three triggers rolled the take.
+  a camera that sends no VANC: mark a box on the live picture, capture it once
+  rolling and once idle, and the take follows the dot.
 - Pre-roll buffer: every take opens with picture *and* sound from before the
   REC press, so nothing is lost to trigger latency.
-- 10-bit capture by default, at whatever the wire is carrying: `v210` for the
-  ordinary 4:2:2 SDI signal, `r210` for RGB 4:4:4, and 12-bit (`R12B`)
-  when an RGB 4:4:4 source carries it. A depth the board refuses falls back visibly
-  rather than producing black frames. ProRes Proxy/LT/422/HQ/4444, H.264 and
-  HEVC.
-- Sound from the board's embedded audio or from a USB audio interface — the
-  sound cart's mix straight into the take, falling back to embedded audio,
-  loudly, if the interface disappears.
+- 10-bit capture by default, at whatever the wire carries: `v210` for 4:2:2
+  SDI, `r210` for RGB 4:4:4, 12-bit `R12B` when the source sends it. ProRes
+  Proxy/LT/422/HQ/4444, H.264 and HEVC.
+- Sound from the board's embedded audio or a USB interface — the cart's mix
+  straight into the take, falling back loudly if the interface disappears.
 - Timecode track per take, with a second anchor written when the camera's
   Rec Run starts mid-take, so the overlap conforms frame-accurately against
   the camera original.
 - LTC decode from an embedded audio channel when the camera sends no RP188.
 - Multicam: every additional board records in sync on one REC press.
 - Recording integrity: fragmented files (a crash cannot lose the take), takes
-  closed on format change or signal loss, disk-space watch, sticky alarms for
-  anything that threatens a recording.
+  closed on format change or signal loss, a disk-space watch, and sticky alarms
+  for anything that threatens a recording.
 
 ### Review
 
 - One render path for live, playback, stills and RAW — what you compare is
   what you recorded, pixel for pixel.
 - BRAW and CinemaDNG playback, and R3D — RED clips including spanned ones,
-  developed to Rec.709 with the camera's metadata and edge timecode. Needs a
-  build made against RED's SDK (`vendor/R3DSDK/README.md`); without it an
-  `.r3d` is recognised and reported as unsupported rather than ignored.
+  developed to Rec.709 with the camera's metadata and edge timecode. Needs
+  RED's SDK (`vendor/R3DSDK/README.md`); without it an `.r3d` is reported as
+  unsupported rather than ignored.
 - Compare against the live signal, a pinned reference frame, or another take,
   with wipe, blend, A/B and a per-pixel difference at ×1/×4/×16 gain.
 - Sync-play: two to four takes in one transport-locked grid, aligned from each
@@ -88,149 +71,117 @@ build is any use to you:
 - Waveform, RGB parade, histogram and vectorscope, as an overlay or in their
   own window.
 - Viewing looks for preview and/or baked into the recording: `.cube` lattices,
-  mirrored into the DaVinci Resolve LUT folder on import, and ASC CDL grades
-  (`.cdl`, `.ccc`, `.cc`), which take the same path and keep their slope,
-  offset, power and saturation for the selects EDL.
+  mirrored into Resolve's LUT folder on import, and ASC CDL grades (`.cdl`,
+  `.ccc`, `.cc`), which keep their slope, offset, power and saturation for the
+  selects EDL.
 
 ### Operator tools
 
 - False color, EL Zone, zebra and focus peaking — stacking, with a legend that
   is burned into the picture, so the hardware monitor gets it too.
-- Framelines, safe areas, anamorphic desqueeze — presets or a ratio you
-  type — and punch-in with drag-to-pan.
+- Framelines, safe areas, and the nine sizing controls a colourist has in
+  Resolve — anamorphic desqueeze, punch-in with drag-to-pan, rotate, flip,
+  pitch and yaw. They reach every output, not just the operator's window, and
+  a checkbox bakes them into the recording.
 - A clean feed on one key: every overlay off, the picture and nothing else.
 - Hardware monitor output: the viewer mirrors to a DeckLink SDI/HDMI out.
-- SRT output: the same mirrored viewer, H.264 in an MPEG-TS, sent to an address
-  on the set network — VLC on a director's laptop, OBS, a Resolve station, a
-  cloud gateway. **With sound**: a stereo fold of the channels being recorded,
-  AAC on a second stream, and it does not depend on whether the cart's speakers
-  are up. Caller or listener, with the bitrate, an optional AES passphrase and
-  a stream ID for gateways that route by one — the delivery buffer sizes itself
-  from the round trip the link reports, and is shown rather than asked for. Off by default; needs libsrt at build time
-  (`vendor/SRTSDK/README.md`) and installed to send.
-- NDI output: the same mirrored viewer announced as a source on the set network,
-  for a director's iPad or a client feed, with no second cable and no second
-  board output. Beside SRT rather than instead of it, because the two answer
-  different rooms — NDI announces itself and a receiver picks it out of a list,
-  so there is a switch and a name and nothing else to get wrong, which is what
-  makes it the one for a receiver on the same LAN. Off by default; needs the NDI
-  SDK at build time (`vendor/NDISDK/README.md`) and an NDI runtime installed.
-- Chroma key: pull the green screen with an eyedropper, tolerance, softness and
-  spill, and put a checkerboard, a colour or a still behind the actor. A preview
-  tool by default — the take, the grabs and the exports keep the original
-  picture — with one switch, **Bake into recording**, that makes the next take a
-  composite instead. It says what that costs before you throw it: the screen is
-  replaced in the file, so it cannot be re-keyed and it is not camera original.
+- SRT output: the mirrored viewer as H.264 in an MPEG-TS, with a stereo AAC
+  fold of the recorded channels. Caller or listener, bitrate, optional AES
+  passphrase and a stream ID; the delivery buffer sizes itself from the link's
+  round trip. Off by default; needs libsrt (`vendor/SRTSDK/README.md`).
+- NDI output: the mirrored viewer announced on the set network, for a
+  director's iPad or a client feed — a receiver picks it out of a list, no
+  address to type. Off by default; needs the NDI SDK
+  (`vendor/NDISDK/README.md`) and an NDI runtime.
+- Chroma key: pull the green screen with an eyedropper, tolerance, softness
+  and spill, and put a checkerboard, a colour or a still behind the actor. A
+  preview tool by default; **Bake into recording** makes the next take a
+  composite instead, and says what that costs before you throw it.
 - Digital slate: a fullscreen card with a running timecode and the rolling
   take's name to point a camera at, with a white sync flash on click.
 - Markers with timecode while recording and while reviewing.
 - Keyboard shortcuts for everything on the shot floor, all remappable.
-- A menu bar item, off by default, that keeps the recorder's state and the
+- A menu bar item, off by default, keeping the recorder's state and the
   running take's timecode visible — and stoppable — with the window closed.
 - **Collect diagnostics** (Help menu) writes a folder to the Desktop with the
-  build, the board, the signal, the takes and the settings in it. Nothing is
+  build, the board, the signal, the takes and the settings. Nothing is
   uploaded; the remote PIN is dropped and the home directory is written as `~`.
 
 ### The phone on set
 
-The web remote is off until you switch it on, serves four pages behind one
-four-digit PIN, and loads nothing from the internet — the pages work on a set
-network with no route out. Settings shows a QR code for each.
+Off until you switch it on, four pages behind one four-digit PIN, and nothing
+loaded from the internet — the pages work on a set network with no route out.
+Settings shows a QR code for each.
 
 - `/` — the operator remote: REC and STOP, marker, good/bad, timecode, free
   disk and a poster frame of the last take.
 - `/script` — the script supervisor's take log, live, with the rating and a
   comment typed straight into the take.
-- `/live` — the viewer as actual video: H.264 over WebRTC, at the signal's own
-  rate. **The phone chooses what it is watching** — Monitor (the operator's own
-  picture, aids and chroma key included, which is what the SRT output carries),
-  Camera (the clean signal, nothing switched on), or Grid (every camera at
-  once). The choice is remembered per phone and changes without the picture
-  dropping, so a DP can watch the monitor feed while a script supervisor on the
-  same app watches the clean one. One encode serves everybody watching the same
-  thing — a second person on your picture costs nothing, a second PICTURE costs
-  a second encode and a second stream's worth of bitrate, and it stops the
-  moment the last person on it leaves. Nothing is encoded at all while nobody
-  is watching. Needs libdatachannel (`vendor/libdatachannel/README.md`) — a
-  build made without it says so on the page, and there is no moving picture to
-  fall back to: the JPEG tile page it used to fall back on was retired.
+- `/live` — the viewer as video: H.264 over WebRTC at the signal's own rate.
+  **The phone chooses what it watches** — Monitor (the operator's picture,
+  aids and key included, which is what SRT carries), Camera (the clean signal
+  with the settled framing — desqueeze, flips, rotation — and none of the
+  tools), or Grid (every camera at once). Remembered per phone, switched
+  without the picture dropping, and nothing is encoded while nobody watches.
+  Needs libdatachannel (`vendor/libdatachannel/README.md`).
 - `/slate` — the digital slate on a phone held in front of the lens: running
   timecode, the scene and take card, and a sync flash.
 
 ### Handover
 
-- Resolve-compatible metadata CSV, selects EDL from good takes with markers as
-  locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`, an Avid log (ALE)
-  for a Media Composer bin carrying the same grade in its `ASC_SOP`/`ASC_SAT`
-  columns, shift report as PDF and CSV.
-- Timeline of the circled takes, back to back with their markers — and, unlike
-  the EDL and the ALE, each clip points at its own file, so an edit suite opens
-  it with the picture already on the timeline instead of with a relink dialog.
-  In two formats, because they reach different rooms: FCP7 `xmeml` (`.xml`),
-  which almost every application still reads, and FCPXML 1.10 (`.fcpxml`), the
-  modern one Resolve and Premiere prefer.
-- Scene, shot and take recorded per take beside the rating and the comment,
-  written into the file and into the sidecars — a correction typed after the
-  fact still reaches post.
+- Resolve-compatible metadata CSV; selects EDL from the circled takes with
+  markers as locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`; an Avid
+  log (ALE) carrying the same grade in its own columns; shift report as PDF and
+  CSV.
+- Timeline of the circled takes with their markers, each clip pointing at its
+  own file — so an edit suite opens with the picture on the timeline instead of
+  a relink dialog. A clip is placed over the part review marked while the media
+  stays whole, so the editor can pull the head or tail back out. Two formats:
+  FCP7 `xmeml` (`.xml`), which almost everything reads, and FCPXML 1.10
+  (`.fcpxml`) for Resolve and Premiere.
+- Scene, shot and take per take beside the rating and the comment, written into
+  the file and the sidecars — a correction typed after the fact still reaches
+  post.
 - Contact sheet: the day as one PDF of poster frames, a cell per take.
 - Dailies: the day's takes batch-transcoded with timecode, clip name, project
-  and camera burned in, the source's own timecode carried over as a track, and
-  the markers flagged on set written in as CHAPTERS — so an editor scrubbing a
-  proxy lands on the moment somebody called out instead of reading the times
-  off a sidecar. The queue pauses itself while a take rolls.
-- DIT offload of several camera cards to several SSDs at once: each card is
-  read once and written to every destination in the same pass, each copy is verified by
-  re-reading it off the disk, and every destination gets a report — a picture
-  to hand over and the same thing as plain text — beside the ASC MHL checksum
-  list that post re-verifies it against. xxHash64, which is what Silverstack,
-  OffShoot and Hedge check against. A destination that fails does so alone; the
-  others finish. The sheet closes over a running copy (the takes panel keeps
-  reporting it) and opens showing the last twenty offloads made from this Mac.
-- A card plugged in while the app is running is recognised (DCIM, XDROOT, BPAV,
-  M4ROOT, AVCHD, CONTENTS…) and **offered** in the takes panel — Offload,
-  Ignore or Never, with the reason it was recognised shown so the operator can
-  judge. Nothing is ever copied without that answer, and nothing is asked
-  during a take: a card that mounts mid-take is offered when the take closes.
-  A card already offloaded is not offered again unless it has been shot on
-  since.
+  and camera burned in, the source's timecode carried over as a track, and the
+  on-set markers written in as CHAPTERS. The queue pauses while a take rolls.
+- DIT offload of several cards to several SSDs at once: each card is read once
+  and written to every destination in the same pass, each copy verified by
+  re-reading it off the disk. Every destination gets a report (PDF and text)
+  beside an ASC MHL checksum list — xxHash64, what Silverstack, OffShoot and
+  Hedge check against. A destination that fails does so alone. The sheet closes
+  over a running copy and reopens on the last twenty offloads.
+- A card plugged in while the app runs is recognised (DCIM, XDROOT, BPAV,
+  M4ROOT, AVCHD, CONTENTS…) and **offered** — Offload, Ignore or Never, with
+  the reason shown. Nothing is copied without that answer and nothing is asked
+  during a take; a card already offloaded is not offered again unless it has
+  been shot on since.
 
 ## Requirements
 
-- macOS 15 (Sequoia) or newer. The published DMG is Apple Silicon; an Intel Mac
-  has to build from source.
+- macOS 15 (Sequoia) or newer, Apple Silicon (an Intel Mac builds from source).
 - To capture: a Blackmagic DeckLink or UltraStudio with
-  [Desktop Video](https://www.blackmagicdesign.com/support/) installed, **and a
-  build made against the DeckLink SDK** — see the note under
-  [Download](#download). Desktop Video alone is not enough for a build that has
-  no SDK in it.
-- For `.braw` playback:
+  [Desktop Video](https://www.blackmagicdesign.com/support/), **and a build
+  made against the DeckLink SDK** — Desktop Video alone is not enough.
+- For `.braw`:
   [Blackmagic RAW](https://www.blackmagicdesign.com/products/blackmagicraw)
-  (the free player installs the runtime TakeShot uses), plus a build made
-  against the Blackmagic RAW SDK.
+  installs the runtime, plus a build made against its SDK.
 
-### What works with no SDK and no hardware at all
+### What works with no SDK and no hardware
 
-Everything downstream of the picture: playback of existing takes and foreign
-clips, compare, scopes, LUTs and CDLs, false colour and the other assists,
-markers, stills, the reports and exports, dailies, the DIT
-card offload, and the whole web remote. The device list carries a built-in demo
-camera generating a 1080p25 signal, so recording a take and everything you
-would do with it afterwards can be exercised end to end without a board.
-Auto-takes cannot: the demo camera's timecode is parked, and REC detection
-wants a real camera's running timecode or a VANC trigger.
+Everything downstream of the picture: playback of takes and foreign clips,
+compare, scopes, LUTs and CDLs, the operator aids, markers, stills, reports and
+exports, dailies, the card offload and the whole web remote. A built-in demo
+camera generates 1080p25, so recording a take and everything after it can be
+exercised end to end without a board — except auto-takes, which want a real
+camera's running timecode or a VANC trigger.
 
-What needs a vendor SDK you obtain yourself — free, but from the vendor, under
-their terms — is the hardware itself: capture and monitor output (DeckLink),
-`.braw` playback (Blackmagic RAW), `.r3d` playback (RED) and the NDI output
-(Vizrt). The SRT output needs libsrt, which is the one exception to "from the
-vendor, under their terms": it is MPL-2.0 and `brew install srt` away. The
-`/live` page needs libdatachannel, MPL-2.0 as well but in no package manager —
-which is why a published build carries the dylib inside the app rather than
-hoping to find one (`vendor/libdatachannel/README.md`, and the licence note in
-`NOTICE`). [`CONTRIBUTING.md`](CONTRIBUTING.md) says where each SDK goes. R3D,
-BRAW, SRT and NDI each say so at the point of use; a build with no DeckLink SDK
-simply lists no capture device, and **Collect diagnostics** is where it
-explains itself.
+What needs a vendor SDK is the hardware: capture and monitor output
+(DeckLink), `.braw` (Blackmagic RAW), `.r3d` (RED) and NDI (Vizrt). SRT needs
+libsrt (MPL-2.0, `brew install srt`); `/live` needs libdatachannel (MPL-2.0,
+carried inside published builds — see `NOTICE`).
+[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each goes.
 
 ## Usage
 
@@ -240,25 +191,23 @@ explains itself.
    button for manual takes.
 
 Takes land in the destination folder with a Resolve-compatible CSV beside
-them. Anything else that appears in that folder shows up under Other content,
-so a card copied in by hand is one double-click from playback.
+them. Anything else in that folder shows up under Other content, so a card
+copied in by hand is one double-click from playback.
 
 ## Documentation
 
 - [`CHANGELOG.md`](CHANGELOG.md) — what changed in each release, and what is
-  known not to work yet, written for the operator rather than the reviewer.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — building from source, testing, and how
-  to submit changes.
+  known not to work yet.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — building from source, testing, and
+  submitting changes.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the app is put together
   and the hardware behaviour it depends on.
 - [`docs/coverage.md`](docs/coverage.md) — how coverage is measured and gated,
-  the seams that make hardware-bound code testable, and what genuinely cannot be
-  covered without a board or a UI session.
+  and what cannot be covered without a board or a UI session.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The vendor SDKs TakeShot builds against are not
-included here and stay under their own terms; [NOTICE](NOTICE) lists them.
-The web remote's pages embed **Resist Sans Display** (Groteskly Yours, Eugene
-Tantsurin), included under a licence held by the project owner and not covered
-by the MIT License — see [NOTICE](NOTICE).
+MIT — see [LICENSE](LICENSE). The vendor SDKs are not included and stay under
+their own terms. The web remote embeds **Resist Sans Display** (Groteskly
+Yours, Eugene Tantsurin) under a licence held by the project owner, not covered
+by the MIT License. [NOTICE](NOTICE) lists both.

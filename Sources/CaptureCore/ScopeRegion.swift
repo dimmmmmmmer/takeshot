@@ -28,12 +28,20 @@ public struct ScopeRegion: Equatable, Sendable {
 
     /// The region the preview shows for these display assists.
     ///
-    /// `MetalPreviewLayer` magnifies by `punchIn` about the frame center and
-    /// then pans by `panX`/`panY` in image fractions, so the visible slice is
-    /// `1/punchIn` of the frame centered at (0.5 + panX, 0.5 + panY). The
-    /// letterbox slop of a viewer whose aspect differs from the source's is
-    /// ignored — a scope reading a percent or two more of the frame than the
-    /// glass shows is not a decision an operator makes differently.
+    /// The display stage magnifies by `punchIn` about the frame centre and
+    /// then pans by `panX`/`panY` in image fractions (`AssistStage.rendered`,
+    /// through `PictureSizing`), so the visible slice is `1/punchIn` of the
+    /// frame centred at (0.5 + panX, 0.5 + panY). The letterbox slop of a
+    /// viewer whose aspect differs from the source's is ignored — a scope
+    /// reading a percent or two more of the frame than the glass shows is not
+    /// a decision an operator makes differently.
+    ///
+    /// **Only those two of the nine**, which is a simplification and not an
+    /// oversight: a rotation or a desqueeze changes which pixels are on the
+    /// glass as well, and reading the scopes over a rotated crop would be a
+    /// window of a window. The zoom is the one an operator reaches for in
+    /// order to LOOK at something, which is when they want the scopes to
+    /// follow; the rest is how the picture is framed for the day.
     public init(assist: ViewAssist) {
         let punchIn = max(1, assist.punchIn)
         let side = 1 / punchIn

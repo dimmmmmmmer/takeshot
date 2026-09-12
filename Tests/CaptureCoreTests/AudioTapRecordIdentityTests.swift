@@ -75,8 +75,14 @@ struct AudioTapRecordIdentityTests {
         let sizes = "\(tapped.audioBytes.count) vs \(untapped.audioBytes.count)"
         #expect(tapped.audioBytes.count == untapped.audioBytes.count,
                 "the tapped take holds a different amount of sound: \(sizes)")
-        let firstDifference: Int? = zip(tapped.audioBytes, untapped.audioBytes)
-            .enumerated().first { $0.element.0 != $0.element.1 }?.offset
+        // By INDEX rather than through `enumerated()`: the offset is what the
+        // message needs — "from byte 41 of 96 000" is a place to look and "the
+        // audio differs" is not — and `enumerated()` only carries it past a
+        // closure that does not use it, which is a shape two of this project's
+        // linters read differently.
+        let firstDifference = tapped.audioBytes.indices.first {
+            tapped.audioBytes[$0] != untapped.audioBytes[$0]
+        }
         let place = "\(firstDifference ?? -1) of \(untapped.audioBytes.count)"
         #expect(firstDifference == nil,
                 "the tap changed the file's audio from byte \(place)")
