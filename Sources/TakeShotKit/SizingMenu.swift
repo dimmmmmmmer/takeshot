@@ -102,15 +102,54 @@ struct SizingControlsPanel: View {
             // backwards onto a source pixel and is refused rather than landing
             // on the wrong one (`PictureSizing.isAffine`).
             if !controller.currentAssist.sizing.isAffine {
-                Text(L("sizing_not_affine"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                note(L("sizing_not_affine"), tint: .secondary)
             }
+            bakeRow
             Button(L("sizing_reset")) { controller.resetSizing() }
                 .buttonStyle(.link)
                 .disabled(!controller.canResetSizing)
         }
+    }
+
+    /// **Whether the reframe goes into the file** (owner: "и то и другое,
+    /// отдельной галкой").
+    ///
+    /// Two notices under it rather than one, because they are two different
+    /// facts and only one of them is always true. The first says what the next
+    /// take will be; the second appears only above 1x and says the thing an
+    /// operator cannot see from the picture — that footage is being thrown
+    /// away and cannot be got back (`PictureSizing.isCropping`, which was
+    /// written for exactly this control and until now had no caller).
+    ///
+    /// While a take is ROLLING the checkbox is disabled: the record buffer's
+    /// pixel format follows it and an open `AVAssetWriter` does not survive
+    /// that changing, so the answer is latched at take open and this would be
+    /// a control that appears to do something and does not.
+    @ViewBuilder private var bakeRow: some View {
+        Toggle(L("sizing_record"), isOn: Binding(
+            get: { controller.sizingRecordOn },
+            set: { on in controller.sizingRecordOn = on }))
+            .toggleStyle(.checkbox)
+            .disabled(controller.isRecording)  // controller rule: recording
+        if controller.playbackFileHasBakedSizing,
+           controller.viewerMode == .playback {
+            note(L("sizing_baked_clip"), tint: .secondary)
+        }
+        note(controller.sizingRecordOn
+             ? L("sizing_record_warning") : L("sizing_preview_only"),
+             tint: controller.sizingRecordOn ? .orange : .secondary)
+        if controller.sizingRecordOn, controller.currentAssist.sizing.isCropping {
+            note(L("sizing_record_cropping"), tint: .orange)
+        }
+    }
+
+    /// One line of small print under the controls.
+    @ViewBuilder private func note(_ text: String,
+                                   tint: Color) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(tint)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

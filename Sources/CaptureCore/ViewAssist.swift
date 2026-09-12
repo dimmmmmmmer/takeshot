@@ -101,6 +101,20 @@ public struct ViewAssist: Equatable, Sendable {
     public var yaw: Double = 0
     public var flipH = false
     public var flipV = false
+    /// **Whether the reframe is baked into the RECORDING** (owner: "и то и
+    /// другое, отдельной галкой").
+    ///
+    /// Off, and off is the whole default behaviour: a sizing is a VIEW, it
+    /// reaches every surface that mirrors the viewer and the file stays what
+    /// the camera sent. This is the operator saying otherwise for this shot —
+    /// the shape `ChromaKey.record` already has, and it lives on the assist
+    /// for that reason: the flag and the nine numbers it applies travel
+    /// together, so the capture side can never latch one without the other.
+    ///
+    /// It is not part of `sizing`: `PictureSizing` is a geometry and this is a
+    /// destination, and a `PictureSizing` that compared unequal because of a
+    /// checkbox would defeat every `isIdentity` fast path in the renderer.
+    public var sizingRecord = false
     /// **The playback surfaces' own geometry**, or nil while they share the
     /// live one (owner: the nine controls wanted separately for playback and
     /// for record viewing).

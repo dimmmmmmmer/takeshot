@@ -379,6 +379,13 @@ final class CaptureController: ObservableObject {
     var currentCDL: CDLLook?
     /// The current playback file already has the look baked in (com.takeshot.lut tag).
     @Published var playbackFileHasBakedLUT = false
+    /// …and whether its FRAMING is in them (`TakeWriter.sizingKey`). A take
+    /// shot with the reframe baked in must not be reframed a second time on
+    /// review — `PlaybackLook.baked`'s problem, one value along, and with one
+    /// difference: the operator may still reframe such a clip deliberately,
+    /// and only the FALLBACK to the live geometry is refused
+    /// (`CaptureController.forPlayback`).
+    @Published var playbackFileHasBakedSizing = false
     /// Manual LUT off for the current clip (the look came from the camera, etc.).
     @Published var playbackLUTSuppressed = false {
         didSet { applyPlaybackLUT() }

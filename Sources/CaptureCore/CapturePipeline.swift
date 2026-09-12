@@ -342,6 +342,27 @@ public final class CapturePipeline: @unchecked Sendable {
     var takeLUTRecord = false
     var takeLUTFilter: CIFilter?
     var takeLUTName: String?
+    /// **The reframe bake** (see `+Sizing`), in the three copies every bake in
+    /// this app keeps: what the main actor last set (under `chromaLock`, for
+    /// the display side's own reason), what the CAPTURE queue has adopted, and
+    /// what the OPEN take latched. Three rather than one because the three
+    /// answer different questions — what the operator wants, what the next
+    /// take will do, and what this file is.
+    var storedSizing = PictureSizing()
+    var storedSizingRecord = false
+    var recordSizing = PictureSizing()
+    var sizingRecord = false
+    var takeSizing = PictureSizing()
+    var takeSizingRecord = false
+    /// Its own pool, like the LUT's: the record-side reframe renders every
+    /// frame of a baking take and must not share a pool with a stage that runs
+    /// on another queue.
+    let sizingBufferPool = PixelBufferPool()
+    /// Frames written into a reframing take WITHOUT the reframe because the
+    /// render failed. Cumulative, a diagnostic rather than a control, and
+    /// guarded by `chromaLock` like the two counters beside it — the writer is
+    /// the capture queue and the reader is the main actor.
+    var sizingBakeFallbackCount = 0
     /// Frames written into a baking take WITHOUT the key because the render
     /// failed. Cumulative for the session, and a diagnostic rather than a
     /// control: any value above zero means some file on the disk has

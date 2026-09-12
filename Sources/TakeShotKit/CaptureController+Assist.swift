@@ -190,9 +190,56 @@ extension CaptureController {
     /// describe exactly one surface.
     private func push(_ value: ViewAssist) {
         pipeline.setViewAssist(value.forLive)
-        let playback = value.forPlayback
+        let playback = forPlayback(value)
         playbackTap.setViewAssist(playback)
         rawPlayer?.setViewAssist(playback)
+    }
+
+    /// **What the playback surfaces get**, with one rule the live side has no
+    /// need of: a take whose FRAMING is already in its pixels is not reframed
+    /// again.
+    ///
+    /// A clip under review has no geometry of its own until the operator
+    /// touches one, and until then it borrows the live set
+    /// (`ViewAssist.forPlayback`). That is right for a camera original and
+    /// wrong for a take this app shot with the reframe baked in: it would be
+    /// flipped twice, or punched into a picture that is already a punch-in.
+    ///
+    /// Only the FALLBACK is refused, never a deliberate move: an operator who
+    /// reaches for the sizing while reviewing a baked take has set
+    /// `playbackSizing`, and gets exactly what they asked for over the picture
+    /// as recorded.
+    func forPlayback(_ value: ViewAssist) -> ViewAssist {
+        guard value.playbackSizing == nil, playbackFileHasBakedSizing else {
+            return value.forPlayback
+        }
+        return value.with(sizing: PictureSizing())
+    }
+
+    /// **Bake the reframe into the recording as well as onto the outputs**
+    /// (owner: "и то и другое, отдельной галкой").
+    ///
+    /// A click, not a drag, so it goes through `setAssist` like the key's own
+    /// bake beside it. Deliberately NOT gated on there being a geometry to
+    /// bake: an operator arms it before they frame, the way they arm the key's
+    /// bake before they dial the key in, and the pipeline's own answer reads
+    /// both facts — an identity reframe is never baked however armed this is
+    /// (`CapturePipeline.bakesSizing`), so the checkbox cannot cost a take its
+    /// wire codes for a transform that would have changed no pixel.
+    ///
+    /// It is not persisted, which is the chroma bake's convention and the safe
+    /// one: the geometry outlives a session because a camera stays mounted the
+    /// way it is mounted, while "put it in the file" is a decision about
+    /// today's deliverable and has to be made again.
+    var sizingRecordOn: Bool {
+        get { liveAssist.sizingRecord }
+        set { setAssist { $0.sizingRecord = newValue } }
+    }
+
+    /// Push the current set again — for a fact that arrived after it, which is
+    /// what a baked-framing tag is (it is read off the file asynchronously).
+    func refreshAssistSurfaces() {
+        push(liveAssist)
     }
 
     /// **The set for the surface on screen**, as it stands right now.
@@ -202,7 +249,7 @@ extension CaptureController {
     /// this rather than the live set, or an operator punched into a take
     /// would be told about the camera's magnification instead.
     var currentAssist: ViewAssist {
-        viewerMode == .playback ? liveAssist.forPlayback : liveAssist.forLive
+        viewerMode == .playback ? forPlayback(liveAssist) : liveAssist.forLive
     }
 
     /// **A geometry change, applied to the set the operator is looking at.**

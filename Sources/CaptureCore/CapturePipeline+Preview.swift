@@ -73,6 +73,9 @@ extension CapturePipeline {
     /// use only the geometry in it.
     public func setViewAssist(_ assist: ViewAssist) {
         setChromaKey(assist.chroma)
+        // …and the reframe, which the stage applies to every surface and the
+        // capture queue bakes only if asked (`+Sizing`).
+        adoptSizing(assist.sizing, record: assist.sizingRecord)
         assistStage.setAssist(assist)
         displaySinks.setAssist(assist)
         // A paused or signal-less surface gets no new frame to carry the

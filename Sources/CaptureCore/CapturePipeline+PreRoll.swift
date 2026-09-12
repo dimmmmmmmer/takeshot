@@ -236,6 +236,7 @@ extension CapturePipeline {
                 ? lutBakedOrCounted(buffered.pixelBuffer, using: takeLUTFilter)
                 : buffered.pixelBuffer
             if takeChromaRecord { frame = chromaBaked(frame) }
+            if takeSizingRecord { frame = sizingBakedForDrain(frame) }
             if writer.appendBuffered(pixelBuffer: frame, pts: buffered.pts,
                                      deadline: drainDeadline) {
                 if firstPreRollPTS == nil { firstPreRollPTS = buffered.pts }

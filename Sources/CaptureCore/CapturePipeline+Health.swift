@@ -88,6 +88,10 @@ public struct PipelineHealth: Sendable, Equatable, Codable {
     /// failed — the same claim as the chroma one, for a look instead of a key:
     /// the file's metadata says baked and the frame is clean.
     public var lutBakeFallbacks = 0
+    /// Frames a REFRAMING take wrote without the reframe because the render
+    /// failed — the same claim again, for the geometry: the file's metadata
+    /// says what was baked and those frames carry the camera's framing.
+    public var sizingBakeFallbacks = 0
     /// Takes whose writer was closed since launch, and how many of those could
     /// not be finalized (the `_FAILED.mov` ones).
     public var takesClosed = 0
@@ -110,6 +114,7 @@ extension CapturePipeline {
         snapshot.chromaLateDrops = chromaLateDropCount
         snapshot.chromaBakeFallbacks = chromaBakeFallbackCount
         snapshot.lutBakeFallbacks = lutBakeFallbackCount
+        snapshot.sizingBakeFallbacks = sizingBakeFallbackCount
         chromaLock.unlock()
         return snapshot
     }

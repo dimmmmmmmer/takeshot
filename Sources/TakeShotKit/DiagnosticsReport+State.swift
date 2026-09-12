@@ -98,6 +98,7 @@ enum DiagnosticsStateReport {
             // nowhere.
             pair("Chroma bake fallbacks", health.chromaBakeFallbacks),
             pair("LUT bake fallbacks", health.lutBakeFallbacks),
+            pair("Sizing bake fallbacks", health.sizingBakeFallbacks),
             pair("Takes closed", health.takesClosed),
             pair("Failed to finalize", health.takesFailedToFinalize),
         ]

@@ -48,6 +48,12 @@ extension CapturePipeline {
         takeLUTRecord = lutRecord
         takeLUTFilter = lutFilter
         takeLUTName = lutName
+        // …and the reframe, geometry and all, for both reasons at once: the
+        // pixel format follows it like the other two, and nine numbers dragged
+        // mid-take would move the frame under one file — which is worse than
+        // either framing of it.
+        takeSizing = recordSizing
+        takeSizingRecord = sizingRecord && !recordSizing.isIdentity
         let startIndex = recStartIndex ?? frameIndex
         let timecode = preRollShiftedTimecode(rawTimecode, startIndex: startIndex)
         // takes are never overwritten: on a name collision — suffix _2, _3…
@@ -114,6 +120,14 @@ extension CapturePipeline {
                 // operator reviewing it, and to a future reader of this app.
                 if takeChromaRecord {
                     meta[TakeWriter.chromaKeyKey] = takeChromaKey.background.rawValue
+                }
+                // …and with the REFRAME, when the operator asked for one. Like
+                // the key it says "this is not camera original"; unlike the
+                // key it also stops the app applying it twice, because the
+                // review player does apply a geometry to what it plays
+                // (`ViewAssist.forPlayback`).
+                if takeSizingRecord {
+                    meta[TakeWriter.sizingKey] = TakeWriter.sizingValue(takeSizing)
                 }
                 // …and with what its code values mean, so the player expands
                 // the take exactly as the monitor expanded the wire. A baked

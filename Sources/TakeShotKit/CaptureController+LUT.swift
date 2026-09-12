@@ -130,17 +130,29 @@ extension CaptureController {
     /// one hops), which is why obeying it by construction is the point.
     func detectBakedLUT(for item: AVPlayerItem, at url: URL) {
         playbackFileHasBakedLUT = false
+        playbackFileHasBakedSizing = false
         Task { [weak self] in
-            let baked = await Self.fileCarriesBakedLUT(at: url)
+            let baked = await Self.bakedFacts(at: url)
             await MainActor.run { [weak self] in
                 guard let self, self.player.currentItem === item else { return }
-                self.playbackFileHasBakedLUT = baked
+                self.playbackFileHasBakedLUT = baked.look
+                self.playbackFileHasBakedSizing = baked.sizing
                 self.applyPlaybackLUT()
+                // …and the geometry, which is not a filter and so is not
+                // applied here: it is pushed to the surfaces with the rest of
+                // the assist, and the answer that just arrived changes what
+                // they should be holding.
+                self.refreshAssistSurfaces()
             }
         }
     }
 
-    /// Whether the file was written with a look already in the picture.
+    /// **What is already in the file's pixels**, both answers out of one
+    /// metadata load: a look baked at record, and a framing baked at record.
+    ///
+    /// One load because it is one file and the two questions arrive together;
+    /// two answers because the readers are different — the player refuses a
+    /// second look, and the surfaces refuse a second reframe.
     /// Nonisolated: the metadata items are read and answered here, and only
     /// the answer leaves (see `detectBakedLUT`).
     ///
@@ -148,9 +160,10 @@ extension CaptureController {
     /// the dailies transcode has to refuse a second grade for the same reason
     /// the player refuses a second look, and a private copy here meant the two
     /// could answer differently.
-    nonisolated private static func fileCarriesBakedLUT(
-        at url: URL) async -> Bool {
+    nonisolated private static func bakedFacts(
+        at url: URL) async -> (look: Bool, sizing: Bool) {
         let metadata = (try? await AVURLAsset(url: url).load(.metadata)) ?? []
-        return await TakeWriter.bakedLookName(metadata) != nil
+        return (await TakeWriter.bakedLookName(metadata) != nil,
+                await TakeWriter.bakedSizing(metadata) != nil)
     }
 }

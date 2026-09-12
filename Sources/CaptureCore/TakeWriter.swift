@@ -178,6 +178,67 @@ public final class TakeWriter {
     /// looks finished is not camera original.
     public static let chromaKeyKey = "com.takeshot.chromakey"
 
+    /// **The take's picture was REFRAMED before it was written**, and this is
+    /// what was done to it — the nine sizing numbers that are not at their
+    /// neutral, shortest first. Absent means the framing is the camera's.
+    ///
+    /// It carries two different jobs, which is why it is a description rather
+    /// than a bare flag:
+    ///
+    /// - like `chromaKeyKey`, it is the one fact about the file the picture
+    ///   cannot give back. A zoom threw footage away permanently; a rotation
+    ///   left black in the corners that was never in the shot. Post, the
+    ///   operator reviewing it and a future reader of this app all have to be
+    ///   able to find out that a take is not camera original.
+    /// - unlike `chromaKeyKey`, it also stops a second application. The review
+    ///   player DOES apply a geometry to what it plays
+    ///   (`ViewAssist.forPlayback`), so a take shot under a flip and opened
+    ///   straight afterwards would be flipped twice — `PlaybackLook.baked`'s
+    ///   problem, one value along.
+    public static let sizingKey = "com.takeshot.sizing"
+
+    /// The sizing as the value of that key: `rotate=90 zoom=1.500`, or
+    /// `identity` for a bake of nothing (which nothing writes — `bakesSizing`
+    /// refuses an identity — but a value that could be empty is one a reader
+    /// has to guess about).
+    ///
+    /// Human-readable and machine-splittable, three decimals like the dailies
+    /// recipe's numbers and for its reason: a slider's own rounding must not
+    /// change what the file says it is.
+    public static func sizingValue(_ sizing: PictureSizing) -> String {
+        var parts: [String] = []
+        func number(_ label: String, _ value: Double, neutral: Double) {
+            guard abs(value - neutral) > 0.000_5 else { return }
+            parts.append("\(label)=" + String(format: "%.3f", value))
+        }
+        number("zoom", sizing.zoom, neutral: 1)
+        number("width", sizing.width, neutral: 1)
+        number("height", sizing.height, neutral: 1)
+        number("rotate", sizing.rotation, neutral: 0)
+        number("pan", sizing.panX, neutral: 0)
+        number("tilt", sizing.panY, neutral: 0)
+        number("pitch", sizing.pitch, neutral: 0)
+        number("yaw", sizing.yaw, neutral: 0)
+        if sizing.flipH { parts.append("flipH") }
+        if sizing.flipV { parts.append("flipV") }
+        return parts.isEmpty ? "identity" : parts.joined(separator: " ")
+    }
+
+    /// What a file says was baked into its framing, or nil for a take whose
+    /// picture is the camera's.
+    ///
+    /// Beside `bakedLookName` and asked by the same two kinds of reader, for
+    /// the same reason: the player, which must not reframe a picture that is
+    /// already reframed, and anything downstream that would otherwise apply a
+    /// geometry a second time.
+    public static func bakedSizing(_ metadata: [AVMetadataItem]) async
+        -> String? {
+        for item in metadata where (item.key as? String) == sizingKey {
+            if let name = try? await item.load(.stringValue) { return name }
+        }
+        return nil
+    }
+
     /// What the picture codes in this file MEAN — `wireValue` when they are the
     /// camera's studio-swing wire codes, absent when they are display values
     /// that fill the scale.

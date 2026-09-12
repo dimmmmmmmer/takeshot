@@ -43,18 +43,26 @@ extension CapturePipeline {
     private func recordProduct(leveled: LevelledFrame,
                                previewed: CVPixelBuffer) -> CVPixelBuffer {
         let display = leveled.display
-        guard !bakesLUT else {
-            let looked = recordLook(display, previewed: previewed)
-            return bakingIntoOpenTake ? chromaBaked(looked) : looked
+        // Nothing is being baked: the camera's own codes go to the writer
+        // verbatim, which is the rule the whole colour pipeline rests on.
+        guard bakesLUT || bakesChromaKey || bakesSizing else {
+            return leveled.wireRecord ?? display
         }
-        guard bakesChromaKey else { return leveled.wireRecord ?? display }
-        // Armed but nothing is rolling: the format is already the display
-        // buffer's (the pre-roll ring is filling with these frames), and the
-        // composite itself would be a CoreImage pass on the capture queue for a
-        // file that does not exist. The still grab reads this frame too, and
-        // WYSIWYG for a grab means what the take would carry — with no take, the
-        // camera.
-        return bakingIntoOpenTake ? chromaBaked(display) : display
+        // **In the order the monitor shows them**: the look, then the
+        // composite over it, then the reframe over that. The display stage
+        // draws the geometry last for the same reason (`AssistStage.rendered`)
+        // — everything that MEASURES has to read the camera's code values, and
+        // a reframe resamples them.
+        //
+        // Armed but nothing rolling spends no pass: the format is already the
+        // display buffer's (the pre-roll ring is filling with these frames),
+        // and a composite or a resample would be CoreImage on the capture
+        // queue for a file that does not exist. The still grab reads this
+        // frame too, and WYSIWYG for a grab means what the take would carry —
+        // with no take, the camera's.
+        var out = bakesLUT ? recordLook(display, previewed: previewed) : display
+        if bakingIntoOpenTake { out = chromaBaked(out) }
+        return sizingBaked(out)
     }
 
     /// Whether the LUT is being baked into the file right now.

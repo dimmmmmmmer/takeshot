@@ -56,6 +56,36 @@ import Testing
         }
     }
 
+    /// **A take recorded with its framing baked in is not reframed again.**
+    ///
+    /// A clip under review has no geometry of its own until the operator
+    /// touches one, and until then it borrows the live set — right for a
+    /// camera original, and wrong for a take this app shot reframed: it would
+    /// be flipped twice, or punched into a picture that is already a punch-in.
+    ///
+    /// Only the FALLBACK is refused. An operator who reaches for the sizing
+    /// over a baked take has said what they want and gets it.
+    @Test func aBakedTakeIsNotReframedAgainOnReview() async throws {
+        try await ControllerHarness.run { controller, _ in
+            var assist = ViewAssist()
+            assist.flipH = true
+            // a camera original borrows the live geometry while it plays…
+            controller.playbackFileHasBakedSizing = false
+            #expect(controller.forPlayback(assist).sizing.flipH)
+            // …and a take that already carries it does not
+            controller.playbackFileHasBakedSizing = true
+            #expect(controller.forPlayback(assist).sizing.isIdentity,
+                    "a baked take was reframed a second time")
+            // …unless the operator reaches for the controls themselves
+            var moved = assist
+            var deliberate = PictureSizing()
+            deliberate.zoom = 2
+            moved.playbackSizing = deliberate
+            #expect(controller.forPlayback(moved).sizing.zoom == 2,
+                    "a deliberate reframe of a baked take was refused")
+        }
+    }
+
     /// The desqueeze lives on the assist struct but has to survive a relaunch,
     /// so it is mirrored into settings.
     ///

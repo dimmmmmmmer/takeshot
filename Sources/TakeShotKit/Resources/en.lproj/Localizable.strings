@@ -401,6 +401,11 @@
 "sizing_reset" = "Reset sizing";
 "sizing_reset_one" = "Back to neutral";
 "sizing_not_affine" = "Picking a colour off the picture is off while a pitch or a yaw is set — the transform cannot be run backwards onto a source pixel.";
+"sizing_record" = "Bake into recording";
+"sizing_preview_only" = "Outputs and monitoring only — takes, grabs and exports keep the camera's framing.";
+"sizing_record_warning" = "The next take is written reframed: the file carries this geometry and is no longer camera original. The scopes keep measuring the camera, not the file.";
+"sizing_record_cropping" = "A zoom above 1 throws footage away permanently — what is outside the frame is not in the file and cannot be got back.";
+"sizing_baked_clip" = "This take was recorded with its framing already in the picture, so nothing is applied over it. Move a control to reframe it anyway.";
 "assist_help" = "Operator aids: exposure, framelines, desqueeze, zoom";
 "assist_tool" = "Exposure assist";
 "assist_off" = "Off";
