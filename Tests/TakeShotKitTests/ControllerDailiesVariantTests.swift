@@ -28,7 +28,14 @@ import Testing
                     durationSeconds: Double(frames) / 25, recordedAt: Date())
     }
 
-    private func raster(of url: URL) async throws -> CGSize {
+    /// **`nonisolated`, and that is not decoration.** This suite is
+    /// `@MainActor`, so without it the track array is a non-Sendable value
+    /// coming back from a nonisolated call into an isolated one — which THIS
+    /// compiler allows and the CI runner's, two releases older, rejects
+    /// outright (docs/ARCHITECTURE.md: the runner is a second COMPILER).
+    /// Nonisolated, the array never crosses an actor at all and only the
+    /// `CGSize` comes back.
+    private nonisolated func raster(of url: URL) async throws -> CGSize {
         let track: AVAssetTrack = try #require(
             try await AVURLAsset(url: url).tracks(ofType: .video).first)
         return try await track.load(.naturalSize)
