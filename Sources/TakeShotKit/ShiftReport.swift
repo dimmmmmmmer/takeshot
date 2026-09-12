@@ -20,17 +20,27 @@ enum ShiftReport {
         page.drawHeader(material, project: project, camera: camera)
         page.drawTableHead()
 
-        for take in material.takes {
-            // The row is measured before it is placed: a note wraps, so height
-            // is a property of the take and pagination is arithmetic on it.
-            let layout = page.layout(of: take,
-                                     range: material.ranges[TakeRuntime.key(take)])
-            if page.rowOverflows(layout) {
-                page.close()
-                page.open()
-                page.drawTableHead()
+        // **A shift at a time** (owner: "может нам учитывать многосменность …
+        // в экспорте шифт репортов"): a project whose folder was never wiped
+        // holds every night that was shot into it, and a table that ran them
+        // together dated three days' takes as one. One shift is one group and
+        // gets no heading, which is the sheet every ordinary day produces.
+        let days = Shifts.split(material.takes)
+        for day in days {
+            if days.count > 1 { page.startDay(day) }
+            for take in day.takes {
+                // The row is measured before it is placed: a note wraps, so
+                // height is a property of the take and pagination is
+                // arithmetic on it.
+                let layout = page.layout(
+                    of: take, range: material.ranges[TakeRuntime.key(take)])
+                if page.rowOverflows(layout) {
+                    page.close()
+                    page.open()
+                    page.drawTableHead()
+                }
+                page.drawRow(take, layout: layout, thumbnail: thumbnails[take.id])
             }
-            page.drawRow(take, layout: layout, thumbnail: thumbnails[take.id])
         }
 
         page.close()
@@ -132,6 +142,11 @@ private final class ReportPage {
     static let stackWidth = pageSize.width - margin - xClip
     /// One 7pt line, which is the step the slate and the markers already sat on.
     static let stackStep: CGFloat = 13
+    /// Air above a shift's heading, so the last row of the shift before it
+    /// does not run into the next day's date.
+    static let dayHeadingGap: CGFloat = 10
+    /// The whole heading block — the gap above it plus its own line.
+    static let dayHeadingHeight: CGFloat = 26
     /// The in/out line's ink. A colour of its own, because the row already has
     /// two meanings in colour — orange for what was flagged during the take,
     /// green and red for the rating — and a third line in either of those
@@ -235,6 +250,31 @@ private final class ReportPage {
         y + layout.height > Self.pageSize.height - Self.margin
     }
 
+    /// Open a shift's block of rows: a little air, the day's own line, and a
+    /// rule under it.
+    ///
+    /// It takes a page break with ROOM FOR A ROW under it, not just for
+    /// itself: a heading alone at the foot of a page is a date whose takes are
+    /// overleaf, which reads as a shift that shot nothing.
+    func startDay(_ day: Shifts.Day) {
+        if y + Self.dayHeadingHeight + Self.rowHeight
+            > Self.pageSize.height - Self.margin {
+            close()
+            open()
+            drawTableHead()
+        }
+        y += Self.dayHeadingGap
+        draw(ReportSummary.dayHeading(day), x: Self.margin,
+             width: Self.pageSize.width - 2 * Self.margin, font: headFont)
+        y += Self.dayHeadingHeight - Self.dayHeadingGap
+        context.setStrokeColor(NSColor.darkGray.withAlphaComponent(0.6).cgColor)
+        context.setLineWidth(0.5)
+        context.move(to: CGPoint(x: Self.margin, y: Self.pageSize.height - y + 5))
+        context.addLine(to: CGPoint(x: Self.pageSize.width - Self.margin,
+                                    y: Self.pageSize.height - y + 5))
+        context.strokePath()
+    }
+
     func open() {
         context.beginPDFPage(nil)
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context,
@@ -268,10 +308,10 @@ private final class ReportPage {
     /// The words are `ReportSummary`, shared with the contact sheet; what is
     /// left here is where they go on the page and which font they take.
     ///
-    /// The selects line is a SECOND line under the summary rather than more
-    /// text on it — see `ReportSummary.selects` for why that is not a style
-    /// choice — and it is absent, not blank, on a day nobody has rated: the
-    /// table head simply moves up to where it always was.
+    /// The shifts and selects lines are SEPARATE lines under the summary
+    /// rather than more text on it — see `ReportSummary.selects` for why that
+    /// is not a style choice — and each is absent, not blank, when it has
+    /// nothing to say: the table head simply moves up to where it always was.
     func drawHeader(_ material: TakeRuntime.ReportMaterial, project: String,
                     camera: String) {
         let header = ReportSummary.make(titleKey: "report_title",
@@ -283,13 +323,14 @@ private final class ReportPage {
         y += 24
         draw(header.summary, x: Self.margin, width: width, font: bodyFont,
              color: .darkGray)
-        guard !header.selects.isEmpty else {
-            y += 24
-            return
+        // Each extra line is drawn only when it has something to say, and the
+        // table head simply moves up when neither does — which is the header
+        // every ordinary day produces.
+        for line in [header.shifts, header.selects] where !line.isEmpty {
+            y += Self.stackStep + 1
+            draw(line, x: Self.margin, width: width, font: bodyFont,
+                 color: .darkGray)
         }
-        y += Self.stackStep + 1
-        draw(header.selects, x: Self.margin, width: width, font: bodyFont,
-             color: .darkGray)
         y += 24
     }
 

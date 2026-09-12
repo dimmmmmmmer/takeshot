@@ -163,6 +163,69 @@ import Testing
         #expect(russian.summary.contains("2025"))
     }
 
+    // MARK: - a sheet that covers more than one shift
+
+    /// A moment on the shoot, local — a shift is a wall-clock thing.
+    private func at(day: Int, hour: Int) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: day, hour: hour))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    private func take(_ index: Int, recorded: Date,
+                      rating: TakeRating = .none) -> Take {
+        var take = take(index, rating: rating, duration: 900)
+        take.recordedAt = recorded
+        return take
+    }
+
+    /// Owner: "может нам учитывать многосменность … в экспорте шифт репортов".
+    /// A folder that was never wiped holds every night shot into it.
+    @Test func aSheetCoveringSeveralShiftsSaysWhichDays() {
+        let summary: ReportSummary = header([
+            take(1, recorded: at(day: 11, hour: 20)),
+            take(2, recorded: at(day: 12, hour: 1)),
+            take(3, recorded: at(day: 13, hour: 20))])
+        #expect(summary.shifts.contains("2 shifts"), "\(summary.shifts)")
+        // the span is the days the shifts STARTED on, and the night through
+        // midnight counts once
+        #expect(summary.shifts.contains("2026-09-11"), "\(summary.shifts)")
+        #expect(summary.shifts.contains("2026-09-13"), "\(summary.shifts)")
+        #expect(!summary.shifts.contains("2026-09-12"), "\(summary.shifts)")
+    }
+
+    /// One shift says nothing: the date on the line above is the whole answer,
+    /// and "1 shift" over it is a fact nobody needed.
+    @Test func aSheetCoveringOneShiftHasNoShiftsLine() {
+        #expect(header([take(1, recorded: at(day: 12, hour: 8)),
+                        take(2, recorded: at(day: 12, hour: 9))]).shifts.isEmpty)
+        #expect(header([]).shifts.isEmpty)
+    }
+
+    @Test func theShiftsLineSpeaksTheAppLanguage() {
+        let russian: ReportSummary = header(
+            [take(1, recorded: at(day: 11, hour: 20)),
+             take(2, recorded: at(day: 13, hour: 20))], language: .russian)
+        #expect(russian.shifts.contains("2 смены"), "\(russian.shifts)")
+    }
+
+    /// The line over one shift's rows: which day, how many takes, what they
+    /// came to. Its own function because the PDF is the hardest place to read
+    /// a string back out of.
+    @Test func aDaysHeadingCarriesItsOwnTallyAndFootage() throws {
+        let days = Shifts.split([
+            take(1, recorded: at(day: 11, hour: 20), rating: .good),
+            take(2, recorded: at(day: 11, hour: 22), rating: .bad),
+            take(3, recorded: at(day: 13, hour: 20))])
+        let heading = ViewRender.withLanguage(.english) {
+            ReportSummary.dayHeading(days[0])
+        }
+        #expect(heading.hasPrefix("2026-09-11"), "\(heading)")
+        #expect(heading.contains("2 takes (1 good, 1 bad)"), "\(heading)")
+        // 900 + 900 seconds on that night, and not the third take's
+        #expect(heading.contains("footage 0:30:00"), "\(heading)")
+    }
+
     // MARK: - what the circled takes came to
 
     /// Owner: "в шифт репорте пиши еще плис по хорошим тейкам сколько хрона

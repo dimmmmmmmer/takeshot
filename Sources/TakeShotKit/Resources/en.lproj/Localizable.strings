@@ -564,6 +564,9 @@
 "file_count_one" = "%d file";
 "file_count_few" = "%d files";
 "file_count_many" = "%d files";
+"shift_count_one" = "%d shift";
+"shift_count_few" = "%d shifts";
+"shift_count_many" = "%d shifts";
 "take_count_one" = "%d take";
 "take_count_few" = "%d takes";
 "take_count_many" = "%d takes";
@@ -684,6 +687,7 @@
 "report_camera" = "Cam %@";
 "report_takes_summary" = "%1$@ (%2$d good, %3$d bad)";
 "report_footage" = "footage %@";
+"report_shifts" = "%1$@   %2$@ … %3$@";
 "report_selects" = "good: %1$@   runtime %2$@";
 "report_selects_inout" = "good: %1$@   runtime %2$@ with in/out on %3$@ (%4$@ whole)";
 "report_row_inout_fmt" = "IN/OUT %1$@ → %2$@   %3$@";
@@ -697,6 +701,7 @@
 "report_rating_bad" = "BAD";
 /* the report CSV's column headers (human paperwork — the frozen Resolve
    sidecar takeshot-log.csv is a different writer and is never translated) */
+"report_csv_shift" = "Shift";
 "report_csv_file" = "File Name";
 "report_csv_roll" = "Roll";
 "report_csv_clip" = "Clip";

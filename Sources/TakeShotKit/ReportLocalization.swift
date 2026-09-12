@@ -14,7 +14,8 @@ extension ShiftReportCSVLabels {
     /// schema is machine-read and never translated.
     static func current() -> ShiftReportCSVLabels {
         var labels = ShiftReportCSVLabels()
-        labels.header = [L("report_csv_file"), L("report_csv_roll"),
+        labels.header = [L("report_csv_shift"),
+                         L("report_csv_file"), L("report_csv_roll"),
                          L("report_csv_clip"), L("report_csv_scene"),
                          L("report_csv_shot"), L("report_csv_take"),
                          L("report_csv_start"), L("report_csv_end"),

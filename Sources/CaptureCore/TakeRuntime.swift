@@ -64,6 +64,24 @@ public enum TakeRuntime {
         public var isTrimmed: Bool { markedCount > 0 }
     }
 
+    /// **Which shift each take belongs to**, as the stamp a document heads it
+    /// with — empty for material that is all one shift, because a column or a
+    /// heading repeating one date down a page says nothing.
+    ///
+    /// Keyed by the take's own id rather than by file name: this is about
+    /// takes in hand, not about a sidecar, and a folder can hold two files of
+    /// the same name from two cards.
+    public static func shiftStamps(of takes: [Take]) -> [UUID: String] {
+        let days = Shifts.split(takes)
+        guard days.count > 1 else { return [:] }
+        var stamps: [UUID: String] = [:]
+        for day in days {
+            let stamp = Shifts.stamp(day.start)
+            for take in day.takes { stamps[take.id] = stamp }
+        }
+        return stamps
+    }
+
     /// The key a range table files this take's marks under.
     public static func key(_ take: Take) -> String { take.url.lastPathComponent }
 

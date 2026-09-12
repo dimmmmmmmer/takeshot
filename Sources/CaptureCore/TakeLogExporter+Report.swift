@@ -43,6 +43,10 @@ extension TakeLogExporter {
                                  labels: ShiftReportCSVLabels = .english)
         -> String {
         var lines = [labels.header.map(escape).joined(separator: ",")]
+        // Empty for a single-shift report, which is nearly all of them: a
+        // column repeating one date down a page says nothing, and the sheet's
+        // own header already carries it.
+        let shifts = TakeRuntime.shiftStamps(of: material.takes)
         let formatter = DateFormatter()
         // numeric and language-neutral on purpose — a date that changes shape
         // with the language is not comparable across two days' reports
@@ -61,6 +65,7 @@ extension TakeLogExporter {
             // one expression spanning three array literals is the shape the
             // older compiler on CI times out type-checking (docs/ARCHITECTURE.md).
             var cells: [String] = [
+                shifts[take.id] ?? "",
                 escape(take.url.lastPathComponent),
                 escape(take.roll),
                 String(take.takeNumber),
@@ -119,10 +124,17 @@ extension TakeLogExporter {
 /// the English default is what the file says with no app around it.
 public struct ShiftReportCSVLabels: Sendable, Equatable {
     /// One label per column — the writer above defines the order.
+    ///
+    /// `Shift` is FIRST because it is the outermost grouping: a project that
+    /// ran over several nights is read shift by shift, and a column the reader
+    /// sorts by belongs where a sort starts. It is empty on every row of a
+    /// single-shift report, which is nearly all of them.
+    ///
     /// The three in/out columns sit with the other timings rather than at the
     /// end: a reader checking a take's marked part against what was rolled
     /// reads five cells side by side instead of across the row.
-    public var header = ["File Name", "Roll", "Clip", "Scene", "Shot", "Take",
+    public var header = ["Shift",
+                         "File Name", "Roll", "Clip", "Scene", "Shot", "Take",
                          "Start TC", "End TC", "Duration",
                          "In", "Out", "Selected", "Rating",
                          "Comments", "Description", "Markers", "Recorded At"]

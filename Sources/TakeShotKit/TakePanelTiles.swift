@@ -289,7 +289,11 @@ struct CountedNoun {
                                   few: "card_count_few",
                                   many: "card_count_many")
 
-    static let all: [CountedNoun] = [.item, .file, .take, .card]
+    static let shift = CountedNoun(one: "shift_count_one",
+                                   few: "shift_count_few",
+                                   many: "shift_count_many")
+
+    static let all: [CountedNoun] = [.item, .file, .take, .card, .shift]
     var keys: [String] { [one, few, many] }
 }
 

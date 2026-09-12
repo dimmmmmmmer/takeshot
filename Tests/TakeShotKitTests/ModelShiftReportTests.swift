@@ -96,6 +96,62 @@ struct ModelShiftReportTests {
         #expect(marked.contains("(0:01:00 whole)"), "\(marked)")
     }
 
+    /// A moment on the shoot, local — a shift is a wall-clock thing.
+    private func at(day: Int, hour: Int) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: day, hour: hour))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    private func shot(_ index: Int, on moment: Date,
+                      rating: TakeRating = .none) -> Take {
+        var take = take(index, rating: rating, duration: 30)
+        take.recordedAt = moment
+        return take
+    }
+
+    /// **A folder that was never wiped holds every night shot into it**
+    /// (owner: "может нам учитывать многосменность … в экспорте шифт
+    /// репортов"). The days are named on the paper and each one's block of
+    /// rows is headed by its own date and tally.
+    @Test func aSheetCoveringSeveralShiftsHeadsEachOne() throws {
+        let body = text(of: try document([
+            shot(1, on: at(day: 11, hour: 20)),
+            shot(2, on: at(day: 12, hour: 1)),
+            shot(3, on: at(day: 13, hour: 20))]))
+        #expect(body.contains("2 shifts"), "\(body)")
+        // Each date appears TWICE — once in the header's span and once over
+        // its own block of rows. Asserting it appears at all would be
+        // satisfied by the header alone, which is how a missing heading reads
+        // as a passing test.
+        for stamp in ["2026-09-11", "2026-09-13"] {
+            #expect(body.components(separatedBy: stamp).count - 1 == 2,
+                    "\(stamp) is not both in the span and over its rows")
+        }
+        // …and each heading carries its OWN footage, which no other line on
+        // the sheet states: 2 × 30 s that night, 30 s the other, 1:30 in all
+        #expect(body.contains("footage 0:01:00"), "\(body)")
+        #expect(body.contains("footage 0:00:30"), "\(body)")
+        #expect(body.contains("footage 0:01:30"), "\(body)")
+        // every take still reaches the paper
+        for take in ["CLIP001", "CLIP002", "CLIP003"] {
+            #expect(body.contains(take), "\(take) is missing")
+        }
+    }
+
+    /// One shift gets no heading at all — that is the sheet every ordinary day
+    /// produces, and a date row over a single block says nothing.
+    @Test func aSheetCoveringOneShiftIsHeadedTheWayItAlwaysWas() throws {
+        let body = text(of: try document([
+            shot(1, on: at(day: 12, hour: 8)),
+            shot(2, on: at(day: 12, hour: 9))]))
+        // no day heading and no shifts line: both are stamped `yyyy-MM-dd`,
+        // and the sheet's own date above is a sentence in the app's language
+        #expect(!body.contains("2026-09-12"), "\(body)")
+        #expect(!body.contains("2026-"), "\(body)")
+        #expect(body.contains("2 takes") || body.contains("2 дубля"), "\(body)")
+    }
+
     /// The row the header's runtime was counted from. Absent — not blank — on
     /// a take nothing narrows, which is most of them.
     @Test func aMarkedTakePrintsItsWindowInItsOwnRow() throws {

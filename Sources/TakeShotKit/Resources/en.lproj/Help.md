@@ -262,6 +262,12 @@ On demand, from the export menu in the takes panel or the File menu:
   dialog. Two formats because they reach different rooms: the `.xml` is FCP7
   `xmeml`, which almost every edit suite still reads, and the `.fcpxml` is the
   modern one Resolve and Premiere prefer. Same cut either way.
+
+  A folder that was never wiped between shifts holds every night shot into it,
+  and both formats split on that: one timeline per shooting day, named with its
+  date. A shift ends at a turnaround — six hours or more between one take and
+  the next — so a night running through midnight stays one day, and two shifts
+  on the same date are still two.
 - **Shift report** — the full table for production paperwork, as a PDF with
   thumbnails or as a CSV. The header carries two totals: the day's footage —
   everything that was rolled — and the runtime of the circled takes, which is
@@ -269,6 +275,9 @@ On demand, from the export menu in the takes panel or the File menu:
   honours it, says how many takes were trimmed and quotes the untrimmed figure
   beside it, and each of those takes prints its own IN/OUT under the file name
   (the CSV has `In`, `Out` and `Selected` columns for the same thing).
+  A sheet covering more than one shift says which days it covers, heads each
+  shift's rows with that day's own date, tally and footage, and stamps every
+  CSV row with its shift.
 
 Takes moved out of the folder leave the panel but stay in the log: the normal end
 of a day is the DIT moving footage into the archive, and that must not erase the

@@ -63,13 +63,13 @@ struct ReportLocalizationTests {
                                       labels: .current())
         }
         let lines = csv.components(separatedBy: "\n")
-        #expect(lines[0] == "Имя файла,Ролл,Клип,Сцена,Кадр,Дубль,"
+        #expect(lines[0] == "Смена,Имя файла,Ролл,Клип,Сцена,Кадр,Дубль,"
             + "TC начала,TC конца,Длительность,Вход,Выход,Отобрано,"
             + "Оценка,Комментарии,Описание,Маркеры,Записан")
         #expect(lines[1].contains("ГОДЕН"))
         // …and the English default is untouched by the labels seam existing
         #expect(TakeLogExporter.reportCSV(TakeRuntime.ReportMaterial([]))
-            .hasPrefix("File Name,Roll,"))
+            .hasPrefix("Shift,File Name,Roll,"))
     }
 
     /// The Resolve sidecar's schema is frozen and machine-read: the language

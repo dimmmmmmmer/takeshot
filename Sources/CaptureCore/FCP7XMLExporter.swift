@@ -76,8 +76,15 @@ public enum FCP7XMLExporter {
     struct Placed {
         let take: Take
         let rate: Rate
-        /// 1-based position in the track — `clipindex` in the link elements.
+        /// 1-based position in ITS OWN track — `clipindex` in the link
+        /// elements, which is per sequence and restarts every shift.
         let index: Int
+        /// 1-based position in the DOCUMENT, which every element id is built
+        /// from. Two numbers because a multi-shift export has two countings:
+        /// ids must be unique across the whole file and a clip index must not
+        /// be, and writing one number into both roles is how a second day's
+        /// links point at the first day's clips.
+        let id: Int
         /// The take's length in ITS OWN frames.
         let frames: Int
         /// The same length in the SEQUENCE's frames, which is what the record
@@ -96,17 +103,18 @@ public enum FCP7XMLExporter {
         let width: Int
         let height: Int
 
-        var fileID: String { "file-\(index)" }
+        var fileID: String { "file-\(id)" }
         /// Picture and sound get their own ids out of one counter, so a
         /// reader that resolves `linkclipref` finds exactly one clip.
-        var videoID: String { "clipitem-\(index * 2 - 1)" }
-        var audioID: String { "clipitem-\(index * 2)" }
+        var videoID: String { "clipitem-\(id * 2 - 1)" }
+        var audioID: String { "clipitem-\(id * 2)" }
     }
 
-    /// What the document says about itself before the clips: the project's
-    /// name, the rate every position on it is counted on, how long the whole
-    /// thing is, and the raster the canvas takes.
+    /// What a sequence says about itself before its clips: its element id,
+    /// its name, the rate every position on it is counted on, how long it is,
+    /// and the raster its canvas takes.
     struct Head {
+        let id: String
         let name: String
         let rate: Rate
         let duration: Int
@@ -125,27 +133,52 @@ public enum FCP7XMLExporter {
     public static func timeline(takes: [Take], project: String,
                                 format: CaptureFormat? = nil) -> String? {
         guard !takes.isEmpty else { return nil }
-        let sequence = rate(for: takes[0])
         let width = format?.width ?? 1920
         let height = format?.height ?? 1080
-        let placed = place(takes, sequence: sequence, width: width, height: height)
-        let duration = (placed.last?.offset ?? 0) + (placed.last?.recordFrames ?? 0)
-        return document(
-            Head(name: escape(project.isEmpty ? "TakeShot" : project),
-                 rate: sequence, duration: duration,
-                 width: width, height: height),
-            video: placed.map(videoClip), audio: placed.map(audioClip))
+        let days = Shifts.split(takes)
+        let title = project.isEmpty ? "TakeShot" : project
+        var sequences: [String] = []
+        var id = 1
+        for (index, day) in days.enumerated() {
+            let rate = rate(for: day.takes[0])
+            let placed = place(day.takes, sequence: rate, width: width,
+                               height: height, from: id)
+            id += placed.count
+            let duration = (placed.last?.offset ?? 0)
+                + (placed.last?.recordFrames ?? 0)
+            sequences.append(sequenceElement(
+                Head(id: "sequence-\(index + 1)",
+                     name: escape(name(title, of: day, ofMany: days.count > 1)),
+                     rate: rate, duration: duration,
+                     width: width, height: height),
+                video: placed.map(videoClip), audio: placed.map(audioClip)))
+        }
+        return document(sequences)
+    }
+
+    /// **One sequence per shift, named by the day it was shot** (owner: "может
+    /// нам учитывать многосменность в экспорте хмл").
+    ///
+    /// A single-shift export keeps the project's bare name, which is what
+    /// every timeline this app has written says and what an assistant reads on
+    /// the bin. The date appears only when there is a second day to tell it
+    /// apart from — a name that grew a date for every export would rename the
+    /// one timeline most days produce, for nothing.
+    static func name(_ project: String, of day: Shifts.Day,
+                     ofMany: Bool) -> String {
+        ofMany ? "\(project) \(Shifts.stamp(day.start))" : project
     }
 
     /// Each take with its numbers worked out once, laid end to end.
-    static func place(_ takes: [Take], sequence: Rate,
-                      width: Int, height: Int) -> [Placed] {
+    static func place(_ takes: [Take], sequence: Rate, width: Int,
+                      height: Int, from id: Int = 1) -> [Placed] {
         var offset = 0
         var placed: [Placed] = []
         for (index, take) in takes.enumerated() {
             let own = rate(for: take)
             let record = frames(of: take, at: sequence)
             placed.append(Placed(take: take, rate: own, index: index + 1,
+                                 id: id + index,
                                  frames: frames(of: take, at: own),
                                  recordFrames: record, offset: offset,
                                  start: take.startTimecode?.frameNumber ?? 0,

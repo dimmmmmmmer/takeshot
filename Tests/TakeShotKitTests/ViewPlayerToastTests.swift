@@ -64,6 +64,56 @@ import Testing
                 > PlayerToastPlan.insetOverPicture)
     }
 
+    /// **The bar makes room for the corner control, not the other way round**
+    /// (owner: "мне кажется стоило не позицию глазика менять в плейбэке а
+    /// полоску транспорта не от самого края слева начинать").
+    ///
+    /// The eye used to be lifted above the bar. It is back in its corner, and
+    /// the bar's left edge clears it — so what this pins is that the inset is
+    /// actually wide enough for what sits there, derived from the same two
+    /// numbers the corner is built from rather than typed a second time.
+    @Test func theTransportBarStartsClearOfTheCornerControl() {
+        #expect(PlayerToastPlan.transportLeading
+                > PlayerToastPlan.cornerPadding
+                + PlayerToastPlan.cornerControlWidth,
+                "the bar starts on top of the eye")
+        // …and not so far in that it reads as a gap: the air is single digits
+        #expect(PlayerToastPlan.transportLeading
+                - PlayerToastPlan.cornerPadding
+                - PlayerToastPlan.cornerControlWidth < 10)
+    }
+
+    /// …and every bar mounted over the picture actually takes that inset.
+    ///
+    /// Asserted on the SOURCE because the alternative is rendering a live
+    /// player with a real clip in it, and the regression this guards is a new
+    /// mount point or a `.padding(6)` put back — both of which are visible in
+    /// the text and neither of which any unit of behaviour can see.
+    ///
+    /// The comment halves are cut out before matching, because the note ABOVE
+    /// those mounts names the constant: an assertion a file's own prose can
+    /// satisfy is the trap CLAUDE.md records against `live.html`.
+    @Test func everyBarOverThePictureTakesThatInset() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/TakeShotKit/PreviewView.swift")
+        let code: String = try String(contentsOf: url, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line -> String in
+                guard let comment = line.range(of: "//") else { return String(line) }
+                return String(line[line.startIndex..<comment.lowerBound])
+            }
+            .joined(separator: "\n")
+        let mounts = code.components(separatedBy: "TransportBar(").count - 1
+        let inset = code.components(
+            separatedBy: "PlayerToastPlan.transportLeading").count - 1
+        #expect(mounts > 0, "the player mounts no transport bar at all")
+        #expect(inset == mounts,
+                Comment(rawValue: "\(mounts) bars over the picture and "
+                    + "\(inset) of them start clear of the corner"))
+    }
+
     // MARK: - what is under the picture at all
 
     /// The live signal has no transport under it.

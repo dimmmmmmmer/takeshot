@@ -164,19 +164,33 @@ extension FCP7XMLExporter {
         """
     }
 
-    /// The whole document around the two tracks.
+    /// The document around one or more sequences.
+    ///
+    /// `xmeml` takes several `<sequence>` children, which is how a project
+    /// spanning nights arrives as several timelines in one import rather than
+    /// as three days laid end to end as if they were one (owner: "может нам
+    /// учитывать многосменность в экспорте хмл").
     ///
     /// No `<uuid>`: the element is optional, and the only value this could put
     /// there is a fresh one per export — which would make two exports of one
     /// unchanged day differ, for a DIT syncing the folder and for the suite
     /// that reads this back.
-    static func document(_ head: Head, video: [String],
-                         audio: [String]) -> String {
+    static func document(_ sequences: [String]) -> String {
         """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE xmeml>
         <xmeml version="5">
-          <sequence id="sequence-1">
+        \(sequences.joined(separator: "\n"))
+        </xmeml>
+
+        """
+    }
+
+    /// One shift as one sequence.
+    static func sequenceElement(_ head: Head, video: [String],
+                                audio: [String]) -> String {
+        """
+          <sequence id="\(head.id)">
             <name>\(head.name)</name>
             <duration>\(head.duration)</duration>
         \(rateElement(head.rate, indent: "    "))
@@ -203,8 +217,6 @@ extension FCP7XMLExporter {
               </audio>
             </media>
           </sequence>
-        </xmeml>
-
         """
     }
 }

@@ -13,7 +13,8 @@ import Testing
     private func take(_ name: String, start: String = "10:00:00:00",
                       fps: Int = 25, dropFrame: Bool = false,
                       rate: Double? = nil, seconds: Double = 10,
-                      markers: [TakeMarker] = []) -> Take {
+                      markers: [TakeMarker] = [],
+                      recorded: Date = Date()) -> Take {
         var take = Take(
             url: URL(fileURLWithPath: "/Volumes/CARD/\(name).mov"),
             scene: "1", roll: "A001", takeNumber: 1,
@@ -22,7 +23,7 @@ import Testing
                          seconds: $0.seconds, frames: $0.frames,
                          fps: fps, isDropFrame: dropFrame)
             },
-            durationSeconds: seconds, recordedAt: Date())
+            durationSeconds: seconds, recordedAt: recorded)
         take.frameRate = rate
         take.markers = markers
         return take
@@ -239,6 +240,66 @@ import Testing
         let asset = try #require((try parse(xml).nodes(forXPath: "//asset")
             .first as? XMLElement))
         #expect(asset.attribute(forName: "start")?.stringValue == "0s")
+    }
+
+    /// A moment on the shoot, local — a shift is a wall-clock thing.
+    private func at(day: Int, hour: Int) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: day, hour: hour))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    /// **A project that spans nights is several timelines** (owner: "может нам
+    /// учитывать многосменность в экспорте хмл"). One `<project>` per shift
+    /// inside the one event, and the RESOURCES stay one list for the library —
+    /// which is the format's own shape and is what keeps two shifts from
+    /// declaring the same file twice.
+    @Test func aProjectAcrossTwoNightsBecomesTwoProjects() throws {
+        let xml = try #require(FCPXMLExporter.timeline(
+            takes: [take("A", recorded: at(day: 11, hour: 20)),
+                    take("B", recorded: at(day: 12, hour: 1)),
+                    take("C", recorded: at(day: 13, hour: 20))],
+            project: "FILM"))
+        let document = try parse(xml)
+        let projects: [XMLElement] = try document.nodes(forXPath: "//project")
+            .compactMap { $0 as? XMLElement }
+        #expect(projects.count == 2)
+        #expect(projects.compactMap {
+            $0.attribute(forName: "name")?.stringValue
+        } == ["FILM 2026-09-11", "FILM 2026-09-13"])
+        // the event around them keeps the project's own name
+        #expect(try #require((document.nodes(forXPath: "//event")
+            .first as? XMLElement)).attribute(forName: "name")?.stringValue
+            == "FILM")
+        // three assets, declared once each for the whole library
+        #expect(try document.nodes(forXPath: "//resources/asset").count == 3)
+        // the night through midnight kept both its takes
+        #expect(try projects[0].nodes(forXPath: ".//asset-clip").count == 2)
+        #expect(try projects[1].nodes(forXPath: ".//asset-clip").count == 1)
+    }
+
+    /// One shift keeps the project's bare name, so the timeline most days
+    /// produce is not renamed for nothing.
+    @Test func oneShiftKeepsTheProjectsBareName() throws {
+        let document = try parse(try #require(FCPXMLExporter.timeline(
+            takes: [take("A", recorded: at(day: 12, hour: 8)),
+                    take("B", recorded: at(day: 12, hour: 9))],
+            project: "FILM")))
+        #expect(try document.nodes(forXPath: "//project/@name")
+            .compactMap(\.stringValue) == ["FILM"])
+    }
+
+    /// Each shift's spine starts at zero: a second day that began where the
+    /// first left off would open with a day of black in front of it.
+    @Test func everyShiftsSpineStartsAtZero() throws {
+        let document = try parse(try #require(FCPXMLExporter.timeline(
+            takes: [take("A", seconds: 10, recorded: at(day: 11, hour: 20)),
+                    take("B", seconds: 4, recorded: at(day: 13, hour: 20))],
+            project: "FILM")))
+        #expect(try document.nodes(forXPath: "//spine/asset-clip/@offset")
+            .compactMap(\.stringValue) == ["0s", "0s"])
+        #expect(try document.nodes(forXPath: "//sequence/@duration")
+            .compactMap(\.stringValue) == ["250/25s", "100/25s"])
     }
 
     /// A take shorter than one frame is still a clip. A zero-length clip is

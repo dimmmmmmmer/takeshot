@@ -30,6 +30,15 @@ struct ReportSummary: Equatable {
     /// The date, the camera when there is one, the take tally and the day's
     /// footage, in that order and separated by wide gaps.
     let summary: String
+    /// **How many shifts this sheet covers and which days they were**
+    /// (owner: "может нам учитывать многосменность … в экспорте шифт
+    /// репортов"), or empty when it is all one shift.
+    ///
+    /// Empty is the ordinary case and says the right thing by saying nothing:
+    /// a sheet covering one day is dated by the line above, and "1 shift" over
+    /// it would be a fact nobody needed. The line appears exactly when the
+    /// date on the line above has stopped being the whole answer.
+    let shifts: String
     /// **What the good takes came to** (owner: "в шифт репорте пиши еще плис
     /// по хорошим тейкам сколько хрона вышло и чтоб если был выбран ин/аут
     /// тоже писало это"), or empty when nothing is circled.
@@ -80,7 +89,38 @@ struct ReportSummary: Equatable {
             summary: "\(formatter.string(from: date))\(cameraPart)   "
                 + takeLine + "   "
                 + "\(L("report_footage", ClipTimeText.hoursMinutesSeconds.text(total)))",
-            selects: selectsLine(material))
+            shifts: shiftsLine(material), selects: selectsLine(material))
+    }
+
+    /// The second line: which shifts the sheet covers, when it covers more
+    /// than one.
+    ///
+    /// The dates are `Shifts.stamp` — digits, language-neutral — while the
+    /// line above is the app's own language. That is deliberate and is the
+    /// same split the rest of the app makes: the line above is a SENTENCE
+    /// about the day, and these are two ends of a SPAN that the office reads
+    /// against the call sheets, sorts, and types into an email.
+    private static func shiftsLine(_ material: TakeRuntime.ReportMaterial) -> String {
+        let days = Shifts.split(material.takes)
+        guard days.count > 1, let first = days.first, let last = days.last
+        else { return "" }
+        return L("report_shifts", localizedCount(days.count, .shift),
+                 Shifts.stamp(first.start), Shifts.stamp(last.start))
+    }
+
+    /// The line drawn over one shift's rows in a multi-shift table: which day
+    /// it was, how many takes it holds and what they came to.
+    ///
+    /// Its own function because the PDF is the only thing that draws it and
+    /// the PDF is the hardest place to read a string back out of.
+    static func dayHeading(_ day: Shifts.Day) -> String {
+        let good = day.takes.filter { $0.rating == .good }.count
+        let bad = day.takes.filter { $0.rating == .bad }.count
+        return "\(Shifts.stamp(day.start))   "
+            + L("report_takes_summary",
+                localizedCount(day.takes.count, .take), good, bad)
+            + "   " + L("report_footage", ClipTimeText.hoursMinutesSeconds
+                .text(TakeRuntime.footage(of: day.takes)))
     }
 
     /// The second line: how much the circled takes came to, and whether an

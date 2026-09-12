@@ -567,6 +567,9 @@
 "file_count_one" = "%d файл";
 "file_count_few" = "%d файла";
 "file_count_many" = "%d файлов";
+"shift_count_one" = "%d смена";
+"shift_count_few" = "%d смены";
+"shift_count_many" = "%d смен";
 "take_count_one" = "%d дубль";
 "take_count_few" = "%d дубля";
 "take_count_many" = "%d дублей";
@@ -687,6 +690,7 @@
 "report_camera" = "Камера %@";
 "report_takes_summary" = "%1$@ (годных — %2$d, брак — %3$d)";
 "report_footage" = "материал %@";
+"report_shifts" = "%1$@   %2$@ … %3$@";
 "report_selects" = "годные: %1$@   хрон %2$@";
 "report_selects_inout" = "годные: %1$@   хрон %2$@ с in/out на %3$@ (%4$@ целиком)";
 "report_row_inout_fmt" = "IN/OUT %1$@ → %2$@   %3$@";
@@ -700,6 +704,7 @@
 "report_rating_bad" = "БРАК";
 /* the report CSV's column headers (human paperwork — the frozen Resolve
    sidecar takeshot-log.csv is a different writer and is never translated) */
+"report_csv_shift" = "Смена";
 "report_csv_file" = "Имя файла";
 "report_csv_roll" = "Ролл";
 "report_csv_clip" = "Клип";

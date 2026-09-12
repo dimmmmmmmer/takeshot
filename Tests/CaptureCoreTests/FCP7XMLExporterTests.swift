@@ -13,7 +13,8 @@ import Testing
     private func take(_ name: String, start: String = "10:00:00:00",
                       fps: Int = 25, dropFrame: Bool = false,
                       rate: Double? = nil, seconds: Double = 10,
-                      markers: [TakeMarker] = []) -> Take {
+                      markers: [TakeMarker] = [],
+                      recorded: Date = Date()) -> Take {
         var take = Take(
             url: URL(fileURLWithPath: "/Volumes/CARD/\(name).mov"),
             scene: "1", roll: "A001", takeNumber: 1,
@@ -22,7 +23,7 @@ import Testing
                          seconds: $0.seconds, frames: $0.frames,
                          fps: fps, isDropFrame: dropFrame)
             },
-            durationSeconds: seconds, recordedAt: Date())
+            durationSeconds: seconds, recordedAt: recorded)
         take.frameRate = rate
         take.markers = markers
         return take
@@ -237,6 +238,81 @@ import Testing
         #expect(try text(document, "//sequence//format//width") == "3840")
         #expect(try text(document, "//file/media/video/samplecharacteristics/height")
             == "2160")
+    }
+
+    // MARK: - a project that spans several nights
+
+    /// A moment on the shoot, local — a shift is a wall-clock thing.
+    private func at(day: Int, hour: Int) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: day, hour: hour))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    /// Owner: "может нам учитывать многосменность в экспорте хмл". Three
+    /// nights laid end to end as one sequence is a timeline nobody asked for;
+    /// `xmeml` takes several sequences, so the import arrives as three.
+    @Test func aProjectAcrossTwoNightsBecomesTwoTimelines() throws {
+        let xml = try #require(FCP7XMLExporter.timeline(
+            takes: [take("A", recorded: at(day: 11, hour: 20)),
+                    take("B", recorded: at(day: 12, hour: 1)),
+                    take("C", recorded: at(day: 13, hour: 20))],
+            project: "FILM"))
+        let document = try parse(xml)
+        let sequences: [XMLNode] = try document.nodes(forXPath: "//sequence")
+        #expect(sequences.count == 2)
+        #expect(try texts(document, "//sequence/name")
+            == ["FILM 2026-09-11", "FILM 2026-09-13"])
+        #expect(sequences.compactMap {
+            ($0 as? XMLElement)?.attribute(forName: "id")?.stringValue
+        } == ["sequence-1", "sequence-2"])
+        // the night through midnight kept both its takes
+        #expect(try texts(document, "//sequence[1]//video/track/clipitem/name")
+            == ["A", "B"])
+        #expect(try texts(document, "//sequence[2]//video/track/clipitem/name")
+            == ["C"])
+    }
+
+    /// One shift keeps the project's bare name — a timeline renamed with a
+    /// date on every export would rename the one most days produce, for
+    /// nothing.
+    @Test func oneShiftKeepsTheProjectsBareName() throws {
+        let document = try parse(try #require(FCP7XMLExporter.timeline(
+            takes: [take("A", recorded: at(day: 12, hour: 8)),
+                    take("B", recorded: at(day: 12, hour: 9))],
+            project: "FILM")))
+        #expect(try texts(document, "//sequence/name") == ["FILM"])
+    }
+
+    /// **Ids are unique across the DOCUMENT and clip indexes are not.** Two
+    /// countings, and writing one number into both roles is how the second
+    /// day's links point at the first day's clips.
+    @Test func theSecondShiftsClipsAreItsOwn() throws {
+        let document = try parse(try #require(FCP7XMLExporter.timeline(
+            takes: [take("A", recorded: at(day: 11, hour: 20)),
+                    take("B", recorded: at(day: 13, hour: 20))],
+            project: "FILM")))
+        let ids: [String] = try document.nodes(forXPath: "//clipitem/@id")
+            .compactMap(\.stringValue)
+        #expect(ids == ["clipitem-1", "clipitem-2", "clipitem-3", "clipitem-4"])
+        #expect(Set(ids).count == ids.count, "two clips share an id")
+        let files: [String] = try document.nodes(forXPath: "//file/@id")
+            .compactMap(\.stringValue)
+        #expect(Set(files) == ["file-1", "file-2"])
+        // …and each day's first clip is clip 1 of its own track
+        #expect(try texts(document, "//clipitem[@id='clipitem-3']/link/clipindex")
+            == ["1", "1"])
+    }
+
+    /// Each shift's timeline starts at zero: a second day that began where the
+    /// first left off would open with an hour of black in front of it.
+    @Test func everyShiftsTimelineStartsAtZero() throws {
+        let document = try parse(try #require(FCP7XMLExporter.timeline(
+            takes: [take("A", seconds: 10, recorded: at(day: 11, hour: 20)),
+                    take("B", seconds: 4, recorded: at(day: 13, hour: 20))],
+            project: "FILM")))
+        #expect(try texts(document, "//video/track/clipitem/start") == ["0", "0"])
+        #expect(try texts(document, "//sequence/duration") == ["250", "100"])
     }
 
     /// Two exports of one unchanged day are the same bytes: nothing in here

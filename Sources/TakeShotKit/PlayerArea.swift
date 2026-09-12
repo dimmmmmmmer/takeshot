@@ -80,19 +80,20 @@ struct PlayerArea: View {
             // opacity: a mode with no visible way back is a mode an operator
             // has to know a key for, and the key (⌃U) is the answer for the
             // person who set it up rather than for the one who finds it on.
-            // **Clear of the transport bar** (owner: "оп в режиме плейбэка
-            // глазик наложился на транспорт"). The bar is an overlay over the
-            // bottom of the picture and this corner is another one, so in
-            // playback they were drawn on top of each other — the eye sat on
-            // the bar's left end. The toast opposite has had the same problem
-            // and the same answer since it was written; the LIFT is stated
-            // once, beside the toast's, so a bar that changes height moves
-            // both (`PlayerToastPlan.bottomCornerLift`).
-            .overlay(alignment: .bottomLeading) {
-                bottomLeftCorner
-                    .padding(.bottom, PlayerToastPlan.bottomCornerLift(
-                        transport: controller.transportBarKind))
-            }
+            // **The eye stays in its corner, and the BAR makes room for it**
+            // (owner: "мне кажется стоило не позицию глазика менять в плейбэке
+            // а полоску транспорта не от самого края слева начинать").
+            //
+            // The first answer to that overlap (owner: "оп в режиме плейбэка
+            // глазик наложился на транспорт") lifted this corner above the
+            // bar. It worked and it read as a button floating off its own
+            // corner — and it had the priority backwards: the eye is anchored
+            // to the picture and is where an operator's hand goes for it in
+            // every mode, while the bar is the thing that only exists
+            // sometimes. So the bar starts clear of it instead
+            // (`PlayerToastPlan.transportLeading`, applied where the bar is
+            // mounted in `PreviewView`).
+            .overlay(alignment: .bottomLeading) { bottomLeftCorner }
             .overlay {
                 if controller.showsAudioPanel {
                     AudioChannelPanel(live: controller.live)
@@ -159,17 +160,24 @@ struct PlayerToastPlan: Equatable {
     /// The padding a bottom CORNER control already carries — the eye and the
     /// REC badge sit in an 8-point box of their own.
     static let cornerPadding: CGFloat = 8
+    /// The eye's plate: a 13-point glyph in 6 points of padding on each side.
+    static let cornerControlWidth: CGFloat = 27
 
-    /// **How far a bottom-corner control lifts to clear the bar**, which is
-    /// the toast's own clearance minus the padding that control already has.
+    /// **Where the transport bar's left edge sits**, so the picture's
+    /// bottom-left corner control ends up BESIDE the bar rather than under it
+    /// (owner: "полоску транспорта не от самого края слева начинать").
     ///
-    /// Here rather than in the view because it is the same fact as the inset
-    /// above — how tall the transport is — and this file's header is a
-    /// post-mortem of what a second copy of that number costs.
-    static func bottomCornerLift(
-        transport: CaptureController.TransportBarKind) -> CGFloat {
-        transport == .none ? 0 : insetOverTransport - cornerPadding
-    }
+    /// Derived rather than typed, because the two numbers it clears are stated
+    /// above and a fourth copy of either is what this file exists to prevent:
+    /// the corner's own 8 points of padding, the eye's plate, and five points
+    /// of air so the two do not touch.
+    ///
+    /// Exact rather than generous, and that is safe for a reason worth
+    /// stating: while a transport bar is drawn the corner can only hold the
+    /// EYE. The REC label beside it needs `viewerMode == .record` and a bar
+    /// needs `.playback`, so the two can never be on screen together — see
+    /// `showsRecordingMark` and `transportBarKind`.
+    static let transportLeading: CGFloat = cornerPadding + cornerControlWidth + 5
 
     /// nil when the player has nothing to say.
     static func current(

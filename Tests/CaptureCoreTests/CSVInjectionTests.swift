@@ -244,8 +244,8 @@ import Testing
     }
 
     /// The shift report is paperwork rather than a round trip, but it is still
-    /// a table: seventeen columns, one row per take, whatever is typed.
-    @Test func theShiftReportKeepsSeventeenColumnsPerTake() {
+    /// a table: eighteen columns, one row per take, whatever is typed.
+    @Test func theShiftReportKeepsEighteenColumnsPerTake() {
         for (name, value) in AwkwardText.pathSafe {
             // Every free-text field the row carries. Shot is NOT among them
             // any more and cannot be: it is an `Int` since the slate stopped
@@ -259,8 +259,8 @@ import Testing
             let csv: String = TakeLogExporter.reportCSV(material)
             let records: [[String]] = TakeLogExporter.parseCSVRecords(csv)
             #expect(records.count == 2, "one take is one row: \(name)")
-            #expect(records.last?.count == 17,
-                    "and the row has all seventeen columns: \(name)")
+            #expect(records.last?.count == 18,
+                    "and the row has all eighteen columns: \(name)")
         }
     }
 }

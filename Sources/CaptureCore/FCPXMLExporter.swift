@@ -93,8 +93,12 @@ public enum FCPXMLExporter {
         let sequence = frameDuration(for: takes[0])
         let width = format?.width ?? 1920
         let height = format?.height ?? 1080
-        let placed = place(takes, sequence: sequence)
-
+        // **One project per shift** (owner: "может нам учитывать
+        // многосменность в экспорте хмл"). The RESOURCES stay one list for the
+        // whole library, which is what the format wants and what keeps a take
+        // appearing in two shifts impossible: the ids run across every day.
+        let days = Shifts.split(takes)
+        let placed = place(days.flatMap(\.takes), sequence: sequence)
         var resources: [String] = [
             formatElement(id: "r0", frame: sequence, width: width, height: height),
         ]
@@ -103,17 +107,41 @@ public enum FCPXMLExporter {
                                            width: width, height: height))
         }
         resources.append(contentsOf: placed.map(assetElement))
+        let title = project.isEmpty ? "TakeShot" : project
+        var projects: [String] = []
+        var next = 0
+        for day in days {
+            let clips = placed[next..<(next + day.takes.count)]
+            next += day.takes.count
+            projects.append(projectElement(
+                name: escape(name(title, of: day, ofMany: days.count > 1)),
+                clips: Array(clips), sequence: sequence))
+        }
+        return document(name: escape(title), projects: projects,
+                        resources: resources)
+    }
 
-        var clips: [String] = []
+    /// A shift's project name: the project alone when it is the only one, and
+    /// the project plus the day it was shot when there are several. See
+    /// `FCP7XMLExporter.name` — one rule, two writers.
+    static func name(_ project: String, of day: Shifts.Day,
+                     ofMany: Bool) -> String {
+        ofMany ? "\(project) \(Shifts.stamp(day.start))" : project
+    }
+
+    /// One shift as one project: its clips laid end to end from zero.
+    private static func projectElement(name: String, clips: [Placed],
+                                       sequence: FrameDuration) -> String {
+        var spine: [String] = []
         var offset = 0
-        for clip in placed {
-            clips.append(clipElement(clip, offset: sequence.time(frames: offset)))
+        for clip in clips {
+            spine.append(clipElement(clip, offset: sequence.time(frames: offset)))
             offset += clip.recordFrames(on: sequence)
         }
-        return document(name: escape(project.isEmpty ? "TakeShot" : project),
-                        dropFrame: takes[0].startTimecode?.isDropFrame == true,
-                        duration: sequence.time(frames: offset),
-                        resources: resources, clips: clips)
+        let dropFrame = clips.first?.take.startTimecode?.isDropFrame == true
+        return projectBody(name: name, dropFrame: dropFrame,
+                           duration: sequence.time(frames: offset),
+                           clips: spine)
     }
 
     /// Each take with its ids and its numbers worked out once.
@@ -131,9 +159,8 @@ public enum FCPXMLExporter {
 
     // MARK: - the elements
 
-    private static func document(name: String, dropFrame: Bool,
-                                 duration: String, resources: [String],
-                                 clips: [String]) -> String {
+    private static func document(name: String, projects: [String],
+                                 resources: [String]) -> String {
         """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE fcpxml>
@@ -143,6 +170,17 @@ public enum FCPXMLExporter {
           </resources>
           <library>
             <event name="\(name)">
+        \(projects.joined(separator: "\n"))
+            </event>
+          </library>
+        </fcpxml>
+
+        """
+    }
+
+    private static func projectBody(name: String, dropFrame: Bool,
+                                    duration: String, clips: [String]) -> String {
+        """
               <project name="\(name)">
                 <sequence format="r0" tcStart="0s" \
         tcFormat="\(dropFrame ? "DF" : "NDF")" duration="\(duration)">
@@ -151,10 +189,6 @@ public enum FCPXMLExporter {
                   </spine>
                 </sequence>
               </project>
-            </event>
-          </library>
-        </fcpxml>
-
         """
     }
 

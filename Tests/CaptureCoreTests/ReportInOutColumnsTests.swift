@@ -92,6 +92,41 @@ import Testing
         #expect(cells["Selected"] == "")
     }
 
+    /// **Which shift each row belongs to** (owner: "может нам учитывать
+    /// многосменность … в экспорте шифт репортов"), and nothing at all when
+    /// the sheet is one shift — a column repeating one date down a page says
+    /// nothing, and the sheet's own header already carries it.
+    @Test func theShiftColumnNamesTheDayAndOnlyWhenThereIsMoreThanOne() throws {
+        let calendar = Calendar.current
+        func at(day: Int, hour: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 9,
+                                               day: day, hour: hour))
+                ?? Date(timeIntervalSince1970: 0)
+        }
+        var night = take(1)
+        night.recordedAt = at(day: 11, hour: 20)
+        var after = take(2)
+        after.recordedAt = at(day: 12, hour: 1)
+        var later = take(3)
+        later.recordedAt = at(day: 13, hour: 20)
+
+        let header: [String] = ShiftReportCSVLabels.english.header
+        #expect(header.first == "Shift", "the sort column is not first")
+
+        let one: [[String]] = TakeLogExporter.parseCSVRecords(
+            TakeLogExporter.reportCSV(
+                TakeRuntime.ReportMaterial([night, after])))
+        #expect(one.dropFirst().allSatisfy { $0.first == "" },
+                "a single-shift sheet stamped its rows")
+
+        let two: [[String]] = TakeLogExporter.parseCSVRecords(
+            TakeLogExporter.reportCSV(
+                TakeRuntime.ReportMaterial([night, after, later])))
+        #expect(two.dropFirst().map { $0.first ?? "" }
+            == ["2026-09-11", "2026-09-11", "2026-09-13"],
+            "the night through midnight was split, or the rows re-ordered")
+    }
+
     /// The three columns sit with the other timings rather than at the end of
     /// the row: a reader checking the marked part against what was rolled
     /// reads five cells side by side.

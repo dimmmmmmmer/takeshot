@@ -88,16 +88,25 @@ struct PreviewView: View {
             // rule of this view's own: the toast over the picture has to clear
             // whatever is drawn here, and two spellings of it drifted
             switch controller.transportBarKind {
+            // The LEADING inset is not the same 6 as the other three: the
+            // picture's bottom-left corner control sits there, and the bar
+            // starts clear of it so the two are side by side rather than
+            // stacked (owner: "полоску транспорта не от самого края слева
+            // начинать"). The number is `PlayerToastPlan.transportLeading`,
+            // beside the rest of this strip's geometry.
             case .video:
                 TransportBar(player: controller.player, model: controller.transport)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .padding(6)
+                    .padding(.init(top: 6, leading: PlayerToastPlan.transportLeading,
+                                   bottom: 6, trailing: 6))
             case .raw:
                 if let model = controller.rawPlayer {
                     RawTransportBar(model: model)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .padding(6)
+                        .padding(.init(top: 6,
+                                       leading: PlayerToastPlan.transportLeading,
+                                       bottom: 6, trailing: 6))
                 }
             case .none:
                 EmptyView()
