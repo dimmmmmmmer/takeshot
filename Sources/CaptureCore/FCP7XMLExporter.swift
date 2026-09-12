@@ -85,9 +85,18 @@ public enum FCP7XMLExporter {
         /// be, and writing one number into both roles is how a second day's
         /// links point at the first day's clips.
         let id: Int
-        /// The take's length in ITS OWN frames.
+        /// The WHOLE file's length in ITS OWN frames — the media's extent,
+        /// which `<file><duration>` declares however little of it is used.
         let frames: Int
-        /// The same length in the SEQUENCE's frames, which is what the record
+        /// How far into the file the clip starts, in the file's own frames —
+        /// zero unless the operator marked an in point.
+        let head: Int
+        /// How much of the file the clip USES, in the file's own frames (owner:
+        /// "в самом таймлайне клип кидай по ин ауту но сорс пускай остается
+        /// полным"). The whole of it unless review narrowed it; the file stays
+        /// whole either way, so the handles are there to pull back out.
+        let used: Int
+        /// The USED length in the SEQUENCE's frames, which is what the record
         /// side advances by and is not the clip's own count at a mixed rate.
         let recordFrames: Int
         /// Where this clip sits on the timeline, in sequence frames.
@@ -103,11 +112,23 @@ public enum FCP7XMLExporter {
         let width: Int
         let height: Int
 
+        /// The clip's out point on the FILE's own line — where `<out>` goes.
+        var tail: Int { head + used }
+
         var fileID: String { "file-\(id)" }
         /// Picture and sound get their own ids out of one counter, so a
         /// reader that resolves `linkclipref` finds exactly one clip.
         var videoID: String { "clipitem-\(id * 2 - 1)" }
         var audioID: String { "clipitem-\(id * 2)" }
+    }
+
+    /// The frame size the document declares, on the sequence's canvas and on
+    /// every file in it. One value because the two always agree — and because
+    /// a pair threaded through `place` would be two of the arguments the
+    /// project's parameter-count limit allows it.
+    struct Raster: Equatable {
+        let width: Int
+        let height: Int
     }
 
     /// What a sequence says about itself before its clips: its element id,
@@ -130,19 +151,26 @@ public enum FCP7XMLExporter {
     /// 1920×1080, which is what the ALE's CUSTOM heading does for the same
     /// reason. The picture on the timeline is the FILE's, whatever this says;
     /// the number only sizes the canvas.
+    /// `ranges` are the in/out marks made during review, keyed the way the
+    /// transport keys them. A marked take lands on the timeline as the part
+    /// that was chosen — `<in>`/`<out>` say which — while the `<file>` keeps
+    /// the whole take's duration, so the editor can drag either end back.
     public static func timeline(takes: [Take], project: String,
-                                format: CaptureFormat? = nil) -> String? {
+                                format: CaptureFormat? = nil,
+                                ranges: [String: ClipRange] = [:]) -> String? {
         guard !takes.isEmpty else { return nil }
-        let width = format?.width ?? 1920
-        let height = format?.height ?? 1080
+        let raster = Raster(width: format?.width ?? 1920,
+                            height: format?.height ?? 1080)
+        let width = raster.width
+        let height = raster.height
         let days = Shifts.split(takes)
         let title = project.isEmpty ? "TakeShot" : project
         var sequences: [String] = []
         var id = 1
         for (index, day) in days.enumerated() {
             let rate = rate(for: day.takes[0])
-            let placed = place(day.takes, sequence: rate, width: width,
-                               height: height, from: id)
+            let placed = place(day.takes, sequence: rate, raster: raster,
+                               from: id, ranges: ranges)
             id += placed.count
             let duration = (placed.last?.offset ?? 0)
                 + (placed.last?.recordFrames ?? 0)
@@ -170,22 +198,48 @@ public enum FCP7XMLExporter {
     }
 
     /// Each take with its numbers worked out once, laid end to end.
-    static func place(_ takes: [Take], sequence: Rate, width: Int,
-                      height: Int, from id: Int = 1) -> [Placed] {
+    static func place(_ takes: [Take], sequence: Rate, raster: Raster,
+                      from id: Int = 1,
+                      ranges: [String: ClipRange] = [:]) -> [Placed] {
         var offset = 0
         var placed: [Placed] = []
         for (index, take) in takes.enumerated() {
             let own = rate(for: take)
-            let record = frames(of: take, at: sequence)
+            let whole = frames(of: take, at: own)
+            // The part review chose, counted in the FILE's own frames — the
+            // same window the shift report's runtime is measured over, so a
+            // clip on the timeline and a duration on the paperwork cannot
+            // disagree about what was picked.
+            let window = TakeRuntime.window(of: take,
+                                            range: ranges[TakeRuntime.key(take)])
+            // Clamped INTO the file before either number is used, for the
+            // reason `FCPXMLExporter.place` states: a mark within half a frame
+            // of the end rounds to the file's length, and a clip that starts
+            // one past its own last frame is not a clip.
+            let head = min(window.map { frames(seconds: $0.start, at: own) } ?? 0,
+                           max(0, whole - 1))
+            let tail = min(window.map { frames(seconds: $0.end, at: own) } ?? whole,
+                           whole)
+            let used = max(1, tail - head)
+            // The RECORD side advances by what the clip SHOWS, at the
+            // sequence's rate: an advance by the whole file would open a gap.
+            let record = max(1, Int((Double(used) / own.real
+                * sequence.real).rounded()))
             placed.append(Placed(take: take, rate: own, index: index + 1,
-                                 id: id + index,
-                                 frames: frames(of: take, at: own),
+                                 id: id + index, frames: whole,
+                                 head: head, used: used,
                                  recordFrames: record, offset: offset,
                                  start: take.startTimecode?.frameNumber ?? 0,
-                                 width: width, height: height))
+                                 width: raster.width, height: raster.height))
             offset += record
         }
         return placed
+    }
+
+    /// Seconds into a file, in that file's own frames.
+    static func frames(seconds: Double, at rate: Rate) -> Int {
+        guard seconds.isFinite else { return 0 }
+        return max(0, Int((seconds * rate.real).rounded()))
     }
 
     /// A take's length in frames at `rate`, never zero: a clip of no length is

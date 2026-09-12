@@ -80,4 +80,57 @@ public struct TakeSpan: Equatable, Sendable {
             frames: frames,
             isZeroBased: take.startTimecode == nil)
     }
+
+    /// **The part of a take a timeline clip covers** (owner: "в самом таймлайне
+    /// клип кидай по ин ауту но сорс пускай остается полным").
+    ///
+    /// An in/out marked during review is a SELECTION, and a timeline is where
+    /// a selection belongs: the clip on it starts and ends where the operator
+    /// said, while the media it points at stays the whole take. That is what
+    /// lets an editor pull the head or the tail back out — the handles are
+    /// there because nothing was thrown away.
+    ///
+    /// A take nothing narrows comes back as `of(take)` exactly, so every
+    /// document an unmarked day produces is the one it always produced.
+    ///
+    /// The window is `TakeRuntime.window`, which is the same judgement the
+    /// shift report prints: one statement of what a mark selects, so a
+    /// runtime on the paperwork and a clip on the timeline cannot disagree
+    /// about which part of a take was chosen.
+    public static func marked(_ take: Take, range: ClipRange?) -> TakeSpan {
+        let whole = of(take)
+        guard let window = TakeRuntime.window(of: take, range: range) else {
+            return whole
+        }
+        let inFrames = TakeLogExporter.frameOffset(seconds: window.start,
+                                                   for: take)
+        let outFrames = TakeLogExporter.frameOffset(seconds: window.end,
+                                                    for: take)
+        // Never zero: a clip of no length is one an NLE drops from the
+        // timeline without saying so, which is the worst way for a circled
+        // take to go missing.
+        let frames = max(1, outFrames - inFrames)
+        let start = Timecode(frameNumber: whole.start.frameNumber + inFrames,
+                             fps: whole.start.fps,
+                             isDropFrame: whole.start.isDropFrame)
+        return TakeSpan(
+            start: start,
+            end: Timecode(frameNumber: start.frameNumber + frames,
+                          fps: start.fps, isDropFrame: start.isDropFrame),
+            frames: frames, isZeroBased: whole.isZeroBased)
+    }
+
+    /// The real frames per second this span is counted in — the take's own
+    /// rate, with drop-frame's 1000/1001 already in it. What a RECORD side at
+    /// another rate has to convert through.
+    public var rate: Double { TakeLogExporter.realRate(of: start) }
+
+    /// How far INTO the take this span starts, in the take's own frames — 0
+    /// for a span nothing narrowed.
+    ///
+    /// What a format needs when it counts a clip's in point from the file's
+    /// first frame rather than from its timecode, which FCP7 `xmeml` does.
+    public func offset(from whole: TakeSpan) -> Int {
+        max(0, start.frameNumber - whole.start.frameNumber)
+    }
 }

@@ -60,16 +60,31 @@ public enum FCPXMLExporter {
         let formatID: String
         let take: Take
         let frame: FrameDuration
-        /// The take's length in its OWN frames.
+        /// The WHOLE take's length in its own frames — the media's extent,
+        /// which is what the `<asset>` declares however little of it the clip
+        /// uses.
         let frames: Int
         /// Where the file's timecode starts, in its own frames.
         let start: Int
+        /// How far into the take the clip begins, in the take's own frames —
+        /// zero unless the operator marked an in point.
+        let head: Int
+        /// How much of the take the CLIP uses, in the take's own frames. The
+        /// whole of it unless review narrowed it (owner: "в самом таймлайне
+        /// клип кидай по ин ауту но сорс пускай остается полным"): the media
+        /// stays whole either way, so an editor can pull the handles back out.
+        let used: Int
 
-        /// The same length counted in the SEQUENCE's frames — what the record
-        /// side advances by, which is not the clip's own count when the two
-        /// run at different rates.
+        /// Where the clip starts in the SOURCE's time — the asset's own start
+        /// advanced by the in point. FCPXML measures both `start` and every
+        /// marker inside the clip on this line.
+        var sourceStart: Int { start + head }
+
+        /// The length the clip uses, counted in the SEQUENCE's frames — what
+        /// the record side advances by, which is not the clip's own count when
+        /// the two run at different rates.
         func recordFrames(on sequence: FrameDuration) -> Int {
-            Int((Double(frames) * Double(frame.numerator)
+            Int((Double(used) * Double(frame.numerator)
                 / Double(frame.denominator)
                 * Double(sequence.denominator) / Double(sequence.numerator))
                 .rounded())
@@ -84,8 +99,13 @@ public enum FCPXMLExporter {
     /// 1920×1080, which is what the ALE's CUSTOM heading does for the same
     /// reason. The picture on the timeline is the FILE's, whatever this says;
     /// the number only sizes the canvas.
+    /// `ranges` are the in/out marks made during review, keyed the way the
+    /// transport keys them. A marked take becomes a clip over the part that
+    /// was chosen while its `<asset>` keeps the whole file's extent — handles
+    /// at both ends, for an editor who needs a frame back.
     public static func timeline(takes: [Take], project: String,
-                                format: CaptureFormat? = nil) -> String? {
+                                format: CaptureFormat? = nil,
+                                ranges: [String: ClipRange] = [:]) -> String? {
         guard !takes.isEmpty else { return nil }
         // The sequence runs at the FIRST take's rate. A day that mixed rates
         // would need a format per clip, which Resolve honours and Premiere
@@ -98,7 +118,8 @@ public enum FCPXMLExporter {
         // whole library, which is what the format wants and what keeps a take
         // appearing in two shifts impossible: the ids run across every day.
         let days = Shifts.split(takes)
-        let placed = place(days.flatMap(\.takes), sequence: sequence)
+        let placed = place(days.flatMap(\.takes), sequence: sequence,
+                           ranges: ranges)
         var resources: [String] = [
             formatElement(id: "r0", frame: sequence, width: width, height: height),
         ]
@@ -145,16 +166,37 @@ public enum FCPXMLExporter {
     }
 
     /// Each take with its ids and its numbers worked out once.
-    private static func place(_ takes: [Take],
-                              sequence: FrameDuration) -> [Placed] {
+    private static func place(_ takes: [Take], sequence: FrameDuration,
+                              ranges: [String: ClipRange]) -> [Placed] {
         takes.enumerated().map { index, take in
             let frame = frameDuration(for: take)
+            let frames = frameCount(of: take, frame: frame)
+            // The part review chose, counted in the FILE's frames — the same
+            // window the shift report's runtime is measured over, so a clip on
+            // the timeline and a duration on the paperwork cannot disagree.
+            let window = TakeRuntime.window(of: take,
+                                            range: ranges[TakeRuntime.key(take)])
+            // Clamped INTO the file before either number is used, so the two
+            // cannot be read from different heads: a mark within half a frame
+            // of the end rounds to the file's length, and a clip that starts
+            // one past its own last frame is not a clip.
+            let head = min(window.map { frameIndex($0.start, frame: frame) } ?? 0,
+                           max(0, frames - 1))
+            let tail = min(window.map { frameIndex($0.end, frame: frame) } ?? frames,
+                           frames)
             return Placed(assetID: "a\(index + 1)",
                           formatID: frame == sequence ? "r0" : "r\(index + 1)",
-                          take: take, frame: frame,
-                          frames: frameCount(of: take, frame: frame),
-                          start: startFrames(of: take))
+                          take: take, frame: frame, frames: frames,
+                          start: startFrames(of: take),
+                          head: head, used: max(1, tail - head))
         }
+    }
+
+    /// Seconds into a file, in that file's own frames.
+    private static func frameIndex(_ seconds: Double,
+                                   frame: FrameDuration) -> Int {
+        let rate = Double(frame.denominator) / Double(frame.numerator)
+        return max(0, Int((seconds * rate).rounded()))
     }
 
     // MARK: - the elements
@@ -221,14 +263,25 @@ public enum FCPXMLExporter {
         """
     }
 
+    /// One clip. It starts where the operator's in point is and runs for what
+    /// they kept; the asset it references is still the whole file.
+    ///
+    /// Markers outside that window are DROPPED. FCPXML measures a marker on
+    /// the clip's own source line, so one before the in point or past the out
+    /// point is a marker outside the element that contains it — Resolve
+    /// rejects the document rather than placing it, and an export that fails
+    /// to open is worse than an export missing a note about a moment nobody
+    /// put on the timeline.
     private static func clipElement(_ clip: Placed, offset: String) -> String {
-        let markers = clip.take.markers.map { marker in
+        let markers = clip.take.markers.compactMap { marker -> String? in
             // On the CLIP's own timeline, which starts at the asset's source
             // timecode — a marker written from zero lands on the wrong frame
             // by exactly the take's start TC.
             let at = clip.start
                 + TakeLogExporter.frameOffset(seconds: marker.seconds,
                                               for: clip.take)
+            guard at >= clip.sourceStart,
+                  at < clip.sourceStart + clip.used else { return nil }
             let note = marker.note.isEmpty ? marker.timecodeText : marker.note
             return """
                         <marker start="\(clip.frame.time(frames: at))" \
@@ -238,8 +291,8 @@ public enum FCPXMLExporter {
         let head = """
                 <asset-clip ref="\(clip.assetID)" \
         name="\(escape(clip.take.displayName))" offset="\(offset)" \
-        start="\(clip.frame.time(frames: clip.start))" \
-        duration="\(clip.frame.time(frames: clip.frames))" \
+        start="\(clip.frame.time(frames: clip.sourceStart))" \
+        duration="\(clip.frame.time(frames: clip.used))" \
         format="\(clip.formatID)"
         """
         guard !markers.isEmpty else { return head + "/>" }

@@ -25,9 +25,16 @@ public enum EDLExporter {
     /// A .cube look passes nil: nine numbers cannot describe a 3D LUT, and
     /// writing an identity SOP instead would tell the colourist the day was
     /// graded flat when it was not.
+    /// `ranges` are the in/out marks the operator made during review, keyed by
+    /// file name as the transport keys them. A marked take becomes an event
+    /// over the PART that was chosen — the source in/out say so — while the
+    /// reel it names is the whole take, so an editor can pull the head or the
+    /// tail back (owner: "в самом таймлайне клип кидай по ин ауту но сорс
+    /// пускай остается полным").
     public static func selectsEDL(takes: [Take], title: String,
                                   fps defaultFPS: Int = 25,
-                                  cdl: CDLLook? = nil) -> String? {
+                                  cdl: CDLLook? = nil,
+                                  ranges: [String: ClipRange] = [:]) -> String? {
         guard !takes.isEmpty else { return nil }
         let fps = takes.first?.startTimecode?.fps ?? defaultFPS
         let dropFrame = takes.first?.startTimecode?.isDropFrame ?? false
@@ -42,40 +49,88 @@ public enum EDLExporter {
         var recordFrame = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0,
                                    fps: fps, isDropFrame: dropFrame).frameNumber
         for (index, take) in takes.enumerated() {
-            let frames = max(1, Int((take.durationSeconds * realRate).rounded()))
-            lines += eventLines(for: take, index: index, recordFrame: recordFrame,
-                                frames: frames, timeline: timeline)
+            // The part the operator chose, on the take's own timebase — and
+            // the whole take, which is what the markers are measured from.
+            let span = TakeSpan.marked(take, range: ranges[TakeRuntime.key(take)])
+            let whole = TakeSpan.of(take)
+            // The RECORD side advances by what this event actually shows, at
+            // the sequence's rate: a trimmed event that advanced by the whole
+            // take's length would leave a gap on the timeline.
+            let placed = Placed(
+                take: take, span: span, sourceFrames: sourceFrames(of: span),
+                head: span.offset(from: whole),
+                rate: whole.rate, recordFrame: recordFrame,
+                frames: max(1, Int((Double(span.frames) / span.rate
+                    * realRate).rounded())))
+            lines += eventLines(for: placed, index: index, timeline: timeline)
             if let cdl { lines += ascLines(for: cdl) }
-            lines += markerLines(for: take, recordFrame: recordFrame,
-                                 timeline: timeline)
+            lines += markerLines(for: placed, timeline: timeline)
             lines.append("")
-            recordFrame += frames
+            recordFrame += placed.frames
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// One take's place in the list: the part of it this event shows, how far
+    /// into the take that part starts, and where it lands on the record side.
+    ///
+    /// A value rather than the five arguments the two writers below would both
+    /// have taken — which is also what the project's parameter-count limit
+    /// says — and a real grouping rather than a bag: the event line and its
+    /// locators state the same trim, and the way they stop agreeing is one
+    /// call site being edited and not the other.
+    private struct Placed {
+        let take: Take
+        /// The part the operator chose, on the take's own timebase.
+        let span: TakeSpan
+        /// The same length with this FORMAT's floor under it — see
+        /// `sourceFrames(of:)`.
+        let sourceFrames: Int
+
+        /// Where the event's source side ends.
+        var sourceOut: Timecode {
+            Timecode(frameNumber: span.start.frameNumber + sourceFrames,
+                     fps: span.start.fps, isDropFrame: span.start.isDropFrame)
+        }
+        /// Frames into the take that part begins at — 0 for an unmarked take.
+        let head: Int
+        /// The take's own real frames a second, which `head` is counted in.
+        let rate: Double
+        /// Where the event sits on the record timeline, and how long it runs
+        /// there — both in the sequence's frames.
+        let recordFrame: Int
+        let frames: Int
+    }
+
+    /// **A CMX event of no length is invalid**, so a take that finalized with
+    /// nothing in it still cuts one frame here — the floor the record side
+    /// below has always had, applied to the SOURCE side as well.
+    ///
+    /// Here and not in `TakeSpan`, deliberately: where a take ENDED is a fact
+    /// about the take and a zero-length one ended where it started
+    /// (`TakeSpanTests.aZeroLengthTakeEndsWhereItStarted`), while one frame is
+    /// a rule about this document. A marked span is clamped already — this is
+    /// only ever the unmarked zero-length case.
+    private static func sourceFrames(of span: TakeSpan) -> Int {
+        max(1, span.frames)
+    }
+
     /// One event: the cut line, the source clip name and the take comment.
-    /// `frames` is the take's length on the RECORD side, already computed at
-    /// the master rate by the caller.
-    private static func eventLines(for take: Take, index: Int, recordFrame: Int,
-                                   frames: Int, timeline: Timeline) -> [String] {
+    private static func eventLines(for placed: Placed, index: Int,
+                                   timeline: Timeline) -> [String] {
+        let take = placed.take
         let fps = timeline.fps
         let dropFrame = timeline.isDropFrame
-        // source TCs run at the TAKE's own rate (mixed-fps sessions):
-        // using the master rate landed conform on wrong frames
-        let sourceFPS = take.startTimecode?.fps ?? fps
-        let sourceDF = take.startTimecode?.isDropFrame ?? dropFrame
-        let sourceRate = Double(sourceFPS) * (sourceDF ? 1000.0 / 1001.0 : 1)
-        let sourceFrames = max(1, Int((take.durationSeconds
-            * sourceRate).rounded()))
-        let sourceIn = take.startTimecode
-            ?? Timecode(frameNumber: 0, fps: sourceFPS, isDropFrame: sourceDF)
-        let sourceOut = Timecode(frameNumber: sourceIn.frameNumber + sourceFrames,
-                                 fps: sourceFPS, isDropFrame: sourceDF)
-        let recordIn = Timecode(frameNumber: recordFrame, fps: fps,
+        // Source TCs run at the TAKE's own rate (mixed-fps sessions): using
+        // the master rate landed conform on wrong frames. `TakeSpan` carries
+        // that arithmetic, and `marked` narrows it to the part the operator
+        // chose — the reel still points at the whole take.
+        let sourceIn = placed.span.start
+        let sourceOut = placed.sourceOut
+        let recordIn = Timecode(frameNumber: placed.recordFrame, fps: fps,
                                 isDropFrame: dropFrame)
-        let recordOut = Timecode(frameNumber: recordFrame + frames, fps: fps,
-                                 isDropFrame: dropFrame)
+        let recordOut = Timecode(frameNumber: placed.recordFrame + placed.frames,
+                                 fps: fps, isDropFrame: dropFrame)
         let reel = reelName(for: take, index: index)
         var lines = [String(
             format: "%03d  %@ V     C        %@ %@ %@ %@",
@@ -116,13 +171,27 @@ public enum EDLExporter {
         String(format: "(%.4f %.4f %.4f)", rgb.r, rgb.g, rgb.b)
     }
 
-    /// The take's markers as `* LOC:` locator lines, placed on the record
-    /// timeline (Resolve imports these as timeline markers).
-    private static func markerLines(for take: Take, recordFrame: Int,
+    /// **The take's markers as `* LOC:` locator lines**, placed on the record
+    /// timeline (Resolve imports these as timeline markers) and measured from
+    /// the part that is ON it.
+    ///
+    /// `Placed.head` is how far into the take the event starts, in the take's
+    /// own frames. A marker before that point is not on this event at all, and
+    /// one written from the take's first frame would land that far ahead of
+    /// where it belongs — on the event before, or off the front of the
+    /// timeline.
+    ///
+    /// Outside the chosen part they are DROPPED rather than clamped: a locator
+    /// sitting on the first frame, for a moment that is not in the cut, is a
+    /// worse answer than no locator.
+    private static func markerLines(for placed: Placed,
                                     timeline: Timeline) -> [String] {
-        take.markers.map { marker in
-            let offset = Int((marker.seconds * timeline.realRate).rounded())
-            let locator = Timecode(frameNumber: recordFrame + offset,
+        let headSeconds = placed.rate > 0 ? Double(placed.head) / placed.rate : 0
+        return placed.take.markers.compactMap { marker -> String? in
+            let offset = Int(((marker.seconds - headSeconds)
+                * timeline.realRate).rounded())
+            guard offset >= 0, offset < placed.frames else { return nil }
+            let locator = Timecode(frameNumber: placed.recordFrame + offset,
                                    fps: timeline.fps,
                                    isDropFrame: timeline.isDropFrame)
             var name = marker.note

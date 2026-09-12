@@ -69,10 +69,14 @@ extension FCP7XMLExporter {
     /// The picture clip: where it sits on the timeline, what part of the file
     /// it shows, the file itself, its markers and its link to the sound.
     ///
-    /// `in` is 0 and `out` is the whole file. A take IS the clip — the in/out
-    /// an operator marks during review is a loop range for watching, and a
-    /// timeline that quietly dropped the footage outside it would be an export
-    /// nobody asked for. The shift report is where that mark is stated.
+    /// **`in`/`out` are the part review chose and `<duration>` is the whole
+    /// file** (owner: "в самом таймлайне клип кидай по ин ауту но сорс пускай
+    /// остается полным"). The two are different numbers on purpose: this
+    /// format states a clipitem's media length and its used range separately,
+    /// so a clip trimmed to a chosen moment still carries handles at both ends
+    /// — the editor drags either edge and the rest of the take is there. A
+    /// take nothing narrowed writes `<in>0</in>` and the whole length, which
+    /// is what every timeline this app has written says.
     static func videoClip(_ clip: Placed) -> String {
         let body = """
                   <clipitem id="\(clip.videoID)">
@@ -81,8 +85,8 @@ extension FCP7XMLExporter {
         \(rateElement(clip.rate, indent: "            "))
                     <start>\(clip.offset)</start>
                     <end>\(clip.offset + clip.recordFrames)</end>
-                    <in>0</in>
-                    <out>\(clip.frames)</out>
+                    <in>\(clip.head)</in>
+                    <out>\(clip.tail)</out>
         \(fileElement(clip, indent: "            "))
                     <sourcetrack>
                       <mediatype>video</mediatype>
@@ -104,8 +108,8 @@ extension FCP7XMLExporter {
         \(rateElement(clip.rate, indent: "            "))
                     <start>\(clip.offset)</start>
                     <end>\(clip.offset + clip.recordFrames)</end>
-                    <in>0</in>
-                    <out>\(clip.frames)</out>
+                    <in>\(clip.head)</in>
+                    <out>\(clip.tail)</out>
                     <file id="\(clip.fileID)"/>
                     <sourcetrack>
                       <mediatype>audio</mediatype>
@@ -125,6 +129,12 @@ extension FCP7XMLExporter {
     /// — its clip timeline starts at the asset's source timecode.)
     ///
     /// `out` is -1, which is this format's "a point, not a range".
+    ///
+    /// Markers outside a trimmed clip's in/out are KEPT, unlike the two
+    /// formats next door. Here they are positions on the MEDIA, which the
+    /// clipitem declares in full, so one before the in point is a legal
+    /// statement about a frame the editor can still drag back to — and if they
+    /// do, the note they were left is waiting on it.
     static func markerElements(_ clip: Placed) -> String {
         clip.take.markers.map { marker in
             let name = marker.note.isEmpty ? marker.timecodeText : marker.note

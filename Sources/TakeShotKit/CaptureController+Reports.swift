@@ -31,7 +31,8 @@ extension CaptureController {
     func exportSelectsEDL() {
         guard let edl = EDLExporter.selectsEDL(
             takes: goodTakes, title: "\(settings.naming.projectName) selects",
-            fps: Int(max(1, playbackFPS).rounded()), cdl: currentCDL)
+            fps: Int(max(1, playbackFPS).rounded()), cdl: currentCDL,
+            ranges: transport.storedRanges)
         else {
             lastError = L("export_no_good_takes")
             return
@@ -95,7 +96,7 @@ extension CaptureController {
     func exportFCPXML() {
         guard let xml = FCPXMLExporter.timeline(
             takes: goodTakes, project: settings.naming.projectName,
-            format: signalFormat) else {
+            format: signalFormat, ranges: transport.storedRanges) else {
             lastError = L("export_no_good_takes")
             return
         }
@@ -121,7 +122,7 @@ extension CaptureController {
     func exportFCP7XML() {
         guard let xml = FCP7XMLExporter.timeline(
             takes: goodTakes, project: settings.naming.projectName,
-            format: signalFormat) else {
+            format: signalFormat, ranges: transport.storedRanges) else {
             lastError = L("export_no_good_takes")
             return
         }
