@@ -222,4 +222,43 @@ import Testing
             #expect(controller.settings.dailies.variants == nil)
         }
     }
+    // MARK: - only the circled takes, off a card
+
+    /// **The switch is offered for a card only while the sync is on.** Without
+    /// it a card clip has no rating at all, so the switch would have nothing
+    /// to keep and would empty the queue.
+    @Test func theCircledSwitchNeedsTheSyncForACard() async throws {
+        try await ControllerHarness.run { controller, root in
+            let model = controller.dailies
+            // a take-based queue: always available
+            #expect(controller.canFilterDailiesToGoodTakes)
+
+            model.addSource(root)
+            #expect(!controller.canFilterDailiesToGoodTakes,
+                    "the switch was offered for a card with no sync")
+            model.syncWithTakes = true
+            #expect(controller.canFilterDailiesToGoodTakes)
+        }
+    }
+
+    /// …and a box left ticked when the sync is switched off must not quietly
+    /// render nothing: the run reads the same rule the switch is offered on.
+    @Test func aTickedBoxWithoutTheSyncDoesNotEmptyTheRun() async throws {
+        try await ControllerHarness.run { controller, root in
+            let model = controller.dailies
+            model.goodTakesOnly = true
+            model.addSource(root)
+
+            model.syncWithTakes = true
+            #expect(model.circledOnly)
+            model.syncWithTakes = false
+            #expect(!model.circledOnly,
+                    "a card run would have filtered every clip out")
+            // a take-based queue is filtered where it is built, and the run's
+            // own pass over it is a no-op rather than a second rule
+            model.removeSource(root)
+            #expect(model.circledOnly)
+        }
+    }
+
 }

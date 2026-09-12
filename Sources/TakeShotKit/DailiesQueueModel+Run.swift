@@ -29,6 +29,7 @@ struct DailiesRunShared: Sendable {
     /// which is every run made of the app's own takes.
     let syncTakes: [TakeSync.Candidate]
     let waveformSync: Bool
+    let circledOnly: Bool
 }
 
 extension DailiesQueueModel {
@@ -82,6 +83,7 @@ extension DailiesQueueModel {
         let skip = skipFinished
         let normalize = normalizeAudio
         let byEar = waveformSync
+        let onlyCircled = circledOnly
         // **Built on this side**, like everything else the task is handed: the
         // takes and the transport's marks are the main actor's.
         let syncTakes = syncWithTakes
@@ -113,7 +115,7 @@ extension DailiesQueueModel {
             burnins: burnins, folder: destination, extras: extras, look: look,
             desqueeze: squeeze, sounds: sounds, skipFinished: skip,
             normalizeAudio: normalize, syncTakes: syncTakes,
-            waveformSync: byEar)
+            waveformSync: byEar, circledOnly: onlyCircled)
         Task.detached(priority: .utility) {
             complete(await Self.runPasses(passes, total: total, shared: shared,
                                           control: token, publish: publish))
@@ -176,6 +178,7 @@ extension DailiesQueueModel {
                 normalizeAudio: shared.normalizeAudio,
                 syncWith: shared.syncTakes, sounds: shared.sounds,
                 waveformSync: shared.waveformSync,
+                circledOnly: shared.circledOnly,
                 skipFinished: shared.skipFinished, control: control,
                 progress: { snapshot in
                     publish(whole(snapshot, after: done, of: total))

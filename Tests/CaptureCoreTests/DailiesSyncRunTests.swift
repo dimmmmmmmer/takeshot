@@ -151,4 +151,149 @@ import Testing
         #expect(again.items.first?.wasSkipped == true,
                 "the same trim rendered a second time")
     }
+    // MARK: - only the circled takes, off a card
+
+    /// **The switch the app could not offer for a card until now** (owner: "а,
+    /// давай еще сделаем галку где-нибудь типа рендерить только удачные
+    /// тейки"). A clip off a card has no rating of its own; matched to a take
+    /// it has one, and the run can leave the rest.
+    @Test func onlyTheCircledTakesAreRenderedOffACard() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let good = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0001.mov"), frames: 25)
+        let bad = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0002.mov"), frames: 25)
+        // one take over each clip, circled and not
+        let takes = [TakeSync.Candidate(start: tenAM, duration: 1,
+                                        name: "A001C001", rating: .good),
+                     TakeSync.Candidate(start: tenAM, duration: 1,
+                                        name: "A001C002", rating: .bad)]
+
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: good)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D"), codec: .proResProxy,
+            syncWith: [takes[0]], circledOnly: true)
+        #expect(report.items.first?.output != nil,
+                "a circled take was left out")
+        #expect(report.items.first?.wasFiltered == false)
+
+        let rejected = await DailiesEngine.run(
+            items: [DailiesRig.item(for: bad)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D2"), codec: .proResProxy,
+            syncWith: [takes[1]], circledOnly: true)
+        #expect(rejected.items.first?.wasFiltered == true,
+                "a rejected take was rendered anyway")
+        #expect(rejected.items.first?.output == nil)
+        #expect(rejected.items.first?.failure == nil,
+                "leaving a clip out is not a failure")
+    }
+
+    /// **A clip no take covers is left out too**, which is the literal reading
+    /// of the switch: a clip nothing circled is not a circled take. It is
+    /// REPORTED rather than dropped, so the length of the report still matches
+    /// the queue's and the panel can say how many were left.
+    @Test func aClipThatMatchesNothingIsLeftOutAndSaidSo() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0003.mov"), frames: 25)
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: source)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D"), codec: .proResProxy,
+            // a take an hour away: nothing matches
+            syncWith: [TakeSync.Candidate(start: tenAM + 3600, duration: 60,
+                                          name: "A001C009", rating: .good)],
+            circledOnly: true)
+        #expect(report.items.count == 1, "the report lost an item")
+        #expect(report.items.first?.wasFiltered == true)
+        #expect(report.filtered.count == 1)
+    }
+
+    /// …and with the switch OFF everything is rendered, whatever it is rated.
+    @Test func withoutTheSwitchEveryClipIsRendered() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0004.mov"), frames: 25)
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: source)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D"), codec: .proResProxy,
+            syncWith: [TakeSync.Candidate(start: tenAM, duration: 1,
+                                          name: "A001C001", rating: .bad)])
+        #expect(report.items.first?.output != nil)
+        #expect(report.filtered.isEmpty)
+    }
+
+    /// **A day with some clips left out is a day that succeeded.** The
+    /// operator asked for them to be left, and a report that called the run
+    /// unsuccessful for obeying would be the app arguing with the checkbox —
+    /// which is what the panel would then show as a failure with nothing
+    /// failed in it.
+    @Test func leavingSomeClipsOutStillCountsAsASuccessfulRun() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let good = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0006.mov"), frames: 25)
+        let bad = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0007.mov"), frames: 25)
+        // both clips sit on the same moment; the takes differ in rating, and
+        // the matcher gives each clip the take it shares the most with
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: good), DailiesRig.item(for: bad)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D"), codec: .proResProxy,
+            syncWith: [TakeSync.Candidate(start: tenAM, duration: 1,
+                                          name: "A001C001", rating: .good)],
+            circledOnly: true)
+        #expect(report.items.count == 2)
+        #expect(report.filtered.isEmpty,
+                "both clips match the circled take and both should render")
+        #expect(report.isFullySucceeded)
+
+        // …and now one of them matches NOTHING — a clip with no timecode at
+        // all, which is what a camera original from before the app was
+        // running looks like. It is left out, and the run is still a success.
+        let stray = try await DailiesRig.writeForeignClip(
+            at: root.appendingPathComponent("C0008.mp4"), frames: 10)
+        let mixed = await DailiesEngine.run(
+            items: [DailiesRig.item(for: good), DailiesRig.item(for: stray)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D2"), codec: .proResProxy,
+            syncWith: [TakeSync.Candidate(start: tenAM, duration: 1,
+                                          name: "A001C001", rating: .good)],
+            circledOnly: true)
+        #expect(mixed.items.count == 2)
+        #expect(mixed.filtered.count == 1,
+                "the clip that matched nothing was not left out")
+        #expect(mixed.completed.count == 1)
+        #expect(mixed.isFullySucceeded,
+                "a run that left a clip out on purpose was called a failure")
+    }
+
+    /// **A run that left everything out is not a failed run.** The operator
+    /// asked for it, and a report that called the day unsuccessful would be
+    /// the app arguing with the checkbox.
+    @Test func aRunThatLeftEverythingOutIsNotAFailure() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("C0005.mov"), frames: 25)
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: source)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("D"), codec: .proResProxy,
+            syncWith: [TakeSync.Candidate(start: tenAM, duration: 1,
+                                          name: "A001C001", rating: .bad)],
+            circledOnly: true)
+        #expect(report.failed.isEmpty)
+        #expect(!report.isFullySucceeded,
+                "a run that made nothing did not make everything")
+        #expect(report.filtered.count == report.items.count)
+    }
+
 }

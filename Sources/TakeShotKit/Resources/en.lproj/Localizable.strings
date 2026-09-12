@@ -916,6 +916,8 @@
 "dailies_status_reopen" = "Open the dailies queue";
 "dailies_cancelling" = "Dailies: stopping…";
 "dailies_done" = "Dailies done: %@";
+"dailies_left_out_fmt" = "%1$@ · %2$d left out";
+"dailies_all_left_out" = "Nothing rendered: %d clips belong to takes nobody circled";
 "dailies_done_with_skips" = "%@ rendered, %d already there.";
 "dailies_failed" = "Dailies: %d failed (%@)";
 "dailies_cancelled" = "Dailies stopped: %d of %d done";

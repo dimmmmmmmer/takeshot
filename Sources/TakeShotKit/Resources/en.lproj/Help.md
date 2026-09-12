@@ -322,7 +322,11 @@ names never match — and rendered with that take's name on the strip, its
 markers as chapters, and **trimmed to its in/out**. A clip nothing matches is
 rendered whole, because a card holds footage from before the app was running.
 A trimmed daily is a different deliverable, so it does not count as already
-rendered, and moving an in point renders that one again.
+rendered, and moving an in point renders that one again. With the sync on,
+"only the circled takes" works for a folder of card clips too — a clip matched
+to a take nobody circled is left out, and so is one no take covers at all,
+since that is not a circled take either. The run says how many it left rather
+than leaving a gap between what was queued and what was made.
 
 **Even out the sound** brings every review copy to the same loudness — EBU
 R128's −23 LUFS, measured per take to ITU-R BS.1770 rather than off a peak,

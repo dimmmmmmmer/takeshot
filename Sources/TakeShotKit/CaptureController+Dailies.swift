@@ -37,8 +37,16 @@ extension CaptureController {
     /// beside the footage. So the switch greys with a source folder on the
     /// list rather than quietly narrowing nothing, which is the difference
     /// between a control that is off and a control that is lying.
+    /// **Only the circled takes** — offered for a run made of takes always,
+    /// and for one made of card clips only while it is syncing with them.
+    ///
+    /// Without the sync a card clip has no rating at all, so the switch would
+    /// have nothing to keep and would empty the queue. `circledOnly` below
+    /// reads the same rule, so a box left ticked when the sync is switched off
+    /// cannot quietly render nothing.
     var canFilterDailiesToGoodTakes: Bool {
-        !dailies.isRunning && dailies.sources.isEmpty
+        !dailies.isRunning
+            && (dailies.sources.isEmpty || dailies.syncWithTakes)
     }
 
     /// Whether the destination can be checked: there is one, nothing is
@@ -316,17 +324,29 @@ extension CaptureController {
         if report.wasCancelled {
             lastNotice = L("dailies_cancelled", report.completed.count,
                            report.items.count)
+        } else if report.filtered.count == report.items.count,
+                  !report.items.isEmpty {
+            // **Everything was left out**, which is a real outcome and not a
+            // failure: the operator asked for the circled takes and this
+            // folder holds none. Its own line, because the branch below would
+            // report it as "0 failed" — a sentence about nothing.
+            lastNotice = L("dailies_all_left_out", report.filtered.count)
         } else if report.isFullySucceeded {
             // **What the run DID, not what the folder holds.** With the skip
             // switch on, a second pass over a finished day succeeds without
             // encoding anything, and a toast saying "40 files" would be
             // claiming a day's work that did not happen.
-            lastNotice = report.skipped.isEmpty
+            let made = report.skipped.isEmpty
                 ? L("dailies_done",
                     localizedCount(report.completed.count, .file))
                 : L("dailies_done_with_skips",
                     localizedCount(report.rendered.count, .file),
                     report.skipped.count)
+            // …and what it was asked to LEAVE, appended rather than branched:
+            // a clip left out is not a fourth kind of run, it is a clause.
+            lastNotice = report.filtered.isEmpty
+                ? made
+                : L("dailies_left_out_fmt", made, report.filtered.count)
         } else {
             lastError = L("dailies_failed", report.failed.count,
                           report.failed.first?.failure ?? "")

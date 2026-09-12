@@ -189,6 +189,14 @@ struct DailiesFilesTab: View {
                     .offloadText(.body)
                     .disabled(!controller.canFilterDailiesToGoodTakes)
             } else {
+                // …and the same switch for a folder of card clips, which can
+                // only mean anything once they have been matched to takes —
+                // so it is greyed until the sync below is on
+                // (`canFilterDailiesToGoodTakes`).
+                Toggle(L("dailies_good_only"), isOn: $model.goodTakesOnly)
+                    .toggleStyle(.checkbox)
+                    .offloadText(.body)
+                    .disabled(!controller.canFilterDailiesToGoodTakes)
                 // **What the day's takes know about this footage** (owner:
                 // "чтоб пользователь отметил галку допустим «синковать
                 // информацию с тейками», чтоб у нас ин/аут сработал таким

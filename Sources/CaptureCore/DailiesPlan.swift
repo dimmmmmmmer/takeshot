@@ -138,12 +138,21 @@ public struct DailiesItem: Sendable, Equatable {
     /// Seconds into the SOURCE, which is what a `ClipRange` already is.
     /// Everything a trim has to be careful about is `DailiesTrim`.
     public var range: ClipRange?
+    /// **What the matched take was rated**, or nil when nothing was matched —
+    /// a clip off a card that no take covers, or a run that was not asked to
+    /// sync at all.
+    ///
+    /// Carried rather than resolved later because the filter that reads it
+    /// runs in the queue loop, where there is no take list any more: by then
+    /// an item is the only thing that knows what it is.
+    public var rating: TakeRating?
 
     public init(source: URL, outputName: String, clipName: String,
                 projectLine: String = "", dateText: String = "",
                 startTimecode: Timecode? = nil,
                 markers: [TakeMarker] = [],
-                range: ClipRange? = nil) {
+                range: ClipRange? = nil,
+                rating: TakeRating? = nil) {
         self.source = source
         self.outputName = outputName
         self.clipName = clipName
@@ -152,6 +161,7 @@ public struct DailiesItem: Sendable, Equatable {
         self.startTimecode = startTimecode
         self.markers = markers
         self.range = range
+        self.rating = rating
     }
 }
 
@@ -279,6 +289,20 @@ public struct DailiesItemResult: Sendable, Equatable {
     /// flag is what lets the report say "30 already rendered, 12 made" instead
     /// of claiming a day's work it did not do.
     public var wasSkipped: Bool = false
+    /// **Left out on purpose**: the run was asked for the circled takes only
+    /// and this clip is not one (owner: "давай еще сделаем галку где-нибудь
+    /// типа рендерить только удачные тейки").
+    ///
+    /// Its own flag and not `wasSkipped`, which means "already in the folder"
+    /// and carries an OUTPUT — an item that was never meant to be rendered
+    /// has none, and calling it skipped would tell the operator a file exists
+    /// that does not. Not a failure either: nothing went wrong.
+    ///
+    /// It stays in the report so the length still matches the queue's, which
+    /// is the rule every other outcome here follows, and so the panel can say
+    /// how many clips were left rather than leaving an unexplained gap
+    /// between what was queued and what was made.
+    public var wasFiltered: Bool = false
     /// Extra destinations this daily could not be copied to, and why.
     ///
     /// Not a failure of the ITEM: the daily exists, and a report that called
@@ -287,12 +311,14 @@ public struct DailiesItemResult: Sendable, Equatable {
     public var copyFailures: [String] = []
 
     public init(source: URL, output: URL? = nil, failure: String? = nil,
-                wasCancelled: Bool = false, wasSkipped: Bool = false) {
+                wasCancelled: Bool = false, wasSkipped: Bool = false,
+                wasFiltered: Bool = false) {
         self.source = source
         self.output = output
         self.failure = failure
         self.wasCancelled = wasCancelled
         self.wasSkipped = wasSkipped
+        self.wasFiltered = wasFiltered
     }
 }
 
@@ -328,8 +354,19 @@ public struct DailiesReport: Sendable, Equatable {
         items.filter { $0.output != nil && !$0.wasSkipped }
     }
 
-    /// Every queued take came out as a daily.
+    /// The ones left out because the run was asked for the circled takes
+    /// only — see `DailiesItemResult.wasFiltered`.
+    public var filtered: [DailiesItemResult] {
+        items.filter { $0.wasFiltered }
+    }
+
+    /// Every take that was MEANT to be made came out as a daily.
+    ///
+    /// A clip left out on purpose does not make a run unsuccessful: the
+    /// operator asked for it to be left, and a report that called the day
+    /// failed for obeying would be the app arguing with the checkbox.
     public var isFullySucceeded: Bool {
-        !items.isEmpty && items.allSatisfy { $0.output != nil }
+        let meant = items.filter { !$0.wasFiltered }
+        return !meant.isEmpty && meant.allSatisfy { $0.output != nil }
     }
 }

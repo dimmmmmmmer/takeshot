@@ -51,20 +51,12 @@ public enum DailiesEngine {
         syncWith takes: [TakeSync.Candidate] = [],
         sounds: [BroadcastWaveFacts] = [],
         waveformSync: Bool = false,
+        circledOnly: Bool = false,
         skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
         async -> DailiesReport {
-        do {
-            try FileManager.default.createDirectory(
-                at: folder, withIntermediateDirectories: true)
-        } catch {
-            // No destination — nothing can run, and every item says why.
-            return DailiesReport(items: items.map {
-                DailiesItemResult(source: $0.source,
-                                  failure: error.localizedDescription)
-            }, wasCancelled: false)
-        }
+        if let refusal = openDestination(folder, for: items) { return refusal }
         // **The folder's own note about itself.** Read once, written after
         // every item: a run that is killed mid-day leaves the dailies it
         // finished AND the record of them, so the next one starts where this
@@ -99,6 +91,11 @@ public enum DailiesEngine {
                     DailiesItemResult(source: $0.source, wasCancelled: true)
                 })
                 break
+            }
+            if circledOnly, item.rating != .good {
+                results.append(filtered(item, at: (index, items.count),
+                                        progress: progress))
+                continue
             }
             if skipFinished,
                let done = skipped(item, at: (index, items.count),

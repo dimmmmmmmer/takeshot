@@ -133,6 +133,21 @@ extension DailiesQueueModel {
         return "_REVIEW"
     }
 
+    /// **Whether the run itself has to leave the uncircled ones out.**
+    ///
+    /// A take-based queue is already filtered where it is built (`contents`),
+    /// so this is a no-op there and is passed anyway — the items carry their
+    /// ratings and a second pass over circled takes keeps all of them. What it
+    /// is FOR is a run made of card clips, where the rating only exists
+    /// because the clips were matched to takes.
+    ///
+    /// The sync is part of the condition rather than assumed: a box left
+    /// ticked when the sync is switched off would otherwise filter every clip
+    /// out, because none of them would have a rating to keep.
+    var circledOnly: Bool {
+        goodTakesOnly && (sources.isEmpty || syncWithTakes)
+    }
+
     /// **Every pass the run will make**: the sheet's own settings first, then
     /// one per extra variant.
     ///

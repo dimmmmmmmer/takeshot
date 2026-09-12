@@ -906,6 +906,8 @@
 "dailies_status_reopen" = "Открыть очередь дейлизов";
 "dailies_cancelling" = "Дейлизы: остановка…";
 "dailies_done" = "Дейлизы готовы: %@";
+"dailies_left_out_fmt" = "%1$@ · пропущено: %2$d";
+"dailies_all_left_out" = "Ничего не отрендерено: %d клипов относятся к дублям, которые никто не отметил";
 "dailies_done_with_skips" = "%@ отрендерено, %d уже были.";
 "dailies_failed" = "Дейлизы: %d с ошибкой (%@)";
 "dailies_cancelled" = "Дейлизы остановлены: готово %d из %d";

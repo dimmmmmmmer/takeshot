@@ -92,6 +92,11 @@ extension DailiesQueueModel {
             startTimecode: take.startTimecode,
             // The flags become the proxy's chapters. Straight off the take —
             // they are already offsets into this very file.
-            markers: take.markers)
+            markers: take.markers,
+            // Carried even though a take-based queue is already filtered where
+            // it is built: an item that knows what it is cannot be filtered
+            // wrongly by a later pass, and "it does not need one" is exactly
+            // the assumption that breaks the day somebody adds one.
+            rating: take.rating)
     }
 }

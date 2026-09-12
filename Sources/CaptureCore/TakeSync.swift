@@ -126,6 +126,9 @@ public enum TakeSync {
         synced.clipName = take.name.isEmpty ? item.clipName : take.name
         synced.markers = take.markers
         synced.range = take.range
+        // Carried so the queue loop can act on it: by the time the filter
+        // runs there is no take list left to ask.
+        synced.rating = take.rating
         return synced
     }
 }
