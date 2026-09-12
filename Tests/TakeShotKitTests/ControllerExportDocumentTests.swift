@@ -74,10 +74,11 @@ import Testing
             try await FakeFilePanel.installed { panel in
                 controller.exportSelectsEDL()
                 controller.exportALE()
+                controller.exportFCP7XML()
                 controller.exportFCPXML()
                 controller.exportShiftReport(pdf: false)
 
-                #expect(panel.saveRequests.count == 4,
+                #expect(panel.saveRequests.count == 5,
                         "an export never got as far as the panel")
                 #expect(controller.lastNotice == nil)
                 #expect(controller.lastError == nil)
@@ -85,7 +86,7 @@ import Testing
                     atPath: root.path)
                     .filter { $0.hasSuffix(".edl") || $0.hasSuffix(".ale")
                         || $0.hasSuffix(".csv") || $0.hasSuffix(".pdf")
-                        || $0.hasSuffix(".fcpxml") }
+                        || $0.hasSuffix(".fcpxml") || $0.hasSuffix(".xml") }
                 #expect(written.isEmpty, "a cancelled export wrote \(written)")
             }
         }
@@ -103,6 +104,7 @@ import Testing
             try await FakeFilePanel.installed(
                 saving: [dead.appendingPathExtension("edl"),
                          dead.appendingPathExtension("ale"),
+                         dead.appendingPathExtension("xml"),
                          dead.appendingPathExtension("fcpxml"),
                          dead.appendingPathExtension("csv")]) { _ in
                 controller.exportSelectsEDL()
@@ -114,6 +116,12 @@ import Testing
                 #expect(controller.lastError?
                     .hasPrefix(localizedHead("toast_ale_failed")) == true,
                         "ALE failure said: \(controller.lastError ?? "nothing")")
+
+                // both timelines report through the one timeline toast
+                controller.exportFCP7XML()
+                #expect(controller.lastError?
+                    .hasPrefix(localizedHead("toast_fcpxml_failed")) == true,
+                        "XML failure said: \(controller.lastError ?? "nothing")")
 
                 controller.exportFCPXML()
                 #expect(controller.lastError?
@@ -307,6 +315,35 @@ struct ControllerFCPXMLExportTests {
                         "the timeline carried a take nobody circled")
                 #expect(controller.lastNotice
                     == L("fcpxml_saved", "cut.fcpxml"))
+                #expect(controller.lastError == nil)
+            }
+        }
+    }
+
+    /// The same cut, in the format the rest of the world reads (owner:
+    /// "таймлайн хмл мне нужен .xml а не fcpxml"). Named `.xml`, holding the
+    /// circled take and not the rejected one, and parsed rather than searched.
+    @Test func theXMLTimelineIsTheSameCutInTheOtherFormat() async throws {
+        try await project("Nightshoot") { controller, root in
+            let day = try self.day(controller, in: root)
+            let destination = root.appendingPathComponent("cut.xml")
+
+            try await FakeFilePanel.installed(saving: [destination]) { panel in
+                controller.exportFCP7XML()
+
+                #expect(panel.lastSaveName == "Nightshoot_timeline.xml")
+                let text = try String(contentsOf: destination, encoding: .utf8)
+                let document = try XMLDocument(xmlString: text, options: [])
+                #expect(document.rootElement()?.name == "xmeml")
+                let paths: [String] = try document.nodes(forXPath: "//pathurl")
+                    .compactMap(\.stringValue)
+                #expect(paths.contains { $0.hasSuffix(
+                    day.good.url.lastPathComponent) },
+                        "the circled take is not on the timeline")
+                #expect(!paths.contains { $0.hasSuffix(
+                    day.bad.url.lastPathComponent) },
+                        "the timeline carried a take nobody circled")
+                #expect(controller.lastNotice == L("fcpxml_saved", "cut.xml"))
                 #expect(controller.lastError == nil)
             }
         }

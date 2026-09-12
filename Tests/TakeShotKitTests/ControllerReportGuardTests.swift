@@ -53,7 +53,8 @@ import Testing
                     "the menu is still offering a cut of nothing")
 
             try await FakeFilePanel.installed { panel in
-                for export in [controller.exportALE, controller.exportFCPXML] {
+                for export in [controller.exportALE, controller.exportFCP7XML,
+                               controller.exportFCPXML] {
                     controller.lastError = nil
                     export()
                     #expect(controller.lastError == L("export_no_good_takes"))

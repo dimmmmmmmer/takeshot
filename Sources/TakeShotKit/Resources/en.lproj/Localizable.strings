@@ -333,6 +333,7 @@
 "export_reports_help" = "Shift report — PDF or CSV";
 "export_timeline_help" = "Good takes, for an edit suite";
 "export_ale" = "Avid log (ALE)";
+"export_fcp7xml" = "Timeline (XML)…";
 "export_fcpxml" = "Timeline (FCPXML)…";
 "fcpxml_saved" = "Timeline saved: %@";
 "toast_fcpxml_failed" = "Could not save the timeline: %@";

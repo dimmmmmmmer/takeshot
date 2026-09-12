@@ -162,10 +162,12 @@ network with no route out. Settings shows a QR code for each.
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
   locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`, an Avid log (ALE)
   of every take for a Media Composer bin, shift report as PDF and CSV.
-- FCPXML timeline of the day, every take back to back with its markers — and,
-  unlike the EDL and the ALE, each clip points at its own file, so Resolve and
-  Premiere open it with the picture already on the timeline instead of with a
-  relink dialog.
+- Timeline of the circled takes, back to back with their markers — and, unlike
+  the EDL and the ALE, each clip points at its own file, so an edit suite opens
+  it with the picture already on the timeline instead of with a relink dialog.
+  In two formats, because they reach different rooms: FCP7 `xmeml` (`.xml`),
+  which almost every application still reads, and FCPXML 1.10 (`.fcpxml`), the
+  modern one Resolve and Premiere prefer.
 - Scene, shot and take recorded per take beside the rating and the comment,
   written into the file and into the sidecars — a correction typed after the
   fact still reaches post.

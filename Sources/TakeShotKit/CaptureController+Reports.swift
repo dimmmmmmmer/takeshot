@@ -107,6 +107,32 @@ extension CaptureController {
         }
     }
 
+    /// **FCP7 XML timeline** (owner: "таймлайн хмл мне нужен .xml а не
+    /// fcpxml"): the same cut as the FCPXML beside it, in the `xmeml` every
+    /// edit suite reads rather than the one two applications read.
+    ///
+    /// Both are offered and neither replaces the other — see
+    /// `FCP7XMLExporter`'s own note for what actually differs between the two
+    /// documents. The circled takes, for the ALE's reason.
+    func exportFCP7XML() {
+        guard let xml = FCP7XMLExporter.timeline(
+            takes: goodTakes, project: settings.naming.projectName,
+            format: signalFormat) else {
+            lastError = L("export_no_good_takes")
+            return
+        }
+        let name = NamingEngine.sanitize(
+            "\(settings.naming.projectName)_timeline") + ".xml"
+        guard let url = FilePanel.save(named: name, in: destinationRoot)
+        else { return }
+        do {
+            try xml.write(to: url, atomically: true, encoding: .utf8)
+            lastNotice = L("fcpxml_saved", url.lastPathComponent)
+        } catch {
+            lastError = L("toast_fcpxml_failed", error.localizedDescription)
+        }
+    }
+
     /// Shift report: A4 PDF with thumbnails or a full CSV table.
     ///
     /// The PDF's pictures come from the panel's cache where it has them and are

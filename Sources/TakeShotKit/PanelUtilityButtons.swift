@@ -129,6 +129,10 @@ struct PanelUtilityButtons: View {
                 Section(L("export_group_selects")) {
                     Button(L("export_edl")) { controller.exportSelectsEDL() }
                     Button(L("export_ale")) { controller.exportALE() }
+                    // Two timelines, and the .xml is FIRST because it is the
+                    // one an edit suite is most likely to be able to open
+                    // (owner: "таймлайн хмл мне нужен .xml а не fcpxml").
+                    Button(L("export_fcp7xml")) { controller.exportFCP7XML() }
                     Button(L("export_fcpxml")) { controller.exportFCPXML() }
                 }
             }

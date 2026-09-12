@@ -256,6 +256,12 @@ On demand, from the export menu in the takes panel or the File menu:
 - **Avid log (ALE)** — every take, for a Media Composer bin: reel, start, end,
   duration, rate, take, scene, the Good Take flag and the comments. The reel is
   the same one the EDL writes, so the two join up.
+- **Timeline (XML)** and **Timeline (FCPXML)** — the circled takes back to
+  back, each clip pointing at its own file with its markers on it, so the
+  timeline opens with the picture already on it instead of with a relink
+  dialog. Two formats because they reach different rooms: the `.xml` is FCP7
+  `xmeml`, which almost every edit suite still reads, and the `.fcpxml` is the
+  modern one Resolve and Premiere prefer. Same cut either way.
 - **Shift report** — the full table for production paperwork, as a PDF with
   thumbnails or as a CSV. The header carries two totals: the day's footage —
   everything that was rolled — and the runtime of the circled takes, which is

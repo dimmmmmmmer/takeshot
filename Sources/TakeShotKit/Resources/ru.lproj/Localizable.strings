@@ -335,6 +335,7 @@
 "export_reports_help" = "Шифт-репорт — PDF или CSV";
 "export_timeline_help" = "Хорошие дубли — для монтажной";
 "export_ale" = "Лог для Avid (ALE)";
+"export_fcp7xml" = "Таймлайн (XML)…";
 "export_fcpxml" = "Таймлайн (FCPXML)…";
 "fcpxml_saved" = "Таймлайн сохранён: %@";
 "toast_fcpxml_failed" = "Не удалось сохранить таймлайн: %@";
