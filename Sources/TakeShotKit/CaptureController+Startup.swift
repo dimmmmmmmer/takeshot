@@ -200,6 +200,16 @@ extension CaptureController {
         // The APPLIED factor, which is 1 while the aid is switched off — the
         // stored factor is the operator's choice and outlives the switch.
         assist.desqueeze = stored.assist.desqueezeApplied
+        // The rest of the sizing, read through the clamped accessors: a
+        // hand-edited blob must not put the picture somewhere nobody can see
+        // it. The punch-in and the pan are deliberately NOT restored — a
+        // magnification is a moment in a shot, not a way of working.
+        assist.height = stored.assist.sizingHeightEffective
+        assist.rotation = stored.assist.sizingRotationEffective
+        assist.pitch = stored.assist.sizingPitchEffective
+        assist.yaw = stored.assist.sizingYawEffective
+        assist.flipH = stored.assist.sizingFlipH ?? false
+        assist.flipV = stored.assist.sizingFlipV ?? false
         assist.peakingColor = stored.assist.peakingColor
             .flatMap(ViewAssist.PeakingColor.init(rawValue:)) ?? .red
         // the framelines and the exposure legend are settings rather than

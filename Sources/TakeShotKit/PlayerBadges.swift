@@ -311,6 +311,12 @@ struct PlayerTopBadgeRow: View {
             playerOverlayBadge {
                 AssistMenu()
             }
+            // **Beside the aids and not inside them**: every control in there
+            // MOVES the picture, where an aid is drawn over it — see
+            // `SizingMenu`.
+            playerOverlayBadge {
+                SizingMenu()
+            }
             playerOverlayBadge {
                 LUTMenu()
             }

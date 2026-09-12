@@ -92,6 +92,26 @@ public struct AssistSettings: Codable, Equatable, Sendable {
     /// nil — red. A crew convention like the marker color, so it survives a
     /// relaunch. Optional, like every added field, so old saved JSON decodes.
     public var peakingColor: String?
+    /// **The rest of the sizing** — the five controls `PictureSizing` has
+    /// always understood and nothing could set (owner: pan, tilt, zoom,
+    /// rotate, width, height, pitch, yaw and flip, wanted as one set).
+    ///
+    /// All Optional and all nil at neutral, like every added field: a blob
+    /// that says nothing about them describes exactly the transform this app
+    /// has always applied, and an older build reading a blob that does say
+    /// something drops the keys it has no property for.
+    ///
+    /// The desqueeze is deliberately NOT in this group — it is `width` under
+    /// its own older name and has its own switch and its own remembered
+    /// factor (`desqueezeFactor`/`desqueezeOn`), which a second spelling here
+    /// would come apart from.
+    public var sizingHeight: Double?
+    public var sizingRotation: Double?
+    public var sizingPitch: Double?
+    public var sizingYaw: Double?
+    public var sizingFlipH: Bool?
+    public var sizingFlipV: Bool?
+
     /// Focus-peaking edge gain — the RENDERER's unit (`CIEdges` intensity),
     /// not the percentage the panel shows; nil — the default 12.
     ///
@@ -157,6 +177,26 @@ public struct AssistSettings: Codable, Equatable, Sendable {
 
     public var safeTitlePercentEffective: Double {
         min(100, max(50, safeTitlePercent ?? 90))
+    }
+
+    /// The five, as the value the renderer takes. Read through here rather
+    /// than off the raw fields: a hand-edited blob asking for a 400-degree
+    /// rotation or a height of zero is a picture nobody can see, and the
+    /// clamps are the same ones the popover's own controls offer.
+    public var sizingHeightEffective: Double {
+        min(4, max(0.25, sizingHeight ?? 1))
+    }
+
+    public var sizingRotationEffective: Double {
+        min(180, max(-180, sizingRotation ?? 0))
+    }
+
+    public var sizingPitchEffective: Double {
+        min(45, max(-45, sizingPitch ?? 0))
+    }
+
+    public var sizingYawEffective: Double {
+        min(45, max(-45, sizingYaw ?? 0))
     }
 
     /// **How bright the safe-area lines are** (owner: "добавь в сейфзоны

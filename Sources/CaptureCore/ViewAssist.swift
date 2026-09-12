@@ -79,6 +79,28 @@ public struct ViewAssist: Equatable, Sendable {
     /// Pan while punched in, in image-fraction units (0 = centered).
     public var panX: Double = 0
     public var panY: Double = 0
+    /// **The five sizing controls this app had no way to set** — the rest of
+    /// `PictureSizing`'s nine, which the renderer has understood since the
+    /// sizing type existed and nothing could reach.
+    ///
+    /// Neutral by default and therefore free: a `PictureSizing` with these at
+    /// their defaults is the transform the app has always applied, and the
+    /// renderer's own fast paths key off `isIdentity` and `isAffine` rather
+    /// than off which fields exist.
+    ///
+    /// `height` is `width`'s twin — `width` is the anamorphic desqueeze under
+    /// its Resolve name — and the two are independent on purpose: a squeezed
+    /// source is corrected on one axis, and a deliverable that has to fill a
+    /// different aspect is corrected on the other.
+    public var height: Double = 1
+    /// Degrees, positive clockwise as the operator sees it.
+    public var rotation: Double = 0
+    /// The two non-affine terms. A pick from the picture is refused while
+    /// either is set — see `PictureSizing.isAffine`.
+    public var pitch: Double = 0
+    public var yaw: Double = 0
+    public var flipH = false
+    public var flipV = false
     /// The chroma-key preview. Carried here, applied elsewhere: the pipeline
     /// splits it out in `setViewAssist` and runs it one stage BEFORE the aids,
     /// so that a false colour meters the picture the key produced rather than
@@ -262,18 +284,27 @@ public struct ViewAssist: Equatable, Sendable {
 
     /// **The geometry, as the one value that knows how to place a picture.**
     ///
-    /// The four numbers above are this app's older spelling of four of
-    /// `PictureSizing`'s nine, and the renderer goes through the new type: two
-    /// transforms doing the same arithmetic is exactly how the overlays and
-    /// the picture came apart the first time. Until the three independent sets
-    /// exist (live, playback, record), this is where a surface gets its
-    /// sizing from.
-    var sizing: PictureSizing {
+    /// The numbers above are this app's own spelling of `PictureSizing`'s
+    /// nine, and the renderer goes through the new type: two transforms doing
+    /// the same arithmetic is exactly how the overlays and the picture came
+    /// apart the first time. Until the three independent sets exist (live,
+    /// playback, record), this is where a surface gets its sizing from.
+    ///
+    /// Public because the sizing POPOVER reads it — to tint its badge and to
+    /// say when the transform has stopped being affine — and asking the nine
+    /// fields one at a time at a call site is how a tenth gets forgotten.
+    public var sizing: PictureSizing {
         var value = PictureSizing()
         value.width = desqueeze
+        value.height = height
         value.zoom = punchIn
         value.panX = panX
         value.panY = panY
+        value.rotation = rotation
+        value.pitch = pitch
+        value.yaw = yaw
+        value.flipH = flipH
+        value.flipV = flipV
         return value
     }
 

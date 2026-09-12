@@ -39,8 +39,66 @@ final class AssistLiveState: ObservableObject {
 /// the value reaches every preview surface immediately (a redraw, not a filter
 /// rebuild) and is folded into the published state once the gesture settles.
 extension CaptureController {
+    /// Whether there is anything to put back — the sizing popover's reset.
+    ///
+    /// On the controller because every `.disabled(` in this app names a rule
+    /// here rather than spelling one in a view, and this one is about the
+    /// session's own state: whether the picture has been moved at all.
+    var canResetSizing: Bool { !liveAssist.sizing.isIdentity }
+
+    /// **The nine controls back to neutral**, and nothing else with them.
+    ///
+    /// Its own action rather than the aids' reset key: those are different
+    /// questions, and an operator who has spent a minute levelling a horizon
+    /// must not lose it by switching false colour off. The aids' own reset
+    /// does clear these too — it is the whole popover set going back to how it
+    /// ships — which is stated at `ViewAssist.reset`.
+    func resetSizing() {
+        var fresh = assist
+        let bare = ViewAssist()
+        fresh.height = bare.height
+        fresh.rotation = bare.rotation
+        fresh.pitch = bare.pitch
+        fresh.yaw = bare.yaw
+        fresh.flipH = bare.flipH
+        fresh.flipV = bare.flipV
+        fresh.punchIn = bare.punchIn
+        fresh.panX = bare.panX
+        fresh.panY = bare.panY
+        assist = fresh
+    }
+
     /// Every write to `assist` lands here (from its didSet): the value goes out
     /// to the three frame sources, the draft state is settled, the scopes follow
+    /// **The five sizing controls, mirrored into the settings** — its own
+    /// function because the observer above had grown past the complexity this
+    /// project holds itself to, and because these five are one decision: a
+    /// crew convention, like the peaking colour, stored as nil at neutral so
+    /// an older build still decodes the blob.
+    private func mirrorSizing(from oldValue: ViewAssist) {
+        // A unit shooting on a camera mounted upside down flips the picture
+        // once, not once a day.
+        if oldValue.height != assist.height {
+            settings.assist.sizingHeight = assist.height == 1 ? nil : assist.height
+        }
+        if oldValue.rotation != assist.rotation {
+            settings.assist.sizingRotation =
+                assist.rotation == 0 ? nil : assist.rotation
+        }
+        if oldValue.pitch != assist.pitch {
+            settings.assist.sizingPitch = assist.pitch == 0 ? nil : assist.pitch
+        }
+        if oldValue.yaw != assist.yaw {
+            settings.assist.sizingYaw = assist.yaw == 0 ? nil : assist.yaw
+        }
+        if oldValue.flipH != assist.flipH {
+            settings.assist.sizingFlipH = assist.flipH ? true : nil
+        }
+        if oldValue.flipV != assist.flipV {
+            settings.assist.sizingFlipV = assist.flipV ? true : nil
+        }
+    }
+
     /// the punch-in, and the members that outlive a session are persisted.
     ///
     /// Lifted out of the property's own observer, where it was twenty lines of
@@ -86,6 +144,7 @@ extension CaptureController {
                 settings.assist.desqueezeOn = false
             }
         }
+        mirrorSizing(from: oldValue)
         // the peaking color is a crew convention, like the marker color:
         // stored as nil at the default so old builds still decode the blob
         if oldValue.peakingColor != assist.peakingColor {

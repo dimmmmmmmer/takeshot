@@ -324,6 +324,9 @@ final class CaptureController: ObservableObject {
     /// has to close it for the duration of a click on the picture and put it
     /// straight back afterwards — see `toggleChromaPick`.
     @Published var showAssistPopover = false
+    /// The sizing popover, open. Beside the aids' flag and for its reason: the
+    /// eyedropper has to be able to put a popover away and bring it back.
+    @Published var showSizingPopover = false
     /// Arming the eyedropper took the popover away, so the pick puts it back.
     var chromaPickReopensAssist = false
     /// File name of the plate loaded behind the key; nil — none. The buffer

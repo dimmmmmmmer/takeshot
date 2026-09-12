@@ -170,6 +170,17 @@ never bends it.
 
 ## Scopes and assists
 
+- **Sizing** — its own badge beside the aids: height, rotate, pitch, yaw and
+  the two flips, alongside the desqueeze and the punch-in that were always
+  there. Nine controls, the same nine a colourist has in Resolve, and the
+  overlays ride every one of them — framelines and safe areas mark the
+  SIGNAL's geometry, so they move with the picture rather than staying pinned
+  to the window. They are their own badge and not part of the aids because
+  every one of them MOVES the picture, where an aid is drawn over it. They
+  persist like a crew convention: a camera mounted upside down is flipped
+  once, not once a day. A pitch or a yaw turns the eyedropper off — the
+  transform stops being affine and a pick cannot be run backwards onto a
+  source pixel, so it is refused rather than landing on the wrong one.
 - Waveform, RGB parade, histogram, vectorscope and a CIE chromaticity chart, as
   an overlay over the player or in a window of their own.
 - The **CIE chart** answers the question none of the others can: what COLOUR the

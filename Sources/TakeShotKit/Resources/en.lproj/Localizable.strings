@@ -390,6 +390,17 @@
 
 "marker_color_help" = "Click to cycle the marker color";
 
+"sizing_help" = "Sizing: pan, zoom, rotate, flip";
+"sizing_title" = "Sizing";
+"sizing_height" = "Height";
+"sizing_rotation" = "Rotate";
+"sizing_pitch" = "Pitch";
+"sizing_yaw" = "Yaw";
+"sizing_flip_h" = "Flip H";
+"sizing_flip_v" = "Flip V";
+"sizing_reset" = "Reset sizing";
+"sizing_reset_one" = "Back to neutral";
+"sizing_not_affine" = "Picking a colour off the picture is off while a pitch or a yaw is set — the transform cannot be run backwards onto a source pixel.";
 "assist_help" = "Operator aids: exposure, framelines, desqueeze, zoom";
 "assist_tool" = "Exposure assist";
 "assist_off" = "Off";
