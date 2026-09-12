@@ -34,6 +34,10 @@ final class DailiesQueueModel: ObservableObject {
     /// What the dailies are written in, and therefore also which container
     /// and extension they get (`CaptureCodec.dailiesChoices`).
     @Published var codec: CaptureCodec = .h264
+    /// **How far the daily is scaled down** (owner: "давай сделаем выбор
+    /// насколько снижать резолюшн"). 1080p is what every daily was before the
+    /// choice existed, and stays the default.
+    @Published var resolution: DailiesResolution = .hd
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался"). Off unless the operator
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not

@@ -1208,6 +1208,8 @@
 "dailies_verdict_silent" = "нет звуковых дорожек";
 "dailies_verdict_unchecked" = "записан до появления этой проверки";
 "dailies_verdict_ok" = "в порядке";
+"dailies_resolution" = "Размер";
+"dailies_resolution_source" = "Как исходник";
 "dailies_export_timeline" = "Экспорт таймлайна…";
 "dailies_export_timeline_hint" = "Удачные дубли подряд, в EDL.";
 "dailies_sound_label" = "Звук";

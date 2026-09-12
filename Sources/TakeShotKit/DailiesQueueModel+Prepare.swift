@@ -31,6 +31,7 @@ extension DailiesQueueModel {
         burnCustom = settings.dailies.burnCustomEffective
         customText = settings.dailies.customText ?? ""
         codec = settings.dailies.codecEffective
+        resolution = settings.dailies.resolutionEffective
         bakeLook = settings.dailies.bakeLook == true
         bakeDesqueeze = settings.dailies.bakeDesqueeze == true
         goodTakesOnly = settings.dailies.goodTakesOnly == true

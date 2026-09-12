@@ -496,6 +496,19 @@ struct DailiesOutputSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OffloadChrome.rowSpacing) {
             HStack(spacing: OffloadChrome.rowSpacing) {
+                // **How far down** (owner: "давай сделаем выбор насколько
+                // снижать резолюшн"), beside the codec because the two are one
+                // decision in practice: what the review copy costs to make and
+                // to send.
+                Text(L("dailies_resolution")).offloadText(.body).fixedSize()
+                Picker("", selection: $model.resolution) {
+                    ForEach(DailiesResolution.allCases) { size in
+                        Text(size == .source ? L("dailies_resolution_source")
+                             : size.label).tag(size)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
                 Text(L("codec")).offloadText(.body).fixedSize()
                 Picker("", selection: $model.codec) {
                     // The curated list, not every codec the app can record:

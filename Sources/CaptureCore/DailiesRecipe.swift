@@ -26,7 +26,8 @@ public enum DailiesRecipe {
     public static func fingerprint(burnins: DailiesBurnins,
                                    codec: CaptureCodec,
                                    look: DailiesLook? = nil,
-                                   desqueeze: Double = 1) -> String {
+                                   desqueeze: Double = 1,
+                                   resolution: DailiesResolution = .hd) -> String {
         var parts: [String] = ["v1", codec.rawValue]
         parts.append("tc:\(flag(burnins.timecode))\(burnins.timecodePosition.rawValue)")
         parts.append("clip:\(flag(burnins.clipName))\(burnins.clipNamePosition.rawValue)")
@@ -38,6 +39,15 @@ public enum DailiesRecipe {
             + "/\(number(burnins.customInk.text))")
         parts.append("look:\(look?.name ?? "-")@\(number(look?.intensity ?? 0))")
         parts.append("desqueeze:\(number(desqueeze))")
+        // **Only when it is not the default**, and that is deliberate rather
+        // than lazy: every daily on every disk in existence was rendered at
+        // 1080p, and a field appended unconditionally would change all of
+        // their fingerprints at once — so the next run over any of those
+        // folders would decide the whole show is stale and render it again.
+        // A run at another ceiling is a different deliverable and says so;
+        // a run at the ceiling everything already used says exactly what it
+        // always said.
+        if resolution != .hd { parts.append("res:\(resolution.rawValue)") }
         return parts.joined(separator: "|")
     }
 

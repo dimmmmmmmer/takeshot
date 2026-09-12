@@ -72,7 +72,9 @@ struct DailiesSourceFacts {
     let bakedLook: String?
 
     static func probe(item: DailiesItem, burnins: DailiesBurnins,
-                      desqueeze: Double = 1) async throws -> DailiesSourceFacts {
+                      desqueeze: Double = 1,
+                      resolution: DailiesResolution = .hd) async throws
+        -> DailiesSourceFacts {
         let asset = AVURLAsset(url: item.source)
         guard let track = try? await asset.tracks(ofType: .video).first else {
             throw DailiesAbort.failed(
@@ -100,7 +102,8 @@ struct DailiesSourceFacts {
             frameRate: frameRate,
             framesTotal: max(1, Int((duration * frameRate).rounded())),
             outputSize: DailiesEngine.outputSize(for: naturalSize,
-                                                 desqueeze: desqueeze),
+                                                 desqueeze: desqueeze,
+                                                 resolution: resolution),
             timeline: burnins.timecode
                 ? DailiesEngine.timeline(anchors: anchors, item: item,
                                          frameRate: frameRate) : nil,

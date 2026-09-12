@@ -28,6 +28,7 @@ extension DailiesQueueModel {
         // Captured on this side, like `burnins` and for the reason spelled out
         // below: the detached task is handed values, never this object.
         let codec = codec
+        let size = resolution
         // **Built on this side, like everything else the task is handed.** The
         // cube and its name live on the controller and the task is a detached
         // one: a look read from over there would be this object crossing into
@@ -80,7 +81,7 @@ extension DailiesQueueModel {
             let result = await DailiesEngine.run(
                 items: items, burnins: burnins, into: destination,
                 alsoInto: extras, codec: codec, look: look,
-                desqueeze: squeeze, sounds: sounds,
+                desqueeze: squeeze, resolution: size, sounds: sounds,
                 skipFinished: skip, control: token,
                 progress: publish)
             complete(result)

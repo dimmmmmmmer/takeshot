@@ -1239,6 +1239,8 @@
 "dailies_verdict_silent" = "sound tracks missing";
 "dailies_verdict_unchecked" = "written before this check existed";
 "dailies_verdict_ok" = "all right";
+"dailies_resolution" = "Size";
+"dailies_resolution_source" = "Source";
 "dailies_export_timeline" = "Export timeline…";
 "dailies_export_timeline_hint" = "Circled takes, back to back, as an EDL.";
 "dailies_sound_label" = "Sound";

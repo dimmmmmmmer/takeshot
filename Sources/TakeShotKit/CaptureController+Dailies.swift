@@ -251,6 +251,11 @@ extension CaptureController {
         settings.dailies.datePosition = model.datePosition == .bottomRight
             ? nil : model.datePosition.rawValue
         settings.dailies.codec = model.codec == .h264 ? nil : model.codec.rawValue
+        // nil at the default, like every other field on this record: a blob
+        // that writes "1080" says nothing a missing key does not, and the
+        // absent key is what lets an older build read the same file.
+        settings.dailies.resolution = model.resolution == .hd
+            ? nil : model.resolution.rawValue
         settings.dailies.bakeLook = model.bakeLook ? true : nil
         settings.dailies.bakeDesqueeze = model.bakeDesqueeze ? true : nil
         settings.dailies.namePrefix = model.namePrefix.isEmpty

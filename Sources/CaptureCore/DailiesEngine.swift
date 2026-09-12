@@ -46,6 +46,7 @@ public enum DailiesEngine {
         items: [DailiesItem], burnins: DailiesBurnins, into folder: URL,
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
         look: DailiesLook? = nil, desqueeze: Double = 1,
+        resolution: DailiesResolution = .hd,
         sounds: [BroadcastWaveFacts] = [],
         skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
@@ -69,7 +70,8 @@ public enum DailiesEngine {
         let destination = Destination(
             folder: folder,
             recipe: DailiesRecipe.fingerprint(burnins: burnins, codec: codec,
-                                              look: look, desqueeze: desqueeze))
+                                              look: look, desqueeze: desqueeze,
+                                              resolution: resolution))
         var results: [DailiesItemResult] = []
         for (index, item) in items.enumerated() {
             guard !control.isCancelled else {
@@ -90,8 +92,8 @@ public enum DailiesEngine {
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec, look: look,
-                desqueeze: desqueeze, sounds: sounds, control: control,
-                publish: progress)
+                desqueeze: desqueeze, resolution: resolution, sounds: sounds,
+                control: control, publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)
@@ -212,18 +214,33 @@ public enum DailiesEngine {
     /// `TakeWriter.pixelAspect` answers for the two SD rasters and a
     /// desqueezed one is not either of them, so a baked proxy states square
     /// pixels — which is what it now has.
-    public static func outputSize(for natural: CGSize,
-                                  desqueeze: Double) -> CGSize {
-        guard desqueeze > 0, desqueeze != 1 else { return outputSize(for: natural) }
+    public static func outputSize(for natural: CGSize, desqueeze: Double,
+                                  resolution: DailiesResolution = .hd) -> CGSize {
+        guard desqueeze > 0, desqueeze != 1 else {
+            return outputSize(for: natural, resolution: resolution)
+        }
         return outputSize(for: CGSize(width: natural.width * desqueeze,
-                                      height: natural.height))
+                                      height: natural.height),
+                          resolution: resolution)
     }
 
-    public static func outputSize(for natural: CGSize) -> CGSize {
+    /// The daily's raster: the source's own shape, fitted inside the chosen
+    /// ceiling and never scaled up.
+    ///
+    /// A raster this cannot read at all falls back to the CEILING rather than
+    /// to nothing — a zero-sized output is a run that fails at the encoder,
+    /// and a 1080p frame of a clip whose natural size the container would not
+    /// state is a daily somebody can look at.
+    public static func outputSize(for natural: CGSize,
+                                  resolution: DailiesResolution = .hd) -> CGSize {
         let width = abs(natural.width)
         let height = abs(natural.height)
-        guard width > 0, height > 0 else { return maxSize }
-        let scale = min(1, min(maxSize.width / width, maxSize.height / height))
+        guard let limit = resolution.limit else {
+            guard width > 0, height > 0 else { return maxSize }
+            return CGSize(width: even(width), height: even(height))
+        }
+        guard width > 0, height > 0 else { return limit }
+        let scale = min(1, min(limit.width / width, limit.height / height))
         return CGSize(width: even(width * scale), height: even(height * scale))
     }
 

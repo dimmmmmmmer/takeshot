@@ -132,6 +132,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case datePosition = "dailiesDatePosition"
         case burnCustom = "dailiesBurnCustom"
         case codec = "dailiesCodec"
+        case resolution = "dailiesResolution"
         case bakeLook = "dailiesBakeLook"
         case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
@@ -183,6 +184,14 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// Codec for the dailies (`CaptureCodec` raw values); nil — H.264, which
     /// is what every daily was before the choice existed.
     public var codec: String?
+    /// **How far a daily is scaled down** (`DailiesResolution` raw values);
+    /// nil — 1080p, which is what every daily was before the choice existed
+    /// (owner: "во, точно, давай сделаем выбор насколько снижать резолюшн").
+    ///
+    /// Persisted because it is a delivery convention rather than a per-batch
+    /// choice: a show sends 720p rushes all season, and re-picking it for
+    /// every batch is how one day's dailies arrive at the wrong size.
+    public var resolution: String?
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался").
     ///
@@ -257,6 +266,13 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// flag was never written (see `burnCustom`).
     public var burnCustomEffective: Bool {
         burnCustom ?? !(customText ?? "").isEmpty
+    }
+
+    /// The ceiling, resolved. An unreadable value lands on 1080p rather than
+    /// on the source's own raster: a blob naming a case this build does not
+    /// know must not start a run that writes 6K ProRes to a shuttle drive.
+    public var resolutionEffective: DailiesResolution {
+        resolution.flatMap(DailiesResolution.init(rawValue:)) ?? .hd
     }
 
     /// The codec, resolved. Restricted to `dailiesChoices`: a blob naming

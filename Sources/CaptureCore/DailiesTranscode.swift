@@ -21,6 +21,8 @@ final class DailiesTranscode {
     private let look: DailiesLook?
     /// The anamorphic squeeze to take out of the picture; 1 leaves it alone.
     private let desqueeze: Double
+    /// The ceiling the daily's raster is fitted into.
+    private let resolution: DailiesResolution
     /// Every sound file the run was given; this item takes the ones whose
     /// timecode overlaps its own (`SoundSync`).
     private let sounds: [BroadcastWaveFacts]
@@ -72,7 +74,8 @@ final class DailiesTranscode {
 
     init(item: DailiesItem, index: Int, count: Int, burnins: DailiesBurnins,
          folder: URL, codec: CaptureCodec = .h264, look: DailiesLook? = nil,
-         desqueeze: Double = 1, sounds: [BroadcastWaveFacts] = [],
+         desqueeze: Double = 1, resolution: DailiesResolution = .hd,
+         sounds: [BroadcastWaveFacts] = [],
          control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
         self.item = item
@@ -83,6 +86,7 @@ final class DailiesTranscode {
         self.codec = codec
         self.look = look
         self.desqueeze = desqueeze
+        self.resolution = resolution
         self.sounds = sounds
         self.control = control
         self.publish = publish
@@ -115,7 +119,8 @@ final class DailiesTranscode {
     private func transcode() async throws -> URL {
         let facts = try await DailiesSourceFacts.probe(item: item,
                                                        burnins: burnins,
-                                                       desqueeze: desqueeze)
+                                                       desqueeze: desqueeze,
+                                                       resolution: resolution)
         framesTotal = facts.framesTotal
         frameDuration = TakeWriter.frameDuration(at: facts.frameRate)
         // Claimed through the same process-wide reservation every writing

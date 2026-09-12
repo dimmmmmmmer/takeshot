@@ -283,6 +283,13 @@ On demand, from the export menu in the takes panel or the File menu:
   shift's rows with that day's own date, tally and footage, and stamps every
   CSV row with its shift.
 
+**Dailies** are written at a ceiling you pick — Source, 2160p, 1080p (the
+default and what every daily was before the choice existed), 720p or 540p.
+It is a ceiling and never an upscale: a 1080p take under a 4K ceiling stays
+1080p, because scaling up costs the disk and buys an editor nothing. A run at
+another ceiling is a different deliverable, so it does not count as already
+rendered.
+
 **Dailies** carry more than the picture: the source's own timecode goes into
 the proxy as a track, and every marker flagged during the take becomes a
 CHAPTER in it — the scrub bar grows a menu, and an editor lands on the frame
