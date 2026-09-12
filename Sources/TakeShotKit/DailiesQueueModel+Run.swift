@@ -28,6 +28,7 @@ struct DailiesRunShared: Sendable {
     /// their review state with it. Empty — no matching is attempted at all,
     /// which is every run made of the app's own takes.
     let syncTakes: [TakeSync.Candidate]
+    let waveformSync: Bool
 }
 
 extension DailiesQueueModel {
@@ -80,6 +81,7 @@ extension DailiesQueueModel {
         // this file's header refuses.
         let skip = skipFinished
         let normalize = normalizeAudio
+        let byEar = waveformSync
         // **Built on this side**, like everything else the task is handed: the
         // takes and the transport's marks are the main actor's.
         let syncTakes = syncWithTakes
@@ -110,7 +112,8 @@ extension DailiesQueueModel {
         let shared = DailiesRunShared(
             burnins: burnins, folder: destination, extras: extras, look: look,
             desqueeze: squeeze, sounds: sounds, skipFinished: skip,
-            normalizeAudio: normalize, syncTakes: syncTakes)
+            normalizeAudio: normalize, syncTakes: syncTakes,
+            waveformSync: byEar)
         Task.detached(priority: .utility) {
             complete(await Self.runPasses(passes, total: total, shared: shared,
                                           control: token, publish: publish))
@@ -172,6 +175,7 @@ extension DailiesQueueModel {
                 desqueeze: shared.desqueeze, resolution: pass.resolution,
                 normalizeAudio: shared.normalizeAudio,
                 syncWith: shared.syncTakes, sounds: shared.sounds,
+                waveformSync: shared.waveformSync,
                 skipFinished: shared.skipFinished, control: control,
                 progress: { snapshot in
                     publish(whole(snapshot, after: done, of: total))

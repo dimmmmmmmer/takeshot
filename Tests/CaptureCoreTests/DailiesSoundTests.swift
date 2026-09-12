@@ -14,7 +14,15 @@ import Testing
 /// of it: a run handed a folder of sound produces a daily with the camera's
 /// track AND the recordist's, named, and a run handed sound that belongs to
 /// another day produces exactly the daily it always did.
-@Suite struct DailiesSoundTests {
+/// **A time limit on the whole suite, because the failure mode is a HANG.**
+///
+/// `AVAssetWriter` holds an input back once it runs far ahead of another that
+/// has not been marked finished, so a sound leg much longer than the picture
+/// can wait for ever for frames that have already stopped — measured, and
+/// fixed by bounding the final drain to the picture's end. Without a limit
+/// here that regression is a suite that never finishes, which reads as a slow
+/// machine; a minute against the seconds these take is what tells them apart.
+@Suite(.timeLimit(.minutes(2))) struct DailiesSoundTests {
     /// The take the fixtures write starts at 10:00:00:00.
     private var takeStart: Double { 10 * 3600 }
 
@@ -131,4 +139,54 @@ import Testing
         let audio = try await tracks(of: try #require(report.items.first?.output))
         #expect(audio.count == 1)
     }
+    /// **A roll much longer than the take does not hang the run**, and its
+    /// sound ends with the picture.
+    ///
+    /// `AVAssetWriter` holds an input back once it runs far ahead of another
+    /// that has not been marked finished, and the video input is not marked
+    /// until the very end — so an unbounded drain of a long sound leg waits
+    /// for ever for a picture that has already stopped. It never showed up on
+    /// the per-take files above because a few seconds of surplus fit in the
+    /// writer's own buffer; a recordist's running safety is a whole setup
+    /// long, and this is that.
+    @Test func aRunningSafetyDoesNotHangTheRunOrOutlastThePicture() async throws {
+        let root = try DailiesRig.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await DailiesRig.writeTake(
+            at: root.appendingPathComponent("A001C001.mov"), frames: 50,
+            audioChannels: 2)
+        // two seconds of picture under thirty seconds of sound
+        let wave = try DailiesRig.writeWave(
+            at: root.appendingPathComponent("SAFETY.wav"),
+            startSecondsSinceMidnight: takeStart - 5, seconds: 30)
+        let facts = try BroadcastWaveReader.read(wave)
+
+        let report = await DailiesEngine.run(
+            items: [DailiesRig.item(for: source)],
+            burnins: DailiesRig.noBurnins,
+            into: root.appendingPathComponent("Dailies"),
+            codec: .proResProxy, sounds: [facts])
+        let daily: URL = try #require(report.items.first?.output,
+                                      "the run produced no daily")
+        let asset = AVURLAsset(url: daily)
+        let audio: [AVAssetTrack] = try await asset.tracks(ofType: .audio)
+        #expect(audio.count == 2, "the roll did not reach the daily")
+        let video: AVAssetTrack = try #require(
+            try await asset.tracks(ofType: .video).first)
+        let picture = try await video.load(.timeRange).duration.seconds
+        // A second past the picture and not thirty: the pump keeps the sound
+        // a second AHEAD of the frame in hand on purpose (that lead is what
+        // stops the writer holding the picture back), so a daily's sound
+        // legitimately ends up to `audioLead` past its last frame plus an AAC
+        // packet. What must not happen is the roll's whole length.
+        let allowed = picture
+            + DailiesTranscode.audioLead.seconds + 0.2
+        for track in audio {
+            let sound = try await track.load(.timeRange).duration.seconds
+            #expect(sound <= allowed,
+                    Comment(rawValue: "a sound track runs \(sound)s under "
+                        + "\(picture)s of picture"))
+        }
+    }
+
 }

@@ -35,6 +35,7 @@ extension DailiesQueueModel {
         extraVariants = settings.dailies.variantsEffective
         normalizeAudio = settings.dailies.normalizeAudio ?? false
         syncWithTakes = settings.dailies.syncWithTakes ?? false
+        waveformSync = settings.dailies.waveformSync ?? false
         bakeLook = settings.dailies.bakeLook == true
         bakeDesqueeze = settings.dailies.bakeDesqueeze == true
         goodTakesOnly = settings.dailies.goodTakesOnly == true

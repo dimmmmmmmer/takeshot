@@ -57,6 +57,10 @@ final class DailiesQueueModel: ObservableObject {
     /// Off by default, and it does nothing at all to a run made of the app's
     /// own takes — those already carry everything a match would find.
     @Published var syncWithTakes = false
+    /// **Place a roll with no timecode by listening to it** (owner: "ну и если
+    /// ВДРУГ есть возможность – синк дублей не только по таймкоду со звуком но
+    /// еще и по вейвформе"). Off by default; see the setting.
+    @Published var waveformSync = false
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался"). Off unless the operator
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not

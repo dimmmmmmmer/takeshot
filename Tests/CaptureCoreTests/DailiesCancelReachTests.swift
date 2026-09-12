@@ -18,24 +18,38 @@ import Testing
 /// in a unit test: it needs a real `AVAssetWriter` whose input has stopped
 /// asking, which is a condition of the encoder rather than of this code.
 @Suite struct DailiesCancelReachTests {
+    /// **Every file of the transcode, not one.** The picture's wait and the
+    /// sound's used to sit in one type; the pump moved to `+Audio` when that
+    /// type reached its length ceiling, and a walk pinned to one file went
+    /// from finding two waits to finding one — which is the walk quietly
+    /// stopping to look at half of what it was written for.
+    private static let files = ["DailiesTranscode.swift",
+                                "DailiesTranscode+Audio.swift"]
+
     @Test func everyBackPressureWaitChecksTheCancel() throws {
-        let url = URL(fileURLWithPath: #filePath)
+        let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/CaptureCore/DailiesTranscode.swift")
-        let lines = try String(contentsOf: url, encoding: .utf8)
-            .components(separatedBy: "\n")
+            .appendingPathComponent("Sources/CaptureCore")
 
         var waits = 0
-        for (index, line) in lines.enumerated()
-        where line.contains("while !") && line.contains("isReadyForMoreMediaData") {
-            waits += 1
-            // the check is the FIRST thing in the loop, before the status
-            // guard and before the sleep: a stop must not have to wait out
-            // whatever the writer is doing
-            let body = lines[(index + 1)...].prefix(4).joined(separator: "\n")
-            #expect(body.contains("checkCancelled()"), Comment(rawValue:
-                "the wait at line \(index + 1) does not read the stop flag"))
+        for name in Self.files {
+            let lines = try String(
+                contentsOf: root.appendingPathComponent(name),
+                encoding: .utf8).components(separatedBy: "\n")
+            for (index, line) in lines.enumerated()
+            where line.contains("while !")
+                && line.contains("isReadyForMoreMediaData") {
+                waits += 1
+                // the check is the FIRST thing in the loop, before the status
+                // guard and before the sleep: a stop must not have to wait out
+                // whatever the writer is doing
+                let body = lines[(index + 1)...].prefix(4)
+                    .joined(separator: "\n")
+                #expect(body.contains("checkCancelled()"), Comment(rawValue:
+                    "the wait at \(name):\(index + 1) does not read the "
+                        + "stop flag"))
+            }
         }
         #expect(waits == 2, """
             \(waits) back-pressure waits found, expected 2 — a new one has \

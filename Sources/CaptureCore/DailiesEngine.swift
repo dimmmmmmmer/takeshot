@@ -50,6 +50,7 @@ public enum DailiesEngine {
         normalizeAudio: Bool = false,
         syncWith takes: [TakeSync.Candidate] = [],
         sounds: [BroadcastWaveFacts] = [],
+        waveformSync: Bool = false,
         skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
         progress: @escaping @Sendable (DailiesProgress) -> Void = { _ in })
@@ -79,6 +80,10 @@ public enum DailiesEngine {
         // inside would mean asking the journal about an item nobody renders —
         // and the answer would be to re-render every synced daily, for ever.
         let items = await resolve(items, syncWith: takes)
+        // **The rolls timecode cannot place**, read once for the whole run —
+        // see `DailiesEngine+Waveform`. Nothing at all when the run was not
+        // asked to listen, which is every run by default.
+        let byEar = await waveformCandidates(sounds, enabled: waveformSync)
         let destination = Destination(
             folder: folder,
             recipe: DailiesRecipe.fingerprint(burnins: burnins, codec: codec,
@@ -107,7 +112,7 @@ public enum DailiesEngine {
                 burnins: burnins, folder: folder, codec: codec, look: look,
                 desqueeze: desqueeze, resolution: resolution,
                 normalizeAudio: normalizeAudio, sounds: sounds,
-                control: control, publish: progress)
+                byEar: byEar, control: control, publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {
                 result.copyFailures = copy(output, into: extras)

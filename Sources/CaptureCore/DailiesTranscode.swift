@@ -25,10 +25,13 @@ final class DailiesTranscode {
     private let resolution: DailiesResolution
     /// **Bring every review copy to the same level** — the run's switch.
     private let normalizeAudio: Bool
+    /// The rolls timecode cannot place, with the envelopes that can. Empty —
+    /// nothing is matched by ear at all.
+    private let byEar: [WaveformSync.Candidate]
     /// What the take measured, as a multiplier every sound leg is scaled by.
     /// 1 when the run is not normalising, and when there was nothing to
     /// measure — see `AudioGain`.
-    private var audioFactor = 1.0
+    var audioFactor = 1.0
     /// Every sound file the run was given; this item takes the ones whose
     /// timecode overlaps its own (`SoundSync`).
     private let sounds: [BroadcastWaveFacts]
@@ -48,14 +51,18 @@ final class DailiesTranscode {
     /// One held sample per audio leg — the camera's, and one per matched
     /// sound file. Held here rather than on the session because a leg is a
     /// value and this is the pump's own state.
-    private var pendingAudio: [CMSampleBuffer?] = []
+    ///
+    /// Internal rather than private, these four: the pump moved into `+Audio`
+    /// when this type reached its length ceiling, and they are the state it
+    /// needs from here.
+    var pendingAudio: [CMSampleBuffer?] = []
     /// What to add to each leg's timestamps to put them on the daily's
     /// timeline. Known only once the first picture frame has arrived, because
     /// that is what the writer's session starts at.
-    private var audioShift: [CMTime] = []
+    var audioShift: [CMTime] = []
     /// Legs already marked finished, so the end does not mark them twice — a
     /// second `markAsFinished` is a writer error, not a no-op.
-    private var finishedAudio: Set<Int> = []
+    var finishedAudio: Set<Int> = []
     /// Internal rather than private, these two: the timecode track's writer
     /// moved into `+Timecode` when this type reached its length ceiling, and
     /// a frame's duration and "has the track been closed" are the only state
@@ -83,6 +90,7 @@ final class DailiesTranscode {
          desqueeze: Double = 1, resolution: DailiesResolution = .hd,
          normalizeAudio: Bool = false,
          sounds: [BroadcastWaveFacts] = [],
+         byEar: [WaveformSync.Candidate] = [],
          control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
         self.item = item
@@ -95,6 +103,7 @@ final class DailiesTranscode {
         self.desqueeze = desqueeze
         self.resolution = resolution
         self.normalizeAudio = normalizeAudio
+        self.byEar = byEar
         self.sounds = sounds
         self.control = control
         self.publish = publish
@@ -156,13 +165,18 @@ final class DailiesTranscode {
         // in point (`DailiesTrim.anchors`), so the match is asked about the
         // frames that will actually be written rather than about the roll
         // they were cut out of.
-        let matched = SoundSync.matches(
+        let byClock = SoundSync.matches(
             pictureStart: facts.timecodeTrack.first.map {
                 Double($0.timecode.frameNumber) / max(1, facts.frameRate)
             } ?? DailiesEngine.startSecondsSinceMidnight(
                 of: item, frameRate: facts.frameRate),
             pictureDuration: Double(facts.framesTotal) / max(1, facts.frameRate),
             in: sounds)
+        // …and the rolls that have no timecode to be matched by, found by ear.
+        // Added rather than substituted: a take can legitimately have both a
+        // file the clock placed and one it could not.
+        let matched = byClock + (await DailiesEngine.waveformMatches(
+            for: item.source, in: byEar))
         let session = try await DailiesSession.open(
             at: url, facts: facts, codec: codec, bakedLook: baked,
             sounds: matched)
@@ -180,6 +194,7 @@ final class DailiesTranscode {
     private func pump(_ session: DailiesSession,
                       composer: DailiesFrameComposer) async throws {
         var sessionStarted = false
+        var lastPicture = CMTime.zero
         while let sample = session.videoOutput.copyNextSampleBuffer() {
             // The gate sits between frames: pause holds HERE (recording
             // protection), and cancel/skip leave the loop with a whole frame,
@@ -206,6 +221,7 @@ final class DailiesTranscode {
             try await pumpAudio(upTo: pts + Self.audioLead, session: session)
             try await append(try composer.compose(source, pts: pts),
                              at: pts, session: session)
+            lastPicture = pts
             framesDone += 1
 
             publishProgress(force: false)
@@ -219,7 +235,23 @@ final class DailiesTranscode {
             throw DailiesAbort.failed(
                 "no video frames: \(item.source.lastPathComponent)")
         }
-        try await pumpAudio(upTo: .positiveInfinity, session: session)
+        // **The sound ends with the picture, and that is two fixes in one.**
+        //
+        // A daily is a review copy of a SHOT: sound past the last frame is
+        // sound nobody can watch, and a recordist's running safety is
+        // legitimately a whole setup long — draining it whole would put
+        // minutes of black-less audio on the end of a four-second proxy.
+        //
+        // It is also a deadlock. `AVAssetWriter` holds an input back once it
+        // runs far ahead of another that has not been marked finished, and the
+        // video input is not marked until `finish()` — so an unbounded drain
+        // of a much longer sound leg waits for ever for a picture that has
+        // already stopped. Measured on a 12 s roll under a 4 s take: the run
+        // sat until its test's time limit killed it. A shorter surplus fits
+        // in the writer's own buffer, which is why this never showed up on
+        // the per-take files the suite was built from.
+        try await pumpAudio(upTo: CMTimeAdd(lastPicture, frameDuration),
+                            session: session)
     }
 
     private func finish(_ session: DailiesSession) async throws {
@@ -255,7 +287,8 @@ final class DailiesTranscode {
         notePauseState(false)
     }
 
-    private func checkCancelled() throws {
+    /// Internal for `+Audio`, which waits in the same way the picture does.
+    func checkCancelled() throws {
         if control.isCancelled || control.isSkipped(item: index) {
             throw DailiesAbort.cancelled
         }
@@ -299,81 +332,6 @@ final class DailiesTranscode {
             throw DailiesAbort.failed(DailiesSession.failure(of: session.writer))
         }
     }
-
-    /// **Where each leg's clock lands on the daily's**, known only now.
-    ///
-    /// The writer's session starts at the first picture frame's own timestamp,
-    /// so that is what a sound sample has to be measured against. A sample at
-    /// `t` seconds into a sound FILE is the picture at `t - offsetIntoSound`
-    /// seconds in, so it belongs at `firstPTS + (t - offsetIntoSound)` — one
-    /// constant per leg.
-    ///
-    /// The camera's leg gets zero: its samples come off the same asset as the
-    /// picture and are already on that clock. Shifting them would move the
-    /// take's own sound by the length of its own head.
-    private func startAudio(session: DailiesSession, at firstPTS: CMTime) {
-        pendingAudio = Array(repeating: nil, count: session.audio.count)
-        audioShift = session.audio.map { leg in
-            guard leg.reader != nil else { return .zero }
-            return firstPTS - CMTime(seconds: leg.offsetIntoSound,
-                                     preferredTimescale: 48_000)
-        }
-    }
-
-    /// Every audio leg, pumped up to the picture's current time.
-    ///
-    /// One loop per leg rather than one shared loop, because the legs are
-    /// different assets with different clocks: the camera's samples are
-    /// already on the daily's timeline and a sound file's are on the
-    /// recordist's, shifted onto it by `audioShift`.
-    private func pumpAudio(upTo limit: CMTime,
-                           session: DailiesSession) async throws {
-        for (index, leg) in session.audio.enumerated() {
-            try await pump(leg: leg, at: index, upTo: limit, session: session)
-        }
-    }
-
-    private func pump(leg: DailiesSession.AudioLeg, at index: Int,
-                      upTo limit: CMTime,
-                      session: DailiesSession) async throws {
-        guard index < pendingAudio.count else { return }
-        let shift = index < audioShift.count ? audioShift[index] : .zero
-        while true {
-            if pendingAudio[index] == nil {
-                pendingAudio[index] = leg.output.copyNextSampleBuffer()
-            }
-            guard let sample = pendingAudio[index] else {
-                // **An exhausted leg is finished HERE, not at the end.** A
-                // writer waits for every input it was given, so a leg that has
-                // run out and says nothing holds the picture back for the rest
-                // of the take — the multi-input stall, from the other side.
-                // Marking it the moment it runs dry lets the rest of the run
-                // proceed; `finish` marks whatever is left.
-                if !finishedAudio.contains(index) {
-                    finishedAudio.insert(index)
-                    leg.input.markAsFinished()
-                }
-                return
-            }
-            let shifted = Self.shifted(sample, by: shift) ?? sample
-            // Every leg by the SAME factor: the balance between the camera's
-            // sound and the recordist's is theirs, not this app's.
-            let stamped = AudioGain.apply(audioFactor, to: shifted) ?? shifted
-            guard CMSampleBufferGetPresentationTimeStamp(stamped) <= limit
-            else { return }
-            while !leg.input.isReadyForMoreMediaData {
-                try checkCancelled() // see `append` above
-                guard session.writer.status == .writing else {
-                    throw DailiesAbort.failed(
-                        DailiesSession.failure(of: session.writer))
-                }
-                try await Task.sleep(for: .milliseconds(2)) // see `append`
-            }
-            leg.input.append(stamped)
-            pendingAudio[index] = nil
-        }
-    }
-
     // MARK: - progress and cleanup
 
     private func publishProgress(force: Bool) {

@@ -1256,6 +1256,8 @@
 "dailies_remove_sound" = "Remove this sound folder";
 "dailies_sound_camera_only" = "The camera's own sound only.";
 "dailies_sound_found" = "%@ matched by timecode, with the track names from their metadata.";
+"dailies_waveform_sync" = "Place these by listening";
+"dailies_waveform_sync_help" = "Match a roll with no timecode to a take by the shape of the sound in both. Only rolls with no timecode are listened to — a roll that has one is placed by its clock.";
 "dailies_sound_no_timecode" = "%d file(s) carry no timecode and cannot be matched";
 "dailies_add_source" = "Add folder";
 "dailies_remove_source" = "Take this folder off the list";

@@ -17,15 +17,31 @@ extension DailiesRig {
     ///
     /// A tone rather than silence: a daily whose sound track is all zeroes
     /// looks exactly like a daily whose sound never arrived.
+    /// `room` writes the shared aperiodic contour instead of a plain tone,
+    /// starting at absolute `from` — which is what lets a fixture wave and a
+    /// fixture take be two recordings of ONE moment, for waveform sync.
+    /// `withTimecode` writes the `bext` chunk; without it the file is exactly
+    /// what a recorder with no timecode produces, and nothing but the sound
+    /// itself can place it.
     @discardableResult
     static func writeWave(at url: URL, startSecondsSinceMidnight: Double,
                           seconds: Double = 4,
-                          sampleRate: Int = 48_000) throws -> URL {
+                          sampleRate: Int = 48_000,
+                          room: UInt64? = nil, from origin: Double = 0,
+                          withTimecode: Bool = true) throws -> URL {
         let frames = Int(seconds * Double(sampleRate))
         var samples = Data(capacity: frames * 4)
         for frame in 0..<frames {
-            let phase = Double(frame) / Double(sampleRate) * 1_000 * 2 * .pi
-            let value = Int16(max(-32_000, min(32_000, sin(phase) * 12_000)))
+            let value: Int16
+            if let room {
+                let t: Double = origin + Double(frame) / Double(sampleRate)
+                let scaled: Double = TestMedia.roomSample(at: t, room: room)
+                    * 12_000
+                value = Int16(max(-32_000, min(32_000, scaled)))
+            } else {
+                let phase = Double(frame) / Double(sampleRate) * 1_000 * 2 * .pi
+                value = Int16(max(-32_000, min(32_000, sin(phase) * 12_000)))
+            }
             let bytes = withUnsafeBytes(of: value.littleEndian) { Data($0) }
             samples += bytes  // left
             samples += bytes  // right
@@ -51,7 +67,8 @@ extension DailiesRig {
         bext += uint32(UInt32(reference >> 32))
         bext += Data(repeating: 0, count: 602 - 346)
 
-        var body = chunk("fmt ", format) + chunk("bext", bext)
+        var body = chunk("fmt ", format)
+        if withTimecode { body += chunk("bext", bext) }
         body += chunk("data", samples)
         var file = Data("RIFF".utf8) + uint32(UInt32(4 + body.count))
         file += Data("WAVE".utf8) + body

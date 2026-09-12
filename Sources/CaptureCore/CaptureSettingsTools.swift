@@ -136,6 +136,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case variants = "dailiesVariants"
         case normalizeAudio = "dailiesNormalizeAudio"
         case syncWithTakes = "dailiesSyncWithTakes"
+        case waveformSync = "dailiesWaveformSync"
         case bakeLook = "dailiesBakeLook"
         case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
@@ -214,6 +215,13 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// from the card renders from the card every day — so it is persisted like
     /// the burn-in set beside it.
     public var syncWithTakes: Bool?
+    /// **Place a roll with no timecode by listening to it**; nil — off.
+    ///
+    /// Off is the honest default and not timidity: it costs a read of every
+    /// such roll and a read of every take, and it is only ever the answer for
+    /// a recorder that writes no timecode at all — which an operator knows
+    /// about their own kit and the app does not.
+    public var waveformSync: Bool?
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался").
     ///

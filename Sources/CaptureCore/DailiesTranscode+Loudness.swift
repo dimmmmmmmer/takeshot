@@ -43,6 +43,35 @@ extension DailiesTranscode {
         return meter
     }
 
+    /// **The take's own loudness envelope**, for matching a sound file to it
+    /// by ear (`WaveformSync`).
+    ///
+    /// Built as the samples arrive rather than from the whole file: a long
+    /// take is a hundred megabytes of Int16 and a run has the machine busy
+    /// already. Empty when the source has no sound at all, which is a take
+    /// nothing can be matched to by ear.
+    static func envelope(of asset: AVAsset,
+                         window: Double = WaveformSync.fineWindow)
+        async -> [Double] {
+        guard let tracks = try? await asset.tracks(ofType: .audio),
+              !tracks.isEmpty,
+              let reader = try? AVAssetReader(asset: asset) else { return [] }
+        let output = AVAssetReaderAudioMixOutput(
+            audioTracks: tracks,
+            audioSettings: DailiesEngine.audioReadSettings())
+        guard reader.canAdd(output) else { return [] }
+        reader.add(output)
+        guard reader.startReading() else { return [] }
+        var builder = WaveformSync.EnvelopeBuilder(channels: 2,
+                                                   sampleRate: 48_000,
+                                                   window: window)
+        while let sample = output.copyNextSampleBuffer() {
+            builder.add(samples(of: sample))
+        }
+        reader.cancelReading()
+        return builder.values
+    }
+
     /// One decoded buffer as interleaved 16-bit samples.
     static func samples(of sample: CMSampleBuffer) -> [Int16] {
         guard let block = CMSampleBufferGetDataBuffer(sample) else { return [] }

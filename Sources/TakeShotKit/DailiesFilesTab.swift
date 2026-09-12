@@ -139,6 +139,17 @@ struct DailiesFilesTab: View {
                     model.soundFindings.withoutTimecode.count),
                   systemImage: "exclamationmark.triangle")
                 .offloadText(.caption)
+            // **The answer to the line above** (owner: "ну и если ВДРУГ есть
+            // возможность – синк дублей не только по таймкоду со звуком но еще
+            // и по вейвформе"), offered exactly where the problem is stated
+            // and nowhere else: with every roll timecoded there is nothing
+            // for it to do, and a switch that does nothing is a switch
+            // somebody will report as broken.
+            Toggle(L("dailies_waveform_sync"), isOn: $model.waveformSync)
+                .toggleStyle(.checkbox)
+                .offloadText(.body)
+                .disabled(controller.isDailiesRunning)
+                .help(L("dailies_waveform_sync_help"))
         }
     }
 

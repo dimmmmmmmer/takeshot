@@ -97,6 +97,58 @@ enum TestMedia {
         }
     }
 
+    /// **A room, as a function of ABSOLUTE time** — the loudness contour two
+    /// recordings of one scene share, so a fixture take and a fixture sound
+    /// file can really be two recordings of the same thing.
+    ///
+    /// Aperiodic, because a periodic envelope correlates with itself at many
+    /// lags and would be testing a harder problem than the one waveform sync
+    /// solves. Deterministic in `t` and `room` and nothing else.
+    static func roomSample(at t: Double, room: UInt64) -> Double {
+        let step = 0.05
+        let index = Int((t / step).rounded(.down))
+        let fraction: Double = t / step - Double(index)
+        let a: Double = roomHash(index, room: room)
+        let b: Double = roomHash(index + 1, room: room)
+        let level: Double = a + (b - a) * fraction
+        return level * sin(2 * .pi * 220 * t)
+    }
+
+    static func roomHash(_ index: Int, room: UInt64) -> Double {
+        var x = UInt64(bitPattern: Int64(index)) &+ room &* 0x9E37_79B9_7F4A_7C15
+        x ^= x >> 33
+        x = x &* 0xFF51_AFD7_ED55_8CCD
+        x ^= x >> 33
+        x = x &* 0xC4CE_B9FE_1A85_EC53
+        x ^= x >> 33
+        return Double(x >> 11) / Double(UInt64(1) << 53)
+    }
+
+    /// A packet of that room, for the take writer.
+    static func roomBuffer(seconds: Double, channels: Int = 2,
+                           room: UInt64, from origin: Double = 0,
+                           gain: Double = 0.5,
+                           cache: inout CMAudioFormatDescription?)
+        -> CMSampleBuffer? {
+        let frames = 1920
+        let start = Int((seconds * 48_000).rounded())
+        var samples = [Int16](repeating: 0, count: frames * channels)
+        for frame in 0..<frames {
+            let t: Double = origin + Double(start + frame) / 48_000
+            let scaled: Double = gain * roomSample(at: t, room: room) * 32_767
+            let value = Int16(max(-32_767, min(32_767, scaled)))
+            for channel in 0..<channels {
+                samples[frame * channels + channel] = value
+            }
+        }
+        return samples.withUnsafeBytes { raw in
+            PCMAudio.makeSampleBuffer(bytes: raw.baseAddress!,
+                                      sampleFrames: frames,
+                                      channelCount: channels,
+                                      ptsSeconds: seconds, formatCache: &cache)
+        }
+    }
+
     /// The value one sample carries under `signature`. Deterministic in all
     /// three coordinates, so the same packet built twice is byte-identical and
     /// two different ones never are.

@@ -290,6 +290,14 @@ It is a ceiling and never an upscale: a 1080p take under a 4K ceiling stays
 another ceiling is a different deliverable, so it does not count as already
 rendered.
 
+A roll your recorder wrote **without timecode can be placed by listening to
+it**: where the sound tab says some files carry none, a switch appears to match
+them to takes by the shape of the sound in both. Only those rolls are listened
+to — one that has timecode is placed by its clock, because a correlation that
+disagreed with a recordist's timecode would be the app being confidently wrong
+about the one thing the file states about itself. A roll that does not clearly
+belong to a take is left off rather than guessed at.
+
 A run made of **camera originals can take the day's review state with it**:
 tick "Take the day's review state with it" over the source folders and each
 clip is matched to the take shot at the same moment — on the clock, since the

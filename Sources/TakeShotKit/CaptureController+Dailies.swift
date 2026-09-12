@@ -272,6 +272,7 @@ extension CaptureController {
             ? nil : model.extraVariants.map(\.stored)
         settings.dailies.normalizeAudio = model.normalizeAudio ? true : nil
         settings.dailies.syncWithTakes = model.syncWithTakes ? true : nil
+        settings.dailies.waveformSync = model.waveformSync ? true : nil
         settings.dailies.bakeLook = model.bakeLook ? true : nil
         settings.dailies.bakeDesqueeze = model.bakeDesqueeze ? true : nil
         settings.dailies.namePrefix = model.namePrefix.isEmpty
