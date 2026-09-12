@@ -107,7 +107,12 @@ public enum EDLExporter {
          String(format: "*ASC_SAT %.4f", cdl.saturation)]
     }
 
-    private static func group(_ rgb: CDLLook.RGB) -> String {
+    /// One triple of the SOP, as the ASC prints it. Internal rather than
+    /// private because the ALE writes the SAME nine numbers in its own
+    /// `ASC_SOP` column (`ALEExporter.ascSOP`) — an assistant conforming the
+    /// EDL and importing the log side by side must not find two spellings of
+    /// one grade.
+    static func group(_ rgb: CDLLook.RGB) -> String {
         String(format: "(%.4f %.4f %.4f)", rgb.r, rgb.g, rgb.b)
     }
 

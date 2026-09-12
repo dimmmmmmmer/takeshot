@@ -35,6 +35,9 @@ public enum ALEExporter {
     /// importing this log side by side has to see one name for one roll, or the
     /// two do not join up.
     ///
+    /// The two grade columns (`ASC_SOP`, `ASC_SAT`) are added to this list by
+    /// `columns(withGrade:)` when there is a grade — see there.
+    ///
     /// `Scene`, `Shot`, `Take` and `Description` are the creative columns, and
     /// they are spelled exactly as Avid and Resolve name those fields — the
     /// whole value of this file is that an assistant maps nothing by hand.
@@ -45,6 +48,38 @@ public enum ALEExporter {
                           "Take", "Scene", "Shot", "Good Take", "Comments",
                           "Description"]
 
+    /// The two grade columns, added to the list above when — and only when —
+    /// there is a grade to put in them (owner: "нужно да", on ASC columns in
+    /// the ALE).
+    ///
+    /// `ASC_SOP` and `ASC_SAT` are the names Avid, Resolve and every CDL
+    /// reader look for, and the VALUES are the EDL's own (`EDLExporter.group`)
+    /// rather than a second spelling of the same nine numbers: an assistant
+    /// conforming the EDL and importing this log side by side has to see one
+    /// grade, exactly as `Tape` and the EDL's reel field are one name.
+    ///
+    /// They are absent from a log written with no CDL, not blank. Two empty
+    /// columns on every ALE is noise, and — the reason that actually matters —
+    /// a .cube look has no slope/offset/power to reduce to, so a column with
+    /// an identity grade in it would state that the day was ungraded when it
+    /// was graded by a lattice this format cannot carry. Same refusal the EDL
+    /// makes.
+    static let gradeColumns = ["ASC_SOP", "ASC_SAT"]
+
+    /// Where the grade columns go: before `Description`, which stays last
+    /// because it is the free-text cell and an ALE opened in a text editor is
+    /// easier to scan with the long field on the end.
+    static func columns(withGrade: Bool) -> [String] {
+        guard withGrade else { return columns }
+        return columns.dropLast() + gradeColumns + [columns[columns.count - 1]]
+    }
+
+    /// The nine numbers as the ASC prints them, for the `ASC_SOP` cell.
+    static func ascSOP(_ cdl: CDLLook) -> String {
+        EDLExporter.group(cdl.slope) + EDLExporter.group(cdl.offset)
+            + EDLExporter.group(cdl.power)
+    }
+
     /// Build the ALE text. `takes` are already filtered/ordered by the caller;
     /// nil when there is nothing to export, matching `EDLExporter.selectsEDL`.
     ///
@@ -52,11 +87,16 @@ public enum ALEExporter {
     /// a frame size, since a `Take` carries timing and metadata but no raster.
     /// Without it the heading says `CUSTOM`, which is the honest answer rather
     /// than a guess an Avid project would be conformed against.
-    public static func ale(takes: [Take], format: CaptureFormat? = nil) -> String? {
+    public static func ale(takes: [Take], format: CaptureFormat? = nil,
+                           cdl: CDLLook? = nil) -> String? {
         guard !takes.isEmpty else { return nil }
         var lines = headingLines(takes: takes, format: format)
-        lines += ["", "Column", columns.joined(separator: "\t"), "", "Data"]
-        lines += takes.enumerated().map { dataLine(for: $1, index: $0) }
+        lines += ["", "Column",
+                  columns(withGrade: cdl != nil).joined(separator: "\t"),
+                  "", "Data"]
+        lines += takes.enumerated().map {
+            dataLine(for: $1, index: $0, cdl: cdl)
+        }
         return lines.joined(separator: newline) + newline
     }
 
@@ -78,8 +118,15 @@ public enum ALEExporter {
     /// One take. Its timecodes are counted on the take's OWN rate, like the
     /// EDL's source side: a day that changed frame rate at lunch otherwise gets
     /// half its log measured against the wrong timebase.
-    private static func dataLine(for take: Take, index: Int) -> String {
+    private static func dataLine(for take: Take, index: Int,
+                                 cdl: CDLLook?) -> String {
         let (start, end) = span(of: take)
+        // The grade is the DAY's, not the take's: one look was on the monitor
+        // while these were shot, which is the same thing the EDL says about
+        // the same numbers. A per-take grade is a different feature and would
+        // need somewhere on `Take` to keep one.
+        let grade = cdl.map { [ascSOP($0), String(format: "%.4f", $0.saturation)] }
+            ?? []
         return [
             take.url.lastPathComponent,
             EDLExporter.reelName(for: take, index: index),
@@ -95,8 +142,10 @@ public enum ALEExporter {
             TakeLogExporter.goodTakeField(rating: take.rating),
             TakeLogExporter.commentsField(rating: take.rating,
                                           comment: take.comment),
-            take.logDescription,
-        ].map(field).joined(separator: "\t")
+        ].map(field)
+            .joined(separator: "\t")
+            + (grade.isEmpty ? "" : "\t" + grade.joined(separator: "\t"))
+            + "\t" + field(take.logDescription)
     }
 
     /// A take's Start and End.

@@ -253,9 +253,13 @@ On demand, from the export menu in the takes panel or the File menu:
 - **Selects EDL** — the good takes, cut back to back, with the markers as
   Resolve locators. When the active look is an ASC CDL, every event also carries
   `*ASC_SOP` and `*ASC_SAT`, which is how the grade reaches the colourist.
-- **Avid log (ALE)** — every take, for a Media Composer bin: reel, start, end,
-  duration, rate, take, scene, the Good Take flag and the comments. The reel is
-  the same one the EDL writes, so the two join up.
+- **Avid log (ALE)** — the circled takes, for a Media Composer bin: reel,
+  start, end, duration, rate, take, scene, the Good Take flag and the comments.
+  The reel is the same one the EDL writes, so the two join up. When the active
+  look is an ASC CDL the log also carries `ASC_SOP` and `ASC_SAT`, with the
+  same nine numbers the EDL puts on its events — a .cube look has no
+  slope/offset/power to reduce to, so those columns are absent rather than
+  filled with an identity grade.
 - **Timeline (XML)** and **Timeline (FCPXML)** — the circled takes back to
   back, each clip pointing at its own file with its markers on it, so the
   timeline opens with the picture already on it instead of with a relink

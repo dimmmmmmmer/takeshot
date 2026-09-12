@@ -161,7 +161,8 @@ network with no route out. Settings shows a QR code for each.
 
 - Resolve-compatible metadata CSV, selects EDL from good takes with markers as
   locators and the active ASC CDL as `*ASC_SOP`/`*ASC_SAT`, an Avid log (ALE)
-  of every take for a Media Composer bin, shift report as PDF and CSV.
+  for a Media Composer bin carrying the same grade in its `ASC_SOP`/`ASC_SAT`
+  columns, shift report as PDF and CSV.
 - Timeline of the circled takes, back to back with their markers — and, unlike
   the EDL and the ALE, each clip points at its own file, so an edit suite opens
   it with the picture already on the timeline instead of with a relink dialog.

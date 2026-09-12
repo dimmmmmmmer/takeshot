@@ -63,7 +63,11 @@ extension CaptureController {
     /// timing but no raster; with no device attached the heading says CUSTOM
     /// rather than guessing.
     func exportALE() {
-        guard let ale = ALEExporter.ale(takes: goodTakes, format: signalFormat)
+        // `currentCDL` is nil for a .cube look, exactly as the EDL above reads
+        // it — nine invented numbers in a machine-read column are worse than a
+        // column that is not there.
+        guard let ale = ALEExporter.ale(takes: goodTakes, format: signalFormat,
+                                        cdl: currentCDL)
         else {
             lastError = L("export_no_good_takes")
             return

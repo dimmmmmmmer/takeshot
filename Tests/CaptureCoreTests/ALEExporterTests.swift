@@ -187,4 +187,49 @@ import Testing
         // terminator — a comment that split would add a twelfth
         #expect(ale.components(separatedBy: "\r\n").count == 12)
     }
+    // MARK: - the day's grade
+
+    /// Owner: "нужно да" — the ASC columns in the ALE. The same nine numbers
+    /// the EDL puts on every event, in the columns Avid and Resolve look for,
+    /// so a conform and a bin import cannot disagree about the grade.
+    @Test func aCDLLookFillsTheGradeColumns() throws {
+        let cdl = CDLLook(id: "day", slope: CDLLook.RGB(1.1, 1, 0.9),
+                          offset: CDLLook.RGB(0, 0.01, -0.02),
+                          power: CDLLook.RGB(1, 0.95, 1.05), saturation: 0.9)
+        let ale: String = try #require(
+            ALEExporter.ale(takes: [shift[0]], format: nil, cdl: cdl))
+        let rows: [[String]] = ale.components(separatedBy: "\r\n")
+            .filter { !$0.isEmpty }
+            .map { $0.components(separatedBy: "\t") }
+        let header: [String] = try #require(
+            rows.first { $0.first == "Name" })
+        let sop: Int = try #require(header.firstIndex(of: "ASC_SOP"))
+        let sat: Int = try #require(header.firstIndex(of: "ASC_SAT"))
+        // Description stays last: it is the free-text cell
+        #expect(header.last == "Description")
+        let row: [String] = try #require(rows.last)
+        #expect(row.count == header.count)
+        #expect(row[sop]
+            == "(1.1000 1.0000 0.9000)(0.0000 0.0100 -0.0200)"
+            + "(1.0000 0.9500 1.0500)", "\(row[sop])")
+        #expect(row[sat] == "0.9000")
+        // …and it is spelled exactly as the EDL spells it
+        #expect(row[sop].hasPrefix(EDLExporter.group(cdl.slope)))
+    }
+
+    /// A .cube look has no slope/offset/power to reduce to, so the columns are
+    /// ABSENT rather than filled with an identity grade — which would state
+    /// that a day graded by a lattice was ungraded. Same refusal the EDL makes.
+    @Test func aLogWithNoCDLHasNoGradeColumnsAtAll() throws {
+        let ale: String = try #require(ALEExporter.ale(takes: [shift[0]]))
+        #expect(!ale.contains("ASC_SOP"))
+        #expect(!ale.contains("ASC_SAT"))
+        let rows: [[String]] = ale.components(separatedBy: "\r\n")
+            .filter { !$0.isEmpty }
+            .map { $0.components(separatedBy: "\t") }
+        let header: [String] = try #require(rows.first { $0.first == "Name" })
+        #expect(header == ALEExporter.columns)
+        #expect(try #require(rows.last).count == header.count)
+    }
+
 }
