@@ -132,11 +132,18 @@ public struct DailiesItem: Sendable, Equatable {
     /// and empty means no chapter track at all rather than one chapter named
     /// after the file.
     public var markers: [TakeMarker] = []
+    /// **The part of the source this daily is made from** (owner: "чтоб у нас
+    /// ин/аут сработал таким образом"), or nil for the whole clip.
+    ///
+    /// Seconds into the SOURCE, which is what a `ClipRange` already is.
+    /// Everything a trim has to be careful about is `DailiesTrim`.
+    public var range: ClipRange?
 
     public init(source: URL, outputName: String, clipName: String,
                 projectLine: String = "", dateText: String = "",
                 startTimecode: Timecode? = nil,
-                markers: [TakeMarker] = []) {
+                markers: [TakeMarker] = [],
+                range: ClipRange? = nil) {
         self.source = source
         self.outputName = outputName
         self.clipName = clipName
@@ -144,6 +151,7 @@ public struct DailiesItem: Sendable, Equatable {
         self.dateText = dateText
         self.startTimecode = startTimecode
         self.markers = markers
+        self.range = range
     }
 }
 

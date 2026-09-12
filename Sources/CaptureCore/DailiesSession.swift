@@ -63,6 +63,10 @@ struct DailiesSourceFacts {
     /// is synchronous over settled facts, and the item is a thing only the
     /// probe sees. Empty for a clip off a card.
     let markers: [TakeMarker]
+    /// **The window the daily is made from**, clamped into the clip — nil for
+    /// the whole of it. The reader is opened over exactly this, and the two
+    /// tracks written from zero are re-based onto it (`DailiesTrim`).
+    let window: (start: Double, end: Double)?
     /// The look already baked into the SOURCE's pixels, or nil.
     ///
     /// A take recorded with the look burned in carries the name of it, and the
@@ -92,7 +96,24 @@ struct DailiesSourceFacts {
         let metadata: [AVMetadataItem] = (try? await asset.load(.metadata)) ?? []
         // Read ONCE, for the strip and for the track both — see
         // `DailiesEngine.timeline(anchors:item:frameRate:)`.
-        let anchors = await TimecodeReader.timelineAnchors(of: asset)
+        // **The clock this daily runs on**, settled here and once: the file's
+        // own anchors, else the take's remembered start, and then re-based
+        // onto the window when the run is trimmed. The burn-in's clock, the
+        // proxy's timecode track, the sound match and the progress count are
+        // all derived below, and every one of them describes the TRIMMED clip.
+        var anchors = DailiesEngine.timecodeTrack(
+            anchors: await TimecodeReader.timelineAnchors(of: asset),
+            item: item)
+        let window = DailiesTrim.window(item.range, duration: duration)
+        var markers = item.markers
+        var length = duration
+        if let window {
+            anchors = DailiesTrim.anchors(anchors, from: window.start,
+                                          frameRate: frameRate)
+            markers = DailiesTrim.markers(markers, from: window.start,
+                                          until: window.end)
+            length = window.end - window.start
+        }
         let wireCodes = await TakeWriter.carriesWireCodes(metadata)
         let baked = await TakeWriter.bakedLookName(metadata)
 
@@ -100,19 +121,19 @@ struct DailiesSourceFacts {
             asset: asset, videoTrack: track,
             audioTracks: (try? await asset.tracks(ofType: .audio)) ?? [],
             frameRate: frameRate,
-            framesTotal: max(1, Int((duration * frameRate).rounded())),
+            framesTotal: max(1, Int((length * frameRate).rounded())),
             outputSize: DailiesEngine.outputSize(for: naturalSize,
                                                  desqueeze: desqueeze,
                                                  resolution: resolution),
             timeline: burnins.timecode
                 ? DailiesEngine.timeline(anchors: anchors, item: item,
                                          frameRate: frameRate) : nil,
-            timecodeTrack: DailiesEngine.timecodeTrack(anchors: anchors,
-                                                       item: item),
+            timecodeTrack: anchors,
             colorimetry: colorimetry,
             levels: StudioSwing.playbackTable(wireCodes: wireCodes,
                                               transfer: colorimetry.transfer),
-            metadata: metadata, markers: item.markers, bakedLook: baked)
+            metadata: metadata, markers: markers, window: window,
+            bakedLook: baked)
     }
 }
 
@@ -201,6 +222,15 @@ struct DailiesSession {
                                        fileType: codec.dailiesContainer)
         } catch {
             throw DailiesAbort.failed(error.localizedDescription)
+        }
+        // **The window, on the reader.** Every output added below inherits
+        // it, so the picture and the camera's own sound are trimmed together
+        // and by construction rather than by two agreeing subtractions.
+        if let window = facts.window {
+            reader.timeRange = CMTimeRange(
+                start: CMTime(seconds: window.start, preferredTimescale: 600),
+                duration: CMTime(seconds: window.end - window.start,
+                                 preferredTimescale: 600))
         }
         let (videoOutput, audioOutput) = try addOutputs(facts: facts,
                                                         to: reader)

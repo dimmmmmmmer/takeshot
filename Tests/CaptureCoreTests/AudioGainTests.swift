@@ -86,7 +86,7 @@ import Testing
             allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: 0,
             layout: nil, magicCookieSize: 0, magicCookie: nil,
             extensions: nil, formatDescriptionOut: &description) == noErr)
-        var samples = [Int16](repeating: level, count: frames * 2)
+        let samples = [Int16](repeating: level, count: frames * 2)
         let bytes = samples.count * 2
         var block: CMBlockBuffer?
         try #require(CMBlockBufferCreateWithMemoryBlock(

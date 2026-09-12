@@ -290,6 +290,15 @@ It is a ceiling and never an upscale: a 1080p take under a 4K ceiling stays
 another ceiling is a different deliverable, so it does not count as already
 rendered.
 
+A run made of **camera originals can take the day's review state with it**:
+tick "Take the day's review state with it" over the source folders and each
+clip is matched to the take shot at the same moment — on the clock, since the
+names never match — and rendered with that take's name on the strip, its
+markers as chapters, and **trimmed to its in/out**. A clip nothing matches is
+rendered whole, because a card holds footage from before the app was running.
+A trimmed daily is a different deliverable, so it does not count as already
+rendered, and moving an in point renders that one again.
+
 **Even out the sound** brings every review copy to the same loudness — EBU
 R128's −23 LUFS, measured per take to ITU-R BS.1770 rather than off a peak,
 because a peak is set by a door slam and says nothing about dialogue. One gain

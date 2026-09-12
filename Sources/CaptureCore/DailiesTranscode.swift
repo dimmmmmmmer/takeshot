@@ -151,8 +151,15 @@ final class DailiesTranscode {
         // carries a look, and a proxy claiming a grade it does not have is
         // worse than one claiming nothing.
         let baked = facts.bakedLook == nil ? look?.name : nil
+        // **Where the PICTURE starts, which is not where the clip does** on a
+        // trimmed run: the first anchor already carries the timecode at the
+        // in point (`DailiesTrim.anchors`), so the match is asked about the
+        // frames that will actually be written rather than about the roll
+        // they were cut out of.
         let matched = SoundSync.matches(
-            pictureStart: DailiesEngine.startSecondsSinceMidnight(
+            pictureStart: facts.timecodeTrack.first.map {
+                Double($0.timecode.frameNumber) / max(1, facts.frameRate)
+            } ?? DailiesEngine.startSecondsSinceMidnight(
                 of: item, frameRate: facts.frameRate),
             pictureDuration: Double(facts.framesTotal) / max(1, facts.frameRate),
             in: sounds)

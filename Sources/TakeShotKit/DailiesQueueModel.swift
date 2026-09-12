@@ -50,6 +50,13 @@ final class DailiesQueueModel: ObservableObject {
     /// **Every review copy at the same level.** Off by default — a level this
     /// app decided cannot be taken back out of a proxy.
     @Published var normalizeAudio = false
+    /// **Take the day's own review state into a run over camera originals**
+    /// (owner: "чтоб пользователь отметил галку допустим «синковать информацию
+    /// с тейками», чтоб у нас ин/аут сработал таким образом").
+    ///
+    /// Off by default, and it does nothing at all to a run made of the app's
+    /// own takes — those already carry everything a match would find.
+    @Published var syncWithTakes = false
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался"). Off unless the operator
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not

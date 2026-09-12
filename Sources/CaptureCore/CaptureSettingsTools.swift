@@ -135,6 +135,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case resolution = "dailiesResolution"
         case variants = "dailiesVariants"
         case normalizeAudio = "dailiesNormalizeAudio"
+        case syncWithTakes = "dailiesSyncWithTakes"
         case bakeLook = "dailiesBakeLook"
         case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
@@ -207,6 +208,12 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// this app has written carries the sound the take had, and a level this
     /// app decided cannot be taken back out of a proxy.
     public var normalizeAudio: Bool?
+    /// **Match a folder of camera originals to the day's takes**; nil — off.
+    ///
+    /// A working method rather than a per-batch choice — a unit that renders
+    /// from the card renders from the card every day — so it is persisted like
+    /// the burn-in set beside it.
+    public var syncWithTakes: Bool?
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался").
     ///

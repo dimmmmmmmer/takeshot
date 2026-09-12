@@ -24,6 +24,10 @@ struct DailiesRunShared: Sendable {
     let sounds: [BroadcastWaveFacts]
     let skipFinished: Bool
     let normalizeAudio: Bool
+    /// The day's takes, for a run over camera originals that is asked to take
+    /// their review state with it. Empty — no matching is attempted at all,
+    /// which is every run made of the app's own takes.
+    let syncTakes: [TakeSync.Candidate]
 }
 
 extension DailiesQueueModel {
@@ -76,6 +80,12 @@ extension DailiesQueueModel {
         // this file's header refuses.
         let skip = skipFinished
         let normalize = normalizeAudio
+        // **Built on this side**, like everything else the task is handed: the
+        // takes and the transport's marks are the main actor's.
+        let syncTakes = syncWithTakes
+            ? TakeSync.candidates(from: controller.takes,
+                                  ranges: controller.transport.storedRanges)
+            : []
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -100,7 +110,7 @@ extension DailiesQueueModel {
         let shared = DailiesRunShared(
             burnins: burnins, folder: destination, extras: extras, look: look,
             desqueeze: squeeze, sounds: sounds, skipFinished: skip,
-            normalizeAudio: normalize)
+            normalizeAudio: normalize, syncTakes: syncTakes)
         Task.detached(priority: .utility) {
             complete(await Self.runPasses(passes, total: total, shared: shared,
                                           control: token, publish: publish))
@@ -160,7 +170,8 @@ extension DailiesQueueModel {
                 items: pass.items, burnins: shared.burnins, into: shared.folder,
                 alsoInto: shared.extras, codec: pass.codec, look: shared.look,
                 desqueeze: shared.desqueeze, resolution: pass.resolution,
-                normalizeAudio: shared.normalizeAudio, sounds: shared.sounds,
+                normalizeAudio: shared.normalizeAudio,
+                syncWith: shared.syncTakes, sounds: shared.sounds,
                 skipFinished: shared.skipFinished, control: control,
                 progress: { snapshot in
                     publish(whole(snapshot, after: done, of: total))

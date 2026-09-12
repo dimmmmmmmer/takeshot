@@ -48,6 +48,7 @@ public enum DailiesEngine {
         look: DailiesLook? = nil, desqueeze: Double = 1,
         resolution: DailiesResolution = .hd,
         normalizeAudio: Bool = false,
+        syncWith takes: [TakeSync.Candidate] = [],
         sounds: [BroadcastWaveFacts] = [],
         skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
@@ -68,6 +69,16 @@ public enum DailiesEngine {
         // finished AND the record of them, so the next one starts where this
         // one stopped instead of re-rendering the morning (`DailiesJournal`).
         var journal = DailiesProgressJournal.read(in: folder)
+        // **Which take each clip IS, settled before the loop** (owner: "чтоб
+        // пользователь отметил галку допустим «синковать информацию с
+        // тейками», чтоб у нас ин/аут сработал таким образом").
+        //
+        // Before, and not inside the transcode, because the trim is part of an
+        // item's RECIPE: the skip decision and the note written after it both
+        // have to be about the item as it will actually be rendered. Matching
+        // inside would mean asking the journal about an item nobody renders —
+        // and the answer would be to re-render every synced daily, for ever.
+        let items = await resolve(items, syncWith: takes)
         let destination = Destination(
             folder: folder,
             recipe: DailiesRecipe.fingerprint(burnins: burnins, codec: codec,
@@ -122,6 +133,18 @@ public enum DailiesEngine {
     struct Destination {
         let folder: URL
         let recipe: String
+
+        /// **The recipe of one ITEM**: the run's, plus whatever that item
+        /// carries that changes the file it produces.
+        ///
+        /// Only the trim so far, and it has to be per item rather than per
+        /// run: every take has its own marks, and a recipe that could not say
+        /// so would skip a take whose in point had moved since the last pass.
+        /// An untrimmed item adds nothing, so every fingerprint ever written
+        /// is unchanged.
+        func recipe(for item: DailiesItem) -> String {
+            recipe + DailiesTrim.recipePart(item.range)
+        }
     }
 
     private static func skipped(
@@ -129,7 +152,7 @@ public enum DailiesEngine {
         journal: DailiesJournal, into destination: Destination,
         progress: @Sendable (DailiesProgress) -> Void) -> DailiesItemResult? {
         guard let existing = journal.finished(source: item.source,
-                                              recipe: destination.recipe,
+                                              recipe: destination.recipe(for: item),
                                               named: item.outputName,
                                               in: destination.folder)
         else { return nil }
@@ -165,7 +188,8 @@ public enum DailiesEngine {
         journal.record(DailiesJournal.Entry(
             source: item.source.lastPathComponent,
             sourceSize: source.size, sourceModified: source.modified,
-            recipe: destination.recipe, output: output.lastPathComponent,
+            recipe: destination.recipe(for: item),
+            output: output.lastPathComponent,
             outputSize: made.size, outputName: item.outputName,
             outputSeconds: seconds, outputAudio: audio,
             finishedAt: Date()))

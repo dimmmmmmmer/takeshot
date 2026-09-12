@@ -178,6 +178,22 @@ struct DailiesFilesTab: View {
                     .offloadText(.body)
                     .disabled(!controller.canFilterDailiesToGoodTakes)
             } else {
+                // **What the day's takes know about this footage** (owner:
+                // "чтоб пользователь отметил галку допустим «синковать
+                // информацию с тейками», чтоб у нас ин/аут сработал таким
+                // образом"). Over the folder list rather than under it,
+                // because it changes what every one of those folders MEANS:
+                // the same files, rendered with the slate, the flags and the
+                // in/out somebody marked during the day.
+                //
+                // Only on this side of the branch: a run made of the app's own
+                // takes already carries all of it, and a switch that does
+                // nothing is a switch somebody will report as broken.
+                Toggle(L("dailies_sync_takes"), isOn: $model.syncWithTakes)
+                    .toggleStyle(.checkbox)
+                    .offloadText(.body)
+                    .disabled(controller.isDailiesRunning)
+                    .help(L("dailies_sync_takes_help"))
                 folderList(model.sources) { url in
                     HStack(spacing: OffloadChrome.rowSpacing) {
                         folderRow(url) {

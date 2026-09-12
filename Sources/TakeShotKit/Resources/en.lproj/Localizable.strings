@@ -1225,6 +1225,8 @@
 "dailies_tab_files" = "Files";
 "dailies_sources_label" = "Render from";
 "dailies_sources_takes" = "Today's takes — add a folder to render camera originals instead";
+"dailies_sync_takes" = "Take the day's review state with it";
+"dailies_sync_takes_help" = "Match each clip to the take shot at the same moment, and use that take's name, markers and in/out. Clips nothing matches are rendered whole.";
 "dailies_good_only" = "Circled takes only";
 "dailies_skip_finished" = "Skip what is already rendered";
 "dailies_verify" = "Check the folder";
