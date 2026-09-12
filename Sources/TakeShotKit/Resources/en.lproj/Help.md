@@ -178,7 +178,13 @@ never bends it.
   to the window. They are their own badge and not part of the aids because
   every one of them MOVES the picture, where an aid is drawn over it. They
   persist like a crew convention: a camera mounted upside down is flipped
-  once, not once a day. A pitch or a yaw turns the eyedropper off — the
+  once, not once a day. The live picture and the one under review keep
+  SEPARATE geometry: punching into a take to check focus does not move what
+  the SDI output and the director's monitor are showing. They start out
+  sharing — a unit that never touches this sees what the app has always shown
+  — and go their own way the first time one of them is changed. The aids
+  stay one set for both: false colour is a way of looking, not a property of
+  a surface. A pitch or a yaw turns the eyedropper off — the
   transform stops being affine and a pick cannot be run backwards onto a
   source pixel, so it is refused rather than landing on the wrong one.
 - Waveform, RGB parade, histogram, vectorscope and a CIE chromaticity chart, as

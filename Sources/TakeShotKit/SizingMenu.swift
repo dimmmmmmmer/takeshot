@@ -34,7 +34,7 @@ struct SizingMenu: View {
         } label: {
             Image(systemName: Self.symbol)
                 .font(.system(size: 13))
-                .foregroundStyle(controller.liveAssist.sizing.isIdentity
+                .foregroundStyle(controller.currentAssist.sizing.isIdentity
                                  ? .white : controller.accentColor)
                 // The same dot the aids and the look wear, and the same
                 // reason: a tint alone is two shades of a 13pt glyph across a
@@ -42,7 +42,7 @@ struct SizingMenu: View {
                 // операторская помощь включена будем точку рисовать рядом с
                 // этой кнопкой как когда лут включен").
                 .overlay(alignment: .topTrailing) {
-                    if !controller.liveAssist.sizing.isIdentity {
+                    if !controller.currentAssist.sizing.isIdentity {
                         Circle()
                             .fill(controller.accentColor)
                             .frame(width: 5, height: 5)
@@ -101,7 +101,7 @@ struct SizingControlsPanel: View {
             // stops being affine, so a pick from the picture cannot be run
             // backwards onto a source pixel and is refused rather than landing
             // on the wrong one (`PictureSizing.isAffine`).
-            if !controller.liveAssist.sizing.isAffine {
+            if !controller.currentAssist.sizing.isAffine {
                 Text(L("sizing_not_affine"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -141,14 +141,21 @@ struct SizingControlsPanel: View {
     /// One field of the live assist, written back through the controller so
     /// the change reaches the pipeline, the settings and the scopes' region by
     /// the one path they all already use.
+    /// **The set for the surface on screen**, edited through the one funnel
+    /// that knows which that is: the same slider moves the camera's picture
+    /// while a take rolls and the clip's while one is under review.
     private func binding(_ path: WritableKeyPath<ViewAssist, Double>)
         -> Binding<Double> {
-        Binding(get: { controller.assist[keyPath: path] },
-                set: { controller.assist[keyPath: path] = $0 })
+        Binding(get: { controller.currentAssist[keyPath: path] },
+                set: { value in
+                    controller.applySizingPreview { $0[keyPath: path] = value }
+                })
     }
 
     private func flip(_ path: WritableKeyPath<ViewAssist, Bool>) -> Binding<Bool> {
-        Binding(get: { controller.assist[keyPath: path] },
-                set: { controller.assist[keyPath: path] = $0 })
+        Binding(get: { controller.currentAssist[keyPath: path] },
+                set: { value in
+                    controller.applySizingPreview { $0[keyPath: path] = value }
+                })
     }
 }

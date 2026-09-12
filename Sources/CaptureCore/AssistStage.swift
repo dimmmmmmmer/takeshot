@@ -56,6 +56,17 @@ public final class AssistStage: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// **What this stage was last told to draw.** A diagnostic accessor like
+    /// `lateDrops` beside it, and the only way to ask a SURFACE what it
+    /// actually received rather than asking the controller what it meant to
+    /// send: with a geometry per surface, those are two different questions
+    /// and the suite has to be able to tell them apart.
+    public var currentAssist: ViewAssist {
+        lock.lock()
+        defer { lock.unlock() }
+        return assist
+    }
+
     /// How many frames reached this stage past their own frame interval and
     /// were shown without the aids rather than held up. A diagnostic, not a
     /// control (see `CapturePipeline.chromaKeyLateDrops` for the same idea).

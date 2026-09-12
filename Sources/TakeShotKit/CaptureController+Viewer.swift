@@ -189,8 +189,11 @@ extension CaptureController {
     /// clean feed takes it with the rest of them.
     var showsAudioPanel: Bool { showAudioPanel && !cleanFeed }
 
+    /// **The set for the surface on screen**: the scopes measure what the
+    /// VIEWER shows, and with a playback geometry of its own the live set is
+    /// about a different picture.
     var scopeRegion: ScopeRegion {
-        ScopeRegion(assist: assist)
+        ScopeRegion(assist: currentAssist)
     }
 
     /// Push the punch-in crop to every analyzer. Called whenever the assists

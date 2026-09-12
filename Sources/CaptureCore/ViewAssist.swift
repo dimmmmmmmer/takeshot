@@ -101,6 +101,25 @@ public struct ViewAssist: Equatable, Sendable {
     public var yaw: Double = 0
     public var flipH = false
     public var flipV = false
+    /// **The playback surfaces' own geometry**, or nil while they share the
+    /// live one (owner: the nine controls wanted separately for playback and
+    /// for record viewing).
+    ///
+    /// Carried HERE rather than on the controller so that one value, one
+    /// draft and one debounce hold both sets — a second copy of that
+    /// machinery is how two surfaces come to disagree about where a gesture
+    /// got to. The risk that buys is the one this type's own note warns
+    /// about, a value carrying a transform for somebody else, and it is
+    /// closed by construction: no surface is ever handed this value. They are
+    /// handed `forLive` or `forPlayback`, and each of those has the nine of
+    /// exactly one surface and no second set at all.
+    ///
+    /// Session state, deliberately. The live set persists because it is about
+    /// the RIG — a camera mounted upside down is flipped once — and a
+    /// playback geometry is about the clip somebody is looking at right now.
+    /// It starts as a copy of the live set, so a unit that never touches it
+    /// sees exactly what this app has always shown.
+    public var playbackSizing: PictureSizing?
     /// The chroma-key preview. Carried here, applied elsewhere: the pipeline
     /// splits it out in `setViewAssist` and runs it one stage BEFORE the aids,
     /// so that a false colour meters the picture the key produced rather than
@@ -306,6 +325,31 @@ public struct ViewAssist: Equatable, Sendable {
         value.flipH = flipH
         value.flipV = flipV
         return value
+    }
+
+    /// What the LIVE surfaces get: this value with no second set on it.
+    public var forLive: ViewAssist { with(sizing: sizing) }
+
+    /// What the PLAYBACK surfaces get: the same aids over their own geometry,
+    /// or over the live one while they share it.
+    public var forPlayback: ViewAssist { with(sizing: playbackSizing ?? sizing) }
+
+    /// A copy whose nine controls are `sizing` — and which carries no second
+    /// set, so what comes out of here can only ever describe one surface.
+    public func with(sizing: PictureSizing) -> ViewAssist {
+        var copy = self
+        copy.playbackSizing = nil
+        copy.desqueeze = sizing.width
+        copy.height = sizing.height
+        copy.punchIn = sizing.zoom
+        copy.panX = sizing.panX
+        copy.panY = sizing.panY
+        copy.rotation = sizing.rotation
+        copy.pitch = sizing.pitch
+        copy.yaw = sizing.yaw
+        copy.flipH = sizing.flipH
+        copy.flipV = sizing.flipV
+        return copy
     }
 
     // MARK: - where the picture lands

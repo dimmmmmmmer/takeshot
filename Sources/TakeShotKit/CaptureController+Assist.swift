@@ -44,7 +44,7 @@ extension CaptureController {
     /// On the controller because every `.disabled(` in this app names a rule
     /// here rather than spelling one in a view, and this one is about the
     /// session's own state: whether the picture has been moved at all.
-    var canResetSizing: Bool { !liveAssist.sizing.isIdentity }
+    var canResetSizing: Bool { !currentAssist.sizing.isIdentity }
 
     /// **The nine controls back to neutral**, and nothing else with them.
     ///
@@ -54,6 +54,13 @@ extension CaptureController {
     /// does clear these too — it is the whole popover set going back to how it
     /// ships — which is stated at `ViewAssist.reset`.
     func resetSizing() {
+        // The set the operator is LOOKING at, not always the live one: a
+        // reset pressed while reviewing must not straighten the camera's own
+        // picture on the SDI output.
+        guard viewerMode != .playback else {
+            assist.playbackSizing = PictureSizing()
+            return
+        }
         var fresh = assist
         let bare = ViewAssist()
         fresh.height = bare.height
@@ -110,9 +117,7 @@ extension CaptureController {
         // bypass on they get the same value with nothing drawn on it, so the
         // operator's whole set-up survives a press (see `assistsHidden`).
         let shown = assistsHidden ? assist.withoutAids : assist
-        pipeline.setViewAssist(shown)
-        playbackTap.setViewAssist(shown)
-        rawPlayer?.setViewAssist(shown)
+        push(shown)
         // a write from anywhere else supersedes a draft the debounce has not
         // folded in yet: the pending timer must not put the old slider value
         // back over the change that just arrived
@@ -176,6 +181,47 @@ extension CaptureController {
         assistLive.hasDraft ? assistLive.assist : assist
     }
 
+    /// **Each surface gets the set that belongs to it, and only that.**
+    ///
+    /// One place, because it is one decision: a `ViewAssist` carries both
+    /// geometries so that one draft can hold them (see
+    /// `ViewAssist.playbackSizing`), and this is the only door out. Nothing
+    /// downstream ever sees the pair — `forLive` and `forPlayback` each
+    /// describe exactly one surface.
+    private func push(_ value: ViewAssist) {
+        pipeline.setViewAssist(value.forLive)
+        let playback = value.forPlayback
+        playbackTap.setViewAssist(playback)
+        rawPlayer?.setViewAssist(playback)
+    }
+
+    /// **The set for the surface on screen**, as it stands right now.
+    ///
+    /// Everything that READS the geometry to show it back — the zoom readout,
+    /// the grab cursor, the scopes' region, the pan's own arithmetic — asks
+    /// this rather than the live set, or an operator punched into a take
+    /// would be told about the camera's magnification instead.
+    var currentAssist: ViewAssist {
+        viewerMode == .playback ? liveAssist.forPlayback : liveAssist.forLive
+    }
+
+    /// **A geometry change, applied to the set the operator is looking at.**
+    ///
+    /// The aids are one set for the whole app — false colour is a way of
+    /// looking, not a property of a surface — and the geometry is two. So aid
+    /// changes go through `applyAssistPreview` unchanged, and everything that
+    /// moves the PICTURE comes through here.
+    func applySizingPreview(_ change: (inout ViewAssist) -> Void) {
+        applyAssistPreview { value in
+            guard self.viewerMode == .playback else { return change(&value) }
+            // Edited as a whole assist so the mutators keep working on the
+            // nine fields they were written for, then folded back as a set.
+            var editing = value.forPlayback
+            change(&editing)
+            value.playbackSizing = editing.sizing
+        }
+    }
+
     /// Apply an aid change to every surface now, publish it later.
     func applyAssistPreview(_ change: (inout ViewAssist) -> Void) {
         let current = liveAssist
@@ -185,9 +231,7 @@ extension CaptureController {
         // GPU pass: a pinch held at the magnification limit is all of these
         guard draft != current else { return }
         assistLive.preview(draft)
-        pipeline.setViewAssist(draft)
-        playbackTap.setViewAssist(draft)
-        rawPlayer?.setViewAssist(draft)
+        push(draft)
         debounced.schedule(.assist, after: Self.assistDebounce) { [weak self] in
             self?.commitAssistDraft()
         }
@@ -248,15 +292,15 @@ extension CaptureController {
     /// relative deltas, and rounding the stored value would swallow each of them
     /// whole. The readout rounds for display instead.
     var punchInLevel: Double {
-        get { liveAssist.punchIn }
+        get { currentAssist.punchIn }
         set {
-            applyAssistPreview { $0.setPunchIn(newValue) }
+            applySizingPreview { $0.setPunchIn(newValue) }
         }
     }
 
     /// A trackpad pinch: `factor` is relative (1 = no change).
     func magnifyPunchIn(by factor: Double) {
-        applyAssistPreview { $0.magnify(by: factor) }
+        applySizingPreview { $0.magnify(by: factor) }
     }
 
     /// **Everything in the assist popover, back to how it ships** — the reset
@@ -283,7 +327,7 @@ extension CaptureController {
     /// the pointer is over instead of the frame center.
     func magnifyPunchIn(by factor: Double, at anchor: CGPoint,
                         viewport: CGSize) {
-        applyAssistPreview {
+        applySizingPreview {
             $0.magnify(by: factor, at: anchor,
                        sourceSize: displaySourceSize(), in: viewport)
         }
@@ -297,12 +341,12 @@ extension CaptureController {
     /// the picture keeps up with the pointer exactly instead of through the
     /// invented constant the drag gesture used to divide by.
     func panPunchIn(by delta: CGSize, viewport: CGSize) {
-        let current = liveAssist
+        let current = currentAssist
         guard current.punchIn > 1,
               let placed = current.placement(sourceSize: displaySourceSize(),
                                              in: viewport),
               placed.rect.width > 0, placed.rect.height > 0 else { return }
-        applyAssistPreview {
+        applySizingPreview {
             $0.pan(by: CGSize(width: -delta.width / placed.rect.width,
                               height: -delta.height / placed.rect.height))
         }
@@ -316,7 +360,7 @@ extension CaptureController {
     }
 
     /// Whether the pointer over the preview should read as a grab handle.
-    var isPunchedIn: Bool { liveAssist.punchIn > 1 }
+    var isPunchedIn: Bool { currentAssist.punchIn > 1 }
 
     // MARK: - the legend
 
