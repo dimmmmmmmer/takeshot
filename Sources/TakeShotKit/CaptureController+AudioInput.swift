@@ -21,6 +21,33 @@ extension CaptureController {
         set { settings.audio.audioInputDeviceUID = newValue }
     }
 
+    /// **The delay for the source that is selected right now.**
+    ///
+    /// One control, two stored numbers: an operator dials this in by ear
+    /// against the picture, which they can only do for the source they are
+    /// listening to — and the other source's number is waiting for them when
+    /// they switch back (`AudioSettings.delayMS(for:)`).
+    ///
+    /// Clamped on the way IN as well as on the way out, so a value typed past
+    /// the range is corrected where the operator can see it happen rather than
+    /// silently at the capture queue.
+    var audioDelayMS: Double {
+        get { settings.audio.delayMS(for: settings.audio.audioInputDeviceUID != nil) }
+        set {
+            let clamped = min(AudioSettings.delayRangeMS.upperBound,
+                              max(AudioSettings.delayRangeMS.lowerBound,
+                                  newValue.isFinite ? newValue : 0))
+            // nil at zero, like every added field: a blob that says nothing
+            // describes exactly the behaviour this app has always had.
+            let stored: Double? = clamped == 0 ? nil : clamped
+            if settings.audio.audioInputDeviceUID != nil {
+                settings.audio.externalDelayMS = stored
+            } else {
+                settings.audio.embeddedDelayMS = stored
+            }
+        }
+    }
+
     /// From `applySettingsChange`: rebuild only when the choice itself moved.
     func applyAudioInputChange(from oldValue: CaptureSettings) {
         guard oldValue.audio.audioInputDeviceUID != settings.audio.audioInputDeviceUID

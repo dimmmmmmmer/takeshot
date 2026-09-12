@@ -147,7 +147,7 @@ extension CapturePipeline {
             lastExternalAudioEnd = CMTimeAdd(
                 retimedPTS, CMSampleBufferGetDuration(sampleBuffer))
         }
-        return Self.retimed(sampleBuffer, to: retimedPTS)
+        return Self.retimedAudio(sampleBuffer, to: retimedPTS)
     }
 
     /// Called per frame: keep a recording take's audio continuous when the
@@ -219,17 +219,4 @@ extension CapturePipeline {
         }
     }
 
-    private static func retimed(_ sampleBuffer: CMSampleBuffer,
-                                to pts: CMTime) -> CMSampleBuffer? {
-        var timing = CMSampleTimingInfo(
-            duration: CMSampleBufferGetDuration(sampleBuffer),
-            presentationTimeStamp: pts,
-            decodeTimeStamp: .invalid)
-        var out: CMSampleBuffer?
-        CMSampleBufferCreateCopyWithNewTiming(
-            allocator: kCFAllocatorDefault, sampleBuffer: sampleBuffer,
-            sampleTimingEntryCount: 1, sampleTimingArray: &timing,
-            sampleBufferOut: &out)
-        return out
-    }
 }

@@ -183,6 +183,12 @@ public struct NamingSettings: Codable, Equatable, Sendable {
 
 /// The monitor speaker, what is recorded, and where playback goes out.
 public struct AudioSettings: Codable, Equatable, Sendable {
+    /// What the two delay fields may hold. Half a second each way is far past
+    /// any interface's own latency (tens of milliseconds) and past a long
+    /// cart chain, and it is short enough that a fat-fingered number cannot
+    /// push a take's sound out of the file altogether.
+    public static let delayRangeMS = -500.0...500.0
+
     /// Live audio monitor on/off (nil = on) — the footer speaker state.
     public var monitorEnabled: Bool?
     /// Live audio monitor volume 0…1; nil — 1. The monitor itself always starts
@@ -206,6 +212,33 @@ public struct AudioSettings: Codable, Equatable, Sendable {
     /// speaker in the footer says why the room is quiet. Persisting the zero
     /// itself is the bug that once made every launch start silent.
     public var monitorMuted: Bool?
+    /// **How late this source's sound arrives, in milliseconds** — one number
+    /// per source, because that is the whole reason the setting exists (owner:
+    /// "по звуку – хочу еще добавить настройку задержки звука. мне кажется с
+    /// разными источниками может быть полезно").
+    ///
+    /// Embedded audio comes off the board with the frame it belongs to; a USB
+    /// interface adds its own buffer on top, and a cart feeding through a long
+    /// chain adds more. One shared number would be wrong for one of the two
+    /// the moment an operator switched sources mid-shift, and they would have
+    /// to remember to retype it — which is the kind of thing nobody remembers
+    /// at the wrong moment.
+    ///
+    /// **A signed offset, and the sign is the whole of it.** POSITIVE moves
+    /// the sound LATER against the picture; negative moves it earlier.
+    ///
+    /// Which one a source needs follows from where its latency is. A USB
+    /// interface buffers, so the sound that happened at T is handed over at
+    /// T+d and stamped there — it lands LATE against the picture in the file,
+    /// and pulling it back means a NEGATIVE number. A source that somehow ran
+    /// ahead takes a positive one. The panel says this in as many words,
+    /// because a control whose sign an operator has to discover by recording a
+    /// take is a control they will set backwards once.
+    ///
+    /// nil is 0 at both, so a blob that says nothing describes exactly the
+    /// behaviour this app has always had.
+    public var embeddedDelayMS: Double?
+    public var externalDelayMS: Double?
     /// Bit mask of recorded channels (bit i = channel i) — the OPERATOR's
     /// answer. nil means they have not given one, which is the usual state:
     /// with `audioChannelAuto` in force the measurement answers instead, and
@@ -234,4 +267,17 @@ public struct AudioSettings: Codable, Equatable, Sendable {
     public var audioInputDeviceUID: String?
 
     public init() {}
+    /// The delay in force for `source`, clamped to what the panel can ask for.
+    ///
+    /// Read through here and never off the field: a hand-edited blob must not
+    /// be able to push a take's sound out of its own file, and one accessor is
+    /// what keeps the capture path and the panel from disagreeing about what
+    /// the number means.
+    public func delayMS(for external: Bool) -> Double {
+        let stored = external ? externalDelayMS : embeddedDelayMS
+        guard let stored, stored.isFinite else { return 0 }
+        return min(Self.delayRangeMS.upperBound,
+                   max(Self.delayRangeMS.lowerBound, stored))
+    }
+
 }

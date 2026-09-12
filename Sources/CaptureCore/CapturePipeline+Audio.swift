@@ -105,13 +105,97 @@ extension CapturePipeline {
             let levels = PCMAudio.peakLevels(of: packet)
             self.sourceAudioChannels = levels.count
             self.noteCarryingChannels(levels: levels, in: packet)
+            // **The CLOCK reads the packet as it arrived.** The operator's
+            // offset is about where the SOUND sits against the picture, and
+            // LTC is not sound — it is a timecode the camera sent, and the
+            // number a take opens on is recording integrity.
+            //
+            // It makes no difference TODAY and it is still the right argument
+            // to pass: `decodeLTC` reads the block buffer's samples and never
+            // the packet's timestamps (`+Timecode.swift`), so a shifted copy
+            // decodes to the same timecode. No test can tell the two apart,
+            // which is why there is none — handing it the moved packet would
+            // be a bet that the decoder never learns to place what it read in
+            // time, and that is a bet with nothing on the other side of it.
             if self.config.settings.capture.timecodeSource == "ltc" {
                 self.decodeLTC(from: packet, channels: levels.count)
             }
-            self.recordAudio(packet)
-            self.feedStereo(packet)
+            // …and everything that IS sound moves together: the take, the
+            // monitoring, the stereo fold the SRT and NDI legs carry. One
+            // shift, at the one door both sources come through, so what the
+            // operator dialled in by ear is what lands in the file.
+            //
+            // Sound pushed past the take's own start is not written — the
+            // writer has no session there yet — so a take made under an offset
+            // holds that much less sound at the end it was moved away from.
+            // That is the offset working rather than a loss: the frames it
+            // covers are the ones whose sound belongs to the take before it.
+            let heard = self.delayed(packet, from: source) ?? packet
+            self.recordAudio(heard)
+            self.feedStereo(heard)
             self.publishLevels(levels)
         }
+    }
+
+    /// The packet stamped back to when its sound actually happened, or nil
+    /// when there is nothing to shift.
+    ///
+    /// Positive moves it later, negative earlier — see
+    /// `AudioSettings.embeddedDelayMS` for which a given source wants. Zero
+    /// returns nil and costs a `Double` comparison, so an operator who never
+    /// touches this pays nothing per packet.
+    ///
+    /// Queue-confined, like everything else `handleAudio` does.
+    func delayed(_ packet: CMSampleBuffer,
+                 from source: AudioSource) -> CMSampleBuffer? {
+        let ms = config.settings.audio.delayMS(for: source == .external)
+        guard ms != 0 else { return nil }
+        guard CMSampleBufferGetPresentationTimeStamp(packet).isValid
+        else { return nil }
+        let shift = CMTime(value: CMTimeValue((ms * 1000).rounded()),
+                           timescale: 1_000_000)
+        return Self.retimedAudio(packet, by: shift)
+    }
+
+    /// A copy of `packet` moved by `shift`, its samples and their own timing
+    /// untouched.
+    ///
+    /// **The packet's OWN timing array, with only the presentation times
+    /// moved.** An audio buffer's timing entry carries the duration of ONE
+    /// SAMPLE — 1/48000 — and `CMSampleBufferGetDuration` reports the whole
+    /// packet, which is that times the sample count. Handing the whole packet's
+    /// duration back as a single entry therefore tells CoreMedia that every one
+    /// of the 1920 samples lasts 40 ms, and the copy claims a length 1920 times
+    /// its own. Read the array, shift it, hand it back.
+    static func retimedAudio(_ packet: CMSampleBuffer,
+                             to pts: CMTime) -> CMSampleBuffer? {
+        let now = CMSampleBufferGetPresentationTimeStamp(packet)
+        guard now.isValid else { return nil }
+        return retimedAudio(packet, by: CMTimeSubtract(pts, now))
+    }
+
+    static func retimedAudio(_ packet: CMSampleBuffer,
+                             by shift: CMTime) -> CMSampleBuffer? {
+        var needed: CMItemCount = 0
+        guard CMSampleBufferGetSampleTimingInfoArray(
+            packet, entryCount: 0, arrayToFill: nil,
+            entriesNeededOut: &needed) == noErr, needed > 0 else { return nil }
+        var timings = [CMSampleTimingInfo](repeating: .invalid,
+                                           count: Int(needed))
+        guard CMSampleBufferGetSampleTimingInfoArray(
+            packet, entryCount: needed, arrayToFill: &timings,
+            entriesNeededOut: nil) == noErr else { return nil }
+        for index in timings.indices where timings[index]
+            .presentationTimeStamp.isValid {
+            timings[index].presentationTimeStamp =
+                CMTimeAdd(timings[index].presentationTimeStamp, shift)
+        }
+        var out: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault, sampleBuffer: packet,
+            sampleTimingEntryCount: needed, sampleTimingArray: &timings,
+            sampleBufferOut: &out)
+        return out
     }
 
     /// How many channels a packet declares, 0 for one with no audio format.

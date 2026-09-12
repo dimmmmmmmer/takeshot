@@ -132,6 +132,44 @@ import Testing
         }
     }
 
+    /// **The one field writes the number for the source that is selected.**
+    ///
+    /// An operator dials this in by ear, and they can only do that for the
+    /// source they are listening to — so the field shows and writes that
+    /// source's own number, and the other one is waiting when they switch.
+    /// One control that wrote into one place would silently retune the source
+    /// they are not on.
+    @Test func theAudioOffsetFieldFollowsTheSelectedSource() async throws {
+        try await ControllerHarness.run { controller, _ in
+            #expect(controller.audioDelayMS == 0, "something was set at launch")
+            controller.audioDelayMS = -18
+            #expect(controller.settings.audio.embeddedDelayMS == -18)
+            #expect(controller.settings.audio.externalDelayMS == nil,
+                    "the embedded number was written into the external source")
+
+            controller.audioInputUID = "cart"
+            #expect(controller.audioDelayMS == 0,
+                    "the new source inherited the other one's offset")
+            controller.audioDelayMS = 42
+            #expect(controller.settings.audio.externalDelayMS == 42)
+            #expect(controller.settings.audio.embeddedDelayMS == -18,
+                    "the embedded source lost its own number")
+
+            // …and switching back gives the first one back, untouched
+            controller.audioInputUID = nil
+            #expect(controller.audioDelayMS == -18)
+
+            // a number nobody could type here is brought back inside where
+            // the operator can see it happen
+            controller.audioDelayMS = 9_000
+            #expect(controller.audioDelayMS
+                == AudioSettings.delayRangeMS.upperBound)
+            // …and zero stores nothing at all
+            controller.audioDelayMS = 0
+            #expect(controller.settings.audio.embeddedDelayMS == nil)
+        }
+    }
+
     /// Resetting the geometry leaves the switch where the operator put it.
     ///
     /// Not tidiness: an operator resets a frame in order to set another one,

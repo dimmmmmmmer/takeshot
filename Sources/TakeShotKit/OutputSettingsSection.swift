@@ -1,3 +1,4 @@
+import CaptureCore
 import SwiftUI
 
 /// Two sections of the settings window, one per department: where the PICTURE
@@ -46,6 +47,7 @@ struct AudioSettingsSection: View {
     var body: some View {
         Section(L("settings_audio")) {
             AudioInputPicker()
+            AudioDelayField()
             // off the controller, like the input picker above it: the list
             // used to be enumerated HERE, which put a CoreAudio device walk in
             // a Form body — once per render of the whole audio section
@@ -58,6 +60,43 @@ struct AudioSettingsSection: View {
                 }
             }
         }
+    }
+}
+
+/// **How late this source's sound arrives**, in milliseconds, for whichever
+/// source is selected right now (owner: "по звуку – хочу еще добавить
+/// настройку задержки звука. мне кажется с разными источниками может быть
+/// полезно").
+///
+/// One field rather than two, showing the number for the source the picker
+/// above is on: an operator dials this in by ear against the picture, and they
+/// can only do that for the source they are actually listening to. The other
+/// source keeps its own number and gets it back when they switch
+/// (`AudioSettings.delayMS(for:)`).
+///
+/// Not disabled while recording. Unlike the source itself — which is latched
+/// per take because the writer's channel count is fixed at open — a delay is
+/// only where samples are stamped, so it may be nudged mid-take and the rest
+/// of the take follows.
+struct AudioDelayField: View {
+    @EnvironmentObject private var controller: CaptureController
+
+    var body: some View {
+        HStack {
+            Text(L("audio_delay"))
+            Spacer()
+            TextField("", value: Binding(get: { controller.audioDelayMS },
+                                         set: { controller.audioDelayMS = $0 }),
+                      format: .number.precision(.fractionLength(0...1)))
+                .frame(width: 64)
+                .multilineTextAlignment(.trailing)
+            Stepper("", value: Binding(get: { controller.audioDelayMS },
+                                       set: { controller.audioDelayMS = $0 }),
+                    in: AudioSettings.delayRangeMS, step: 1)
+                .labelsHidden()
+            Text(L("unit_ms")).foregroundStyle(.secondary)
+        }
+        .help(L("audio_delay_help"))
     }
 }
 
