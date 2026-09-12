@@ -38,6 +38,15 @@ final class DailiesQueueModel: ObservableObject {
     /// насколько снижать резолюшн"). 1080p is what every daily was before the
     /// choice existed, and stays the default.
     @Published var resolution: DailiesResolution = .hd
+    /// **More versions of the same day** (owner: "и да, очередь из нескольких
+    /// вариантов дейликов будет супер"), beyond the one the row above
+    /// describes.
+    ///
+    /// Empty by default, which is the whole of the compatibility story: a run
+    /// with no extras is byte for byte the run this app has always made. Each
+    /// extra is another PASS over the same takes, which is why the list is
+    /// capped (`DailiesVariant.limit`) — the cost is decodes, not rows.
+    @Published var extraVariants: [DailiesVariant] = []
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался"). Off unless the operator
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not

@@ -133,6 +133,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case burnCustom = "dailiesBurnCustom"
         case codec = "dailiesCodec"
         case resolution = "dailiesResolution"
+        case variants = "dailiesVariants"
         case bakeLook = "dailiesBakeLook"
         case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
@@ -192,6 +193,13 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// choice: a show sends 720p rushes all season, and re-picking it for
     /// every batch is how one day's dailies arrive at the wrong size.
     public var resolution: String?
+    /// **The extra versions a run also produces** (owner: "очередь из
+    /// нескольких вариантов дейликов"), each as one string — see
+    /// `DailiesVariant.stored` for why a string and not an object.
+    ///
+    /// nil/empty is the ordinary case and is the whole compatibility story: a
+    /// run with no extras is the run this app has always made.
+    public var variants: [String]?
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался").
     ///
@@ -273,6 +281,16 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// know must not start a run that writes 6K ProRes to a shuttle drive.
     public var resolutionEffective: DailiesResolution {
         resolution.flatMap(DailiesResolution.init(rawValue:)) ?? .hd
+    }
+
+    /// The extra variants, resolved. One unreadable entry is dropped and the
+    /// rest are kept — the same leniency every other list in this blob has,
+    /// because one mangled row must not cost an operator the others — and the
+    /// list is capped where the model caps it, so a hand-edited blob cannot
+    /// ask for forty passes over a night's footage.
+    public var variantsEffective: [DailiesVariant] {
+        Array((variants ?? []).compactMap(DailiesVariant.init(stored:))
+            .prefix(DailiesVariant.limit))
     }
 
     /// The codec, resolved. Restricted to `dailiesChoices`: a blob naming

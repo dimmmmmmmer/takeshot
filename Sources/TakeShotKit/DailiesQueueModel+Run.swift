@@ -8,10 +8,30 @@ import Foundation
 /// handover — the values the sheet has collected becoming an engine call on a
 /// background task, and the token that call can be stopped through. What the
 /// run REPORTS is still next door, with the published state it writes into.
+/// **What every pass of one run shares**: the burn-ins drawn over the picture,
+/// where the files land, the look baked in, the squeeze taken out, the sound
+/// matched to them, and whether finished items are skipped.
+///
+/// A value rather than nine parameters threaded twice — which is also what the
+/// project's parameter-count limit says — and a real grouping rather than a
+/// bag: what is NOT in here is exactly what a variant is allowed to change.
+struct DailiesRunShared: Sendable {
+    let burnins: DailiesBurnins
+    let folder: URL
+    let extras: [URL]
+    let look: DailiesLook?
+    let desqueeze: Double
+    let sounds: [BroadcastWaveFacts]
+    let skipFinished: Bool
+}
+
 extension DailiesQueueModel {
     func start() {
         guard canStart, let destination, let controller else { return }
-        let items = plannedItems(settings: controller.settings)
+        // **Every pass the run will make.** One without extras, which is the
+        // run this app has always made; one more per extra variant.
+        let passes = passes(settings: controller.settings)
+        let total = passes.reduce(0) { $0 + $1.items.count }
         let token = DailiesControl()
         // Recording protection from the first frame: a queue started while a
         // take is rolling opens already paused and waits its turn.
@@ -22,13 +42,11 @@ extension DailiesQueueModel {
         progress = nil
         report = nil
         controller.rememberDailiesChoices(from: self)
-        controller.dailiesStatus = L("dailies_status", 0, items.count)
+        controller.dailiesStatus = L("dailies_status", 0, total)
         let extras = Array(destinations.dropFirst())
         let burnins = burnins
         // Captured on this side, like `burnins` and for the reason spelled out
         // below: the detached task is handed values, never this object.
-        let codec = codec
-        let size = resolution
         // **Built on this side, like everything else the task is handed.** The
         // cube and its name live on the controller and the task is a detached
         // one: a look read from over there would be this object crossing into
@@ -77,15 +95,77 @@ extension DailiesQueueModel {
         // Utility priority, off the main actor: the encode must never compete
         // with the capture path for the machine (the pause gate guards the
         // disk and encoder; this guards the CPU).
+        let shared = DailiesRunShared(
+            burnins: burnins, folder: destination, extras: extras, look: look,
+            desqueeze: squeeze, sounds: sounds, skipFinished: skip)
         Task.detached(priority: .utility) {
-            let result = await DailiesEngine.run(
-                items: items, burnins: burnins, into: destination,
-                alsoInto: extras, codec: codec, look: look,
-                desqueeze: squeeze, resolution: size, sounds: sounds,
-                skipFinished: skip, control: token,
-                progress: publish)
-            complete(result)
+            complete(await Self.runPasses(passes, total: total, shared: shared,
+                                          control: token, publish: publish))
         }
+    }
+
+    /// **One pass's snapshot, renumbered onto the whole run.**
+    ///
+    /// Each engine call counts "item i of its own list" and the operator is
+    /// watching ONE queue: without the offset the bar jumps back to the start
+    /// of the line at every pass, and without the total it fills up and then
+    /// starts again. Its own function because that is a statement about two
+    /// numbers and the alternative is a closure nothing can check.
+    /// `nonisolated` because the engine calls it from its own task: this is
+    /// arithmetic on two integers and belongs to nobody's actor.
+    nonisolated static func whole(_ snapshot: DailiesProgress, after done: Int,
+                                  of total: Int) -> DailiesProgress {
+        var moved = snapshot
+        moved.itemIndex += done
+        moved.itemCount = total
+        return moved
+    }
+
+    /// **Each pass in turn, as one run.**
+    ///
+    /// Sequential and not parallel, deliberately: two transcodes of the same
+    /// footage at once compete for the decoder, the disk and the pause gate
+    /// that keeps a daily out of a rolling take's way — and the pass that
+    /// finishes second finishes no sooner for it.
+    ///
+    /// Progress is renumbered onto the WHOLE run so the one bar the strip
+    /// draws counts every pass: each engine call reports "item i of its own
+    /// list", and the operator is watching one queue.
+    ///
+    /// Cancel stops the passes as well as the items, and the passes that never
+    /// started report their items as cancelled — the engine's own rule, that a
+    /// report's length always matches the queue's, applied one level up.
+    private static func runPasses(
+        _ passes: [DailiesPass], total: Int, shared: DailiesRunShared,
+        control: DailiesControl,
+        publish: @escaping @Sendable (DailiesProgress) -> Void)
+        async -> DailiesReport {
+        var all: [DailiesItemResult] = []
+        var cancelled = false
+        for (index, pass) in passes.enumerated() {
+            guard !control.isCancelled else {
+                all += passes[index...].flatMap { rest in
+                    rest.items.map {
+                        DailiesItemResult(source: $0.source, wasCancelled: true)
+                    }
+                }
+                cancelled = true
+                break
+            }
+            let done = all.count
+            let result = await DailiesEngine.run(
+                items: pass.items, burnins: shared.burnins, into: shared.folder,
+                alsoInto: shared.extras, codec: pass.codec, look: shared.look,
+                desqueeze: shared.desqueeze, resolution: pass.resolution,
+                sounds: shared.sounds, skipFinished: shared.skipFinished,
+                control: control,
+                progress: { snapshot in
+                    publish(whole(snapshot, after: done, of: total))
+                })
+            all += result.items
+            cancelled = cancelled || result.wasCancelled
+        }
+        return DailiesReport(items: all, wasCancelled: cancelled)
     }
 
     /// Stop the whole queue. The frame in hand finishes and the partial

@@ -1208,6 +1208,9 @@
 "dailies_verdict_silent" = "нет звуковых дорожек";
 "dailies_verdict_unchecked" = "записан до появления этой проверки";
 "dailies_verdict_ok" = "в порядке";
+"dailies_variants" = "Ещё версии";
+"dailies_variants_add_help" = "Ещё одна версия тех же дублей, за один заход по материалу";
+"dailies_variants_passes" = "проходов по каждому дублю: %d";
 "dailies_resolution" = "Размер";
 "dailies_resolution_source" = "Как исходник";
 "dailies_export_timeline" = "Экспорт таймлайна…";

@@ -8,6 +8,18 @@ import Foundation
 /// one question — files or takes — for the three readers that ask it (what
 /// Start queues, what the preview describes, and which frame it lays its strips
 /// over), and the whole point is that they get ONE answer.
+/// One pass of a run: the queue under one variant's name, in that variant's
+/// codec, at that variant's ceiling.
+///
+/// A type rather than a tuple because it is three things and a three-member
+/// tuple is a name nobody can read at the call site — which is also what the
+/// project's own `large_tuple` limit says.
+struct DailiesPass {
+    let items: [DailiesItem]
+    let codec: CaptureCodec
+    let resolution: DailiesResolution
+}
+
 extension DailiesQueueModel {
     /// **What a run is made of**: the files the folders hold, or the app's own
     /// takes. One or the other and never both — see `queuedTakes`.
@@ -70,18 +82,73 @@ extension DailiesQueueModel {
 
     /// The queue Start will run.
     func plannedItems(settings: CaptureSettings) -> [DailiesItem] {
+        plannedItems(settings: settings, suffix: nameSuffix)
+    }
+
+    /// The same queue named for one VARIANT. Two versions of one take land in
+    /// one folder, so their names have to differ — see `DailiesVariant`.
+    func plannedItems(settings: CaptureSettings,
+                      suffix: String) -> [DailiesItem] {
         switch queueContents {
         case .files(let urls):
             return urls.map {
                 Self.item(for: $0, settings: settings,
-                          prefix: namePrefix, suffix: nameSuffix)
+                          prefix: namePrefix, suffix: suffix)
             }
         case .takes(let takes):
             return takes.map {
                 Self.item(for: $0, settings: settings,
-                          prefix: namePrefix, suffix: nameSuffix)
+                          prefix: namePrefix, suffix: suffix)
             }
         }
+    }
+
+    /// One more version, seeded from the row above so the new line is a
+    /// SMALLER copy of the daily rather than an empty form: 720p H.264 is what
+    /// a second copy is for nine times in ten, and an operator who wants
+    /// something else changes one picker.
+    func addVariant() {
+        guard extraVariants.count < DailiesVariant.limit else { return }
+        extraVariants.append(DailiesVariant(
+            resolution: resolution == .hd720 ? .sd : .hd720,
+            codec: .h264,
+            suffix: Self.nextVariantSuffix(after: extraVariants)))
+    }
+
+    func removeVariant(_ id: UUID) {
+        extraVariants.removeAll { $0.id == id }
+    }
+
+    /// A suffix nothing else in the list is using. Numbered rather than blank:
+    /// two variants with one suffix is two runs writing over each other's
+    /// names, and the `_2` the collision rule then appends says nothing about
+    /// which copy is which.
+    static func nextVariantSuffix(after existing: [DailiesVariant]) -> String {
+        let taken = Set(existing.map(\.suffix))
+        guard taken.contains("_REVIEW") else { return "_REVIEW" }
+        for index in 2...(DailiesVariant.limit + 1)
+        where !taken.contains("_REVIEW\(index)") {
+            return "_REVIEW\(index)"
+        }
+        return "_REVIEW"
+    }
+
+    /// **Every pass the run will make**: the sheet's own settings first, then
+    /// one per extra variant.
+    ///
+    /// The sheet's row is deliberately the FIRST pass rather than a member of
+    /// the list: it is the daily, and the extras are extra. An operator who
+    /// never opens the list gets exactly the run this app has always made, in
+    /// the order it has always made it.
+    func passes(settings: CaptureSettings) -> [DailiesPass] {
+        [DailiesPass(items: plannedItems(settings: settings),
+                     codec: codec, resolution: resolution)]
+            + extraVariants.prefix(DailiesVariant.limit).map { variant in
+                DailiesPass(
+                    items: plannedItems(settings: settings,
+                                        suffix: variant.suffix),
+                    codec: variant.codec, resolution: variant.resolution)
+            }
     }
 
     /// What the burn-in preview describes: the first item the run would

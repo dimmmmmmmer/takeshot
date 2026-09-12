@@ -53,6 +53,18 @@ extension CaptureController {
     /// sticky alarm — the alarm means footage is at risk, and a daily that did
     /// not survive is a file this app can make again from footage that is
     /// still there. The detail stays on the sheet, which lists every file.
+    /// **Whether another version can be added to the run.**
+    ///
+    /// On the controller because every `.disabled(` in this app names a rule
+    /// here rather than spelling one in a view — and because it is two rules,
+    /// not one: a run in flight takes no new passes, and the list has a
+    /// ceiling (`DailiesVariant.limit`) whose reason is decodes rather than
+    /// rows.
+    var canAddDailiesVariant: Bool {
+        !isDailiesRunning
+            && dailies.extraVariants.count < DailiesVariant.limit
+    }
+
     func dailiesDidVerify(_ findings: [DailiesVerify.Finding]) {
         let faults = findings.filter(\.isFault)
         if findings.isEmpty {
@@ -256,6 +268,8 @@ extension CaptureController {
         // absent key is what lets an older build read the same file.
         settings.dailies.resolution = model.resolution == .hd
             ? nil : model.resolution.rawValue
+        settings.dailies.variants = model.extraVariants.isEmpty
+            ? nil : model.extraVariants.map(\.stored)
         settings.dailies.bakeLook = model.bakeLook ? true : nil
         settings.dailies.bakeDesqueeze = model.bakeDesqueeze ? true : nil
         settings.dailies.namePrefix = model.namePrefix.isEmpty

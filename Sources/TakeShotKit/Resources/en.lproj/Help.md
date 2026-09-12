@@ -290,6 +290,14 @@ It is a ceiling and never an upscale: a 1080p take under a 4K ceiling stays
 another ceiling is a different deliverable, so it does not count as already
 rendered.
 
+One run can produce **several versions of the same day**: under the output row
+is a list of extra copies, each with its own size, codec and name suffix. The
+row above is the daily itself and the list is what goes somewhere else — an
+edit copy at the full raster, a 720p for the director, something small enough
+to email. They are rendered in one pass over the footage, one after another,
+so nobody has to come back and start a second batch; the suffix is what tells
+the copies apart in the folder.
+
 **Dailies** carry more than the picture: the source's own timecode goes into
 the proxy as a track, and every marker flagged during the take becomes a
 CHAPTER in it — the scrub bar grows a menu, and an editor lands on the frame

@@ -568,6 +568,9 @@ struct DailiesOutputSection: View {
                 .offloadText(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            // **More versions of the same day**, under the row that describes
+            // the daily itself — see `DailiesVariantsRow`.
+            DailiesVariantsRow(model: model)
             // **The look, baked** (owner: "о в дейликах хочу еще возможность
             // чтоб лут в них запекался"). Here rather than with the burn-ins,
             // because this is what the batch will PRODUCE — the same question
