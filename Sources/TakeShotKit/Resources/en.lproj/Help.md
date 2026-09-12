@@ -283,6 +283,13 @@ On demand, from the export menu in the takes panel or the File menu:
   shift's rows with that day's own date, tally and footage, and stamps every
   CSV row with its shift.
 
+**Work reports** are the cart's own paperwork rather than the camera
+department's, so they live where the work does: one under the dailies
+destination (what that folder has had rendered into it, totalled) and one in
+the offload sheet's history (the cards copied, the files verified, how much).
+Both are plain text — a dozen lines of totals meant to be read on a phone,
+pasted into an email and printed.
+
 Takes moved out of the folder leave the panel but stay in the log: the normal end
 of a day is the DIT moving footage into the archive, and that must not erase the
 day's ratings.

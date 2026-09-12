@@ -724,6 +724,29 @@
    these values are injected into CaptureCore (OffloadReportLabels) and the
    English ones MUST stay byte-identical to its built-in defaults — the pinned
    summary test compares the whole file */
+"work_report_dailies_title" = "TakeShot — dailies work report";
+"work_report_cards_title" = "TakeShot — card work report";
+"work_report_folder" = "Folder";
+"work_report_dailies" = "Dailies";
+"work_report_runtime" = "Runtime";
+"work_report_written" = "Written";
+"work_report_cards" = "Cards";
+"work_report_files" = "Files";
+"work_report_copied" = "Copied";
+"work_report_verified" = "Verified";
+"work_report_first" = "First";
+"work_report_last" = "Last";
+"work_report_verified_fmt" = "%1$d of %2$d";
+"work_report_files_of_fmt" = "%1$d of %2$d files";
+"work_report_disks_fmt" = "%d disks";
+"work_report_verdict_verified" = "verified";
+"work_report_verdict_problems" = "problems";
+"work_report_verdict_cancelled" = "cancelled";
+"work_report_verdict_failed" = "failed";
+"export_work_report_dailies" = "Work report…";
+"export_work_report_cards" = "Work report…";
+"work_report_saved" = "Work report saved: %@";
+"toast_work_report_failed" = "Could not save the work report: %@";
 "offload_report_title" = "TakeShot verified offload";
 "offload_report_source" = "Source";
 "offload_report_destination" = "Destination";

@@ -23,6 +23,18 @@ extension DailiesFilesTab {
         HStack(spacing: OffloadChrome.rowSpacing) {
             Button(L("dailies_verify")) { model.verifyDestination() }
                 .disabled(!controller.canVerifyDailies)
+            // **What this folder has had rendered into it**, as a page to hand
+            // over (owner: "хотелось бы иметь возможность отгружать отчеты
+            // проделанной работы по дейликам"). Beside the check because both
+            // are questions about the FOLDER rather than about the queue, and
+            // both read the same journal — one asks whether it is all right,
+            // the other what it came to.
+            Button(L("export_work_report_dailies")) {
+                if let folder = model.destination {
+                    controller.exportDailiesWorkReport(for: folder)
+                }
+            }
+            .disabled(!controller.canVerifyDailies)
             if model.isVerifying {
                 Text(L("dailies_verify_running")).offloadText(.caption)
             } else if !model.verifyFindings.isEmpty {

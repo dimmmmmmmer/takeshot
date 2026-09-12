@@ -13,6 +13,7 @@ import SwiftUI
 /// is itself the answer.
 struct OffloadHistoryList: View {
     @ObservedObject var store: OffloadHistoryStore
+    @EnvironmentObject private var controller: CaptureController
 
     /// Local, so the row text does not change shape with the machine's clock
     /// settings mid-session. Short/short: this is scanned, not read.
@@ -37,6 +38,15 @@ struct OffloadHistoryList: View {
                 // empty is a list that stops being read. Beside the ledger's
                 // own, in the same place and the same shape.
                 if !store.runs.isEmpty {
+                    // **The day's copying, as a page to hand over** (owner:
+                    // "отчеты проделанной работы … по слитым карточкам").
+                    // Here because this list IS the record it is built from,
+                    // and an export button anywhere else would be an export of
+                    // something the operator cannot see.
+                    Button(L("export_work_report_cards")) {
+                        controller.exportCardWorkReport()
+                    }
+                    .buttonStyle(.link)
                     Button(L("offload_history_clear")) { store.clear() }
                         .buttonStyle(.link)
                         .help(L("offload_history_clear_help"))

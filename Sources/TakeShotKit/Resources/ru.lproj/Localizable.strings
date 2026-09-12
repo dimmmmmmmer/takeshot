@@ -724,6 +724,29 @@
 "report_csv_recorded" = "Записан";
 
 /* === owner item 21: the offload summary .txt and report-card PNG === */
+"work_report_dailies_title" = "TakeShot — отчёт по дейликам";
+"work_report_cards_title" = "TakeShot — отчёт по картам";
+"work_report_folder" = "Папка";
+"work_report_dailies" = "Дейликов";
+"work_report_runtime" = "Хронометраж";
+"work_report_written" = "Записано";
+"work_report_cards" = "Карт";
+"work_report_files" = "Файлов";
+"work_report_copied" = "Скопировано";
+"work_report_verified" = "Проверено";
+"work_report_first" = "Начало";
+"work_report_last" = "Конец";
+"work_report_verified_fmt" = "%1$d из %2$d";
+"work_report_files_of_fmt" = "%1$d из %2$d файлов";
+"work_report_disks_fmt" = "дисков: %d";
+"work_report_verdict_verified" = "проверено";
+"work_report_verdict_problems" = "с замечаниями";
+"work_report_verdict_cancelled" = "отменено";
+"work_report_verdict_failed" = "сбой";
+"export_work_report_dailies" = "Отчёт о работе…";
+"export_work_report_cards" = "Отчёт о работе…";
+"work_report_saved" = "Отчёт сохранён: %@";
+"toast_work_report_failed" = "Не удалось сохранить отчёт: %@";
 "offload_report_title" = "TakeShot — проверенный офлоуд";
 "offload_report_source" = "Источник";
 "offload_report_destination" = "Назначение";

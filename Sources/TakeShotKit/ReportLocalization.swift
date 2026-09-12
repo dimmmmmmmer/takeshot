@@ -31,6 +31,39 @@ extension ShiftReportCSVLabels {
     }
 }
 
+extension WorkReportLabels {
+    /// The work reports' words in the current UI language. The duration units
+    /// come from the offload report's own labels rather than a second set:
+    /// two documents from one cart must not spell "min" two ways.
+    static func current() -> WorkReportLabels {
+        var labels = WorkReportLabels()
+        labels.dailiesTitle = L("work_report_dailies_title")
+        labels.cardsTitle = L("work_report_cards_title")
+        labels.folder = L("work_report_folder")
+        labels.dailies = L("work_report_dailies")
+        labels.runtime = L("work_report_runtime")
+        labels.written = L("work_report_written")
+        labels.cards = L("work_report_cards")
+        labels.files = L("work_report_files")
+        labels.copied = L("work_report_copied")
+        labels.verified = L("work_report_verified")
+        labels.first = L("work_report_first")
+        labels.last = L("work_report_last")
+        labels.verifiedFormat = L("work_report_verified_fmt")
+        labels.filesOfFormat = L("work_report_files_of_fmt")
+        labels.destinationsFormat = L("work_report_disks_fmt")
+        // Spelled out rather than looked up as "work_report_verdict_" + raw:
+        // a key built out of a value is a key the localization walk cannot
+        // see, which is the rule `DailiesFilesTabCheck.words` already states.
+        labels.verdicts = ["verified": L("work_report_verdict_verified"),
+                           "problems": L("work_report_verdict_problems"),
+                           "cancelled": L("work_report_verdict_cancelled"),
+                           "failed": L("work_report_verdict_failed")]
+        labels.offload = .current()
+        return labels
+    }
+}
+
 extension OffloadReportLabels {
     /// The offload summary's and report card's words in the current UI
     /// language. Read once per run and stamped into the plan — the reports of
