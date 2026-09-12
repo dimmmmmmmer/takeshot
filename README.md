@@ -11,26 +11,6 @@ scopes, exposure aids, markers and reports.
 [![Coverage](https://app.codacy.com/project/badge/Coverage/5223b50b77af47e3a35f9d49b9b9c9e9)](https://app.codacy.com/gh/dimmmmmmmer/takeshot/coverage/dashboard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Download
-
-Grab the latest DMG from [Releases](https://github.com/dimmmmmmmer/takeshot/releases)
-and drag TakeShot to Applications. [`CHANGELOG.md`](CHANGELOG.md) says what
-changed in each one.
-
-Three things about the published build:
-
-- **It cannot record from a capture board.** The vendor SDKs cannot be
-  redistributed, so the DeckLink bridge ships as a stub and no capture device
-  is visible. Everything downstream of the picture works, and a built-in demo
-  camera stands in for a board. To capture, build with Blackmagic's SDK —
-  [`CONTRIBUTING.md`](CONTRIBUTING.md) says where it goes.
-- **Ad-hoc signed, not notarized.** Gatekeeper blocks the first launch:
-  System Settings → Privacy & Security → **Open Anyway**, or `xattr -d
-  com.apple.quarantine TakeShot.app`.
-- **Apple Silicon.** The DMG is `arm64`; an Intel Mac builds from source. Each
-  release page lists that build's architectures and bridges, and so does the
-  app's **Collect diagnostics**.
-
 ## Features
 
 ### Recording
@@ -61,9 +41,7 @@ Three things about the published build:
 - One render path for live, playback, stills and RAW — what you compare is
   what you recorded, pixel for pixel.
 - BRAW and CinemaDNG playback, and R3D — RED clips including spanned ones,
-  developed to Rec.709 with the camera's metadata and edge timecode. Needs
-  RED's SDK (`vendor/R3DSDK/README.md`); without it an `.r3d` is reported as
-  unsupported rather than ignored.
+  developed to Rec.709 with the camera's metadata and edge timecode.
 - Compare against the live signal, a pinned reference frame, or another take,
   with wipe, blend, A/B and a per-pixel difference at ×1/×4/×16 gain.
 - Sync-play: two to four takes in one transport-locked grid, aligned from each
@@ -88,11 +66,10 @@ Three things about the published build:
 - SRT output: the mirrored viewer as H.264 in an MPEG-TS, with a stereo AAC
   fold of the recorded channels. Caller or listener, bitrate, optional AES
   passphrase and a stream ID; the delivery buffer sizes itself from the link's
-  round trip. Off by default; needs libsrt (`vendor/SRTSDK/README.md`).
+  round trip.
 - NDI output: the mirrored viewer announced on the set network, for a
   director's iPad or a client feed — a receiver picks it out of a list, no
-  address to type. Off by default; needs the NDI SDK
-  (`vendor/NDISDK/README.md`) and an NDI runtime.
+  address to type.
 - Chroma key: pull the green screen with an eyedropper, tolerance, softness
   and spill, and put a checkerboard, a colour or a still behind the actor. A
   preview tool by default; **Bake into recording** makes the next take a
@@ -123,7 +100,6 @@ Settings shows a QR code for each.
   with the settled framing — desqueeze, flips, rotation — and none of the
   tools), or Grid (every camera at once). Remembered per phone, switched
   without the picture dropping, and nothing is encoded while nobody watches.
-  Needs libdatachannel (`vendor/libdatachannel/README.md`).
 - `/slate` — the digital slate on a phone held in front of the lens: running
   timecode, the scene and take card, and a sync flash.
 
@@ -160,28 +136,14 @@ Settings shows a QR code for each.
 
 ## Requirements
 
-- macOS 15 (Sequoia) or newer, Apple Silicon (an Intel Mac builds from source).
-- To capture: a Blackmagic DeckLink or UltraStudio with
-  [Desktop Video](https://www.blackmagicdesign.com/support/), **and a build
-  made against the DeckLink SDK** — Desktop Video alone is not enough.
-- For `.braw`:
-  [Blackmagic RAW](https://www.blackmagicdesign.com/products/blackmagicraw)
-  installs the runtime, plus a build made against its SDK.
-
-### What works with no SDK and no hardware
-
-Everything downstream of the picture: playback of takes and foreign clips,
-compare, scopes, LUTs and CDLs, the operator aids, markers, stills, reports and
-exports, dailies, the card offload and the whole web remote. A built-in demo
-camera generates 1080p25, so recording a take and everything after it can be
-exercised end to end without a board — except auto-takes, which want a real
-camera's running timecode or a VANC trigger.
-
-What needs a vendor SDK is the hardware: capture and monitor output
-(DeckLink), `.braw` (Blackmagic RAW), `.r3d` (RED) and NDI (Vizrt). SRT needs
-libsrt (MPL-2.0, `brew install srt`); `/live` needs libdatachannel (MPL-2.0,
-carried inside published builds — see `NOTICE`).
-[`CONTRIBUTING.md`](CONTRIBUTING.md) says where each goes.
+- macOS 15 (Sequoia) or newer, Apple Silicon.
+- A Blackmagic DeckLink or UltraStudio with
+  [Desktop Video](https://www.blackmagicdesign.com/support/) installed.
+- For `.braw` playback:
+  [Blackmagic RAW](https://www.blackmagicdesign.com/products/blackmagicraw),
+  which installs the runtime TakeShot uses.
+- A built-in demo camera generates 1080p25, so everything downstream of the
+  picture can be exercised with no board attached.
 
 ## Usage
 
@@ -198,8 +160,8 @@ copied in by hand is one double-click from playback.
 
 - [`CHANGELOG.md`](CHANGELOG.md) — what changed in each release, and what is
   known not to work yet.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — building from source, testing, and
-  submitting changes.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — building from source, the vendor SDKs
+  each bridge is built against, testing, and submitting changes.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the app is put together
   and the hardware behaviour it depends on.
 - [`docs/coverage.md`](docs/coverage.md) — how coverage is measured and gated,
@@ -207,7 +169,7 @@ copied in by hand is one double-click from playback.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The vendor SDKs are not included and stay under
-their own terms. The web remote embeds **Resist Sans Display** (Groteskly
+MIT — see [LICENSE](LICENSE). The vendor SDKs TakeShot builds against stay
+under their own terms. The web remote embeds **Resist Sans Display** (Groteskly
 Yours, Eugene Tantsurin) under a licence held by the project owner, not covered
 by the MIT License. [NOTICE](NOTICE) lists both.
