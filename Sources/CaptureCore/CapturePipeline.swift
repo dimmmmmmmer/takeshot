@@ -177,6 +177,10 @@ public final class CapturePipeline: @unchecked Sendable {
     /// two follow the LIVE camera whatever the viewer is showing. Behind the
     /// same lock, for the same torn-closure-read reason.
     var monitorFrameHandler: (@Sendable (LiveFrame) -> Void)?
+    /// Whether anything on the MIRRORS slot takes a picture built out of the
+    /// clean one — see `setMirrorsTakeCleanPicture`. Behind the same lock as
+    /// the two handlers, and read with them.
+    var mirrorsTakeCleanPicture = false
 
     // LUT (all access on queue)
     let ciContext = CIContext(options: [.cacheIntermediates: false])
@@ -720,5 +724,14 @@ public final class CapturePipeline: @unchecked Sendable {
     /// on while the signal is paused (or gone) re-decorates what is on screen
     /// instead of waiting for a frame that is not coming.
     var lastDisplaySource: CVPixelBuffer?
+    /// …and the CLEAN picture that went with it, so a redraw can re-publish
+    /// the pair it published the first time.
+    ///
+    /// Both, rather than the screen buffer twice: the screen one carries the
+    /// pinned-reference wipe, the blend or the difference, and handing that to
+    /// the phones as their clean picture would put half of an hour-old frame
+    /// in a tile labelled A-cam every time a slider moved. Display-queue
+    /// confined, like the source beside it.
+    var lastDisplayClean: CVPixelBuffer?
 
 }

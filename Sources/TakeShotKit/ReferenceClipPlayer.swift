@@ -92,6 +92,21 @@ final class ReferenceClipPlayer: ObservableObject {
         tap.attach(to: item, url: url)
         let frames = self.frames
         tap.setOnDisplayFrame { [weak pipeline] frame in
+            // **The clean picture of THIS tap, which is never given an
+            // assist** — and that is load-bearing rather than incidental.
+            //
+            // A clean picture carries the operator's settled framing now
+            // (`AssistStage.framed`), and this buffer is not only shown on the
+            // A/B pane: it is stored and read back on the capture queue as the
+            // back half of the DIFFERENCE compare
+            // (`CapturePipeline.setReferenceFrameProvider`), which measures
+            // code values. `push(_:)` reaches the pipeline, the playback tap
+            // and the RAW player and nothing else, so this tap's stage sits at
+            // the default and `framed` answers nil.
+            //
+            // The day somebody pushes an assist to this tap, |A−B| quietly
+            // starts measuring a resampled picture. Take the framing off here
+            // if that ever happens.
             let buffer = frame[.clean]
             frames.store(buffer)
             // Straight onto the A/B pane, from the decode's own queue. See the

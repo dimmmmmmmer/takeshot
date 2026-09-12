@@ -244,8 +244,14 @@ struct SizingBakeTests {
     }
 
     /// The measurement side is untouched, and that is what keeps a reframed
-    /// take worth exposing by: the frame published for the compare provider
-    /// and the phone's camera grid is still the camera's.
+    /// take worth exposing by: the frame published for the compare provider is
+    /// still the camera's.
+    ///
+    /// **The phone's camera grid is no longer on that list**, and the
+    /// narrowing is deliberate: the crew's picture carries the SETTLED framing
+    /// now (`LivePicture.clean`), which is the half that cannot crop. The grid
+    /// still shows the whole frame the camera sent — in the shape it is meant
+    /// to be seen in.
     @Test func theBakeNeverReachesTheMeasurementPath() async throws {
         let root = TestMedia.scratchDirectory("SizingBakeClean")
         defer { try? FileManager.default.removeItem(at: root) }

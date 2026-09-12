@@ -161,6 +161,17 @@ extension CaptureController {
         let encoders: [(LivePicture, LiveVideoEncoder)] = mirrors.liveEncoders
             .filter { $0.key.source == .viewer }
             .map { ($0.key, $0.value) }
+        // **Does anything on this slot take the CLEAN picture?** Flattened
+        // here with the encoder list it comes from, once per wiring, for that
+        // list's own reason — and it decides whether a frame is worth a
+        // CoreImage pass. The playout, NDI and SRT can only ever take
+        // `.decorated`, so a rig with a hardware monitor out, an anamorphic
+        // desqueeze and no phones must not pay the crew's framing pass per
+        // frame (`CapturePipeline.setMirrorsTakeCleanPicture`).
+        let takesClean = encoders.contains { $0.0 == .clean }
+        pipeline.setMirrorsTakeCleanPicture(takesClean)
+        playbackTap.setMirrorsTakeCleanPicture(takesClean)
+        rawPlayer?.setMirrorsTakeCleanPicture(takesClean)
         guard feeder != nil || ndi != nil || !encoders.isEmpty else {
             pipeline.setOnDisplayFrame(nil)
             playbackTap.setOnDisplayFrame(nil)

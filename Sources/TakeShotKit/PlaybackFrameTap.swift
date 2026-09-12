@@ -32,10 +32,22 @@ final class PlaybackFrameTap: @unchecked Sendable {
     /// the same pattern in CapturePipeline and RawPlayerModel).
     let displayFrameLock = NSLock()
     var displayFrameHandler: (@Sendable (LiveFrame) -> Void)?
+    /// Whether whoever is on that slot takes a picture built out of the clean
+    /// one — see `CapturePipeline.setMirrorsTakeCleanPicture`, which this
+    /// mirrors: the framing pass a crew picture needs is spent only when
+    /// somebody is taking one. There is no monitor slot here, so the flag is
+    /// the whole answer.
+    var mirrorsTakeCleanPicture = false
 
     func setOnDisplayFrame(_ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
         displayFrameHandler = handler
+        displayFrameLock.unlock()
+    }
+
+    func setMirrorsTakeCleanPicture(_ takes: Bool) {
+        displayFrameLock.lock()
+        mirrorsTakeCleanPicture = takes
         displayFrameLock.unlock()
     }
 
@@ -68,17 +80,16 @@ final class PlaybackFrameTap: @unchecked Sendable {
         compareSinks.remove(layer)
     }
 
-    /// The aids. Two destinations, because the value has two halves: the
-    /// exposure tools and the guides are drawn into the delivered FRAME (which
-    /// is what carries them to the hardware playout — owner item 7), and the
-    /// sinks get the whole value for the geometry they place with.
+    /// The aids — ONE destination now. The exposure tools, the guides and the
+    /// geometry are all drawn into the delivered FRAME (which is what carries
+    /// them to the hardware playout and the browser streams — owner item 7);
+    /// the sinks used to get the value as well, for the geometry they placed
+    /// with, and a surface places nothing of its own any more.
     ///
     /// A paused clip is re-delivered on the spot: nothing else would put the
     /// change on screen, the same reason `setLUT` re-delivers.
     func setViewAssist(_ assist: ViewAssist) {
         assistStage.setAssist(assist)
-        sinks.setAssist(assist)
-        compareSinks.setAssist(assist)
         queue.async {
             self.idleDelivered = false
             if let buffer = self.lastBuffer {

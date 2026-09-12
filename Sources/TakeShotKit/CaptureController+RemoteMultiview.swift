@@ -53,6 +53,14 @@ extension CaptureController {
         // composer wants it so the grid's encoder is built for the rate the
         // master camera is actually running at.
         let rate = signalFormat?.frameRate ?? 0
+        // **Camera 0 is the one the operator is framing.** Its tile carries
+        // the settled framing, because that is what `LivePicture.clean` means
+        // now (owner: "на телефоне пусть тоже будет кадрирование"); the extra
+        // channels below are never given a `ViewAssist` at all
+        // (`CaptureController.push` reaches three producers and none of them
+        // is a channel), so their tiles arrive as the board sent them. That is
+        // the right answer rather than an omission — a B-cam's geometry is
+        // that camera's, and this app has one operator's set.
         pipeline.setOnMonitorFrame { [weak composer] frame in
             composer?.offer(frame[.grid], camera: 0, framesPerSecond: rate)
         }

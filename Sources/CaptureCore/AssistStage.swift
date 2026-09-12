@@ -178,6 +178,69 @@ public final class AssistStage: @unchecked Sendable {
         return out
     }
 
+    /// **The frame with the settled FRAMING on it and no aids at all** — the
+    /// picture a crew monitoring surface gets, or nil when there is nothing to
+    /// apply.
+    ///
+    /// The phone camera grid and the browser's clean stream are watched by
+    /// people who are not judging exposure, and everything the operator
+    /// switched on for themselves lies to them: false colour tells a gaffer
+    /// the scene is on fire, a frameline matte reads as the actual frame. The
+    /// REFRAME is not one of those — an anamorphic feed shown squeezed on a
+    /// room of phones is simply wrong, and a flip is the way the camera is
+    /// hung (owner: "на телефоне пусть тоже будет кадрирование").
+    ///
+    /// **No deadline, and the absence is the contract rather than an
+    /// oversight.** The stage's deadline drops the EFFECT and a reframe is not
+    /// one — the rule `rendered` states one function up, where a late frame
+    /// loses the tools and keeps its framing. There is nothing in this pass
+    /// but framing, so there is nothing the deadline would be allowed to drop.
+    /// Do not add one for symmetry.
+    ///
+    /// `settled` and not the whole sizing, which is the operator's own answer
+    /// to where that line falls: the magnification and the pan are a moment in
+    /// a shot, and an operator punching in to 4x to check focus must not take
+    /// the whole unit's picture with them.
+    ///
+    /// **And `settled` is what makes it safe as well as right.** The sharpest
+    /// rule against putting any geometry on a tile is the composer's own — "a
+    /// tile cropped to its cell would hide the edges of a frame somebody is
+    /// using to judge what is in shot, which is the one thing a monitoring
+    /// surface must not do" (`MultiviewComposer`). A settled sizing cannot
+    /// crop: `zoom` is 1, so `isCropping` is false by construction, and
+    /// everything before step 4 is aspect-FITTED into the frame. The crew
+    /// never loses an edge; they gain the shape the picture actually has.
+    ///
+    /// nil at the identity, which is what keeps it free: a session with no
+    /// reframe pays one `Bool` read per frame, and the pass is spent only when
+    /// somebody is actually watching this picture (the producers build the
+    /// frame only when a consumer is wired).
+    ///
+    /// A fourth `LivePicture` rather than this would have cost a whole H.264
+    /// session — one encode per picture, 6 ms at 1080p and 21 at UHD — for a
+    /// choice nobody asked for, and left `.clean` defined for no consumer.
+    public func framed(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        lock.lock()
+        let sizing = assist.sizing.settled
+        let bars = letterbox
+        lock.unlock()
+        guard !sizing.isIdentity else { return nil }
+        renderLock.lock()
+        defer { renderLock.unlock() }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        guard width > 0, height > 0,
+              let out = pool.buffer(width: width, height: height) else { return nil }
+        let image = sizing.applied(
+            to: CIImage(cvPixelBuffer: pixelBuffer, options: [.colorSpace: NSNull()]),
+            in: CGRect(x: 0, y: 0, width: width, height: height), letterbox: bars)
+        let destination = CIRenderDestination(pixelBuffer: out)
+        destination.colorSpace = nil
+        guard let task = try? context.startTask(toRender: image, to: destination),
+              (try? task.waitUntilCompleted()) != nil else { return nil }
+        return out
+    }
+
     /// No deadline: for the producers that do not carry one.
     ///
     /// The capture pipeline stamps every frame with the moment it stops being

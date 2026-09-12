@@ -103,11 +103,24 @@ final class RawPlayerModel: ObservableObject {
     private let displayFrameLock = NSLock()
     nonisolated(unsafe) private var displayFrameHandler:
         (@Sendable (LiveFrame) -> Void)?
+    /// Whether whoever is on that slot takes a picture built out of the clean
+    /// one — see `setMirrorsTakeCleanPicture`. Behind `displayFrameLock` with
+    /// the handler, and read with it.
+    nonisolated(unsafe) private var mirrorsTakeCleanPicture = false
 
     nonisolated func setOnDisplayFrame(
         _ handler: (@Sendable (LiveFrame) -> Void)?) {
         displayFrameLock.lock()
         displayFrameHandler = handler
+        displayFrameLock.unlock()
+    }
+
+    /// Whether whoever is on that slot takes a picture built out of the clean
+    /// one — `CapturePipeline.setMirrorsTakeCleanPicture`'s twin, and the whole
+    /// answer here since there is no monitor slot.
+    nonisolated func setMirrorsTakeCleanPicture(_ takes: Bool) {
+        displayFrameLock.lock()
+        mirrorsTakeCleanPicture = takes
         displayFrameLock.unlock()
     }
     /// Last decoded frame — re-presented to newly registered sinks, and
@@ -182,12 +195,13 @@ final class RawPlayerModel: ObservableObject {
         sinks.remove(layer)
     }
 
-    /// The aids: drawn into the presented frame (which is what reaches the
-    /// hardware playout — owner item 7) and handed to the sinks for the
-    /// geometry half. A paused clip is re-presented so the change lands.
+    /// The aids: drawn into the presented frame, geometry and all, which is
+    /// what reaches the hardware playout and the browser streams (owner item
+    /// 7). The sinks used to be handed the value as well, for the geometry
+    /// half; a surface places nothing of its own any more. A paused clip is
+    /// re-presented so the change lands.
     func setViewAssist(_ assist: ViewAssist) {
         assistStage.setAssist(assist)
-        sinks.setAssist(assist)
         repaintPausedFrame()
     }
 
@@ -255,11 +269,16 @@ final class RawPlayerModel: ObservableObject {
         sinks.present(shown)
         displayFrameLock.lock()
         let handler = displayFrameHandler
+        let wantsClean = mirrorsTakeCleanPicture
         displayFrameLock.unlock()
-        // Which is also what makes the clean picture free here: the decoded
-        // frame IS `LivePicture.clean` for a RAW clip, and only the copy on its
-        // way to the surfaces carries the aids.
-        handler?(LiveFrame(decorated: shown, clean: buffer))
+        // Which is also what makes the clean picture nearly free here: the
+        // decoded frame IS `LivePicture.clean` for a RAW clip, and only the
+        // copy on its way to the surfaces carries the aids. It does take the
+        // settled framing, like the other two producers — see
+        // `AssistStage.framed`.
+        handler?(LiveFrame(
+            decorated: shown,
+            clean: wantsClean ? (assistStage.framed(buffer) ?? buffer) : buffer))
     }
 
     /// Wait until everything already submitted has been shown. For the suite —

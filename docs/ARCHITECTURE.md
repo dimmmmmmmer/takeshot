@@ -147,10 +147,13 @@ operator switches modes.
 
 There is one, and it is the pipeline's display stage — `publishDisplayFrame`,
 which runs the chroma key (`CapturePipeline+ChromaKey`, and the pinned reference
-compare beside it) and then the operator aids (`AssistStage`, whose filter
-chains live in `AssistFilters`): false color, EL Zone, zebra, peaking,
-desqueeze, punch-in. Key first, aids second — a false colour has to meter the
-picture the monitor is actually showing, background and all.
+compare beside it), then the operator aids (`AssistStage`, whose filter chains
+live in `AssistFilters`): false color, EL Zone, zebra, peaking — and then the
+GEOMETRY, which is not an aid but the nine sizing controls (`PictureSizing`:
+desqueeze, height, punch-in, pan, rotate, pitch, yaw and the two flips). Key
+first, aids second, geometry last — a false colour has to meter the picture the
+monitor is actually showing, background and all, and it has to meter the code
+values the camera sent rather than a resample of them.
 
 The aids used to be applied inside `MetalPreviewLayer.render`, once per mounted
 surface. That worked for windows and for nothing else: the hardware playout, a
@@ -188,9 +191,14 @@ values included: the record buffer's pixel format follows that answer, and
 mid-take bakes the next take; disarming mid-take finishes the one in progress.
 
 The phone camera grid (the live page's Grid picture) is deliberately outside
-all of it. It is a monitoring surface, not an assist one, so it is handed the
+most of it. It is a monitoring surface, not an assist one, so it is handed the
 `clean` buffer — the same frame before the key and the aids — and the
 operator's compare wipe, chroma-key preview and exposure tools never reach it.
+The settled FRAMING does (owner: "на телефоне пусть тоже будет кадрирование"):
+a desqueeze is what the picture is rather than an opinion about it, and an
+anamorphic feed shown squeezed on a room of phones is a wrong picture. The
+punch-in and its pan stay behind — see `LivePicture.clean` and
+`PictureSizing.settled`, where the line is drawn and argued.
 `MultiviewComposer` tiles those buffers into one raster with Rec.709 declared
 on both ends, so the tile is the app's own picture rather than a gamma
 conversion of it (owner item 13).

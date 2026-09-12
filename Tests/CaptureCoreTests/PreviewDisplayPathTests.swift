@@ -306,19 +306,27 @@ enum PreviewProbe {
                 "the wipe never reached the viewer")
 
         let tile = try #require(grid.last, "nothing reached the camera grid")
-        // No wipe: both sides of where the seam would be are the live frame.
+        // No wipe and no aid: across the middle row, where a 2x desqueeze
+        // leaves the picture, the phone sees the live frame and nothing else.
         #expect(PreviewProbe.level(of: tile, atFractionX: 0.1) == 0x20,
                 "the operator's pinned reference reached the phone")
         #expect(PreviewProbe.level(of: tile, atFractionX: 0.9) == 0x20)
-        // No punch-in and no desqueeze: the frame is the signal's own shape,
-        // whole. Those live in MetalPreviewLayer, per surface, and the grid is
-        // not one of its surfaces — this is what keeps it that way.
+        // …on the signal's own raster, which the reframe never changes.
         #expect(CVPixelBufferGetWidth(tile) == 64)
         #expect(CVPixelBufferGetHeight(tile) == 32)
-        // And it is the very buffer the frame path produced, not a copy of
-        // anything the display stage built on top of it.
-        #expect(tile === source,
-                "the grid was handed a processed frame, not the clean one")
+        // **And the FRAMING did reach it** (owner: "на телефоне пусть тоже
+        // будет кадрирование"). A 2x desqueeze of this 2:1 source is fitted
+        // into the raster and leaves bars top and bottom, so a black top row
+        // is the anamorphic stretch arriving.
+        //
+        // The same row is what proves the PUNCH-IN stayed behind, which is
+        // where the operator drew the line ("всё кроме зума и пана"): a 2x
+        // zoom on top of the desqueeze scales the picture back to the full
+        // raster and there would be no bar to read. One sample, both halves
+        // of the rule.
+        let top = SizingProbe.pixel(of: tile, atX: 0.5, atY: 0.05)
+        #expect(top.r < 12 && top.g < 12 && top.b < 12,
+                "the desqueeze never reached the phone, or the punch-in did: \(top)")
     }
 
     /// With nothing switched on the two taps see the same frame — the split
@@ -376,14 +384,12 @@ enum PreviewProbe {
         let pipeline = PreviewProbe.makePipeline()
         let layer = MetalPreviewLayer()
         pipeline.setPreviewLetterbox(CIColor(red: 0.5, green: 0, blue: 0.25))
-        var assist = ViewAssist()
-        assist.desqueeze = 1.33
-        pipeline.setViewAssist(assist)
-
         pipeline.addDisplaySink(layer)
         #expect(pipeline.displaySinks.all().count == 1)
+        // The letterbox is the ONLY per-surface state there is now: the assist
+        // used to join with it, because a surface applied the geometry half of
+        // it for itself, and that is applied upstream now (`AssistStage`).
         #expect(abs(layer.letterboxColor.red - 0.5) < 0.001)
-        #expect(layer.assist.desqueeze == 1.33)
 
         pipeline.removeDisplaySink(layer)
         #expect(pipeline.displaySinks.all().isEmpty)

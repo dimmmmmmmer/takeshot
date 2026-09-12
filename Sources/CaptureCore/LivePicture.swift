@@ -7,8 +7,9 @@
 /// surface should get has never been one answer: the hardware monitor and the
 /// SRT link exist to stand in for a cable to a director's monitor, so they take
 /// what the operator is looking at; the phone camera grid is a crew monitoring
-/// surface where the operator's own tools would lie to it, so it takes the
-/// camera's own picture. Both rules were right and both were written at their
+/// surface where the operator's own TOOLS would lie to it, so it takes the
+/// camera's picture as framed and nothing else. Both rules were right and
+/// both were written at their
 /// own call sites, which is how "what does clean mean" drifts — and a stream
 /// carrying a burn-in that should not be there is invisible until somebody
 /// downstream complains about footage.
@@ -27,9 +28,30 @@ public enum LivePicture: String, CaseIterable, Sendable {
     /// in, the reference wipe included. The picture the SRT output carries and
     /// the hardware monitor shows, and the one this seam has always sent.
     case decorated
-    /// The same frame BEFORE the key and the assists — the camera's own
-    /// picture, with the levels and the viewing LUT that make it a picture at
-    /// all and nothing the operator switched on for themselves.
+    /// The same frame BEFORE the key and the assists, **carrying the settled
+    /// framing and nothing else the operator switched on for themselves**.
+    ///
+    /// The levels and the viewing LUT are in it, because those are what make
+    /// it a picture at all. The exposure tools, the guides, the legend, the
+    /// chroma key and the compare wipe are not: a crew monitoring surface is
+    /// watched by people who are not judging exposure, and every one of those
+    /// would lie to them.
+    ///
+    /// **The FRAMING is, and that is the carve-out** (owner: "на телефоне
+    /// пусть тоже будет кадрирование"). A desqueeze is not an opinion about
+    /// the picture, it is what the picture IS — an anamorphic feed shown
+    /// squeezed on a room of phones is not the camera's picture, it is a wrong
+    /// one — and a flip is the way the camera is hung. What is left out is the
+    /// magnification and its pan (`PictureSizing.settled`), which is where the
+    /// operator drew the line: "всё кроме зума и пана". Those two are a moment
+    /// in a shot, and an operator punching in to check focus must not take the
+    /// whole unit's picture with them.
+    ///
+    /// That carve-out is also what keeps this safe for a grid. The sharpest
+    /// rule against putting geometry on a tile is the composer's own — a tile
+    /// cropped to its cell would hide the edges of a frame somebody is using
+    /// to judge what is in shot — and a settled sizing cannot crop: `zoom` is
+    /// 1, so `isCropping` is false by construction.
     case clean
     /// Every camera's `clean` picture at once, tiled into one frame.
     ///

@@ -173,36 +173,40 @@ struct PreviewLayerRenderTests {
         #expect(renders == 1, "the probe did not run over the frame")
     }
 
-    /// Turning the operator's aids on re-renders what is on screen (they are
-    /// applied inside the draw, so nothing else would update a paused frame),
-    /// and setting the same value again does not.
-    @Test func assistChangesRedrawTheFrameOnScreen() throws {
+    /// **This layer is told two things and the assist is not one of them.**
+    ///
+    /// It used to hold a `ViewAssist` and re-render on every change to it,
+    /// because the geometry half was applied inside the draw. That half is
+    /// applied upstream now, into the signal's own raster
+    /// (`AssistStage.rendered`), so that the consumers which are pixel buffers
+    /// rather than layers carry the operator's reframe too — and a surface
+    /// that kept the value would have been a settings write costing a GPU pass
+    /// per mounted surface for a picture that could not differ.
+    ///
+    /// The two that are left are the ones the draw actually reads: the
+    /// letterbox colour (`+Render.swift`, at the composite) and the drawable
+    /// size. Both are tested here and below, and both go through the same
+    /// `stateLock` + coalesced `redraw()` shape the assist used to.
+    @Test func aChangedLetterboxRedrawsTheFrameOnScreen() throws {
         let layer = makeLayer()
-        layer.debugTag = "assist"
+        layer.debugTag = "letterbox"
         let source = frame(0x70)
         layer.present(source)
         drain(layer)
         let baseline = state(of: layer).1
 
-        var assist = ViewAssist()
-        assist.colorTool = .falseColor
-        assist.zebraOn = true
-        assist.peakingOn = true
-        assist.desqueeze = 1.33
-        assist.punchIn = 2
-        assist.panX = 0.2
-        assist.panY = -0.1
-        layer.setAssist(assist)
+        layer.letterboxColor = CIColor(red: 0.5, green: 0, blue: 0.25)
+        layer.redraw()
         drain(layer)
 
         let (adopted, renders) = state(of: layer)
-        #expect(adopted === source)
-        #expect(renders > baseline, "the aids never reached the screen")
-        #expect(layer.currentAssist == assist)
+        #expect(adopted === source, "the redraw replaced the frame on screen")
+        #expect(renders > baseline, "the change never reached the screen")
+        #expect(abs(layer.letterboxColor.red - 0.5) < 0.001)
 
-        // an unchanged assist must not cost a GPU pass per settings write
+        // …and an unchanged drawable size must not cost a GPU pass per write
         let settled = state(of: layer).1
-        layer.setAssist(assist)
+        layer.setDrawableSize(layer.drawableSize)
         drain(layer)
         #expect(state(of: layer).1 == settled)
     }
@@ -226,11 +230,13 @@ struct PreviewLayerRenderTests {
         drain(layer)
         let baseline = state(of: layer).1
 
-        var assist = ViewAssist()
-        assist.zebraOn = true
+        // Sixty ticks of the one setting a surface still has. It used to be
+        // the zebra threshold, through `setAssist`, until the geometry moved
+        // upstream and the layer stopped being told anything about the aids —
+        // the LATCH being tested is the same one either way (`redraw()`), and
+        // the loudest thing that reaches it now is a live resize.
         for step in 0..<60 {
-            assist.zebraThreshold = Double(50 + step) / 100
-            layer.setAssist(assist)
+            layer.setDrawableSize(CGSize(width: 128 + step, height: 64))
         }
         drain(layer)
         let drawn = state(of: layer).1 - baseline
@@ -242,7 +248,7 @@ struct PreviewLayerRenderTests {
         // and tight enough that sixty would fail it.
         #expect(drawn <= 4, "sixty ticks cost \(drawn) GPU passes")
         // …and the LAST value is the one on screen.
-        #expect(layer.currentAssist.zebraThreshold == assist.zebraThreshold)
+        #expect(layer.drawableSize.width == 187)
     }
 
     /// A drawable smaller than two pixels is not something to draw into; the
@@ -264,15 +270,22 @@ struct PreviewLayerRenderTests {
     /// **A settings change must never wait on a parked `nextDrawable()`.**
     ///
     /// That is this file's own rule — `stateLock` exists beside `renderLock`
-    /// precisely for it, and `setLetterbox` follows it. `setAssist` did not: it
-    /// took `renderLock`, which `render()` holds across the GPU pass, so every
-    /// zebra slider tick, punch-in pinch and false-colour toggle — all on the
-    /// MainActor — could block the main thread for as long as a drawable takes
-    /// to come back. On an occluded window that is up to a second.
+    /// precisely for it. `setAssist` did not follow it: it took `renderLock`,
+    /// which `render()` holds across the GPU pass, so every zebra slider tick,
+    /// punch-in pinch and false-colour toggle — all on the MainActor — could
+    /// block the main thread for as long as a drawable takes to come back. On
+    /// an occluded window that is up to a second.
+    ///
+    /// That setter is gone (the aids are applied upstream now and a surface is
+    /// told nothing about them), and **the rule is not**: it is the shape of
+    /// every setter this layer has. `setDrawableSize` is the one the lesson
+    /// moves to, because it is the loudest — a live window resize delivers one
+    /// per frame from the MainActor, and it has the identical `stateLock` +
+    /// conditional-`redraw()` body.
     ///
     /// The lock is held by another thread here, which is exactly what a pass in
     /// flight looks like from the caller's side.
-    @Test func settingTheAssistDoesNotWaitOnTheRenderLock() throws {
+    @Test func settingTheDrawableSizeDoesNotWaitOnTheRenderLock() throws {
         let layer = MetalPreviewLayer()
         let held = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)
@@ -285,23 +298,15 @@ struct PreviewLayerRenderTests {
         held.wait()
         defer { release.signal() }
 
-        // `let`, not a `var` mutated above it: the closure below captures it
-        // and runs on another thread, which the runner's toolchain warns about
-        // and the development Mac's does not.
-        let assist: ViewAssist = {
-            var built = ViewAssist()
-            built.desqueeze = 2
-            return built
-        }()
+        let wanted = CGSize(width: 320, height: 180)
         let returned = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
-            layer.setAssist(assist)
+            layer.setDrawableSize(wanted)
             returned.signal()
         }
         // Generous: the point is "it did not park behind a GPU pass", not a
-        // latency figure. Under the old code this waits for the full hold.
+        // latency figure. Under the old shape this waits for the full hold.
         #expect(returned.wait(timeout: .now() + 2) == .success,
-                "setAssist blocked on the render lock")
-        #expect(layer.currentAssist == assist)
+                "setDrawableSize blocked on the render lock")
     }
 }

@@ -74,6 +74,7 @@ extension PlaybackFrameTap {
         }
         displayFrameLock.lock()
         let handler = displayFrameHandler
+        let wantsClean = mirrorsTakeCleanPicture
         displayFrameLock.unlock()
         // The two pictures a take under review has, named the same way the live
         // path names them (`LivePicture`): `output` is the clip composed —
@@ -83,7 +84,14 @@ extension PlaybackFrameTap {
         // laid over the picture, it IS the picture under review, and there is
         // no un-composited buffer to hand over that would not cost a second
         // render pass on the tap queue for a distinction nobody asked for.
-        handler?(LiveFrame(decorated: shown, clean: output))
+        // …and the clean one carries the settled FRAMING, like the live path
+        // and for its reason (`LivePicture.clean`): a browser watching the
+        // clean picture of a take under review is a monitoring surface too.
+        // Spent only when something takes that picture — nothing here has a
+        // monitor slot, so the flag is the whole answer.
+        handler?(LiveFrame(
+            decorated: shown,
+            clean: wantsClean ? (assistStage.framed(output) ?? output) : output))
     }
 
     /// LUT + compare composite in raw code values (color management off — the

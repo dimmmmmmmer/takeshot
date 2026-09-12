@@ -91,6 +91,38 @@ public struct PictureSizing: Equatable, Sendable {
     /// Whether anything is set that a badge should light up for.
     public var isShowingChange: Bool { !isIdentity }
 
+    /// **The part of the framing that has SETTLED** — the nine controls with
+    /// the magnification and the pan taken out of them.
+    ///
+    /// The split is the app's own and it is already made once, where the
+    /// stored geometry is read back at launch: the desqueeze, the flips, the
+    /// rotation, the height and the two perspective terms persist because a
+    /// camera stays mounted the way it is mounted, while the punch-in and its
+    /// pan are deliberately NOT restored — "a magnification is a moment in a
+    /// shot, not a way of working" (`CaptureController.restoreAssists`).
+    ///
+    /// That is exactly the line the CREW's picture wants (owner: "на телефоне
+    /// пусть тоже будет кадрирование", asked for everything but the zoom and
+    /// the pan). An anamorphic feed shown squeezed on a room of phones is
+    /// simply wrong and a flip is the way the camera is hung — but an operator
+    /// who punches in to 4x to check focus must not take the whole unit's
+    /// picture with them.
+    ///
+    /// **The zoom goes whole, including below one.** A shrink ADDS picture
+    /// rather than cropping it, so a rule that kept it would not be unsafe —
+    /// but it would be a threshold where there is now one line, and the line
+    /// is the one the operator drew and the app already draws at launch. One
+    /// rule also buys the guarantee outright: with `zoom` at 1, `isCropping`
+    /// is false by construction, so a settled sizing can never take an edge
+    /// off a monitoring surface. Do not make this `min(zoom, 1)`.
+    public var settled: PictureSizing {
+        var value = self
+        value.zoom = 1
+        value.panX = 0
+        value.panY = 0
+        return value
+    }
+
     // MARK: - the dials
 
     /// Zoom bounds. Below one is the half this app has never had: the punch-in

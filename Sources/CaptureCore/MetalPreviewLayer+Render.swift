@@ -38,7 +38,7 @@ extension MetalPreviewLayer {
     /// safe", "лагают и ползунки высоты и ширины").
     ///
     /// Dropping the ones in between cannot show a stale frame: a redraw takes
-    /// `lastBuffer` and `currentAssist` when it RUNS, so whichever pass runs
+    /// `lastBuffer` and the letterbox when it RUNS, so whichever pass runs
     /// last draws the value the operator settled on. The flag is cleared at the
     /// start of the pass, so a change arriving mid-render schedules one more.
     public func redraw() {

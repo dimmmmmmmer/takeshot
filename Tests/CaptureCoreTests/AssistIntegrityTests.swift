@@ -161,7 +161,11 @@ struct AssistIntegrityTests {
     }
 
     /// The camera grid on a phone is the ONE display consumer that must not get
-    /// the aids. It is what the crew watches, not what the operator judges
+    /// the aids — the AIDS. The reframe is deliberately not on that list (see
+    /// `LivePicture.clean` and `SizingMonitorTests`), and this suite's
+    /// `loudAssist` sets no geometry, so what it proves is what it says.
+    ///
+    /// It is what the crew watches, not what the operator judges
     /// exposure on: false colour there tells a gaffer the scene is on fire, and
     /// a frameline matte reads as the actual frame. The owner asked for them off
     /// (item 13), so the grid is handed the clean frame while the viewer and the

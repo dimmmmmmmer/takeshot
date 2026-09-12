@@ -33,6 +33,38 @@ struct LivePictureRouteTests {
         }
     }
 
+    /// **A page that asked for the clean picture makes the app produce one.**
+    ///
+    /// The crew's picture carries the operator's settled framing now, and
+    /// building it is a full-raster CoreImage pass per frame — so it is spent
+    /// only when something takes it. The phone grid says so by wiring a
+    /// monitor handler; the browsers say so here, and `wireDisplayMirrors` is
+    /// the one place that knows which pictures the encoder pool holds.
+    ///
+    /// A rig with a hardware monitor out and nobody watching a clean stream
+    /// must come back to paying nothing, which is the second half.
+    @Test func aBrowserOnTheCleanPictureDeclaresTheDemandForIt() async throws {
+        let peers = WebRTCPeerLog()
+        try await ControllerHarness.run { controller, _ in
+            controller.mirrors.webrtcPeerFactory = { peers.build($0, $1) }
+            let served = try await RemoteHarness.serve(controller)
+            #expect(!controller.pipeline.mirrorsTakeClean,
+                    "the demand was declared before anybody asked")
+
+            let reply = try await WebRTCHarness.offer(
+                port: served.port, pin: served.pin, picture: .clean)
+            #expect(reply.status == 200)
+            #expect(controller.pipeline.mirrorsTakeClean,
+                    "a browser took the clean picture and nothing said so")
+
+            // …and it goes back down when that viewer leaves
+            controller.mirrors.webrtcViewers.removeAll()
+            controller.releaseIdleLivePictures()
+            #expect(!controller.pipeline.mirrorsTakeClean,
+                    "the demand outlived the viewer that declared it")
+        }
+    }
+
     /// An offer with no picture in it is answered with the decorated one.
     ///
     /// The compatible default, and it is a decision rather than an accident:

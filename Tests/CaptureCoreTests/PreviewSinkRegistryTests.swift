@@ -89,9 +89,11 @@ struct PreviewSinkRegistryTests {
                 registry.setLetterbox(CIColor(red: Double(iteration % 10) / 10,
                                               green: 0, blue: 0))
             default:
-                var assist = ViewAssist()
-                assist.zebraOn = iteration % 8 == 3
-                registry.setAssist(assist)
+                // The registry carries one piece of per-surface state now —
+                // the assist rode it too until the geometry moved upstream
+                // (`AssistStage`) — so the fourth kind of traffic is a second
+                // reader rather than a second writer.
+                _ = registry.all().count
             }
         }
 
