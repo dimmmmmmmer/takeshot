@@ -250,12 +250,22 @@ import Testing
         await TestWait.untilWritten { pipeline.health.takesClosed == 1 }
         await pipeline.finishPendingWrites()
         await TestWait.untilWritten { pipeline.health.takesFailedToFinalize == 1 }
+        // **Waited for separately, and it has to be.** The counter is bumped
+        // on the finish task and the alarm is dispatched to main AFTER it
+        // (`CapturePipeline+Take.swift`, the catch branch), so the count
+        // arriving says nothing about the alarm having been delivered yet.
+        // Asserting straight off the counter passed only because an idle main
+        // queue drains in microseconds — under a loaded battery it lost, and
+        // a red run that names a recording-integrity alarm is the worst kind
+        // of flake to have to re-read.
+        #expect(await TestWait.becomesTrue {
+            ears.said("TAKE LOST — failed to finalize")
+        }, "the integrity alarm never reached the listener")
 
         #expect(pipeline.health.takesFailedToFinalize == 1,
                 "a finalize that failed was not counted")
         #expect(ears.takes.isEmpty,
                 "an unfinalized take was published to the list anyway")
-        #expect(ears.said("TAKE LOST — failed to finalize"))
         #expect(ears.severity(of: "failed to finalize") == .integrity,
                 "a take that never finalized was reported as a notice")
         #expect(!pipeline.health.isRecording)
