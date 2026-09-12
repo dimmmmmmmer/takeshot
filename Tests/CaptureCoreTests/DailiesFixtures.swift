@@ -33,7 +33,8 @@ enum DailiesRig {
                           level: UInt8 = 128,
                           wireCodes: Bool = false,
                           slate: SlateMetadata = .empty,
-                          metadata: [String: String] = [:]) async throws -> URL {
+                          metadata: [String: String] = [:],
+                          tone: Double? = nil) async throws -> URL {
         let format = CaptureFormat(width: width, height: height, frameRate: 25,
                                    timecodeFPS: 25, name: "test")
         let writer = try TakeWriter(
@@ -55,7 +56,11 @@ enum DailiesRig {
                 try await Task.sleep(for: .milliseconds(5))
             }
             if audioChannels > 0,
-               let audio = TestMedia.audioBuffer(
+               let audio = tone.flatMap({ level in
+                   TestMedia.toneBuffer(seconds: Double(frame) * 0.04,
+                                        channels: audioChannels,
+                                        amplitude: level, cache: &audioCache)
+               }) ?? TestMedia.audioBuffer(
                    seconds: Double(frame) * 0.04, channels: audioChannels,
                    cache: &audioCache) {
                 writer.append(audioSampleBuffer: audio)

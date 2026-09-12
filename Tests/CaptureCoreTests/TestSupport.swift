@@ -71,6 +71,32 @@ enum TestMedia {
         }
     }
 
+    /// A packet of 997 Hz tone at `amplitude` (0…1), for the suites that
+    /// need audio with a LEVEL rather than a signature — the loudness
+    /// measurement has nothing to say about digital silence, which is what
+    /// every other fixture packet here is.
+    static func toneBuffer(seconds: Double, channels: Int = 2,
+                           amplitude: Double,
+                           cache: inout CMAudioFormatDescription?)
+        -> CMSampleBuffer? {
+        let frames = 1920
+        let start = Int((seconds * 48_000).rounded())
+        var samples = [Int16](repeating: 0, count: frames * channels)
+        for frame in 0..<frames {
+            let phase = 2 * Double.pi * 997 * Double(start + frame) / 48_000
+            let value = Int16((amplitude * 32_767 * sin(phase)).rounded())
+            for channel in 0..<channels {
+                samples[frame * channels + channel] = value
+            }
+        }
+        return samples.withUnsafeBytes { raw in
+            PCMAudio.makeSampleBuffer(bytes: raw.baseAddress!,
+                                      sampleFrames: frames,
+                                      channelCount: channels,
+                                      ptsSeconds: seconds, formatCache: &cache)
+        }
+    }
+
     /// The value one sample carries under `signature`. Deterministic in all
     /// three coordinates, so the same packet built twice is byte-identical and
     /// two different ones never are.

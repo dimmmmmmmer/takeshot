@@ -23,6 +23,7 @@ struct DailiesRunShared: Sendable {
     let desqueeze: Double
     let sounds: [BroadcastWaveFacts]
     let skipFinished: Bool
+    let normalizeAudio: Bool
 }
 
 extension DailiesQueueModel {
@@ -74,6 +75,7 @@ extension DailiesQueueModel {
         // model's own property from inside the detached task is the capture
         // this file's header refuses.
         let skip = skipFinished
+        let normalize = normalizeAudio
         // Both ways back are built HERE, on the main actor, and the task is
         // handed nothing else of ours. A reference the task captured belongs
         // to the task's own region, and passing THAT to a closure that will
@@ -97,7 +99,8 @@ extension DailiesQueueModel {
         // disk and encoder; this guards the CPU).
         let shared = DailiesRunShared(
             burnins: burnins, folder: destination, extras: extras, look: look,
-            desqueeze: squeeze, sounds: sounds, skipFinished: skip)
+            desqueeze: squeeze, sounds: sounds, skipFinished: skip,
+            normalizeAudio: normalize)
         Task.detached(priority: .utility) {
             complete(await Self.runPasses(passes, total: total, shared: shared,
                                           control: token, publish: publish))
@@ -157,8 +160,8 @@ extension DailiesQueueModel {
                 items: pass.items, burnins: shared.burnins, into: shared.folder,
                 alsoInto: shared.extras, codec: pass.codec, look: shared.look,
                 desqueeze: shared.desqueeze, resolution: pass.resolution,
-                sounds: shared.sounds, skipFinished: shared.skipFinished,
-                control: control,
+                normalizeAudio: shared.normalizeAudio, sounds: shared.sounds,
+                skipFinished: shared.skipFinished, control: control,
                 progress: { snapshot in
                     publish(whole(snapshot, after: done, of: total))
                 })

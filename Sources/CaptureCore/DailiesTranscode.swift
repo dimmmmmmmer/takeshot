@@ -23,6 +23,12 @@ final class DailiesTranscode {
     private let desqueeze: Double
     /// The ceiling the daily's raster is fitted into.
     private let resolution: DailiesResolution
+    /// **Bring every review copy to the same level** — the run's switch.
+    private let normalizeAudio: Bool
+    /// What the take measured, as a multiplier every sound leg is scaled by.
+    /// 1 when the run is not normalising, and when there was nothing to
+    /// measure — see `AudioGain`.
+    private var audioFactor = 1.0
     /// Every sound file the run was given; this item takes the ones whose
     /// timecode overlaps its own (`SoundSync`).
     private let sounds: [BroadcastWaveFacts]
@@ -75,6 +81,7 @@ final class DailiesTranscode {
     init(item: DailiesItem, index: Int, count: Int, burnins: DailiesBurnins,
          folder: URL, codec: CaptureCodec = .h264, look: DailiesLook? = nil,
          desqueeze: Double = 1, resolution: DailiesResolution = .hd,
+         normalizeAudio: Bool = false,
          sounds: [BroadcastWaveFacts] = [],
          control: DailiesControl,
          publish: @escaping @Sendable (DailiesProgress) -> Void) {
@@ -87,6 +94,7 @@ final class DailiesTranscode {
         self.look = look
         self.desqueeze = desqueeze
         self.resolution = resolution
+        self.normalizeAudio = normalizeAudio
         self.sounds = sounds
         self.control = control
         self.publish = publish
@@ -123,6 +131,14 @@ final class DailiesTranscode {
                                                        resolution: resolution)
         framesTotal = facts.framesTotal
         frameDuration = TakeWriter.frameDuration(at: facts.frameRate)
+        // **Measured before anything is written**, on the take's own sound.
+        // A pass over the audio alone is cheap beside the decode of the
+        // picture that follows it, and the alternative — deciding the gain
+        // from the first few seconds — is a level set by whatever happened
+        // before the slate.
+        if normalizeAudio {
+            audioFactor = await Self.audioFactor(of: facts.asset) ?? 1
+        }
         // Claimed through the same process-wide reservation every writing
         // path uses, so a daily can never land on a name a take (or another
         // daily) is about to take. Collisions get the app's `_2` suffix.
@@ -332,7 +348,10 @@ final class DailiesTranscode {
                 }
                 return
             }
-            let stamped = Self.shifted(sample, by: shift) ?? sample
+            let shifted = Self.shifted(sample, by: shift) ?? sample
+            // Every leg by the SAME factor: the balance between the camera's
+            // sound and the recordist's is theirs, not this app's.
+            let stamped = AudioGain.apply(audioFactor, to: shifted) ?? shifted
             guard CMSampleBufferGetPresentationTimeStamp(stamped) <= limit
             else { return }
             while !leg.input.isReadyForMoreMediaData {

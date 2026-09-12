@@ -1242,6 +1242,8 @@
 "dailies_variants" = "Also render";
 "dailies_variants_add_help" = "Another version of the same takes, in one pass over the footage";
 "dailies_variants_passes" = "%d passes over every take";
+"dailies_normalize_audio" = "Even out the sound";
+"dailies_normalize_audio_help" = "Bring every review copy to the same loudness (EBU R128, −23 LUFS). Measured per take; it cannot be taken back out of a proxy.";
 "dailies_resolution" = "Size";
 "dailies_resolution_source" = "Source";
 "dailies_export_timeline" = "Export timeline…";

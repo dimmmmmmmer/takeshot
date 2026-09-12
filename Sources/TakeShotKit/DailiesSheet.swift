@@ -568,6 +568,14 @@ struct DailiesOutputSection: View {
                 .offloadText(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            // **Every copy at the same level**, beside the baked look for the
+            // same reason: both are things the run PUTS IN the file and
+            // neither can be taken out again. Off by default.
+            Toggle(L("dailies_normalize_audio"), isOn: $model.normalizeAudio)
+                .toggleStyle(.checkbox)
+                .offloadText(.body)
+                .disabled(controller.isDailiesRunning)
+                .help(L("dailies_normalize_audio_help"))
             // **More versions of the same day**, under the row that describes
             // the daily itself — see `DailiesVariantsRow`.
             DailiesVariantsRow(model: model)

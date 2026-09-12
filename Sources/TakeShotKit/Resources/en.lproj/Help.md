@@ -290,6 +290,15 @@ It is a ceiling and never an upscale: a 1080p take under a 4K ceiling stays
 another ceiling is a different deliverable, so it does not count as already
 rendered.
 
+**Even out the sound** brings every review copy to the same loudness — EBU
+R128's −23 LUFS, measured per take to ITU-R BS.1770 rather than off a peak,
+because a peak is set by a door slam and says nothing about dialogue. One gain
+for the whole file, so the balance between the camera's sound and a
+recordist's track is left exactly as they made it. A boost stops at 12 dB (past
+that the source has a problem no gain fixes) and nothing is pushed past
+−1 dBFS. Off by default: a level this app decided cannot be taken out of a
+proxy again.
+
 One run can produce **several versions of the same day**: under the output row
 is a list of extra copies, each with its own size, codec and name suffix. The
 row above is the daily itself and the list is what goes somewhere else — an

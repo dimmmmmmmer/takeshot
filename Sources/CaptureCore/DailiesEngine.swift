@@ -47,6 +47,7 @@ public enum DailiesEngine {
         alsoInto extras: [URL] = [], codec: CaptureCodec = .h264,
         look: DailiesLook? = nil, desqueeze: Double = 1,
         resolution: DailiesResolution = .hd,
+        normalizeAudio: Bool = false,
         sounds: [BroadcastWaveFacts] = [],
         skipFinished: Bool = false,
         control: DailiesControl = DailiesControl(),
@@ -71,7 +72,8 @@ public enum DailiesEngine {
             folder: folder,
             recipe: DailiesRecipe.fingerprint(burnins: burnins, codec: codec,
                                               look: look, desqueeze: desqueeze,
-                                              resolution: resolution))
+                                              resolution: resolution,
+                                              normalizeAudio: normalizeAudio))
         var results: [DailiesItemResult] = []
         for (index, item) in items.enumerated() {
             guard !control.isCancelled else {
@@ -92,7 +94,8 @@ public enum DailiesEngine {
             let transcode = DailiesTranscode(
                 item: item, index: index, count: items.count,
                 burnins: burnins, folder: folder, codec: codec, look: look,
-                desqueeze: desqueeze, resolution: resolution, sounds: sounds,
+                desqueeze: desqueeze, resolution: resolution,
+                normalizeAudio: normalizeAudio, sounds: sounds,
                 control: control, publish: progress)
             var result = await transcode.run()
             if let output = result.output, !extras.isEmpty {

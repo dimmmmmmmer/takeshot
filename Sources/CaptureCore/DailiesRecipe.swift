@@ -27,7 +27,8 @@ public enum DailiesRecipe {
                                    codec: CaptureCodec,
                                    look: DailiesLook? = nil,
                                    desqueeze: Double = 1,
-                                   resolution: DailiesResolution = .hd) -> String {
+                                   resolution: DailiesResolution = .hd,
+                                   normalizeAudio: Bool = false) -> String {
         var parts: [String] = ["v1", codec.rawValue]
         parts.append("tc:\(flag(burnins.timecode))\(burnins.timecodePosition.rawValue)")
         parts.append("clip:\(flag(burnins.clipName))\(burnins.clipNamePosition.rawValue)")
@@ -48,6 +49,10 @@ public enum DailiesRecipe {
         // a run at the ceiling everything already used says exactly what it
         // always said.
         if resolution != .hd { parts.append("res:\(resolution.rawValue)") }
+        // Only when it is ON, for the line above's reason: every daily ever
+        // written was written with the sound the take had, and a field
+        // appended unconditionally would call all of them stale.
+        if normalizeAudio { parts.append("loudness:\(number(AudioGain.targetLUFS))") }
         return parts.joined(separator: "|")
     }
 

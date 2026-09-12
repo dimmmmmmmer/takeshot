@@ -134,6 +134,7 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
         case codec = "dailiesCodec"
         case resolution = "dailiesResolution"
         case variants = "dailiesVariants"
+        case normalizeAudio = "dailiesNormalizeAudio"
         case bakeLook = "dailiesBakeLook"
         case bakeDesqueeze = "dailiesBakeDesqueeze"
         case namePrefix = "dailiesNamePrefix"
@@ -200,6 +201,12 @@ public struct DailiesSettings: Codable, Equatable, Sendable {
     /// nil/empty is the ordinary case and is the whole compatibility story: a
     /// run with no extras is the run this app has always made.
     public var variants: [String]?
+    /// **Bring every review copy to the same level**; nil — off.
+    ///
+    /// Off is the honest default, like the baked look beside it: every daily
+    /// this app has written carries the sound the take had, and a level this
+    /// app decided cannot be taken back out of a proxy.
+    public var normalizeAudio: Bool?
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался").
     ///

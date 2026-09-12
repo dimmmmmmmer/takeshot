@@ -1211,6 +1211,8 @@
 "dailies_variants" = "Ещё версии";
 "dailies_variants_add_help" = "Ещё одна версия тех же дублей, за один заход по материалу";
 "dailies_variants_passes" = "проходов по каждому дублю: %d";
+"dailies_normalize_audio" = "Выровнять звук";
+"dailies_normalize_audio_help" = "Привести все ревью-копии к одной громкости (EBU R128, −23 LUFS). Меряется по каждому дублю; из прокси это уже не убрать.";
 "dailies_resolution" = "Размер";
 "dailies_resolution_source" = "Как исходник";
 "dailies_export_timeline" = "Экспорт таймлайна…";

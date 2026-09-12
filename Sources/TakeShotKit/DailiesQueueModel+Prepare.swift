@@ -33,6 +33,7 @@ extension DailiesQueueModel {
         codec = settings.dailies.codecEffective
         resolution = settings.dailies.resolutionEffective
         extraVariants = settings.dailies.variantsEffective
+        normalizeAudio = settings.dailies.normalizeAudio ?? false
         bakeLook = settings.dailies.bakeLook == true
         bakeDesqueeze = settings.dailies.bakeDesqueeze == true
         goodTakesOnly = settings.dailies.goodTakesOnly == true

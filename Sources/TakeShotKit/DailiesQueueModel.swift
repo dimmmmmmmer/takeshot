@@ -47,6 +47,9 @@ final class DailiesQueueModel: ObservableObject {
     /// extra is another PASS over the same takes, which is why the list is
     /// capped (`DailiesVariant.limit`) — the cost is decodes, not rows.
     @Published var extraVariants: [DailiesVariant] = []
+    /// **Every review copy at the same level.** Off by default — a level this
+    /// app decided cannot be taken back out of a proxy.
+    @Published var normalizeAudio = false
     /// **Bake the viewing look into the proxies** (owner: "о в дейликах хочу
     /// еще возможность чтоб лут в них запекался"). Off unless the operator
     /// says otherwise — see `DailiesSettings.bakeLook` for why nil is not
