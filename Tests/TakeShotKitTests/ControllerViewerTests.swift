@@ -32,6 +32,30 @@ import Testing
         }
     }
 
+    /// **The geometry math is handed the RASTER, with no desqueeze in it.**
+    ///
+    /// The desqueeze is one of the nine sizing controls and it is applied into
+    /// the signal's own raster, in the shared display stage, so that every
+    /// surface carries it and not just this window. Handing the already-
+    /// desqueezed aspect to the overlays as well would apply it twice — every
+    /// frameline, the taught-REC box and the eyedropper would sit a stretch
+    /// away from the picture they name, which is the exact defect
+    /// `ViewAssist.placement` exists to prevent.
+    @Test func theGeometrySourceIsTheRasterAndNotTheStretch() async throws {
+        try await ControllerHarness.run { controller, _ in
+            controller.signalFormat = CaptureFormat(
+                width: 1998, height: 1080, frameRate: 25, timecodeFPS: 25,
+                name: "test")
+            let flat: CGFloat = 1998.0 / 1080.0
+            controller.assist.desqueeze = 2
+            #expect(controller.displayAspect == flat * 2)
+            #expect(controller.signalAspect == flat)
+            #expect(controller.displaySourceSize()
+                == CGSize(width: flat, height: 1),
+                    "the overlays were handed the stretch as well")
+        }
+    }
+
     /// The desqueeze lives on the assist struct but has to survive a relaunch,
     /// so it is mirrored into settings.
     ///

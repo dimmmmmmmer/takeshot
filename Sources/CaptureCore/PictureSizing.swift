@@ -112,6 +112,21 @@ public struct PictureSizing: Equatable, Sendable {
         zoom > 1 ? (1 - 1 / zoom) / 2 : 0
     }
 
+    /// **The pan the two transforms actually take**, which is nothing at all
+    /// below a magnification: unmagnified the picture has nowhere to go, and
+    /// that is what `panLimit` says one line up.
+    ///
+    /// Read rather than trusted, because the value's own mutators are not the
+    /// only way a pan gets set: the fields are stored settings and a restore
+    /// writes them straight in, so a session that was saved punched-in and
+    /// reopened at 1× used to carry a pan nothing would clamp. The mutators
+    /// keep the invariant and this enforces it — belt and braces on the one
+    /// number that can slide a picture off centre behind the operator's back.
+    var effectivePan: CGPoint {
+        guard zoom > 1 else { return .zero }
+        return CGPoint(x: panX, y: panY)
+    }
+
     /// Keep the pan inside `panLimit` (zooming back out has to bring the
     /// picture with it, not leave it parked off-centre).
     public mutating func clampPan() {
@@ -173,8 +188,8 @@ public struct PictureSizing: Equatable, Sendable {
         let scale = fit * CGFloat(min(Self.maxZoom, max(Self.minZoom, zoom)))
         shape = shape.concatenating(CGAffineTransform(scaleX: scale, y: scale))
         // step 5: pan, as a fraction of the picture's own size on screen
-        let shiftX = CGFloat(panX) * box.width * scale
-        let shiftY = CGFloat(panY) * box.height * scale
+        let shiftX = effectivePan.x * box.width * scale
+        let shiftY = effectivePan.y * box.height * scale
         return shape.concatenating(CGAffineTransform(
             translationX: viewport.width / 2 - shiftX,
             y: viewport.height / 2 - shiftY))

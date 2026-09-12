@@ -188,32 +188,32 @@ extension MetalPreviewLayer {
         colorspace = space
     }
 
-    /// The frame placed into a `size` drawable: desqueezed, fitted, punched in.
-    /// nil when the image has no extent to place.
+    /// The frame fitted into a `size` drawable. nil when the image has no
+    /// extent to place.
     ///
-    /// The exposure tools and the guides are NOT applied here any more. They
-    /// arrive already on the frame, drawn once in the shared display stage, so
-    /// that the surfaces which are pixel buffers rather than layers — the
-    /// hardware playout, the multiview — carry them too (owner item 7; see
-    /// `AssistStage`). What is left is the geometry, which cannot move: only a
-    /// surface knows its own viewport.
+    /// **Nothing about the operator's settings is applied here any more.** The
+    /// exposure tools and the guides moved to the shared display stage first,
+    /// so that the surfaces which are pixel buffers rather than layers — the
+    /// hardware playout, the multiview, the phone grid — carry them too (owner
+    /// item 7); the GEOMETRY followed, for exactly the same reason and one
+    /// release later. A reframe that lived here was a reframe the director's
+    /// monitor never saw.
     ///
-    /// The assist is copied out under `stateLock` (see `currentAssist`),
-    /// not read under `renderLock`: a settings change must never wait on a
-    /// parked `nextDrawable()`.
-    private func placedImage(from pixelBuffer: CVPixelBuffer,
-                             in size: CGSize) -> CIImage? {
+    /// What is left is the fit, which genuinely is a property of this surface:
+    /// the frame arriving is the SIGNAL's raster, already reframed inside it,
+    /// and a window has to put that raster somewhere. An identity sizing is
+    /// the whole of that — `placed` fits a source into a frame — so the fit,
+    /// the integral-pixel placement and the fast paths stay stated once, in
+    /// `PictureSizing`, rather than being written a second time here.
+    /// Internal rather than private so the suite can render it and look:
+    /// "this surface adds a fit and nothing else" is a claim about pixels, and
+    /// the alternative is reading back a Metal drawable.
+    func placedImage(from pixelBuffer: CVPixelBuffer,
+                     in size: CGSize) -> CIImage? {
         let image = CIImage(cvPixelBuffer: pixelBuffer,
                             options: [.colorSpace: NSNull()])
         guard image.extent.width > 0, image.extent.height > 0 else { return nil }
-        // **One transform, in `PictureSizing`** — the width (which is the
-        // desqueeze), the zoom and the pan, plus the six controls this layer
-        // did not have. The overlays ride the same value's `transform`, which
-        // is what keeps the framelines on the signal's geometry instead of on
-        // the window's; two spellings of it is how they came apart before.
-        // Integral-pixel placement and the identity fast path are both inside
-        // it, stated once for every surface rather than here for one.
-        return currentAssist.sizing.placed(
-            image, in: CGRect(origin: .zero, size: size))
+        return PictureSizing().placed(image,
+                                      in: CGRect(origin: .zero, size: size))
     }
 }

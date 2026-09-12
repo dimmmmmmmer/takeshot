@@ -237,6 +237,8 @@ final class RawPlayerModel: ObservableObject {
 
     func setLetterbox(_ color: CIColor) {
         sinks.setLetterbox(color)
+        // …and the stage — see `AssistStage.setLetterbox`.
+        assistStage.setLetterbox(color)
     }
 
     /// `lastBuffer` keeps the CLEAN decoded frame — that is what a still grab

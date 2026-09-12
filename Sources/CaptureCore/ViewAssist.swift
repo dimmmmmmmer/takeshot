@@ -265,30 +265,36 @@ public struct ViewAssist: Equatable, Sendable {
     public mutating func magnify(by factor: Double, at anchor: CGPoint,
                                  sourceSize: CGSize, in viewport: CGSize) {
         guard factor > 0, factor.isFinite else { return }
-        guard let before = placement(sourceSize: sourceSize, in: viewport)
-        else {
+        // **Which pixel of the SOURCE is under the pointer**, asked through
+        // the matrix rather than by interpolating across the picture's
+        // bounding box: under a rotation or a flip those are different points,
+        // and the whole promise of this function is that one of them stays put.
+        guard let fraction = imageFraction(of: anchor, sourceSize: sourceSize,
+                                           in: viewport) else {
             // nothing on screen to anchor to — a plain clamped magnify
             setPunchIn(punchIn * factor)
             return
         }
-        // where the anchor sits on the PICTURE, as a fraction of it
-        let u = (anchor.x - before.rect.minX) / before.rect.width
-        let v = (anchor.y - before.rect.minY) / before.rect.height
         setPunchIn(punchIn * factor)
-        // the centered placement at the new magnification (pan contributes only
-        // a shift, so zeroing it reuses the one placement formula instead of
-        // growing a second copy of it — see `placement`)
+        // The centred geometry at the new magnification: the pan contributes
+        // only a shift, so zeroing it reuses the one formula instead of
+        // growing a second copy of it — see `surfaceTransform`.
         panX = 0
         panY = 0
         guard punchIn > 1,
-              let centered = placement(sourceSize: sourceSize, in: viewport)
+              let centred = surfaceTransform(sourceSize: sourceSize,
+                                             in: viewport),
+              let picture = placement(sourceSize: sourceSize, in: viewport)
         else { return }
-        // the pan that puts the same image fraction back under the anchor:
-        // anchor.x = centeredMinX − panX·width + u·width, solved for panX
-        panX = Double((centered.rect.minX + u * centered.rect.width - anchor.x)
-                      / centered.rect.width)
-        panY = Double((centered.rect.minY + v * centered.rect.height - anchor.y)
-                      / centered.rect.height)
+        let landed = CGPoint(x: fraction.x * sourceSize.width,
+                             y: fraction.y * sourceSize.height)
+            .applying(centred)
+        // …and the pan that puts it back under the anchor. A pan moves the
+        // picture by a fraction of its own size on screen, and a POSITIVE one
+        // moves it left and up (`PictureSizing.transform`, step 5), which is
+        // why the difference is taken this way round.
+        panX = Double((landed.x - anchor.x) / picture.rect.width)
+        panY = Double((landed.y - anchor.y) / picture.rect.height)
         clampPan()
     }
 
@@ -364,35 +370,64 @@ public struct ViewAssist: Equatable, Sendable {
         public var rect: CGRect
     }
 
+    /// **Source pixels to points on a surface**, y DOWN — the one matrix the
+    /// overlays and the mouse ride.
+    ///
+    /// Two transforms in a row, because that is what actually happens to the
+    /// picture now:
+    ///
+    /// 1. the nine controls, INTO THE SIGNAL'S OWN RASTER — where the display
+    ///    stage applies them, so that the hardware playout, the multiview and
+    ///    the phone grid carry the operator's reframe and not just this
+    ///    window (`AssistStage.rendered`);
+    /// 2. that raster aspect-fitted into the surface, which is the only part
+    ///    a window still decides for itself (`MetalPreviewLayer`).
+    ///
+    /// `sourceSize` is the SIGNAL's raster and not the desqueezed picture: the
+    /// desqueeze is one of the nine and is applied in step 1, inside the
+    /// raster, which is why an anamorphic feed now goes out letterboxed in
+    /// 16:9 instead of only looking right in this app.
+    ///
+    /// nil under a pitch or a yaw — there is no affine inverse then and a pick
+    /// must be refused rather than land on the wrong pixel — and nil for a
+    /// degenerate source or viewport.
+    public func surfaceTransform(sourceSize: CGSize,
+                                 in viewport: CGSize) -> CGAffineTransform? {
+        guard sourceSize.width > 0, sourceSize.height > 0,
+              viewport.width > 0, viewport.height > 0,
+              let sized = sizing.transform(sourceSize: sourceSize,
+                                           in: sourceSize) else { return nil }
+        let fit = min(viewport.width / sourceSize.width,
+                      viewport.height / sourceSize.height)
+        return sized
+            .concatenating(CGAffineTransform(scaleX: fit, y: fit))
+            .concatenating(CGAffineTransform(
+                translationX: (viewport.width - sourceSize.width * fit) / 2,
+                y: (viewport.height - sourceSize.height * fit) / 2))
+    }
+
     /// Where the picture lands inside `viewport`, and at what scale.
     ///
-    /// The renderer and the SwiftUI overlays both call this instead of each
+    /// The SwiftUI overlays and the two gestures call this instead of each
     /// keeping a copy of the formula: framelines and safe areas mark the
-    /// SIGNAL's geometry, so when the operator punches in they have to ride
+    /// SIGNAL's geometry, so when the operator reframes they have to ride
     /// exactly the transform the image rides. Two copies of the math is how
     /// they came to disagree — the overlays stayed pinned to the window while
     /// the picture moved under them.
     ///
-    /// nil for a degenerate source or viewport (nothing to place).
+    /// The rect is the picture's BOUNDING BOX, which is the whole of it for
+    /// the eight controls that keep it square to the frame and its extent
+    /// under a rotation. `scale` is that box against the source.
+    ///
+    /// nil for a degenerate source or viewport, and under a pitch or a yaw —
+    /// see `surfaceTransform`.
     public func placement(sourceSize: CGSize,
                           in viewport: CGSize) -> ImagePlacement? {
-        guard sourceSize.width > 0, sourceSize.height > 0,
-              viewport.width > 0, viewport.height > 0 else { return nil }
-        // at or below 1 punch-in is off; clamping here keeps every caller from
-        // having to agree about that separately
-        let magnification = CGFloat(max(1, punchIn))
-        let fit = min(viewport.width / sourceSize.width,
-                      viewport.height / sourceSize.height)
-        let scale = fit * magnification
-        let width = sourceSize.width * scale
-        let height = sourceSize.height * scale
-        // pan is meaningless unmagnified — the picture has nowhere to go
-        let shiftX = magnification > 1 ? CGFloat(panX) * width : 0
-        let shiftY = magnification > 1 ? CGFloat(panY) * height : 0
-        return ImagePlacement(scale: scale, rect: CGRect(
-            x: (viewport.width - width) / 2 - shiftX,
-            y: (viewport.height - height) / 2 - shiftY,
-            width: width, height: height))
+        guard let matrix = surfaceTransform(sourceSize: sourceSize,
+                                            in: viewport) else { return nil }
+        let rect = CGRect(origin: .zero, size: sourceSize).applying(matrix)
+        guard rect.width > 0, rect.height > 0 else { return nil }
+        return ImagePlacement(scale: rect.width / sourceSize.width, rect: rect)
     }
 
     /// Where a point on the SURFACE lands on the picture, as fractions of the
@@ -407,10 +442,16 @@ public struct ViewAssist: Equatable, Sendable {
     /// is how the two come to disagree.
     public func imageFraction(of point: CGPoint, sourceSize: CGSize,
                               in viewport: CGSize) -> CGPoint? {
-        guard let placed = placement(sourceSize: sourceSize, in: viewport),
-              placed.rect.width > 0, placed.rect.height > 0 else { return nil }
-        let u = (point.x - placed.rect.minX) / placed.rect.width
-        let v = (point.y - placed.rect.minY) / placed.rect.height
+        guard let matrix = surfaceTransform(sourceSize: sourceSize,
+                                            in: viewport),
+              matrix.a * matrix.d - matrix.b * matrix.c != 0 else { return nil }
+        // Through the matrix and not across the placement rect: a rotated or
+        // flipped picture's bounding box says nothing about which pixel is
+        // under the pointer, and the eyedropper has to hit the one the
+        // operator is pointing at.
+        let source = point.applying(matrix.inverted())
+        let u = source.x / sourceSize.width
+        let v = source.y / sourceSize.height
         guard (0...1).contains(u), (0...1).contains(v) else { return nil }
         return CGPoint(x: u, y: v)
     }

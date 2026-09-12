@@ -220,23 +220,26 @@ import Testing
                                      in: viewport) == nil)
     }
 
-    /// **The old geometry and the new place the picture identically**, which
-    /// is what makes swapping the renderer onto `PictureSizing` a change of
-    /// spelling rather than of behaviour.
+    /// **Every surface shows the same framing.** A window adds a fit and
+    /// nothing else.
     ///
-    /// Both exist for as long as the three independent sets are being built,
-    /// and while both exist they have to agree: the renderer goes through the
-    /// sizing and the overlays still ask the assist, so a disagreement here is
-    /// a frameline that no longer marks the pixels it names — the defect this
-    /// whole file was written for, arriving from the other side.
+    /// The nine controls are applied INTO THE SIGNAL'S RASTER, in the shared
+    /// display stage, so the reframe is in the delivered frame and reaches the
+    /// hardware playout, the multiview and the phone grid — the surfaces that
+    /// are handed a pixel buffer and have no layer to do it for them. They
+    /// used to be applied per surface, which meant the operator's own window
+    /// was the only place the reframe existed at all.
     ///
-    /// Note the two are called differently on purpose: the ASSIST is handed an
-    /// already-desqueezed source (that is how the renderer used it — it scaled
-    /// the image first and fitted what came out), and the SIZING carries the
-    /// desqueeze as its `width` and is handed the raw raster.
-    @Test func theAssistsSizingPlacesWhereTheAssistDid() throws {
+    /// So the claim worth pinning is not a formula, it is that one: the
+    /// picture's place inside the raster, as fractions of it, is the same
+    /// whatever is looking. A viewport that changed the framing would be a
+    /// director's monitor framed differently from the operator's window.
+    @Test func everySurfaceShowsTheSameFraming() throws {
         let raw = CGSize(width: 1920, height: 1080)
-        let viewport = CGSize(width: 800, height: 500)
+        let viewports = [CGSize(width: 800, height: 500),
+                         CGSize(width: 1920, height: 1080),
+                         CGSize(width: 640, height: 640),
+                         CGSize(width: 2400, height: 600)]
         for desqueeze in [1.0, 1.33, 2.0, 0.75] {
             for punchIn in [1.0, 2.0, 4.5] {
                 for pan in [0.0, 0.1, -0.2] {
@@ -246,23 +249,40 @@ import Testing
                     assist.panX = pan
                     assist.panY = -pan
                     assist.clampPan()
-                    let stretched = CGSize(width: raw.width * desqueeze,
-                                           height: raw.height)
-                    let old = try #require(assist.placement(sourceSize: stretched,
-                                                            in: viewport))
-                    let new = try #require(
-                        assist.sizing.pictureRect(sourceSize: raw, in: viewport))
                     let label = "desqueeze \(desqueeze) punch \(punchIn) pan \(pan)"
-                    #expect(abs(old.rect.minX - new.minX) < 0.001,
-                            "\(label): x \(old.rect.minX) against \(new.minX)")
-                    #expect(abs(old.rect.minY - new.minY) < 0.001,
-                            "\(label): y \(old.rect.minY) against \(new.minY)")
-                    #expect(abs(old.rect.width - new.width) < 0.001,
-                            "\(label): width \(old.rect.width) against \(new.width)")
-                    #expect(abs(old.rect.height - new.height) < 0.001,
-                            "\(label): height \(old.rect.height) against \(new.height)")
+                    // what the STAGE draws, inside the signal's own raster
+                    let drawn = try #require(
+                        assist.sizing.pictureRect(sourceSize: raw, in: raw))
+                    let wanted = CGRect(x: drawn.minX / raw.width,
+                                        y: drawn.minY / raw.height,
+                                        width: drawn.width / raw.width,
+                                        height: drawn.height / raw.height)
+                    for viewport in viewports {
+                        let got = try #require(framing(assist, raw: raw,
+                                                       in: viewport))
+                        #expect(abs(got.minX - wanted.minX) < 0.000_1
+                            && abs(got.minY - wanted.minY) < 0.000_1
+                            && abs(got.width - wanted.width) < 0.000_1
+                            && abs(got.height - wanted.height) < 0.000_1,
+                                "\(label) in \(viewport): \(got) vs \(wanted)")
+                    }
                 }
             }
         }
+    }
+
+    /// Where the picture sits INSIDE the raster on screen, as fractions of the
+    /// raster's own rect there. An identity assist places the bare raster,
+    /// which is what a surface does to a frame that is already framed.
+    private func framing(_ assist: ViewAssist, raw: CGSize,
+                         in viewport: CGSize) -> CGRect? {
+        guard let picture = assist.placement(sourceSize: raw, in: viewport),
+              let raster = ViewAssist().placement(sourceSize: raw, in: viewport),
+              raster.rect.width > 0, raster.rect.height > 0 else { return nil }
+        return CGRect(
+            x: (picture.rect.minX - raster.rect.minX) / raster.rect.width,
+            y: (picture.rect.minY - raster.rect.minY) / raster.rect.height,
+            width: picture.rect.width / raster.rect.width,
+            height: picture.rect.height / raster.rect.height)
     }
 }

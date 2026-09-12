@@ -57,7 +57,17 @@ struct AssistGeometryTests {
                                                           in: viewport))
             let fromAspect = try #require(state.placement(
                 sourceSize: CGSize(width: 16.0 / 9.0, height: 1), in: viewport))
-            #expect(fromPixels.rect.equalTo(fromAspect.rect),
+            // To a ten-thousandth of a point, not bit for bit: the placement
+            // is now two transforms concatenated rather than one formula (the
+            // sizing into the signal's raster, then the raster fitted into
+            // the surface — `ViewAssist.surfaceTransform`), so the two orders
+            // of multiplication disagree in the last bit of a Double. They
+            // agreed exactly while it was one formula; what the test is for
+            // is a frameline sitting BESIDE the picture, which is points.
+            #expect(abs(fromPixels.rect.minX - fromAspect.rect.minX) < 0.000_1
+                && abs(fromPixels.rect.minY - fromAspect.rect.minY) < 0.000_1
+                && abs(fromPixels.rect.width - fromAspect.rect.width) < 0.000_1
+                && abs(fromPixels.rect.height - fromAspect.rect.height) < 0.000_1,
                     "\(punchIn)x: \(fromPixels.rect) vs \(fromAspect.rect)")
         }
     }

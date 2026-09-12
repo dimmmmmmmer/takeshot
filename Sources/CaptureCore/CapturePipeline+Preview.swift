@@ -137,6 +137,9 @@ extension CapturePipeline {
 
     public func setPreviewLetterbox(_ color: CIColor) {
         displaySinks.setLetterbox(color)
+        // The stage as well as the surfaces: the bars around a REFRAMED
+        // picture are inside the signal's raster and travel with the frame.
+        assistStage.setLetterbox(color)
     }
     /// Grab the next displayed frame as PNG (WYSIWYG with levels/preview LUT).
     /// The handler fires once, on the main queue.

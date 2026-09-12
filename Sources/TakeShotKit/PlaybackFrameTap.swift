@@ -90,6 +90,9 @@ final class PlaybackFrameTap: @unchecked Sendable {
     func setLetterbox(_ color: CIColor) {
         sinks.setLetterbox(color)
         compareSinks.setLetterbox(color)
+        // …and the stage, which paints the bars a reframed picture leaves
+        // inside the frame itself — see `AssistStage.setLetterbox`.
+        assistStage.setLetterbox(color)
     }
 
     let queue = DispatchQueue(label: "takeshot.playback-tap", qos: .userInitiated)

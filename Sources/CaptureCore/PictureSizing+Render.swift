@@ -76,8 +76,8 @@ extension PictureSizing {
         let scale = fit * CGFloat(min(Self.maxZoom, max(Self.minZoom, zoom)))
         shape = shape.concatenating(CGAffineTransform(scaleX: scale, y: scale))
         return shape.concatenating(CGAffineTransform(
-            translationX: -CGFloat(panX) * box.width * scale,
-            y: CGFloat(panY) * box.height * scale))
+            translationX: -effectivePan.x * box.width * scale,
+            y: effectivePan.y * box.height * scale))
     }
 
     /// **Pitch and yaw, as a projection and not as a shear.**

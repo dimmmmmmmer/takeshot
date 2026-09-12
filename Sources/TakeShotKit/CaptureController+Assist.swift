@@ -353,10 +353,17 @@ extension CaptureController {
     }
 
     /// A source-shaped size for the placement math: the aspect is all the
-    /// overlays and the pan need, and `displayAspect` already carries the
-    /// desqueeze the renderer applies before it fits the picture.
+    /// overlays and the two gestures need.
+    ///
+    /// **The SIGNAL's aspect, with no desqueeze in it.** It used to be
+    /// `displayAspect`, which carries the desqueeze, because the renderer
+    /// fitted an already-desqueezed picture straight into the window. The
+    /// desqueeze is now one of the nine controls applied INTO THE SIGNAL'S
+    /// RASTER, one stage earlier and for every surface at once
+    /// (`AssistStage.rendered`), so handing it in here as well would apply it
+    /// twice and put every overlay a stretch away from the picture.
     func displaySourceSize() -> CGSize {
-        CGSize(width: max(0.01, displayAspect), height: 1)
+        CGSize(width: max(0.01, signalAspect), height: 1)
     }
 
     /// Whether the pointer over the preview should read as a grab handle.

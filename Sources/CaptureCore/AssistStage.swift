@@ -39,6 +39,10 @@ public final class AssistStage: @unchecked Sendable {
     private let lock = NSLock()
     private let renderLock = NSLock()
     private var assist = ViewAssist()
+    /// What the bars around a reframed picture are painted in — the operator's
+    /// own player background, the same colour the preview layer uses for the
+    /// bars it paints around a fitted frame.
+    private var letterbox = CIColor(red: 0, green: 0, blue: 0)
     /// Frames shown WITHOUT the aids because they were already late.
     private var lateDropCount = 0
 
@@ -53,6 +57,18 @@ public final class AssistStage: @unchecked Sendable {
     public func setAssist(_ newValue: ViewAssist) {
         lock.lock()
         assist = newValue
+        lock.unlock()
+    }
+
+    /// The colour the bars around a reframed picture take. Any thread.
+    ///
+    /// Here as well as on the surfaces because the geometry is here now: a
+    /// rotated or shrunk picture has black around it INSIDE the signal's
+    /// raster, and those bars are in the delivered frame — they reach the
+    /// hardware playout and the multiview, which have no layer to paint them.
+    public func setLetterbox(_ color: CIColor) {
+        lock.lock()
+        letterbox = color
         lock.unlock()
     }
 
@@ -87,13 +103,26 @@ public final class AssistStage: @unchecked Sendable {
                          deadline: UInt64) -> CVPixelBuffer? {
         lock.lock()
         let current = assist
+        let bars = letterbox
         lock.unlock()
-        guard current.anyToolActive || !current.guides.isEmpty else { return nil }
-        guard DispatchTime.now().uptimeNanoseconds <= deadline else {
+        guard current.anyToolActive || !current.guides.isEmpty
+            || !current.sizing.isIdentity else { return nil }
+        // **Past the deadline the AIDS go and the framing stays.**
+        //
+        // The rule was "drop the effect, never the frame", and it is still
+        // that — but a reframe is not an effect. An aid missing for one frame
+        // costs the operator a zebra; a framing missing for one frame is the
+        // whole picture jumping to another position and back, on the
+        // director's monitor as well as here, which is far worse than the
+        // stutter the deadline exists to prevent. So a late frame loses the
+        // tools, the guides and the legend and keeps its geometry — and with
+        // no geometry to keep, it is passed through exactly as before.
+        let late = DispatchTime.now().uptimeNanoseconds > deadline
+        if late {
             lock.lock()
             lateDropCount += 1
             lock.unlock()
-            return nil
+            guard !current.sizing.isIdentity else { return nil }
         }
         renderLock.lock()
         defer { renderLock.unlock() }
@@ -107,14 +136,41 @@ public final class AssistStage: @unchecked Sendable {
         let source = CIImage(cvPixelBuffer: pixelBuffer,
                              options: [.colorSpace: NSNull()])
         var image = source
-        if current.anyToolActive {
-            image = AssistFilters.applied(source, assist: current)
+        if !late {
+            if current.anyToolActive {
+                image = AssistFilters.applied(source, assist: current)
+            }
+            image = current.guides.drawn(over: image)
+            // last, and over the matte: the legend is the key to the colours
+            // the stage has just painted, and a frameline drawn on top of it
+            // would dim the one thing on the frame that has to be read
+            // literally
+            image = current.legend.drawn(over: image, tool: current.colorTool)
         }
-        image = current.guides.drawn(over: image)
-        // last, and over the matte: the legend is the key to the colours the
-        // stage has just painted, and a frameline drawn on top of it would dim
-        // the one thing on the frame that has to be read literally
-        image = current.legend.drawn(over: image, tool: current.colorTool)
+        // **The geometry, LAST** — after everything that measures.
+        //
+        // It used to be applied per surface, in `MetalPreviewLayer`, which
+        // meant the operator's reframe existed in the operator's own window
+        // and nowhere else: the hardware playout, the multiview, the phone
+        // grid and every browser stream are handed a pixel buffer rather than
+        // a layer, so the director's monitor showed a picture nobody had
+        // framed. That is the same gap the aids above were moved here to
+        // close, one stage further on.
+        //
+        // Last and not first, and that is the contract rather than an order of
+        // convenience: false colour, zebra and peaking read CODE VALUES, and a
+        // reframe RESAMPLES — measuring interpolated pixels would make the
+        // exposure tools answer for a picture the camera never sent. The
+        // guides and the legend ride it deliberately (a frameline marks the
+        // framing, so it moves with the frame), which is the order the preview
+        // layer applied for as long as it owned this.
+        //
+        // Into the SIGNAL's own raster, which is what makes the answer one
+        // answer: a viewport is a property of a window, and every surface has
+        // a different one.
+        image = current.sizing.applied(
+            to: image, in: CGRect(x: 0, y: 0, width: width, height: height),
+            letterbox: bars)
         let destination = CIRenderDestination(pixelBuffer: out)
         destination.colorSpace = nil
         guard let task = try? context.startTask(toRender: image, to: destination),

@@ -210,17 +210,24 @@ extension CaptureController {
         }
     }
 
-    /// Aspect of the picture currently in the viewer, desqueeze included —
-    /// the framelines box must hug the visible image.
-    var displayAspect: CGFloat {
-        let base: CGFloat
+    /// **Aspect of the RASTER the picture lives in** — the signal's own, or
+    /// the playing clip's, with no desqueeze in it.
+    ///
+    /// What the geometry is stated against now: the nine controls are applied
+    /// inside this raster (`AssistStage.rendered`), so it is the frame the
+    /// overlays and the mouse map through (`ViewAssist.surfaceTransform`).
+    var signalAspect: CGFloat {
         if viewerMode == .playback, let aspect = playbackAspect {
-            base = aspect
-        } else if let format = signalFormat, format.height > 0 {
-            base = CGFloat(format.width) / CGFloat(format.height)
-        } else {
-            base = 16.0 / 9.0
+            return aspect
         }
-        return base * CGFloat(assist.desqueeze)
+        if let format = signalFormat, format.height > 0 {
+            return CGFloat(format.width) / CGFloat(format.height)
+        }
+        return 16.0 / 9.0
+    }
+
+    /// Aspect of the PICTURE inside that raster, desqueeze included.
+    var displayAspect: CGFloat {
+        signalAspect * CGFloat(assist.desqueeze)
     }
 }
